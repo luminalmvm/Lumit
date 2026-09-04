@@ -1,5 +1,4 @@
-//! **Effects on a layer group, end to end** (docs/impl/group-effects.md §7,
-//! K-731).
+//! **Effects on a layer group, end to end** (docs/impl/group-effects.md §7).
 //!
 //! # In plain terms
 //!
@@ -10,15 +9,15 @@
 //! entries the Viewer and the exporter use, to catch what would break
 //! silently:
 //!
-//! - **The K-702 promise, reworded.** A group whose header carries no effects
-//!   (or only bypassed ones) must render byte-identical to no group at all,
-//!   and keep the very same frame key.
+//! - **The promise that grouped and ungrouped render alike.** A group whose
+//!   header carries no effects (or only bypassed ones) must render
+//!   byte-identical to no group at all, and keep the very same frame key.
 //! - **The scope.** The header's blur reaches the members and nothing else —
 //!   the layer above stays crisp, the plate below stays crisp.
 //! - **The machine itself.** A grouped run with a live header is *the same
 //!   picture* as packing the members into a Precomp layer wearing the same
 //!   stack — that equivalence is the whole design (§2), so it is asserted
-//!   directly, at full and at half preview resolution (K-266 rides it).
+//!   directly, at full and at half preview resolution.
 //! - **Mattes cross the boundary** in both directions while the header is
 //!   live, because a matte source renders alone by construction.
 //! - **An empty run runs nothing**: eyes off ⇒ no unit, and a generator on
@@ -194,7 +193,7 @@ fn key_of(doc: &Arc<Document>, comp: Uuid) -> lumit_eval::FrameKey {
 /// **Test 1 — identity.** An empty header, and a wholly bypassed one, render
 /// byte-identical to the same comp with no group at all, and share its frame
 /// key; and the group's own file form carries no `effects` key while the list
-/// is empty, so every pre-K-731 project re-saves byte-identical.
+/// is empty, so every older project re-saves byte-identical.
 #[test]
 fn a_header_with_no_live_effects_changes_nothing_at_all() {
     let build = |effects: Option<Vec<EffectInstance>>| {
@@ -216,7 +215,7 @@ fn a_header_with_no_live_effects_changes_nothing_at_all() {
         "an empty header stack must leave no trace in the file"
     );
     let back: LayerGroup = serde_json::from_value(json).unwrap();
-    assert_eq!(back, bare, "and a pre-K-731 group loads to the same thing");
+    assert_eq!(back, bare, "and an older group loads to the same thing");
 
     let (ungrouped, comp_a) = build(None);
     let (grouped, comp_b) = build(Some(Vec::new()));
@@ -241,8 +240,8 @@ fn a_header_with_no_live_effects_changes_nothing_at_all() {
     let (base, ..) = r.render_rgba(&ungrouped, comp_a, 0, 1.0).unwrap();
     let (empty, ..) = r.render_rgba(&grouped, comp_b, 0, 1.0).unwrap();
     let (byp, ..) = r.render_rgba(&bypassed, comp_c, 0, 1.0).unwrap();
-    assert_eq!(base, empty, "an empty header is the K-702 group: no change");
-    assert_eq!(base, byp, "a bypassed header is the K-702 group: no change");
+    assert_eq!(base, empty, "an empty header renders as no group at all");
+    assert_eq!(base, byp, "a bypassed header renders as no group at all");
 }
 
 /// **Test 2 — scoping (and test 10's determinism).** A blur on the middle
@@ -305,7 +304,7 @@ fn a_header_blur_reaches_the_members_and_nothing_else() {
 /// Multiply member over a plate below, which is exactly the isolation §3
 /// chooses (the member stops multiplying the backdrop; the slab meets it as
 /// one Normal picture). Asserted at full size and at half preview resolution,
-/// which is the K-266 rescale riding the same equivalence.
+/// which is the preview rescale riding the same equivalence.
 #[test]
 fn a_live_group_is_the_precompose_it_claims_to_be() {
     let mk_items = |doc: &mut Document| -> (Uuid, Uuid) {

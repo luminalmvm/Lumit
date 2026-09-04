@@ -1,4 +1,4 @@
-//! The GPU scope pass (docs/07-UI-SPEC.md §8, K-096 v1) — the "scopes are super
+//! The GPU scope pass (docs/07-UI-SPEC.md §8, v1) — the "scopes are super
 //! laggy" fix.
 //!
 //! # In plain terms

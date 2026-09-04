@@ -1,5 +1,5 @@
 //! The RIFX container walk — the bottom of the direct `.aep` route
-//! (docs/impl/ae-import.md §7, K-418).
+//! (docs/impl/ae-import.md §7).
 //!
 //! In plain terms: an After Effects project file is a box of boxes. Each box
 //! starts with a four-letter name, then says in four more bytes how long it is,

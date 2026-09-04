@@ -73,7 +73,7 @@ void main() {
       expect(asked, 1);
     });
 
-    /// `Ctrl+Space` asks the same bar for the FX console (K-324) — and the
+    /// `Ctrl+Space` asks the same bar for the FX console — and the
     /// bare space bar must still reach the transport, which is the thing a
     /// modified space bar is most likely to have broken.
     testWidgets('Ctrl+Space asks for the FX console, and space still plays',
@@ -91,7 +91,7 @@ void main() {
       expect(console, 1);
       expect(play, 0, reason: 'the modified chord is not the transport');
 
-      // The console that just opened owns the keyboard (K-328), so it is
+      // The console that just opened owns the keyboard, so it is
       // closed before the bare space bar can mean the transport again.
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
@@ -101,7 +101,7 @@ void main() {
       expect(console, 1);
     });
 
-    /// With the console up, the keyboard is the console's (K-328): a
+    /// With the console up, the keyboard is the console's: a
     /// keystroke aimed at its search box must never also run a shell command
     /// — the exact bug was typing over the open console renaming and adding
     /// layers underneath it.
@@ -148,7 +148,7 @@ void main() {
           reason: 'shortcuts must not depend on where focus is sitting');
     });
 
-    /// `Mod`+arrow steps the playhead (K-282). The **bare** arrows do not: they
+    /// `Mod`+arrow steps the playhead. The **bare** arrows do not: they
     /// belong to whatever has focus — a list moving its highlight, a field
     /// moving its cursor — which is the whole reason the step took a modifier.
     testWidgets('Ctrl and the arrows step the playhead within the comp',
@@ -232,7 +232,7 @@ void main() {
           reason: 'the selection cannot outlive the layer');
     });
 
-    /// **A finer selection gets Delete first (K-234).** A selected mask row is
+    /// **A finer selection gets Delete first.** A selected mask row is
     /// what the key is about, not the layer it sits on — and every key handler
     /// runs on every key, so the Timeline cannot claim the chord merely by
     /// handling it. The shell asks, and stands down when the answer is yes.
@@ -260,7 +260,7 @@ void main() {
       expect(comp.getLayers(), isEmpty);
     });
 
-    /// Alt+Shift+T does nothing now (K-200): it was a misremembering of AE's
+    /// Alt+Shift+T does nothing now: it was a misremembering of AE's
     /// chord, and on Windows the OS steals it for the input-language switch
     /// anyway. It is unbound rather than kept as a second chord — Retime is
     /// not special — and anyone who wants it can bind it in Settings → Keymap.
@@ -283,10 +283,9 @@ void main() {
           reason: 'no binding, no Retime — the chord means nothing');
     });
 
-    /// **Ctrl+Alt+T is the Retime chord** (K-197, narrowed to one by K-200):
-    /// After Effects' own Time Remap chord, and one Windows cannot steal. On
-    /// gives the layer a Retime; off removes the property rather than leaving
-    /// a flattened curve behind.
+    /// **Ctrl+Alt+T is the Retime chord**: After Effects' own Time Remap
+    /// chord, and one Windows cannot steal. On gives the layer a Retime; off
+    /// removes the property rather than leaving a flattened curve behind.
     testWidgets('Ctrl+Alt+T toggles the selected layer\'s Retime',
         (tester) async {
       final p = await mount(tester);
@@ -347,7 +346,7 @@ void main() {
     /// shell's key handler was never called again and *every* shortcut was dead
     /// until something inside the shell was clicked.
     ///
-    /// It only became reachable when New composition grew a dialogue (K-180):
+    /// It only became reachable when New composition grew a dialogue:
     /// make a comp, press space, nothing plays.
     testWidgets('the keyboard still works after a dialogue has been used',
         (tester) async {
@@ -379,7 +378,7 @@ void main() {
     /// **Ctrl+S did nothing.** `file.save` was in the keymap from the day the
     /// keymap came back, but the shell's dispatch had no case for it — so the
     /// chord resolved to an action nobody ran and the status line went on
-    /// saying "Unsaved changes" (K-203). Saved to a path already, so no picker
+    /// saying "Unsaved changes". Saved to a path already, so no picker
     /// is involved: this is about the dispatch, not the dialogue.
     testWidgets('Ctrl+S saves the project', (tester) async {
       final p = await mount(tester);
@@ -404,9 +403,9 @@ void main() {
           reason: 'the chord reached the same save the File menu runs');
     });
 
-    /// B and N set the work area's ends from the playhead (docs/07 §15). Bound
-    /// since K-199 and dispatched by nobody until K-203, which is why the work
-    /// area read as unimplemented.
+    /// B and N set the work area's ends from the playhead (docs/07 §15). They
+    /// were bound but dispatched by nobody, which is why the work area read as
+    /// unimplemented.
     testWidgets('B and N set the work area from the playhead', (tester) async {
       final p = await mount(tester);
       final comp = p.uiState.selectedComp!;
@@ -428,7 +427,7 @@ void main() {
       expect(comp.frameAtTime(time: work.outPoint), 30);
     });
 
-    /// Numbered markers (K-254). The pairing is the whole feature: the chord
+    /// Numbered markers. The pairing is the whole feature: the chord
     /// that marks a moment is the key that goes back to it, so both halves are
     /// asserted together — a set that does not return is not the feature.
     testWidgets('Shift+1 sets marker 1 and the bare 1 returns to it',
@@ -466,7 +465,7 @@ void main() {
       expect(p.uiState.playheadFrame.value, 15);
     });
 
-    /// **`Ctrl+C` on a selected layer copied nothing** (K-300). Cut, copy and
+    /// **`Ctrl+C` on a selected layer copied nothing.** Cut, copy and
     /// paste had menu rows and no chord in the keymap at all, and no case in
     /// the shell's handler either — so the three keys everyone reaches for
     /// first did nothing, and the only way to copy a layer was the Edit menu.
@@ -491,7 +490,7 @@ void main() {
           reason: 'and Ctrl+V put the copy back into the composition');
     });
 
-    /// **A copy has to leave a trace the machine can see** (K-302). The layer
+    /// **A copy has to leave a trace the machine can see.** The layer
     /// and effect clipboard was in-app only, so copying a layer and pasting
     /// into a text editor produced nothing — which reads exactly like Copy
     /// having done nothing at all, and was the first thing the owner tried.
@@ -537,8 +536,7 @@ void main() {
     });
 
     /// With an effect picked out of a stack, the chord takes *that*, not the
-    /// layer under it (K-300) — the finest selection wins, exactly as Delete
-    /// has done since K-234.
+    /// layer under it — the finest selection wins, exactly as Delete does.
     testWidgets('Ctrl+C takes the picked effect, not the layer it sits on',
         (tester) async {
       final p = await mount(tester);
@@ -565,7 +563,7 @@ void main() {
     });
 
     /// `M` still reveals Masks in the Timeline, which is why the plain marker
-    /// key is `Shift+M` (K-254).
+    /// key is `Shift+M`.
     testWidgets('Shift+M drops a marker at the playhead', (tester) async {
       final p = await mount(tester);
       final comp = p.uiState.selectedComp!;
@@ -694,7 +692,7 @@ void main() {
     /// **Slide and trim are two key pairs** (A8, docs/07 §4.4). `[` and `]`
     /// put the layer's in or out point on the playhead by **moving the whole
     /// layer**, and a layer's keyframes are timed against its own clock — they
-    /// reach the composition's through the start offset (K-213), which travels
+    /// reach the composition's through the start offset, which travels
     /// with a move — so the animation goes with the bar. `Alt` makes it a trim:
     /// one edge moves over content that stays put, and every keyframe is
     /// exactly where it was.

@@ -1,4 +1,4 @@
-//! Sprite flare (docs/08 §3.29, K-359): the art-directed flare — a glow on the
+//! Sprite flare (docs/08 §3.29): the art-directed flare — a glow on the
 //! light, a train of iris ghosts through the frame's centre, and an anamorphic
 //! streak. Deliberately a separate effect from the physically simulated §3.27
 //! rather than a mode of it.
@@ -35,11 +35,11 @@ pub const SPRITE_FLARE_GROUPS: &[ParamGroup] = &[
 
 /// Sprite flare's controls.
 ///
-/// Every distance is px@comp (K-260), declared `Px` so the resolve step scales
+/// Every distance is px@comp, declared `Px` so the resolve step scales
 /// each by the §2.3 preview factor and
 /// [`ResolvedStack::rescale_spatial`](crate::fx::ResolvedStack::rescale_spatial)
 /// moves them together if the stack is reused at another size — the light's
-/// position included, or the whole flare would slide (K-266). Ghost spacing is a
+/// position included, or the whole flare would slide. Ghost spacing is a
 /// *fraction* of the light→centre distance, not a length, so it follows nothing.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
@@ -52,7 +52,7 @@ pub const SPRITE_FLARE_GROUPS: &[ParamGroup] = &[
     groups = SPRITE_FLARE_GROUPS,
 )]
 pub struct SpriteFlare {
-    /// px@comp (K-260), like the physical flare's light. Open both sides: an
+    /// px@comp, like the physical flare's light. Open both sides: an
     /// off-frame light still throws ghosts across the frame, which is most of
     /// what this effect is for.
     #[slider(min = 0.0, max = 3840.0, default = 640.0, unit = Px)]

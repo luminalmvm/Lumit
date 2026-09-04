@@ -159,7 +159,7 @@ impl Session {
     ///
     /// Which standard it speaks is read off the file's own name (`AnyModule`),
     /// so **one broker binary serves both** — the pipe, the ring, the handle
-    /// registry and the watchdog are the same code either way (K-707).
+    /// registry and the watchdog are the same code either way.
     fn module(&mut self) -> Option<AnyModule> {
         if self.module.is_none() {
             self.module = AnyModule::open(&self.module_path).ok();

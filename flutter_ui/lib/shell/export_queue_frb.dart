@@ -6,7 +6,7 @@
 // when it was added (docs/06 §7.1), so a row goes on writing what you queued
 // however much the project changes afterwards.
 //
-// It is built to the K-444 dialog pattern like every other popup — the same
+// It is built to the shared dialog pattern like every other popup — the same
 // title strip, rows and footer — because the approved mockups draw the export
 // *dialog* and leave the queue to the pattern.
 //
@@ -15,13 +15,13 @@
 // answer. The one bridge call in a rebuild path would be that ask, so it is not
 // in one: the timer reads, and `build` draws what was read.
 //
-// **A waiting row is dragged to move it** (K-503). The order of the queue is
-// the order the exports run in, and dragging the row is the gesture the rest
-// of the application already uses to reorder a list — layers in the Timeline,
-// items in the Project panel, effects in a stack. Only what is still waiting
-// can be picked up: the engine refuses a row that is running, has run, or has
-// gone, in its own words, and the refusal is nothing to draw because the next
-// poll shows the list unchanged.
+// **A waiting row is dragged to move it.** The order of the queue is the order
+// the exports run in, and dragging the row is the gesture the rest of the
+// application already uses to reorder a list — layers in the Timeline, items
+// in the Project panel, effects in a stack. Only what is still waiting can be
+// picked up: the engine refuses a row that is running, has run, or has gone,
+// in its own words, and the refusal is nothing to draw because the next poll
+// shows the list unchanged.
 
 import 'dart:async';
 

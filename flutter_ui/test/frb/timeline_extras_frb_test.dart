@@ -91,8 +91,8 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    /// **A hovered comp tab wears the value well's own hover outline**
-    /// (K-640). A tab that is not the open one used to answer a hover with
+    /// **A hovered comp tab wears the value well's own hover outline.**
+    /// A tab that is not the open one used to answer a hover with
     /// nothing at all: the pointer crossed it and the strip did not admit it
     /// was a control. It now takes the same face a well takes — one pixel of
     /// `hairlineStrong` — in a *foreground* decoration, so nothing about the
@@ -351,7 +351,7 @@ void main() {
       await mount(tester, p);
 
       // Once each: the outline names the layer, and its bar carries no label
-      // unless the setting asks for one (K-514).
+      // unless the setting asks for one.
       expect(find.text('Text'), findsOneWidget);
       expect(find.text('Camera'), findsOneWidget);
 
@@ -526,7 +526,7 @@ void main() {
     /// Scrubbing during playback used to be unwinnable: the engine handed back
     /// a frame every tick and each one put the playhead straight back where the
     /// transport wanted it. Taking hold of the playhead takes it off the
-    /// transport (K-254), and it stays where the drag left it — the
+    /// transport, and it stays where the drag left it — the
     /// return-to-start of a normal stop would undo the very gesture.
     testWidgets('dragging the ruler during playback stops it and holds',
         (tester) async {
@@ -548,7 +548,7 @@ void main() {
           reason: 'and it stays where the drag left it, not back at the start');
     });
 
-    /// Markers on the ruler are direct manipulation now (K-254): a flag can be
+    /// Markers on the ruler are direct manipulation now: a flag can be
     /// dragged to another moment, and its text changed from its own menu. The
     /// dialogue in the ⋯ menu is still there for adding one by hand.
     testWidgets('a marker flag drags along the ruler', (tester) async {
@@ -571,7 +571,7 @@ void main() {
       expect(moved.id, id, reason: 'it is the same marker, not a new one');
     });
 
-    /// A marker can carry a span (K-441, docs/15 §12A.1): the ruler draws a bar
+    /// A marker can carry a span (docs/15 §12A.1): the ruler draws a bar
     /// running from its frame for its duration, and a moment draws none.
     testWidgets('a spanning marker draws a bar, a moment draws none',
         (tester) async {
@@ -612,7 +612,7 @@ void main() {
       expect(span.height, MarkerFlag.spanHeight);
 
       // And it survives an edit that never touched it — the same promise
-      // K-270 made for a beat's kind.
+      // a beat's kind gets.
       await tester.tap(find.byKey(ValueKey<String>('tl-marker-${moment.id}')),
           buttons: kSecondaryButton);
       await tester.pumpAndSettle();
@@ -762,7 +762,7 @@ void main() {
           reason: 'a digit with no marker is nothing to jump to');
     });
 
-    // --- layer markers (K-254) -------------------------------------------
+    // --- layer markers ---------------------------------------------------
 
     /// A composition dropped into another brings its markers along as the
     /// layer's own. Copies, with ids of their own: from here the two lists are
@@ -839,7 +839,7 @@ void main() {
           reason: 'the composition it came from is untouched');
     });
 
-    // --- the sequence view (K-248) --------------------------------------
+    // --- the sequence view -----------------------------------------------
 
     /// A Sequence layer, ready to open. Added layers land at the top of the
     /// stack, so it is always the first — which lets a test put something
@@ -883,8 +883,8 @@ void main() {
       expect(find.byKey(ValueKey<String>('seq-clip-${clip.id}')), findsNothing);
     });
 
-    /// A trimmed clip draws the outline of the material trimmed away (K-441,
-    /// docs/15 §12A.1) — the clip-level twin of the layer bar's own ghost.
+    /// A trimmed clip draws the outline of the material trimmed away
+    /// (docs/15 §12A.1) — the clip-level twin of the layer bar's own ghost.
     ///
     /// The source's length is the one thing the model cannot look up, so this
     /// needs a file that genuinely probes: a two-second WAV, which the probe
@@ -1030,7 +1030,7 @@ void main() {
     /// holding the drag went with it. The gesture ended the instant the
     /// readout showed up, one frame in. Driven here one step at a time,
     /// because a single synthetic move never reproduces it (the same reason
-    /// K-212's first round of tests all passed).
+    /// an earlier round of tests all passed).
     /// The velocity drag must stay linear.
     ///
     /// The axis grows to hold whatever a point reaches, so a point dragged
@@ -1104,7 +1104,7 @@ void main() {
       final from = Offset(clipBox.center.dx, strip.top + strip.height * 0.3);
 
       // One event at a time, because a single synthetic move never
-      // reproduces a drag that dies part way (the same reason K-212's first
+      // reproduces a drag that dies part way (the same reason an earlier
       // round of tests all passed).
       final gesture = await tester.startGesture(from);
       for (var i = 0; i < 6; i++) {
@@ -1199,7 +1199,7 @@ void main() {
       expect(p.comp.getLayers().single.getClips(), hasLength(1),
           reason: 'the razor is a mode, not the default click');
 
-      // The Timeline's menu item arms the toolbar's Razor tool (K-220) —
+      // The Timeline's menu item arms the toolbar's Razor tool —
       // one razor, two doors.
       await openMore(tester);
       await tester.tap(find.byKey(const ValueKey('tl-razor')));
@@ -1288,7 +1288,7 @@ void main() {
     });
 
     // -----------------------------------------------------------------------
-    // 6.43 — the Animated filter (K-441).
+    // 6.43 — the Animated filter.
     // -----------------------------------------------------------------------
 
     /// **Animated lists what is keyed, All brings the twirls back.** The filter

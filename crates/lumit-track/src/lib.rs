@@ -1,5 +1,5 @@
 //! `lumit-track` — the 2D track substrate for camera and object tracking
-//! (K-415; the algorithms are pinned in docs/impl/tracking.md, and §2 is what
+//! (the algorithms are pinned in docs/impl/tracking.md, and §2 is what
 //! this crate builds: phase 1).
 //!
 //! # In plain terms
@@ -43,9 +43,9 @@
 //! over `f32` pixels, so two runs over the same frames produce the identical
 //! [`TrackSet`].
 //!
-//! Coordinates are **source raster pixels**, per K-248: the tracker runs on the
-//! full, unaltered footage, and mapping through comp scale and retimes happens
-//! at export.
+//! Coordinates are **source raster pixels**: the tracker runs on the full,
+//! unaltered footage, and mapping through comp scale and retimes happens at
+//! export.
 //!
 //! ```
 //! use lumit_track::{FramePlane, TrackSettings, Tracker};
@@ -310,7 +310,7 @@ pub enum TrackState {
 pub struct TrackPoint {
     /// Source frame index, as the caller numbered it.
     pub frame: i64,
-    /// Source raster pixels (K-248).
+    /// Source raster pixels.
     pub x: f64,
     pub y: f64,
 }

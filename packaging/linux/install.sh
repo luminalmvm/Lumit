@@ -1,5 +1,5 @@
 #!/bin/sh
-# Installs a built Lumit bundle for the current user (K-252): the app under
+# Installs a built Lumit bundle for the current user: the app under
 # ~/.local/lib/lumit, a launcher on the PATH, the desktop entry, the .lum,
 # .lumfx and .lumtheme MIME types, and the icons (the brand SVGs install as scalable icons,
 # so the desktop renders them at any size).

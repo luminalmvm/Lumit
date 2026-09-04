@@ -24091,17 +24091,17 @@ class BridgeEffectInstanceImpl extends RustOpaque
         that: this,
       );
 
-  /// Whether the vector pair keyed by `stem` is chained (K-443). A stem this
+  /// Whether the vector pair keyed by `stem` is chained. A stem this
   /// effect has no pair for is unlinked, never an error.
   bool pairLinked({required String stem}) => BridgeLib.instance.api
       .crateApiEffectBridgeEffectInstancePairLinked(that: this, stem: stem);
 
-  /// Add one stroke to this Roto brush, on the **staged** copy (K-713).
+  /// Add one stroke to this Roto brush, on the **staged** copy.
   ///
   /// `points` are `[x0, y0, x1, y1, …]` in **source raster pixels** on the
   /// unaltered footage — the viewer converts, because only it knows the chain
   /// of transforms the pointer came through, and the matte has to describe the
-  /// file's frames rather than this comp's (K-248). `frame` is the source
+  /// file's frames rather than this comp's. `frame` is the source
   /// frame the stroke was drawn on.
   ///
   /// **The first stroke sets the base frame**, which is what makes Propagate
@@ -24139,11 +24139,10 @@ class BridgeEffectInstanceImpl extends RustOpaque
       BridgeLib.instance.api.crateApiEffectBridgeEffectInstanceRotoSetBaseFrame(
           that: this, frame: frame);
 
-  /// Every stroke this instance holds, for the overlay to draw (K-713).
+  /// Every stroke this instance holds, for the overlay to draw.
   ///
   /// Read on the gesture that needs it and on a document revision moving —
-  /// never per rebuild, which is the contract every other panel read has
-  /// (K-681).
+  /// never per rebuild, which is the contract every other panel read has.
   List<BridgeRotoStroke> rotoStrokes() =>
       BridgeLib.instance.api.crateApiEffectBridgeEffectInstanceRotoStrokes(
         that: this,
@@ -24154,7 +24153,7 @@ class BridgeEffectInstanceImpl extends RustOpaque
         that: this,
       );
 
-  /// Stage the user's own name for this instance (K-321) — an empty or
+  /// Stage the user's own name for this instance — an empty or
   /// whitespace name clears it back to the effect's label. Staging only, like
   /// `set_value`: `LayerReference::set_effects` is the commit.
   void setCustomName({required String name}) => BridgeLib.instance.api
@@ -24208,7 +24207,7 @@ class BridgeEffectInstanceImpl extends RustOpaque
   /// `origin` is the file the text was read from, or `None` for text the user
   /// typed — which is the honest answer once they have typed it, since it no
   /// longer says what that file says. An empty `source` clears the block back
-  /// to a fresh instance: a passthrough with no badge (K-111).
+  /// to a fresh instance: a passthrough with no badge.
   ///
   /// The rows the new source declares are **offered**, not adopted: the
   /// document keeps the values it has, an id that has gone keeps its row and
@@ -24224,8 +24223,8 @@ class BridgeEffectInstanceImpl extends RustOpaque
   /// Refused when `value` is of a different kind from the parameter, so a
   /// control can never quietly change what a parameter *is*.
   ///
-  /// **The hard range is enforced here, not in the panel** (docs/08 §1.2,
-  /// K-620). Every way a number reaches an effect parameter — typed, scrubbed,
+  /// **The hard range is enforced here, not in the panel** (docs/08 §1.2).
+  /// Every way a number reaches an effect parameter — typed, scrubbed,
   /// dragged in the graph editor, picked off the Viewer, wired from a node,
   /// pasted, loaded from a preset — passes through this one call, and both the
   /// preview and the commit stage through it, so clamping once here is what

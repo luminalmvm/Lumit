@@ -1,4 +1,4 @@
-// The Ctrl+Space console (K-324; popover face from the 2026-08-30 boards):
+// The Ctrl+Space console (popover face from the 2026-08-30 boards):
 // what the search ranks, what the category strip narrows, and what the keys
 // do while the popover is up.
 
@@ -119,7 +119,7 @@ void main() {
 
     /// The list and strip rebuild around the field as the query narrows them;
     /// the field itself must survive those rebuilds, or its text-input
-    /// connection dies and typing stops after one letter (the K-328 lesson).
+    /// connection dies and typing stops after one letter.
     /// The second letter is delivered through the **connection already
     /// open**, not via `enterText`, which re-attaches one and would hide
     /// exactly that fault.

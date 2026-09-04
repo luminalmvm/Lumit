@@ -168,7 +168,7 @@ pub fn marker_window(e: &EffectInstance, lt: f64, markers: &MarkerContext) -> Op
 /// exactly equal and the envelope maths lives in a single time base — plus
 /// the comp frame rate, because duration-class parameters are authored in
 /// comp frames (§2.3). Built by [`MarkerContext::for_layer`], the one
-/// constructor preview and export both call (K-031), so the two can never
+/// constructor preview and export both call, so the two can never
 /// drift. A caller with no comp to hand passes [`MarkerContext::NONE`];
 /// marker-driven effects MUST fall back gracefully on it (§1.4).
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -199,7 +199,7 @@ impl MarkerContext {
 
     /// The context at comp time itself — for an effect stack with no layer
     /// clock to convert through: a group header's (docs/impl/group-effects.md
-    /// §1, K-731). The same beats `for_layer` reads, unshifted.
+    /// §1). The same beats `for_layer` reads, unshifted.
     pub fn for_comp(comp: &Composition) -> Self {
         Self::at_offset(comp, crate::time::Rational::ZERO)
     }

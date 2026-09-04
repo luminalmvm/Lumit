@@ -11,7 +11,7 @@
 //! Four things it does that are worth reading before changing anything here.
 //!
 //! **One broker per module.** A `.clap` file holding forty effects gets one
-//! process, not forty (K-592). The cost of that is recorded and deliberate: the
+//! process, not forty. The cost of that is recorded and deliberate: the
 //! three strikes below are struck against the *module*, so a plugin that dies
 //! three times takes its file-mates with it. A vendor that ships one crashing
 //! effect beside thirty good ones is a quirks-table entry away from its own
@@ -80,7 +80,7 @@ pub const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 /// Windows CI runner it was missed once in seven runs with the test module
 /// alone. Nothing on the audio path waits on describe, and a describe that
 /// genuinely hangs costs ten seconds instead of two, so it takes the ceiling
-/// sized for a program starting (K-751).
+/// sized for a program starting.
 pub(crate) fn describe_deadline(quirks: &crate::quirks::Quirks) -> Duration {
     HANDSHAKE_TIMEOUT.max(quirks.control_timeout)
 }
@@ -94,7 +94,7 @@ pub const BROKER_EXE_ENV: &str = "LUMIT_APLUG_BROKER";
 /// One list, read in two places for one reason each: **before describe**, so a
 /// switched-off plugin is never created and its code never runs, and **at the
 /// top of every block batch**, so a switch flicked mid-session is honoured on
-/// the next batch rather than at the next restart (K-594). The owner of the
+/// the next batch rather than at the next restart. The owner of the
 /// list is whoever reads `lumit_project::PluginPrefs`; this crate only reads
 /// what it is handed, which is what keeps the plugin host free of a dependency
 /// on the project format.
@@ -107,7 +107,7 @@ pub fn nothing_disabled() -> DisableList {
 }
 
 /// **This session's** switched-off list, which is the one a live instance
-/// reads (K-594, K-700).
+/// reads.
 ///
 /// A scan is handed its list by the caller, because a scan is a thing somebody
 /// asks for with options in hand. A *block* is not: the chain opens a plugin
@@ -143,7 +143,7 @@ pub fn set_enabled(identifier: &str, enabled: bool) {
     }
 }
 
-/// The brokers this session has started, one per `.clap` module (K-592).
+/// The brokers this session has started, one per `.clap` module.
 ///
 /// Strong handles, so a module's process lives as long as the session once
 /// anything in it has played: a chain is opened and dropped every time a mix is
@@ -158,7 +158,7 @@ static BROKERS: std::sync::OnceLock<Mutex<BTreeMap<PathBuf, Arc<Mutex<Broker>>>>
     std::sync::OnceLock::new();
 
 /// The broker hosting `module`, started and described if this is the first
-/// plugin from it (K-592, K-700).
+/// plugin from it.
 ///
 /// # Errors
 ///
@@ -840,8 +840,7 @@ mod describe_deadline_tests {
     use std::time::Duration;
 
     /// The shipped two-second control deadline is not what describe waits
-    /// under: the first describe opens the module, which is a program starting
-    /// (K-751).
+    /// under: the first describe opens the module, which is a program starting.
     #[test]
     fn describe_takes_the_handshake_ceiling_by_default() {
         let quirks = Quirks::default();

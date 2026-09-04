@@ -1,4 +1,4 @@
-// What the shell does when a panel's build throws (K-741).
+// What the shell does when a panel's build throws.
 //
 // # In plain terms
 //

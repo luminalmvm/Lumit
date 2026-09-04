@@ -1,5 +1,4 @@
-// The welcome screen — the page Lumit opens on (docs/07-UI-SPEC.md §13.2,
-// K-448, K-464).
+// The welcome screen — the page Lumit opens on (docs/07-UI-SPEC.md §13.2).
 //
 // In plain terms: before any project is on screen, Lumit shows one calm page.
 // The wordmark, three ways to start work, the projects worked on recently, and
@@ -9,8 +8,8 @@
 //
 // **It renders in this window**, not in one of its own. A separate welcome
 // window is where docs/impl/multi-window.md ends up; Flutter's windowing is not
-// shippable yet (K-449), so the page takes the main window after the boot
-// splash and gives it up to the shell — the same handover the splash makes.
+// shippable yet, so the page takes the main window after the boot splash and
+// gives it up to the shell — the same handover the splash makes.
 //
 // Nothing here decides anything. Every card runs the very function its File
 // menu row runs (`openProjectFrb`, `saveProjectFrb`, `LumitState.newProject`),
@@ -18,7 +17,7 @@
 // second way to reach it rather than a second copy of it.
 //
 // The same three cards are also what the Viewer shows when the welcome has been
-// closed and nothing is open ([EmptyStageFrb], K-481) — the one list of ways to
+// closed and nothing is open ([EmptyStageFrb]) — the one list of ways to
 // start work, in the two places somebody can be standing when they have not
 // started yet.
 
@@ -42,10 +41,10 @@ import 'wordmark.dart';
 
 // --- The drawing's measurements -------------------------------------------
 //
-// Every one of these is read off the approved welcome mockup (K-451: the
-// mockup's metrics are canonical, and a mismatch is a defect). They are
-// declared here rather than written into the widgets so `welcome_metrics_test`
-// can assert against the same numbers the screen is built from.
+// Every one of these is read off the approved welcome mockup: its metrics are
+// canonical, and a mismatch is a defect. They are declared here rather than
+// written into the widgets so `welcome_metrics_test` can assert against the
+// same numbers the screen is built from.
 
 /// The width of the whole stack — cards, recents and footer alike.
 const double welcomeColumnWidth = 560;
@@ -53,9 +52,9 @@ const double welcomeColumnWidth = 560;
 /// The air between the four blocks: wordmark, cards, recents, footer.
 const double welcomeBlockGap = 28;
 
-/// The wordmark: the brand's own lockup rather than the word set in type
-/// (K-480), 22 logical pixels from its cap line to the `u`'s overshoot — the
-/// height the drawing's 22px mono mark stood at. Its width follows the lockup.
+/// The wordmark: the brand's own lockup rather than the word set in type, 22
+/// logical pixels from its cap line to the `u`'s overshoot — the height the
+/// drawing's 22px mono mark stood at. Its width follows the lockup.
 const double welcomeWordmarkHeight = 22;
 
 /// A start card: 14 of padding above and below a 13px title, a 4px gap and a
@@ -73,8 +72,8 @@ const double welcomeRecentHeaderHeight = 18;
 /// One recent project. The seam under it is drawn on top, so a row measures 52
 /// and the eye reads 53 for all but the last.
 ///
-/// 52 rather than the drawing's 40 because the row now carries a picture
-/// (K-468): 8 of air above and below a 36-tall thumbnail is what sets it.
+/// 52 rather than the drawing's 40 because the row now carries a picture: 8 of
+/// air above and below a 36-tall thumbnail is what sets it.
 const double welcomeRecentRowHeight = 52;
 const EdgeInsets welcomeRecentRowPadding = EdgeInsets.symmetric(horizontal: 14);
 
@@ -90,8 +89,8 @@ const double welcomeThumbGap = 12;
 /// The recents' fixed columns: the date, and the button that forgets the row.
 /// The name column takes whatever is left.
 ///
-/// **There is no format column** (K-468). It was drawn holding a project's size
-/// and rate and reserved 120px against an engine call that could report them
+/// **There is no format column**. It was drawn holding a project's size and
+/// rate and reserved 120px against an engine call that could report them
 /// without opening the file — but that is per-composition data and a project
 /// has as many of those as it likes, so the question the column asked was the
 /// wrong one. Its room went to the picture and to the name.
@@ -157,7 +156,7 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
     }
   }
 
-  /// Escape closes the screen with nothing open (K-481) — the standard way out
+  /// Escape closes the screen with nothing open — the standard way out
   /// of anything that has taken the window, and the reason the shell behind it
   /// has something to show. On the ladder's dialogue rung, as every
   /// other Escape in the shell is (widgets/escape_ladder.dart): this page has
@@ -211,9 +210,9 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     // The wordmark, not a phrase: a brand mark is the same in
-                    // every language, and since K-480 it is the website's own
-                    // lockup — the blue key, `umi`, the violet key — rather
-                    // than the word set in mono.
+                    // every language, and it is the website's own lockup —
+                    // the blue key, `umi`, the violet key — rather than the
+                    // word set in mono.
                     LumitWordmark(
                       key: const ValueKey('welcome-wordmark'),
                       height: welcomeWordmarkHeight,
@@ -357,7 +356,7 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
 
 // --- The two ways to start work -------------------------------------------
 
-/// New project: no file, no questions (K-617).
+/// New project: no file, no questions.
 ///
 /// From the welcome screen there is nothing to make — the empty project the
 /// application boots with is already loaded (see `main`), so this is the card
@@ -366,9 +365,9 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
 /// a fresh one.
 ///
 /// **It does not ask where the file goes.** A second card did, ahead of the
-/// editor (K-480), and the owner has taken it off the page: a project with
-/// nothing in it has nothing to lose, so where it lives is a question for the
-/// first save rather than for the door.
+/// editor, and the owner has taken it off the page: a project with nothing
+/// in it has nothing to lose, so where it lives is a question for the first
+/// save rather than for the door.
 void startNewProject(LumitState app, {VoidCallback? onStarted}) {
   if (app.project?.path() != null) app.newProject();
   onStarted?.call();
@@ -385,7 +384,7 @@ Future<void> startOpenProject(
 }
 
 /// The **two** start cards, in a row that gives each of them half of whatever
-/// width it is handed (K-617): *New project* and *Open*, and nothing else.
+/// width it is handed: *New project* and *Open*, and nothing else.
 ///
 /// One widget for the two places they appear — the welcome screen and the empty
 /// shell behind it — so the ways to start work cannot drift apart. [onStarted]
@@ -429,7 +428,7 @@ class StartCards extends StatelessWidget {
   }
 }
 
-/// What the Viewer shows when there is nothing to show (K-481).
+/// What the Viewer shows when there is nothing to show.
 ///
 /// In plain terms: the welcome screen can be closed with nothing open, so
 /// something has to be behind it — and an empty editor whose largest panel says
@@ -449,8 +448,8 @@ class EmptyStageFrb extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Watched: the moment a composition exists this is the wrong thing to be
-    // showing. `comps()` is the cached list (K-184), so a rebuild asks the
-    // engine nothing.
+    // showing. `comps()` is the cached list, so a rebuild asks the engine
+    // nothing.
     final app = context.watch<LumitState>();
     if (app.comps().isNotEmpty) {
       return PlaceholderPanel(
@@ -653,7 +652,7 @@ class _RecentRowState extends State<_RecentRow> {
   }
 }
 
-/// The project's saved picture, if it has one (K-468).
+/// The project's saved picture, if it has one.
 ///
 /// A file that is simply not there is the ordinary case, not an error: a
 /// project last saved before this feature existed has none, and neither does

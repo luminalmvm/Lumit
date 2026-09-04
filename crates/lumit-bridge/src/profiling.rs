@@ -8,8 +8,8 @@
 //! layer and every effect (see `lumit_render::profile`), which is exactly the
 //! overlap a fast preview depends on. So the frontend says when it wants the
 //! numbers, and the worker reads that wish before each frame. A frame a tier
-//! already holds is served regardless, and measured on the idle turn after
-//! (K-420): the picture never waits for its own numbers.
+//! already holds is served regardless, and measured on the idle turn after:
+//! the picture never waits for its own numbers.
 //!
 //! One flag, one atomic: it is written from Dart's thread and read on the
 //! render thread, and neither may wait for the other — the same shape the cache
@@ -17,13 +17,13 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-/// The wish. **On by default (K-276 revision)**: the numbers are what the
-/// column is for, and a diagnostic nobody can find is not shipped — the first
-/// arrangement asked the user to press a glyph in a column header, and the
-/// answer to "why is it empty" was "you have to switch it on", which is no
-/// answer at all. The frontend's switch now lives in the bottom strip beside
-/// the cache meters, where a session-wide toggle belongs, and both sides start
-/// in the same state without a call at startup.
+/// The wish. **On by default**: the numbers are what the column is for, and
+/// a diagnostic nobody can find is not shipped — the first arrangement asked
+/// the user to press a glyph in a column header, and the answer to "why is it
+/// empty" was "you have to switch it on", which is no answer at all. The
+/// frontend's switch now lives in the bottom strip beside the cache meters,
+/// where a session-wide toggle belongs, and both sides start in the same state
+/// without a call at startup.
 ///
 /// Relaxed ordering throughout: this decides whether the *next* frame is
 /// measured, and a frame either side of the change is a correct answer to a

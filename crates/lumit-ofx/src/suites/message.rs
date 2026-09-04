@@ -23,8 +23,7 @@ pub static SUITE: OfxMessageSuiteV1 = OfxMessageSuiteV1 { message };
 /// plugin's "trial", a missing file's name — and this host has one place for
 /// that already: the badge, which reads the message log (docs/12 §2.2). So a
 /// persistent message is filed like any other and clearing it is a no-op the
-/// spec allows; nothing stays up that the badge was not already showing
-/// (K-757).
+/// spec allows; nothing stays up that the badge was not already showing.
 pub static SUITE_V2: OfxMessageSuiteV2 = OfxMessageSuiteV2 {
     message,
     set_persistent_message: message,

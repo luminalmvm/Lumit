@@ -81,7 +81,7 @@ fn normalising_dedupes_and_restores_the_pinned_order() {
     );
 }
 
-/// K-258's degrade rule reaches styles too: a tenth style from a newer Lumit is
+/// The degrade rule reaches styles too: a tenth style from a newer Lumit is
 /// kept, sorted to the end, and renders as identity — never thrown away.
 #[test]
 fn an_unknown_style_survives_and_sorts_last() {
@@ -108,7 +108,7 @@ fn no_style_declares_a_row_the_render_would_have_to_fill() {
         let name = s.match_name;
         assert!(
             s.matte.param().is_none(),
-            "{name} declares a Matte; K-395's injected row is suppressed on \
+            "{name} declares a Matte; the injected row is suppressed on \
              styles (matte = false) because a style dresses the layer's own alpha"
         );
         assert!(
@@ -134,7 +134,7 @@ fn no_style_declares_a_row_the_render_would_have_to_fill() {
 }
 
 /// Every style ends with the host-uniform Mix, so every style gets the injected
-/// Blend choice beside it (K-425) — which is where a style's blend mode lives
+/// Blend choice beside it — which is where a style's blend mode lives
 /// (§1), and the reason no style needed a field of its own for one.
 #[test]
 fn every_style_carries_a_mix_and_the_blend_row_beside_it() {
@@ -198,7 +198,7 @@ fn a_fresh_style_carries_every_declared_value() {
 
 /// Spread's slope is exactly 1 at nought, which is what makes a shadow with no
 /// spread take no branch and stay the bytes it always was — and the Drop shadow
-/// *effect* packs that neutral pair, so its kernel is untouched by K-706.
+/// *effect* packs that neutral pair, so its kernel is untouched by styles.
 #[test]
 fn spread_at_nought_is_the_neutral_the_effect_packs() {
     assert_eq!(cpu::spread_scale(0.0), 1.0);
@@ -359,8 +359,8 @@ fn a_colour_overlay_adds_no_pixels_outside_the_alpha() {
 }
 
 /// A layer with no styles writes **no `styles` key at all**, and one written
-/// before the field existed reads back empty — the two halves of K-258 for a
-/// new field.
+/// before the field existed reads back empty — the two halves of compatibility
+/// for a new field.
 #[test]
 fn an_empty_style_list_leaves_the_file_exactly_as_it_was() {
     let mut layer = crate::model::Layer {

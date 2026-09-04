@@ -81,7 +81,7 @@ void main() {
   final theme = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.sharp);
 
   // Wide enough that every pane in these arrangements clears its own minimum:
-  // the Graph's floor rose to 480 with the snap magnet (K-689), and two panes
+  // the Graph's floor rose to 480 with the snap magnet, and two panes
   // that do not fit are drawn at their minimums and slid sideways (§12A.6's
   // ladder, step 5) - which overlaps them, and leaves no seam to photograph.
   Future<void> mount(WidgetTester tester, DockSplit root,

@@ -92,13 +92,13 @@ static MIGRATIONS: &[Migration] = &[Migration {
     apply: retime_onto_the_layer,
 }];
 
-/// `0.1.0` → `0.2.0` (K-249): a Footage layer's own retime segment store moves
+/// `0.1.0` → `0.2.0`: a Footage layer's own retime segment store moves
 /// onto the layer as the Retime **property**, and the frame-interpolation
 /// policy moves out beside it.
 ///
-/// Until K-249 a layer could be retimed two ways — the keyframable property on
-/// the layer, and a rival segment store inside `kind.Footage`. One had to go,
-/// and the property won, so a document written by the old build has its segment
+/// A layer could once be retimed two ways — the keyframable property on the
+/// layer, and a rival segment store inside `kind.Footage`. One had to go, and
+/// the property won, so a document written by the old build has its segment
 /// store converted here, before it is ever typed: the store's own exact reader
 /// turns it into the identical keyframes, which is why this is lossless for
 /// every curve the old rows could actually author.
@@ -160,7 +160,7 @@ fn retime_onto_the_layer(value: &mut serde_json::Value) {
         };
         for layer in layers {
             // A Sequence layer's clips carried the same segment store, and
-            // move to the same property shape (K-249's second half).
+            // move to the same property shape.
             if let Some(clips) = layer
                 .pointer_mut("/kind/Sequence/clips")
                 .and_then(|c| c.as_array_mut())
@@ -296,7 +296,7 @@ pub fn open(path: &Path) -> Result<(Document, Manifest), ProjectError> {
         }
     };
     let mut doc = doc;
-    // Forward-migrate effect stacks (K-258): a built-in whose schema grew
+    // Forward-migrate effect stacks: a built-in whose schema grew
     // since this file was saved gains the new parameters at their defaults,
     // so the panel has values to draw and edits have ids to write.
     for item in &mut doc.items {
@@ -304,13 +304,13 @@ pub fn open(path: &Path) -> Result<(Document, Manifest), ProjectError> {
             let (w, h) = (f64::from(comp.width), f64::from(comp.height));
             for layer in &mut comp.layers {
                 lumit_core::fx::backfill_builtin_params(&mut layer.effects);
-                // And convert the share-of-the-frame values K-558 turned into
+                // And convert the share-of-the-frame values that became
                 // px@comp. Separate because it needs the composition's own
                 // size, which is why it is done here rather than in the
                 // backfill: a per cent is only a pixel count once the frame is
                 // known.
                 lumit_core::fx::migrate_percent_to_px(&mut layer.effects, w, h);
-                // The layer's styles (K-706) take the same forward migration —
+                // The layer's styles take the same forward migration —
                 // they are effect instances, and a style whose schema grew
                 // needs its new rows just as much. And then §1's invariants are
                 // restored: a file hand-edited (or written by a tool that did
@@ -414,7 +414,7 @@ pub fn frame_cache_dir(doc_id: Uuid) -> Option<PathBuf> {
     Some(dirs.cache_dir().join("frames").join(doc_id.to_string()))
 }
 
-/// Camera-solve sidecar directory (docs/10-FILE-FORMAT.md §3, K-417) — where a
+/// Camera-solve sidecar directory (docs/10-FILE-FORMAT.md §3) — where a
 /// tracked clip's solve is parked so the next session does not re-track it.
 ///
 /// Global and keyed by (media fingerprint, analysis settings), for the reason
@@ -428,7 +428,7 @@ pub fn track_cache_dir() -> Option<PathBuf> {
     Some(dirs.cache_dir().join("track"))
 }
 
-/// Roto-matte sidecar directory (docs/10-FILE-FORMAT.md §3, K-710) — where a
+/// Roto-matte sidecar directory (docs/10-FILE-FORMAT.md §3) — where a
 /// propagated matte is parked so a correction re-solves only the frames it
 /// spoiled, and the next session re-solves none of them.
 ///
@@ -667,7 +667,7 @@ pub fn relative_between(base: &Path, target: &Path) -> Option<String> {
 }
 
 /// A saved project carries relative paths and fingerprints, nothing
-/// machine-specific (docs/10 §2, K-173): clone `doc` for writing with every
+/// machine-specific (docs/10 §2): clone `doc` for writing with every
 /// located media reference rebased against `project_dir` — the relative path
 /// recomputed from the session's absolute path (or, failing that, wherever
 /// the current relative path resolves) — and a fingerprint stamped where one
@@ -685,7 +685,7 @@ pub fn rebase_for_save(doc: &Document, project_dir: &Path) -> Document {
         };
         rebase_one(&mut f.media, project_dir);
     }
-    // A proxy is a media reference like any other (K-501): it is written
+    // A proxy is a media reference like any other: it is written
     // relative, fingerprinted, and found again after a move by exactly the same
     // rules — otherwise reopening a project would silently lose every proxy and
     // the small pictures would come back as full-resolution ones with no
@@ -693,7 +693,7 @@ pub fn rebase_for_save(doc: &Document, project_dir: &Path) -> Document {
     for proxy in doc.proxies.values_mut() {
         rebase_one(&mut proxy.media, project_dir);
     }
-    // And the project's OCIO config (K-490), for the reason it was made a
+    // And the project's OCIO config, for the reason it was made a
     // `MediaRef` rather than a bare path: a config that travelled with its
     // project keeps working, and one that moved elsewhere relinks by content
     // through the machinery footage already uses.
@@ -754,7 +754,7 @@ pub fn resolve_all_media(
         // *folder* the run lives in, because that is what the .aep records — a
         // folder is not a file, so every step below would call it missing. One
         // look inside turns it into the run's first frame, which is what a
-        // sequence item points at everywhere else (K-539).
+        // sequence item points at everywhere else.
         if f.sequence.is_some() {
             if let Some(frame) = first_numbered_file(Path::new(&f.media.absolute_path))
                 .or_else(|| first_numbered_file(&project_dir.join(&f.media.relative_path)))
@@ -804,7 +804,7 @@ pub fn resolve_all_media(
         }
     }
     // Proxies resolve by the same three steps, and a proxy that cannot be found
-    // is **not** reported missing (K-501): a missing stand-in is not a missing
+    // is **not** reported missing: a missing stand-in is not a missing
     // clip, the render falls back to the original on its own, and putting it in
     // this list would open the relink dialogue over footage that is perfectly
     // present. It also does not count as a relink, which is a count of the
@@ -818,9 +818,8 @@ pub fn resolve_all_media(
     // The colour config resolves by the same three steps, and like a proxy it
     // is **not** reported missing: a project whose config vanished still opens,
     // still keeps every colour space name it was given, and simply previews
-    // through the built-in family until the file comes back (K-490's calm
-    // degrade). Opening the relink dialogue over it would be a lie about what
-    // is wrong.
+    // through the built-in family until the file comes back. Opening the
+    // relink dialogue over it would be a lie about what is wrong.
     if let Some(config) = doc.colour.config.as_mut() {
         if let Resolved::Found { path, .. } = resolve_media(config, project_dir, search_roots) {
             config.absolute_path = path.to_string_lossy().into_owned();
@@ -980,7 +979,7 @@ fn unique_name(base: &str, used: &mut std::collections::HashSet<String>) -> Stri
 
 /// Copy the project's referenced media into `dest_dir/media/` and return a
 /// document whose references point there, project-relative — the mechanism
-/// behind sharing a project (K-065, docs/10 §2). `source_dir` is the current
+/// behind sharing a project (docs/10 §2). `source_dir` is the current
 /// project folder, used to locate each file with the same resolver `open` uses.
 ///
 /// Nothing machine-specific survives: both the relative and the former absolute
@@ -999,7 +998,7 @@ pub fn collect_for_sharing(
     let mut out = doc.clone();
     let mut used = std::collections::HashSet::new();
     let mut missing = Vec::new();
-    // Proxies do not travel (K-501). A collected project is a copy of the
+    // Proxies do not travel. A collected project is a copy of the
     // *work*: the stand-ins are local convenience files, regenerable in one
     // action from the originals that are being copied, and carrying them would
     // double the size of the folder to ship pictures nobody delivers. Dropping
@@ -1007,7 +1006,7 @@ pub fn collect_for_sharing(
     // opens with no missing-proxy state to explain.
     out.proxies.clear();
     // The OCIO config does not travel either, and is **kept referenced** rather
-    // than cleared (K-490). It is not one file: it is a text file plus whatever
+    // than cleared. It is not one file: it is a text file plus whatever
     // look-up tables its own `search_path` points at, so copying the one file
     // into `media/` would produce a config that parses and then cannot find a
     // single table. Clearing it instead would silently change what the copy
@@ -1197,7 +1196,7 @@ mod tests {
         doc
     }
 
-    /// TF-36 / K-173: what a saved project carries. The written clone's
+    /// TF-36: what a saved project carries. The written clone's
     /// references are rebased relative to the project's folder and stamped
     /// with fingerprints; the serialized JSON contains no `absolute_path`
     /// key at all (it would embed the local username — the thing docs/10 §2
@@ -1244,7 +1243,7 @@ mod tests {
         let json = serde_json::to_string(&rebased).unwrap();
         assert!(
             !json.contains("absolute_path"),
-            "an absolute path embeds the username — never serialized (K-173)"
+            "an absolute path embeds the username — never serialized"
         );
         // A legacy file that carries one still loads it (step-2 fallback).
         let legacy: MediaRef = serde_json::from_str(
@@ -1330,7 +1329,7 @@ mod tests {
     }
 
     /// **An image sequence imported from After Effects opens on its first
-    /// frame** (K-539).
+    /// frame**.
     ///
     /// The .aep names the folder a run lives in — that is what its file alias
     /// targets — and a folder is not a file, so every resolution step would
@@ -1703,7 +1702,7 @@ mod tests {
         }
     }
 
-    /// docs/10 §2 / K-065: collect copies referenced media into `dest/media/`
+    /// docs/10 §2: collect copies referenced media into `dest/media/`
     /// and rewrites the reference project-relative, with nothing machine-specific.
     #[test]
     fn collect_copies_media_and_rewrites_refs() {
@@ -1820,8 +1819,8 @@ mod tests {
     }
 
     /// A `0.1.0` document whose Footage layer carries the old segment store
-    /// opens with that retiming on the layer's Retime **property** (K-249),
-    /// and reads the same source moments it always did.
+    /// opens with that retiming on the layer's Retime **property**, and reads
+    /// the same source moments it always did.
     ///
     /// Half speed is the case worth pinning: at four seconds of layer time the
     /// layer shows two seconds of source, before and after.
@@ -1865,9 +1864,9 @@ mod tests {
         );
     }
 
-    /// A Sequence layer's **clips** convert too — the second half of K-249,
-    /// and the one that would otherwise have left the sequence view editing a
-    /// representation nothing else spoke.
+    /// A Sequence layer's **clips** convert too — the second half of the
+    /// migration, and the one that would otherwise have left the sequence view
+    /// editing a representation nothing else spoke.
     #[test]
     fn a_clips_segment_store_becomes_the_retime_property() {
         use lumit_core::retime::Retime;
@@ -2050,14 +2049,14 @@ mod tests {
             "unset fingerprint must not appear in the file: {json}"
         );
         let back: lumit_core::model::MediaRef = serde_json::from_str(&json).unwrap();
-        // The absolute path is session-state (K-173): never serialized, so it
+        // The absolute path is session-state: never serialized, so it
         // comes back empty; everything else round-trips.
         assert_eq!(back.absolute_path, "");
         assert_eq!(back.relative_path, m.relative_path);
         assert_eq!(back.fingerprint, m.fingerprint);
     }
 
-    /// **A sequence costs a project that has none nothing at all** (K-539). The
+    /// **A sequence costs a project that has none nothing at all**. The
     /// field is skipped when unset, so every project saved before image
     /// sequences existed round-trips byte-for-byte — and a project that *does*
     /// have one carries its rate back exactly, because a rate that went through
@@ -2117,7 +2116,7 @@ mod tests {
         );
     }
 
-    /// **Colour tags travel with the project** (K-451). They are organisation
+    /// **Colour tags travel with the project**. They are organisation
     /// rather than picture, but organisation is exactly what is lost when a
     /// project is handed on, so they belong in the file. A project nobody has
     /// tagged saves no field at all — the serde-default rule docs/10 §1.1 gives
@@ -2153,7 +2152,7 @@ mod tests {
         assert_eq!(reopened.item_label(id), 0);
     }
 
-    /// **A project's arrangement travels with it** (K-245): hand the file to
+    /// **A project's arrangement travels with it**: hand the file to
     /// someone else and it opens with the panels where its author left them.
     /// The engine stores it as the frontend's own JSON without reading inside,
     /// so it round-trips whole; a project nobody has arranged saves no field at
@@ -2189,7 +2188,7 @@ mod tests {
         let mut doc = doc_with_item();
         save(&doc, &path).unwrap();
         let (loaded, manifest) = open(&path).unwrap();
-        // Absolute paths are session-state, never saved (K-173) — equality
+        // Absolute paths are session-state, never saved — equality
         // holds once the original's is cleared to match.
         if let ProjectItem::Footage(f) = &mut doc.items[0] {
             f.media.absolute_path = String::new();
@@ -2200,10 +2199,10 @@ mod tests {
         assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1);
     }
 
-    /// The anti-aliasing setting is a project property (K-274,
-    /// docs/impl/anti-aliasing.md §5, test 7): a non-default value must survive
-    /// a save and reload, and a `.lum` written before the field existed must
-    /// load at the default rather than failing.
+    /// The anti-aliasing setting is a project property
+    /// (docs/impl/anti-aliasing.md §5, test 7): a non-default value must
+    /// survive a save and reload, and a `.lum` written before the field existed
+    /// must load at the default rather than failing.
     #[test]
     fn the_anti_aliasing_setting_round_trips_and_defaults_when_absent() {
         let dir = tempfile::tempdir().unwrap();
@@ -2227,7 +2226,7 @@ mod tests {
     }
 
     /// **The colour shelf survives the file, and an empty one writes no line**
-    /// (K-448, docs/10 §1.1): a project nobody has kept a colour in must be
+    /// (docs/10 §1.1): a project nobody has kept a colour in must be
     /// byte-identical to one written before swatches existed, and a shelf must
     /// come back in the order it was kept, names and all.
     #[test]
@@ -2271,7 +2270,7 @@ mod tests {
     }
 
     /// **The colour settings survive the file, and cost an older one nothing**
-    /// (K-490, docs/impl/ocio.md §3.1, §9.1). Three things, because only the
+    /// (docs/impl/ocio.md §3.1, §9.1). Three things, because only the
     /// first is visible and the other two are the ones a regression breaks:
     ///
     /// 1. A project that has never named a config writes **no line** for
@@ -2314,7 +2313,7 @@ mod tests {
         let saved = String::from_utf8(entry_bytes(&path, "project.json")).unwrap();
         assert!(
             !saved.contains(&config.to_string_lossy().replace('\\', "\\\\")),
-            "an absolute path must never reach the file (K-173):\n{saved}"
+            "an absolute path must never reach the file:\n{saved}"
         );
 
         let (mut loaded, _) = open(&path).unwrap();
@@ -2354,11 +2353,11 @@ mod tests {
         );
     }
 
-    /// **A vanished config never holds the project hostage** (K-490's calm
-    /// degrade, docs/impl/ocio.md §3.3). It opens, it keeps every name it was
-    /// given, and — unlike footage — it is not reported missing, because a
-    /// missing config is not a missing clip and opening the relink dialogue
-    /// over it would say the wrong thing.
+    /// **A vanished config never holds the project hostage**
+    /// (docs/impl/ocio.md §3.3). It opens, it keeps every name it was given,
+    /// and — unlike footage — it is not reported missing, because a missing
+    /// config is not a missing clip and opening the relink dialogue over it
+    /// would say the wrong thing.
     #[test]
     fn a_config_that_vanished_opens_quietly_and_keeps_its_names() {
         let dir = tempfile::tempdir().unwrap();
@@ -2394,7 +2393,7 @@ mod tests {
     }
 
     /// **A proxy is a media reference like any other, and it survives the
-    /// file** (K-501, docs/03 §3a). Three things at once, because all three are
+    /// file** (docs/03 §3a). Three things at once, because all three are
     /// easy to get wrong and only the first is visible:
     ///
     /// 1. A project with **no** proxies writes no line for either field, so
@@ -2513,7 +2512,7 @@ mod tests {
         );
     }
 
-    /// A collected project ships the originals and **not** the proxies (K-501):
+    /// A collected project ships the originals and **not** the proxies:
     /// the stand-ins are local convenience files, remade in one action, and a
     /// copy that carried them would be twice the size and open with references
     /// to files nobody sent.
@@ -2746,13 +2745,13 @@ mod tests {
     }
 
     /// **A project written before drivers existed is untouched by them**
-    /// (K-471 §4, and the note's first core invariant).
+    /// (the note's first core invariant).
     ///
     /// The `graph` field is additive with a serde default and is skipped when
-    /// empty, so a pre-K-471 document opens with an empty graph, its
-    /// `project.json` carries no such key, and opening and re-saving reproduces
-    /// the same bytes. A wired layer then round-trips whole — drivers, wires and
-    /// canvas positions.
+    /// empty, so a document written before drivers opens with an empty graph,
+    /// its `project.json` carries no such key, and opening and re-saving
+    /// reproduces the same bytes. A wired layer then round-trips whole —
+    /// drivers, wires and canvas positions.
     #[test]
     fn an_untouched_project_gains_no_graph_and_re_saves_byte_for_byte() {
         use lumit_core::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
@@ -2814,7 +2813,7 @@ mod tests {
         doc.items
             .push(lumit_core::model::ProjectItem::Composition(comp));
 
-        // 1. The pre-K-471 shape: no `graph` key anywhere in the file.
+        // 1. The shape before drivers: no `graph` key anywhere in the file.
         let a = dir.path().join("a.lum");
         save(&doc, &a).unwrap();
         let json = String::from_utf8(entry_bytes(&a, "project.json")).unwrap();
@@ -3041,8 +3040,8 @@ mod tests {
         assert!(journal.read().unwrap().is_empty());
     }
 
-    /// **A layer's audio insert chain survives the file** (K-700,
-    /// docs/impl/audio-plugins.md §4; the note's §7 plan 6).
+    /// **A layer's audio insert chain survives the file**
+    /// (docs/impl/audio-plugins.md §4; the note's §7 plan 6).
     ///
     /// The chain *is* the layer's effect stack — "the stack is the rack" — so
     /// what has to round-trip is the order, each instance's keyframed rows, and

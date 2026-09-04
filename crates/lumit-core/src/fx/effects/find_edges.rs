@@ -37,8 +37,8 @@ pub struct FindEdges {
     /// with bright ones.
     ///
     /// **"Invert edges", not AE's bare "Invert"**: every effect now carries the
-    /// K-395 Matte row, whose own switch is called Invert, and two rows of the
-    /// same name in one panel is a control nobody can point at. The label is
+    /// Matte row, whose own switch is called Invert, and two rows of the same
+    /// name in one panel is a control nobody can point at. The label is
     /// distinct, the id and the import mapping are unchanged.
     #[toggle(label = "Invert edges", default = false)]
     pub invert: bool,

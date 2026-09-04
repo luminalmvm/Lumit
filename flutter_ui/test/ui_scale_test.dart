@@ -1,8 +1,8 @@
-// UI scale (Settings → Interface → UI scale, K-117): the [UiScaleView] wrapper
+// UI scale (Settings → Interface → UI scale): the [UiScaleView] wrapper
 // scales layout AND hit-testing together — the mechanism recorded in
 // widgets/ui_scale.dart and docs/archive/flutter-port/05.
 //
-// K-560 put a presentation baseline of ×1.1 underneath the user's own factor:
+// A presentation baseline of ×1.1 sits underneath the user's own factor:
 // the size the owner tested at 110% is what the shipped 100% now draws. So the
 // factor the view is *given* is the user's, and what it *draws* is that over
 // the baseline — which is what these expectations are written against.
@@ -40,7 +40,7 @@ void main() {
     await tester.pumpWidget(Directionality(
       textDirection: TextDirection.ltr,
       child: UiScaleView(
-        // What a settings file written before K-560 at 100% migrates to.
+        // What a settings file written before the rebase at 100% migrates to.
         scale: 1 / uiScaleBaseline,
         child: SizedBox.expand(key: key),
       ),

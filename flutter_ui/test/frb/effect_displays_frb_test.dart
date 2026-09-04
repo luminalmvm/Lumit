@@ -1,5 +1,5 @@
-// The three panel halves of the K-412/K-413/K-414 sitting, against the real
-// engine: Curves' curve editor, Levels' histogram row, and the Slider control.
+// Three panel halves against the real engine: Curves' curve editor, Levels'
+// histogram row, and the Slider control.
 //
 // Every document operation here is genuine (frb_test_support.dart), so a write
 // asserted below is a value the engine actually holds — which is the point:
@@ -60,7 +60,7 @@ void main() {
           _ => const [],
         };
 
-    // ---------------------------------------------------------------- K-412
+    // --------------------------------------------------------------- Curves
 
     testWidgets('Curves draws one tabbed editor, at the identity diagonal',
         (tester) async {
@@ -277,7 +277,7 @@ void main() {
       }
     });
 
-    // ---------------------------------------------------------------- K-413
+    // --------------------------------------------------------------- Levels
 
     testWidgets('Levels draws its histogram, handles and output bar',
         (tester) async {
@@ -332,7 +332,7 @@ void main() {
       expect(black.field0, lessThan(0.4));
     });
 
-    // ---------------------------------------------------------------- K-414
+    // --------------------------------------------------------------- Slider
 
     testWidgets('the Controls category holds the five identity effects',
         (tester) async {
@@ -389,7 +389,7 @@ void main() {
     testWidgets('a closed range draws a track, and a drag on it commits once',
         (tester) async {
       final p = withLayer();
-      // Completion is the catalogue's one genuinely closed range (K-414):
+      // Completion is the catalogue's one genuinely closed range:
       // a wipe is between not begun and complete, and there is no picture
       // either side of that.
       p.layer.addEffect(name: 'linear_wipe');
@@ -420,7 +420,7 @@ void main() {
           reason: 'and never leaves the closed range');
     });
 
-    /// The other half of "the kind is the control, not the storage" (K-414):
+    /// The other half of "the kind is the control, not the storage":
     /// a closed range can still be driven by an expression, which means the
     /// number beside the track must offer the same menu entry the plain float
     /// row offers. It did not, so adopting the kind on the four wipes'

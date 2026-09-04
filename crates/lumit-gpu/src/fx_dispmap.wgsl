@@ -2,7 +2,7 @@
 // this one. Mirrors lumit_core::fx::cpu::displacement_map op-for-op (§1.6: the
 // CPU is the oracle).
 //
-// **The matte IS the map** (K-395, the seventh override): what the Matte row
+// **The matte IS the map** (the seventh override): what the Matte row
 // supplies here is the displacement field itself, not an amount of one, so the
 // texture comes into the kernel and no generic dissolve runs beside it. With
 // none bound the kernel is a passthrough — the labelled no-op every layer-input

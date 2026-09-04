@@ -61,7 +61,7 @@ pub(crate) struct Row {
     pub suggest: Option<String>,
     /// The OFX plugin identifiers that are **this same effect** — the vendor's
     /// own OFX build of the plug-in the After Effects match name belongs to
-    /// (docs/11 §5, K-655).
+    /// (docs/11 §5).
     ///
     /// If one of them is in the catalogue this session — the user has the
     /// plug-in installed — the effect maps straight to it rather than to
@@ -76,7 +76,7 @@ pub(crate) struct Row {
     /// on a machine without the plug-in.
     #[serde(default)]
     pub ofx: Vec<String>,
-    /// The match name is the famous one rather than an audited one (K-414).
+    /// The match name is the famous one rather than an audited one.
     /// Carried for the record; nothing in the import branches on it, because a
     /// name that turns out to be wrong claims nothing and the effect becomes a
     /// placeholder with every parameter kept.
@@ -159,8 +159,8 @@ mod tests {
         let table = Table::parse(SHIPPED).expect("the shipped table parses");
         for row in table.rows() {
             assert!(!row.name.is_empty(), "{} has no AE name", row.ae);
-            // An OFX identifier is a reverse-domain name compared for equality
-            // (K-655). A blank or bare word would either match nothing or, far
+            // An OFX identifier is a reverse-domain name compared for equality.
+            // A blank or bare word would either match nothing or, far
             // worse, look like it had been checked.
             for id in &row.ofx {
                 assert!(

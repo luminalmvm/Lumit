@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
-  <!-- The Lumit mark (docs/15-DESIGN.md, brand; K-251): two keyframes overlapping,
+  <!-- The Lumit mark (docs/15-DESIGN.md, brand): two keyframes overlapping,
        the overlap additive white. Bare form: Windows/Linux, any background. -->
   <defs>
     <linearGradient id="key-a" x1="0" y1="0" x2="1" y2="1">

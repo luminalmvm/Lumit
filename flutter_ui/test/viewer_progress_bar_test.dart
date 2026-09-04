@@ -30,7 +30,7 @@ void main() {
           animationLevel: animation,
           showTooltips: false,
           // Sized by what it draws, not by the box it is in: the bar sits on
-          // the right of the transport now (K-287), taking only the room it
+          // the right of the transport now, taking only the room it
           // needs, and its width is part of what is being tested.
           child: Align(
             alignment: Alignment.topLeft,
@@ -85,7 +85,7 @@ void main() {
         reason: 'and nothing is moving once it has arrived');
   });
 
-  /// The bar rides on the transport now (K-287), where a percentage that
+  /// The bar rides on the transport now, where a percentage that
   /// resized itself as it counted would jog every control beside it.
   testWidgets('the bar is the same width at 9% as at 100%', (tester) async {
     final tracker = PreviewProgressTracker();

@@ -153,7 +153,7 @@ sequenceDiagram
 ```
 
 Pixels never cross the seam. The engine hands over a shared-texture handle and
-Flutter draws it directly (K-183).
+Flutter draws it directly.
 
 ## Where do I change X
 
@@ -206,9 +206,8 @@ The loop for a small engine change. Adjust the middle for a frontend change.
 5. **Run the gates locally.** `cargo fmt --all`, then
    `cargo clippy --workspace --all-targets -- -D warnings`. Both block merge.
 6. **Regenerate if you touched a boundary.** See the table above.
-7. **Update the docs in the same commit.** A new concept means a new plain-English
-   section in [GUIDE.md](../GUIDE.md). A reversed decision means a new entry
-   appended to [02-DECISIONS.md](../02-DECISIONS.md). Never edit decision history.
+7. **Update the docs in the same commit.** A new crate or mechanism means a line in
+   [GUIDE.md](../GUIDE.md). A reversed rule means the spec that carries it changes too.
 
 Two rules catch most newcomers. Every user-facing string goes through
 `app_en.arb`, and a string the *engine* sends also needs an `engine_labels.dart`

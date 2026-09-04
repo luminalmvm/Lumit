@@ -2,7 +2,7 @@
 //
 // The menu bar reaches values the Timeline shows as rows — a mask's feather, a
 // keyframe's influence — and a menu row cannot carry a drag field. So it asks:
-// the dialogue pattern's row (K-444) with a single well in it, Enter to apply
+// the dialogue pattern's row with a single well in it, Enter to apply
 // and Escape to leave everything as it was.
 //
 // It decides nothing and knows nothing about what it is asking for. One
@@ -77,7 +77,7 @@ class _NumberBodyState extends State<_NumberBody> {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     // The dialogue takes focus when it opens and Enter applies wherever that
-    // focus sits — the rule every one of them follows (K-243).
+    // focus sits — the rule every one of them follows.
     return Focus(
       autofocus: true,
       onKeyEvent: (_, event) {

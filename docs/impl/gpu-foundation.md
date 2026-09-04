@@ -54,7 +54,7 @@ struct TexturePool { free: HashMap<PoolKey, Vec<PooledTexture>>, ledger: BudgetL
 - Acquire → RAII guard returns to pool on drop; the guard carries the epoch so a stale
   render returning a texture is fine.
 - Every acquire goes through the governor's ledger (bytes = w·h·8 for Rgba16Float);
-  refusal is an `Err`, and the caller degrades — this is the mechanism behind K-018,
+  refusal is an `Err`, and the caller degrades — that is the whole degradation mechanism,
   build it first, not later.
 - Idle trim: on governor pressure or 30 s unused, actually destroy.
 
@@ -75,7 +75,7 @@ Uniforms: one big per-frame arena buffer with dynamic offsets, not one buffer pe
   per-node profiler ([13-PERFORMANCE-RULES.md](../13-PERFORMANCE-RULES.md) instrumentation).
   Gate behind a toggle: timestamps cost ~nothing on DX12, real overhead on some Metal HW.
 
-## 5. Device loss (routine, by decision K-018)
+## 5. Device loss (routine)
 
 wgpu surfaces loss as: `Device::on_uncaptured_error` callback, submissions failing, or
 `SurfaceError::Lost/Outdated`. Treat them identically:
@@ -93,7 +93,7 @@ wgpu surfaces loss as: `Device::on_uncaptured_error` callback, submissions faili
 Test it in CI on Windows with `dxgi` debug tricks or by wrapping device in a test shim that
 injects loss; do not ship recovery untested — it is the kind of code that silently rots.
 
-## 6. egui integration and the Viewer (historical — the egui shell went with K-182)
+## 6. egui integration and the Viewer (historical — the egui shell is gone)
 
 > This section described the egui-era Viewer. The shipping frontend is Flutter: frames
 > reach it as zero-copy shared textures per

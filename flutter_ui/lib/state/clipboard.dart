@@ -1,11 +1,11 @@
-// What Copy put down, for Paste to pick up (K-275).
+// What Copy put down, for Paste to pick up.
 //
 // **In plain terms.** Copying a layer or an effect asks the engine for it as
 // text — the same document a project file is made of, so everything on it
 // travels: keyframes, masks, paint, switches, the lot. This holds that text
 // until something pastes it.
 //
-// **The tray, and the system clipboard beside it** (K-275, opened up by K-302).
+// **The tray, and the system clipboard beside it.**
 // The payload is a Lumit document, so this tray holds it whole; but a copy that
 // leaves *no* trace on the system clipboard is a copy the machine cannot see —
 // paste into a text editor and nothing arrives, which reads exactly like Copy
@@ -58,7 +58,7 @@ class LumitClipboard {
   }
 }
 
-/// What kind of Lumit document [text] is, or null when it is not one (K-302).
+/// What kind of Lumit document [text] is, or null when it is not one.
 ///
 /// Sniffed rather than trusted: this is asked of whatever happens to be on the
 /// *system* clipboard, which is most often a shopping list. A layer document

@@ -1,4 +1,4 @@
-// The clock readouts (K-287): a fixed slot, a click that types, a clamp at
+// The clock readouts: a fixed slot, a click that types, a clamp at
 // both ends of the composition, and a drag for the rows that had one.
 //
 // The width test is the point of the widget: a readout whose box changes size

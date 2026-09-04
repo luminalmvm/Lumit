@@ -1,9 +1,9 @@
-// Lens flare ghost blur (docs/08 §3.27, K-261, K-263): one direction of a
+// Lens flare ghost blur (docs/08 §3.27): one direction of a
 // separable box blur over the flare buffer — FlareSim's Ghost Blur, run
 // horizontal + vertical × 3 passes to approximate a Gaussian. A touch of
 // out-of-focus softness that also hides quad-grid facets at low qualities.
 //
-// The sum is taken through a workgroup line cache (K-263). Read straight from
+// The sum is taken through a workgroup line cache. Read straight from
 // the texture, an 80 px radius costs 161 fetches per pixel per pass and six
 // passes run — near a thousand fetches a pixel, which is what made a high
 // Ghost softness on a large frame a stall rather than a slow frame. A

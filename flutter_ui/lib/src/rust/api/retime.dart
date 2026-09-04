@@ -9,7 +9,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 // These functions are ignored because they are not marked as `pub`: `from_core`, `live_flow_params`, `onto`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`
 
-/// A footage layer's Flow group (docs/08 §3.1, K-331), flat for the bridge.
+/// A footage layer's Flow group (docs/08 §3.1), flat for the bridge.
 ///
 /// Every field is a picture-changing parameter, so every field is part of the
 /// frame's identity — see `feed_interp`. Read and written whole: a group of
@@ -81,7 +81,7 @@ enum BridgeRetimeInterp {
   /// Crossfade the two neighbours.
   blend,
 
-  /// Optical-flow synthesis (K-331/K-332): the engine measures how everything
+  /// Optical-flow synthesis: the engine measures how everything
   /// moved between the two frames and paints the one in between.
   flow,
   ;

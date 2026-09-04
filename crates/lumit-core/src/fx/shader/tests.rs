@@ -525,7 +525,7 @@ fn removing_a_shader_uniform_leaves_its_parameter_and_its_expression_alive() {
         "and the offered set is the source's, not the document's"
     );
     // A row with no uniform behind it simply is not in the bag, which is the
-    // K-258 rule: a missing parameter is a default, never a fault.
+    // rule: a missing parameter is a default, never a fault.
     assert_eq!(resolved_radius(&inst, 1.0, 1.0), None);
 }
 
@@ -545,13 +545,13 @@ fn the_starter_shader_compiles_and_changes_nothing() {
     );
 
     // Its two rows are the point of the example: a slider and a colour, read
-    // off the text exactly as a user's own fields are (K-650).
+    // off the text exactly as a user's own fields are.
     let program = crate::fx::shader::program_for(source).expect("compiled");
     let ids: Vec<String> = program.params.iter().map(|p| p.id.to_string()).collect();
     assert_eq!(ids, vec!["gain", "tint"], "the example declares both kinds");
 
     // Neutral: gain 1, white tint, so dropping the effect on changes no pixel
-    // until the user writes something. K-111's exception, stated in the source.
+    // until the user writes something.
     assert_eq!(
         crate::fx::instantiate("custom_shader")
             .map(|plain| crate::fx::effects::custom_shader::source_of(&plain).is_none()),

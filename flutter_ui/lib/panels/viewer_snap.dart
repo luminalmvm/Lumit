@@ -1,4 +1,4 @@
-// Snapping on the picture (K-689, docs/07 §2.2 item 6).
+// Snapping on the picture (docs/07 §2.2 item 6).
 //
 // **In plain terms.** While you drag a layer about the Viewer it should want to
 // land on the lines already there — a guide you pulled out of a ruler, a line of

@@ -1,4 +1,4 @@
-// Separate axes (K-571): a Position that comes apart into a row per axis, and
+// Separate axes: a Position that comes apart into a row per axis, and
 // goes back together without moving the picture.
 //
 // What is pinned here is the wiring, because the storage needed none — the axes

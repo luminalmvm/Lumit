@@ -1,4 +1,4 @@
-// Oklab conversions for effect kernels (decision K-034).
+// Oklab conversions for effect kernels.
 //
 // SAME constants as oklab.rs — that file is the CPU oracle; a test compiles
 // this module so it cannot rot. Effect kernels needing perceptual
@@ -61,7 +61,7 @@ fn linear_from_oklch(lch: vec3<f32>) -> vec3<f32> {
     );
 }
 
-// THE gradient primitive (K-034): shortest-arc hue interpolation.
+// THE gradient primitive: shortest-arc hue interpolation.
 fn oklch_lerp(a: vec3<f32>, b: vec3<f32>, t: f32) -> vec3<f32> {
     let tau = 6.2831853;
     var la = oklch_from_linear(a);

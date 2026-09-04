@@ -69,7 +69,7 @@ pub const BEZIER_WARP_GROUPS: &[ParamGroup] = &[
 
 /// Bezier warp's controls: twelve points and a solver budget.
 ///
-/// Every point is px@comp (§2.3, K-260), declared `Px`. The schema defaults are
+/// Every point is px@comp (§2.3), declared `Px`. The schema defaults are
 /// a nominal 1080p frame with its handles at the thirds — the patch that is
 /// exactly the identity — and
 /// [`instantiate_for_raster`](crate::fx::instantiate_for_raster) puts a fresh
@@ -86,8 +86,8 @@ pub const BEZIER_WARP_GROUPS: &[ParamGroup] = &[
     roi = FullFrame,
     premultiplied = true,
     groups = BEZIER_WARP_GROUPS,
-    // K-427: the matte scales the displacement, inside the kernel (the
-    // owner's rule for mattes); the generic strength dissolve does not also run.
+    // The matte scales the displacement, inside the kernel (the owner's rule
+    // for mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales the bend from the straight frame per pixel, read where the \

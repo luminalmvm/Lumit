@@ -1,7 +1,7 @@
 # Built-in effects
 
-**Status: implementation-ready.** Specifies the effect model and the built-in effect suite
-(K-064, K-019). Terminology per [01-GLOSSARY.md](01-GLOSSARY.md); render semantics per
+**Status: implementation-ready.** Specifies the effect model and the built-in effect suite.
+Terminology per [01-GLOSSARY.md](01-GLOSSARY.md); render semantics per
 [06-RENDER-PIPELINE.md](06-RENDER-PIPELINE.md); plugin-hosted effects (OFX, LFX) per
 [12-PLUGINS.md](12-PLUGINS.md). The goal of Tier 1 is blunt: a new montage editor MUST need
 zero third-party plugins to achieve the core genre look.
@@ -19,24 +19,24 @@ effect consists of exactly four parts, and an effect is not mergeable until all 
    per [01-GLOSSARY.md](01-GLOSSARY.md) §3) and MUST be visible to the expression system by
    its stable identifier (`effect("Glow")("Radius")` style access). Parameter types: float,
    integer, boolean, enum, angle (degrees), colour (scene-linear RGBA), 2D point (comp
-   space), **curve** (K-412 — an ordered list of 2..16 control points in the unit square,
+   space), **curve** (an ordered list of 2..16 control points in the unit square,
    with a clamped cubic through them), seed (integer), file reference, layer reference, **mask-path
-   reference** (K-408 — one of the owning layer's masks, whose *geometry* the effect walks),
-   marker-trigger (§1.4), and **action** (K-417 — a button, the one row that is not
+   reference** (one of the owning layer's masks, whose *geometry* the effect walks),
+   marker-trigger (§1.4), and **action** (a button, the one row that is not
    animatable, because it carries no value to animate; see §1.2).
-2. **A WGSL compute implementation** — the production path, running on wgpu (K-011).
+2. **A WGSL compute implementation** — the production path, running on wgpu.
    Implementations MUST be pure functions of (inputs, parameters, time): no global state,
    no reading outside declared inputs.
-3. **A CPU reference implementation** (K-019) — a plain Rust implementation of identical
+3. **A CPU reference implementation** — a plain Rust implementation of identical
    semantics. It is the test oracle (§1.6) and the CPU fallback rung of the degradation
    ladder ([13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md)).
 4. **A trait declaration** (§1.3) the evaluation graph compiler reads to plan scheduling,
    caching, and cancellation.
 
-Effects are versioned. The version participates in the cache key (K-016), so changing an
+Effects are versioned. The version participates in the cache key, so changing an
 effect's maths in a release invalidates stale cached frames rather than mixing generations.
 
-The four parts are **declared once**, in the effect's own file (K-381): the parameter set is
+The four parts are **declared once**, in the effect's own file: the parameter set is
 a struct whose fields are the parameters, the schema below is generated from it, and the
 effect registers itself by one line of a written list. An effect is therefore *not* a variant
 of a closed enum, and one that this build has never heard of — an OFX plugin, in time a
@@ -50,9 +50,9 @@ parameters).
 
 - **Names** are sentence case in the UI, stable snake_case identifiers in the schema.
 - **Ranges** declare a slider range and a hard range; sliders MAY be exceeded by typing,
-  hard ranges MUST NOT be. Hard ranges MAY be one-sided (K-090): a threshold clamps at
+  hard ranges MUST NOT be. Hard ranges MAY be one-sided: a threshold clamps at
   zero below and is unbounded above where that is the honest shape of the parameter.
-- **Closed ranges are their own kind** (K-414). Where a parameter's whole meaning lives
+- **Closed ranges are their own kind.** Where a parameter's whole meaning lives
   inside one range — a wipe is between not begun and complete, and there is no picture
   either side of that — the schema declares a **Slider**: one range that is both the
   slider's travel and the hard bound, drawn as a track and thumb with the value beside it.
@@ -67,7 +67,7 @@ parameters).
   no-op is a bug unless the effect is inherently trigger-driven (Flash, Shake in
   beat-triggered mode).
 - **Reset** restores defaults per parameter and per effect.
-- **File-reference** parameters (K-111) hold a path chosen from a native file dialog, filtered
+- **File-reference** parameters hold a path chosen from a native file dialog, filtered
   by the effect's declared extensions (e.g. `.cube` for a LUT). They animate only by
   *stepping*: the stored value is a set of referenced paths plus a hold-keyframed index that
   selects which one is live at a given time — two file paths cannot be blended, so only Hold
@@ -75,7 +75,7 @@ parameters).
   path with a static index. An **unset** file resolves to identity: the effect is a no-op
   until a file is chosen, the one sanctioned exception to the "no no-op default" rule above,
   since a file the user must supply cannot have a tasteful default.
-- **Layer-reference** parameters (K-123, [impl/layer-input.md](impl/layer-input.md)) name
+- **Layer-reference** parameters ([impl/layer-input.md](impl/layer-input.md)) name
   a layer in the same composition as an auxiliary picture an effect samples — a
   depth pass for Depth of field (§3.22), a bright-source matte for the Lens flare (§3.27).
   The stored value is an optional layer id (the shape
@@ -84,7 +84,7 @@ parameters).
   layer is rendered alone. An **unset** or **dangling** reference resolves to identity — the
   same sanctioned exception to the "no no-op default" rule, since a layer the user must
   supply cannot have a tasteful default.
-  **This layer** (K-288): a reference may name the layer the effect is *on*, and then it is
+  **This layer**: a reference may name the layer the effect is *on*, and then it is
   not a second render at all — it is the effect's own input at its point in the stack. On an
   ordinary layer that is the picture the effect is about to process; on an **adjustment
   layer** it is the composite of everything below, which is the only picture an adjustment
@@ -93,14 +93,14 @@ parameters).
   does), in which case a fresh instance added to a layer starts pointed at that layer; the
   source combobox below does not apply to a this-layer reference, since nothing is
   re-rendered. Beside the picker sits a **source** combobox
-  (K-142, revising K-125's before/after bool) choosing *what of* the referenced layer is
+  (revising the old before/after bool) choosing *what of* the referenced layer is
   read: **None** (its raw footage/solid — no masks, no effects), **Masks** (its source plus
   its masks) or **Effects and masks** (its finished picture — a graded or blurred input).
   The same three-way source applies to a track matte (§5.1 of
   [03-DATA-MODEL.md](03-DATA-MODEL.md)). Temporal effects on the referenced layer (echo,
   flow motion blur) are still not sub-sampled through the input in v1 — the spatial and
-  colour stack applies, an echo/flow degrades to a still (the K-125 boundary).
-- **Mask-path** parameters (K-408) name one of the **owning layer's** masks, and hand the
+  colour stack applies, an echo/flow degrades to a still (the v1 temporal boundary).
+- **Mask-path** parameters name one of the **owning layer's** masks, and hand the
   effect that mask's *geometry* — where the curve goes — rather than the coverage it produces.
   Coverage is a picture, and a picture cannot say which way is *along* a curve; a brush that
   walks a path from one per cent to another, or segments marching round one, need the
@@ -119,7 +119,7 @@ parameters).
   raster would let one frame key name two pictures. A row naming nothing, a mask since
   deleted, or a layer with no masks all arrive as an **empty polyline**, which is the effect's
   documented no-op — the same sanctioned exception an unset file or layer takes.
-- **Curve** parameters (K-412) hold a **tone curve as its own control points**: an ordered
+- **Curve** parameters hold a **tone curve as its own control points**: an ordered
   list of 2..16 `[x, y]` pairs in the unit square, the identity diagonal by default. This is
   the one parameter whose value is a *shape*, and it is what an editor edits — points move
   sideways as well as up and down, which is exactly what a row of fixed sliders cannot say.
@@ -133,7 +133,7 @@ parameters).
   **straightened on read** — sorted, clamped, deduplicated, and replaced by the diagonal when
   nothing usable survives — quietly, because it comes off a document rather than a caller.
 
-- **Action** parameters (K-417) are **buttons, not values**: a row the panel draws as a push
+- **Action** parameters are **buttons, not values**: a row the panel draws as a push
   button, which asks the engine to *do* something rather than describing what a picture
   should look like. The Camera track's Analyse and Cancel (§3.85) are the first two, and the
   kind is generic because they will not be the last — beat detection is already waiting.
@@ -153,10 +153,10 @@ Every effect declares, statically:
 | Trait | Values | Consumed by |
 |---|---|---|
 | **Cost class** | `trivial` (pointwise), `cheap` (small fixed kernel), `moderate` (large-radius / multi-pass), `heavy` (iterative or flow-based) | Adaptive degradation ordering, background render budgeting |
-| **ROI support** | `exact` (output pixel needs only the same input pixel), `padded(r)` (needs input dilated by radius r, in **px@comp** — scaled to the raster in play exactly as a px@comp parameter is, K-433), `full-frame` (needs the whole input) | Region-of-interest rendering, tiling |
+| **ROI support** | `exact` (output pixel needs only the same input pixel), `padded(r)` (needs input dilated by radius r, in **px@comp** — scaled to the raster in play exactly as a px@comp parameter is), `full-frame` (needs the whole input) | Region-of-interest rendering, tiling |
 | **Temporal window** | Set of source-relative frame offsets required, e.g. `{0}`, `{-1, 0, +1}`, `{-n..0}` for echoes | Cache prefetcher and decode planner (§2.5) |
 | **Alpha mode** | `premultiplied` (default) or `unpremultiplied` (§2.2) | Host unpremultiply/re-premultiply wrapping |
-| **Cancellation points** | `per-pass` and/or `per-tile` | Epoch-based cancellation on scrub (K-017): every pass boundary and tile boundary MUST check the epoch and abandon work |
+| **Cancellation points** | `per-pass` and/or `per-tile` | Epoch-based cancellation on scrub: every pass boundary and tile boundary MUST check the epoch and abandon work |
 | **Randomness** | `none` or `seeded` | Determinism audit (§2.4); frame keys — a seeded effect's pixels are a function of time under constant parameters, so the layer's local time joins its cache key |
 | **Marker input** | `none` or `beat` | Marker-trigger plumbing (§1.4); frame keys — a marker-driven instance's pixels follow the beat times, so its local time and §1.4 window join its cache key |
 
@@ -176,7 +176,7 @@ beat-marker times translated into the layer's local time (one subtraction with t
 layer's start offset, the same subtraction that produces the layer time itself, so the
 envelope maths lives in a single time base) plus the comp frame rate, since
 duration-class parameters are authored in comp frames. It is built by one shared
-constructor that preview and export both call (K-031), and a caller without markers
+constructor that preview and export both call, and a caller without markers
 passes an obvious empty context on which every marker-driven effect falls back
 gracefully. v1 binds to **comp beat markers only**: binding to a named layer's markers,
 and label filtering beyond the beat kind, follow later with no change to the context's
@@ -194,7 +194,7 @@ shape.
   Bypass state is not animatable (use the effect's own Mix/Amount parameter for that).
 - Every effect SHOULD expose a final **Mix** parameter (0–100%, default 100%) blending
   processed over unprocessed input, host-provided so it is uniform.
-- **Every Mix row carries a Blend choice** (K-425): how the effect's result combines with
+- **Every Mix row carries a Blend choice**: how the effect's result combines with
   its input, offered as the layer blend modes verbatim (`BlendMode::ALL`, the same words
   the layer's Mode dropdown uses), default Normal. It is injected beside `mix` by the
   derive on every effect that has a Mix slider and does not declare a `blend` of its own
@@ -213,8 +213,8 @@ shape.
   modes ([06-RENDER-PIPELINE.md](06-RENDER-PIPELINE.md) §blend domains): Add, Multiply,
   Lighten, Darken and Subtract per channel in linear light, the rest encoded to sRGB for
   the W3C formula and decoded; alpha is the effect's own. **Normal runs no pass** — the
-  kernel's own Mix does the whole job and the picture is byte for byte what it was
-  (K-258). Where an effect also has a generic strength matte (§2.6), the blend runs first
+  kernel's own Mix does the whole job and the picture is byte for byte what it was.
+  Where an effect also has a generic strength matte (§2.6), the blend runs first
   and the matte dissolve after it, so the matte still holds the whole result off.
 
 ### 1.6 CPU reference as oracle
@@ -234,7 +234,7 @@ A WGSL change without a matching reference change MUST fail CI.
 
 All effects operate in the working space defined by
 [06-RENDER-PIPELINE.md](06-RENDER-PIPELINE.md) §3.1: scene-linear, premultiplied alpha, at
-the project-wide depth (K-069). Effects MUST NOT assume display-referred input: values
+the project-wide depth. Effects MUST NOT assume display-referred input: values
 above 1.0 are legal and meaningful (glow depends on them). Effects MUST NOT clip highlights
 except where clipping is the documented behaviour of a parameter.
 
@@ -269,7 +269,7 @@ among them — §3.12).
 Parameters MUST be expressed in units that survive comp resizing and preview resolution:
 
 - **px@comp** — pixels at composition size, for **every** distance, radius and
-  displacement (K-419). A value is authored against the composition's own raster; the
+  displacement. A value is authored against the composition's own raster; the
   engine scales it by the preview resolution factor to the raster actually in play, and
   again to a different export size, so Half or Quarter preview frames exactly like the
   export. No distance in Lumit is a percentage of the composition diagonal.
@@ -278,13 +278,13 @@ Parameters MUST be expressed in units that survive comp resizing and preview res
 - **per cent** — a share of something the parameter names: the host-uniform Mix, a
   channel's share of a grain, a position given as a fraction of the frame's own width
   and height. 100 is the whole of it. A per cent survives resizing because it is not a
-  distance; a *distance* is px@comp, never a percentage of the diagonal (K-419).
+  distance; a *distance* is px@comp, never a percentage of the diagonal.
 - **none** — a number with no unit at all: a gamma, a count, a stop, a rate in Hz.
 
 Every parameter declares which of these it is (`Unit` in `lumit_core::fx`), and a test
 fails the build on one that declares nothing — the declaration is where the resolve
 step learns what to scale for a preview raster, and where the panel learns what to
-write beside the value (K-443).
+write beside the value.
 
 A raw "pixels of whatever buffer I was handed" parameter is forbidden; previews at Quarter
 resolution MUST look like the export, only softer.
@@ -306,19 +306,19 @@ frames; the host resolves them through Retime so a slowed clip requests the corr
 frames. Temporal effects MUST define behaviour at layer/clip boundaries (typical: clamp to
 the boundary frame, matching Overrun semantics in [04-RETIMING.md](04-RETIMING.md)).
 
-### 2.6 Every effect can be driven by a matte (K-395)
+### 2.6 Every effect can be driven by a matte
 
 Every built-in effect has a **Matte** input: a layer whose brightness says *how much of the
 effect* each pixel gets. It is one row, in the same place, on all of them — the layer
-picker with an **Invert** checkbox beside it and a **Channel** choice (K-425), labelled
-"Matte" / "Invert" / "Channel". **Two effects carry none.** The Matte key (K-425): a
+picker with an **Invert** checkbox beside it and a **Channel** choice, labelled
+"Matte" / "Invert" / "Channel". **Two effects carry none.** The Matte key: a
 keyer's subject is the picture it keys, and a strength matte over a key is a garbage
-matte, which is a mask's job. And **Set matte** (K-429): every Matte row answers "how much
+matte, which is a mask's job. And **Set matte**: every Matte row answers "how much
 of me happens here", and Set matte has no answer to give — what it takes from another
 layer is the coverage itself, so the row it shows is its own source picker, riding the
 ordinary auxiliary-layer carriage beside Light wrap's Background rather than the universal
 one. Both keep their stored ids, so a project saved before either drop loads exactly as it
-did (K-065, K-258 — the forward-migration walk only appends what a schema has *grown*, and
+did (the forward-migration walk only appends what a schema has *grown*, and
 carries a row nobody declares any more along untouched).
 
 **The Channel choice says which channel of the matte layer drives the effect**: Luminance
@@ -332,7 +332,7 @@ channel — and no kernel learns about the row, nor inverts on its own any more 
 blur, Glow and Turbulent displace used to; they read the matte as it arrives now, so
 Invert cannot be applied twice). Luminance with Invert off runs **no pass**: the kernels
 read exactly that already, and a pass through an fp16 texture would requantise what they
-read, so the default is byte for byte the matte of K-395 (K-258). Effects that own a
+read, so the default is byte for byte the matte as it first shipped. Effects that own a
 channel choice for their matte carry no Channel row and get the raw RGBA: Depth of field
 (`depth_channel`), Displacement map (its two channel choices), Set matte (Channel) and the
 Lens flare (source detection).
@@ -357,11 +357,11 @@ twin `fx_matte_mix.wgsl`), not thirty-odd times, which is what makes the row mea
 every effect from the day it landed rather than on the handful someone remembered.
 
 **Effects may override with a deeper meaning** where the matte belongs inside the maths.
-An override takes the same row and the same labels, keeps its stored parameter id (K-065 —
-a save is a save), and documents what its matte means in its own schema prose, which is
+An override takes the same row and the same labels, keeps its stored parameter id (a save
+is a save), and documents what its matte means in its own schema prose, which is
 what the manual's parameter tables generate from. Six effects do for a reason of their
 own, and each is a picture the dissolve above cannot produce (Set matte was a seventh
-until K-429 took its Matte row away altogether):
+until its Matte row was taken away altogether):
 
 | Effect | What its matte means |
 |---|---|
@@ -370,9 +370,9 @@ until K-429 took its Matte row away altogether):
 | Glow (§3.3) | gates which pixels may **seed** the halo, before the bright pass — only the lit part of the matte blooms, but its halo still spills outward across the dark part |
 | Depth of field (§3.22) | a **depth** pass: the luma is how far away each pixel is, and the blur widens with the distance from focus, so a mid-grey matte can be perfectly sharp |
 | Lens flare (§3.27) | where the flare **detects its light sources**, in Matte source mode |
-| Displacement map (§3.49) | **is the map**: its chosen channels say which way and how far each pixel is pushed, mid-grey meaning no push — the effect's subject rather than a strength applied to one (K-402) |
+| Displacement map (§3.49) | **is the map**: its chosen channels say which way and how far each pixel is pushed, mid-grey meaning no push — the effect's subject rather than a strength applied to one |
 
-**And the matte scales the amount of every blur, sharpen and colour effect (K-426, the
+**And the matte scales the amount of every blur, sharpen and colour effect (the
 owner's rule for mattes).** The matte is not a mask: where an effect has an amount — a
 Length, a Gamma, a Density — the matte multiplies *that control* per pixel, toward its
 neutral value, before the maths runs: white keeps the control where it was set, black puts
@@ -387,14 +387,14 @@ and Posterize's Levels toward 256 (black matte: a step too fine to see). Where s
 amount is *mathematically* the dissolve — the output is a straight lerp of the input —
 nothing changes and the effect keeps the strength semantic: Contrast and Vignette are
 exactly that, as are Tritone, Black and white, Tint, Curves, Levels, Invert, LUT and
-Broadcast safe at Mix. **Threshold is the exception the owner named** (K-559): its matte
+Broadcast safe at Mix. **Threshold is the exception the owner named**: its matte
 scales the **Level** instead — `level·k` at each pixel, before the cut — so the threshold
 moves across the frame, which is behaviour and not a fade. The formula is one
 helper on each path (`cpu::matte_toward` and its WGSL twin): `neutral·(1 − k) + value·k`,
 spelled so that k = 1 is the value to the bit, which is what keeps an empty matte
-byte-identical to the effect before the claim (K-258).
+byte-identical to the effect before the claim.
 
-**And the matte scales the displacement of every distortion (K-427, the same rule).** A
+**And the matte scales the displacement of every distortion (the same rule).** A
 distortion's amount is a distance: how far a pixel is moved. The matte multiplies *that*,
 per pixel, so a grey matte is a smaller move rather than a full move faded back — which is
 the difference between a warp and a double exposure of a warped picture over a still one.
@@ -419,11 +419,11 @@ Where scaling the amount is *mathematically* the dissolve, nothing changes and t
 keeps the strength semantic (the rule's own test): **Datamosh** is exactly that — its
 output is `current·(1 − Intensity) + melted·Intensity`, so Intensity·k and the dissolve are
 the same arithmetic — and **Tile, Mirror and Polar coordinates** have no amount to scale at
-all, being a repeat, a reflection and a change of coordinates. Turbulent displace (K-395)
-and Displacement map (K-402) had already claimed theirs, on this rule before it was written
+all, being a repeat, a reflection and a change of coordinates. Turbulent displace
+and Displacement map had already claimed theirs, on this rule before it was written
 down.
 
-**And the matte scales the amount of every generator and stylise effect (K-428, the same
+**And the matte scales the amount of every generator and stylise effect (the same
 rule again).** Where an effect *draws* something over the picture, its amount is the drawn
 thing's **opacity**, and the matte multiplies that — so the drawing fades along its own
 length and what lies underneath is untouched. Where an effect has a **size**, the matte
@@ -437,7 +437,7 @@ pair of families that is four: **Noise, Flash, Sprite flare and Light wrap** eac
 linear amount of something to the picture — grain, a colour, light, a screened spill — so
 `amount·k` and the dissolve are the same arithmetic. **Fill, Gradient, Fractal noise, Beam,
 Mosaic and Find edges** have no amount of their own to scale, replacing the picture rather
-than adding to it, and Glow (K-395) keeps its seed gate and the Lens flare its source
+than adding to it, and Glow keeps its seed gate and the Lens flare its source
 detection.
 
 Two of the eleven are the rule at its most visible. **Median** at a half matte draws
@@ -451,7 +451,7 @@ alone", and honestly so, since the matte turns Relief down rather than turning E
 the shadow *falls* rather than where the shape stands: paint the matte over the wall and it
 is the shadow on the wall that goes.
 
-**And the matte scales the shutter, the decay and the completion (K-429, the same rule a
+**And the matte scales the shutter, the decay and the completion (the same rule a
 fourth time).** In the Temporal family the amount is a *duration*: how long the shutter was
 open, how long a trail lasts. **Echo**'s matte scales its **Decay**, so the ghosts are
 genuinely fewer and shorter where the matte is dark — and because `(decay·k)^(i+1)`
@@ -480,7 +480,7 @@ sentence about the same thing: the polygon opens wide where the matte is white a
 nothing where it is black, and a black matte is the same exact identity Outer radius 0
 already is. Outside those families **Transform** and **Broadcast safe** keep the strength
 dissolve, because scaling their amount *is* that dissolve, and the **Camera track** carries
-no row at all (K-417): it draws nothing for a matte to gate.
+no row at all: it draws nothing for a matte to gate.
 
 The difference is worth stating once, because it is the whole reason the hook exists. The
 dissolve can only change *how much of a finished effect* survives; it cannot change what
@@ -495,16 +495,16 @@ itself, and one place then decides who gets the texture — the kernel, or the d
 never both. Depth of field and the Lens flare had their own lists before this and no
 longer do (docs/impl/effect-registry.md §2.5b).
 
-**The matte is a layer, rendered exactly as a depth pass is** (K-387,
-[impl/layer-input.md](impl/layer-input.md)): alone, at the effect's own raster, through the
+**The matte is a layer, rendered exactly as a depth pass is**
+([impl/layer-input.md](impl/layer-input.md)): alone, at the effect's own raster, through the
 same helper preview and export share, with the referenced layer's masks and effects applied
 per its Layer source mode. A matte pointed at the layer the effect is *on* is the effect's
-own input, not a second render (K-288) — on an adjustment layer, that is the composite of
+own input, not a second render — on an adjustment layer, that is the composite of
 everything below.
 
 **Unset is the default, and unset costs nothing.** A fresh effect starts with no matte and
 Invert off; a project saved before this existed carries neither parameter and reads exactly
-that (K-258). No matte bound means no dissolve pass runs at all — not a lerp by one — so
+that. No matte bound means no dissolve pass runs at all — not a lerp by one — so
 such an effect renders **byte-for-byte** what it rendered before the row existed. That is
 the invariant the campaign is held to, and it has its own regression test at each stage.
 
@@ -512,15 +512,15 @@ the invariant the campaign is held to, and it has its own regression test at eac
 
 ## 3. Tier 1 — the montage staples (v1)
 
-The in-box replacements for the scene's paid stack. Two shape rules (K-090): an effect
+The in-box replacements for the scene's paid stack. Two shape rules: an effect
 does **one thing** (multi-purpose designs split; an all-in-one grading suite may exist
 later as a deliberate exception), and every schema declares a **category** — Blur &
 sharpen, Colour, Distortion, Generate, Stylise, Temporal, Transition, Utility, Controls —
 which is how
-the Add-effect menu groups (**Generate** added by K-398, for the effects that *make* pixels
-rather than change them; **Transition** by K-400, for the effects that *remove* the picture
-progressively so a cut can be made out of them; **Controls** by K-414, for the effects that
-change no pixel at all — see §3.80). The flow engine is **not** in this list: it is a per-layer option (K-088),
+the Add-effect menu groups (**Generate** added for the effects that *make* pixels
+rather than change them; **Transition** for the effects that *remove* the picture
+progressively so a cut can be made out of them; **Controls** for the effects that
+change no pixel at all — see §3.80). The flow engine is **not** in this list: it is a per-layer option,
 specified in §3.1's original text but surfaced as layer UI, not an effect. Summary:
 
 | # | Effect | Replaces | Cost | Temporal window |
@@ -570,13 +570,13 @@ specified in §3.1's original text but surfaced as layer UI, not an effect. Summ
 
 ### 3.1 Flow engine — optical-flow retime interpolation (Twixtor-class)
 
-**K-088: not an effect.** Everything below stands as the engine specification, but flow is
+**Not an effect.** Everything below stands as the engine specification, but flow is
 surfaced as a **layer option**: a toggle in the footage layer's switch cluster, a **Flow**
 group beside Transform and Effects carrying these parameters, engaging only when the
 footage's rate (through any retime) undershoots the composition's — when a source frame
 would otherwise hold across two or more comp frames.
 
-**Input rate (conform, K-095; keyframeable, K-160).** The Flow group carries an **Input
+**Input rate (conform, keyframeable).** The Flow group carries an **Input
 rate** control: the fps the clip is *interpreted* at for flow. It is a keyframeable value the
 user types any rate into (a numeric field with the usual stopwatch and keyframe navigator,
 not a preset dropdown), so the conform rate can ramp over the clip. `0` reads as Native (the
@@ -609,7 +609,7 @@ bidirectional warping with occlusion-aware blending. This is what makes extreme 
    level from the upsampled coarser level, refine by inverse-search patch matching (8×8
    patches on a stride-4 grid, a few Newton steps each) then densify. Compute A→B and B→A
    fields. The exact structure — patch size, grid, occlusion and confidence — is pinned in
-   [docs/impl/optical-flow.md](impl/optical-flow.md); DIS is the shipped v1 engine (K-169).
+   [docs/impl/optical-flow.md](impl/optical-flow.md); DIS is the shipped v1 engine.
 3. **Occlusion detection** by forward-backward consistency: where `flow_AB` followed by
    `flow_BA` fails to return within a threshold, the pixel is occluded in one frame.
 4. Synthesis at fraction t: splat/warp A forward by `t·flow_AB` and B backward by
@@ -617,7 +617,7 @@ bidirectional warping with occlusion-aware blending. This is what makes extreme 
    which the pixel is visible; inpaint the (rare) both-occluded holes from neighbours.
 5. HUD/overlay guard: static-region detection (near-zero flow with high texture) biases
    those pixels toward pure blending, reducing the classic Twixtor HUD smearing.
-   **Shipped (K-331)** as `lumit_flow::hud_weights`: per pixel, `stillness × texture`, where
+   **Shipped** as `lumit_flow::hud_weights`: per pixel, `stillness × texture`, where
    stillness tapers over 0.25–1.0 px of measured motion and texture over 0.02–0.08 of Sobel
    magnitude in encoded luma. The texture term takes a **3×3 max** of the gradient before the
    taper, not the gradient itself — a gradient is zero inside every stroke of a glyph and
@@ -627,21 +627,21 @@ bidirectional warping with occlusion-aware blending. This is what makes extreme 
    is itself visible), and synthesis mixes each pixel back toward the plain blend by it.
 
 **Parameters** (surfaced per clip / per layer as render-policy options, not a stack entry).
-All of these ship as `FlowParams` fields (K-331); each is content in the frame-cache key,
+All of these ship as `FlowParams` fields; each is content in the frame-cache key,
 because each changes the synthesised picture.
 
 | Parameter | Range / type | Default | Notes |
 |---|---|---|---|
-| Flow resolution | Native / Half / Quarter | Native | The size flow is *measured* at. Independent of the preview quality tier (K-331) — see below |
+| Flow resolution | Native / Half / Quarter | Native | The size flow is *measured* at. Independent of the preview quality tier — see below |
 | Vector detail | Low / Medium / High / Ultra | Medium | Pyramid depth + refinement iterations |
 | Smoothness | 0–100 | 50 | Regularisation weight; high = fewer tears, gloopier. Scales the smoothing pass's flow-range sigma, 50 being the tuned default the analytic tests were fitted against |
 | Occlusion handling | Blend / Visible-only | Visible-only | Blend trades ghosting for fewer holes |
 | Fallback | enum | Blend | Behaviour where confidence is low: **blend** (crossfade) or **nearest** |
 | HUD guard | bool | on | Step 5's static-region bias; off for footage with no overlay |
 | Always | bool | off | Force flow past the engagement gate below |
-| Input rate | fps, keyframeable | 0 (Auto) | The conform rate above (K-095, K-160). Shipped with cadence presets beside the field — Auto, On 2s (12), On 3s (8), On 4s (6), 24, 25, 30 — named for the cadence rather than the number, since an editor knows a cut is "on 2s" without doing 24 ÷ 2 |
+| Input rate | fps, keyframeable | 0 (Auto) | The conform rate above. Shipped with cadence presets beside the field — Auto, On 2s (12), On 3s (8), On 4s (6), 24, 25, 30 — named for the cadence rather than the number, since an editor knows a cut is "on 2s" without doing 24 ÷ 2 |
 
-**Flow resolution is not the preview resolution (K-331).** Flow used to be measured on
+**Flow resolution is not the preview resolution.** Flow used to be measured on
 whatever the preview scale had shrunk the decode to, which made a draft scrub and an export
 two different *measurements* rather than one measurement at two sizes. The working resolution
 is now this parameter alone. Consequence, accepted deliberately: **a layer whose flow is live
@@ -651,7 +651,7 @@ user buys the speed back. The rule is "whoever asks": a layer with a live flow-c
 effect (§3.2, §3.12) decodes natively on the same grounds, which is also what lets the two
 consumers share one measured field.
 
-**Engagement gate (K-088, built in K-331).** Flow engages only where a source frame would
+**Engagement gate (shipped).** Flow engages only where a source frame would
 otherwise hold across two or more comp frames — i.e. where `|speed| · source_rate / comp_rate`
 is under 1, the source rate being the conform rate when one is set. Outside that (100% or
 faster, or a freeze) the policy degrades to Nearest and costs nothing. **Always** overrides.
@@ -663,8 +663,8 @@ changes no pixels.
 synthesised pixel carries a confidence value, and low-confidence pixels fall back per the
 Fallback parameter. The Viewer offers a diagnostic channel view (motion vectors, occlusion
 matte, confidence) so editors can see *why* a region tears and mask or retrim rather than
-guess. Flow fields are cached per source-frame-pair (content-hashed, K-016) so scrubbing a
-retimed clip does not recompute flow. CUDA MAY accelerate this node where present (K-014);
+guess. Flow fields are cached per source-frame-pair (content-hashed) so scrubbing a
+retimed clip does not recompute flow. CUDA MAY accelerate this node where present;
 the WGSL path is the portable baseline and the CPU reference is the oracle for the flow
 field itself (vector-field tolerance, then bit-tolerant synthesis).
 
@@ -692,7 +692,7 @@ adapts to vector length (4–64), clamped by quality.
 | Vector source | Auto / Flow / Transform-only | Auto |
 | Quality | Normal / High | Normal |
 
-(K-390 dropped the *Draft* tier this table used to list: tap counts became adaptive,
+(The *Draft* tier this table used to list was dropped: tap counts became adaptive,
 so the cheap tier is what a short streak already costs and a third name would have
 been a knob with nothing behind it.)
 
@@ -709,7 +709,7 @@ and handed to the kernel as an `rgba32float` texture threaded exactly as Echo's
 neighbour frames are (decode → draw → realise/export → the pass): `.xy` the flow vectors,
 `.z` a per-pixel **confidence** in 0..1. Preview and export compute
 it the same way — the same `to_gray` → `lumit_flow` forward/backward-flow call on the same
-source frames — so they match (K-031); the exact f32 flow texture keeps the CPU/GPU oracle at
+source frames — so they match; the exact f32 flow texture keeps the CPU/GPU oracle at
 the cheap-class ≤ 2 fp16 ULP bound, the only rounding being the colour taps.
 
 **Confidence, not a hard cut (FX-19).** A patch-based flow field is unreliable at occlusions and
@@ -718,7 +718,7 @@ confidence — `lumit_flow::confidence`, a 0..1 forward–backward-consistency m
 two flows agree, tapering to 0 where they disagree, an invalid patch fully suspect), 3×3
 box-blurred so the falloff has no seam — is a **smooth** quantity throughout, never a switch.
 
-**What confidence does with it changed in v2 (K-392).** v1 *shortened* the streak by
+**What confidence does with it changed in v2.** v1 *shortened* the streak by
 confidence, so an uncertain pixel came out sharp in the middle of a blurred frame and
 confidence 0 was a bit-exact passthrough. v2 **steers** instead: an uncertain pixel borrows
 its neighbourhood's motion (sampled bilinearly between 16 px tile centres, so the borrowed
@@ -749,7 +749,7 @@ foreground from a fast background, so a *small* static object entirely surrounde
 motion receives its neighbours' smear (large static regions do not — the reach is a tile or
 two plus the streak); the fix, if ever wanted, is a depth input rather than a constant.
 
-**On an adjustment layer and on a Precomp, the picture measures itself** (K-565). The
+**On an adjustment layer and on a Precomp, the picture measures itself.** The
 sentence above — *most commonly, on an adjustment layer over the whole montage* — was for a
 long time the one placement where the effect did nothing at all, and a Precomp layer was the
 same: the decode worker measures between decoded source frames, and neither of those kinds
@@ -764,9 +764,9 @@ two composites back to make CPU greys costs several times what the measurement d
 offset steps by the **comp's own frame**, which is the shutter the effect smears over, and
 the working resolution is the half-res the decode worker measures an effect's motion at, so
 a composite is measured the way footage is rather than by a second rule. Datamosh (§3.12)
-goes through the identical machinery for its own `-1` measurement; K-544's contract holds
-unchanged, because the builder emits **one neighbour render per offset the stack asked for**
-and neither consumer can take the other's field.
+goes through the identical machinery for its own `-1` measurement; the one-field-per-effect
+contract holds unchanged, because the builder emits **one neighbour render per offset the
+stack asked for** and neither consumer can take the other's field.
 
 Two boundaries, both inherited and both deliberate. **Cost**: each measurement is a second
 render of the below-stack (or of the nested comp) plus one flow pair, taken on demand — a
@@ -779,12 +779,12 @@ transforms, effects, cameras, nested animation — and not the sub-frame motion 
 playing back beneath the adjustment, which is measured by putting the effect on the footage
 layer itself. Sequence-clip temporal effects remain deferred exactly as they are for Echo.
 
-**Its matte scales Shutter angle per pixel** (K-429, §2.6), read at the destination pixel
+**Its matte scales Shutter angle per pixel** (§2.6), read at the destination pixel
 and spent everywhere the shutter is spent — this pixel's own vector, the neighbourhood's
 dominant sweep, and each tap's reach — so a grey matte is a genuinely shorter streak
 rather than a long one faded back over a sharp picture.
 
-**A Motion vectors layer may stand in for the measured flow** (K-429). A **Motion vectors**
+**A Motion vectors layer may stand in for the measured flow.** A **Motion vectors**
 Layer row names a layer whose **red and green channels are the per-pixel motion**, in the
 encoding every engine's velocity pass and every renderer's vector pass already uses: red is
 sideways, green is up-and-down, and **mid-grey (0.5) is standing still**, so the motion in
@@ -793,7 +793,7 @@ are not read, and confidence comes out at 1 everywhere — a supplied vector is 
 measurement that can have failed to match. **Vector scale** (px@comp, default 32, greyed
 until a layer is picked) is what makes one engine's normalisation agree with the frame it
 came from; different passes normalise differently, and this is the dial that reconciles
-them. The layer is an ordinary auxiliary layer input on the K-387 carriage (§1.2, K-123),
+them. The layer is an ordinary auxiliary layer input on the shared carriage (§1.2),
 so a matte may be given as well; unset is the labelled no-op, and the measured flow is
 used. Bound, it is also the one way this effect works on a layer that has no measured
 flow at all — a solid, a shape, a comp — because the field no longer has to be measured
@@ -833,11 +833,11 @@ band or clip prematurely.
 | Recombine | Add / Screen | Add |
 
 Cost class `moderate`; ROI `full-frame` (Radius is unbounded px@comp, so a %-diag padding
-cannot bound it statically, K-135 — mirroring Chromatic aberration's own px@comp choice).
+cannot bound it statically, mirroring Chromatic aberration's own px@comp choice).
 The mip chain makes large radii near-constant cost — the "radius 200 makes AE cry" failure
 mode does not exist here.
 
-**The Matte gates the seed (K-395, §2.6).** Glow is one of the four effects that claim the
+**The Matte gates the seed (§2.6).** Glow is one of the four effects that claim the
 matte inside their own maths: the input is multiplied by the matte's luma **before** step 1,
 so only what the matte lights is allowed to bloom. The halo then spreads from those pixels
 as light does — outward across the dark part of the matte, past its edge, over the parts of
@@ -845,13 +845,13 @@ the picture the matte excluded. Dissolving a finished glow instead clips the hal
 matte's outline, which is why this is an override and not the generic semantic: a glow "on
 the sign only" should still light the wall beside it.
 
-**Status (v1 core, shipped; ranges revised K-135/FX-16):** the bright-pass → separable
+**Status (v1 core, shipped; ranges revised in FX-16):** the bright-pass → separable
 gaussian → additive recombine spine, with Threshold (hard range clamped at zero below and
-unbounded above — the K-090 one-sided shape; HDR values glow harder; **default 0.8** so a
+unbounded above — the one-sided shape; HDR values glow harder; **default 0.8** so a
 fresh instance blooms highlights just shy of white), **Softness** (the soft-knee width — its
 UI label was renamed from Knee for plainer language; the stable parameter id stays `knee`, so
 saved projects and expressions are unaffected), **Radius** (now **px@comp** rather than %
-diag, K-135: a real-pixel half-width scaled by the preview factor, clamped at zero below and
+diag: a real-pixel half-width scaled by the preview factor, clamped at zero below and
 unbounded above so a wide bloom is a matter of typing a larger number, not hitting a cap —
 default 24 px), Intensity, Tint and the host Mix. The knee is pinned as
 `max(0, c − threshold) · smoothstep(threshold − knee, threshold + knee, c)` per channel. The
@@ -898,14 +898,14 @@ exponentially over Decay seconds, so shakes hit on the beat and settle.
 | Seed | seed | per-instance |
 
 The master Amplitude and Frequency drive the overall translational sway; the **Per-axis
-wobble** twirl (K-146) biases each axis and adds depth. **Rotation frequency** (K-541) is the
+wobble** twirl biases each axis and adds depth. **Rotation frequency** is the
 twist's own rate multiplier, beside its amount, so a slow sway can carry a fast shudder;
 ×1 is the master rate the twist had before the row existed. X and Y amount/frequency are
 dimensionless multipliers on the master values (×1 reproduces the plain uniform shake); Z
 is the depth/scale shake — Z amount is a scale-pump per cent (the old Zoom pump, same
-range), Z frequency a rate multiplier. **Edges** (K-145, the reusable control) governs the
+range), Z frequency a rate multiplier. **Edges** (the reusable control) governs the
 border the resample reveals: Transparent leaves it clear, Repeat holds the edge pixel,
-Mirror reflects. The **Motion blur** twirl (T18/K-165) adds the shake's own motion blur:
+Mirror reflects. The **Motion blur** twirl (T18) adds the shake's own motion blur:
 the wobble is a pure function of time, so with the toggle on it is sampled at several
 sub-frame placements across the shutter and the resamples are averaged — translation,
 rotation and zoom smear together, along the shake's own inter-frame movement, and only this
@@ -915,7 +915,7 @@ resample. This is the streak the S_Shake feature wiggle expressions never had.
 
 **Status (v1, continuous form, shipped):** Amplitude, Frequency, Rotation amount and
 Rotation frequency, the
-Per-axis wobble twirl (X/Y/Z amount and frequency), the Motion blur twirl (T18/K-165), an
+Per-axis wobble twirl (X/Y/Z amount and frequency), the Motion blur twirl (T18), an
 Edges control (Transparent / Repeat / Mirror, default Mirror — pass 5 owner feedback: the
 reflected border reads most natural under a shake) and Seed (per-instance
 default, with reseed). The generator is pinned as two octaves of seeded value noise
@@ -923,20 +923,20 @@ default, with reseed). The generator is pinned as two octaves of seeded value no
 at local time × frequency — deterministic and hop-free per §2.4. Resolved host-side into an
 affine and dispatched through the §3.5 Transform kernel (which now carries the Edges
 policy): no kernel of its own, and the zero-wobble state is a bit-exact passthrough (pinned
-by test). **Motion blur (T18/K-165):** with the twirl on, the resolver samples the wobble at
+by test). **Motion blur (T18):** with the twirl on, the resolver samples the wobble at
 a fixed, odd number of sub-frame placements (host-side — the noise lattice needs 64-bit
 integers the GPU has not got) and a dedicated averaging kernel resamples the input through
 each and takes the premultiplied-linear mean; off, or Shutter 0, is the exact single
 resample. The shutter window is measured in the shake's own phase (local time × frequency),
 not seconds, so the effect resolver stays frame-rate-agnostic and the smear is frame-rate
-independent (see K-165). **Migration (FX-11/K-146):** this reshape replaced the old Zoom
+independent. **Migration (FX-11):** this reshape replaced the old Zoom
 pump and Auto-scale bool — a project saved before it maps its Zoom pump to the Z amount, and
 its Auto-scale to the Edges control (on → Repeat, which hides the border as the cover scale
 once did; off → Transparent). The Auto-scale cover (which zoomed in to keep every corner
 covered) is gone; the Edges control handles the revealed border instead. Style presets and
 Triggered mode (§1.4) follow; shipped parameters are stable when they do.
 
-**The Matte scales the displacement (K-427, §2.6):** the shove, the twist and the zoom the
+**The Matte scales the displacement (§2.6):** the shove, the twist and the zoom the
 wobble gives a pixel are all pulled toward none by the matte at the pixel they land on, so
 a half-grey matte on a 6 px shove is the 3 px shove and a soft matte turns a frame-wide
 shove into a **warp** — one part of the picture moving while another stays put, which no
@@ -944,7 +944,7 @@ dissolve of a shaken frame can be. The motion-blurred tier scales every sub-fram
 same way. The Transform effect (§3.5) shares this kernel and does **not** claim it: it
 keeps the strength dissolve.
 
-### 3.5 Transform — the transform properties as an effect (K-090)
+### 3.5 Transform — the transform properties as an effect
 
 Position, Anchor, Scale, Skew, Rotation, Opacity — the layer transform group, as a stack entry.
 Its point is adjustment layers: applied there, it transforms the composite of everything
@@ -952,7 +952,7 @@ below, which is the montage punch-in/whip gesture without touching per-layer tra
 Parameters mirror the transform group exactly (same names, units, animatability). Cost
 `trivial`, ROI `exact` under pure translation and `full-frame` otherwise, `{0}` temporal.
 
-**Skew and Skew axis (K-666).** After Effects' own pair, with After Effects' own composition
+**Skew and Skew axis.** After Effects' own pair, with After Effects' own composition
 order — anchor, scale, **skew**, rotation, position — so the lean is applied to the scaled
 picture and the rotation then turns the leaned one. Skew is its unitless amount, read as the
 lean angle in degrees (45 shears by one unit of x per unit of y) and hard-limited short of
@@ -961,12 +961,12 @@ with positive amounts leaning the top to the right, the axis turning that lean c
 screen like the Rotation dial. The shear has determinant 1, so it leans a frame without
 resizing it and adds no degenerate case to the zero-scale one. **A zero amount is skipped
 entirely**, which is what makes a stack saved before the pair existed render byte for byte
-what it did (K-258) — `R(axis)·I·R(−axis)` is only approximately the identity in floating
+what it did — `R(axis)·I·R(−axis)` is only approximately the identity in floating
 point, and approximately is not byte-identical.
 
 ### 3.6 RGB split
 
-**Quality (K-090; picker-driven A1/K-163):** a `Wavelength` Bool (default off) switches from
+**Quality (picker-driven, A1):** a `Wavelength` Bool (default off) switches from
 the three-tap split to a smooth dispersion (more samples across the offset span, recombined in
 linear) for the higher-quality look. The three-colour picker drives it: each spectral tap is
 tinted by the picker sampled as a gradient (Colour 1 → Colour 2 → Colour 3), so the default
@@ -975,7 +975,7 @@ are shared between modes.
 
 **Parameters:** Amount (0–200 px@comp, hard 0–500, default 8), Angle (degrees), Red / Green / Blue per-tap
 amounts (%), Colour 1 / 2 / 3 (the three tap tints), Wavelength (Bool), Samples (Wavelength
-mode), Mix. **Linear only (K-161, T17):** RGB split has no Radial mode — the always-radial
+mode), Mix. **Linear only (T17):** RGB split has no Radial mode — the always-radial
 fringe is §3.15 Chromatic aberration's job.
 
 **Algorithm sketch.** Three tinted taps along the Angle offset: taps 1 and 2 sample behind the
@@ -985,40 +985,40 @@ R-behind / B-ahead / G-anchored split bit-for-bit; any other colours cross-tint 
 Operates premultiplied; alpha stays put to avoid fringed mattes. Trivially animatable Amount is
 the scene's impact-frame staple.
 
-**Per-tap amounts (FX-9, K-143):** three per-cent scales — **Red**, **Green**, **Blue**
-(defaults 100 / 0 / 100, open both sides, K-135) — multiply the overall Amount per tap, so the
+**Per-tap amounts (FX-9):** three per-cent scales — **Red**, **Green**, **Blue**
+(defaults 100 / 0 / 100, open both sides) — multiply the overall Amount per tap, so the
 taps can fringe by different amounts and the middle tap be nudged off its anchor. Taps 1 and 2
 displace along −offset, tap 3 along +offset, so the 100 / 0 / 100 defaults (with the default
 tints) reproduce the classic split bit-for-bit. They apply to the classic (non-Wavelength) mode
 only.
 
-**Tap tints (K-161, T17; K-163):** the same reusable three-colour picker §3.15 chromatic
+**Tap tints (T17):** the same reusable three-colour picker §3.15 chromatic
 aberration carries (`channel_colour_1/2/3`, default red / green / blue) tints the taps. In the
 classic mode the primaries reduce to the historical channel-separated split; other colours
 produce coloured fringes (a cyan/magenta split, a warm/cool split, and so on). The picker drives
-the **Wavelength** mode too (A1/K-163): it defines the dispersion gradient there.
-**Normalisation (K-167, T17):** the classic mode normalises the three tints per output channel
+the **Wavelength** mode too (A1): it defines the dispersion gradient there.
+**Normalisation (T17):** the classic mode normalises the three tints per output channel
 (each channel's column of tap weights is rescaled to sum to 1, host-side in
 `lumit_core::fx::normalise_tint_columns`, shared by CPU and GPU) — the same rule the
 Wavelength gradient already applied. So custom tints recolour only where the taps *disagree*
 (the misaligned fringe); uniform or aligned regions pass through at their original exposure,
 and the default primaries are untouched bit-for-bit (columns already sum to 1).
 
-**Wavelength samples (FX-9, K-144):** the Wavelength mode carries a **Samples** control (the
+**Wavelength samples (FX-9):** the Wavelength mode carries a **Samples** control (the
 tap count, `3..=64`, default 16). More taps fill the same `±offset` span more densely, so a
 large offset disperses as a smooth fringe instead of a few discrete stacked copies. Each tap's
-colour is the three-colour picker sampled as a gradient at its offset fraction (A1/K-163:
+colour is the three-colour picker sampled as a gradient at its offset fraction (A1:
 Colour 1 at the −offset end, Colour 2 at centre, Colour 3 at the +offset end); the colour
 columns are normalised across the taps host-side and shared by the CPU reference and the WGSL
 kernel, so a uniform image still passes through unchanged (the fringe is tinted, not the
-exposure) and preview equals export (K-031).
+exposure) and preview equals export.
 
 **§3.15 Chromatic aberration** is the always-radial sibling shipped alongside this effect: the
 same three-tinted-tap idea, but growing radially from the frame centre rather than along an
 angle. It carries the same three-colour channel picker and the same Wavelength/Samples
-dispersion (K-144) — see §3.15.
+dispersion — see §3.15.
 
-**The Matte scales Amount on both (K-427, §2.6):** the offset vector the three taps spread
+**The Matte scales Amount on both (§2.6):** the offset vector the three taps spread
 across is multiplied by the matte at the pixel it is read for, in both the classic tier and
 the Wavelength one, so the fringe is genuinely narrower where the matte is grey rather than
 a wide fringe faded back. A black matte returns the pixel untouched.
@@ -1038,7 +1038,7 @@ genre.
 **Status (v1, shipped):** Mode (Manual / Trigger / Strobe) — Manual is the pre-marker
 manual form (keyframed hits on Trigger decaying exponentially over Decay) and the
 default, so existing instances and old projects render byte-identically — plus Duration
-(frames, default 2; hard floor 0, unbounded above per K-090), Attack/decay shape
+(frames, default 2; hard floor 0, unbounded above), Attack/decay shape
 (Hard / Fade), Every Nth beat (Strobe; the spec's integer ≥ 1, carried as a rounded
 float row for now) and Phase offset (frames). The envelope is pinned host-side in one
 shared function: from the nearest trigger at/before the frame — every Nth beat of the
@@ -1053,9 +1053,9 @@ the envelope. Shipped parameters are stable when these follow.
 
 ### 3.8 Blur — Gaussian, Directional, Radial (three effects)
 
-**Three single-purpose effects (K-137).** This began as one mode-driven "Blur" effect;
-K-137 split it into **Gaussian blur**, **Directional blur** and **Radial blur** — one job per
-effect (K-090), each in the **Blur & sharpen** category. The maths, kernels and CPU oracles
+**Three single-purpose effects.** This began as one mode-driven "Blur" effect; it was
+split into **Gaussian blur**, **Directional blur** and **Radial blur** — one job per
+effect, each in the **Blur & sharpen** category. The maths, kernels and CPU oracles
 are unchanged by the split; only the schema and the resolve arms that read it changed. All
 three are premultiplied (blurring unpremultiplied colour bleeds haloes) and declare `per-tile`
 cancellation.
@@ -1066,12 +1066,12 @@ cancellation.
   loads here as Gaussian at its stored Radius, byte-identically** — whatever mode it had saved,
   its now-unread mode/length/centre parameters are simply ignored.
 - **Directional blur** (match_name `directional_blur`): Length (px@comp, default 200, slider
-  0–2000, **hard-unbounded above** per K-090) and Angle. Line-integral sampling along the
+  0–2000, **hard-unbounded above**) and Angle. Line-integral sampling along the
   angle. Length may exceed the frame, since it is its own effect rather than
   sharing the family's reach; the tap count still clamps (`cpu::dir_blur_taps`), so a long
   streak stays bounded in cost. ROI `full-frame` (an unbounded Length cannot be padded
   statically).
-- **Radial blur** (match_name `radial_blur`): Centre X / Centre Y (**px@comp**, K-558, default
+- **Radial blur** (match_name `radial_blur`): Centre X / Centre Y (**px@comp**, default
   960/540 and centred on the actual comp by `instantiate_for_raster` — the schema has no
   Point-shaped `ParamKind`, so this follows Transform's own `anchor_x`/`anchor_y` split),
   Amount (px@comp, default 150, slider 0–2000, hard-unbounded above),
@@ -1087,7 +1087,7 @@ cancellation.
   the useful Amount range; the oracle holds to ≤ 2 fp16 ULP (measured worst 1 ULP). Amount 0 is
   a bit-exact passthrough (pinned by test, mirroring Directional's zero-length case).
 
-**The Matte scales Gaussian blur's radius (K-395, §2.6).** Gaussian blur is one of the four
+**The Matte scales Gaussian blur's radius (§2.6).** Gaussian blur is one of the four
 effects that claim the matte inside their own maths: each pixel's matte luma multiplies
 Radius before the kernel is built, so white blurs at the full Radius, mid-grey at half of
 it, and black not at all. Both separable passes read the *destination* pixel's matte, so the
@@ -1095,11 +1095,11 @@ two halves agree on that pixel's kernel width. This is a different picture from 
 full-width blur, and the difference is the point: a dissolve leaves every pixel gathered
 from the full radius away and merely fades that back, so it reads as a veil over a sharp
 image, where a radius ramp reads as a lens racking focus. **Directional and Radial claim it
-the same way (K-426):** the matte scales Directional blur's Length and Radial blur's Amount
+the same way:** the matte scales Directional blur's Length and Radial blur's Amount
 per pixel — the same host-computed taps, packed closer — so the streak or the sweep is
 genuinely shorter where the matte is grey, not a long one faded back.
 
-**Edges (K-137).** The old effect carried one shared Transparent / Repeat / Mirror control
+**Edges.** The old effect carried one shared Transparent / Repeat / Mirror control
 across every mode. The split keeps that control **only on Radial** (the sweep most often wants
 Mirror or Transparent); **Gaussian and Directional resolve at the old default, Repeat**
 (full-frame game footage never darkens along the border), so their look is unchanged. Radial's
@@ -1108,7 +1108,7 @@ clears exactly like them.
 
 ### 3.9 Sharpen — Unsharp mask and plain Sharpen (two effects)
 
-**Two effects (K-138).** The original §3.9 effect was really an unsharp mask; K-138 renamed
+**Two effects.** The original §3.9 effect was really an unsharp mask; a later pass renamed
 its **label** to **Unsharp mask** (match_name stays `sharpen`, so saved projects are
 unchanged) and added a separate plain **Sharpen**. Both are in the **Blur & sharpen** category
 and run in linear light on unpremultiplied colour (§2.2).
@@ -1117,7 +1117,7 @@ and run in linear light on unpremultiplied colour (§2.2).
   (0–1, suppresses noise amplification), and a luminance-only option (avoids chroma fringing on
   compressed game capture). Algorithm: `input + amount · (input − gaussian(input, radius))`
   gated by threshold — a radius-controlled detail lift.
-- **Sharpen** (match_name `sharpen_simple`, K-138): the plain sibling — a high-pass
+- **Sharpen** (match_name `sharpen_simple`): the plain sibling — a high-pass
   convolution scaled by **Amount** (default 1 = the classic 5/−1 kernel, slider 0–5,
   hard-clamped ≥ 0) with an adjustable **Radius** (T15; the neighbour distance in pixels,
   default 1 = a 3×3 kernel, slider 1–8, host-rounded to a whole pixel). `out = u + amount ·
@@ -1127,13 +1127,13 @@ and run in linear light on unpremultiplied colour (§2.2).
   Mix 0 are the bit-exact passthrough. Cheap; the honest "just sharpen it" control beside the
   Unsharp mask's knobs.
 
-**The Matte scales Amount on both (K-426, §2.6):** less detail is added back where the matte
+**The Matte scales Amount on both (§2.6):** less detail is added back where the matte
 is grey, which differs from fading a finished sharpen wherever the full Amount undershot
 past zero and was clipped.
 
 ### 3.10 The colour effects — Colour balance, Saturation, and the preset browser (Magic Bullet-class)
 
-The "CC" engine, as single-purpose effects (K-090: the v1 all-in-one Grade split; an
+The "CC" engine, as single-purpose effects (the v1 all-in-one Grade split; an
 all-in-one grading suite MAY return later as the deliberate exception). Each is `cheap`,
 pointwise, unpremultiplied (§2.2), all parameters animatable, neutral by default (a
 grade's tasteful default is a preset choice — see the browser below):
@@ -1143,15 +1143,15 @@ grade's tasteful default is a preset choice — see the browser below):
   (gain), with gamma on a display-referred intermediate for familiar feel, documented
   precisely in the implementation notes.
 - **Saturation** (per cent about Rec. 709 luma in linear light; 0 = greyscale, 100 = neutral,
-  200 = doubled) — the hard ceiling is **open** (K-135): the luma/colour mix keeps
+  200 = doubled) — the hard ceiling is **open**: the luma/colour mix keeps
   extrapolating past 200, so the slider reaches a heavy 400 and typing higher pushes further.
-- **Vibrancy** (v1, shipped, K-152) — a saturation boost *weighted by each pixel's current
+- **Vibrancy** (v1, shipped) — a saturation boost *weighted by each pixel's current
   colourfulness*: the per-pixel factor is `1 + amount·(1 − sat)`, where `sat = (max − min)/max`
   is the scale-invariant HSV saturation (clamped 0..1), so less-saturated pixels lift more and
   already-vivid ones little — skin tones and near-neutrals gain while saturated areas are
   protected from clipping, unlike Saturation's uniform scale. One **Amount** dial (per cent):
   0 is the neutral, bit-exact identity; the slider reaches a heavy 200 and typing higher pushes
-  further (open ceiling, K-135, floored at 0). Same domain as Saturation — linear light,
+  further (open ceiling, floored at 0). Same domain as Saturation — linear light,
   unpremultiplied (§2.2), re-premultiplied, colour scaled about Rec. 709 luma and clamped at
   zero. `cheap` cost, `Exact` ROI; the §1.6 CPU/GPU oracle holds to ≤ 2 fp16 ULP, and the
   neutral is the bit-exact identity on both paths.
@@ -1160,7 +1160,7 @@ grade's tasteful default is a preset choice — see the browser below):
 pack has one. The remaining "CC" stages arrive the same way: **exposure / white balance**
 (stops; Temperature via Bradford-adapted CCT shift; Tint). **Curves** has landed as §3.30 —
 master + R/G/B + alpha, each a real point list with a clamped cubic through it, which is the
-point list sketched here (K-412; K-396's five fixed knots a channel were the floor it grew
+point list sketched here (the five fixed knots a channel were the floor it grew
 from).
 
 **Preset browser.** Colour presets get a dedicated browser (per
@@ -1170,7 +1170,7 @@ engine at thumbnail resolution through the real effect — never approximations.
 ≥ 40 presets across the genre families (clean/bright, teal-orange, moody desat, anime
 vibrance, VHS warm). Selecting a preset sets parameters; it never locks editing.
 
-**The Matte scales the amount of each (K-426, §2.6):** Colour balance's Lift is pulled
+**The Matte scales the amount of each (§2.6):** Colour balance's Lift is pulled
 toward 0 and its Gamma and Gain toward 1 per pixel before the grade runs; Saturation is
 pulled toward 100; Vibrancy's Amount is scaled. A grey matte is a gentler grade, not a full
 grade faded back — which differs wherever the full grade clipped, or (Colour balance) wherever
@@ -1186,21 +1186,21 @@ Tetrahedral, default Tetrahedral), Mix.
 working-space linear into the LUT's expected space, applies, converts back. Unpremultiplied.
 Missing file behaviour: effect becomes a labelled no-op with a warning badge — never a
 render failure ([13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md) never-crash rule). The
-file's content hash joins the cache key; project save embeds small LUTs (K-040) so shared
+file's content hash joins the cache key; project save embeds small LUTs so shared
 projects survive relinking.
 
-**Status (v1, shipped, K-114; Input space K-543):** **File + Input space + Mix**. The File
+**Status (v1, shipped; Input space added later):** **File + Input space + Mix**. The File
 parameter picks a `.cube`
-cube (animatable by stepping between paths with hold keys — two files cannot be blended,
-K-111) and Mix blends the graded result over the input. **3D trilinear** only (the manual
+cube (animatable by stepping between paths with hold keys — two files cannot be blended)
+and Mix blends the graded result over the input. **3D trilinear** only (the manual
 eight-corner interpolation of [docs/impl/lut.md](impl/lut.md) §2–3, matching the CPU oracle
-`lut::Lut3d::sample_in` to ≤ 2 fp16 ULP; Tetrahedral is deferred). **Input space** (K-543) is
+`lut::Lut3d::sample_in` to ≤ 2 fp16 ULP; Tetrahedral is deferred). **Input space** is
 a three-option dropdown — **Linear** (default), **sRGB**, **Rec. 709** — naming the transfer
 function the cube was authored against: the straight colour converts into it, the table
 applies, and the result converts back to scene-linear, so a `.cube` baked in a
 display-referred grading application lands in the cells its author was looking at. Linear is
 the identity in both directions and is byte-for-byte the picture this effect rendered before
-the row existed (K-258). There is no Log option: the pipeline defines no log transfer
+the row existed. There is no Log option: the pipeline defines no log transfer
 function and §1's rules forbid inventing one (a follow-up, with OCIO).
 Unpremultiplied (§2.2), and the transfer sits **inside** the unpremultiply/re-premultiply
 pair — a transfer function is a statement about colour, not about coverage. An **unset,
@@ -1209,18 +1209,18 @@ never a fault. GPU-only: the parsed cube is threaded beside the resolved op (lik
 neighbour frames and Motion blur's flow field), so the CPU-degradation rung renders a LUT as
 identity — its §1.6 oracle reference is `lut::Lut3d::sample_in` used directly in the lumit-gpu
 test, the one effect whose reference lives outside its own `EffectDef::apply_cpu` (its parameter
-is a file, not a number). Preview and export load and apply it identically (K-031). **Follow-ups:**
+is a file, not a number). Preview and export load and apply it identically. **Follow-ups:**
 Tetrahedral interpolation, log input spaces, the content-hash cache key (the cache is
 path-only for now, so an edited-on-disk LUT needs the app reopened), and embedding small LUTs
-in the project (K-040).
+in the project.
 
 ### 3.12 Glitch family — block glitch, scanlines, datamosh
 
-Three separate effects, formerly shipped as one "Glitch" effect with enableable sections
-(K-104). **Status (K-107):** split into one-thing effects per the §1's one-effect-one-job
-rule (K-090 — the same rule that split the v1 Grade into Colour balance and Saturation, and
+Three separate effects, formerly shipped as one "Glitch" effect with enableable sections.
+**Status:** split into one-thing effects per the §1's one-effect-one-job
+rule (the same rule that split the v1 Grade into Colour balance and Saturation, and
 gave the radial fringe its own Chromatic aberration effect, later leaving RGB split
-linear-only, K-161). Stacking **Block glitch** →
+linear-only). Stacking **Block glitch** →
 **Scanlines**, each at Mix 100%, reproduces the old combined Glitch's look bit-for-bit — the
 two sections never interacted beyond running in the same pass. Existing saved `glitch`
 instances do not migrate (pre-v1, single user, no alias); each of the three below is added
@@ -1269,7 +1269,7 @@ carries the layer's local time into its cache key with no effect-specific plumbi
 **Algorithm sketch.** A pointwise periodic darken in raster Y (plus the roll offset — roll
 speed × time × period, host-computed so the kernel never sees raw time), alternating which
 half of each period darkens on odd periods when Interlace offset is on — the classic
-interlaced-field look. **Intensity is the single darken dial** (FX-13, K-147): 0..1 is *how
+interlaced-field look. **Intensity is the single darken dial** (FX-13): 0..1 is *how
 dark the dark lines get* — 0 the bit-exact passthrough, 1 takes them to black; the bright
 half is untouched. This collapses the former Intensity × Darkness pair (which multiplied to
 one darken amount) into one control; a project saved with the old pair folds losslessly on
@@ -1283,12 +1283,12 @@ beyond the ordinary parameter-animation case.
 
 #### Datamosh
 
-**Parameters:** Intensity (default 1, open above per K-135 — pass 5 owner feedback raised it
+**Parameters:** Intensity (default 1, open above — pass 5 owner feedback raised it
 from 0.5 so the drop-on default is the full melt), Displacement (frames, default
-4, hard min 1, open above per K-135), Bloom (0–1, default 0.6), Reset interval (seconds,
+4, hard min 1, open above), Bloom (0–1, default 0.6), Reset interval (seconds,
 default 0 = off, hard min 0, open above), Mix.
 
-**Algorithm sketch (K-164/T19).** Simulates the compression-glitch look of removing I-frames:
+**Algorithm sketch (T19).** Simulates the compression-glitch look of removing I-frames:
 the previous picture keeps being dragged along the current frame's motion, so moving regions
 smear and *bloom* while static ones stay. It is a *look*, not real bitstream corruption —
 deterministic and safe. Reuses the §3.2 flow machinery Motion blur introduced (the shared
@@ -1305,7 +1305,7 @@ controls:
 - **Displacement** (frames) — how far the walk reaches, i.e. how many frames of predicted
   motion it accumulates (the P-frame run length before a clean reference frame; longer = more
   melt). The tap count is derived from it (one tap ≈ one frame of motion, clamped 2–64), so it
-  supersedes K-148's Streak length; an old project's `streak_length` is still read as the
+  supersedes the old Streak length; an old project's `streak_length` is still read as the
   reach so its look is unchanged.
 - **Bloom** (0–1) — how much of that reach accumulates into the smear. Near 0 only the nearest
   step survives (a short, quickly-resetting trail — close to the old single-tap prediction);
@@ -1316,27 +1316,27 @@ controls:
   by the next — the accumulating-P-frame look, restarting on a fixed cadence. The ramp is a
   pure function of layer time (a sawtooth), computed in resolve and folded into Intensity and
   Displacement, so the kernel stays time-agnostic and the frame-cache key already covers it (a
-  param+time function, the K-093/K-094 reasoning). It is in *seconds*, not frames, because the
+  param+time function). It is in *seconds*, not frames, because the
   resolve step is frame-rate-agnostic; a frame-count interval would need the comp frame index
-  threaded through resolve, the deferred broad change K-148 avoided. A **content-driven reset**
+  threaded through resolve, a broad change deliberately deferred. A **content-driven reset**
   also fires regardless: where the flow is zero or unmeasurable (a still, a cut) the walk does
   not move, so the picture holds — exactly where a real codec inserts an I-frame.
 
-**Intensity's hard ceiling is open** (K-135): above 1 the blend extrapolates past the moshed
+**Intensity's hard ceiling is open**: above 1 the blend extrapolates past the moshed
 frame for a punchier tear (`mix()` does not clamp in either the CPU or GPU path); 0 stays the
 bit-exact passthrough regardless of the other parameters (pinned by test).
 
 With no -1 neighbour or flow field (a dropped decode, a layer nothing can measure) it
 degrades to a no-op, never a fault. On an **adjustment layer** and on a **Precomp** the pair
-is now measured from the picture itself, exactly as §3.2's is and through the same machinery
-(K-565) — this effect needs both halves of it, since it drags the previous picture along the
-field. Temporal window `{-1, 0}` — static, exactly the shape
+is now measured from the picture itself, exactly as §3.2's is and through the same
+machinery. This effect needs both halves of it, since it drags the previous picture along
+the field. Temporal window `{-1, 0}` — static, exactly the shape
 Motion blur's own `{0, +1}` has, so `effect_flow_neighbour` reads the match name the same
-static way. **A layer measures one flow field per consuming effect (K-543's successor K-544,
-superseding K-104's one-per-layer rule):** Motion blur wants the forward measurement to `+1`
+static way. **A layer measures one flow field per consuming effect (superseding the old
+one-per-layer rule):** Motion blur wants the forward measurement to `+1`
 and Datamosh the backward one to `-1`, so there was never a single field both could read — a
 stack with both now carries both, each op binding the field keyed by the offset its own
-effect asked for. Before K-544 the first of the two in stack order took the layer's single
+effect asked for. Before that the first of the two in stack order took the layer's single
 slot and the other silently rendered its missing-field passthrough. A stack with only one of
 them measures exactly once, as it always did. `moderate` cost (a multi-tap streamline like Motion blur's
 streak, plus a bilinear flow re-sample each step), `full-frame` ROI (the flow can point
@@ -1345,18 +1345,18 @@ seeded (`seeded: false`) — no hash or random-looking sequence, just flow-direc
 Oracle: GPU matches `lumit_core::fx::cpu::datamosh` at ≤ 2 fp16 ULP (measured worst 1 across
 the bloom and step sweep).
 
-**Status (K-104, its own effect since K-107, reworked to a flow-driven melt by K-164/T19):**
+**Status (its own effect since the Glitch split, reworked to a flow-driven melt by T19):**
 originally a single motion-compensated tap that warped the -1 neighbour by its own flow vector
 (a "reused old motion" prediction), added first as a toggle (`datamosh_enabled`) inside the
-combined Glitch effect and split out at K-107. T19 rebuilt it referencing the well-known
+combined Glitch effect, then split out. T19 rebuilt it referencing the well-known
 datamoshing technique (removing I-frames so P-frame motion keeps being applied to the wrong
 picture) into the streamline-melt above, adding the Bloom accumulation dial and the periodic
-Reset. The schema bumps version 2 → 3; pre-release, no migration is required (K-148's
+Reset. The schema bumps version 2 → 3; pre-release, no migration is required (the old
 `streak_length` is still read as the Displacement reach as a courtesy, so an existing instance
 keeps its look). `temporal: {-1, 0}` remains the schema's static declaration and
 `effect_flow_neighbour` reads the match name the same static way it reads Motion blur's.
 
-**The Matte, on all three (K-427, §2.6).** **Block glitch** scales its **Intensity** per
+**The Matte, on all three (§2.6).** **Block glitch** scales its **Intensity** per
 pixel, before any hash is read, so the jitter, the displacement, the channel split and the
 slice odds all shrink together where the matte darkens — a genuinely calmer glitch, not a
 loud one faded back. **Scanlines** cannot take that route, because scaling its Intensity
@@ -1379,10 +1379,10 @@ resolved through Retime so slow-motion echoes stretch correctly), each transform
 attenuated. Temporal window declared dynamically from Count × Spacing so the prefetcher
 plans decode. `moderate` cost, `full-frame` ROI.
 
-**v1 status (shipped; blend modes + 16-echo cap FX-17/K-149).** Echo is the first temporal
+**v1 status (shipped; blend modes + 16-echo cap FX-17).** Echo is the first temporal
 effect — the render decodes the layer's source at each offset in the stack's temporal window
 (`fx::stack_temporal_window`) and hands them to the pass; the frame-cache key hashes those
-neighbour frames too (K-094). Pinned simplifications for v1: **Echoes 1–16 at a fixed
+neighbour frames too. Pinned simplifications for v1: **Echoes 1–16 at a fixed
 one-frame spacing** (the trait's `temporal` window is `&'static`, so the maximum reach is a
 fixed cap — raised from 8 to 16 by FX-17; a Spacing control and a larger/dynamic window are a
 later refinement) and **intensity `Decay^k`** per echo `k`. **Mode** (T21) lists two
@@ -1403,7 +1403,7 @@ It reads the layer's
 later), and echoes footage layers only — Sequence-clip and adjustment-layer temporal effects
 are deferred. Marker-triggerable intensity spikes come with the §1.4 wiring already in place.
 
-**The Matte scales Decay (K-429, §2.6):** the trail dies away sooner where the matte is
+**The Matte scales Decay (§2.6):** the trail dies away sooner where the matte is
 dark and reaches its full length where it is white, so the ghosts are genuinely shorter
 rather than faded back. Because `(decay·k)^(i+1)` factorises as `decay^(i+1) · k^(i+1)`, a
 half matte draws *exactly* the half-decay trail; and a tap the matte has taken to nothing is
@@ -1428,7 +1428,7 @@ sampling despite the spatial falloff.
 without ranges or a parameter shape — pinned here as Amount / Radius / Softness / Roundness,
 plain fractions in the normalised distance metric rather than the %-diag or percentage figures
 most of the catalogue uses. Amount, Radius and Roundness keep a 0–1 cap; **Softness is open
-above** (K-135): the metric itself is not capped at 1 (a corner reaches ~√2 under circular
+above**: the metric itself is not capped at 1 (a corner reaches ~√2 under circular
 roundness), so a Softness beyond 1 is a legitimately wider feather, and only the ceiling is
 lifted — the floor stays 0. The schema's Radius plays the role §3.10's text calls Size,
 renamed for clarity against
@@ -1448,7 +1448,7 @@ rule only reaches `Color32`/hex-literal colours in widget code).
 
 ### 3.15 Chromatic aberration
 
-**Parameters:** Amount (px@comp, default 4, open above per K-135), the three channel colours
+**Parameters:** Amount (px@comp, default 4, open above), the three channel colours
 (Colour 1 / 2 / 3, default red / green / blue), Wavelength (Bool, default off), Samples
 (3–64, default 16), Mix.
 
@@ -1456,19 +1456,19 @@ rule only reaches `Color32`/hex-literal colours in widget code).
 (toward centre / on the pixel / away), each sampled and multiplied component-wise by its
 channel colour and summed; G and alpha stay put. Default tints red / green / blue keep only
 their own channel, so R reads outward, B inward and G on its own pixel — the classic split.
-Custom tints are normalised per output channel exactly as §3.6's classic mode is (K-167,
+Custom tints are normalised per output channel exactly as §3.6's classic mode is (by
 `normalise_tint_columns`): fringes recolour, aligned regions keep their exposure, and the
 default primaries stay bit-exact. Premultiplied throughout, edges clamp. `cheap` cost,
 `full-frame` ROI.
 
-**Channel picker (P2, K-143):** the three tap colours are edited through the **reusable
+**Channel picker (P2):** the three tap colours are edited through the **reusable
 three-colour channel picker** — three colour swatches (defaults red / green / blue), each
 opening the colour picker. The widget is shared: any effect whose schema declares three
 Colour parameters `channel_colour_1/2/3` gets it automatically (see `channel_picker` in the
-inspector) — §3.6 RGB split now does too (K-161), and any future three-tinted-channel effect
+inspector) — §3.6 RGB split now does too, and any future three-tinted-channel effect
 adopts it without new UI code.
 
-**Wavelength (K-144; picker-driven A1/K-163):** a `Wavelength` Bool (default off) reuses §3.6
+**Wavelength (picker-driven, A1):** a `Wavelength` Bool (default off) reuses §3.6
 RGB split's own spectral machinery — turning on resolves the effect to a radial spectral split
 with a **Samples** control (3–64, default 16), the same many-tap dispersion RGB split's
 Wavelength mode uses, for a smooth fringe rather than the three discrete tinted taps. The
@@ -1476,11 +1476,11 @@ channel colours drive both modes: in Wavelength mode they define the dispersion 
 (Colour 1 → Colour 2 → Colour 3 across the offset span), so the default red / green / blue gives
 a red→green→blue fringe.
 
-**Status (v1, shipped):** the always-radial sibling of §3.6 RGB split (K-161, T17). RGB split
+**Status (v1, shipped):** the always-radial sibling of §3.6 RGB split (T17). RGB split
 is linear-only — three tinted taps along an Angle — and this effect is the same three-tinted-tap
 idea grown radially from the frame centre instead. It exists as a single-purpose, one-click
 version: drop it on and it already looks right (§1.2), the same
-shape rule that split the old Grade into Colour balance and Saturation (K-090). Because it has
+shape rule that split the old Grade into Colour balance and Saturation. Because it has
 no Angle to share a currency with, Amount is authored in px@comp (§2.3) —
 scaled by the preview factor exactly like Block glitch's Block size (§3.12) — and its ROI is
 declared `full-frame` rather than a tight %-diag padding, since a fixed pixel offset cannot be
@@ -1491,7 +1491,7 @@ Amount 0, so every tap collapses onto its own pixel and the tinted sum returns t
 the primary defaults — the same un-guarded style RGB split's own kernel uses (asserted
 bit-exact by test).
 
-**The Matte scales Amount (K-427, §2.6),** in both tiers, exactly as §3.6's does: the
+**The Matte scales Amount (§2.6),** in both tiers, exactly as §3.6's does: the
 radial offset is multiplied by the matte at the pixel it is read for, so the fringe narrows
 toward the frame's own colours where the matte darkens.
 
@@ -1505,14 +1505,14 @@ identical number — no `exp2` runs per pixel or per path. Premultiplied through
 scales premultiplied colour consistently (straight × factor, then × the unchanged alpha), so
 there is no unpremultiply round trip and alpha is untouched. `cheap` cost, `Exact` ROI.
 
-**Status (v1, shipped, K-106):** the montage grade's brightness lever, beside Colour balance
+**Status (v1, shipped):** the montage grade's brightness lever, beside Colour balance
 and Saturation in the **Colour** category. Continuous (unlike a quantiser), so the §1.6 oracle
 holds to ≤ 2 fp16 ULP. 0 stops (`factor` 1.0) short-circuits to the input on both paths (the
 bit-exact neutral point, pinned by test); Mix 0 is likewise the identity. Distinct from Colour
 balance's three-channel Gain: a single, animatable, photographic-stops control — the common
 one-knob exposure move.
 
-**The Matte scales Stops toward 0 (K-426, §2.6):** the gain under a matte of strength k is
+**The Matte scales Stops toward 0 (§2.6):** the gain under a matte of strength k is
 `2^(stops·k)`, so a half-grey matte on +2 stops is +1 stop, not a blend of +2 and none.
 
 ### 3.17 Hue shift
@@ -1521,7 +1521,7 @@ one-knob exposure move.
 (bool, default on), Mix.
 
 **Algorithm sketch.** A hue rotation built from the standard SVG `feColorMatrix` hue-rotate
-construction, in one of two modes chosen by **Preserve luminance** (K-136):
+construction, in one of two modes chosen by **Preserve luminance**:
 
 - **On (default)** — the weights are Rec.709 luma, so it is a **constant-luminance** rotation:
   perceived brightness stays put as the hue turns (a saturated green stays as bright, a blue
@@ -1533,22 +1533,22 @@ construction, in one of two modes chosen by **Preserve luminance** (K-136):
 
 Either way the result is a row-major 3×3 colour matrix computed host-side
 (`lumit_core::fx::hue_matrix` / `hue_matrix_rgb` — the bool only picks the weights), so the
-CPU reference and the WGSL kernel multiply by identical coefficients and preview equals export
-(K-031); the kernel is matrix-general and unchanged. The nine coefficients travel as
+CPU reference and the WGSL kernel multiply by identical coefficients and preview equals
+export; the kernel is matrix-general and unchanged. The nine coefficients travel as
 individual `f32` uniform fields (tight 4-byte packing, matching the Rust `[f32; 9]` — a
 uniform array would stride at 16). Premultiplied throughout: a linear matrix scales through
 alpha, so no unpremultiply round trip and alpha is untouched. `cheap` cost, `Exact` ROI.
 
-**Status (v1, shipped, K-108; Preserve-luminance toggle added K-136):** the third one-knob
+**Status (v1, shipped; Preserve-luminance toggle added later):** the third one-knob
 grade, beside Exposure and Saturation in the **Colour** category. Continuous (a linear
 matrix), so the §1.6 oracle holds to ≤ 2 fp16 ULP (measured 0–1 on the dev RTX) in **both**
 modes. 0° resolves to the exact identity matrix in either mode — the bit-exact neutral point,
 pinned by test — and Mix 0 is likewise the identity. Hue rotation runs in the compositor's
 scene-linear working space (not gamma), consistent with every other grade here. (Note: the
-constant-luminance mode is a Rec.709-weighted linear-RGB rotation, in the spirit of K-034's
-perceptual hue handling but not literally an Oklab rotation — see docs/GUIDE.md.)
+constant-luminance mode is a Rec.709-weighted linear-RGB rotation, in the spirit of the
+app's perceptual hue handling but not literally an Oklab rotation.)
 
-**The Matte scales Angle toward 0 (K-426, §2.6):** the rotation matrix for `Angle·k` is built
+**The Matte scales Angle toward 0 (§2.6):** the rotation matrix for `Angle·k` is built
 per pixel in the kernel from the same coefficients, so a half-grey matte on 90° turns the hue
 45° — where a fade would mix the turned colour with the original and desaturate it.
 
@@ -1559,7 +1559,7 @@ above), Mix.
 
 **Algorithm sketch.** Expand or compress every RGB channel about a fixed mid-grey pivot:
 `out = (in − pivot) × k + pivot`, with `k = 1 + t|t|` for `t = Contrast ÷ 100 − 1`, and
-`pivot = 0.5`. The factor is **quadratic** in the distance from neutral (K-737): the ends
+`pivot = 0.5`. The factor is **quadratic** in the distance from neutral: the ends
 are unchanged — 0 flattens to grey and 200 doubles — and the per cent either side of 100 is
 a hundredth of the move a linear mapping gave it. Alpha is
 untouched. The maths runs in the compositor's scene-linear working space, consistent with the
@@ -1569,7 +1569,7 @@ does **not** commute with premultiplied alpha: it declares `alpha mode: unpremul
 the host wraps it unpremultiply → grade → re-premultiply, exactly like Colour balance and
 Saturation (§2.2), so matte edges do not shift. `cheap` cost, `Exact` ROI.
 
-**Status (v1, shipped, K-110):** the fourth one-knob grade, beside Exposure, Hue shift and
+**Status (v1, shipped):** the fourth one-knob grade, beside Exposure, Hue shift and
 Saturation in the **Colour** category. Purely continuous (no round/clamp/quantize — mid-grey
 0.5 is the fixed point, and highlights are never clipped), so the §1.6 oracle holds to ≤ 2
 fp16 ULP, exercised on a corpus that includes partial-alpha pixels since the premultiply round
@@ -1595,7 +1595,7 @@ the host wraps it unpremultiply → curve → re-premultiply, exactly like Contr
 (§2.2), so matte edges do not shift. The hard floor 0.01 keeps `1 ÷ gamma` finite; there is no
 ceiling. `cheap` cost, `Exact` ROI.
 
-**Status (v1, shipped, K-112):** the fifth one-knob grade, beside Exposure, Hue shift,
+**Status (v1, shipped):** the fifth one-knob grade, beside Exposure, Hue shift,
 Saturation and Contrast in the **Colour** category. Continuous everywhere for input ≥ 0 (the
 power is smooth, and the pre-clamp removes the only discontinuity), so the §1.6 oracle holds to
 ≤ 2 fp16 ULP, exercised on a corpus that includes partial-alpha pixels since the premultiply
@@ -1606,7 +1606,7 @@ Gamma, so a 0..1 image stays in range, while scene-linear highlights above 1 are
 and never clipped (§2.1). Distinct from Colour balance's three-channel Gamma: a single,
 animatable mid-tone control — the common one-knob gamma move.
 
-**The Matte pulls Gamma toward 1 (K-426, §2.6):** a half-grey matte on Gamma 2 curves by
+**The Matte pulls Gamma toward 1 (§2.6):** a half-grey matte on Gamma 2 curves by
 `pow(x, 1/1.5)` — a genuinely gentler curve — and not `lerp(x, pow(x, 1/2), ½)`.
 
 ### 3.20 Temperature
@@ -1617,7 +1617,7 @@ animatable mid-tone control — the common one-knob gamma move.
 compositor's scene-linear working space: with `k = Temperature ÷ 100` (clamped to the ±2 hard
 range), red is scaled by `gain_r = max(0, 1 + 0.75·k)` and blue by
 `gain_b = max(0, 1 − 0.75·k)`, so warming (`+`) lifts red and drops blue and cooling (`−`)
-does the mirror; green and alpha are untouched. The `0.75·k` gain (K-135, up from `0.5·k`)
+does the mirror; green and alpha are untouched. The `0.75·k` gain (up from `0.5·k`)
 makes full deflection a decisive orange or blue, and the `max(0, …)` floor stops an extreme
 driving a channel negative. The two gains are
 computed host-side (in the resolve step) so the CPU reference and the WGSL kernel multiply by
@@ -1628,18 +1628,18 @@ the affine Contrast and Saturation grades, whose `− pivot`/luma offset breaks 
 (§2.2) — there is no unpremultiply round trip and matte edges do not shift. `cheap` cost,
 `Exact` ROI.
 
-**Status (v1, shipped, K-113):** the sixth one-knob grade, beside Exposure, Hue shift,
+**Status (v1, shipped):** the sixth one-knob grade, beside Exposure, Hue shift,
 Saturation, Contrast and Gamma in the **Colour** category. Continuous everywhere (a linear
 per-channel scale, no round/clamp/quantize, highlights never clipped), so the §1.6 oracle
 holds to ≤ 2 fp16 ULP, exercised on a corpus that includes partial-alpha pixels to pin that
 the premultiplied multiply comes out identical on both paths. Temperature 0 resolves to gains
 exactly `(1.0, 1.0)` and short-circuits to the input on both paths (the bit-exact neutral
 point, pinned by test); Mix 0 is likewise the identity. This is the simple montage-grade
-warmth lever — a per-channel ±0.75·k R/B gain with green held (K-135) — not the fuller white
+warmth lever — a per-channel ±0.75·k R/B gain with green held — not the fuller white
 balance sketched for Tier 2 (§3.10: a Bradford-adapted CCT shift with a Tint axis); it is the
 common one-click warm/cool move, animatable like every other grade.
 
-**The Matte scales Temperature toward 0 (K-426, §2.6):** the two gains are rebuilt per pixel
+**The Matte scales Temperature toward 0 (§2.6):** the two gains are rebuilt per pixel
 from `Temperature·k` rather than lerped, because the blue gain floors at 0 past ±133 and a
 lerp of a floored gain is not the gain of a smaller Temperature.
 
@@ -1647,8 +1647,8 @@ lerp of a floored gain is not the gain of a smaller Temperature.
 
 Pulls a proper key off a green (or blue) screen: alpha is driven down where a pixel matches
 a chosen **screen colour**, with the strength/balance/clip/despill controls a colourist
-expects from Foundry's Keylight. It began (K-121) as a soft chroma-distance key and was
-expanded (K-154) into the colour-difference keyer below. Everything is
+expects from Foundry's Keylight. It began as a soft chroma-distance key and was
+expanded into the colour-difference keyer below. Everything is
 `clamp`/`min`/`max`/`mix` — **continuous everywhere**, so it is safe under the §1.6 ULP
 oracle, unlike a hard threshold.
 
@@ -1696,7 +1696,7 @@ fraction, draining screen tint; **Replace method** then recolours where spill wa
 Source keeps the original colour, Hard/Soft blend in the replace colour (Soft scaled by the
 pixel's brightness), None leaves the despilled colour.
 
-**The spatial stages (K-546).** Every control above judges a pixel on its own; these judge it
+**The spatial stages.** Every control above judges a pixel on its own; these judge it
 by its neighbours, so the matte becomes a **picture of its own** for the length of the effect
 and is only spent on the colour at the end. Seven stages, in this order: pre-blur the picture
 the key is judged from → the screen matte, clips and rollback → shrink/grow → softness →
@@ -1709,7 +1709,7 @@ an amount rather than a size and reaches exactly one pixel: a speck is a pixel e
 whose eight neighbours is on the other side of it, so black lifts such a pixel to the darkest
 of them and white drops it to the brightest, which leaves a real edge — always with a
 neighbour on its own side — untouched. The **garbage masks** are two `ParamKind::MaskPath`
-rows (§1.2, K-408) on this layer's own masks: the outline arrives as geometry, inside/outside
+rows (§1.2) on this layer's own masks: the outline arrives as geometry, inside/outside
 is an even-odd crossing count, and the soft edge is the **mask's own feather and expansion**
 read through the same ramp the mask's ordinary coverage is read through, so a hold-out and the
 shape it was drawn from soften alike. Both rows are unset by default and an unset row means no
@@ -1721,26 +1721,26 @@ before. `moderate` cost, `padded_px(251)` ROI — pre-blur, shrink/grow and soft
 hard maxima plus the despot's one pixel — `{0}` temporal. Category **Utility**, beside
 Transform.
 
-**Status (K-154, shipped — supersedes the K-121 chroma-distance key):** the colour-difference
+**Status (shipped — supersedes the original chroma-distance key):** the colour-difference
 screen matte, clips, despill and replace model above, with the default green screen + 100 %
 gain visibly keying a typical green screen ("drop it on and it works", §1.2). The screen's
 primary channel and reference are derived from the resolved Screen colour identically on the
-CPU reference and in the WGSL kernel, so both paths use the same numbers (K-031); the effect
+CPU reference and in the WGSL kernel, so both paths use the same numbers; the effect
 is continuous (no hard step), so the §1.6 oracle holds to ≤ 2 fp16 ULP over a corpus of
 near-screen, far-from-screen, partial-alpha and HDR pixels swept across gain / balance /
 clips / despill / replace / bias and all three View modes. There is **no neutral no-op
 default** (the effect exists to key, §1.2 — the tasteful default keys); **Mix 0 is the
 bit-exact identity**, pinned by test. The Screen colour and the bias/replace swatches render
 through the inspector's existing `ParamKind::Colour` arm (each with the eyedropper); the twirl
-uses the K-145 `ParamGroup`. **Migration:** a project saved before K-154 keeps its stored
+uses the shared `ParamGroup`. **Migration:** a project saved before this keeps its stored
 Screen colour (`key`) and Spill (now Despill amount); its old Tolerance/Softness are
 superseded by gain/balance/clip and simply go unread, and the new controls take their Keylight
 defaults (version bumped 1 → 2, so the frame cache re-keys).
 
-**Status (K-546, shipped — the spatial half):** Screen pre-blur, Screen shrink/grow, Screen
+**Status (shipped — the spatial half):** Screen pre-blur, Screen shrink/grow, Screen
 softness, Despot black/white and the Inside/Outside garbage masks, described above. The
-garbage mattes are mask-path rows rather than the layer-input holdout the K-155 deferral
-guessed at — a garbage matte is a shape drawn on this layer, which is what the K-408 carriage
+garbage mattes are mask-path rows rather than the layer-input holdout the earlier deferral
+guessed at — a garbage matte is a shape drawn on this layer, which is what the mask carriage
 already delivers. The §1.6 oracle is `cpu::matte_key_spatial`, matched by the WGSL pipeline one
 control at a time, all of them at once, and with the two masks bound; the defaults are pinned
 bit-for-bit against the pointwise kernel.
@@ -1762,7 +1762,7 @@ file. The GPU kernel and its §1.6 CPU oracle are `lumit_gpu::fx::dof` / `fx_dof
 
 **In plain terms.** Open a hole the size of the blur around each pixel and average what you
 can see through it. Two things make that read as a *lens* rather than as a smudge, and both
-arrived with K-313:
+arrived in the same pass:
 
 - **the hole is a polygon.** A real iris has blades, and a defocused highlight is a picture
   of the hole — which is why bokeh balls are hexagons on some lenses and circles on others.
@@ -1775,15 +1775,15 @@ rendered — see *Neutral means bit-identical* below.
 
 **Parameters:** **Matte** with **Invert** beside it — the uniform matte row of §2.6, here
 under this effect's own deeper meaning: the matte is a *depth* pass and it decides **focus**,
-not strength. The stored ids are still `depth` and `depth_invert` (K-065 — a save is a save);
-only the labels and the row are shared (K-395, which moved Invert up out of the Depth map
+not strength. The stored ids are still `depth` and `depth_invert` (a save is a save);
+only the labels and the row are shared (which moved Invert up out of the Depth map
 twirl to sit beside its picker, where every effect's Invert now is). The layer reference is
 unset until picked — a labelled no-op — and Invert defaults off, so when on the depth is
 inverted, `d' = 1 − d`, before the circle-of-confusion, swapping near and far. Then
-Depth source (a combobox beside the Matte picker, K-142: **None** reads the depth layer's
+Depth source (a combobox beside the Matte picker: **None** reads the depth layer's
 raw pixels — no masks, no effects, the default; **Masks** reads it plus its masks; **Effects and
 masks** runs the depth layer's own effect stack into the depth pass first, a graded/blurred depth
-map — same v1 temporal boundary as the effects-and-masks matte; replaces K-125's "Depth after
+map — same v1 temporal boundary as the effects-and-masks matte; replaces the old "Depth after
 effects" checkbox),
 Focus distance (0–1, default 0.5, the in-focus depth; greys out while Use focus
 point is on), Use focus point (bool, default off) and Focus point (an `_x`/`_y`
@@ -1824,7 +1824,7 @@ view: **Rendered** the normal blurred output, **Depth map** the post-invert, pos
 **post-Gamma** depth as greyscale, **Focus map** the smooth in-focus mask, white where sharp),
 Mix.
 
-**Both views answer to Gamma, and answer the same way** (K-615). Gamma scales the depth's
+**Both views answer to Gamma, and answer the same way.** Gamma scales the depth's
 distance from focus, so the Focus map has always moved with it; the Depth map drew the raw
 depth and sat still, which is the wrong half of a pair that is read together. The Depth map
 now draws the axis the ramp reads — `focus + (d − focus)·2^gamma` — so a pass whose content
@@ -1879,7 +1879,7 @@ collapses to `r ≤ coc` whatever the coefficient), and Aspect ratio's multiplie
 and it is pinned by `the_dof_aperture_stays_inside_its_circle` rather than left to the oracle,
 which would miss the same taps on both paths.
 
-**Neutral means bit-identical, and it is reached by branching** (K-313). Roundness 1 takes the
+**Neutral means bit-identical, and it is reached by branching.** Roundness 1 takes the
 plain `r² ≤ coc²` circle test, Rim brightness 0 and Remove edge leak 0 take the unweighted
 accumulation, and Exposure 0 takes the unsplit sum — rather than multiplying every tap by one
 and splitting it at a threshold it never crosses. None of those is an IEEE 754 identity:
@@ -1900,34 +1900,34 @@ temporal. Category **Blur & sharpen**. A zero effective aperture (master or both
 depth everywhere inside the sharp band, or `Mix 0` are all bit-exact passthroughs, pinned by
 the kernel oracle.
 
-**Threading the depth (K-031).** The resolved bag carries only the scalars; the depth is a
+**Threading the depth.** The resolved bag carries only the scalars; the depth is a
 whole texture, so — like the LUT's cube and Motion blur's flow field — the referenced layer's
 render travels **beside** the resolved op (a parallel `layer_inputs` slot the k-th consuming
-op binds, declared by the effect as `AuxKind::LayerInput` per K-387 and shared with §3.28's
+op binds, declared by the effect as `AuxKind::LayerInput` and shared with §3.28's
 Light wrap). Preview and export render the depth through **one shared helper**
 (`fxops::render_layer_input`), so the viewport and the file match. The frame cache key hashes
 the referenced layer's source and transform (the same content a matte's key hashes), so
 editing the depth pass retires stale frames.
 
-**Status (v1, shipped, K-124; extended K-128, K-313):** the depth-driven aperture blur above.
-K-128 added the depth Invert, separate Near/Far blur under the Aperture master, and the
-Rendered/Depth map/Focus map Display views. K-313 folded in the iris, the split-at-threshold
-power mean and the fuller depth model (channel pick, focus point, Gamma,
+**Status (v1, shipped; extended twice):** the depth-driven aperture blur above.
+One extension added the depth Invert, separate Near/Far blur under the Aperture master,
+and the Rendered/Depth map/Focus map Display views. Another folded in the iris, the
+split-at-threshold power mean and the fuller depth model (channel pick, focus point, Gamma,
 edge-leak suppression), all neutral at their defaults.
 
 Deliberate v1 limitations (documented, follow-ups tracked): the depth layer is sampled per its
-**Depth source** mode (K-142) — None (raw), Masks, or Effects and masks (which runs its own
+**Depth source** mode — None (raw), Masks, or Effects and masks (which runs its own
 stack into the depth) — and **resampled to the consuming layer's raster** to align with the
 pixels the blur runs on; a placement-aware depth is a follow-up (the referenced layer's own
 transform is not applied). The depth layer only needs to be **in-span**
 — it is expected to be *hidden* (a depth map should not render into the comp), and both the
 preview decode planner and export decode a hidden layer-input reference exactly as they do a
 matte source. The depth layer is chosen with the inspector's Layer picker
-(a dropdown of the comp's layers, its own included — K-288, where it reads the effect's
+(a dropdown of the comp's layers, its own included, in which case it reads the effect's
 own input), with the Depth source combobox beside it; an unset or dangling reference is a
 no-op.
 
-**Open (K-313).** Three things here are *our reading* of controls rather than measurements
+**Open.** Three things here are *our reading* of controls rather than measurements
 against a reference plugin, and are the honest places to correct later: Rim brightness's curve and
 Aspect ratio's mapping. So is the stops-to-power constant
 (`Dof::EXPOSURE_STOPS_PER_DOUBLING = 12`): 6 put the top of the Exposure slider at
@@ -1938,7 +1938,7 @@ than the pixel being gathered.
 
 **Not this effect: DOF PRO.** The physically-accurate, deliberately intensive depth of field —
 a scene-referred aperture and f-stop, per-pixel scatter, occlusion and inpainting behind
-foreground edges, spectral response — remains a separate planned effect (K-313). What landed
+foreground edges, spectral response — remains a separate planned effect. What landed
 here is the base lens blur finished, not that.
 ### 3.23 Invert
 
@@ -1949,13 +1949,13 @@ untouched. Because `1 − c` is affine (a `1 −` offset, not a pure scale) it d
 commute with premultiplied alpha, so — like Contrast and Gamma (§2.2) — it declares `alpha
 mode: unpremultiplied` and the host wraps it unpremultiply → invert → re-premultiply, so
 matte edges do not fringe. The inverse is taken in the compositor's **scene-linear working
-space** as-is (the deliberately simple choice, K-126): scene-linear values above 1.0 invert
+space** as-is (the deliberately simple choice): scene-linear values above 1.0 invert
 to honest negatives, never clipped (§2.1), and there is no display-referred round trip. There
 is no neutral no-op default — invert always inverts, so the "no no-op default" rule (§1.2) is
 satisfied trivially — and **Mix 0 is the bit-exact identity**. `cheap` cost, `Exact` ROI,
 `{0}` temporal. Category **Colour**, beside its grade siblings.
 
-**Status (v1, shipped, K-126):** the one-parameter inverse above. Continuous everywhere (a
+**Status (v1, shipped):** the one-parameter inverse above. Continuous everywhere (a
 plain `1 − c`, no round/clamp/quantize), so the §1.6 oracle holds to ≤ 2 fp16 ULP, exercised
 on a corpus that includes partial-alpha pixels since the premultiply round trip is
 load-bearing here. The scene-linear space choice is the owner's "simple inverse"; a
@@ -1980,7 +1980,7 @@ maps every pixel to its own luma — a greyscale**, a visible tasteful result (�
 no-op; **Mix 0 is the bit-exact identity**. `cheap` cost, `Exact` ROI, `{0}` temporal.
 Category **Colour**, beside its grade siblings.
 
-**Status (v1, shipped, K-127):** the two-colour luma map above. Continuous everywhere (a
+**Status (v1, shipped):** the two-colour luma map above. Continuous everywhere (a
 linear lerp of a luma), so the §1.6 oracle holds to ≤ 2 fp16 ULP, exercised on a corpus that
 includes partial-alpha pixels since the premultiply round trip is load-bearing here. The two
 colours render through the inspector's existing `ParamKind::Colour` arm — no inspector change
@@ -1991,7 +1991,7 @@ remaps by luma rather than grading in place. The fuller shadows/mids/highlights 
 ### 3.25 Posterize time — temporal frame-rate hold (stop-motion look)
 
 **Parameters:** Input frame rate (default 12), Phase (comp seconds, default 0). There is no
-Scope parameter (K-166): what the hold covers is implied by the kind of layer carrying the
+Scope parameter: what the hold covers is implied by the kind of layer carrying the
 effect — see **Reach** below.
 
 **Algorithm sketch.** A **temporal** effect, not a per-pixel one: it changes *what time* the
@@ -2009,7 +2009,7 @@ rather than filters, it lives at the frame-orchestration layer — detected wher
 `run_ops` — and so resolves to **no** per-pixel op. See
 [docs/impl/temporal-rerender.md](impl/temporal-rerender.md).
 
-**Reach (K-166 — implied by the carrier, no Scope parameter).** The effect holds whatever the
+**Reach (implied by the carrier, no Scope parameter).** The effect holds whatever the
 layer carrying it would feed its effect stack anyway, so no parameter is needed. On an
 **adjustment layer** that input is the composite of everything beneath, so the whole scene
 below re-renders at `held_t` and is laid back over the live composite by the adjustment's
@@ -2023,7 +2023,7 @@ is `lumit_core::fx::this_layer_effect_time` (the grid computed on comp time, map
 layer's own base), fed to `resolve_stack_temporal` as the sample time so a
 `sample_temporally == false` effect still resolves at the live playhead; the held source frame
 comes from the same `posterize_sample_times` snap the below-stack layers use. (An earlier
-build carried an explicit Scope choice; K-166 removed it — a stored Scope value in an old
+build carried an explicit Scope choice, since removed — a stored Scope value in an old
 project is ignored and the kind rule above applies.)
 
 **Determinism & cache.** `held_t` is a pure function of `t`, `rate` and `phase`, so many
@@ -2031,14 +2031,14 @@ frames share it and re-render identically; the frame key folds the effect's para
 the held-time dedup (keying the below-stack at `held_t` so identical held frames collapse to
 one cache entry) is a tracked optimisation on top — correctness never depends on it.
 
-**Preview == export (K-031).** Both paths re-render the below-stack through the **one** shared
+**Preview == export.** Both paths re-render the below-stack through the **one** shared
 `render_below_at` = `build_comp_draws` at `held_t` (reusing the held decoded pixels) → the
 shared `Realiser`. A still-scene re-render at the same time is bit-identical to no re-render,
 and a full-coverage posterised frame is bit-identical to a plain render at the held time (both
 pinned by test). **Boundaries (v1):** temporal effects *inside* the held below-stack (echo,
 flow Motion blur, Datamosh) degrade to stills — the held re-render carries no *neighbour* frames
 (only the primary source frame is snapped to the grid), the same boundary the after-effects
-matte takes (K-125); footage is held everywhere below the adjustment (so a *masked* Posterize
+matte takes; footage is held everywhere below the adjustment (so a *masked* Posterize
 reveals held footage outside the mask too, comp animation stepping only inside it — the
 full-frame adjustment being the intended global pass); a Posterize adjustment *inside a
 collapsed* Precomp degrades to a no-op (its held draws are sized for the nested comp); and the
@@ -2051,7 +2051,7 @@ promise. `cheap` cost, `FullFrame` ROI, `{0}` temporal, Category **Temporal**.
 
 Labelled **Motion blur** in the UI: the accumulation kind is the correct, whole-scene one, so it
 takes the plain name; the optical-flow effect (§3.2) is *Fast motion blur*. Do not confuse
-either with the per-layer transform motion-blur *switch* (docs/06 §4, K-120), which is a layer
+either with the per-layer transform motion-blur *switch* (docs/06 §4), which is a layer
 switch, not an effect.
 
 **Parameters:** Samples N (default 8), Shutter angle (degrees, default 180), Shutter phase
@@ -2059,7 +2059,7 @@ switch, not an effect.
 
 **Algorithm sketch.** A **temporal** effect, not a per-pixel one, and the sibling of Posterize
 time (§3.25): it renders the **whole scene below it** several times at in-between moments and
-averages the finished frames. Per-layer motion blur (docs/06 §4, K-120) smears one layer along
+averages the finished frames. Per-layer motion blur (docs/06 §4) smears one layer along
 its own transform; accumulation motion blur smears everything below — footage motion, animated
 effects, depth passes, the camera — all correct per sample (no blurred-depth artefact). The
 sub-frame sample times reuse the **same centred-shutter maths** as per-layer motion blur
@@ -2080,7 +2080,7 @@ the adjustment's coverage (mask × opacity). The owner's global "motion-blur the
 pass is simply the effect on a full-frame adjustment layer.
 
 **Force on all layers.** With this on, every layer in each sub-frame sample render also smears
-along **its own transform** — per-layer motion blur (K-120) forced on for the whole below-stack,
+along **its own transform** — per-layer motion blur forced on for the whole below-stack,
 the effect's own Shutter angle/phase/Samples standing in for the comp master and each layer's
 own switch. So one effect blurs every moving layer without toggling each one, and because each
 of the N accumulation samples is itself transform-smeared the result stays smooth at lower
@@ -2090,27 +2090,27 @@ switches ride on the sample render's cloned comp only (`AccumulationMbParams::fo
 Boundary: the force reaches the top-level below layers; the inner layers of a *nested* Precomp
 keep their own switches (a v1 follow-up).
 
-**Preview == export (K-031).** Both paths re-render each sub-frame below-stack through the
+**Preview == export.** Both paths re-render each sub-frame below-stack through the
 **one** shared `render_below_at` and average with the identical `Compositor::accumulate`, so a
 preview frame equals an export frame. A **still scene** averaged over N is bit-identical to the
 plain composite (pinned by test — `1/N` is exact in fp16, the N copies sum back exactly); a
 **moving scene** smears (a coverage-widening test). **Boundaries (v1):** temporal effects inside
-the sampled below-stack (echo, flow motion blur, datamosh) hold to stills (the same K-125
+the sampled below-stack (echo, flow motion blur, datamosh) hold to stills (the same v1
 boundary Posterize takes), and an accumulation adjustment inside a collapsed Precomp degrades to
 a no-op (its sampled draws are sized for the nested comp). Honours the per-effect
-`sample_temporally` flag (K-132) — a particle system stays pinned to the playhead across the
+`sample_temporally` flag — a particle system stays pinned to the playhead across the
 samples. Sub-frame sample-count reduction under the draft/scrub path is a tracked follow-up
 (full N always on export). `heavy` cost (≈ N× a full comp render), `FullFrame` ROI, `{0}`
 temporal, Category **Temporal**.
 
-**Per-effect sampling (K-132).** The held re-render honours each below-effect's
+**Per-effect sampling.** The held re-render honours each below-effect's
 `sample_temporally` flag (a general `EffectInstance` property, default on): an effect with it
 **off** resolves at the true frame time, not the held time `held_t`, so a costly or stochastic
 effect (a particle system) is pinned to the playhead while the rest of the scene holds. The
 split is `lumit_core::fx::resolve_stack_temporal`; with the frame and held times equal it is
 byte-identical to the plain resolve, so an ordinary render is unchanged.
 
-**The Matte scales Shutter angle per pixel (K-429, §2.6).** This is the one effect that
+**The Matte scales Shutter angle per pixel (§2.6).** This is the one effect that
 claims its matte in the **combine** rather than in a kernel, because it has no kernel: it
 orchestrates a re-render, so it resolves to no op and the matte carriage `run_ops` walks
 skips it on both sides. The matte is instead carried on the sub-frame plan itself, rendered
@@ -2125,7 +2125,7 @@ whole span and every cell is fully inside it — the equal-weight average the ef
 always drawn. At black it has shrunk to the frame's own instant, which is the unblurred
 frame. Between, it is a genuinely shorter exposure over a shorter slice of the same N
 moments, which is not the same picture as a blurred frame faded back. **No matte bound runs
-the old hardware equal-weight pass unchanged, byte for byte** (K-258).
+the old hardware equal-weight pass unchanged, byte for byte.**
 
 ### 3.27 Lens flare — physically-based lens flare (Realflare-class)
 
@@ -2136,7 +2136,7 @@ starburst is the true diffraction pattern of the aperture, computed by Fourier t
 This is the [Hullin et al. 2011] / [Ritschel et al. 2009] approach, studied end-to-end in
 the realflare renderer (GPLv3, the reference implementation) and adapted to run per-frame
 inside the compositor — the full derivation, formulas and deviations are pinned in
-[docs/impl/lens-flare.md](impl/lens-flare.md). K-256.
+[docs/impl/lens-flare.md](impl/lens-flare.md).
 
 **Why simulation matters.** Sprite-based flares (the stock-plugin kind) fake the ghost
 train with drawn ellipses, so every light looks the same and nothing responds to the
@@ -2149,20 +2149,20 @@ cast of real flares comes from.
 **Algorithm sketch** (full detail in the impl note):
 1. **Bake** (CPU, on parameter change only, cached): parse the selected .lens
    prescription; enumerate every two-surface bounce pair — and, under a
-   reflectance-product prefilter, the best four-bounce paths (K-368) —
+   reflectance-product prefilter, the best four-bounce paths —
    filter by interface and an on-axis brightness probe, rank the two kinds
    brightest-first in one list; bake the
    **starburst sprite** (Fourier amplitude of the iris image under a Fresnel
    propagation term, integrated across the visible spectrum with CIE
    weights); close the **auto-exposure loop** by rendering a thumbnail **at the lens's
-   native aperture** (K-432), so the gain describes the glass and not how far
+   native aperture**, so the gain describes the glass and not how far
    the iris happens to be closed.
 2. **Trace** (GPU compute, per frame): for each surviving pair × wavelength,
    a regular grid of rays over the entrance pupil — each corner weighted by
    the iris mask (blades, roundness, softness) — refracts through every
    surface with per-surface Fresnel/MgF₂-coating weights (the FlareSim
-   three-phase walk, K-261), reflecting at the path's two surfaces — or, for
-   a four-bounce path, at its four (K-368) — landing on the focus-shifted
+   three-phase walk), reflecting at the path's two surfaces — or, for
+   a four-bounce path, at its four — landing on the focus-shifted
    sensor.
 3. **Rasterise** (GPU raster, additive): each live grid cell draws as two
    triangles at density `launch cell area ÷ landed area` (energy
@@ -2170,22 +2170,22 @@ cast of real flares comes from.
    into the bright rims real flares show), with sub-pixel fold quads
    inflated flux-exactly so no rasteriser can drop them, cells that straddle
    a fold dropped rather than stretched into streaks, and the caustic
-   density capped (K-262), then the Ghost softness box blur.
+   density capped, then the Ghost softness box blur.
 4. **Combine** (GPU compute): `out = input + intensity · (flare + starburst)`
    in linear light, alpha saturating toward 1 (the Glow shape); the starburst
    is a baked sprite at each light; the whole flare takes Scale and the
    anamorphic squeeze. Mix blends against the untouched input.
 
-**Parameters (K-257 panel design).** Top level: **Light** (one x/y point row —
+**Parameters.** Top level: **Light** (one x/y point row —
 the `_x`/`_y` pair convention of docs/07 §6.1 — with a pick-on-Viewer dropper;
 **px@comp**, open both sides since an off-frame light keeps flaring — point
-parameters are always authored in comp pixels, K-260),
+parameters are always authored in comp pixels),
 **Intensity** (0–4, open above), **F-stop** (0.7–32 — stops the iris down
 from the lens's native f-number; wide open the ghosts are big and round,
 stopped down small, bladed **and dimmer**, since a smaller hole passes less
-light and the auto-exposure is measured wide open — K-432; Intensity is the
+light and the auto-exposure is measured wide open; Intensity is the
 knob that puts the brightness back), **Lens** (the embedded prescription library,
-K-261, curated to **twenty real lenses** K-264 and re-verified K-265: every
+curated to **twenty real lenses** and re-verified: every
 entry bakes a live ghost train and keeps flaring with the light well
 off-centre (the three-position probe), chosen for maximally different flare
 characters — modern multicoated cine glass, 1930s uncoated exotics, a
@@ -2194,9 +2194,9 @@ telezoom, long telephotos. Wide-angle and fisheye prescriptions are
 deliberately absent: the trace's angular acceptance collapses off-axis for
 retrofocus designs (recorded limit). Every prescription carries its own
 per-surface anti-reflective coating layers, which is what replaced the
-K-257 Coating-type presets; labels are `Maker · Model` and the default is
+earlier Coating-type presets; labels are `Maker · Model` and the default is
 the Master Prime 50),
-**Lens file** (K-264: a user's own `.lens` prescription in the same
+**Lens file** (a user's own `.lens` prescription in the same
 FlareSim / PhotonsToPhotos Optical Bench format — set, it overrides the
 Lens pick entirely, with the native f-number estimated from the geometry;
 unset, missing or unparsable degrades to the picked lens, a labelled
@@ -2206,17 +2206,17 @@ the tail:
 
 | Group | Parameters |
 |---|---|
-| *Lens options* (twirl) | Focus (m) (0.5–100 slider, hard min 0.2 — the focus distance; K-260, refocusing shifts the sensor plane and visibly rearranges the whole ghost train, the "same lens, different focus" look), Anamorphic squeeze (0.5–3), Blades (int 3–16), Rotation, Coating (0 uncoated → 1 fully coated), Roundness, Softness |
-| *Flare options* (twirl) | Ghost intensity (0–4), Ghost softness (0–22 slider, px@comp — FlareSim's Ghost Blur, K-261: a touch of out-of-focus softness on the ghost train; a blur radius is a distance, so it is pixels since K-558, and the default and both range ends are the old per cents at a nominal 1080p diagonal — default 0.44 px, K-264's 0.02 % — taste, not cover: the vertex-smoothed density and the multisampled raster leave nothing for it to hide, and **0 is a clean setting**), Max ghosts (int 0–200 — the brightest survive), **Detail** (0.25–4 slider, default 1; K-265 — multiplies the Quality tier's ray grid AND its traced wavelength count through one shared pair of helpers, so the budget is the user's dial: a lens whose rims still show structure buys more without jumping a tier, a preview buys less), Dispersion (0–2), Starburst intensity (0–4), Scale (0.05–20 — the WHOLE flare about the optical centre, ghosts and starbursts together) |
-| *Source* | Source type (Manual light / Matte / Lights); **Light tint** (a colour, with picker and eyedropper — multiplies every light in every mode); then, shown conditionally: **Use source colour** (Matte *and* Lights) and — Matte only — **Matte** (the §2.6 row's layer picker; this effect's deeper meaning is source *detection*, and the stored id was already `matte`; defaults to **this layer**, K-288) with **Invert** beside it — on, detection reads `1 − rgb` of the matte, so its DARK parts are the lights; applied in the detect kernel and its CPU oracle rather than at the dispatch seam, because this matte is a picture the flare takes colour from and the seam's pass would flatten it to clamped grey (K-425's rule for an effect that owns its matte). Off by default, so a flare saved before v13 detects what it always did (K-258), Threshold (linear luma, slider 0–1, open above), Threshold softness |
+| *Lens options* (twirl) | Focus (m) (0.5–100 slider, hard min 0.2 — the focus distance; refocusing shifts the sensor plane and visibly rearranges the whole ghost train, the "same lens, different focus" look), Anamorphic squeeze (0.5–3), Blades (int 3–16), Rotation, Coating (0 uncoated → 1 fully coated), Roundness, Softness |
+| *Flare options* (twirl) | Ghost intensity (0–4), Ghost softness (0–22 slider, px@comp — FlareSim's Ghost Blur: a touch of out-of-focus softness on the ghost train; a blur radius is a distance, so it is pixels, and the default and both range ends are the old per cents at a nominal 1080p diagonal — default 0.44 px, the old 0.02 % — taste, not cover: the vertex-smoothed density and the multisampled raster leave nothing for it to hide, and **0 is a clean setting**), Max ghosts (int 0–200 — the brightest survive), **Detail** (0.25–4 slider, default 1 — multiplies the Quality tier's ray grid AND its traced wavelength count through one shared pair of helpers, so the budget is the user's dial: a lens whose rims still show structure buys more without jumping a tier, a preview buys less), Dispersion (0–2), Starburst intensity (0–4), Scale (0.05–20 — the WHOLE flare about the optical centre, ghosts and starbursts together) |
+| *Source* | Source type (Manual light / Matte / Lights); **Light tint** (a colour, with picker and eyedropper — multiplies every light in every mode); then, shown conditionally: **Use source colour** (Matte *and* Lights) and — Matte only — **Matte** (the §2.6 row's layer picker; this effect's deeper meaning is source *detection*, and the stored id was already `matte`; defaults to **this layer**) with **Invert** beside it — on, detection reads `1 − rgb` of the matte, so its DARK parts are the lights; applied in the detect kernel and its CPU oracle rather than at the dispatch seam, because this matte is a picture the flare takes colour from and the seam's pass would flatten it to clamped grey (the rule for an effect that owns its matte). Off by default, so a flare saved before v13 detects what it always did, Threshold (linear luma, slider 0–1, open above), Threshold softness |
 
-and **Quality** (Draft / Normal / High / Ultra), **Blend** (K-289 — how the
+and **Quality** (Draft / Normal / High / Ultra), **Blend** (how the
 flare element combines with the layer under it; see below), **Mix**. Blades
 and Max ghosts are the first **Int-kind** parameters (§1.2): stored and
 animated as Float scalars, but declared whole-number so the row steps,
 displays and commits integers.
 
-**Blend (K-289, superseding K-258's Background pair).** Everything the effect
+**Blend (superseding the old Background pair).** Everything the effect
 renders is a black-backed light **element**: a frame that is pure black where
 there is no flare. Blend says how that element combines with the layer
 beneath it — the same question a layer's Mode dropdown asks — and offers the
@@ -2238,26 +2238,26 @@ addition, bit-identical to what the effect did before this menu existed
 default renders the same pixels. The neutral passthroughs (Intensity 0, Mix
 0) stay bit-exact whatever the menu holds.
 
-**Source modes (K-257).** **Manual light** is the tracked-point workflow: one
+**Source modes.** **Manual light** is the tracked-point workflow: one
 white source at the Light point. **Matte** detects the flare's sources in a
 referenced layer's picture (impl note §6): the brightest points — up to
 sixteen anchors, non-max suppressed — each spawn a full flare, positioned on
 the source, gated by the soft Threshold; each anchor's brightness is the
-**summed flux of every gated detection tile nearest it** (K-267), so a
+**summed flux of every gated detection tile nearest it**, so a
 practical spanning half the frame finally weighs as its whole lit area
 where it used to count as one pixel, while a true point source reads
 exactly as before. The matte layer defaults to **this layer** — the layer
-the effect is on (K-288) — because "flare the lights in this picture" is
+the effect is on — because "flare the lights in this picture" is
 what asking for a matte source nearly always means; that reads the effect's
 own input at its point in the stack rather than re-rendering anything, and
 on an **adjustment layer** it is the composite of everything below, which is
 the only picture an adjustment layer has. Point it at any *other* layer and
 that layer renders alone exactly as a DoF depth pass does (its own masks and
-effects apply, K-142 default) and is expected to be hidden. **Lights** is prepared for light
+effects apply, the default) and is expected to be hidden. **Lights** is prepared for light
 layers: the option exists and resolves as Manual until they land, so projects
 built against it survive the wiring.
 
-**Colouring the flare (K-259).** Every light's colour is `(use source ? the
+**Colouring the flare.** Every light's colour is `(use source ? the
 source's own rgb : white) × gate × Light tint`. **Light tint** applies in all
 three modes — in Manual it is simply the flare's colour, since the light is
 otherwise white — and is a frame-time value outside the bake key, so animating
@@ -2277,15 +2277,15 @@ spectral fringe from a stacked-copies RGB-split look, each band weighted by
 its **integral** of the CIE colour-matching functions rather than a point
 sample, impl note deviation D5), and the pupil-grid base (32 / 64 / 96 / 144).
 The grid base is only a budget: each ghost pair's own grid scales by its
-measured image size (K-262, retuned K-265 — a tight blob keeps the full
+measured image size (since retuned: a tight blob keeps the full
 base, its caustic rim carries structure the size probe cannot see), and a
-**frame-time probe** (K-267) re-measures each pair's worst local stretch at
+**frame-time probe** re-measures each pair's worst local stretch at
 the actual light position every frame, raising — never lowering — its grid
 under a bounded ray headroom, worst stretch first. That is what lets
 **Normal stand on its own** rather than being the tier where cell facets
 show, and what keeps corner lights from wearing their cells as polyline
 edges. A Squeeze or Scale below 1 renders the ghost buffer padded (up to 2×
-per axis, K-267) so the widened field carries real flare to the frame edge
+per axis) so the widened field carries real flare to the frame edge
 instead of cutting to black.
 
 **Cost and traits.** `heavy` cost (the one effect that owns a render pass), `full-frame`
@@ -2295,20 +2295,17 @@ into the sprite. Category **Stylise**, beside Glow. The per-frame GPU work is a 
 hundred thousand ray threads and ~2 ms of additive fill at Normal quality; the FFTs never
 run per frame.
 
-**Oracle (K-256, a documented §1.6 deviation).** The trace — the physics — has a CPU twin
+**Oracle (a documented §1.6 deviation).** The trace — the physics — has a CPU twin
 compared ray-for-ray at tight absolute bounds (positions to microns; reflectance to 1%,
 since GPU transcendental builtins are not correctly rounded); the baked textures are
 CPU-built and consumed by both paths, so they are their own reference; the rasterised
 frame is compared against a CPU scanline reference at a perceptual bound (mean error +
 total energy), because hardware rasterisation pins no per-pixel fill contract a CPU twin
 could hit at ULP tolerance — the same staged-oracle shape flow effects already use. The
-CPU degradation rung renders the effect as a labelled no-op, like the LUT (K-114
+CPU degradation rung renders the effect as a labelled no-op, like the LUT (the
 precedent). Exact numbers in the impl note §8.
 
-**Status (core K-256..K-260; FlareSim model K-261; artefact and picker
-pass K-262; smooth-shading, curation and custom-file pass K-264; frame-time
-grid probe, padded anamorphic buffer and area-flux sources K-267,
-shipped):** everything above — the curated library with per-surface
+**Status (shipped):** everything above — the curated library with per-surface
 coatings and the `.lens` file override, the three-phase pupil-grid trace
 with the vertex-smoothed energy-conserving quad raster (4× multisampled)
 and flux-exact caustic inflation, the Ghost softness blur, Focus distance,
@@ -2372,7 +2369,7 @@ footage. The oracle asserts it directly: nudging the light by a pixel may not ch
 pixel by more than a small bound.
 
 One procedural pass, no inputs but the layer itself, so it is Cheap. Intensity 0 and Mix 0
-are the bit-exact passthrough. Everything with a distance is px@comp (K-260) and shrinks
+are the bit-exact passthrough. Everything with a distance is px@comp and shrinks
 with the preview raster, the light's position included — or the flare would slide between
 preview and export.
 
@@ -2383,12 +2380,12 @@ Effects' own five) — each an ordered list of **2 to 16 control points in the u
 the identity diagonal `[[0, 0], [1, 1]]` by default. Plus Mix. The panel draws them as
 channel tabs over one editor, not as five stacked rows.
 
-**The parameter form** (K-412, replacing K-396's twenty fixed knots). AE stores
+**The parameter form** (replacing the twenty fixed knots). AE stores
 `ADBE CurvesCustom` as an **arbitrary-data blob**: a list of control points per channel,
 however many the user dragged, in a private serialisation. Arbitrary data is not interpolable,
 so AE itself only ever *holds* it between keyframes — a curve does not animate, it steps.
 Lumit's answer is a real parameter kind rather than a blob: §1.1's **curve** kind, whose value
-is the point list itself and which is **static in v1** for exactly AE's reason. K-396's five
+is the point list itself and which is **static in v1** for exactly AE's reason. The five
 fixed knots per channel were the honest floor while no editor existed; the owner asked for the
 editor, and a curve stored as its points is what an editor edits. The effect was days old and
 unreleased, so the schema was replaced outright rather than migrated (the version went to 2,
@@ -2445,7 +2442,7 @@ two points survive. It comes off a document that a hand, an older build or an im
 and 14-ENGINEERING-RULES §4 forbids a panic on one.
 
 **The import is unchanged** (docs/11 §5). AE's point list is the one property AE's own
-scripting cannot read (K-410), so Curves still imports as a placeholder with its unreadable
+scripting cannot read, so Curves still imports as a placeholder with its unreadable
 property named. What changed is the ceiling: the day a blob decoder lands, the target can
 carry the whole curve rather than a five-point sample of it.
 
@@ -2492,7 +2489,7 @@ its own end points.
 **Parameters:** Brightness (default 0, slider −100..+100, unbounded), Contrast (default 0,
 slider −100..+100, hard min −100 and unbounded above), Mix.
 
-**Why a sibling and not a mode of §3.18** (K-397; the open question in
+**Why a sibling and not a mode of §3.18** (the open question in
 [impl/ae-effect-parity.md](impl/ae-effect-parity.md)). Three reasons, and the third is the
 one that decided it:
 
@@ -2502,11 +2499,11 @@ one that decided it:
    the report would have to explain a shape the user never authored.
 2. **The two knobs are not the same knob.** Contrast (§3.18) is a per-cent scale where 100
    is neutral; AE's Contrast is a signed amount where **0** is neutral. Folding them into
-   one control means one of the two spellings has to change meaning, and K-065 says a save
+   one control means one of the two spellings has to change meaning, and a save
    is a save.
 3. **Menu hygiene loses to honesty.** A mode switch that silently re-scales an existing
    slider is the kind of control that reads fine in a menu and wrong in a project file. Two
-   small effects that each do one thing is what §3's shape rule (K-090) asks for anyway.
+   small effects that each do one thing is what §3's shape rule asks for anyway.
 
 So: **Brightness** is its own effect in the **Colour** category, carrying both of AE's
 sliders under AE's names and AE's neutral point. §3.18 Contrast is untouched.
@@ -2530,7 +2527,7 @@ Mix 0 likewise. A neutral default is the grade family's sanctioned exception to 
 "no no-op default" rule (§3.10: a grade's tasteful default is a preset choice), the same
 one Exposure, Contrast and Gamma take.
 
-**The Matte pulls both controls toward neutral (K-426, §2.6):** Brightness toward 0 and
+**The Matte pulls both controls toward neutral (§2.6):** Brightness toward 0 and
 Contrast toward 0 per pixel before the grade, which with both set is not a fade of the
 finished grade (the offset rides through the scaled contrast).
 
@@ -2579,7 +2576,7 @@ panel — §3.24 Tint already maps luma to colour, which is the same picture by 
 route — so it is not built until someone wants the exact AE behaviour; the import reports
 a colourised instance rather than approximating it.
 
-**The Matte scales every range's Hue, Saturation and Lightness toward 0 (K-426, §2.6):**
+**The Matte scales every range's Hue, Saturation and Lightness toward 0 (§2.6):**
 applied to the pixel's summed adjustment, which is the same number as scaling all twenty-one
 controls first, so a grey matte turns the hue part of the way rather than fading a turned
 colour over the original.
@@ -2641,7 +2638,7 @@ out.a   = 1
 
 `p` is the pixel centre in raster pixels; the two points are declared `px@comp` so the
 resolve step converts them and the generic rescale moves them together if the stack is
-reused at another size (K-266) — a ramp that slid when the preview resolution changed
+reused at another size — a ramp that slid when the preview resolution changed
 would be a ramp nobody could grade against.
 
 Three decisions in that:
@@ -2868,7 +2865,7 @@ Five decisions, none of them arithmetic:
    the number is px@comp (§2.3) rather than AE's per cent of an unnamed base — the same
    divergence, for the same reason, that §3.37 decision 1 records for Scale.
 
-**The matte scales the displacement** (§2.6's override, K-395/K-399): `k` multiplies the vector
+**The matte scales the displacement** (§2.6's override): `k` multiplies the vector
 before the sample, so where the matte is grey the picture is *warped less*, and where it is
 black the picture is untouched. This is not what the generic dissolve produces. A dissolve
 blends a fully-warped picture back towards the unwarped one, which shows both — a ghost,
@@ -2894,8 +2891,8 @@ Phase (dial, degrees, default 0), Horizontal phase shift (default off), Mix.
 raster that may be **larger** than the one it read:
 
 ```
-reach  = 2·|tile centre − (W, H)÷2| + output size            # K-613, see below
-raster = max(reach, (W, H)), capped at 8 192 a side          # K-542
+reach  = 2·|tile centre − (W, H)÷2| + output size            # see below
+raster = max(reach, (W, H)), capped at 8 192 a side
 origin = (raster − (W, H)) ÷ 2, whole pixels                 # where the frame sits in it
 p      = the output pixel's position in the INCOMING frame's coordinates
 tile   = (tile_width, tile_height)                           # px@comp, already raster pixels
@@ -2912,7 +2909,7 @@ out = orig·(1 − mix) + out·mix      # orig is transparent outside the incomi
 
 Four notes:
 
-- **The default is the identity, and it is AE's** (K-542, which reverses this section's
+- **The default is the identity, and it is AE's** (which reverses this section's
   earlier 2×2 default). One whole-frame tile, cut from the middle of the frame, stamped
   over exactly the frame it came from: dropping Tile on a layer changes not one bit.
   §1.2's "drop it on and it already looks right" is met by *looking unchanged* here, for
@@ -2924,13 +2921,13 @@ Four notes:
   than resampling through it. The centre default is the raster's own, filled by
   `instantiate_for_raster` — a fixed 960, 540 would shift the picture on any comp that is
   not 1080p, which is precisely what the identity forbids. **The four sizes are px@comp
-  and get their defaults the same way** (K-558, which supersedes K-542's per-cent
+  and get their defaults the same way** (which supersedes the earlier per-cent
   rationale for them): a size is a distance, so it is pixels, and a whole-frame tile is
   1920 × 1080 on exactly one comp — `instantiate_for_raster` writes the comp's own, so
   the default is still the exact identity anywhere and the *stored* number is honest
   pixels. A project saved before the conversion has its per cents scaled against the
   comp on load (schema v1 → v2), each axis against its own extent.
-- **An output window wider than the frame grows the working raster** (K-542). This is the
+- **An output window wider than the frame grows the working raster.** This is the
   point of the control, and AE's: the copies land *past* the frame's edges, the working
   picture grows evenly on all four sides to hold them, and every effect after Tile in the
   stack runs on that wider picture — so a warp or a directional blur below it finds tiled
@@ -2945,7 +2942,7 @@ Four notes:
   matte source's own stack, and a referenced layer's own stack. On those a Tile whose window
   is wider than the frame reads as the plain clipped tiling. A layer mask is grown into the same margin with
   nothing in it, so the copies Tile puts outside the layer are outside the mask.
-- **The output window is centred on the tile centre** (K-613), so raising Output width or
+- **The output window is centred on the tile centre**, so raising Output width or
   height spreads half the extra to each side of the stamped rectangle — left *and* right,
   up *and* down, as AE's Motion Tile does. Centred on the frame instead, a tile cut from
   anywhere but the middle grew only towards the further edge, which reads as the copies
@@ -2990,7 +2987,7 @@ a constant speed) and because it is the same number twice otherwise. The import 
 
 `cheap` cost, `FullFrame` ROI. Mix 0 and a zero shift are both the bit-exact identity.
 
-**The Matte scales the shift (K-427, §2.6):** each pixel reads through `shift · k` for the
+**The Matte scales the shift (§2.6):** each pixel reads through `shift · k` for the
 matte's strength at that pixel, so part of the frame can slide while the rest stays — a
 shear or a smear of the wrap rather than the whole picture moving. The wrap is unchanged;
 only how far each pixel reaches into it is.
@@ -3068,12 +3065,12 @@ Four things that are decision rather than derivation:
   same function of the same input, they differ by the platforms' own `tan`, and the §1.6
   oracle runs on a smooth corpus where a sub-thousandth of a pixel of sampling error stays
   inside the fp16 tolerance. A hard-edged corpus would not, and would be measuring the
-  platform's libm rather than this kernel. K-399 records the measurement and the rule.
+  platform's libm rather than this kernel.
 
 `moderate` cost, `FullFrame` ROI. Mix 0 is the bit-exact identity, and so is Field of view
 0 (the kernel short-circuits rather than dividing by a zero tangent).
 
-**The Matte scales the distortion (K-427, §2.6):** the sample position is pulled back toward
+**The Matte scales the distortion (§2.6):** the sample position is pulled back toward
 the pixel's own centre by the matte, read where the pixel lands, so the Field of view's
 effect fades toward the identity as the matte darkens — the bend is genuinely weaker there,
 not a fully bent frame dissolved over a straight one. A black matte is the untouched
@@ -3129,7 +3126,7 @@ Four things are decision rather than derivation:
 Softness outside every edge of the layer's shape and there is no honest smaller bound
 without reading both sliders. Mix 0 is the bit-exact identity, and so is Opacity 0.
 
-**The Matte scales the shadow's Opacity (K-428, §2.6),** read where the shadow *falls*
+**The Matte scales the shadow's Opacity (§2.6),** read where the shadow *falls*
 rather than where the shape stands — paint the matte over the wall and it is the shadow on
 the wall that goes. The blur is left unmatted: it is taken where the shape is, and a
 per-pixel softness there would be a softness of the wrong picture.
@@ -3139,18 +3136,18 @@ reason. Multiple shadows are multiple instances, which is what AE users do anywa
 
 ### 3.44 Set matte — another layer's channel becomes this layer's alpha
 
-**This effect is a K-395 matte consumer by nature**, and that resolves the open question
+**This effect is a matte consumer by nature**, and that resolves the open question
 [impl/ae-effect-parity.md](impl/ae-effect-parity.md) recorded: Set matte lives in
 **Utility** *and* its source is the universal Matte row, because those were never two
 answers. Its matte does not scale a strength — it **is** the alpha, which is the sixth
-override in §2.6's table (K-400).
+override in §2.6's table.
 
 **Parameters:** Matte (the universal layer row, §2.6), Invert (the row's own switch),
 Channel (Luminance / Alpha / Red / Green / Blue, default Luminance), Combine with existing
 alpha (default off), Mix.
 
 **Algorithm sketch.** The matte layer is rendered alone at this raster like every other
-matte (K-387), so no stretching or alignment step exists or is needed:
+matte, so no stretching or alignment step exists or is needed:
 
 ```
 k  = channel(matte at p)               # by the Channel row, on straight values
@@ -3180,15 +3177,15 @@ layer-input effect follows (§1.2) — the one sanctioned exception to the no-op
 rule, since a layer the user must supply cannot have a tasteful default. Mix 0 is the
 bit-exact identity.
 
-**This effect carries no universal Matte row (K-429, §2.6).** The row above is its **own**
+**This effect carries no universal Matte row (§2.6).** The row above is its **own**
 source picker and always was in spirit: every other effect's Matte answers "how much of me
 happens here", and Set matte has no answer to give, because what it takes from another layer
-is the coverage itself rather than an amount of it. It used to claim the universal row
-(K-395/K-400); it now declares its own, on the ordinary auxiliary-layer carriage beside
+is the coverage itself rather than an amount of it. It used to claim the universal row;
+it now declares its own, on the ordinary auxiliary-layer carriage beside
 Light wrap's Background and Texturize's Texture, so no dissolve stands beside the kernel,
 the Channel above is the only channel pick there is, and Invert is applied once, inside the
-kernel. The stored ids are unchanged — a save is a save (K-065) — and a project saved
-before the change loads exactly as it did (K-258).
+kernel. The stored ids are unchanged — a save is a save — and a project saved
+before the change loads exactly as it did.
 
 **Not in v1:** AE's "Stretch Matte to Fit" (Lumit renders the matte at this raster, so
 there is nothing to stretch) and "Premultiply Matte Layer" (Lumit's compositing is
@@ -3225,7 +3222,7 @@ Three notes:
 `moderate` cost, `PaddedPx(2000)` ROI — the largest radius any one channel can reach.
 Mix 0 is the bit-exact identity, and so are four zero radii.
 
-**The Matte scales all four radii (K-426, §2.6):** Gaussian blur's own override four times
+**The Matte scales all four radii (§2.6):** Gaussian blur's own override four times
 over — each channel's blur is genuinely narrower where the matte is grey, both passes reading
 the destination pixel's matte.
 
@@ -3253,7 +3250,7 @@ Three notes:
 
 - **Completion defaults to 50, where AE's is 0**, for §1.2's reason: an effect whose
   default state has removed nothing is an effect that has not been applied. (§3.39 used to
-  be cited here as the precedent; K-542 turned that one back to the identity, for a reason
+  be cited here as the precedent; that one has since gone back to the identity, for a reason
   that does not reach a wipe — a wipe's control means something the moment it is dragged,
   a tiling's does not until there is somewhere to tile to.) Feather
   keeps AE's 0, because one divergence is enough to make the effect visible and a second
@@ -3267,7 +3264,7 @@ Three notes:
 
 `trivial` cost, `Exact` ROI. Mix 0 and Completion 0 are both the bit-exact identity.
 
-**The Matte scales Completion per pixel (K-429, §2.6),** which is what turns a wipe into a
+**The Matte scales Completion per pixel (§2.6),** which is what turns a wipe into a
 **gradient wipe**: the edge is further along where the matte is bright, so a grey ramp
 sweeps the frame in the ramp's own shape rather than the schema's straight line, and a black
 matte holds the frame back entirely.
@@ -3312,13 +3309,13 @@ Four notes:
   angle that width subtends grows without bound, so it is clamped at π — the middle few
   pixels of a heavily feathered wipe are mush, which is true of AE's and of any polar
   feather.
-- **One `atan2` per pixel** — §3.42's admission again, and recorded by the same decision
-  (K-399): the angle *is* a function of the pixel and cannot be lifted host-side. The §1.6
+- **One `atan2` per pixel** — §3.42's admission again, and for its reason:
+  the angle *is* a function of the pixel and cannot be lifted host-side. The §1.6
   oracle is judged on absolute difference for it.
 
 `cheap` cost, `Exact` ROI. Mix 0 and Completion 0 are both the bit-exact identity.
 
-**The Matte scales Completion per pixel (K-429, §2.6):** the hand has swept further where
+**The Matte scales Completion per pixel (§2.6):** the hand has swept further where
 the matte is bright, so a grey ramp opens the wedge unevenly and a black matte holds the
 frame back.
 
@@ -3387,7 +3384,7 @@ Five things that are decision rather than derivation:
 within a last-bit rounding of the perspective divide, which is not the same claim and is not
 made as one: the map is the identity but the sample still travels through a division.
 
-**The Matte scales the pull from the corners (K-427, §2.6),** in the owner's words: the
+**The Matte scales the pull from the corners (§2.6),** in the owner's words: the
 matte multiplies the offset the handles set, so where the matte is black the pixel stays
 where it was — the untouched picture, not a transparent one. It is read where the pixel
 lands, so a soft matte pins part of the frame to its own corners while the rest travels to
@@ -3400,7 +3397,7 @@ Both are Tier B ([impl/ae-effect-parity.md](impl/ae-effect-parity.md)). Nor is A
 
 ### 3.49 Displacement map — another layer's channels push this one
 
-**This effect is a K-395 matte consumer by nature**, the seventh, and the second (after
+**This effect is a matte consumer by nature**, the seventh, and the second (after
 §3.44) whose matte is the *subject* rather than a modifier: the layer on the Matte row **is
 the map**. AE calls the same control "Displacement Map Layer"; Lumit already has one row that
 names another layer and renders it at this raster, and a second picker beside it saying the
@@ -3502,7 +3499,7 @@ Four things that are decision rather than derivation:
   over one control with a sign.
 
 `cheap` cost, `FullFrame` ROI. Mix 0 and Interpolation 0 are both the bit-exact identity.
-Three transcendentals a pixel, which is §3.42's fourth note and K-399's rule again: the angle
+Three transcendentals a pixel, which is §3.42's fourth note again: the angle
 is a function of the pixel, both paths run their own platform's `atan2`/`sin`/`cos`, and the
 oracle is judged on absolute difference over a smooth corpus.
 
@@ -3534,11 +3531,11 @@ Three notes:
   can leave the frame are the ones whose disc already hung over the edge, and those come out
   transparent.
 - **One sine and cosine a pixel**, for §3.42's reason — the angle is a function of the radius
-  and cannot be lifted host-side. K-399's metric applies.
+  and cannot be lifted host-side. §3.42's metric applies.
 
 `cheap` cost, `FullFrame` ROI. Mix 0, Angle 0 and Radius 0 are all the bit-exact identity.
 
-**The Matte scales Angle (K-427, §2.6):** a half-grey matte on a 200° twirl draws the 100°
+**The Matte scales Angle (§2.6):** a half-grey matte on a 200° twirl draws the 100°
 twirl, to the byte — the picture the control at half draws, which no dissolve of the 200°
 picture can be. Read at the destination pixel, so the falloff over the disc is the matte's
 own shape crossed with the radius ramp.
@@ -3582,9 +3579,9 @@ Four notes:
   Bulge and magnitude to Radius.
 
 `cheap` cost, `FullFrame` ROI. Mix 0, Bulge 0 and Radius 0 are all the bit-exact identity.
-One arc sine or sine a pixel — §3.42's fourth note, K-399's metric.
+One arc sine or sine a pixel — §3.42's fourth note and its metric.
 
-**The Matte scales Bulge (K-427, §2.6):** the matte multiplies Bulge toward 0 before the
+**The Matte scales Bulge (§2.6):** the matte multiplies Bulge toward 0 before the
 map is blended, so the glass is genuinely shallower where the matte is grey — and the
 Bulge-0 short-circuit above then catches a black matte, which is why it costs no
 resampling.
@@ -3623,7 +3620,7 @@ Four things that are decision rather than derivation:
   disturbance: the crests are strongest in a ring, not at the point the stone went in. It
   peaks at `ρ = ⅓` with the value `4⁄27`, so the factor `27⁄4` makes **Wave height literally
   the farthest a pixel moves** rather than a number the envelope quietly discounts.
-- **Evolution replaces AE's Wave Speed, and it is an angle** (K-403). A control that means "cycles per
+- **Evolution replaces AE's Wave Speed, and it is an angle.** A control that means "cycles per
   second" reads the clock, and an effect that reads the clock is not deterministic (§2.4) —
   the same frame would render differently in a preview and an export. One turn of Evolution
   sends one whole wave outward, so an AE Speed of *s* is a linear Evolution keyframe of
@@ -3640,10 +3637,10 @@ Four things that are decision rather than derivation:
   transparent edge there bites a hole out of the picture instead of rippling it.
 
 `cheap` cost, `FullFrame` ROI. Mix 0, Radius 0 and Wave height 0 are all the bit-exact
-identity. One sine and cosine a pixel, so K-399's metric applies: judged on absolute
+identity. One sine and cosine a pixel, so §3.42's metric applies: judged on absolute
 difference over the smooth corpus.
 
-**The Matte scales Wave height (K-427, §2.6):** the rings are shallower where the matte is
+**The Matte scales Wave height (§2.6):** the rings are shallower where the matte is
 grey and flat where it is black, the envelope and the ring spacing untouched — so the water
 can be still at one side of the disc and moving at the other.
 
@@ -3687,7 +3684,7 @@ Four notes:
   to the outermost pixel centre; the factors multiply where two edges are pinned. §3.38 ships
   four of these combinations and reports the rest — this one ships all of them, because the
   ramp is per edge here rather than per axis and eight flags cost what two did.
-- **Phase replaces AE's Wave Speed** (K-403), for §3.53's reason and with the same
+- **Phase replaces AE's Wave Speed**, for §3.53's reason and with the same
   conversion.
 - **The edges repeat rather than fading.** An unpinned wave carries the picture off the frame
   and something has to stand behind it; a transparent edge would put a hole where the wave
@@ -3695,9 +3692,9 @@ Four notes:
 - **Both lengths are px@comp** (§2.3), AE's being raster pixels; the import divides through.
 
 `cheap` cost, `PaddedPx(1000)` ROI (twice Wave height's slider, its hard maximum being open). Mix 0 and Wave height 0 are both the bit-exact
-identity. K-399's metric.
+identity. §3.42's metric.
 
-**The Matte scales Wave height (K-427, §2.6):** the slide is shorter where the matte is
+**The Matte scales Wave height (§2.6):** the slide is shorter where the matte is
 grey — the wave's shape, width and speed are the host's and unchanged, only its amplitude
 varies across the frame. The pinned edges keep their own ramp width, so a pinned border is
 still exactly still whatever the matte says.
@@ -3754,14 +3751,14 @@ Four things that are decision rather than derivation:
   Bezier warp with its tangents at the thirds *is* an affine Corner pin. What Bezier warp adds
   is the bend between the corners; what §3.48 keeps is real perspective, which a patch cannot
   do. They are siblings, not one superseding the other.
-- **Quality is Newton steps, not mesh subdivisions** (K-403). AE tessellates the patch and draws
+- **Quality is Newton steps, not mesh subdivisions.** AE tessellates the patch and draws
   triangles, so its Quality buys smaller triangles. There are no triangles here — every pixel
   inverts the patch exactly — so the same slider buys convergence instead, and the default 8
   is well past the point where an ordinary warp stops moving. A folded patch (one whose
   Jacobian goes singular, which is a patch turned inside out) stops iterating rather than
   dividing by zero, exactly as §3.48's degenerate quad does.
-- **Outside the patch is transparent, and the solve is *checked* before it is believed**
-  (K-403). The warped shape is meant to be seen as a shape; an edge policy that repeated the
+- **Outside the patch is transparent, and the solve is *checked* before it is believed.**
+  The warped shape is meant to be seen as a shape; an edge policy that repeated the
   border would fill the frame and hide the very thing the effect makes, and AE agrees. But
   "in range" is not enough on its own: outside the patch there is no answer, and an
   unchecked iteration wanders until it happens to land in `0..1`, which draws a scatter of
@@ -3776,9 +3773,9 @@ Four things that are decision rather than derivation:
   a resampler could show.
 
 `moderate` cost (Quality patch evaluations and Jacobians a pixel), `FullFrame` ROI. Mix 0 is
-the bit-exact identity, and so — by the snap above — is the default patch. K-399's metric.
+the bit-exact identity, and so — by the snap above — is the default patch. §3.42's metric.
 
-**The Matte scales the bend from the straight frame (K-427, §2.6),** in the owner's words:
+**The Matte scales the bend from the straight frame (§2.6),** in the owner's words:
 the matte multiplies the offset the handles set, after the solve and its snap, so where the
 matte is black the pixel stays where it was. It is read where the pixel lands. A pixel
 outside the patch stays transparent whatever the matte says — there is no solution to pull
@@ -3829,7 +3826,7 @@ with `ρ = min(r, 1)`, and every unlisted component left alone.
 
 Four notes:
 
-- **The five swelling styles subtract their coefficient** (K-403). This is a gather — the map says
+- **The five swelling styles subtract their coefficient.** This is a gather — the map says
   where a pixel is *read from* — so pulling the sample inward is what makes the picture swell
   outward. Written the other way round, a positive Bend on a style called Bulge would pinch,
   which is the one thing a named preset may not do.
@@ -3856,9 +3853,9 @@ Four notes:
   bent trapezoid, which is not what either control is for.
 
 `cheap` cost, `FullFrame` ROI. Mix 0 and Bend 0 with both distortions 0 are the bit-exact
-identity. K-399's metric.
+identity. §3.42's metric.
 
-**The Matte scales Bend and both distortions (K-427, §2.6):** all three are multiplied by
+**The Matte scales Bend and both distortions (§2.6):** all three are multiplied by
 the matte at the destination pixel before the style runs, so a grey matte is a shallower
 bend seen at a shallower angle, and a black one is the identity the line above names.
 
@@ -3900,12 +3897,12 @@ out  = orig·(1 − mix) + out·mix
 
 Four things that are decision rather than derivation:
 
-- **The blur is the distance field** (K-403). A real signed-distance transform is a second algorithm,
+- **The blur is the distance field.** A real signed-distance transform is a second algorithm,
   two more passes and a great deal of care about ties; a gaussian at the radius you were going
   to chew anyway has a `½` contour in the same place and a gradient of exactly the right
   width, and it is a kernel that already ships. §3.43 reuses the same blur for the same reason
   and this is the second time it has paid.
-- **Edge type is three shapes, and the colour is its own switch** (K-403). AE ships seven types, which
+- **Edge type is three shapes, and the colour is its own switch.** AE ships seven types, which
   are three shapes (Roughen, Cut, Spiky) times a colour flag, plus Photocopy. Multiplying two
   independent choices into one dropdown means neither can be animated or read on its own, so
   Lumit splits them: Roughen is the signed field smoothed by Edge sharpness, Cut is the same
@@ -3914,7 +3911,7 @@ Four things that are decision rather than derivation:
   "Hard" means a hundredth of the alpha range, not a step: across a blurred edge of any real
   Border that is well under a pixel, so Cut arrives antialiased rather than stair-stepped —
   and a true step would also make the effect's own §1.6 oracle a coin toss on the pixels that
-  land on the threshold, which is K-399's rule about a threshold on a coverage.
+  land on the threshold, which is §3.58's threshold rule on a coverage.
 - **The band weights the noise, and that is what keeps the chewing at the edge.** Deep
   inside the shape the blurred alpha is 1, so `band` is 0 and the threshold cannot move at
   all — no amount of Fractal influence punches a hole in the middle of a solid layer, which
@@ -3929,7 +3926,7 @@ Four things that are decision rather than derivation:
   for (it hardens a soft matte) and would be a lie to call "off".
 - **Scale is px@comp**, not AE's per cent — §3.37 decision 1, a fourth time.
 
-**The Matte scales Border (K-428, §2.6),** and it rides entirely on the gaussian: Border *is*
+**The Matte scales Border (§2.6),** and it rides entirely on the gaussian: Border *is*
 that blur's radius, and the matte already scales a radius per pixel (§3.8), so a grey matte
 leaves a narrower ramp in the alpha and therefore a narrower band to chew. The outline is bitten
 coarsely where the matte is white and finely — down to untouched — where it is dark, which no
@@ -3956,7 +3953,7 @@ out  = (⌊t·n + ½⌋ ÷ n)²            # the nearest rung of the ladder, bac
 
 Three things in that are decision rather than arithmetic:
 
-1. **The rungs are spaced perceptually, not in light** (K-404). Scene-linear is a
+1. **The rungs are spaced perceptually, not in light.** Scene-linear is a
    measurement of photons and the eye is not (§2.1): eight rungs spaced evenly in light put
    six of them above mid-grey, so a posterized picture would band its highlights to pieces
    and leave the shadows a smooth ramp. That is neither what a posterize is for nor what AE
@@ -3964,8 +3961,8 @@ Three things in that are decision rather than arithmetic:
    root** of the light puts them where a person sees them.
 2. **The curve is √, not sRGB's 2.2** — and the reason is the oracle, not the picture. A
    quantiser's output is a *step*, so the two paths disagreeing by one bit on which side of
-   a rung a value falls is a whole rung of colour, not a last-bit difference (K-399's rule
-   about a threshold, arriving on a colour effect). `sqrt` is a single correctly-rounded
+   a rung a value falls is a whole rung of colour, not a last-bit difference (the threshold
+   rule, arriving on a colour effect). `sqrt` is a single correctly-rounded
    instruction on both the CPU and the GPU; `pow(u, 1/2.2)` is a polynomial each vendor
    writes differently. Between a gamma of 2.0 and one of 2.2 there is no visible difference
    in where eight bands land, and between an exactly agreed answer and an approximately
@@ -3979,7 +3976,7 @@ Unpremultiplied (§2.2) — quantising premultiplied colour would band a soft ed
 bit-exact identity; there is no neutral level, because Levels 2 is a real setting and 255 is
 the effect doing almost nothing rather than nothing at all.
 
-**The Matte pulls Levels toward 256 (K-426, §2.6):** the step count is lerped per pixel from
+**The Matte pulls Levels toward 256 (§2.6):** the step count is lerped per pixel from
 255 (a black matte: the 8-bit ladder, a step too fine to see) to `Levels − 1` (white), so a
 dark matte means finer rungs rather than a coarse ladder faded back over the picture.
 
@@ -4001,7 +3998,7 @@ out  = (k, k, k)
 
 Two decisions:
 
-- **Level is a perceptual position** (K-404), the same √ §3.58 uses and for the same reason:
+- **Level is a perceptual position**, the same √ §3.58 uses and for the same reason:
   a Level of 50 has to land on the grey a person calls middle, which in light is 0.25 and
   not 0.5. This is the one place the batch departs from §3.18's linear pivot, and it departs
   deliberately — Contrast's pivot is the middle of an *operation*, and this is the middle of
@@ -4016,7 +4013,7 @@ Alpha is untouched: a thresholded picture keeps its shape, and the frame does no
 white rectangle. Unpremultiplied (§2.2). `cheap` cost, `Exact` ROI. Mix 0 is the bit-exact
 identity.
 
-**The Matte scales the Level (K-559, §2.6):** the cut's position is multiplied by the
+**The Matte scales the Level (§2.6):** the cut's position is multiplied by the
 matte at each pixel, so white cuts where the Level is set, black cuts at 0 — where every
 pixel with any light in it comes back white — and grey cuts somewhere between. The
 threshold *moves* across the frame, which is the one thing the strength dissolve cannot
@@ -4024,7 +4021,7 @@ do; it is not a lerp toward a neutral, because a Level of 0 is a real setting ra
 the effect doing nothing.
 
 **Softness is not AE's.** AE's Threshold has one control. Softness defaults to 0, where it is
-AE's picture, so an import is faithful (K-401).
+AE's picture, so an import is faithful.
 
 ### 3.60 Tritone — three colours mapped onto the tone range
 
@@ -4046,7 +4043,7 @@ out  = c · max(t, 1)
 
 Two decisions:
 
-- **The three stops are placed perceptually** (K-404), so Midtones lands on the grey a person
+- **The three stops are placed perceptually**, so Midtones lands on the grey a person
   points at rather than on 0.5 of the light, which is nearly white.
 - **Highlights above 1 keep their headroom** rather than clamping to the Highlights colour
   (§2.1). The ramp is chosen by the clamped position and then *scaled* by how far past white
@@ -4091,7 +4088,7 @@ Two things worth stating:
 Density 0 is the bit-exact identity on both paths, and so is Mix 0. Unpremultiplied (§2.2);
 alpha untouched. `cheap` cost, `Exact` ROI.
 
-**The Matte scales Density (K-426, §2.6):** thinner glass where the matte is grey, which with
+**The Matte scales Density (§2.6):** thinner glass where the matte is grey, which with
 Preserve luminosity on is a different picture from a fade, since the luma put back depends on
 how dark the glass was.
 
@@ -4128,7 +4125,7 @@ Three notes:
 - **Nothing is clipped above**, so a weight of 300 on a specular highlight keeps its headroom
   (§2.1). The grey is floored at 0, because a negative weight would otherwise ask for
   negative light.
-- **Tint changes hue, not exposure** (K-404). The grey is multiplied by the Tint colour
+- **Tint changes hue, not exposure.** The grey is multiplied by the Tint colour
   divided by that colour's own luma, so choosing a darker tint tints the picture rather than
   darkening it, and the brightness stays where the six weights put it.
 
@@ -4169,7 +4166,7 @@ Five decisions:
   dissolving into its own dark pixels. The pixel's own value is what gets multiplied, so
   nothing is softened and no detail is borrowed from a neighbour: the blur is a question, not
   an answer.
-- **One Radius, not AE's two** (K-404). AE carries a Shadow Radius and a Highlight Radius,
+- **One Radius, not AE's two.** AE carries a Shadow Radius and a Highlight Radius,
   which is a second full-frame gaussian for a control whose whole job is the softness of a
   mask, and a shot that needs the shadows' mask measured at one scale and the highlights' at
   another in the same grade has not turned up. The import averages AE's two and reports it.
@@ -4182,8 +4179,8 @@ Five decisions:
   desaturated, because that is what happens to real shadows when they are opened up. The
   boost applies exactly where the gain differs from 1 and nowhere else, so 0 is the identity
   in colour and the control cannot quietly saturate a picture it did not otherwise touch.
-- **Midtone contrast pivots on the perceptual middle**, the same √ the rest of the batch uses
-  (K-404): mid-grey, not 0.5 of the light.
+- **Midtone contrast pivots on the perceptual middle**, the same √ the rest of the batch uses:
+  mid-grey, not 0.5 of the light.
 
 **Not built, and reported by the import: Auto Amounts, Temporal Smoothing and Scene Detect.**
 AE's default is to choose the two amounts from the frame's own histogram and then smooth that
@@ -4197,7 +4194,7 @@ Blurring means `PaddedPx(2000)` ROI — Radius' own hard maximum — and `modera
 untouched. **Both amounts and Midtone contrast at 0 short-circuits to the bit-exact identity**
 on both paths — the blur is not even run — and Mix 0 likewise.
 
-**The Matte scales Shadow amount and Highlight amount (K-426, §2.6):** a grey matte lifts and
+**The Matte scales Shadow amount and Highlight amount (§2.6):** a grey matte lifts and
 pulls less, the neighbourhood blur, the widths and Midtone contrast untouched by it.
 
 ### 3.64 Median — the middle value of a neighbourhood
@@ -4226,7 +4223,7 @@ cheaper stand-in gives that property up.
 Four things that are decision rather than derivation:
 
 - **The selection is a compare-exchange network, because a data-dependent sort is not a
-  GPU program** (K-405). A branchy quickselect diverges every lane in a warp and is a
+  GPU program.** A branchy quickselect diverges every lane in a warp and is a
   different sequence of comparisons on the two paths, which §1.6 could not hold to
   agreement. Instead both paths sweep the window once, carrying a sorted register array of
   the `⌈N⁄2⌉` smallest values seen so far and inserting each new sample with a bubble of
@@ -4255,7 +4252,7 @@ Four things that are decision rather than derivation:
   despeckling its colour. With it on, alpha is medianed in the same sweep — a fourth lane
   of the same network, free.
 
-**The Matte scales Radius (K-428, §2.6):** each pixel's matte luma multiplies Radius before
+**The Matte scales Radius (§2.6):** each pixel's matte luma multiplies Radius before
 its window is swept, rounded with the same `floor(x + ½)` the control itself is, so a half
 matte on Radius 2 gives *exactly* the Radius 1 picture — a genuinely smaller window, not a
 half-fade of a bigger one. That is what lets one painted matte despeckle a noisy sky and leave
@@ -4291,9 +4288,9 @@ Three notes:
 
 - **Nothing here is a float** until the averaging itself. A block edge decided by
   `floor(x ÷ block_width)` in floating point is a pixel that lands in different blocks on
-  the two paths wherever the division is exact — K-399's rule about a threshold, arriving
+  the two paths wherever the division is exact — §3.58's threshold rule, arriving
   on a *coordinate*. Integer division has no such tie.
-- **The average is a bounded sample, and that is deliberate** (K-405). A true mean of a
+- **The average is a bounded sample, and that is deliberate.** A true mean of a
   block of a 1080p frame at the default grid is 3 500 taps, redone by every one of those
   3 500 pixels — a hundred-fold more work than the picture is worth. The block is instead
   sampled on a stratified grid of at most 8×8 positions, which for any block reads as the
@@ -4330,7 +4327,7 @@ out      = q²                                    # back into light
 
 Two decisions:
 
-- **The gradient is taken on the perceptual value, not on the light** (K-405, §3.58's rule
+- **The gradient is taken on the perceptual value, not on the light** (§3.58's rule
   a fifth time). A Sobel in scene-linear light is dominated by the highlights: the step
   from 3.0 to 4.0 in a sunlit sky is a stronger "edge" than the step from 0.01 to 0.05 in
   a shadow, though the eye sees the second and not the first. Taking the difference in √
@@ -4379,7 +4376,7 @@ Three notes:
   The perceptual difference is §3.58's curve for the sixth time, and for Find edges'
   reason: a relief taken in light would be all highlight and no shadow.
 
-**The Matte scales Relief (K-428, §2.6):** each pixel's matte luma multiplies the tap offset
+**The Matte scales Relief (§2.6):** each pixel's matte luma multiplies the tap offset
 before the two taps are read, so the relief is genuinely shallower where the matte is grey. A
 black matte therefore gives the **flat mid-grey sheet**, not the picture back — because Relief
 0 is that sheet and not the identity, and the matte turns the relief down rather than turning
@@ -4412,13 +4409,13 @@ out  = max(u · (1 + r), 0)
 
 Four things worth stating:
 
-- **The texture is its own Layer row, not the Matte row** (K-405). §3.49's map *is* the
+- **The texture is its own Layer row, not the Matte row.** §3.49's map *is* the
   matte, because a displacement map has nothing else it could be; a texture is not, because
   an editor will want to press a canvas into a layer **and** limit the pressing to a
   region, and one row cannot say both. So Texturize declares its own Texture row — Light
   wrap's Background is the precedent — and keeps the generic §2.6 strength matte, which is
   what "only over the sky" means here.
-- **Placement is a *fitting*, and Scale is the size** (K-405). The layer carriage renders
+- **Placement is a *fitting*, and Scale is the size.** The layer carriage renders
   a referenced layer alone at this raster (docs/impl/layer-input.md), so the texture arrives
   frame-shaped: "stretch to fit" is what the carriage does and always did, exactly as
   §3.49 records. Scale is therefore Lumit's own control — it says how big one copy of the
@@ -4435,7 +4432,7 @@ Four things worth stating:
 - **An unset Texture is the labelled no-op**, as every layer row is (docs/impl/
   layer-input.md), and so is a dangling or cyclic reference.
 
-**The Matte scales Relief (K-428, §2.6)** — the light vector Relief is spent into, before the
+**The Matte scales Relief (§2.6)** — the light vector Relief is spent into, before the
 texture's two taps are read, so a grey matte reads a *different pair* of texture pixels and not
 a weaker version of the same difference. The Texture row is unaffected: it is the effect's
 subject, the matte is how much of it presses in.
@@ -4476,7 +4473,7 @@ out    = v²                                     # back into light
 
 Three decisions:
 
-- **It is a clamp, and it says so in its name** (K-405). AE calls the effect Broadcast
+- **It is a clamp, and it says so in its name.** AE calls the effect Broadcast
   Colors and offers "Key Out Unsafe" as a *diagnostic view* beside two real repairs; Lumit
   keeps all four, because seeing which pixels are illegal is half of why anyone reaches for
   this, but the name is what the effect **does** to the picture — docs/01's rule that a
@@ -4486,7 +4483,7 @@ Three decisions:
 - **The encoding is §3.58's square root, not Rec. 709's transfer function.** A composite
   signal's amplitude is a statement about the *encoded* value, so scene-linear light has to
   be encoded before it can be measured. The batch's `√` is used for the same oracle reason
-  it was chosen for in the first place (K-404) — the answer here is a **threshold**, so a
+  it was chosen for in the first place — the answer here is a **threshold**, so a
   last-bit disagreement between the two paths is a pixel that is keyed out on one and not
   on the other. Across the range the difference between `√` and the real OETF is under two
   IRE, which is inside the margin a Maximum signal of 110 already carries, and the control
@@ -4544,7 +4541,7 @@ Four notes:
 
 `trivial` cost, `Exact` ROI. Mix 0 and Completion 0 are both the bit-exact identity.
 
-**The Matte scales Completion per pixel (K-429, §2.6):** the slats stand further open where
+**The Matte scales Completion per pixel (§2.6):** the slats stand further open where
 the matte is bright, so one part of the frame can be shut while another is wide open.
 
 ### 3.71 Iris wipe — a polygon or a star opened out of the middle
@@ -4596,17 +4593,17 @@ Five notes:
   (it inverts which parts of the frame the iris opens in, not which side of the edge is kept)
   — use §3.44 Set matte with this effect on the matte layer, or an Outer radius large enough
   to leave only the star.
-- **The two radii and the centre are all px@comp** (K-419): a radius is a *size* that the
+- **The two radii and the centre are all px@comp**: a radius is a *size* that the
   preview scaling keeps consistent across a reframe, a centre is a *place* the user clicks.
   AE's are both layer pixels, so the import carries them unchanged.
 - **Outer radius 0 is the identity by short-circuit.** With no polygon there is no edge, the
   normal is undefined, and a kernel that divided by its length would paint half-grey over the
   frame; both paths test the radius instead. §3.51's and §3.52's short-circuits, a third time.
 
-`cheap` cost — one `atan2` a pixel, §3.47's admission again (K-399) — `Exact` ROI. Mix 0 and
+`cheap` cost — one `atan2` a pixel, §3.47's admission again — `Exact` ROI. Mix 0 and
 Outer radius 0 are both the bit-exact identity.
 
-**The Matte scales the iris radius per pixel (K-429, §2.6),** this being the one transition
+**The Matte scales the iris radius per pixel (§2.6),** this being the one transition
 with no Completion to scale — which is the same sentence about the same thing, since the
 radius *is* the transition. It costs one multiply: the solved sector's vertex is the only
 place a radius survives into the expression, so scaling it scales the outer and inner radii
@@ -4621,7 +4618,7 @@ first in the catalogue to put a **camera** in front of a pixel — a fixed one, 
 on it (see the fourth decision).
 
 **Parameters:** Completion (per cent, 0..100, default 50, hard 0..100), Transition width
-(**px@comp**, K-558, 1..3840, default 960, hard min 1 — the flipping wave's width across the
+(**px@comp**, 1..3840, default 960, hard min 1 — the flipping wave's width across the
 frame, measured along whichever axis Flip order runs, and centred on the actual comp by
 `instantiate_for_raster`), Rows (whole number, 1..64, default 6, hard 1..256),
 Columns (whole number, 1..64, default 8, hard 1..256), Flip axis (Horizontal axis / Vertical
@@ -4661,9 +4658,9 @@ out         = orig·(1 − mix) + out·mix
 
 Six decisions:
 
-- **Transition width is a distance across the frame, not a share of the wipe** (K-558). The
+- **Transition width is a distance across the frame, not a share of the wipe.** The
   Flip order ramp `o` is a *position* — where a card sits along the order axis, 0 to 1 — so the
-  band running along it is measured in the same space, and since K-558 that space is quoted in
+  band running along it is measured in the same space, and that space is quoted in
   pixels. The share is taken once, host-side, dividing by the raster's own extent along that
   axis, so both kernels are handed the same `1 ÷ w` and `1 − w` they always were and neither
   learns a new unit. Width and raster carry the same preview factor, so a Half preview wipes
@@ -4694,7 +4691,7 @@ Six decisions:
   camera it does not have. The import reports all of it. **Back Layer, Card Scale, Position
   Jitter and Rotation Jitter are not carried either**; a card turns to nothing, which is AE's
   own picture when the back layer is empty.
-- **Flip order's Gradient needs no row of its own** (revised by K-429). It used to be
+- **Flip order's Gradient needs no row of its own.** It used to be
   declined here on §3.68's test: AE picks the order from a gradient *layer*, the only layer
   row this effect has is the universal Matte (§2.6), and a card wipe wanted to say "only over
   the sky" as well as "in this order" — two things about *where*, which one row could not
@@ -4709,11 +4706,11 @@ card in its own frame costs. Premultiplied (§2.2). `cheap` cost, `FullFrame` RO
 a card the width of the frame). Mix 0 and Completion 0 are both the bit-exact identity, and
 Completion 100 is the exactly empty frame.
 
-**The Matte scales Completion per pixel (K-429, §2.6):** the cards have turned further where
+**The Matte scales Completion per pixel (§2.6):** the cards have turned further where
 the matte is bright. Note the grain — it is asked per *pixel*, not per card, so a matte can
 leave one half of a card standing while the other half has flipped away, and it is read at
 the **destination** pixel, where the card's point is standing rather than where the picture
-was fetched from (K-427's rule for every gather). Painting a ramp on the matte is therefore
+was fetched from (the rule for every gather). Painting a ramp on the matte is therefore
 AE's **gradient flip order**, which is what settled the fourth decision above.
 
 ---
@@ -4724,7 +4721,7 @@ Maps AE's Beam ([11-AE-IMPORT.md](11-AE-IMPORT.md)). A **Generate** effect, and 
 member of the draw family: one segment, two colours and a taper.
 
 **Parameters:** Start x and Start y (px@comp, default 240, 840), End x and End y (px@comp,
-default 1680, 240), Length (**px@comp**, K-558, 0..4000, default 1560 — the length of the run
+default 1680, 240), Length (**px@comp**, 0..4000, default 1560 — the length of the run
 those defaults describe, hard min 0), Time (per cent,
 0..100, default 100, hard 0..100), Start thickness (px@comp, 0..200, default 14, hard min 0),
 End thickness (px@comp, 0..200, default 3, hard min 0), Softness (per cent, 0..100, default
@@ -4758,7 +4755,7 @@ Four notes:
   effect that animated itself off the clock would make preview and export disagree. Time says
   where the beam's *head* has got to and Length how far its tail trails behind it, both
   ordinary controls the timeline keyframes. Time is a per cent of the run; Length is px@comp
-  since K-558, because it is a distance and a distance is pixels — the kernel divides it by
+  because it is a distance and a distance is pixels — the kernel divides it by
   the run once, host-side, and both numbers carry the same preview factor, so a Half preview
   draws the same beam the export does. AE's Length is a fraction of the run, so the import
   multiplies it by the run those points describe.
@@ -4861,7 +4858,7 @@ Five decisions:
   with Amplitude, Forking and Decay. All of it is reported by the import rather than
   approximated — §3.63's Auto Amounts a second time.
 
-**The Matte scales the bolt's opacity (K-428, §2.6):** the core's own coverage and the Glow
+**The Matte scales the bolt's opacity (§2.6):** the core's own coverage and the Glow
 opacity together, per pixel, before the composite — so the bolt fades along its length and
 what lies under it is untouched. Not the dissolve, and doubly so: the glow only lights what
 the core has not taken, so fading the two together is quadratic in the matte; and with
@@ -4898,7 +4895,7 @@ A        = (1, 0)                                   # the unit shape's vertex on
 B        = plain:  (cos period, sin period)
            star:   (1 − Star depth ÷ 100)·(cos ½period, sin ½period)
 m        = the outward unit normal of the edge A→B
-k_hi     = floor(Time × Frequency)                  # the newest wave's index (K-399: host-side)
+k_hi     = floor(Time × Frequency)                  # the newest wave's index (host-side)
 count    = min(ceil(Lifespan × Frequency) + 1, 32)
 
 # per pixel
@@ -4934,7 +4931,7 @@ Five notes:
   rather than thirty-two solves — and Star, Sides and Star depth cost nothing per wave.
   §3.71's fold and its mirror do the rest, which means the distance that comes out is again a
   **true perpendicular distance in pixels** and Stroke width is a width.
-- **`floor(Time × Frequency)` is taken host-side**, K-399's rule about a threshold reaching a
+- **`floor(Time × Frequency)` is taken host-side**, §3.58's threshold rule reaching a
   product: the newest wave's index decides *which* rings exist, and one bit of disagreement
   about it is a whole ring appearing on one path and not the other.
 - **Thirty-two waves is the cap, and it is a budget** — §3.64's cap that cannot be typed past,
@@ -4944,7 +4941,7 @@ Five notes:
   starts empty and fills up — which is what an emitter does, and what makes Time 0 the
   bit-exact identity.
 
-**The Matte scales Opacity (K-428, §2.6),** per pixel and before the composite, so the rings
+**The Matte scales Opacity (§2.6),** per pixel and before the composite, so the rings
 fade out across the frame rather than the frame fading back to what was underneath. With
 Composite on original off a black matte leaves the pixel transparent, which is what "draw
 nothing here" means when the layer that arrived has already been discarded.
@@ -4957,7 +4954,7 @@ is not shipped at all. Mix 0 and Time 0 are both the bit-exact identity.
 
 ### 3.76 Vegas — marching lights along a contour or a mask
 
-Maps AE's Vegas ([11-AE-IMPORT.md](11-AE-IMPORT.md)), **both halves** since K-408. A
+Maps AE's Vegas ([11-AE-IMPORT.md](11-AE-IMPORT.md)), **both halves**. A
 **Generate** effect that runs a dashed stroke along a line: either a contour it finds in the
 picture it was given, or — with Source set to Mask/Path — a mask you have drawn (§1.2).
 
@@ -5031,11 +5028,11 @@ Five decisions:
   stroke, so the two sources are the same effect and not two. The path half is drawn by the
   shared kernel §3.78 and §3.79 use, since a dashed stroke round a curve is what all three of
   them are.
-- **The gradient is taken on the perceptual value** (K-404), for §3.66's reason: a contour
+- **The gradient is taken on the perceptual value**, for §3.66's reason: a contour
   taken in scene-linear light sits wherever the highlights are, and Threshold would be a
   control that spends its first eighty per cent doing nothing.
 
-**The Matte scales Opacity (K-428, §2.6),** per pixel and before the composite, on **both**
+**The Matte scales Opacity (§2.6),** per pixel and before the composite, on **both**
 halves: the contour kernel and the shared path drawing claim it the same way, so a stroke
 marching round a level set and one marching round a mask fade identically. With Composite on
 original off a black matte leaves the pixel transparent.
@@ -5076,7 +5073,7 @@ out_c    = max(v', 0)²
 
 Four notes:
 
-- **The grain is added where the eye is** (K-404), which is what makes Intensity mean one thing
+- **The grain is added where the eye is**, which is what makes Intensity mean one thing
   across the frame. Added in scene-linear light, the same amount of grain is invisible in the
   shadows and a blizzard in the highlights, because linear light spends most of its range on
   the top stop. The curve is §3.58's `sqrt` and its exact inverse, so the round trip costs two
@@ -5095,7 +5092,7 @@ Four notes:
   three independent fields and mono grain is one field read three times. Neither is the other
   filtered.
 
-The frame's own tick arrives through `resolve_derived` exactly as §3.36's does (K-385), so the
+The frame's own tick arrives through `resolve_derived` exactly as §3.36's does, so the
 kernel never sees a clock and Animate off pins it to zero. `cheap` cost, `Exact` ROI.
 Unpremultiplied (§2.2), for §3.36's reason: grain sprinkled onto premultiplied values would
 fade out across a soft edge instead of lying evenly over it. Mix 0 and Intensity 0 are both the
@@ -5104,7 +5101,7 @@ bit-exact identity.
 AE's Add Grain also carries a Blending Mode, a Viewing Mode, a Tonal Ranges group with movable
 boundaries, and Channel Balance in an expert group. The blending mode is the layer's own
 (docs/06), the viewing mode is a preview affordance rather than a look, the tonal boundaries
-**The Matte scales Intensity (K-428, §2.6),** per pixel and before the grain is added. Unlike
+**The Matte scales Intensity (§2.6),** per pixel and before the grain is added. Unlike
 §3.36's plain additive grain — whose Intensity·k *is* the dissolve, so it keeps the strength
 semantic — this one adds its wobble on the **perceptual** value and squares it back, so half
 the Intensity is a genuinely finer grain rather than a half-faded coarse one.
@@ -5118,7 +5115,7 @@ carried at all** and is not a gap: a denoiser is a programme, not an effect
 ### 3.78 Scribble — a mask filled with pencil strokes
 
 Maps AE's Scribble ([11-AE-IMPORT.md](11-AE-IMPORT.md)). A **Generate** effect, and the first
-of the two that read a **mask's geometry** rather than the picture (§1.2, K-408): you draw a
+of the two that read a **mask's geometry** rather than the picture (§1.2): you draw a
 mask, this shades it in the way a hand shades a shape with a pencil — parallel strokes at an
 angle, running a little past the edges, wavering as they go.
 
@@ -5176,7 +5173,7 @@ Four decisions:
   product through, so it drifts. The tick is taken at resolve in `f64` and handed over as a
   number, so the kernel never sees a clock (§2.4) — §3.36's rule again. **Static is pinned in
   two places**, at resolve and in the effect's own packing, for the reason §3.77's Animate
-  toggle is: a bag can carry a derived value over from another setting (K-258).
+  toggle is: a bag can carry a derived value over from another setting.
 - **Past the geometry budget the spacing widens; the fill never stops half way.** A fine hatch
   over a large mask can want more strokes than the uniform holds (§1.2's carriage is a fixed
   size, exactly as §3.74's is). The failure that keeps the picture whole is a coarser hatch, not
@@ -5189,7 +5186,7 @@ geometry rather than as a neighbourhood of the picture. Premultiplied (§2.2). *
 row, a deleted mask, or a layer with no masks all render the input unchanged** (§1.2's
 documented no-op), and so do Mix 0, Opacity 0 and Stroke width 0.
 
-**The Matte scales Opacity (K-428, §2.6),** per pixel — applied to the shared path drawing's
+**The Matte scales Opacity (§2.6),** per pixel — applied to the shared path drawing's
 coverage, which is where Opacity enters and nowhere else — so the pencil fades along its own
 line. On Paint on transparent a black matte leaves nothing at all, which a dissolve cannot do.
 
@@ -5233,7 +5230,7 @@ out       = base·(1 − cov) + Colour·cov       # On original
 out       = src·(1 − mix) + out·mix
 ```
 
-**The Matte scales Opacity (K-428, §2.6),** per pixel — applied, as Scribble's and Vegas'
+**The Matte scales Opacity (§2.6),** per pixel — applied, as Scribble's and Vegas'
 Mask/Path half are, to the shared path drawing's `cov`, which is where Opacity enters and
 nowhere else. The brush therefore fades along the line it is walking. On Reveal original a
 black matte leaves nothing rather than handing the picture back, which is the honest reading:
@@ -5276,7 +5273,7 @@ paint style. The dash gate is switched off by the same convention §3.76 already
 continuous outline (a lit share of 2, which cannot be reached by wrapping), so there is not even
 a branch between them. One kernel, one CPU reference, one §1.6 oracle covering all three.
 
-### The Controls category — the effects that change no pixel (K-414)
+### The Controls category — the effects that change no pixel
 
 The five sections below are one family and are read together. Each is a **parameter-only
 identity effect**: it declares one row, renders nothing, and exists so that *other*
@@ -5303,7 +5300,7 @@ Four facts hold for all five, so none of them repeats it:
   starting value for someone else's expression, and a Slider control that arrived at some
   arbitrary non-zero number would be a lie about the rig.
 
-They sit **last in the Add-effect menu** (K-137's order is the catalogue's, and the family
+They sit **last in the Add-effect menu** (the menu order is the catalogue's, and the family
 is appended at its end), in After Effects' own order: Slider, Angle, Checkbox, Colour,
 Point.
 
@@ -5311,12 +5308,12 @@ Point.
 
 **Parameters:** **Slider** (default 0, slider 0..100, unbounded).
 
-The plain number an expression reads. Its range is **not** the §1.2 Slider *kind* K-414 also
-introduced, and the distinction is the whole point of that kind: a Slider control's numbers
-mean whatever the property reading them means, so a rig wanting 0..3000 is as ordinary as
-one wanting 0..1, and the 0..100 travel is only where the thumb starts. The Slider kind is
-for the opposite case — a parameter whose whole meaning lives inside a closed range, which
-is why the four wipes' Completion adopted it and this row did not.
+The plain number an expression reads. Its range is **not** the §1.2 Slider *kind* that came
+with this family, and the distinction is the whole point of that kind: a Slider control's
+numbers mean whatever the property reading them means, so a rig wanting 0..3000 is as
+ordinary as one wanting 0..1, and the 0..100 travel is only where the thumb starts. The
+Slider kind is for the opposite case — a parameter whose whole meaning lives inside a closed
+range, which is why the four wipes' Completion adopted it and this row did not.
 
 ### 3.81 Angle control — one angle, held
 
@@ -5351,7 +5348,7 @@ A crosshair that can be dragged on the picture and keyframed, so one dragged poi
 flare, a mask and a light together. It is two parameters rather than one because a point in
 Lumit *is* an adjacent `_x`/`_y` pair the panel folds into one row with a crosshair pick
 (§1.1) — a point needs no schema kind of its own, only the naming convention. The numbers
-are px@comp (K-260), and a fresh instance is centred on the actual comp rather than on the
+are px@comp, and a fresh instance is centred on the actual comp rather than on the
 schema's nominal 1080p default, for the reason §3.48's corners are.
 
 **The import** (docs/11 §5) maps all five one for one — one property onto one row, same
@@ -5371,12 +5368,12 @@ already specifies for every unclaimed name.
 Normal / High, default Normal), **Use masks** (default on), **Show points** (default on).
 
 Applied to a footage or precomp layer, this effect **renders identity**: it is not a look,
-it is a button and a readout. Pressing Analyse starts a camera solve (K-415's pipeline,
+it is a button and a readout. Pressing Analyse starts a camera solve (the tracking pipeline,
 [impl/tracking.md](impl/tracking.md)) on its own thread, and you keep editing while it runs
 — the working shape After Effects has, and the reason the controls are an effect on the
-tracked layer rather than a modal window that owns the application (K-417's first ruling).
+tracked layer rather than a modal window that owns the application.
 
-**The analysis is keyed to the source, not the clip** (K-248, K-417's second ruling). The
+**The analysis is keyed to the source, not the clip.** The
 job tracks and solves the **entire unaltered source clip**, keyed by (media, analysis
 settings), cached in the `track/` sidecar ([10-FILE-FORMAT.md](10-FILE-FORMAT.md) §3) and
 rebuildable like every sidecar tier — deleting it at any moment costs one re-analysis and
@@ -5390,10 +5387,10 @@ analysing a nested comp means rendering it rather than decoding it (docs/TODO.md
 
 **Feature density** is the one quality knob worth a row: it sets the detection grid and the
 best-N per bucket the tracker uses (Normal is the tracker's own default, so the middle
-option changes nothing). **Use masks** is K-408's mask carriage put to work — a track is
+option changes nothing). **Use masks** is the mask carriage put to work — a track is
 neither born in nor allowed to wander into a masked region, which is how a moving subject is
 excluded by hand rather than argued with. **Show points** draws the solved cloud over the
-picture on this layer, depth-cued, on after a solve (K-417's fourth ruling); selected points
+picture on this layer, depth-cued, on after a solve; selected points
 make a Null or a Solid at their mean solved position.
 
 **The status is not a parameter.** A parameter is something the document stores and the
@@ -5406,23 +5403,23 @@ together are the one number that says whether the solve is any good. A refusal i
 sentence in the same line, and nothing about the shot has changed. **Create camera** sits
 beside it once there is a solve to follow.
 
-**A track may cover part of its clip, and says which part** (K-540). Not every shot can be
+**A track may cover part of its clip, and says which part.** Not every shot can be
 followed to its end — the lens racks, the frame whites out, a cut lands mid-clip — and where
 the specks stop crossing from one frame to the next there is nothing after that point that
 can be related to anything before it. The analysis **stops there**, solves the span that
 worked and keeps it: a thin bar above the status line shows that span against the rest of the
 clip, and the line says how far it got instead of quoting an error over frames it never saw.
 A camera linked to a partial solve derives inside the span and **holds** the last derived
-pose outside it, which is K-417's rule meeting a range that ends early. Re-analysing after
-masking the offending region, or with a different Feature density, is the way past it; a
-partial answer is honest, usable and cached like any other.
+pose outside it, which is the linked-camera rule meeting a range that ends early.
+Re-analysing after masking the offending region, or with a different Feature density, is
+the way past it; a partial answer is honest, usable and cached like any other.
 
 What the solve is *for* is the **solve link** on a Camera layer
 ([03-DATA-MODEL.md](03-DATA-MODEL.md) §5.6): the camera points at this layer and derives its
 placement per frame, rather than being handed a copy. Create camera makes one; while it is
 linked its Transform heading wears a calm badge saying which of the three link states it is in,
 with **Convert to keyframes** beside it ([07-UI-SPEC.md](07-UI-SPEC.md) §2.3.6). Its rows are
-still the user's to drag — what they hold is a correction on top of the solve (K-578) — and
+still the user's to drag — what they hold is a correction on top of the solve — and
 this effect's status row carries the *edited since track* dot when one has been made.
 
 Like the Controls family above, it declares no image operation, takes no matte and has no
@@ -5431,27 +5428,27 @@ Control: it holds a *job*, not a value.
 
 ### 3.86 Particulate — a particle system that is arithmetic, not history
 
-A **Generate** effect (K-446), and the first that hands something out beside its picture: a
+A **Generate** effect, and the first that hands something out beside its picture: a
 declared `Points` output carrying the same particles it drew, for the family that will
 consume them ([impl/points-stream.md](impl/points-stream.md)). The design is
 [impl/particulate.md](impl/particulate.md); this entry is the catalogue's account of it.
 
 **Parameters**, in four groups. *Emitter*: Shape (Point · Line · Ellipse · Rectangle · Mask
-path · **Ellipse outline** · **Rectangle outline** — K-597), Position (px@comp), **Position z** (px@comp, default 0 — K-561), Width / Height
-(px@comp, 0–2000, default 400), **Depth** (px@comp, 0–2000, default 0 — K-561), Emitter
-angle, Mask path (K-408), Emit rate (per second, 0–1000, default 150), Direction (degrees,
-default −90), **Direction z** (degrees, default 0 — K-561), Spread (degrees, 0–360, default
-360), **Spread z** (degrees, 0–180, default 0 — K-561), Initial speed (px@comp/s, default
+path · **Ellipse outline** · **Rectangle outline**), Position (px@comp), **Position z** (px@comp, default 0), Width / Height
+(px@comp, 0–2000, default 400), **Depth** (px@comp, 0–2000, default 0), Emitter
+angle, Mask path, Emit rate (per second, 0–1000, default 150), Direction (degrees,
+default −90), **Direction z** (degrees, default 0), Spread (degrees, 0–360, default
+360), **Spread z** (degrees, 0–180, default 0), Initial speed (px@comp/s, default
 90), Speed jitter (per cent, default 50). *Particle*: Life (seconds, default 2), Life jitter (per cent,
 default 30), Size (px@comp, default 4), Size jitter (per cent, default 40), Size over life
-and Opacity over life (curves, K-412 — flat, and 1 → 0), Colour and End colour
+and Opacity over life (curves — flat, and 1 → 0), Colour and End colour
 (scene-linear, values above 1 legal), Rotation, **Rotation jitter** (degrees, 0–360, default
-360 — K-507), Spin (degrees/s), Align to motion. *Forces*: Gravity (px@comp/s², and **down stays down** — K-561),
+360), Spin (degrees/s), Align to motion. *Forces*: Gravity (px@comp/s², and **down stays down**),
 Wind x / Wind y / **Wind z** (px@comp/s — they act **through** Drag, and with Drag 0 they
 do nothing at all), Drag (per second, default 0.5), Turbulence amount / scale / speed. *Render*: Mode
-(Disc · Sprite · Streak), Feather (per cent), Sprite layer (K-123, K-142), Streak length
+(Disc · Sprite · Streak), Feather (per cent), Sprite layer, Streak length
 (seconds), **Max particles** (1–200 000, hard 1 000 000, default 20 000 — not animatable),
-Seed. Plus the host Mix with its Blend (K-425).
+Seed. Plus the host Mix with its Blend.
 
 **Algorithm sketch.** No frame reads any other frame. The whole of a particle's life is
 decided by its **birth index** and a seed, so "where is it at frame 500?" is arithmetic:
@@ -5469,7 +5466,7 @@ seen  = M·(x, y, z, 1) ; draw at seen.xy/seen.w, size ÷ seen.w  # the comp's c
 
 Eight notes:
 
-- **The forces are the set with closed-form integrals** (K-474), and that is the selection
+- **The forces are the set with closed-form integrals**, and that is the selection
   criterion rather than a styling choice. `r` and `s` are `(1 − e^(−x))/x` and its
   companion, written so **neither divides by the drag** — the published `g/k` form is
   infinite at zero drag — with a series branch below `x = 0.1`. The note says `1e−4`; in
@@ -5488,50 +5485,48 @@ Eight notes:
   is the referenced layer's picture in the quad. **An unset Sprite layer draws discs** —
   the documented deviation from the unset-is-identity convention, because a render mode
   must always draw something.
-- **Max particles is the budget dial** (K-475, [13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md)
+- **Max particles is the budget dial** ([13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md)
   §2): it is the declared peak scratch, which is why it is a parameter and not a guess. Over
   budget, the **newest** cap by birth index survives — visible, deterministic, and identical
   from any scrub direction. Under governor pressure the same rule at half the cap is the
   degradation rung: interaction only, never on export (docs/06 §6.2).
 - **Three things ride beside the op**, because none of them is a number anybody typed: the
   layer's clock, the birth schedule — the whole history of the Emit rate track rather than
-  its value now — and, since K-561, the composition's camera. The draw builder works out all
+  its value now — and the composition's camera. The draw builder works out all
   three, exactly as it flattens a mask polyline (§1.2).
-- **The two outline shapes emit along a perimeter** (K-597), uniformly by arc length, and
+- **The two outline shapes emit along a perimeter**, uniformly by arc length, and
   they are the *same walk* a Mask path emitter already does: the host flattens the ellipse
   or the rectangle into a polyline in the emitter's own local frame — vertices on the true
   curve, 128 chords for an ellipse — and both render paths walk that one polyline, so
   neither can come to flatten it differently. The outline is then turned by Emitter angle
   and placed at Position exactly as the area it hollows out would have been, and Depth
   fills through it, so a cylinder becomes a tube. The two codes are **appended** to the
-  Shape list rather than slotted in beside their fills: a Choice is stored as its index
-  (K-065), so inserting one would quietly turn every saved Mask path emitter into a
+  Shape list rather than slotted in beside their fills: a Choice is stored as its index,
+  so inserting one would quietly turn every saved Mask path emitter into a
   Rectangle. Uniform by arc length rather than by angle is the whole point of the walk — on
   a 2:1 ellipse, parameterising by angle crowds the ends of the long axis by a factor of
   two.
-- **The particles live in three axes, and the composition's camera sees them** (K-561,
-
-  K-596). A
+- **The particles live in three axes, and the composition's camera sees them.** A
   particle carries a depth, the closed forms integrate it under the same drag and wind
   algebra (gravity excepted — down stays down), the emitter reaches through the layer's
   plane, and turbulence gained a third lattice channel on the rule that a jitter with an x
   and a y gains a z. **On a 3D layer** the stream projects through the comp's active camera
   exactly as the layer's own transform does — the same `camera_matrix` and `place_matrix`
   the compositor places layers with, restricted back onto the layer's plane, so there is no
-  second camera in the engine (the precedent is K-406's ruling on Card wipe: Lumit keeps
+  second camera in the engine (the precedent is Card wipe's ruling: Lumit keeps
   cameras on the composition). **On a 2D layer nothing changes**: the projection is flat and
   every project saved before the axis existed draws the picture it always drew, bit for bit,
-  which is the K-258 gate and is tested as one. Depth-map occlusion and collision remain out
-  of scope. The wire stays one type: a consumer reads the projected pair unless it declares
-  3D awareness on its port, which is how Points sample keeps measuring its Nearest distance
-  where the viewer sees the particles.
+  which is the saved-project gate and is tested as one. Depth-map occlusion and collision
+  remain out of scope. The wire stays one type: a consumer reads the projected pair unless
+  it declares 3D awareness on its port, which is how Points sample keeps measuring its
+  Nearest distance where the viewer sees the particles.
 
 `moderate` cost, `FullFrame` ROI (a particle may travel anywhere), premultiplied, temporal
 window `{0}` — the payoff of the closed forms, and what makes scrubbing one evaluation.
-`sample_temporally` on, so accumulation Motion blur gets true particle motion for free
-(K-132). Mix 0, Max particles 0 and an Emit rate that has produced nothing are all the
+`sample_temporally` on, so accumulation Motion blur gets true particle motion for free.
+Mix 0, Max particles 0 and an Emit rate that has produced nothing are all the
 bit-exact identity, as is a Mask path emitter whose row comes to no mask — the documented
-no-op (K-408).
+no-op.
 
 **The Matte takes the generic strength semantic** (§2.6): the particles are drawn in full
 and dissolved back by the matte's luma afterwards, which is the right reading for an effect
@@ -5564,13 +5559,13 @@ px@comp, ordinary keyframes the graph editor draws and the user owns from the mo
 land. That is the whole screen-replacement gesture, and it is the reason the Corner pin's
 Tier-2 row has always said "export target for the tracker".
 
-**The same four corners are also a transform** (K-734). Where their centre went is a
+**The same four corners are also a transform.** Where their centre went is a
 position, how far the quad turned is a rotation, how much it grew is a scale — so **Create
 transform keys** writes that movement onto the **Pin layer**'s own Position, Rotation and
 Scale instead of onto a Corner pin, one key per composition frame, in the same walk and with
 the same clamping.
 
-**And not everything worth following is flat** (K-735). **Follow** turns the effect to *One
+**And not everything worth following is flat.** **Follow** turns the effect to *One
 point* or *Two points*: a search box **Region size** across, centred on Point 1 and — for
 two — on Point 2, each followed entirely on its own. A light on a car, a badge on a moving
 shoulder, two marks on opposite walls of a room: nothing in the two-point case assumes the
@@ -5602,7 +5597,7 @@ circle rather than snapping back the way `atan2` would, and the turn is measured
 quad's two horizontal edges together, since a projective warp treats opposite edges
 differently.
 
-**Why a second effect and not a mode on the Camera track** (K-579). The two share their
+**Why a second effect and not a mode on the Camera track.** The two share their
 first step — the same detector, the same pyramidal KLT, the same exclusion masks — and
 nothing after it. A camera solve answers *where the camera was*: one answer for a whole
 file, shared by every clip of it, read by a Camera layer through a link, carrying a point
@@ -5630,7 +5625,7 @@ recent frame and remembers the one homography that reaches it, so error accumula
 re-anchor rather than once per frame. The status line says how many re-anchors there were,
 because that is the one number that says how much to trust the far end.
 
-**Use masks** is K-408's mask carriage doing a second job here: the quad already says where
+**Use masks** is the mask carriage doing a second job here: the quad already says where
 to look, and a mask says what to ignore *inside* it — the hand crossing the phone, the
 reflection sliding over the sign. **Feature density** is the Camera track's own row, meaning
 the same three things to the same detector.
@@ -5648,26 +5643,26 @@ panel rather than dragged on the picture; on-canvas handles are owed
 ([TODO.md](TODO.md)), and the two points are rows in the same way. A layer given transform
 keys turns and scales about its own anchor point rather than about the tracked feature —
 move the anchor where it should pivot. And the effect analyses a **footage** layer only — a Camera track on a
-Precomp layer renders the nested comp to track it (K-577), and the same for a planar track
+Precomp layer renders the nested comp to track it, and the same for a planar track
 is owed rather than pretended.
 
 ---
 
 ### 3.88 Grid — a lattice of points, and the discs that show it
 
-A **Generate** effect (K-598), and the first of the points **generators**: like Particulate
+A **Generate** effect, and the first of the points **generators**: like Particulate
 it declares a `Points` output beside its picture, and unlike Particulate it has no time in
 it at all. Rows, columns and planes, spaced by a distance you type, with a jitter dial per
 axis. There is nothing to be born, nothing to age, nothing to carry off — a cell is where
 the arithmetic says it is, at every frame, for ever.
 
 **Parameters**, in two groups. *Grid*: Columns (1–100, hard 1 000, default 10), Rows
-(default 6), **Planes** (default 1 — the count *through* the layer's plane, K-561), Spacing
+(default 6), **Planes** (default 1 — the count *through* the layer's plane), Spacing
 x / Spacing y / Spacing z (px@comp, 0–1000, default 120), Position x / y / **z** (px@comp —
 the lattice's centre), Jitter x / y / z (px@comp, 0–500, default 0), Seed. *Point*: Size
 (px@comp, default 8 — the diameter of the disc a point is drawn as), Feather (per cent),
 Colour (scene-linear, values above 1 legal), **Max points** (1–200 000, hard 1 000 000,
-default 20 000 — the budget dial, not animatable). Plus the host Mix with its Blend (K-425).
+default 20 000 — the budget dial, not animatable). Plus the host Mix with its Blend.
 
 **Algorithm sketch.** One expression, no walk:
 
@@ -5691,7 +5686,7 @@ Five notes:
   fixed ordering — deterministic, identical from any scrub direction, and reached by
   *stopping* rather than trimming, so an over-large lattice costs the cap and not the
   lattice.
-- **The points are drawn on the host and posted to the card** (K-598). Particulate works
+- **The points are drawn on the host and posted to the card.** Particulate works
   its particles out in a compute pass because there can be a million of them and each is a
   page of algebra; a lattice is a few hundred cells of arithmetic, and posting the answers
   costs less than a pass would. What it buys is better than speed: the points the effect
@@ -5720,7 +5715,7 @@ points lands ([impl/points-stream.md](impl/points-stream.md) §2.3).
 
 ### 3.89 Scatter — points thrown at the picture, kept where there is alpha
 
-A **Generate** effect (K-599), the second points **generator** and the first thing in the
+A **Generate** effect, the second points **generator** and the first thing in the
 family whose stream depends on the *picture*. Grid puts points where the arithmetic says;
 Scatter throws them at random and keeps the ones that land on something. "Something" is the
 layer's own alpha — or a matte layer's, if one is bound — so a silhouette, a piece of text
@@ -5729,8 +5724,8 @@ or a keyed subject becomes a cloud of points in the shape of itself.
 **Parameters**, in two groups. *Scatter*: Density (0–100, default 20 — candidate points per
 hundred-pixel square **of the composition**), Seed. *Point*: Size (px@comp, default 6),
 Feather (per cent), Colour (scene-linear), **Max points** (1–200 000, hard 1 000 000,
-default 20 000 — the budget dial, not animatable). Plus the host Mix with its Blend (K-425),
-and the Matte row, which this effect **claims inside its own maths** (§2.6, K-395).
+default 20 000 — the budget dial, not animatable). Plus the host Mix with its Blend,
+and the Matte row, which this effect **claims inside its own maths** (§2.6).
 
 **Algorithm sketch.** Rejection sampling, and nothing else:
 
@@ -5753,7 +5748,7 @@ Six notes:
   pixels — changing the preview divisor never re-rolls the crowd. What it can change is
   whether a candidate sitting **on a soft edge** is admitted, because the alpha it reads is
   the picture at the raster being drawn and a half-resolution picture is a different
-  picture. At full resolution preview and export are identical by construction (K-031),
+  picture. At full resolution preview and export are identical by construction,
   which is where that guarantee is actually made. Any fixed "working resolution" would have
   been a second resampling of the picture, a second cost and a second truth, to move the
   same wobble somewhere else.
@@ -5761,7 +5756,7 @@ Six notes:
   owns the answer and answers it with a constant. A luma source becomes an alpha one
   through Matte key or Set matte, which is what those exist for. **Invert** works, and
   scatters the points *outside* the shape.
-- **The rejection happens in the draw**, not in a pass of its own (K-599). The candidates
+- **The rejection happens in the draw**, not in a pass of its own. The candidates
   are a set that exists only on the host and the field is a picture that exists only on the
   card, so the vertex stage is where the two can meet: what is posted is the whole candidate
   set, and a refused point is given no size — a disc of no radius covers no pixel. The
@@ -5788,7 +5783,7 @@ points and Connect points land.
 
 ### 3.90 Clone to points — a layer stamped at every point of a stream
 
-A **Generate** effect (K-600), and the first thing in this engine that **reads** a points
+A **Generate** effect, and the first thing in this engine that **reads** a points
 wire rather than handing one out. Wire a producer's teal Points socket into it, pick a
 layer, and that layer's picture is stamped once per point: at the point's place, turned by
 the point's own rotation, sized by the point's own size, tinted by its colour. A hundred
@@ -5799,7 +5794,7 @@ silhouette — the rig people build by hand out of repeaters and expressions, as
 cent, 0–1000, default 100 — multiplies each point's own size), Rotation (degrees, added to
 each point's own), Tint (per cent, default 100 — how much of the point's colour and alpha
 the stamp takes), **Max clones** (1–200 000, hard 1 000 000, default 2 000 — the budget
-dial, not animatable). Plus the host Mix with its Blend (K-425). No panel row for the
+dial, not animatable). Plus the host Mix with its Blend. No panel row for the
 stream: it is a **wire-only** input, declared on the signature, because a points stream has
 no stored value to fall back on (impl/points-stream.md §4.1).
 
@@ -5818,13 +5813,13 @@ Five notes:
 - **Painter's order is `id` order**, and that is the determinism claim. A stream arrives
   ordered by birth index ascending — a fact of the evaluation rather than an artefact of how
   it was scheduled (impl/particulate.md §5) — and the stamps are laid down in that order, so
-  a later point covers an earlier one on every machine and in every render (K-031).
+  a later point covers an earlier one on every machine and in every render.
 - **It is Particulate's Sprite mode, pointed at somebody else's particles.** Not a second
   implementation: literally the same instanced quad, the same bilinear tap, the same
-  premultiplied tint, through the shared points draw K-598 built. What changes is only where
+  premultiplied tint, through the shared points draw Grid built. What changes is only where
   the points came from.
 - **Nothing wired draws nothing**, and the box says so: an unwired Points input wears the
-  `!` mark and the tooltip K-509 gave the family. So does an unset Clone layer — the
+  `!` mark and the family's tooltip. So does an unset Clone layer — the
   ordinary unset-is-identity reading, deliberately unlike Particulate's Sprite mode, which
   falls back to discs because a *render mode* must always draw something. This has no mode,
   only a source.
@@ -5832,7 +5827,7 @@ Five notes:
   *fade* as well as the hue — Particulate's Opacity over life lives in that alpha. At 0 the
   stamp is the layer's own picture; at 100 it is that picture times the point's colour and
   alpha; between, both.
-- **A wire from Scatter reads the empty stream** (K-599, K-600), which is that producer's
+- **A wire from Scatter reads the empty stream**, which is that producer's
   recorded refusal rather than this effect's: a stream that is a function of the input
   picture cannot be answered where the stack's carriages are built. Grid and Particulate
   both feed this effect in full.
@@ -5849,14 +5844,14 @@ here is for.
 
 ### 3.91 Trail — where every point has been, drawn without remembering it
 
-A **Generate** effect (K-601), the second points **consumer** and the family's last named
+A **Generate** effect, the second points **consumer** and the family's last named
 one. Each point of a wired stream grows a tail: a line of dots, or one connected ribbon,
 running back through the places it was a moment ago and fading as it goes.
 
 **Nothing is stored, ever.** A trail is the obvious place to keep a history, and keeping one
 would cost this engine everything it has — a frame that depended on the frame before it
-cannot be scrubbed to, cannot be exported out of order, and cannot promise two renders agree
-(K-474, K-031). So Trail does what Streak does and does it further: it evaluates the
+cannot be scrubbed to, cannot be exported out of order, and cannot promise two renders agree.
+So Trail does what Streak does and does it further: it evaluates the
 producer's stream **again**, at `t − k·Spacing`, once per sample, and reads each point's
 older self out of the answer. Frame 500's tail costs what frame 3's costs, from a cold start,
 from either scrub direction.
@@ -5866,7 +5861,7 @@ where the point is now, so 1 is no tail at all), **Spacing** (seconds, default 0
 far apart in time those places are), Style (Dots · Segments), Scale (per cent, default 60 —
 multiplies each point's own size), Feather (per cent), Fade (per cent, default 100 — how far
 the far end fades away), **Max trails** (1–200 000, hard 1 000 000, default 2 000 — the
-budget dial, not animatable). Plus the host Mix with its Blend (K-425). No panel row for the
+budget dial, not animatable). Plus the host Mix with its Blend. No panel row for the
 stream: it is a wire-only input (impl/points-stream.md §4.1).
 
 **Algorithm sketch.** One evaluation per sample, then a merge:
@@ -5895,8 +5890,7 @@ Five notes:
   yet. The tail simply stops there, which is the honest picture and is why the samples do not
   all carry the same number of dabs.
 - **Painter's order is oldest sample first, `id` inside it**, so the near end of a tail lands
-  on top of the far end and one point's tail lands on the next point's in a fixed order
-  (K-031).
+  on top of the far end and one point's tail lands on the next point's in a fixed order.
 - **Dots and Segments are one kernel**: a capsule whose tail is its head is a disc, the same
   identity the three Particulate render modes rest on. Segments fills each dab's tail with
   the previous sample's place; Dots leaves it at the head. **Fade is over the tail, not over
@@ -5906,8 +5900,8 @@ Five notes:
 `heavy` cost, `FullFrame` ROI, premultiplied, temporal window `{0}` (it reads the producer at
 other times through its own evaluation, never the *picture* at other times), not seeded in
 the §1.3 sense. Mix 0, an unwired stream, Scale 0 and Samples 1 with Mix 0 are the bit-exact
-identity; an unwired stream also wears the `!` mark K-509 gave the family. A wire from
-Scatter reads the empty stream, for K-599's recorded reason.
+identity; an unwired stream also wears the family's `!` mark. A wire from
+Scatter reads the empty stream, for the reason recorded in its section.
 
 AE's nearest equivalent is Echo, which repeats whole *frames* and therefore does keep them;
 this repeats a point's own arithmetic instead, which is why it costs nothing to scrub.
@@ -5916,13 +5910,13 @@ this repeats a point's own arithmetic instead, which is why it costs nothing to 
 
 ### 3.92 Connect points — lines between the points that are near each other
 
-A **Generate** effect (K-602), the third points **consumer**. Every pair of points in a
+A **Generate** effect, the third points **consumer**. Every pair of points in a
 wired stream closer together than **Max distance** is joined by a line: particles drifting
 past each other web up and let go again, a Grid becomes a mesh, a Scatter inside a
 silhouette becomes a constellation. The plexus look, as one wire.
 
 **A line is a capsule, and a capsule is a disc that has been stretched.** Nothing new is
-drawn: the shared points draw already runs a dab from a head to a tail (K-601), so a segment
+drawn: the shared points draw already runs a dab from a head to a tail, so a segment
 is one entry in an ordinary stream whose tail is somewhere other than its head. Four effects,
 one rasteriser.
 
@@ -5933,7 +5927,7 @@ default 0 — how much a longer line thins), **Fade** (per cent, default 100 —
 longer line dims, so the web comes and goes instead of switching on), Width (px@comp,
 default 2), Feather (per cent), Colour (multiplies the colour a line inherits), **Max
 points** (1–200 000, hard 1 000 000, default 2 000 — the budget dial, not animatable). Plus
-the host Mix with its Blend (K-425). No panel row for the stream: it is a wire-only input
+the host Mix with its Blend. No panel row for the stream: it is a wire-only input
 (impl/points-stream.md §4.1).
 
 **Algorithm sketch.** Cut the plane, then walk it once:
@@ -5962,7 +5956,7 @@ Four notes:
 - **Max connections is counted at both ends.** A pair is joined only while *both* points
   still have room, so the dial means what it says everywhere rather than only at the point
   being walked — and the total is bounded at `n · Max connections / 2` lines.
-- **Determinism is the walk's order, twice over** (K-031): points in `id` order — a fact of
+- **Determinism is the walk's order, twice over**: points in `id` order — a fact of
   the evaluation rather than of scheduling — and each point's candidates ordered by distance
   with `id` breaking every tie. Painter's order is the order the lines were found in.
 - **A line inherits the mean of its two ends' own colours**, so a producer's Colour over life
@@ -5970,8 +5964,8 @@ Four notes:
 
 `moderate` cost, `FullFrame` ROI, premultiplied, temporal window `{0}`, not seeded in the
 §1.3 sense. Mix 0, an unwired stream, Max distance 0, Max connections 0 and Width 0 are the
-bit-exact identity; an unwired stream also wears the `!` mark K-509 gave the family. A wire
-from Scatter reads the empty stream, for K-599's recorded reason.
+bit-exact identity; an unwired stream also wears the family's `!` mark. A wire
+from Scatter reads the empty stream, for the reason recorded in its section.
 
 AE has no equivalent; the look is bought as a plugin there.
 
@@ -5979,19 +5973,19 @@ AE has no equivalent; the look is bought as a plugin there.
 
 ### 3.93 Emit from image — points thrown at a picture, kept where it is bright
 
-A **Generate** effect (K-603), the family's fourth **producer** and the last of it. Grid
+A **Generate** effect, the family's fourth **producer** and the last of it. Grid
 puts points where the arithmetic says and Scatter keeps the ones that land on something
 *opaque*; this one keeps the ones that land on something *bright*. Point it at a layer — a
 title, a logo, a noise pattern, a luma matte somebody painted — and its highlights become a
 cloud of points in the shape of themselves.
 
-**Parameters.** **Source layer** (K-123 — the layer whose brightness is read; **unset reads
+**Parameters.** **Source layer** (the layer whose brightness is read; **unset reads
 this effect's own input picture**), **Threshold** (per cent of full white, default 50 — how
 bright a pixel must be before a candidate on it stands any chance at all), Density (candidate
 points per hundred-pixel square of the *composition*, default 20), Seed, Size (px@comp,
 default 6), Feather (per cent), Colour, **Max points** (1–200 000, hard 1 000 000, default
 20 000 — the budget dial, bounding the **candidates**, not animatable). Plus the host Mix
-with its Blend (K-425). Beside the stream it draws its own points as feathered discs; **Mix
+with its Blend. Beside the stream it draws its own points as feathered discs; **Mix
 at nought emits the stream and draws nothing**, the emit-only mode Grid documents.
 
 **Algorithm sketch.** Scatter's, with a different question asked of the pixel:
@@ -6015,14 +6009,14 @@ Three notes:
   grey; the honest answer to "how bright is what is *there*" divides the coverage back out
   first. Without it a soft-edged title would emit from its own antialiasing as if it were a
   shadow. Both render paths do it, and a test holds them together over a half-covered band.
-- **The rejection happens in the vertex stage**, for K-599's reason unchanged: the field is a
-  picture that exists only on the card and the candidates are a set that exists only on the
-  host, so that is where the two meet. What the card holds is the *candidate* set with the
-  refused ones given no size. The kernel's field test grew a second mode for this rather than
-  a second kernel — Scatter asks for coverage, this asks for light.
+- **The rejection happens in the vertex stage**, for Scatter's reason unchanged: the field
+  is a picture that exists only on the card and the candidates are a set that exists only on
+  the host, so that is where the two meet. What the card holds is the *candidate* set with
+  the refused ones given no size. The kernel's field test grew a second mode for this rather
+  than a second kernel — Scatter asks for coverage, this asks for light.
 
 **Its stream cannot be read by a driver or by a stack consumer**, which is
-impl/points-stream.md §2.2's constraint answered the same way K-599 answered it: the stream
+impl/points-stream.md §2.2's constraint answered the same way Scatter answered it: the stream
 is a function of a picture, and at resolve time — when the driver walk runs, and when the
 draw builder fills a consumer's carriage — no picture exists. Both read the documented empty
 stream rather than a guess.
@@ -6062,7 +6056,7 @@ Four notes:
   its own alpha inside it, so reading one as a colour would read that alpha twice — and
   this effect's whole business is moving colour and coverage about independently. The
   round trip is fused into the one pass.
-- **The Source row is not a matte** (K-429's test, docs/impl/layer-input.md). A Matte row
+- **The Source row is not a matte** (the test in docs/impl/layer-input.md). A Matte row
   answers "how much of me happens here" and this row answers "where do these numbers come
   from", so it rides the ordinary auxiliary-layer carriage beside Light wrap's Background
   and Texturize's Texture, and the universal Matte row stays where it is. "Reassign the
@@ -6097,8 +6091,8 @@ import reports such a channel and leaves it at its identity default (§11 §5).
 
 **Parameters:** **Second input** (layer, unset), **Edit shader…** (action), **Load from
 file…** (action), **Mix** (0–100 %, default 100), plus the injected Blend and Matte rows —
-and **every parameter the shader itself declares** (K-650,
-[impl/custom-shader.md](impl/custom-shader.md)).
+and **every parameter the shader itself declares**
+([impl/custom-shader.md](impl/custom-shader.md)).
 
 A **Utility** effect, `Heavy` cost, `FullFrame` ROI, temporal window `{0}`. Drop it on a
 layer and it renders identity, because it has no program yet; type one into the editor
@@ -6121,7 +6115,7 @@ while a frame is rendering ([impl/effect-registry.md](impl/effect-registry.md) �
 
 **The source is not a parameter.** It lives on the instance under `extra.shader`, which
 rides through save, load, undo, copy/paste, a `.lumfx` preset and an older reader with no
-format work at all (K-065, K-129). A parameter must animate, and two shader sources cannot
+format work at all. A parameter must animate, and two shader sources cannot
 be interpolated.
 
 **`FullFrame` and `Heavy` are statements about a program nobody has read.** A shader may
@@ -6139,7 +6133,7 @@ it can address nothing but its own bind group. The host also sanitises: a NaN or
 coming back from the user's function is replaced before it is stored, in host code the user
 cannot remove, because one poisoned pixel becomes a black composition three effects later.
 
-**A shader that does not compile does not stop the composition.** The badge (K-593) carries
+**A shader that does not compile does not stop the composition.** The badge carries
 the compiler's own sentence with the line numbers remapped to the user's own text, and the
 picture is the effect's input unchanged. Interactively the last pipeline that *did* compile
 keeps drawing under that badge — being syntactically broken is the state a person is in for
@@ -6175,14 +6169,14 @@ cannot reach is copied from the cache rather than solved a second time.
 undo, and journal like any other edit; the mattes live in the `roto/` sidecar tier
 ([10-FILE-FORMAT.md](10-FILE-FORMAT.md) §3) and can be deleted at any moment for the price
 of a re-propagation. Strokes are recorded in **source raster pixels** on the unaltered
-footage (K-248), so one shot's mattes serve every composition that cuts it and survive every
+footage, so one shot's mattes serve every composition that cuts it and survive every
 transform, retime and preview tier.
 
 **It is an image operation**, unlike the two tracking handles beside it in Utility: what it
 holds is a job whose answer is a picture applied where the effect stands in the stack.
 **Matte mode** says whether the layer keeps the subject or drops it; the matte multiplies the
 layer's alpha and leaves its colour alone (§2.2's straight-alpha rule, Set matte's reasoning
-exactly). **It carries no Matte row** (K-429): what it applies *is* a coverage, and a second
+exactly). **It carries no Matte row**: what it applies *is* a coverage, and a second
 picture saying how much of it happens here would be a coverage over a coverage — the honest
 way to say "not there" is another stroke.
 
@@ -6194,8 +6188,8 @@ right one's face.
 nothing to key a cache with), *Flow unavailable* (no GPU flow on this device — the CPU
 oracle at seconds a pair would misrepresent a minutes-long job as hung, and mixing backends
 would break the byte-identical rebuild claim), *Busy* (one propagation at a time), *No base
-frame* (Propagate pressed before any stroke). **Cancel finalises rather than discards**
-(K-540): the frames already solved are kept and correctly named, and a later Propagate
+frame* (Propagate pressed before any stroke). **Cancel finalises rather than discards**:
+the frames already solved are kept and correctly named, and a later Propagate
 resumes from them.
 
 **Honest about its ceiling.** This is classical machinery — stroke-seeded geodesic
@@ -6214,12 +6208,12 @@ roughly by demand.
 
 | Effect | Scope |
 |---|---|
-| ~~Levels / curves per channel~~ | **Shipped** as §3.31 and §3.30. Curves is master + R/G/B + alpha on real control points (K-412); Levels is master + R/G/B, and its alpha channel is still Tier 2 |
+| ~~Levels / curves per channel~~ | **Shipped** as §3.31 and §3.30. Curves is master + R/G/B + alpha on real control points; Levels is master + R/G/B, and its alpha channel is still Tier 2 |
 | ~~Hue/saturation~~ | **Shipped** as §3.33 (master + six ranges). Colourise is still Tier 2 |
 | Tritone / tint | Map shadows/mids/highlights to three colours |
 | Keying | Luma key + colour key + a basic screen key (core matte generation, not Keylight parity at first) |
 | Matte choker | Grow/shrink/soften mattes; companion to keying |
-| ~~Fractal noise~~ | **Shipped** as §3.37, in the new Generate category (K-398). Sub rotation, Sub offset and AE's Overflow modes are still Tier 2 |
+| ~~Fractal noise~~ | **Shipped** as §3.37, in the new Generate category. Sub rotation, Sub offset and AE's Overflow modes are still Tier 2 |
 | ~~Gradient ramp~~ | **Shipped** as §3.35 **Gradient** (linear and radial, with scatter) |
 | ~~Noise~~ | **Shipped** as §3.36 (uniform/gaussian, mono/colour, animated or frozen) |
 | ~~Drop shadow~~ | **Shipped** as §3.43. Per-mask targeting is still Tier 2 |
@@ -6229,10 +6223,10 @@ roughly by demand.
 | Posterise | Value quantisation (plus posterise-time as a separate temporal utility) |
 | Turbulent displace | Noise-driven UV displacement |
 | Wave warp | Parametric sinusoidal displacement |
-| ~~Corner pin~~ | **Shipped** as §3.48, and it is one of the Planar track's two export targets (§3.87, K-579; the other is a layer's own transform, K-734) |
+| ~~Corner pin~~ | **Shipped** as §3.48, and it is one of the Planar track's two export targets (§3.87; the other is a layer's own transform) |
 | Mesh warp | Grid-based freeform warp |
 | Stabiliser | Flow-engine-backed smoothing of unwanted camera motion (warp-stabiliser class) |
-| Tracker | ~~Planar~~ tracking **shipped** as §3.87 **Planar track** (K-579), ~~the keyframed *transform*~~ with it (K-734) and ~~one- and two-point~~ tracking beside it (K-735): **Follow** picks a surface, one point or two, and **Create transform keys** writes the answer onto a layer's Position, Rotation and Scale. Still Tier 2: the on-canvas handles the geometry rows stand in for |
+| Tracker | ~~Planar~~ tracking **shipped** as §3.87 **Planar track**, ~~the keyframed *transform*~~ with it and ~~one- and two-point~~ tracking beside it: **Follow** picks a surface, one point or two, and **Create transform keys** writes the answer onto a layer's Position, Rotation and Scale. Still Tier 2: the on-canvas handles the geometry rows stand in for |
 
 Tier 2 effects follow every rule in §1–2; nothing in Tier 1's architecture may assume the
 suite stays small.
@@ -6244,8 +6238,8 @@ suite stays small.
 - **Per-effect presets**: a named parameter snapshot (keyframes and expressions included
   when marked "animated preset"). **Per-stack presets**: an ordered list of effect
   instances with their parameters — the unit the scene calls an editing/CC pack.
-- Serialised as a single shareable file (`.lumfx`), a machine-independent JSON payload per
-  K-065. (v1 writes plain JSON; bundling embedded assets such as LUTs into a zipped pack is a
+- Serialised as a single shareable file (`.lumfx`), a machine-independent JSON payload.
+  (v1 writes plain JSON; bundling embedded assets such as LUTs into a zipped pack is a
   later extension — see §3.11.) Import by drag onto a layer, the Effect Controls panel, or the
   preset browser.
 - Lumit ships a first-party library (grade presets §3.10, shake styles, zoom eases, glitch
@@ -6259,28 +6253,28 @@ suite stays small.
 
 ---
 
-## The universal strength matte (K-035) — delivered as §2.6
+## The universal strength matte — delivered as §2.6
 
-K-035's ambition — every effect drivable per pixel, implemented once by the host rather
-than thirty-odd times by effect authors — is what **§2.6** now specifies and what shipped
-under K-395. That section is the normative text; this one is kept only to say where the
-idea went, because K-035 is cited from elsewhere.
+The ambition — every effect drivable per pixel, implemented once by the host rather
+than thirty-odd times by effect authors — is what **§2.6** now specifies and what has
+shipped. That section is the normative text; this one is kept only to say where the
+idea went, because this section is cited from elsewhere.
 
 Two details of the original wording were settled differently and §2.6 is the one to
 believe. The source is **a layer, not a layer-or-mask-set**: a mask set is reachable by
 pointing the row at the layer that carries it, so the second source bought nothing (the
 row is the layer picker of §1.1, so it is animatable and expression-visible and hashes
-like any input, as K-035 required). And there is **no gain control** — Invert alone, with
-the layer's own effects available for anything shapelier.
+like any input, as the original wording required). And there is **no gain control** —
+Invert alone, with the layer's own effects available for anything shapelier.
 
-K-035's warp clause — a displacement-class effect scaling its *vectors* by the matte
+The original warp clause — a displacement-class effect scaling its *vectors* by the matte
 rather than dissolving its output — is exactly the override mechanism of §2.6 and is
 listed there as one the displacement effects have not claimed yet
 ([TODO.md](TODO.md)).
 
 ## Open questions
 
-1. **Flow algorithm choice — resolved (K-169).** v1 ships **dense inverse search** (DIS,
+1. **Flow algorithm choice — resolved.** v1 ships **dense inverse search** (DIS,
    Kroeger et al. 2016), pinned in [docs/impl/optical-flow.md](impl/optical-flow.md) and
    implemented in `lumit-flow`. A learned model (RAFT-class) beats it on quality but
    complicates the GPLv3 story, model distribution size, and the CPU reference oracle, so it
@@ -6298,7 +6292,7 @@ listed there as one the displacement effects have not claimed yet
 5. **fp16 oracle tolerances.** The per-cost-class tolerance defaults in §1.6 are
    placeholders until the first three effects are implemented on both NVIDIA and AMD and
    real cross-vendor deltas are measured.
-6. **~~Should the three-colour picker drive Wavelength mode too?~~ RESOLVED (A1/K-163).** The
+6. **~~Should the three-colour picker drive Wavelength mode too?~~ RESOLVED (A1).** The
    owner chose to replace the physical `SPECTRAL_BASIS` with a smooth colour1→colour2→colour3
    gradient across the offset span, so the picker fully drives the Wavelength fringe (default
    red/green/blue → a red→green→blue dispersion). Implemented in `spectral_taps`; the old

@@ -20,7 +20,7 @@
 //! - [`HeadlessRenderer::render_rgba`] is the **export** framing of the same
 //!   walk: full decode quality, comp resolution.
 //!
-//! There is ONE comp walk (K-031): `build_comp_draws` + `Realiser::realise`.
+//! There is ONE comp walk: `build_comp_draws` + `Realiser::realise`.
 //! The export encode loop drives it too, on its own renderer, so preview ==
 //! export == the written file by construction — gated by the bit-identity
 //! matrix in this file's tests.
@@ -48,11 +48,11 @@ struct Parts {
     compositor: lumit_gpu::Compositor,
     fx: lumit_gpu::fx::FxEngine,
     lut_cache: std::cell::RefCell<crate::fxops::LutCache>,
-    /// The per-effect intermediate cache (K-421), VRAM only. Lives here
+    /// The per-effect intermediate cache, VRAM only. Lives here
     /// rather than beside `frame_textures` because its entries are textures
     /// the effect engine made, and they go with it.
     fx_cache: std::cell::RefCell<crate::fxops::FxCache>,
-    /// The flow backend a composite measurement runs on (docs/08 §3.2, K-565).
+    /// The flow backend a composite measurement runs on (docs/08 §3.2).
     /// Here for the caches' reason — the solver's plan and its dozen compiled
     /// shaders are worth keeping between frames — and empty until the first
     /// adjustment or Precomp layer actually asks for motion.
@@ -94,7 +94,7 @@ pub struct HeadlessRenderer {
     /// unwinds (never expected — engine crates forbid panics) leaves this `None`,
     /// and further calls answer a calm error rather than crashing.
     parts: Option<Parts>,
-    /// The GPU scope pass (K-096 v1). Held directly rather than in [`Parts`]
+    /// The GPU scope pass, v1. Held directly rather than in [`Parts`]
     /// because a scope trace runs *from a finished frame*, not during a
     /// composite, so it is never lent to the `Renderer` — it borrows `&self.gpu`
     /// on its own. Compiled once with the other engines.
@@ -104,7 +104,7 @@ pub struct HeadlessRenderer {
     items: HashMap<Uuid, ItemInfo>,
     /// Probe results by footage id, so each file is probed at most once.
     probe_cache: HashMap<Uuid, Probe>,
-    /// The same, for each item's **proxy** file (K-501) — kept beside its path
+    /// The same, for each item's **proxy** file — kept beside its path
     /// rather than under the id alone, so attaching a different proxy (or the
     /// one MAKE-PROXY has just written) re-probes instead of answering from a
     /// stale entry about a file that is no longer the one referenced.
@@ -113,7 +113,7 @@ pub struct HeadlessRenderer {
     /// export audio jobs probes each file at most once (export path only).
     audio_jobs: AudioJobsBuilder,
     /// The open decoders and the decoded-source-frame cache every render uses
-    /// (K-031: the export drives this same path on its own renderer).
+    /// (the export drives this same path on its own renderer).
     pool: DecodePool,
     /// The last interactive frame's decoded per-layer pixels, kept with the
     /// plan that produced them — what makes a live value drag cost no decoding
@@ -123,9 +123,9 @@ pub struct HeadlessRenderer {
     /// card"): finished display textures keyed by their **content hash**
     /// ([`crate::cache::frame_key`]) and channel order. This is what makes a
     /// revisited frame free on the zero-copy Viewer, which keeps no CPU bytes to
-    /// cache (K-183).
+    /// cache.
     ///
-    /// Content-keyed, not keyed by position (docs/06 §5.2, K-178). That is what
+    /// Content-keyed, not keyed by position (docs/06 §5.2). That is what
     /// lets an edit which cannot change a pixel — a rename, a work-area nudge,
     /// an opacity keyframe on a hidden layer — keep every held frame, and what
     /// makes an undo instantly valid again: the restored document asks for the
@@ -141,12 +141,12 @@ pub struct HeadlessRenderer {
     /// Read-backs the card refused (see [`Self::poll_demotions`]): the frames
     /// that left VRAM and reached no lower tier. A count, because a test that
     /// asserts every evicted frame is held somewhere has to be able to tell a
-    /// dropped demotion from a leak (K-753).
+    /// dropped demotion from a leak.
     demotions_failed: u64,
     /// Evictions that never became a read-back: already held below, the
     /// in-flight ceiling reached, or no engines to encode with. Dropped by
     /// design — a miss costs a render — and counted for the same reason as
-    /// the refusals above (K-753).
+    /// the refusals above.
     demotions_dropped: u64,
     /// Display textures that left the cache and can hold the next promoted
     /// frame — see [`Self::upload_frame_texture`]. Bounded by
@@ -172,7 +172,7 @@ pub struct HeadlessRenderer {
     /// frame worth describing) and playback (a frame that must not be slowed).
     watching: bool,
     measuring: bool,
-    /// The Viewer's own exposure and tone map (K-314) — a way of *looking* at
+    /// The Viewer's own exposure and tone map — a way of *looking* at
     /// the composite, never part of it.
     ///
     /// **This is how "it can never reach an export" is kept true.** It defaults
@@ -189,22 +189,22 @@ pub struct HeadlessRenderer {
     /// transform — for every export and for a project with no config.
     colour_view: Option<(String, String)>,
     /// The colour space an *export* is delivering into, when it named one of
-    /// the config's (K-479, K-490). Set only by the export path, and set
+    /// the config's. Set only by the export path, and set
     /// instead of `colour_view`: a delivered file is written in the space the
     /// dialogue asked for, not in whatever the Viewer happens to be showing.
     colour_output: Option<String>,
     /// Whether the fronted comp's own background colour is left out of the
     /// composite, so pixels nothing covers stay transparent and the Viewer's
-    /// transparency grid shows through them (K-352). The Viewer sets it to
+    /// transparency grid shows through them. The Viewer sets it to
     /// follow its grid button; like [`Self::view`] it is a way of *looking*,
     /// and the export renderer — which nobody calls this on — always draws
     /// the backdrop.
     transparent_background: bool,
-    /// The Viewer's region of interest as comp fractions (K-362), or `None`
+    /// The Viewer's region of interest as comp fractions, or `None`
     /// for the whole frame. Preview-only: the export renderer is never given
     /// one, the same construction that keeps the preview scale out of files.
     region: Option<[f32; 4]>,
-    /// The Windows zero-copy Viewer targets (K-177): **one per size, kept and
+    /// The Windows zero-copy Viewer targets: **one per size, kept and
     /// reused**, most recently used last.
     ///
     /// This was a single texture re-created whenever the size changed, and that
@@ -235,7 +235,7 @@ pub struct HeadlessRenderer {
     /// controller serves all three platforms.
     #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
     shared_dmabuf: Vec<lumit_gpu::shared_linux::SharedDmabuf>,
-    /// The macOS IOSurface sibling of [`Self::shared`] (K-195).
+    /// The macOS IOSurface sibling of [`Self::shared`].
     #[cfg(all(target_os = "macos", feature = "shared-texture-macos"))]
     shared_iosurface: Vec<lumit_gpu::shared_metal::SharedIoSurface>,
 }
@@ -265,7 +265,7 @@ struct Retained {
 }
 
 /// A rendered frame that stayed on the GPU: the number naming the surface it
-/// lives in, plus its dimensions and format (K-177, K-195). Handed across the
+/// lives in, plus its dimensions and format. Handed across the
 /// bridge so the runner can register the texture with Flutter without any pixel
 /// copy. The number stays valid across frames (the same texture is re-used) and
 /// only changes when the comp is resized.
@@ -292,7 +292,7 @@ pub struct SharedFrameInfo {
 }
 
 /// A rendered frame that stayed on the GPU as a DMA-BUF (the Linux zero-copy
-/// Viewer path, K-177): the exported file descriptor plus the dimensions, stride,
+/// Viewer path): the exported file descriptor plus the dimensions, stride,
 /// offset and DRM format/modifier the GTK embedder needs to import it as an
 /// `EGLImage`. The Linux sibling of [`SharedFrameInfo`]. The fd stays valid
 /// across frames (the same texture is re-used) and only changes when the comp is
@@ -312,7 +312,7 @@ pub struct SharedFrameInfoLinux {
 
 /// The inputs one export needs beyond the document itself: the comp's audio
 /// jobs, mixed exactly as playback mixes them. The exporter builds its own
-/// renderer and drives the same walk the Viewer does (K-031), so nothing else
+/// renderer and drives the same walk the Viewer does, so nothing else
 /// crosses.
 pub struct ExportInputs {
     pub audio: Vec<AudioJob>,
@@ -349,7 +349,7 @@ pub struct FrameProvenance {
     /// The quality the frame was made at, which is what makes the position
     /// answerable *and* checkable: a positional consumer can recompute the
     /// content name this position has now at this quality, and so tell the
-    /// picture of frame 12 from a picture frame 12 used to show (K-330).
+    /// picture of frame 12 from a picture frame 12 used to show.
     pub quality: Quality,
 }
 
@@ -522,8 +522,7 @@ impl PreparedFrame {
     ///
     /// Public and platform-independent on purpose: it is the one thing a
     /// present path can ask a prepared frame without owning a transport, so
-    /// the field has a reader on macOS too, which has no transport yet
-    /// (K-033/K-183).
+    /// the field has a reader on macOS too, which has no transport yet.
     #[must_use]
     pub fn size(&self) -> (u32, u32) {
         (self.texture.width(), self.texture.height())
@@ -561,8 +560,8 @@ impl HeadlessRenderer {
             fx_cache: std::cell::RefCell::new(crate::fxops::FxCache::default()),
             flow: std::cell::RefCell::new(crate::realise::CompositeFlow::default()),
         };
-        // Flow runs on this same device rather than opening one of its own
-        // (K-331); the handles are reference-counted, so this shares it.
+        // Flow runs on this same device rather than opening one of its own.
+        // The handles are reference-counted, so this shares it.
         let pool = DecodePool::with_gpu(&gpu);
         Self {
             gpu,
@@ -634,17 +633,17 @@ impl HeadlessRenderer {
         self.measuring = measuring;
     }
 
-    /// Whether the renders from here on may add to the per-effect cache
-    /// (K-421). On for a committed document's scrub and edit renders; off for
-    /// a drag's provisional values and for playback, which would only churn
-    /// the budget. Lookups happen either way.
+    /// Whether the renders from here on may add to the per-effect cache. On
+    /// for a committed document's scrub and edit renders; off for a drag's
+    /// provisional values and for playback, which would only churn the budget.
+    /// Lookups happen either way.
     pub fn keep_effect_outputs(&mut self, keep: bool) {
         if let Some(parts) = self.parts.as_ref() {
             parts.fx_cache.borrow_mut().keep_outputs(keep);
         }
     }
 
-    /// Resize the per-effect cache (K-421), evicting down to the new budget.
+    /// Resize the per-effect cache, evicting down to the new budget.
     pub fn set_effect_cache_budget(&mut self, bytes: usize) {
         if let Some(parts) = self.parts.as_ref() {
             parts.fx_cache.borrow_mut().set_budget(bytes);
@@ -662,7 +661,7 @@ impl HeadlessRenderer {
     }
 
     /// `(nested frames realised, nested frames served held)` since the
-    /// renderer was made (K-422).
+    /// renderer was made.
     #[must_use]
     pub fn nested_frame_counts(&self) -> (u64, u64) {
         self.parts
@@ -676,7 +675,7 @@ impl HeadlessRenderer {
     /// The caller that owns the tiers above this renderer asks, because only a
     /// *composited* frame yields numbers: a frame served from a cache costs
     /// nothing and therefore reveals nothing. The cache is still allowed to
-    /// answer a measured request (K-420) — the caller notes that it did, and
+    /// answer a measured request — the caller notes that it did, and
     /// composites the frame again for its numbers when the editor is idle.
     #[must_use]
     pub fn measuring(&self) -> bool {
@@ -700,11 +699,11 @@ impl HeadlessRenderer {
     }
 
     /// Build the inputs one export of `comp_id` needs (the bridge's v0.4 export
-    /// path, K-175): the footage [`ItemInfo`] map (probed exactly as a render
+    /// path): the footage [`ItemInfo`] map (probed exactly as a render
     /// probes, sharing this renderer's cache), the comp's audio jobs, and a GPU
     /// context sharing this renderer's device. `None` when `comp_id` is unknown.
     /// The exporter (`crate::export::start`) takes these and spawns its own
-    /// encode thread (K-017), so this call is cheap and holds no GPU work.
+    /// encode thread, so this call is cheap and holds no GPU work.
     pub fn export_inputs(&mut self, doc: &Arc<Document>, comp_id: Uuid) -> Option<ExportInputs> {
         let comp = doc.comp(comp_id)?;
         let audio = self.collect_audio(doc, comp);
@@ -718,17 +717,16 @@ impl HeadlessRenderer {
     }
 
     /// Set the Viewer's exposure and tone map for every frame this renderer
-    /// composites from here on (K-314). Preview only — see [`Self::view`].
+    /// composites from here on. Preview only — see [`Self::view`].
     ///
     /// A non-neutral view **names its frames differently** rather than leaving
-    /// them nameless (K-346, superseding that part of K-314): the look is baked
-    /// into the display-encoded pixels these tiers hold, so a frame under one
-    /// is a different picture and takes a different name. Refusing a name
-    /// instead switched every tier off for as long as a control was engaged,
-    /// which is a whole session for anyone who works with the tone map on.
-    /// Neutral is unchanged and keeps the names it always had, so frames banked
-    /// before this still come back. An export is always neutral, so a graded
-    /// preview frame can never be served as one.
+    /// them nameless: the look is baked into the display-encoded pixels these
+    /// tiers hold, so a frame under one is a different picture and takes a
+    /// different name. Refusing a name instead switched every tier off for as
+    /// long as a control was engaged, which is a whole session for anyone who
+    /// works with the tone map on. Neutral is unchanged and keeps the names it
+    /// always had, so frames banked before this still come back. An export is
+    /// always neutral, so a graded preview frame can never be served as one.
     pub fn set_display_view(&mut self, view: lumit_gpu::DisplayParams) {
         self.view = view;
     }
@@ -751,15 +749,15 @@ impl HeadlessRenderer {
         self.colour_view.as_ref()
     }
 
-    /// Deliver into one of the config's colour spaces (K-479's refusal, now
-    /// with an answer). The export path sets this; nothing else does.
+    /// Deliver into one of the config's colour spaces. The export path sets
+    /// this; nothing else does.
     pub fn set_colour_output(&mut self, space: Option<String>) {
         self.colour_output = space;
     }
 
     /// Whether a named colour space can actually be delivered right now — the
-    /// question the export's refusal asks, and the one half of K-490's
-    /// asymmetry that says no. A preview degrades; a delivery does not.
+    /// question the export's refusal asks, and the one half of the asymmetry
+    /// that says no. A preview degrades; a delivery does not.
     #[must_use]
     pub fn can_deliver_colour_space(&self, name: &str) -> bool {
         self.colour
@@ -770,7 +768,7 @@ impl HeadlessRenderer {
     }
 
     /// Let a Custom shader that will not compile keep drawing with the last
-    /// pipeline that did (K-650, custom-shader.md §3.2).
+    /// pipeline that did (custom-shader.md §3.2).
     ///
     /// **Off unless an interactive surface turns it on**, which is why it is a
     /// call rather than a default: editing a shader means being syntactically
@@ -803,8 +801,8 @@ impl HeadlessRenderer {
     /// The tables the display pass binds: the export's output space if one was
     /// named, else the Viewer's chosen view, else nothing at all.
     ///
-    /// Both come out of the same bake and bind to the same dispatch, which is
-    /// how K-031 is kept **by construction** rather than by two paths agreeing.
+    /// Both come out of the same bake and bind to the same dispatch, so preview
+    /// and export match **by construction** rather than by two paths agreeing.
     fn display_tables(&self) -> Option<lumit_gpu::OcioTables> {
         let loaded = self.colour.loaded().filter(|l| l.usable())?;
         let edge = match (&self.colour_output, &self.colour_view) {
@@ -820,7 +818,7 @@ impl HeadlessRenderer {
 
     /// Leave the fronted comp's background colour out of the composite, so
     /// pixels nothing covers stay transparent and the Viewer's transparency
-    /// grid shows through them (K-352). A way of looking, like the display
+    /// grid shows through them. A way of looking, like the display
     /// view above — the export renderer never has this called on it, so an
     /// export always draws the backdrop.
     ///
@@ -832,7 +830,7 @@ impl HeadlessRenderer {
     }
 
     /// Composite only a sub-rectangle of the fronted comp — the Viewer's
-    /// **region of interest** (K-362, docs/07 §2.2). Given as fractions of the
+    /// **region of interest** (docs/07 §2.2). Given as fractions of the
     /// comp (`[u0, v0, u1, v1]`, top-left to bottom-right) so the caller never
     /// has to know which raster the engine will settle on; `None` clears it.
     ///
@@ -921,7 +919,7 @@ impl HeadlessRenderer {
             u8::from(self.view.tone_map),
             u8::from(self.transparent_background),
         ]);
-        // The region (K-362). A cropped frame is a different picture of a
+        // The region. A cropped frame is a different picture of a
         // different size, so it takes a different name — which is exactly what
         // lets scrubbing inside a region use the cache at all, rather than
         // refusing to name frames while one is set.
@@ -944,19 +942,19 @@ impl HeadlessRenderer {
     }
 
     /// Let this renderer make a Lens flare's bake beside the frame rather than
-    /// inside it (K-350), so choosing a lens is a wait you can watch instead of
+    /// inside it, so choosing a lens is a wait you can watch instead of
     /// half a second of stopped picture.
     ///
     /// **Off by default, and the exporter never turns it on.** An export builds
     /// its own renderer on its own device, so it starts with an empty bake
     /// cache and bakes inside the frame exactly as it always did — which is
-    /// what keeps K-031's preview-equals-export identity true and an export
+    /// what keeps the preview-equals-export identity true and an export
     /// bit-for-bit what it was. The Viewer's renderer turns it on.
     ///
     /// A frame drawn with the previous lens must not be filed under a name
     /// that says it was drawn with this one, so such a frame is made and not
     /// kept — see [`Self::flare_substitutions`], which says exactly which
-    /// frames those were (K-431).
+    /// frames those were.
     pub fn set_deferred_flare_bakes(&self, deferred: bool) {
         if let Some(parts) = self.parts.as_ref() {
             parts.fx.set_deferred_flare_bakes(deferred);
@@ -976,7 +974,7 @@ impl HeadlessRenderer {
     }
 
     /// How many times a frame has drawn a lens flare with other optics than
-    /// its parameters name (K-431). Read either side of a render: unmoved
+    /// its parameters name. Read either side of a render: unmoved
     /// means the frame may be banked under the name taken before it.
     #[must_use]
     pub fn flare_substitutions(&self) -> u64 {
@@ -1009,10 +1007,10 @@ impl HeadlessRenderer {
         frame: u64,
         quality: Quality,
     ) -> Option<u128> {
-        // A flare bake in flight used to make this answer `None` (K-350) —
+        // A flare bake in flight used to make this answer `None` —
         // for every comp, whether or not it held a flare. A keyframed
         // aperture keeps a bake in flight for as long as it plays, so that
-        // rule stopped the whole project caching (K-431). The name is taken
+        // rule stopped the whole project caching. The name is taken
         // here and the frame is *checked* afterwards instead: see
         // [`Self::flare_substitutions`], which counts the frames that
         // actually drew other optics than they name, and those alone are the
@@ -1119,7 +1117,7 @@ impl HeadlessRenderer {
         // The frame's recorder: absent unless somebody is drawing a bar for
         // this frame or reading its numbers (docs/13 §7.1).
         let watcher = self.profiler_for(comp_id, frame);
-        // The nested-frame store (K-422): what the builder names each Precomp
+        // The nested-frame store: what the builder names each Precomp
         // by, and what the planner asks before decoding into one. Both use
         // the one keyer, so the name the plan found held is the name the
         // realiser asks for. A measured frame realises every Precomp so its
@@ -1203,7 +1201,7 @@ impl HeadlessRenderer {
                 fx_cache: &parts.fx_cache,
                 render_scale: composite_scale(quality),
                 // The project's setting, resolved against what this adapter
-                // will actually give (K-274). Preview and export both read the
+                // will actually give. Preview and export both read the
                 // same document field — unlike `render_scale`, which is a
                 // preview-only reduction — so the two stay the same picture.
                 samples: self.gpu.sample_count(doc.anti_aliasing.samples()),
@@ -1231,10 +1229,10 @@ impl HeadlessRenderer {
                 Some(&keys),
                 false,
             );
-            // The comp's backdrop is a way of viewing, not a layer (K-241);
+            // The comp's backdrop is a way of viewing, not a layer;
             // with the transparency grid up the Viewer asks for none at all,
             // so what nothing covers arrives with zero alpha and the grid
-            // shows through it (K-352).
+            // shows through it.
             let background = if self.transparent_background {
                 [0.0; 4]
             } else {
@@ -1243,7 +1241,7 @@ impl HeadlessRenderer {
             if let Some(w) = &watcher {
                 w.compositing(draws.len() as u32);
             }
-            // The region of interest (K-362): composite only the window the
+            // The region of interest: composite only the window the
             // Viewer asked for. `realise_region` refuses it — and composites
             // the whole frame — where an adjustment or a motion-blurring layer
             // stages through a comp-sized intermediate, so the picture is the
@@ -1332,7 +1330,7 @@ impl HeadlessRenderer {
     /// pixels. It arrives as a patched document like any other provisional
     /// value, and the plan below re-reads the map from it. (A bespoke override
     /// parameter for this existed here, threaded through every caller and
-    /// constructed by none of them; K-249 removed it.)
+    /// constructed by none of them; an earlier change removed it.)
     ///
     /// The document handed in may be a throwaway with a drag's provisional value
     /// already patched in; nothing is cached against its identity here, so that
@@ -1528,7 +1526,7 @@ impl HeadlessRenderer {
         self.gpu.reclaim();
     }
 
-    /// Has the graphics device under this renderer been lost (K-585)?
+    /// Has the graphics device under this renderer been lost?
     ///
     /// Nothing here can be mended once it is true — every texture, pipeline and
     /// cached frame went with the device — so the only answer is to drop this
@@ -1569,7 +1567,7 @@ impl HeadlessRenderer {
     /// returning `(pixels, width, height)`. `scale` of 1.0 is the comp's own
     /// resolution; a smaller positive `scale` downsamples the output.
     ///
-    /// Since the comp-walk unification (K-031) this IS [`Self::render_preview`]
+    /// Since the comp-walk unification this IS [`Self::render_preview`]
     /// at full decode quality — export and interactive rendering are one path
     /// by construction. The name survives for the callers and tests that mean
     /// "the frame as an export would write it".
@@ -1583,7 +1581,7 @@ impl HeadlessRenderer {
         self.render_preview(doc, comp_id, frame, Quality::default(), scale)
     }
 
-    /// Compute a scope trace (waveform/vectorscope/histogram, K-096 v1) from an
+    /// Compute a v1 scope trace (waveform/vectorscope/histogram) from an
     /// already-rendered comp frame's display bytes, returning the `GRID × GRID`
     /// RGBA8 trace. `rgba` is the exact frame the Viewer shows (served from the
     /// bridge's rendered-frame cache, so the scope traces the same frame at no
@@ -1673,8 +1671,8 @@ impl HeadlessRenderer {
         name: Option<u128>,
     ) -> Result<PreparedFrame, String> {
         let key = name.map(|k| (k, bgra));
-        // A held frame is served whether or not this frame is being measured
-        // (K-420). A cache hit has nothing to say about what the layers cost,
+        // A held frame is served whether or not this frame is being measured.
+        // A cache hit has nothing to say about what the layers cost,
         // but refusing it meant a frame the bar showed green was composited
         // again — and fenced at every layer — on arrival. The owner of the
         // tiers measures such a frame afterwards, in an idle moment, rather
@@ -1689,11 +1687,11 @@ impl HeadlessRenderer {
         }
         let started = std::time::Instant::now();
         // A flare that fell back to the previous lens during this composite
-        // (K-350) made a picture of a lens its name does not describe. The
+        // made a picture of a lens its name does not describe. The
         // name was taken before the render, so it has to be dropped
         // afterwards — the alternative is an entry that lies about its own
-        // content, which no later edit or undo can clear (K-178). Counted, so
-        // only the frames it actually happened to are dropped (K-431).
+        // content, which no later edit or undo can clear. Counted, so
+        // only the frames it actually happened to are dropped.
         let subs_before = self.flare_substitutions();
         let (texture, _, _) = self.preview_display_texture_fmt(
             doc,
@@ -1761,8 +1759,7 @@ impl HeadlessRenderer {
                 }
             } else {
                 // Held below already, the ceiling reached, or no engines: the
-                // frame is let go here and nowhere else, so it is counted here
-                // (K-753).
+                // frame is let go here and nowhere else, so it is counted here.
                 self.demotions_dropped += 1;
             }
             // The texture itself can serve the next promoted frame, whether or
@@ -1917,7 +1914,7 @@ impl HeadlessRenderer {
 
     /// How many demotion read-backs the card has refused so far. Each is a
     /// frame that left VRAM and reached no lower tier, by design (a miss costs
-    /// a render); a test counting held frames subtracts these (K-753).
+    /// a render); a test counting held frames subtracts these.
     #[must_use]
     pub fn demotions_failed(&self) -> u64 {
         self.demotions_failed
@@ -2034,7 +2031,7 @@ impl HeadlessRenderer {
     /// and these are keyed by position, or the user asked (Clear cache).
     pub fn clear_frame_textures(&mut self) {
         self.frame_textures.clear();
-        // The per-effect intermediates go with the frames (K-421): a user
+        // The per-effect intermediates go with the frames: a user
         // who asked for an empty cache meant all of it.
         if let Some(parts) = self.parts.as_ref() {
             parts.fx_cache.borrow_mut().clear();
@@ -2082,11 +2079,11 @@ impl HeadlessRenderer {
     }
 
     /// Render composition `comp_id` at integer `frame` into the Windows shared
-    /// GPU texture, returning its NT handle and dimensions ([`SharedFrameInfo`],
-    /// K-177) — the zero-copy sibling of [`Self::render_preview`]. The frame
-    /// never leaves the graphics card: it is composited and display-encoded by
-    /// the identical interactive path, then copied GPU-to-GPU into the shared
-    /// texture instead of being read back to the CPU.
+    /// GPU texture, returning its NT handle and dimensions
+    /// ([`SharedFrameInfo`]) — the zero-copy sibling of [`Self::render_preview`].
+    /// The frame never leaves the graphics card: it is composited and
+    /// display-encoded by the identical interactive path, then copied GPU-to-GPU
+    /// into the shared texture instead of being read back to the CPU.
     ///
     /// Because it shares that path it also shares the drag fast path: on the
     /// shipped Windows build, dragging a value re-composites and copies without
@@ -2166,11 +2163,11 @@ impl HeadlessRenderer {
     }
 
     /// Render composition `comp_id` at integer `frame` into the Linux DMA-BUF GPU
-    /// texture, returning its exported fd and DRM metadata ([`SharedFrameInfoLinux`],
-    /// K-177) — the Linux sibling of [`Self::render_to_shared`]. The frame never
-    /// leaves the graphics card: it is composited and display-encoded by the same
-    /// interactive path (so it shares the drag fast path), then copied into the
-    /// DMA-BUF texture instead of being read back.
+    /// texture, returning its exported fd and DRM metadata
+    /// ([`SharedFrameInfoLinux`]) — the Linux sibling of [`Self::render_to_shared`].
+    /// The frame never leaves the graphics card: it is composited and
+    /// display-encoded by the same interactive path (so it shares the drag fast
+    /// path), then copied into the DMA-BUF texture instead of being read back.
     ///
     /// The texture is created on the first call and re-used across frames (a
     /// stable fd); a comp of different dimensions re-creates it and reports the new
@@ -2242,8 +2239,8 @@ impl HeadlessRenderer {
     }
 
     /// Render composition `comp_id` at integer `frame` into the macOS IOSurface
-    /// texture, returning the surface's id and dimensions ([`SharedFrameInfo`],
-    /// K-195) — the Metal sibling of the Windows [`Self::render_to_shared`]. The
+    /// texture, returning the surface's id and dimensions ([`SharedFrameInfo`])
+    /// — the Metal sibling of the Windows [`Self::render_to_shared`]. The
     /// frame never leaves the graphics card: it is composited and display-encoded
     /// by the same interactive path (so it shares the drag fast path), then
     /// copied into the IOSurface-backed texture instead of being read back.
@@ -2482,7 +2479,7 @@ static HAS_AUDIO: LazyLock<Mutex<HashMap<Uuid, bool>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// The layer's *Duck under* wire, if its graph lands one on the Layer out's
-/// Volume socket (K-471, the Out Volume port) — everything the bake needs to
+/// Volume socket (the Out Volume port) — everything the bake needs to
 /// ask the chain later, or `None` for the overwhelmingly ordinary layer.
 ///
 /// `offset_s` is where the layer's own time 0 sits on the mixed timeline and
@@ -2515,7 +2512,7 @@ fn driven_volume_of(
 
 /// The layer's **audio insert chain**, or `None` for a layer with an empty
 /// effect stack — which is most of them, and is what keeps a mix with no
-/// plugin in it exactly the mix it was (K-700).
+/// plugin in it exactly the mix it was.
 ///
 /// Whether any entry in the stack is *audio* is deliberately not asked here:
 /// the catalogue answers that when the chain opens, and asking twice would put
@@ -2557,7 +2554,7 @@ impl AudioJobsBuilder {
 
     /// **One layer's audio jobs, whatever the switches say.** The layer named
     /// here is mixed even when its own audible switch is off and even when a
-    /// solo somewhere else in the comp silences it (K-718).
+    /// solo somewhere else in the comp silences it.
     ///
     /// This is the Beats panel's *Source* picker (docs/09 §5): choosing a layer
     /// by name is asking to hear that layer, and a source picked by name that
@@ -2616,7 +2613,7 @@ impl AudioJobsBuilder {
         let any_solo = lumit_core::model::any_solo(comp);
         for layer in &comp.layers {
             // A layer asked for by name is heard whatever its own switches or a
-            // solo elsewhere say (K-718, `layer_audio_jobs`). Ids are unique to
+            // solo elsewhere say (`layer_audio_jobs`). Ids are unique to
             // a document, so this can only ever match the row that was named.
             let named = self.heard == Some(layer.id);
             if !named && (!layer.switches.audible || (any_solo && !layer.switches.solo)) {
@@ -2666,7 +2663,7 @@ impl AudioJobsBuilder {
                         offset_s,
                     });
                     // The nested comp's own **master fader** rides down with
-                    // the Precomp layer's Volume (K-691). A master is a stage
+                    // the Precomp layer's Volume. A master is a stage
                     // only for the comp being mixed; one comp deep it is just
                     // another gain on what that comp contributes, which is
                     // exactly what a carrier is.
@@ -2698,7 +2695,7 @@ impl AudioJobsBuilder {
         }
     }
 
-    /// The audio of one **Sequence layer**'s clips (K-695).
+    /// The audio of one **Sequence layer**'s clips.
     ///
     /// A clip is a placed, trimmed span of a footage item — exactly the shape
     /// `place_on_timeline` already mixes — so each sounding clip becomes a job
@@ -2816,7 +2813,7 @@ impl AudioJobsBuilder {
     }
 
     /// **Whether this layer could make a sound** — the question the timeline
-    /// asks to decide whether to draw a mute switch on the row (K-435).
+    /// asks to decide whether to draw a mute switch on the row.
     ///
     /// The same two kinds [`Self::walk`] mixes, answered the same way, so the
     /// switch appears exactly where pressing it changes what the comp sounds
@@ -2868,7 +2865,7 @@ impl AudioJobsBuilder {
                 visited.pop();
                 has
             }
-            // A Sequence layer sounds through its clips (K-695), so the row
+            // A Sequence layer sounds through its clips, so the row
             // wears a mute switch as soon as one of them carries audio.
             LayerKind::Sequence { clips } => {
                 let mut has = false;
@@ -2928,7 +2925,7 @@ impl AudioJobsBuilder {
 ///
 /// Composite, colour and view are identical in all three — only the bucket the
 /// finished frame lands in differs, which is what keeps preview and export the
-/// same picture (K-031).
+/// same picture.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Present {
     Rgba8,
@@ -2939,7 +2936,7 @@ enum Present {
 /// The scale the compositor should composite at for `quality`: the Viewer's
 /// display scale when auto resolution asks for less than full, else 1.0.
 /// Export always renders with the default quality, so it composites at 1.0
-/// and the K-031 preview == export identity is untouched.
+/// and the preview == export identity is untouched.
 fn composite_scale(quality: Quality) -> f32 {
     if quality.auto_res {
         quality.display_scale.min(1.0)
@@ -2967,7 +2964,7 @@ pub(crate) fn media_path(m: &lumit_core::model::MediaRef) -> PathBuf {
 }
 
 /// [`footage_path`] together with what the item says it is: one file, or the
-/// numbered run of stills that file belongs to (K-539).
+/// numbered run of stills that file belongs to.
 fn footage_source(f: &FootageItem) -> lumit_media::MediaSource {
     lumit_media::MediaSource {
         path: footage_path(f),
@@ -3047,7 +3044,7 @@ fn seen(probe: Option<&Probe>) -> SourceProbe {
     }
 }
 
-/// Copy a sub-rectangle out of a finished composite (K-362), so a region of
+/// Copy a sub-rectangle out of a finished composite, so a region of
 /// interest returns a region-sized texture even on the frames where the
 /// realiser had to composite the whole thing.
 ///
@@ -3112,8 +3109,8 @@ fn crop_texture(
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
-    /// **What a frame is named under, once colour is in the picture** (K-490,
-    /// docs/impl/ocio.md §5.5). Three separate sensitivities, and the third is
+    /// **What a frame is named under, once colour is in the picture**
+    /// (docs/impl/ocio.md §5.5). Three separate sensitivities, and the third is
     /// the one worth having: switching view must rename the *display* frames
     /// and nothing else, so switching back finds the old ones still banked.
     ///
@@ -3466,7 +3463,7 @@ mod tests {
     }
 
     /// **A Tile whose output window is wider than the frame reaches past the
-    /// layer's own edges** (docs/08 §3.39, K-542), and the composite puts the
+    /// layer's own edges** (docs/08 §3.39), and the composite puts the
     /// wider picture in the same place.
     ///
     /// An 8×8 solid in a 32×32 comp covers the middle eight pixels and nothing
@@ -3485,7 +3482,7 @@ mod tests {
                 return;
             }
         };
-        // The output window is px@comp (K-558) and the layer is 8 x 8, so the
+        // The output window is px@comp and the layer is 8 x 8, so the
         // frame's own size is 8 and the old 300 % is 24.
         let comp_with_tile = |output_px: f64| {
             let mut doc = Document::new();
@@ -3634,7 +3631,7 @@ mod tests {
         assert_eq!(alpha, 255, "the solid is opaque");
     }
 
-    /// **The transparency grid can see through an empty comp (K-352).** The
+    /// **The transparency grid can see through an empty comp.** The
     /// comp's backdrop is opaque black by default, so every pixel nothing
     /// covers used to reach the Viewer with alpha 1 and the checkerboard
     /// behind the picture could never show — even with every layer hidden.
@@ -3739,14 +3736,14 @@ mod tests {
         assert!(rgba[idx] > 200, "red solid stays red at the scaled size");
     }
 
-    /// **A view names its frames apart rather than leaving them nameless**
-    /// (K-346, superseding that half of K-314). The look is baked into the
-    /// display-encoded pixels the tiers hold, so a frame under one is a
-    /// different picture and takes a different name — which is what lets the
-    /// caches keep working while an exposure is dialled in, where the old rule
-    /// switched all three off for as long as a control was engaged. Neutral
-    /// keeps the name it always had, so frames banked before this still come
-    /// back. Needs no adapter — naming is a hash of the document, not a render.
+    /// **A view names its frames apart rather than leaving them nameless.** The
+    /// look is baked into the display-encoded pixels the tiers hold, so a frame
+    /// under one is a different picture and takes a different name — which is
+    /// what lets the caches keep working while an exposure is dialled in, where
+    /// the old rule switched all three off for as long as a control was
+    /// engaged. Neutral keeps the name it always had, so frames banked before
+    /// this still come back. Needs no adapter — naming is a hash of the
+    /// document, not a render.
     #[test]
     fn a_view_names_its_frames_apart_rather_than_leaving_them_nameless() {
         let mut r = match HeadlessRenderer::shared() {
@@ -3807,7 +3804,7 @@ mod tests {
             "returning to neutral returns the frame's own name"
         );
 
-        // The backdrop is part of the picture too (K-352): a frame composited
+        // The backdrop is part of the picture too: a frame composited
         // without it must never be served as one composited with it, so the
         // transparency-grid flag names frames apart exactly as a view does.
         r.set_transparent_background(true);
@@ -3828,7 +3825,7 @@ mod tests {
         );
     }
 
-    /// **The export cannot see the Viewer's view** (K-314), and it is neutral by
+    /// **The export cannot see the Viewer's view**, and it is neutral by
     /// *construction* rather than by discipline: `export::run` builds its own
     /// `HeadlessRenderer` and nothing ever calls the setter on it, then renders
     /// each frame through `render_preview` exactly as this does.
@@ -3930,7 +3927,7 @@ mod tests {
         // The audio-only item stays omitted across the second sync_items call.
         assert!(!r.items.contains_key(&audio_id));
 
-        // K-435: a file that HAS a picture, placed as an Audio layer, is not
+        // A file that HAS a picture, placed as an Audio layer, is not
         // probed or indexed for the picture either. Without the `audio_only`
         // skip in `comp_footage_items` the renderer would open and frame-index
         // a video the user placed for its sound alone.
@@ -4039,7 +4036,7 @@ mod tests {
         );
     }
 
-    /// The zero-copy path (K-177) renders a real comp into a shared GPU texture
+    /// The zero-copy path renders a real comp into a shared GPU texture
     /// and reports a non-zero NT handle whose dimensions are stable across two
     /// frames (the texture is re-used, not re-created). Skips when there is no
     /// GPU adapter; also skips calmly if this machine's wgpu is not on the D3D12
@@ -4313,7 +4310,7 @@ mod tests {
         );
     }
 
-    /// **A strip is a row of the comp being mixed** (K-690). Two sounds
+    /// **A strip is a row of the comp being mixed**. Two sounds
     /// straight in the comp are two strips; two sounds arriving through one
     /// Precomp layer are one, because that is the one row the mixer draws
     /// and the one fader that would move them.
@@ -4348,11 +4345,11 @@ mod tests {
         assert_eq!(strips.len(), 2, "two rows, two strips");
     }
 
-    /// **A row asked for by name is heard whatever the switches say** (K-718,
-    /// owner). The Beats panel's Source picker names a layer; the mix it is
-    /// picked out of is beside the point, so a solo on the picture row and the
-    /// named layer's own audible switch are both stepped over. The comp's own
-    /// mix is unchanged: it is what the comp sounds like, solo and all.
+    /// **A row asked for by name is heard whatever the switches say.** The
+    /// Beats panel's Source picker names a layer; the mix it is picked out of
+    /// is beside the point, so a solo on the picture row and the named layer's
+    /// own audible switch are both stepped over. The comp's own mix is
+    /// unchanged: it is what the comp sounds like, solo and all.
     #[test]
     fn a_layer_asked_for_by_name_is_heard_through_a_solo_and_its_own_mute() {
         let mut doc = Document::new();
@@ -4413,7 +4410,7 @@ mod tests {
     }
 
     /// **A Sequence layer sounds through its clips, and a join is a
-    /// crossfade** (K-695).
+    /// crossfade**.
     ///
     /// Three clips on one row: two butted end to end (a hard cut, no ramps at
     /// all) and a third laid over the second by half a second, which gives the
@@ -4500,8 +4497,8 @@ mod tests {
         );
     }
 
-    /// **A Precomp layer over a comp that has sound in it says it has sound**
-    /// (K-435). The timeline draws a row's mute switch only where the layer can
+    /// **A Precomp layer over a comp that has sound in it says it has sound.**
+    /// The timeline draws a row's mute switch only where the layer can
     /// make a sound, and the question used to be asked of the layer's own
     /// footage item alone — which a Precomp layer does not have. So a precomp
     /// holding the music, the ordinary way a bed is placed, wore no mute switch
@@ -4549,7 +4546,7 @@ mod tests {
         assert!(!builder.layer_has_audio(&doc, &null));
     }
 
-    /// **The export contract for the deferred flare bake (K-350).** A fresh
+    /// **The export contract for the deferred flare bake.** A fresh
     /// renderer bakes lens flares *inside* the frame, exactly as it always did.
     ///
     /// This is how "an export is never a provisional picture" is kept true. An
@@ -4578,13 +4575,13 @@ mod tests {
         );
     }
 
-    /// **A dropped-on Lens flare puts light on the frame** (K-256, K-425).
+    /// **A dropped-on Lens flare puts light on the frame**.
     ///
     /// The gate the flare never had: its kernels are checked against the CPU
     /// reference and its bake against its cache, but nothing rendered a whole
     /// comp through the real path and looked at the pixels. The regression it
     /// pins is what that gap hid — the flare declares a `blend` of its own,
-    /// under the id K-425 injects its Blend row on, so the seam blended the
+    /// under the id its Blend row is injected on, so the seam blended the
     /// finished flare a second time by an index into the wrong menu: a fresh
     /// flare's Add (index 1) came back as the layer modes' Darken against the
     /// untouched input, and every flare on anything darker than itself
@@ -4631,7 +4628,7 @@ mod tests {
     }
 
     /// A lens baking somewhere **does not stop the rest of the project being
-    /// named** (K-431, superseding the K-350 rule it replaces).
+    /// named**.
     ///
     /// The regression: `frame_key` used to answer `None` for every comp while
     /// any bake was in flight. A keyframed f-stop asks for a slightly
@@ -4678,10 +4675,10 @@ mod tests {
         );
     }
 
-    /// **A keyframed aperture names, and keeps, every frame it draws**
-    /// (K-431). Ten frames of an animated f-stop, with a bake in flight the
-    /// whole time: each frame takes its own name, and no two frames share one
-    /// — the aperture is part of the picture, so it is part of the name.
+    /// **A keyframed aperture names, and keeps, every frame it draws.** Ten
+    /// frames of an animated f-stop, with a bake in flight the whole time:
+    /// each frame takes its own name, and no two frames share one — the
+    /// aperture is part of the picture, so it is part of the name.
     #[test]
     fn a_keyframed_aperture_names_every_frame() {
         let mut r = match HeadlessRenderer::shared() {
@@ -4726,8 +4723,8 @@ mod tests {
         );
     }
 
-    /// **Editing a .lens file on disk renames the frames that read it**
-    /// (K-431). The bake keys on the file's CONTENT, so before this the edited
+    /// **Editing a .lens file on disk renames the frames that read it.** The
+    /// bake keys on the file's CONTENT, so before this the edited
     /// prescription rebaked and drew different optics under the old file's
     /// name — a cached frame no edit or undo could ever clear.
     #[test]
@@ -4781,7 +4778,7 @@ surfaces:
     }
 
     /// A bake that has **finished** must read as finished from an idle
-    /// thread — with no frame render in between (the K-350 follow-up fix).
+    /// thread — with no frame render in between.
     ///
     /// The regression this pins: `bake_pending` used to read the in-flight
     /// set, which only a frame render's `collect` cleared — so after the
@@ -4910,7 +4907,7 @@ surfaces:
     /// — the comp size times the preview scale — and reading them must not
     /// depend on a transport existing. It did: the texture had no reader
     /// outside the Windows and Linux present paths, so macOS builds failed the
-    /// `-D warnings` clippy gate on a dead field (K-033).
+    /// `-D warnings` clippy gate on a dead field.
     #[test]
     fn a_prepared_frame_reports_the_scaled_size() {
         let mut r = match HeadlessRenderer::shared() {
@@ -5362,10 +5359,10 @@ surfaces:
         assert!(r.upload_pool.is_empty(), "a clear empties the pool as well");
     }
 
-    /// The interactive path renders the same picture the export path does — the
-    /// K-031 promise, checked on the one comp both can build without media. A
-    /// solid is enough to catch a wrong background, colour pipeline or camera:
-    /// those are the parts the two walks each implement separately.
+    /// The interactive path renders the same picture the export path does,
+    /// checked on the one comp both can build without media. A solid is enough
+    /// to catch a wrong background, colour pipeline or camera: those are the
+    /// parts the two walks each implement separately.
     #[test]
     fn the_preview_and_export_paths_agree_on_a_solid_comp() {
         let mut r = match HeadlessRenderer::shared() {
@@ -5386,7 +5383,7 @@ surfaces:
         assert_eq!((pw, ph), (ew, eh), "both paths render at the comp's size");
         assert_eq!(
             preview, export,
-            "the interactive and export paths must produce identical pixels (K-031)"
+            "the interactive and export paths must produce identical pixels"
         );
     }
 
@@ -5434,7 +5431,7 @@ surfaces:
         let mut level = lumit_core::fx::instantiate("audio_level").expect("the catalogue knows it");
         for p in &mut level.params {
             if p.id == "audio" {
-                // Unset is the comp's own mix (K-657), which here is that same
+                // Unset is the comp's own mix, which here is that same
                 // tone through the mixer rather than straight off the file.
                 p.value = lumit_core::model::EffectValue::Layer(named.then_some(music_id));
             }
@@ -5480,8 +5477,8 @@ surfaces:
         Some((doc, comp_id))
     }
 
-    /// **A parameter the music drives is the same number in both renders**
-    /// (K-471 1.3, K-031) - and it is a number, not silence.
+    /// **A parameter the music drives is the same number in both renders** -
+    /// and it is a number, not silence.
     ///
     /// The row the matrix was missing: a Brightness on a solid, driven through
     /// a Remap by the level of a track on another layer. Two things are checked,
@@ -5519,7 +5516,7 @@ surfaces:
         assert_eq!((pw, ph), (ew, eh), "both paths render at the comp's size");
         assert_eq!(
             preview, export,
-            "a driven parameter must reach the same value in both renders (K-031)"
+            "a driven parameter must reach the same value in both renders"
         );
 
         let (silent, _, _) = r
@@ -5532,7 +5529,7 @@ surfaces:
     }
 
     /// **An Audio level left on This comp drives from the mixer's own sum, and
-    /// does it identically every time it is asked** (K-657).
+    /// does it identically every time it is asked**.
     ///
     /// The comp-mix half of the row above, and the same two claims: the picture
     /// is the *same* picture twice (the mix is rebuilt from the document on
@@ -5615,7 +5612,7 @@ surfaces:
         assert_eq!(without, with, "a Null layer must contribute no pixels");
     }
 
-    /// **A layer whose Layer out is unplugged draws nothing** (K-738).
+    /// **A layer whose Layer out is unplugged draws nothing**.
     ///
     /// The owner's own words for it: "having a layer display nothing because
     /// it's not wired up is completely okay". It is the same nothing a hidden
@@ -5666,14 +5663,14 @@ surfaces:
         );
     }
 
-    /// **Layers under a full-frame opaque solid are not rendered** (K-423), and
+    /// **Layers under a full-frame opaque solid are not rendered**, and
     /// the picture cannot tell. The same comp is rendered with the cull live
     /// and with it refused — a Null on top whose matte names the bottom layer
     /// is a reference to a layer below, which switches the cull off without
     /// adding a pixel — and the two must be byte-identical, for a solid
     /// underneath and (where ffmpeg can write the fixture) for footage. The
     /// draw list proves the cull engaged; the export path stays identical to
-    /// the interactive one (K-031).
+    /// the interactive one.
     #[test]
     fn layers_under_a_full_frame_opaque_solid_are_culled_without_changing_a_pixel() {
         let mut r = match HeadlessRenderer::shared() {
@@ -5783,10 +5780,7 @@ surfaces:
             let (preview, _, _) = r
                 .render_preview(&culled, comp_id, 0, crate::plan::Quality::default(), 1.0)
                 .expect("preview render");
-            assert_eq!(
-                preview, with_cull,
-                "{name}: preview and export agree (K-031)"
-            );
+            assert_eq!(preview, with_cull, "{name}: preview and export agree");
         }
     }
 
@@ -5847,12 +5841,13 @@ surfaces:
         }
     }
 
-    /// The K-031 matrix. It gated the comp-walk unification (preview vs the
-    /// old `render_comp_linear`, byte for byte, before the old walk could be
-    /// deleted); with one walk left it now proves that walk renders every
-    /// construction deterministically — a retained-pixel recomposite and a
-    /// fresh render must still agree exactly. Each row is a document the model
-    /// builds without a media file; the footage rows are the test below.
+    /// The preview-equals-export matrix. It gated the comp-walk unification
+    /// (preview vs the old `render_comp_linear`, byte for byte, before the old
+    /// walk could be deleted); with one walk left it now proves that walk
+    /// renders every construction deterministically — a retained-pixel
+    /// recomposite and a fresh render must still agree exactly. Each row is a
+    /// document the model builds without a media file; the footage rows are the
+    /// test below.
     #[test]
     fn the_preview_and_export_paths_agree_across_the_matrix() {
         let mut r = match HeadlessRenderer::shared() {
@@ -5953,7 +5948,7 @@ surfaces:
                 comp.layers.insert(0, adj);
                 (doc, comp_id, 15)
             }),
-            // The anti-aliasing row (K-274, docs/impl/anti-aliasing.md §5,
+            // The anti-aliasing row (docs/impl/anti-aliasing.md §5,
             // test 3): the count is a PROJECT property, so both walks read the
             // same one — an export that anti-aliased differently from the
             // preview is exactly what this matrix exists to catch. A rotated
@@ -5967,10 +5962,10 @@ surfaces:
                 l.transform.rotation = Property::fixed(17.0);
                 (doc, comp_id, 0)
             }),
-            // **Particulate** (K-446, K-474): a whole field of particles, drawn
+            // **Particulate**: a whole field of particles, drawn
             // at a frame partway in. The effect keeps nothing between frames
             // and reads no clock, so preview and export must agree exactly —
-            // and the degradation rung (K-475) is never on this path, because
+            // and the degradation rung is never on this path, because
             // nothing on it can turn the rung on. A particle system that
             // disagreed with itself would show here as two pictures.
             ("particulate draws its particles", |w, h, red, blue| {
@@ -5996,7 +5991,7 @@ surfaces:
                 l.effects = vec![fx];
                 (doc, comp_id, 7)
             }),
-            // A **driven parameter** (K-471): the top layer's blur radius comes
+            // A **driven parameter**: the top layer's blur radius comes
             // off a Wiggle rather than off its keyframes, so both walks have to
             // resolve the same driver graph at the same layer time and get the
             // same number. A driver that read a clock, or that depended on
@@ -6044,7 +6039,7 @@ surfaces:
                 // starting value.
                 (doc, comp_id, 7)
             }),
-            // A **points-driven parameter** (K-492, K-494): the blur radius
+            // A **points-driven parameter**: the blur radius
             // comes off a Points sample reading Particulate's stream, so both
             // walks have to evaluate the same particles at the same layer time
             // — the stream is arithmetic over the document rather than history,
@@ -6060,7 +6055,7 @@ surfaces:
                 l.graph = graph;
                 (doc, comp_id, 7)
             }),
-            // A **stack effect reading another's stream** (K-600): the first
+            // A **stack effect reading another's stream**: the first
             // wire whose two ends are both ops. Both walks have to build the
             // same carriage — the same lattice, at the same layer time, in the
             // same units — and stamp it in the same order, or the two pictures
@@ -6116,12 +6111,12 @@ surfaces:
             );
             assert_eq!(
                 preview, export,
-                "{name}: the interactive and export paths must be bit-identical (K-031)"
+                "{name}: the interactive and export paths must be bit-identical"
             );
         }
     }
 
-    /// **A wire reaches the picture** (K-471 §2.1).
+    /// **A wire reaches the picture.**
     ///
     /// The matrix above proves the two walks agree; this proves there is
     /// something to agree *about*. The same comp is rendered three times: with
@@ -6355,7 +6350,7 @@ surfaces:
         }
     }
 
-    /// The footage rows of the K-031 matrix: plain footage, Retime blend and
+    /// The footage rows of the matrix above: plain footage, Retime blend and
     /// Retime flow — the rows where the two walks run genuinely different
     /// decode machinery, so they are the ones the swap most needs proven.
     /// Skips (with a note) when no ffmpeg CLI is present to write the fixture.
@@ -6374,13 +6369,13 @@ surfaces:
         };
 
         use lumit_core::retime::{FlowParams, Interpolation};
-        // Half speed as the Retime property expresses it (K-249): two seconds
+        // Half speed as the Retime property expresses it: two seconds
         // of layer time reading one of source. The interpolation policy rides
         // beside it on the layer rather than inside it.
         let half_speed = || {
             lumit_core::model::Layer::identity_retime(Rational::ZERO, Rational::new(2, 1).unwrap())
         };
-        // The last element is K-537's adjustment switch: a footage layer that
+        // The last element is the adjustment switch: a footage layer that
         // has set its own picture aside and is grading the composite below it.
         // It earns a row of its own because the switch changes what the *decode
         // plan* asks for as well as what the draw builder makes, and those are
@@ -6478,7 +6473,7 @@ surfaces:
             );
             assert_eq!(
                 preview, export,
-                "{name}: the interactive and export paths must be bit-identical (K-031)"
+                "{name}: the interactive and export paths must be bit-identical"
             );
         }
     }
@@ -6622,7 +6617,7 @@ surfaces:
         (vec![producer, lift], graph)
     }
 
-    /// **A points wire reaches the picture** (K-492, K-494).
+    /// **A points wire reaches the picture**.
     ///
     /// The matrix row above proves the two walks agree about a points-driven
     /// frame; this proves there is something to agree *about*. The same comp
@@ -6709,8 +6704,8 @@ surfaces:
         );
     }
 
-    /// A layer stamped at every point of a lattice: the effects and the wire
-    /// (K-600). Grid rather than Particulate on purpose — a lattice has no clock
+    /// A layer stamped at every point of a lattice: the effects and the wire.
+    /// Grid rather than Particulate on purpose — a lattice has no clock
     /// in it, so what the test below compares is the *wire* and nothing else.
     fn cloned_lattice(
         w: u32,
@@ -6776,11 +6771,11 @@ surfaces:
     }
 
     /// **A points wire reaches the picture from one stack effect to another**
-    /// (K-600) — the first wire in this engine whose two ends are both ops.
+    /// — the first wire in this engine whose two ends are both ops.
     ///
     /// The same comp twice, with one wire cut. Wired, a lattice of stamps lands
     /// on the frame; cut, the consumer has no stream, draws nothing and passes
-    /// its picture on — the documented calm K-509 gave the family, here as a
+    /// its picture on — the documented calm of the family, here as a
     /// picture rather than as a panel mark.
     #[test]
     fn a_cloned_layer_lands_at_every_point_of_a_wired_stream() {
@@ -6824,11 +6819,11 @@ surfaces:
             "a wired stream must put the cloned layer on the frame"
         );
         // And twice is once: the whole path — the wire, the carriage, the
-        // instanced draw — is a function of the document (K-031).
+        // instanced draw — is a function of the document.
         assert_eq!(stamped, frame_of(true), "two renders of one frame differ");
     }
 
-    /// **A trail is drawn without a frame of history being kept** (K-601).
+    /// **A trail is drawn without a frame of history being kept**.
     ///
     /// The strong claim, and the one the whole design rests on: the same frame,
     /// rendered from a cold start, with no frame before it ever having been
@@ -6940,7 +6935,7 @@ surfaces:
     }
 
     /// **A points wire reaches Connect points and the web lands on the frame**
-    /// (K-602) — the whole path the effect depends on, through the export walk:
+    /// — the whole path the effect depends on, through the export walk:
     /// the edge is read, the producer's stream is evaluated on the carriage, the
     /// pairing runs, and the lines are drawn.
     ///
@@ -7044,7 +7039,7 @@ surfaces:
         assert_eq!(webbed, frame_of(&wired), "two renders of one frame differ");
     }
 
-    /// **One layer's effect draws another layer's points** (K-604) — the whole
+    /// **One layer's effect draws another layer's points** — the whole
     /// cross-layer path, through the export walk: the tap's Points layer row is
     /// resolved, the named layer's producer is evaluated with that layer's own
     /// graph, and the stream reaches this layer's consumer on the carriage.
@@ -7162,7 +7157,7 @@ surfaces:
     }
 
     /// **The Source layer reaches the rejection, and its brightness decides**
-    /// (K-603) — the whole path, through the export walk: the layer reference
+    /// — the whole path, through the export walk: the layer reference
     /// is resolved, the referenced layer's picture rides the carriage to the
     /// pass, and the candidates on it stand or fall by how bright it is.
     ///
@@ -7246,7 +7241,7 @@ surfaces:
         assert_eq!(lit, frame_of(&bound), "two renders of one frame differ");
     }
 
-    /// **The degradation rung never engages on an export walk** (K-475, PS7;
+    /// **The degradation rung never engages on an export walk** (PS7;
     /// docs/13 §2's note under B12–B14).
     ///
     /// Under governor pressure Particulate draws the newest `cap/2`, halving
@@ -7333,12 +7328,12 @@ surfaces:
         );
         assert_eq!(
             export, preview,
-            "the export walk drew a different field from the interactive one (K-031)"
+            "the export walk drew a different field from the interactive one"
         );
         assert_ne!(
             export, halved,
             "the export walk drew the newest half — the degradation rung is on the export path \
-             (K-475: interaction-only, never on export)"
+             (interaction-only, never on export)"
         );
     }
 
@@ -7362,7 +7357,7 @@ surfaces:
         (solid, layer_id)
     }
 
-    /// **What the engine drops, the driver gets back** (K-295).
+    /// **What the engine drops, the driver gets back**.
     ///
     /// The failure this pins is not a slow leak: it is memory that comes back
     /// only when something unrelated happens. Dropping a texture or a buffer
@@ -7555,7 +7550,7 @@ surfaces:
     }
 
     /// A consumer layer matted by a hidden source carrying a mask and an
-    /// effect, with the matte's sampling mode chosen per row (K-142).
+    /// effect, with the matte's sampling mode chosen per row.
     fn matte_doc(
         w: u32,
         h: u32,
@@ -7732,7 +7727,7 @@ surfaces:
     }
 
     /// **Editing the last effect of a layer re-runs only that effect, and the
-    /// picture is byte-for-byte the cold one** (K-421, K-031).
+    /// picture is byte-for-byte the cold one**.
     ///
     /// End to end through the draw builder: a solid's stack is named from its
     /// colour, size and masks, so after a committed render the blur's output
@@ -7805,7 +7800,7 @@ surfaces:
         );
     }
 
-    /// **A precomp's frames are cached as one unit** (K-422, K-031).
+    /// **A precomp's frames are cached as one unit**.
     ///
     /// A nested comp is realised once and then served by its own name: a
     /// parent edit, and a second parent frame the nested comp is static
@@ -7904,8 +7899,8 @@ surfaces:
         assert_eq!(r.effect_cache_stats().0 .2, 0, "Clear cache empties it");
     }
 
-    /// **A parent edit does not decode the footage inside a held precomp**
-    /// (K-422), and the picture it serves is the cold one. The planner skips
+    /// **A parent edit does not decode the footage inside a held precomp**,
+    /// and the picture it serves is the cold one. The planner skips
     /// the nested comp's jobs on the store's word, and the realiser then finds
     /// the texture the planner pinned — so a frame rendered with no nested
     /// pixels in hand is still the right frame. Skips without an ffmpeg CLI to
@@ -8062,7 +8057,7 @@ surfaces:
     /// the end, so a fence taken mid-walk would wait on a queue that has not
     /// been handed over and time nothing real. A *measured* frame therefore
     /// flushes at each layer and each effect before it fences — which is the
-    /// cost the stopwatch already declares (K-276: measuring waits for the card
+    /// cost the stopwatch already declares (measuring waits for the card
     /// at each layer, which is why it is opt-in and never runs during playback).
     ///
     /// So the property is the opposite of the unmeasured one: an unmeasured
@@ -8127,14 +8122,15 @@ surfaces:
         );
     }
 
-    /// **A precomp set as a track matte must actually gate the layer** (K-268).
+    /// **A precomp set as a track matte must actually gate the layer**.
     ///
     /// The regression: a comp has no pixels until it is rendered, so the draw
     /// builder's `pixels_for` answered None for a Precomp matte source and the
     /// whole matte quietly disappeared — the consumer drew everywhere, as if
-    /// no matte had been set. K-266 fixed the same hole for the *layer-input*
-    /// mattes (a flare source, a DoF depth pass); the track matte, which is
-    /// how everyone actually reaches for a precomp matte, still had it.
+    /// no matte had been set. An earlier fix closed the same hole for the
+    /// *layer-input* mattes (a flare source, a DoF depth pass); the track
+    /// matte, which is how everyone actually reaches for a precomp matte,
+    /// still had it.
     ///
     /// The scene: a full-frame red solid matted by a hidden precomp layer whose
     /// own 16×16 blue solid covers the LEFT half of a 32×16 comp. Red survives
@@ -8191,7 +8187,7 @@ surfaces:
         );
     }
 
-    /// **A paint stroke on a Precomp layer must reach the picture** (K-547).
+    /// **A paint stroke on a Precomp layer must reach the picture**.
     ///
     /// Every other kind of layer is painted in its own raster before it is
     /// uploaded; a Precomp has no raster until it is rendered, so its strokes
@@ -8251,7 +8247,7 @@ surfaces:
 
     /// **An effect ON a Precomp layer must keep its px@comp parameters where
     /// they were put when the preview renders at a reduced resolution**
-    /// (K-268, the twin of K-266's adjustment-layer fix).
+    /// (the twin of the adjustment-layer fix).
     ///
     /// The regression: the stack of a Precomp layer resolves against the nested
     /// comp's full width (factor 1) but runs on the nested comp's *preview*

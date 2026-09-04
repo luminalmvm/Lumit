@@ -1,15 +1,15 @@
 # The Custom shader: a shader the user writes, and the graph that writes it
 
-**Decision:** K-642 (commissioned by the owner, 2026-08-30). **Builds on:** K-381 and
+**Commissioned by the owner**, 2026-08-30. **Builds on:**
 [effect-registry.md](effect-registry.md) §4 (dynamic parameters — the settled rules this
-note stands on; the panel affordances are the half that was owed), K-471 and
-[node-graph.md](node-graph.md) (the driver graph the outer world keeps), K-263 (naga
-validates every shader without a graphics card), K-624 (entering a precomp — the navigation
-precedent for entering a shader), K-593 (a definition that can fail wears a calm badge),
-K-129/K-065 (`.lumfx` preset files), K-031 (preview equals export).
+note stands on; the panel affordances are the half that was owed),
+[node-graph.md](node-graph.md) (the driver graph the outer world keeps), naga validating
+every shader without a graphics card, entering a precomp (the navigation precedent for
+entering a shader), a definition that can fail wearing a calm badge, `.lumfx` preset
+files, and preview equals export.
 **Feeds:** [08-EFFECTS.md](../08-EFFECTS.md), [12-PLUGINS.md](../12-PLUGINS.md),
 [06-RENDER-PIPELINE.md](../06-RENDER-PIPELINE.md).
-**Status: CS1's engine half is built** (K-650, 2026-08-30) — the catalogue entry, the §1.4
+**Status: CS1's engine half is built** (2026-08-30) — the catalogue entry, the §1.4
 grammar and its derived rows, the §1.3 assembler, naga validation and the §2.2 refusals, the
 §2.3 NaN epilogue, the source-hash pipeline cache and the §3.2 last-good rule, and the §2.4
 frame-key term. **CS2 and CS3 are built too**: the bridge's instance-scoped
@@ -38,7 +38,7 @@ persisting is somebody missing their place across a restart), and every gesture 
 Two panel ceilings recorded: a Parameter box lands as a 0..1 slider and its five facts are
 not yet editable on the box (the §4.3 inspector is owed), and the inner selection is a
 plain click — no marquee, no modifier set — until the outer canvas's gestures are asked
-for. Four things K-650 settled where this note left a choice open, and which the rest of
+for. Four things CS1 settled where this note left a choice open, and which the rest of
 the note should be read against:
 
 - **The derived rows are `&'static [ParamSchema]`** from a session-lived parse cache keyed by
@@ -47,7 +47,7 @@ the note should be read against:
 - **The frame key folds the whole `extra.shader` block minus `origin`**, which covers §2.4's
   two terms with one and no parse. The source hash additionally rides in the resolved bag
   (pushed by `resolve_derived`), which is also how the assembled text reaches the GPU pass —
-  and which puts the source in the K-421 per-effect cache key for free.
+  and which puts the source in the per-effect cache key for free.
 - **The prologue, the epilogue and the assembler live in `lumit-core/src/fx/shader/`**, not in
   `lumit-gpu`: the generated `Params` struct is a product of the parse, and `lumit-gpu` only
   dev-depends on `lumit-core`. An empty `Params` gets one placeholder member, WGSL having no
@@ -124,7 +124,7 @@ Four declared rows, and every other row this effect ever shows is **derived** (�
   the governor cautious rather than the one that makes it optimistic. This is not
   pessimism for its own sake: an ROI declaration that is *wrong* is a wrong picture, and a
   cost declaration that is wrong is a dropped frame. Only one of those is recoverable.
-- **`mix` earns the injected Blend** (K-425), so a custom shader gets a Mix row and a blend
+- **`mix` earns the injected Blend**, so a custom shader gets a Mix row and a blend
   mode for free, on the same seam every other effect uses. Nothing about that is
   shader-specific and none of it reaches the user's code.
 - **The matte is `Strength`** — the default role (registry §2.5b). A shader could claim its
@@ -135,12 +135,12 @@ Four declared rows, and every other row this effect ever shows is **derived** (�
   off. A shader that reads the matte and is also dissolved by it applies it twice; that is
   the user's arithmetic, visible in their own code, and not a seam the host can get wrong.
 - **`input2` is the one extra picture**, an ordinary layer reference riding the existing
-  auxiliary-layer carriage (registry §2.5a, K-429 — `EffectSchema::layer_input()` finds the
+  auxiliary-layer carriage (registry §2.5a — `EffectSchema::layer_input()` finds the
   first `Layer` row that is not the matte). One, not many: the carriage is one slot per op
   walked by a shared counter, and a second would need a second counter and a second
   predicate on both sides of `build.rs`. If a shader genuinely needs three inputs, the
   answer is three shaders and a stack, which is what the stack is for.
-- **Two `Action` rows** (K-417), because the source is not a parameter (§1.2). `Edit shader…`
+- **Two `Action` rows**, because the source is not a parameter (§1.2). `Edit shader…`
   opens the editor surface; `Load from file…` opens a native file dialog and copies the text
   in. Neither carries a value and neither animates, which is exactly what an Action row is.
 
@@ -170,7 +170,7 @@ The WGSL text lives on the instance, in `EffectInstance.extra`, under a `shader`
    mechanism for something that is not a file.
 
 `extra` is `#[serde(flatten)]`, so this rides through save, load, undo, copy/paste, the
-`.lumfx` preset (§6) and an older reader (K-065) with no format work at all. It costs one
+`.lumfx` preset (§6) and an older reader with no format work at all. It costs one
 thing, and §2.4 is where that debt is paid: **the frame key does not hash `extra` today.**
 
 ### 1.3 The binding contract
@@ -185,7 +185,7 @@ kernel already uses (`fx_gamma.wgsl` is the shortest example of it in the tree):
 | 1 | `var orig: texture_2d<f32>` | the layer's picture before the stack — the Mix reference |
 | 2 | `var dst: texture_storage_2d<rgba16float, write>` | the picture leaving |
 | 3 | `var<uniform> lumit: LumitHeader` | the host's own header, fixed layout (below) |
-| 4 | `var matte: texture_2d<f32>` | the K-395 matte, prepared at the seam; bound to `src` when there is none |
+| 4 | `var matte: texture_2d<f32>` | the matte, prepared at the seam; bound to `src` when there is none |
 | 5 | `var input2: texture_2d<f32>` | the extra layer input; bound to `src` when unbound |
 | 6 | `var<uniform> p: Params` | the user's own parameters, laid out by the host (§1.4) |
 
@@ -218,7 +218,7 @@ fn shade(uv: vec2<f32>) -> vec4<f32>
 Fragment-shaped, deliberately, because that is the model every person who has written a
 shader before already has: one pixel in, one colour out, no neighbours, no order. It
 compiles to a **compute** entry point, because that is what the rest of the engine is
-(K-011, and the whole `FxEngine`); the fragment stage is the authoring model, not the
+(the whole `FxEngine`); the fragment stage is the authoring model, not the
 carriage. Nobody has to know that, and the note says it so the next reader does not
 "discover" a fragment pipeline is missing.
 
@@ -248,7 +248,7 @@ one named `Params`, and when the user declares none it emits an empty one there 
 | `lumit_load(xy: vec2<i32>) -> vec4<f32>` | `textureLoad(src, clamped xy, 0)` — edge-clamped, so a sample off the frame is the edge rather than black |
 | `lumit_sample(uv: vec2<f32>) -> vec4<f32>` | bilinear from `src`; there is no sampler in this layout, so the four loads and the two lerps are written once, here |
 | `lumit_sample2(uv)`, `lumit_orig(uv)` | the same for bindings 5 and 1 |
-| `lumit_matte(uv) -> f32` | the K-395 strength at that point (the Rec. 709 luma the seam already prepared) |
+| `lumit_matte(uv) -> f32` | the matte strength at that point (the Rec. 709 luma the seam already prepared) |
 | `lumit_size() -> vec2<f32>` | the raster size in pixels |
 | `lumit_px(uv) -> vec2<f32>` | uv → px@comp, i.e. `uv * lumit_size() / lumit.comp_scale` |
 | `lumit_unpremult(c)`, `lumit_premult(c)` | the pair every colour operation needs (docs/08 §2.2) |
@@ -285,11 +285,11 @@ because it means a field with no annotation at all is still a working parameter:
 
 | Type | No annotation | With annotation |
 |---|---|---|
-| `f32` | `Float`, slider 0..1, no hard bound (docs/08 §1.2 — a slider may be typed past) | `@slider(lo,hi)`, `@bounded(lo,hi)` → the K-414 closed Slider, `@dial` → Angle |
+| `f32` | `Float`, slider 0..1, no hard bound (docs/08 §1.2 — a slider may be typed past) | `@slider(lo,hi)`, `@bounded(lo,hi)` → the closed Slider, `@dial` → Angle |
 | `i32` | `Int`, 0..100 | `@counter(lo,hi)` |
 | `u32` | `Int` | `@toggle` → Bool, `@choice(…)` → Choice, `@seed` → Seed |
 | `vec4<f32>` | `Colour` | `@colour` (the same thing, written out) |
-| `vec2<f32>` | `Point`, **px@comp** (K-419) | `@point` |
+| `vec2<f32>` | `Point`, **px@comp** | `@point` |
 | `vec3<f32>` | **refused** | — |
 
 `vec3` is refused rather than padded silently, because a `vec3<f32>` in a uniform block
@@ -348,7 +348,7 @@ derived set is offered; the stored set is the document's:
 
 ### 2.1 The validator is the one wgpu uses
 
-`naga` 24 with `wgsl-in` is already a direct dependency of `lumit-gpu`, for K-263's
+`naga` 24 with `wgsl-in` is already a direct dependency of `lumit-gpu`, for
 `every_wgsl_kernel_parses_and_validates`. The custom shader takes the identical road, on the
 identical settings, because anything else would mean a shader that passes here and fails at
 pipeline creation on a stranger's adapter:
@@ -388,9 +388,9 @@ degrades is the one that has to.
 | A `vec3<f32>` parameter field | **refused at the edit** | §1.4; the padding trap, named rather than papered over. |
 | Parse or validation error | **degrades**: calm badge with the message, and the last pipeline that compiled keeps running (§3) | This is the state a person is in for most of the time they are typing. Going black on every keystroke is punishment UI (docs/15). |
 | A malformed annotation on one field | that parameter is skipped, with a message; the rest stand | A typo in a doc comment must not cost the other eight rows. |
-| No source at all (a fresh instance) | identity passthrough, no badge | The K-111 rule for an unset file: a thing the user must supply cannot have a tasteful default, and an empty effect is not a failed one. |
+| No source at all (a fresh instance) | identity passthrough, no badge | The rule for an unset file: a thing the user must supply cannot have a tasteful default, and an empty effect is not a failed one. |
 
-**The badge already exists.** `effectBadgeRow` (K-593's `EffectDef::last_error`) draws a
+**The badge already exists.** `effectBadgeRow` (`EffectDef::last_error`) draws a
 reason key plus a verbatim detail, in the accent colour, never red, never modal — written for
 a plugin that failed and shaped exactly right for a shader that will not compile. Two new
 reason keys: *this shader did not compile* and *this shader is still compiling*. The
@@ -483,7 +483,8 @@ milliseconds — a frame's whole budget — so it cannot happen on the render pa
 the pipeline in play depends on *when* a background compile finished. Two renders of the same
 document at the same frame could then disagree, and worse, a frame drawn with the *old*
 pipeline would be filed under the *new* source's key. That is a stale cache entry that
-survives the edit, and it is the exact failure K-031 exists to prevent.
+survives the edit, and it is the exact failure the preview-equals-export rule exists to
+prevent.
 
 **The split that fixes it, in one line each:**
 
@@ -543,17 +544,17 @@ is a stale cache to overwrite, never a conflict to resolve.
 
 The owner's framing, and the navigation road is already built. **Double-clicking** the Custom
 shader — the box on the Graph panel's canvas, or its heading in the Effect controls stack,
-which are one selection (K-300) — opens the **inner graph in the Graph panel**, with a
+which are one selection — opens the **inner graph in the Graph panel**, with a
 breadcrumb back: `Wall › Custom shader`. Escape, or the breadcrumb's first crumb, returns.
 
-K-624 is the precedent and the parts that transfer are named rather than assumed:
+Precomp entry is the precedent, and the parts that transfer are named rather than assumed:
 
 - **A composition remembers where you were, and so does a shader.** The inner graph's zoom
   and scroll come back when you re-enter it, in the session blob beside `compViews`, never in
   the document — standing somewhere in a graph is a way of working on it, not an edit to it.
 - **Node positions are document data**, exactly as `LayerGraph::layout` is: the positions are
   the drawing, they travel with the file, and they are absent from the frame key.
-- **The mapping that K-624 sends to the engine has no analogue here.** A precomp's entry
+- **The mapping a precomp entry sends to the engine has no analogue here.** A precomp's entry
   needed `Layer::entry_time` because two comps keep different clocks; a shader graph has no
   clock of its own. Nothing crosses the bridge on the double-click but the instance id.
 
@@ -563,7 +564,7 @@ rather than the model.** The layer's graph has an image chain that *is* the effe
 chain and no drivers — it is a pure-function DAG whose wires carry numbers and vectors. What
 is shared is the drawing: the dot grid, the node card with its shared header (a tick, a twirl and a
 name — the same one an Effect controls heading wears), type-coloured wires and sockets, the
-Ctrl+Space console as the add surface (K-673), frame-all, the selected border.
+Ctrl+Space console as the add surface, frame-all, the selected border.
 Sharing the widget and not the document type is what keeps §1.1's honesty guarantee from
 being quietly weakened by a second meaning for `Edge`.
 
@@ -637,7 +638,7 @@ the first has proven the seam.
 
 ## 6. Sharing, and what this is not
 
-**A saved custom shader is a `.lumfx` preset** (K-129, K-065) and needs no new file format.
+**A saved custom shader is a `.lumfx` preset** and needs no new file format.
 `EffectPreset` serialises whole `EffectInstance`s, and `extra` is `#[serde(flatten)]`, so the
 source, the graph and the dynamic parameters ride along today. It lands in the preset library
 like any other, appears in the preset browser, and applies as one `SetLayerEffects`. A shader
@@ -687,7 +688,7 @@ survive a native plugin arriving in a project file.
   documentation.
 - **`uv` spans the raster, not the composition.** At Half preview there are half as many
   pixels, so a shader whose look is a function of pixel *count* — a dither, a fixed-step
-  march — will differ between preview and export, which is a K-031 failure the user authored.
+  march — will differ between preview and export, which is a failure the user authored.
   `lumit.comp_scale` and `lumit_px()` are handed in precisely so that a distance can be
   written in px@comp and be right at every resolution.
 - **A `@unit(px)` parameter rescales; anything the shader derives does not.** The registry's
@@ -736,7 +737,7 @@ survive a native plugin arriving in a project file.
 10. `a_compile_error_reports_the_users_own_line_number` — an error on line 3 of a source with
     a 40-line prologue reports 3.
 11. `the_assembled_module_validates` (`lumit-gpu`, no GPU needed) — the prologue and epilogue
-    round every fixture through the K-263 road, so a change to the host's own wrapper cannot
+    round every fixture through the naga road, so a change to the host's own wrapper cannot
     ship broken. It is the same test `wgsl_validates.rs` already is, pointed at assembled
     sources.
 12. `a_nan_returned_by_a_shader_never_leaves_the_effect` (`lumit-gpu`, GPU) — a shader whose
@@ -745,8 +746,8 @@ survive a native plugin arriving in a project file.
     the source, key moves; move the node's canvas position, key holds.
 14. `the_frame_key_changes_when_the_derived_shape_changes` — registry test 10 on this effect.
 15. `a_shader_is_a_pure_function_of_frame_and_document` — the same frame rendered twice, and
-    an export against a preview (K-031's matrix gains a custom-shader row), on a fixture whose
-    shader reads `time`, `seed`, the matte and both pictures.
+    an export against a preview (the preview-equals-export matrix gains a custom-shader
+    row), on a fixture whose shader reads `time`, `seed`, the matte and both pictures.
 
 **§3 — caching**:
 
@@ -754,9 +755,9 @@ survive a native plugin arriving in a project file.
 17. `two_instances_of_one_source_keep_their_own_uniforms` — different parameter values, two
     different pictures, one pipeline.
 18. `a_broken_edit_keeps_the_last_good_picture_and_raises_the_badge`.
-19. `a_frame_drawn_with_a_stale_pipeline_is_never_cached` — the one that protects K-031;
-    assert the cache is untouched across a broken-then-fixed edit, and that the frame after the
-    fix is the new shader's.
+19. `a_frame_drawn_with_a_stale_pipeline_is_never_cached` — the one that protects preview
+    equals export; assert the cache is untouched across a broken-then-fixed edit, and that
+    the frame after the fix is the new shader's.
 20. `an_export_refuses_the_stale_pipeline` — a document whose shader does not compile exports
     as identity with the error in the log, never as the previous shader.
 21. `ten_keystrokes_queue_one_compile`.
@@ -780,14 +781,14 @@ survive a native plugin arriving in a project file.
 
 29. `a_custom_shader_round_trips_through_a_lumfx_preset` — source, graph and dynamic parameter
     values all survive save → load → apply, with fresh instance ids.
-30. `an_older_reader_preserves_a_shader_it_cannot_run` — K-065's unknown-field rule, on the
+30. `an_older_reader_preserves_a_shader_it_cannot_run` — the unknown-field rule, on the
     `shader` key.
 
 ---
 
 ## 9. Work packages
 
-Ordered; each sized for one agent; each lands with its tests and its GUIDE paragraph (K-007).
+Ordered; each sized for one pull request; each lands with its tests.
 CS1 → CS2 → CS3; CS4 needs CS1 and CS3; CS5 needs CS4.
 
 ### CS1 — The effect, the grammar and the pipeline
@@ -815,7 +816,7 @@ plus the writes the affordances need: `set_shader_source`, `sync_parameters`,
 `remove_unused_parameters`, and `shader_status` (the badge's reason key and detail).
 **Files**: `crates/lumit-bridge/src/api/effect.rs` (then codegen; generated files are never
 edited), `docs/17-BRIDGE-CONTRACT.md`, `flutter_ui/lib/l10n/engine_labels.dart` +
-`app_en.arb` (new keys listed in the commit message and the PR for translation, K-303).
+`app_en.arb` (new keys listed in the commit message and the PR for translation).
 **Tests**: an frb test driving edit → derive → sync → keyframe → undo; `engine_labels_test`
 green; `bridge_call_budget_test` unchanged at 0 for rebuild paths — the derived list is
 fetched on selection and on document change and cached Dart-side, exactly as `get_effects` is.
@@ -842,7 +843,7 @@ writes, `flutter_ui/lib/panels/shader_graph.dart` reusing the Graph panel's canv
 ### CS5 — Entry
 
 Double-click entry from both selection surfaces, the breadcrumb, Escape/back, and the
-session-held view (§4.2), on K-624's road.
+session-held view (§4.2), on the precomp entry's road.
 **Files**: `flutter_ui/lib/panels/graph_panel.dart`, the shell's breadcrumb, `SavedSession`,
 arb keys.
 **Tests**: §8 item 28.

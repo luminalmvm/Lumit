@@ -12,7 +12,7 @@
 //! The catalogue itself is deliberately an explicit list ([`catalogue!`] in
 //! `catalogue.rs`) rather than something assembled before `main` runs: the
 //! Add-effect menu, the command palette and the preset browser are all driven
-//! from it in order (K-137), and an order that depended on link order would be a
+//! from it in order, and an order that depended on link order would be a
 //! visible defect. Effects that are *not* known at compile time — OFX plugins
 //! (docs/12), and in time the user's own — arrive through the same trait object
 //! at run time, which is the seam this arrangement exists for.
@@ -25,7 +25,7 @@ use super::schema::EffectSchema;
 use crate::expression::ExpressionContext;
 use crate::model::EffectInstance;
 
-/// What resolve-time derivation sees (docs/impl/effect-registry.md §2.4a, K-385).
+/// What resolve-time derivation sees (docs/impl/effect-registry.md §2.4a).
 ///
 /// **In plain terms.** Most effects are entirely described by their controls: a
 /// radius, a colour, a mix. A few are not — a Flash fired from beat markers has
@@ -55,13 +55,13 @@ pub struct ResolveCx<'a> {
     pub context: Arc<ExpressionContext>,
 }
 
-/// What an entry in the catalogue *produces* (K-471 §1.3).
+/// What an entry in the catalogue *produces*.
 ///
 /// **In plain terms.** Everything in the catalogue has always been a picture
 /// operation: pixels in, pixels out. A **driver** is the other kind — no WGSL,
 /// no CPU pixel path, just a scalar or colour worked out at resolve time and
 /// handed to whichever parameter is wired to it. Declaring which one an entry
-/// is, rather than inferring it, is what lets the whole K-381 registry
+/// is, rather than inferring it, is what lets the whole registry
 /// machinery carry drivers for free: schema-declared parameters, catalogue
 /// generation, `list_parameters`, and the Effect-controls rows all work
 /// unchanged.
@@ -70,17 +70,17 @@ pub enum Signature {
     /// A picture operation — every effect until now, and the default.
     Image {
         /// The **data** inputs this picture operation declares beside its
-        /// picture (K-492, points-stream.md §4.1) — wire-only, with no stored
+        /// picture (points-stream.md §4.1) — wire-only, with no stored
         /// value, nothing to keyframe and no panel row.
         ///
         /// Empty for every effect but the points **consumers**, Clone to points
-        /// and Trail (K-600, K-601), each of which reads a stream a wire brings
+        /// and Trail, each of which reads a stream a wire brings
         /// it. The note said this is the method that would grow when a stack
         /// effect gained a Points input; it grew here, and every caller already
         /// read it.
         inputs: &'static [super::schema::Port],
         /// The **data** outputs this picture operation declares beside its
-        /// picture (K-472, K-492, points-stream.md §4.1).
+        /// picture (points-stream.md §4.1).
         ///
         /// Empty for every effect but the points **producers**, which draw
         /// their points for the chain *and* hand them out as a stream.
@@ -91,7 +91,7 @@ pub enum Signature {
     },
     /// A driver: no image kernel, and these named data ports.
     Data {
-        /// The **data** input ports (K-492, points-stream.md §4.1): wire-only,
+        /// The **data** input ports (points-stream.md §4.1): wire-only,
         /// with no stored value, nothing to keyframe and no panel row.
         ///
         /// Empty for every driver that only reads its own parameters, which is
@@ -121,8 +121,7 @@ impl Signature {
     }
 
     /// This signature's declared **data** input ports — a driver's wire-only
-    /// inputs, and a picture operation's own since the points consumers landed
-    /// (K-600).
+    /// inputs, and a picture operation's own since the points consumers landed.
     ///
     /// A picture operation's image and matte inputs are not here: they are
     /// drawn from `INPUT_PORT` and the schema's matte row at the seam, exactly
@@ -149,7 +148,7 @@ impl Signature {
     }
 }
 
-/// What a driver is handed when it computes its outputs (K-471 §2.1).
+/// What a driver is handed when it computes its outputs.
 pub struct DriverCx<'a> {
     /// The driver instance's id — Wiggle seeds its noise from it, which is what
     /// makes two Wiggles on one layer wobble differently and the same Wiggle
@@ -157,7 +156,7 @@ pub struct DriverCx<'a> {
     pub node: uuid::Uuid,
     /// The driver instance itself — its stored properties in full, which is
     /// what lets Audio level read its layer reference (a binding the resolved
-    /// bag deliberately does not carry, K-387).
+    /// bag deliberately does not carry).
     pub inst: &'a EffectInstance,
     /// Layer time, seconds.
     pub lt: f64,
@@ -165,7 +164,7 @@ pub struct DriverCx<'a> {
     /// layer and the time. `ResolveCx` carries the same thing for the same
     /// reason: a driver that evaluates an expression needs the surroundings the
     /// expression can name, and it must be the *host's* context so preview and
-    /// export reach the same number (K-031).
+    /// export reach the same number.
     pub context: &'a std::sync::Arc<crate::expression::ExpressionContext>,
     /// This driver's own parameters, already evaluated at `lt` and with any
     /// incoming wires substituted in.
@@ -189,7 +188,7 @@ pub struct DriverCx<'a> {
     pub points_input: &'a dyn Fn(&str) -> Option<std::rc::Rc<super::points::PointsStream>>,
 }
 
-/// Where Audio level gets its samples (K-471 §1.3).
+/// Where Audio level gets its samples.
 ///
 /// The engine model cannot decode audio — `lumit-core` knows nothing of media —
 /// so the host supplies this and the driver does the maths, which is what keeps
@@ -227,8 +226,7 @@ pub trait EffectDef: Sync + Send + 'static {
     fn schema(&self) -> &'static EffectSchema;
 
     /// The CPU reference implementation (docs/08 §1.6) — the oracle the WGSL
-    /// kernel is tested against, and the degradation ladder's fallback rung
-    /// (K-019).
+    /// kernel is tested against, and the degradation ladder's fallback rung.
     ///
     /// `rgba` is premultiplied scene-linear, four floats per pixel, row-major.
     /// The default is identity, which is correct for the orchestration-only
@@ -237,7 +235,7 @@ pub trait EffectDef: Sync + Send + 'static {
     fn apply_cpu(&self, _rgba: &mut [f32], _w: u32, _h: u32, _p: Params<'_>) {}
 
     /// [`apply_cpu`](EffectDef::apply_cpu), told **which instance** it is
-    /// rendering and at **what layer time** (K-593).
+    /// rendering and at **what layer time**.
     ///
     /// The dispatch seam calls this one; the default drops the two extra facts
     /// and calls `apply_cpu`, which is what every built-in implements and what
@@ -261,7 +259,7 @@ pub trait EffectDef: Sync + Send + 'static {
     }
 
     /// Values derived at resolve time from things that are not parameters
-    /// (docs/impl/effect-registry.md §2.4a, K-385): layer time, the marker
+    /// (docs/impl/effect-registry.md §2.4a): layer time, the marker
     /// context, a whole keyframed track.
     ///
     /// Pushed into the bag after the declared parameters, under `ParamId`s the
@@ -301,7 +299,7 @@ pub trait EffectDef: Sync + Send + 'static {
         true
     }
 
-    /// What this entry produces and consumes (K-471 §1.3). Every effect is
+    /// What this entry produces and consumes. Every effect is
     /// [`Signature::Image`] with neither half filled; a driver declares its
     /// output ports, a points producer declares its Points output beside its
     /// picture, and a points consumer its Points input.
@@ -318,7 +316,7 @@ pub trait EffectDef: Sync + Send + 'static {
     /// **Deterministic by construction**: it sees the frame's time, its own
     /// parameters and its own node id, and nothing else — no wall clock, no
     /// render order, no shared state. Two renders of the same project agree bit
-    /// for bit, and export equals preview (K-031).
+    /// for bit, and export equals preview.
     fn eval_driver(
         &self,
         _cx: &DriverCx<'_>,
@@ -326,8 +324,8 @@ pub trait EffectDef: Sync + Send + 'static {
     ) {
     }
 
-    /// How far either side of the frame this driver reads its input, in seconds
-    /// (K-471 §2.3) — the **temporal declaration**.
+    /// How far either side of the frame this driver reads its input, in
+    /// seconds — the **temporal declaration**.
     ///
     /// Zero for a pointwise driver, which is all but two of them: Smooth reads
     /// its input over a window, and Audio level reads sound around the frame.
@@ -366,8 +364,8 @@ pub trait EffectDef: Sync + Send + 'static {
     }
 
     /// Open one **live audio instance** of this effect — the mixer's way of
-    /// asking "are you a plugin I can play sound through?" (K-700,
-    /// docs/impl/audio-plugins.md §2).
+    /// asking "are you a plugin I can play sound through?"
+    /// (docs/impl/audio-plugins.md §2).
     ///
     /// `None` for everything that is not an audio plugin, which is every
     /// built-in and every OFX entry, so a layer whose stack holds no plugin
@@ -402,7 +400,7 @@ pub trait EffectDef: Sync + Send + 'static {
 /// scan today, exactly as `fx::schema` was, and is called at edit time and once
 /// per effect per frame — not per pixel.
 ///
-/// **Two lists, one order** (K-593). The built-ins are the compile-time slice
+/// **Two lists, one order**. The built-ins are the compile-time slice
 /// and come first, always, so the Add-effect menu, the command palette and the
 /// preset browser see exactly the order §2.6 promised. Behind them sit the
 /// entries registered at run time — OFX plugins today, the user's own in time —
@@ -427,7 +425,7 @@ impl Catalogue {
         }
     }
 
-    /// Add a definition discovered at run time (K-593).
+    /// Add a definition discovered at run time.
     ///
     /// `false` — and nothing added — when the catalogue already answers to that
     /// `match_name`, whether from the built-in list or from an earlier scan. A
@@ -459,7 +457,7 @@ impl Catalogue {
 
     /// The definition named `match_name`, or `None` for a name this build does
     /// not know — an unknown effect is preserved as an inert placeholder, never
-    /// an error (docs/08 §5, K-065).
+    /// an error (docs/08 §5).
     pub fn get(&self, match_name: &str) -> Option<&'static dyn EffectDef> {
         self.defs
             .iter()
@@ -482,8 +480,8 @@ impl Catalogue {
     ///
     /// For the rules that are statements about Lumit's own declarations rather
     /// than about effects in general: that every effect of ours carries a Matte
-    /// row (K-395), that a Mix row comes with a Blend, that a per cent is never
-    /// a disguised distance (K-558). A plugin's rows are its own (docs/12 §2.2)
+    /// row, that a Mix row comes with a Blend, that a per cent is never
+    /// a disguised distance. A plugin's rows are its own (docs/12 §2.2)
     /// and were written by somebody who never read those conventions, so judging
     /// them by ours would fail the build for somebody else's taste.
     pub fn builtins(&self) -> impl Iterator<Item = &'static dyn EffectDef> + '_ {
@@ -550,7 +548,6 @@ pub trait EffectMetadata: Sized {
 
     /// Read this effect's parameters out of a resolved bag, filling each field
     /// from its declared default when the bag has no entry for it — which is
-    /// what makes a project saved before a parameter existed load and render
-    /// (K-258).
+    /// what makes a project saved before a parameter existed load and render.
     fn read(p: Params<'_>) -> Self;
 }

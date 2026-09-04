@@ -1,5 +1,5 @@
 // Lens flare Matte-mode source detection (docs/08 §3.27, docs/impl/
-// lens-flare.md §6, K-257): find the brightest sources in the matte layer's
+// lens-flare.md §6): find the brightest sources in the matte layer's
 // rendered picture and turn them into the frame's flare lights. Mirrors
 // lumit_core::fx::lens_flare::detect_lights op-for-op — the CPU function is
 // the oracle — and is deterministic by construction: the tile reduction
@@ -13,10 +13,10 @@
 //                  to the lower cell index), Chebyshev suppression radius
 //                  2, each gated by the soft threshold; then every gated
 //                  tile's flux accumulates onto its nearest anchor
-//                  (K-267 area sources); dead slots zeroed.
+//                  (area sources); dead slots zeroed.
 
 // What one tile knows about the light inside it — the WGSL twin of
-// lumit_core's `TileStat` (K-355). Through K-354 this was the brightest pixel
+// lumit_core's `TileStat`. Earlier this was the brightest pixel
 // alone, which is what made flares JUMP on footage: which pixel is brightest
 // inside a practical changes frame to frame with sensor noise, so the light's
 // position hopped about inside a source that had not moved.
@@ -41,7 +41,7 @@ struct Tile {
 
 // Shares its layout with fx_lens_flare_trace.wgsl: position and half-extent
 // as raster fractions, colour already gated. The extent is what the trace
-// integrates over per ray (K-367).
+// integrates over per ray.
 struct Light {
     pos_x: f32,
     pos_y: f32,
@@ -61,9 +61,9 @@ struct DetectParams {
     threshold: f32,
     softness: f32,
     // 1 = a detected source's own colour tints its flare; 0 = white through
-    // the tint alone (K-259).
+    // the tint alone.
     use_source_colour: u32,
-    // 1 = read the matte inverted (1 - rgb), the Matte row's Invert (K-395);
+    // 1 = read the matte inverted (1 - rgb), the Matte row's Invert;
     // the twin of `detect_lights`'s `invert`, applied at every load below.
     invert: u32,
     // Scene-linear Light tint, multiplied into every detected light.
@@ -80,15 +80,15 @@ struct DetectParams {
 
 const DETECT_TILE: u32 = 32u;
 // Distinct sources detection may find, and so the light slots the trace
-// carries — one per source however large it is (K-367 dropped K-355's
-// expansion into up to 5x5 sample slots). Mirrors lumit_core's MAX_SOURCES.
+// carries — one per source however large it is. Mirrors lumit_core's
+// MAX_SOURCES.
 const MAX_SOURCES: u32 = 16u;
 const SUPPRESS_TILES: i32 = 2;
 
-// The soft gate (== lens_flare::threshold_gate, K-363): one-sided — closed
+// The soft gate (== lens_flare::threshold_gate): one-sided — closed
 // at and below the threshold, fully open a softness above it. Declared
 // before its first use, which WGSL requires.
-// The Matte row's Invert, at the one place the matte is read (K-395): the
+// The Matte row's Invert, at the one place the matte is read: the
 // flare owns its matte, so it inverts the raw RGBA itself rather than through
 // the dispatch seam's grey `matte_prepare` pass.
 fn matte_rgb(xy: vec2<i32>) -> vec3<f32> {
@@ -150,7 +150,7 @@ fn detect_tiles(
                 best_luma = luma;
                 best_index = index;
             }
-            // Every lit pixel contributes, not just the brightest (K-355).
+            // Every lit pixel contributes, not just the brightest.
             let g = gate(luma);
             if (g > 0.0) {
                 let f = luma * g;
@@ -219,7 +219,7 @@ fn detect_pick(@builtin(global_invocation_id) gid: vec3<u32>) {
     // wants a bound: suppress by re-checking distance to already-picked
     // tiles instead of a flag array, which needs only the picks.
     // `var` (not `let`) for every dynamically indexed array: lavapipe's
-    // shader compiler crashes on dynamically indexed `let` arrays (K-264).
+    // shader compiler crashes on dynamically indexed `let` arrays.
     var picked_x: array<i32, 16>;
     var picked_y: array<i32, 16>;
     var anchor_px: array<u32, 16>;
@@ -279,7 +279,7 @@ fn detect_pick(@builtin(global_invocation_id) gid: vec3<u32>) {
             picked_count = picked_count + 1u;
         }
     }
-    // Area sources (K-267): every gated tile's flux — its brightest pixel's
+    // Area sources: every gated tile's flux — its brightest pixel's
     // colour (or white) times its gate — lands on the NEAREST anchor
     // (Chebyshev; ties to the lowest anchor index), tile order fixed so the
     // sum matches the CPU reference op-for-op. A one-tile point source is
@@ -306,7 +306,7 @@ fn detect_pick(@builtin(global_invocation_id) gid: vec3<u32>) {
                 }
             }
             // The tile's MEAN colour over its lit pixels, not its brightest
-            // pixel's (K-355): one sparkle among a thousand lit pixels now
+            // pixel's: one sparkle among a thousand lit pixels now
             // shifts the colour by a thousandth instead of defining it.
             var src = vec3<f32>(1.0, 1.0, 1.0);
             if (dp.use_source_colour == 1u) {
@@ -350,15 +350,15 @@ fn detect_pick(@builtin(global_invocation_id) gid: vec3<u32>) {
         lights[k] = dead;
     }
 
-    // Each source becomes ONE light carrying its measured half-extent (K-367).
-    // Through K-355 this expanded an area source into a grid of up to 5x5
+    // Each source becomes ONE light carrying its measured half-extent.
+    // Earlier this expanded an area source into a grid of up to 5x5
     // point lights and ran the whole ray pipeline once per sample: 25x the
     // rays, and wherever a ghost was smaller than the sample spacing you saw
     // that many separate copies of the aperture. The trace integrates the
     // extent per ray now, so a bar-shaped practical draws one bar-shaped ghost
     // at a point source's cost.
     for (var k = 0u; k < picked_count; k = k + 1u) {
-        // Where the light IS, is the centre of its light (K-354, K-355) — not
+        // Where the light IS, is the centre of its light — not
         // whichever pixel happened to be brightest this frame. On footage
         // that pixel wanders with sensor noise and specular sparkle, and the
         // whole flare jittered with it.

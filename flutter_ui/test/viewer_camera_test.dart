@@ -1,4 +1,4 @@
-// The camera tools' arithmetic (K-229): the camera's own axes, and what each of
+// The camera tools' arithmetic: the camera's own axes, and what each of
 // the three drags does to its pose.
 //
 // The axes are the part that has to agree with the *renderer* — lumit-gpu builds

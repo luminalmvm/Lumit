@@ -56,15 +56,15 @@ impl Fingerprint {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MediaRef {
     /// Path relative to the project file's directory — the one path a saved
-    /// project carries (docs/10 §2, K-173). Rebased against the project's
+    /// project carries (docs/10 §2). Rebased against the project's
     /// location on every save.
     pub relative_path: String,
-    /// The file's location on THIS machine, this session. Never serialized
-    /// (K-173): an absolute path embeds the local username — the exact thing
-    /// docs/10 §2 promises the file never contains — and the tester sharing
-    /// a project found theirs inside. Projects saved before K-173 still
-    /// carry one, so it still *deserializes* and serves as the resolver's
-    /// step-2 fallback; it simply never gets written again.
+    /// The file's location on THIS machine, this session. Never serialized: an
+    /// absolute path embeds the local username — the exact thing docs/10 §2
+    /// promises the file never contains — and the tester sharing a project
+    /// found theirs inside. Projects saved before that rule still carry one, so
+    /// it still *deserializes* and serves as the resolver's step-2 fallback; it
+    /// simply never gets written again.
     #[serde(default, skip_serializing)]
     pub absolute_path: String,
     /// Content fingerprint for path-independent relink (docs/10 §2). Optional:
@@ -82,9 +82,9 @@ impl MediaRef {
     /// The path to *show* for this reference — the Project panel's Path column
     /// (docs/07 §3.1, docs/15 §12A.3a).
     ///
-    /// The relative path, which is the one a saved project actually carries
-    /// (K-173), falling back to the absolute path when there is no relative one
-    /// — a project that has never been saved has nothing to be relative to, and
+    /// The relative path, which is the one a saved project actually carries,
+    /// falling back to the absolute path when there is no relative one — a
+    /// project that has never been saved has nothing to be relative to, and
     /// showing the file's real location then is more use than showing nothing.
     ///
     /// Display data, and only that: it says where the reference *points*, not
@@ -102,7 +102,7 @@ impl MediaRef {
 }
 
 /// A footage item that is a folder of numbered stills rather than one file
-/// (docs/03-DATA-MODEL.md §3, K-539).
+/// (docs/03-DATA-MODEL.md §3).
 ///
 /// Deliberately just the rate. Which files are in the run, where it starts and
 /// how long it is are re-read from the folder every time it is opened, because
@@ -112,7 +112,7 @@ impl MediaRef {
 /// the project can say.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SequenceRef {
-    /// The rate the run plays at. Defaults to 25 on import (K-539).
+    /// The rate the run plays at. Defaults to 25 on import.
     pub frame_rate: FrameRate,
     /// Unknown fields from newer Lumit versions, preserved on load/save
     /// (docs/10-FILE-FORMAT.md §1.1 — mandatory forward compatibility).
@@ -135,7 +135,7 @@ pub struct FootageItem {
     pub name: String,
     pub media: MediaRef,
     /// The colour space this footage arrives in, by the loaded config's own
-    /// name (K-490, docs/impl/ocio.md §3.1).
+    /// name (docs/impl/ocio.md §3.1).
     ///
     /// `None` — the usual case — means the built-in interpretation defaults:
     /// video is Rec.709, stills are sRGB, and the container's own metadata
@@ -151,7 +151,7 @@ pub struct FootageItem {
     pub colour_space: Option<String>,
     /// Set when this item is an image sequence: `media` then names *a* file of
     /// the numbered run — usually the first — and the item's frames are the
-    /// run's files in numeric order (K-539).
+    /// run's files in numeric order.
     ///
     /// Absent, and skipped on save, for the ordinary one-file case, so every
     /// project written before sequences existed round-trips byte for byte.
@@ -165,7 +165,7 @@ pub struct FootageItem {
 
 impl FootageItem {
     /// The rate to read a numbered run of stills at, or `None` when this item
-    /// is one ordinary file (K-539).
+    /// is one ordinary file.
     ///
     /// The exact pair, never `fps()`: a rate that goes through a float does not
     /// come back (docs/14 §2). This is what everything that opens media builds
@@ -250,7 +250,7 @@ pub struct Composition {
     pub work_area: Option<(CompTime, CompTime)>,
     /// Index 0 = top of the stack.
     pub layers: Vec<Layer>,
-    /// **Layer groups** (K-702, [`crate::group`]): named folds over runs of
+    /// **Layer groups** ([`crate::group`]): named folds over runs of
     /// [`Self::layers`], drawn as a header row in the Timeline's outline with
     /// its members indented beneath it.
     ///
@@ -276,7 +276,7 @@ pub struct Composition {
     /// layers whose own `motion_blur` switch is set actually blur.
     #[serde(default)]
     pub motion_blur: MotionBlur,
-    /// **The master fader**, in dB (docs/09 §3.1, K-691): one gain stage on
+    /// **The master fader**, in dB (docs/09 §3.1): one gain stage on
     /// the summed mix, ahead of the safety limiter. 0 is unity; −100 and
     /// below is exact silence, the same −∞ knee a layer's Volume has.
     ///
@@ -295,7 +295,7 @@ pub struct Composition {
     /// layer's Volume does.
     #[serde(default)]
     pub master_volume_db: f64,
-    /// The **confirmed beat grid** (docs/09 §5, K-698): the tempo and phase
+    /// The **confirmed beat grid** (docs/09 §5): the tempo and phase
     /// the last beat detection ran its grid at, kept so the Timeline's beat
     /// band can number bars without re-running the analysis. `None` until a
     /// detection with a grid lands, and cleared with the generated markers.
@@ -304,8 +304,7 @@ pub struct Composition {
     /// reading of the *document* — reopening a cut-to-the-grid project must
     /// show the same bars it was cut against.
     // Skipped while `None` so a project saved before the field existed
-    // re-saves byte-identical (K-040's quiet half; the round-trip test
-    // pins it).
+    // re-saves byte-identical (the round-trip test pins it).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub beat_grid: Option<BeatGrid>,
     /// Unknown fields from newer Lumit versions, preserved on load/save
@@ -314,7 +313,7 @@ pub struct Composition {
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
-/// A confirmed tempo grid over a composition's timeline (docs/09 §5, K-698):
+/// A confirmed tempo grid over a composition's timeline (docs/09 §5):
 /// beats at `bpm`, the first of them `phase` seconds in. Bars are the grid
 /// read four beats at a time — v1 assumes common time, which is what the
 /// scene's material is in.
@@ -327,7 +326,7 @@ pub struct BeatGrid {
     pub phase: crate::time::Rational,
 }
 
-/// Comp-wide motion-blur settings (docs/06, K-120). Per-layer motion blur is a
+/// Comp-wide motion-blur settings (docs/06). Per-layer motion blur is a
 /// cheap transform-sampled blur: with the comp master on, each layer whose own
 /// `motion_blur` switch is set is drawn `samples` times across the open shutter,
 /// its transform re-evaluated at each sub-frame time and the draws averaged, so
@@ -371,7 +370,7 @@ impl MotionBlur {
     pub const MAX_SAMPLES: u32 = 256;
 
     /// The sub-frame sample offsets, in *frames*, across the open shutter
-    /// (docs/06 §4, K-120). For `samples` = N the k-th midpoint offset is
+    /// (docs/06 §4). For `samples` = N the k-th midpoint offset is
     /// `phase_frac + (k + 0.5)/N · open_frac`, where `open_frac =
     /// shutter_angle/360` and `phase_frac = shutter_phase/360` — the shutter
     /// centres of N equal slices. A caller turns each offset into a comp-time
@@ -384,8 +383,7 @@ impl MotionBlur {
     /// blurs" without re-checking. `samples` is capped at [`Self::MAX_SAMPLES`]
     /// (the docs/06 §4 maximum), so a damaged file can never demand an
     /// unbounded number of sub-frame draws. Deterministic and side-effect
-    /// free, so preview and export derive identical sample times from it
-    /// (K-031).
+    /// free, so preview and export derive identical sample times from it.
     pub fn sample_offsets(&self) -> Vec<f64> {
         if !self.enabled || self.samples < 2 {
             return Vec::new();
@@ -414,7 +412,7 @@ pub struct TransformGroup {
     pub scale_y: Property,
     /// Degrees (z rotation — the 2D rotation).
     pub rotation: Property,
-    /// 2.5D additions (K-023; serde-defaulted so pre-3D projects load).
+    /// 2.5D additions (serde-defaulted so pre-3D projects load).
     #[serde(default = "Property::zero")]
     pub position_z: Property,
     #[serde(default = "Property::zero")]
@@ -423,7 +421,7 @@ pub struct TransformGroup {
     pub rotation_y: Property,
     /// Percent, 0..100.
     pub opacity: Property,
-    /// How each two-axis property is shown and edited (K-571, docs/03 §6.5).
+    /// How each two-axis property is shown and edited (docs/03 §6.5).
     /// Absent in every project written before separate axes existed, which is
     /// exactly the default — so old files load unchanged, and a project that
     /// has never been separated writes nothing.
@@ -433,7 +431,7 @@ pub struct TransformGroup {
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
-/// How one two-axis transform property is shown and edited (K-571).
+/// How one two-axis transform property is shown and edited.
 ///
 /// The axes are always stored as separate scalar properties (§6.1) — this says
 /// nothing about storage and everything about the rows the panels draw and how
@@ -494,7 +492,7 @@ impl AxisModes {
     }
 }
 
-/// Which multi-axis transform property an axis-mode edit names (K-571).
+/// Which multi-axis transform property an axis-mode edit names.
 ///
 /// Rotation is one angle and Opacity one number, so neither is here: a pair is
 /// exactly a property whose axes could be told apart.
@@ -560,7 +558,7 @@ pub enum TransformProp {
 
 impl TransformGroup {
     /// The animations a pair's axes need in order to be shown on **one** row
-    /// again (K-571): every animated axis gains a key wherever any other
+    /// again: every animated axis gains a key wherever any other
     /// animated axis in the pair has one, so a diamond on the recombined row
     /// means the same thing on every axis under it.
     ///
@@ -632,35 +630,35 @@ impl TransformGroup {
     }
 }
 
-/// How a layer-input parameter samples the layer it references (K-142,
-/// revising K-125's two-way "after effects" bool). Applies uniformly to a
-/// track matte's source ([`MatteRef`]) and to an effect's Layer-reference
-/// input (the Depth of field depth layer, docs/impl/layer-input.md):
+/// How a layer-input parameter samples the layer it references, in place of the
+/// old two-way "after effects" bool. Applies uniformly to a track matte's
+/// source ([`MatteRef`]) and to an effect's Layer-reference input (the Depth of
+/// field depth layer, docs/impl/layer-input.md):
 /// - `None` — the referenced layer's **raw** footage/solid only: no masks,
 ///   no effects (the rawest input a consumer can read).
 /// - `Masks` — the source **with its own masks** applied, but not its effects.
-/// - `EffectsAndMasks` — the source **with its effects and masks** (K-125's
+/// - `EffectsAndMasks` — the source **with its effects and masks** (the old
 ///   `after_effects = true`): a keyed greenscreen matte, a graded depth pass.
 ///
 /// Temporal effects on the source (echo, flow motion blur, a nested depth
 /// reference) are still not sub-sampled through a layer input in v1 — the
 /// spatial and colour stack applies, but an echo/flow effect degrades to a
-/// still (the documented K-125 boundary, unchanged by K-142).
+/// still (the documented boundary, unchanged).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum LayerInputSource {
     /// Raw source pixels only — no masks, no effects.
     None,
     /// Source plus its own masks, but not its effects.
     Masks,
-    /// Source with its effects and masks (K-125's `after_effects = true`).
-    /// The default (owner K-142 follow-up): the most complete source is what a
-    /// new matte/depth input should sample unless the user narrows it.
+    /// Source with its effects and masks (the old `after_effects = true`).
+    /// The default: the most complete source is what a new matte/depth input
+    /// should sample unless the user narrows it.
     #[default]
     EffectsAndMasks,
 }
 
 impl LayerInputSource {
-    /// Migrate K-125's boolean: `true` (after effects) → `EffectsAndMasks`;
+    /// Migrate the legacy boolean: `true` (after effects) → `EffectsAndMasks`;
     /// `false` → `Masks`. The historical source-only path (`after_effects =
     /// false`) already applied the source's masks, so `Masks` — not `None` — is
     /// its faithful mapping. A matte with neither field migrates to the default
@@ -717,9 +715,9 @@ pub struct MatteRef {
     pub layer: Uuid,
     pub channel: MatteChannel,
     pub inverted: bool,
-    /// How the matte samples its source layer (K-142): raw source (`None`),
+    /// How the matte samples its source layer: raw source (`None`),
     /// source + masks (`Masks`), or the source's processed picture
-    /// (`EffectsAndMasks` — a keyed or blurred matte). Replaces K-125's
+    /// (`EffectsAndMasks` — a keyed or blurred matte). Replaces the legacy
     /// `after_effects` bool; old projects migrate through [`MatteRefRepr`]
     /// (`true` → `EffectsAndMasks`, `false` → `Masks`). New inputs default to
     /// `EffectsAndMasks`.
@@ -728,8 +726,8 @@ pub struct MatteRef {
 }
 
 /// Deserialisation shim for [`MatteRef`] that accepts both the current
-/// `source: LayerInputSource` field and K-125's legacy `after_effects: bool`,
-/// so saved projects still load (K-142). When `source` is present it wins;
+/// `source: LayerInputSource` field and the legacy `after_effects: bool`,
+/// so saved projects still load. When `source` is present it wins;
 /// otherwise the legacy bool is migrated (`true` → `EffectsAndMasks`, `false`
 /// → `Masks`); a matte with neither field takes the default. New projects
 /// always serialise `source`.
@@ -776,7 +774,7 @@ pub enum EffectNamespace {
     /// An OpenFX plugin (docs/12-PLUGINS.md).
     Ofx,
     /// An **audio plugin** — a CLAP one today, a VST3 one on the same road in
-    /// AP4 (docs/impl/audio-plugins.md, K-700).
+    /// AP4 (docs/impl/audio-plugins.md).
     ///
     /// One namespace for both standards on purpose: both collapse into one
     /// internal definition and nothing downstream of describe knows which a
@@ -798,7 +796,7 @@ pub enum EffectNamespace {
 }
 
 /// Which effect an instance is: namespace + stable match name + version.
-/// The version participates in the frame key (K-016), so changing an
+/// The version participates in the frame key, so changing an
 /// effect's maths invalidates stale cached frames rather than mixing
 /// generations (docs/08-EFFECTS.md §1.1).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -811,8 +809,8 @@ pub struct EffectKey {
 }
 
 /// A file-valued parameter: the set of file paths it references plus a
-/// hold-keyframed index that selects which one is live at a given time
-/// (K-111). Two file paths cannot be blended, so the index only ever *steps*
+/// hold-keyframed index that selects which one is live at a given time. Two
+/// file paths cannot be blended, so the index only ever *steps*
 /// (hold keyframes — see [`crate::anim::SideInterp::Hold`]); the common case is
 /// a single path with a static index. An empty `paths` means unset, and the
 /// consuming effect treats that as identity (a no-op) rather than erroring.
@@ -859,7 +857,7 @@ impl FileParam {
 /// Floats, angles and percentages are all `Float`; points animate per axis;
 /// colours animate per channel (scene-linear RGBA). Bool/Choice/Seed are
 /// static in v1 — the tier-1 staples don't keyframe them. `File` carries a
-/// path chosen from a dialog, animatable only by stepping (hold keys, K-111).
+/// path chosen from a dialog, animatable only by stepping (hold keys).
 /// `Layer` references another layer as an auxiliary picture (a depth pass for
 /// depth of field, docs/impl/layer-input.md), the same shape [`MatteRef`]
 /// uses.
@@ -879,7 +877,7 @@ pub enum EffectValue {
     /// v1 — a layer reference does not keyframe.
     Layer(Option<Uuid>),
     /// A reference to one of the **owning layer's masks**, whose *geometry* an
-    /// effect walks (K-408, docs/08 §1.2): the mask id, or `None` for the
+    /// effect walks (docs/08 §1.2): the mask id, or `None` for the
     /// "First mask" entry, which resolves to whichever mask is first at render
     /// time. A `Some` id that no longer names a mask on the layer degrades to
     /// the effect's no-op, never an error. Static in v1, exactly as a layer
@@ -891,7 +889,7 @@ pub enum EffectValue {
     /// the frame key's, the decode planner's — would each have to learn which
     /// ids were secretly masks.
     MaskPath(Option<Uuid>),
-    /// A tone curve, as its own control points (K-412): an ordered list of
+    /// A tone curve, as its own control points: an ordered list of
     /// 2..=16 `[x, y]` pairs in the unit square, the identity diagonal
     /// `[[0, 0], [1, 1]]` by default.
     ///
@@ -935,13 +933,13 @@ pub struct EffectInstance {
     #[serde(default = "default_true")]
     pub sample_temporally: bool,
     /// The user's own name for this instance, shown in place of the effect's
-    /// label wherever the stack is drawn (K-321) — "Blur the sign", not
+    /// label wherever the stack is drawn — "Blur the sign", not
     /// "Gaussian blur". `None` (the default, and what every older project
     /// deserialises to) shows the label; rendering, expressions and every
     /// `match_name` lookup are untouched by it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_name: Option<String>,
-    /// Which of this effect's **vector pairs** are linked (K-443), by the
+    /// Which of this effect's **vector pairs** are linked, by the
     /// pair's stem — `light` for `light_x` / `light_y`, as
     /// [`EffectSchema::pairs`](crate::fx::EffectSchema::pairs) names them.
     ///
@@ -957,8 +955,7 @@ pub struct EffectInstance {
     /// written before the flag existed deserialises to and exactly how it
     /// behaved: two numbers that moved on their own. So the field is
     /// `#[serde(default)]` and is left out of the file when empty, and no
-    /// format version moves (K-258 — an untouched document saves back the same
-    /// bytes).
+    /// format version moves (an untouched document saves back the same bytes).
     ///
     /// **The proportional edit itself is not here.** Scaling y as x is dragged
     /// is what the panel does with a linked pair while the gesture is live; the
@@ -967,8 +964,8 @@ pub struct EffectInstance {
     /// whatever order the toggles were clicked in.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub linked_pairs: Vec<String>,
-    /// An **audio plugin's own memory of itself**, as hex (K-700,
-    /// docs/impl/audio-plugins.md §4).
+    /// An **audio plugin's own memory of itself**, as hex
+    /// (docs/impl/audio-plugins.md §4).
     ///
     /// # In plain terms
     ///
@@ -993,7 +990,7 @@ pub struct EffectInstance {
     /// blob back off a live instance necessary.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plugin_state: Option<String>,
-    /// A **Roto brush's strokes and base frame** (K-710, docs/impl/roto.md §1).
+    /// A **Roto brush's strokes and base frame** (docs/impl/roto.md §1).
     ///
     /// # In plain terms
     ///
@@ -1010,7 +1007,7 @@ pub struct EffectInstance {
     ///
     /// `None` on every effect that is not a Roto brush and on every Roto brush
     /// nobody has stroked yet, and left out of the file then — so a project
-    /// written before roto existed reads and saves back byte for byte (K-258).
+    /// written before roto existed reads and saves back byte for byte.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub roto: Option<crate::roto::RotoBlock>,
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
@@ -1034,7 +1031,7 @@ impl EffectInstance {
         self.plugin_state = (!bytes.is_empty()).then(|| hex::encode(bytes));
     }
 
-    /// Whether the vector pair named by `stem` is linked (K-443). Unknown to
+    /// Whether the vector pair named by `stem` is linked. Unknown to
     /// this instance means unlinked, which is every pair of every older project.
     #[must_use]
     pub fn pair_linked(&self, stem: &str) -> bool {
@@ -1156,7 +1153,7 @@ impl EffectInstance {
     }
 
     /// A mask-path parameter's named mask id, or `None` when the parameter is
-    /// absent, not a mask path, or on the "First mask" entry (K-408). `None`
+    /// absent, not a mask path, or on the "First mask" entry. `None`
     /// is not "no mask": which mask it comes to is
     /// [`crate::mask::mask_path_at`]'s answer, and depends on the schema's
     /// `self_default` and on what the layer actually carries.
@@ -1167,13 +1164,13 @@ impl EffectInstance {
         }
     }
 
-    /// How a Layer-reference parameter `id` samples its source (K-142): the
+    /// How a Layer-reference parameter `id` samples its source: the
     /// `<id>_source` Choice param if present (the current form, written by the
-    /// inspector combobox), else the legacy `<id>_after_effects` bool (K-125:
-    /// `true` → `EffectsAndMasks`, `false` → `Masks`), else the default
-    /// (`EffectsAndMasks`). Reading
-    /// the legacy bool lets a project saved with the old checkbox keep its
-    /// behaviour without a migration pass over the effect stack.
+    /// inspector combobox), else the legacy `<id>_after_effects` bool (`true` →
+    /// `EffectsAndMasks`, `false` → `Masks`), else the default
+    /// (`EffectsAndMasks`). Reading the legacy bool lets a project saved with
+    /// the old checkbox keep its behaviour without a migration pass over the
+    /// effect stack.
     pub fn layer_source(&self, id: &str) -> LayerInputSource {
         if let Some(EffectValue::Choice(v)) = self.param(&format!("{id}_source")) {
             return LayerInputSource::from_choice(*v);
@@ -1213,12 +1210,12 @@ pub struct Switches {
     /// stack. Defaults on, so old projects load with effects live.
     #[serde(default = "default_true")]
     pub fx: bool,
-    /// Solo / isolate (K-105): while any layer in the composition is soloed,
+    /// Solo / isolate: while any layer in the composition is soloed,
     /// only soloed layers render — a quick way to view one layer (or a few)
     /// against nothing. Off by default, so nothing changes until it is set.
     #[serde(default)]
     pub solo: bool,
-    /// Per-layer motion blur (K-120): when set and the comp's motion-blur master
+    /// Per-layer motion blur: when set and the comp's motion-blur master
     /// is on, this layer is drawn across the open shutter and its transform
     /// samples averaged, smearing it along its own motion. Off by default.
     #[serde(default)]
@@ -1228,13 +1225,13 @@ pub struct Switches {
     /// renders, which is why the evaluator does not read it.
     #[serde(default)]
     pub shy: bool,
-    /// Guide (K-497): the layer is *for reference only*. The Viewer draws it
+    /// Guide: the layer is *for reference only*. The Viewer draws it
     /// like any other layer; a walk that produces a file skips it, wherever it
     /// sits — including inside a precomp rendered into a parent — and
     /// regardless of solo. Off by default, so old projects deliver unchanged.
     #[serde(default)]
     pub guide: bool,
-    /// Accepts lights (K-361): the layer is shaded by the comp's Light layers.
+    /// Accepts lights: the layer is shaded by the comp's Light layers.
     /// Defaults on, so placing a light lights the scene without hunting for a
     /// switch — but a comp with no lights shades nothing either way, so 2D
     /// montage work pays nothing for the default.
@@ -1243,7 +1240,7 @@ pub struct Switches {
 }
 
 impl Layer {
-    /// Whether this layer is a Light (K-360) — asked often enough by the
+    /// Whether this layer is a Light — asked often enough by the
     /// lighting path that it is worth a name rather than a `matches!` at each
     /// call site.
     #[must_use]
@@ -1251,7 +1248,7 @@ impl Layer {
         matches!(self.kind, LayerKind::Light { .. })
     }
 
-    /// Whether this layer acts as an adjustment layer (K-537) — the one answer
+    /// Whether this layer acts as an adjustment layer — the one answer
     /// every picture path asks, so the [`Layer::adjustment`] flag and the
     /// legacy [`LayerKind::Adjustment`] take a single path and cannot drift.
     ///
@@ -1262,11 +1259,11 @@ impl Layer {
         self.adjustment || matches!(self.kind, LayerKind::Adjustment)
     }
 
-    /// Whether the adjustment switch means anything on this layer (K-537):
+    /// Whether the adjustment switch means anything on this layer:
     /// **any layer that shows something in the Viewer**.
     ///
     /// A Camera is a viewpoint, a Light is something other layers see, a Null
-    /// is a transform and nothing else, and an Audio layer (K-435) is sound —
+    /// is a transform and nothing else, and an Audio layer is sound —
     /// none of the four has a picture to set aside, so none of them can grade
     /// what is under it either. Everything else can, including a layer whose
     /// own visibility switch is off: hiding a layer and making it an adjustment
@@ -1281,14 +1278,14 @@ impl Layer {
     }
 }
 
-/// Whether any layer in `comp` is soloed (K-105). When true, the compositor
+/// Whether any layer in `comp` is soloed. When true, the compositor
 /// renders only the soloed layers. Shared by the preview and export paths so
 /// they agree on what is visible.
 pub fn any_solo(comp: &Composition) -> bool {
     comp.layers.iter().any(|l| l.switches.solo)
 }
 
-/// Whether any layer that **draws** is soloed (K-435) — the question the
+/// Whether any layer that **draws** is soloed — the question the
 /// picture asks, where [`any_solo`] is the one the mixer asks.
 ///
 /// **In plain terms.** Solo means "just this one". Soloing a music track means
@@ -1339,7 +1336,7 @@ pub enum CollapseState {
 /// consumed, two inner conditions force: an inner layer using a matte (a
 /// matte renders "alone into comp space", and splicing that across comps is
 /// a later refinement — forcing keeps preview and export pixel-identical),
-/// and an inner adjustment layer with a live stack (K-091: its effects
+/// and an inner adjustment layer with a live stack (its effects
 /// apply to the composite beneath it *within its own comp*, and splicing
 /// would hand it the whole parent stack instead).
 pub fn collapse_state(doc: &Document, comp: &Composition, layer: &Layer, lt: f64) -> CollapseState {
@@ -1357,7 +1354,7 @@ pub fn collapse_state(doc: &Document, comp: &Composition, layer: &Layer, lt: f64
         })
     });
     let forced = !layer.masks.is_empty()
-        // Paint is stamped into the layer's own raster (K-227), which splicing
+        // Paint is stamped into the layer's own raster, which splicing
         // a collapsed precomp never produces.
         || !layer.paint.is_empty()
         // §1.4: any live effect on the Precomp layer itself — its stack runs
@@ -1381,8 +1378,8 @@ pub fn collapse_state(doc: &Document, comp: &Composition, layer: &Layer, lt: f64
 pub enum LayerKind {
     /// One footage item as the layer's source. Retiming lives on the layer
     /// itself ([`Layer::retime`]), not here: this variant carried a second,
-    /// rival retime store until K-249 deleted it, and a document written
-    /// before that is converted on open (the `0.1.0` → `0.2.0` migration in
+    /// rival retime store until it was deleted, and a document written
+    /// before then is converted on open (the `0.1.0` → `0.2.0` migration in
     /// `lumit-project`).
     Footage { item: Uuid },
     /// A SolidDef asset as this layer's source (docs/01-GLOSSARY.md: Solid
@@ -1400,7 +1397,7 @@ pub enum LayerKind {
     /// plane maps 1:1.
     Camera {
         zoom: Property,
-        /// The **solve link** (K-417, docs/03 §5.6): the id of a layer whose
+        /// The **solve link** (docs/03 §5.6): the id of a layer whose
         /// camera solve drives this camera, in the same composition.
         ///
         /// **In plain terms.** A tracked shot knows where the real camera was
@@ -1409,7 +1406,7 @@ pub enum LayerKind {
         /// derives its placement per frame — so re-solving, re-trimming or
         /// re-timing that layer moves the camera with it, and nothing has to
         /// be re-baked. While the link is set the camera's own transform and
-        /// zoom are the **correction lane** (K-578): what they hold over and
+        /// zoom are the **correction lane**: what they hold over and
         /// above [`Self::Camera::correction_base`] is added to the solved pose,
         /// so the shot can be tracked once and nudged afterwards.
         /// **Convert to keyframes** ([`crate::track::bake_solve_link`]) turns
@@ -1417,11 +1414,11 @@ pub enum LayerKind {
         ///
         /// The named layer is the one the analysis was run on — or a Precomp
         /// layer that contains it, which is how the owner's precomp workflow
-        /// resolves (K-417's parent-comp ruling). `None` is an ordinary camera
+        /// resolves. `None` is an ordinary camera
         /// the user drives by hand, which is every camera today.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         solve_link: Option<Uuid>,
-        /// The **zero of the correction lane** (K-578): the pose this camera's
+        /// The **zero of the correction lane**: the pose this camera's
         /// own properties held at the moment the link was made.
         ///
         /// **In plain terms.** A linked camera's rows keep showing its own
@@ -1454,9 +1451,9 @@ pub enum LayerKind {
     /// masks and effect stack apply to the accumulated composite of every layer
     /// beneath it, within its span. A comp-sized container for effects.
     Adjustment,
-    /// Vector art as the layer's own picture (docs/03-DATA-MODEL.md §7.2,
-    /// K-237): one or more paths, each with a fill and a stroke, drawn at
-    /// whatever resolution the frame is rendered at.
+    /// Vector art as the layer's own picture (docs/03-DATA-MODEL.md §7.2): one
+    /// or more paths, each with a fill and a stroke, drawn at whatever
+    /// resolution the frame is rendered at.
     ///
     /// The paths are `mask::BezierPath` — the same path type a mask uses, and
     /// deliberately so: a shape layer's path and a mask's path differ in what
@@ -1471,7 +1468,7 @@ pub enum LayerKind {
     /// to it — nothing enforces otherwise — but with no pixels to act on they
     /// never run, the same as on a Camera layer.
     Null,
-    /// A Light layer (K-360, docs/03-DATA-MODEL.md §5.5): a source of light in
+    /// A Light layer (docs/03-DATA-MODEL.md §5.5): a source of light in
     /// the composition. Like a Camera it draws no pixels of its own — it is
     /// something other layers *see* — and like a Camera it carries its
     /// placement in the ordinary layer transform, so it animates, parents and
@@ -1479,9 +1476,9 @@ pub enum LayerKind {
     ///
     /// The **area** kind is the one that earns the layer: a rectangle of a real
     /// width and height, rather than a point pretending to be one. What reads
-    /// it first is the Lens flare's Lights source mode (K-257's reserved
-    /// option), where a light with real extent flares as its own shape rather
-    /// than as a dot — the machinery K-355 already built for detected sources.
+    /// it first is the Lens flare's Lights source mode, where a light with real
+    /// extent flares as its own shape rather than as a dot — the machinery
+    /// already built for detected sources.
     ///
     /// Boxed because eight animatable [`Property`] channels make [`LightDef`]
     /// several times the size of any other layer kind, and every layer in
@@ -1507,7 +1504,7 @@ pub enum LightKind {
     Area,
 }
 
-/// A Light layer's own properties (K-360). The placement is NOT here — it is
+/// A Light layer's own properties. The placement is NOT here — it is
 /// the layer's ordinary transform, so a light animates and parents exactly as
 /// every other layer does.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -1524,7 +1521,7 @@ pub struct LightDef {
     /// The emitting rectangle's half-width and half-height in comp pixels —
     /// meaningful for [`LightKind::Area`], ignored by the other two. Half
     /// rather than full, so it matches the Lens flare's Source size dials
-    /// (K-355) and a light can be measured from its centre outward.
+    /// and a light can be measured from its centre outward.
     #[serde(default = "LightDef::zero_pair")]
     pub half_size: [Property; 2],
     /// The spot cone's half-angle in degrees; ignored unless the kind is
@@ -1567,7 +1564,7 @@ impl Default for LightDef {
 }
 
 /// One Light layer resolved at a comp time — what the renderer hands to the
-/// effects that read lights (K-360). Positions are comp pixels, matching every
+/// effects that read lights. Positions are comp pixels, matching every
 /// other px@comp quantity the render path carries.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ResolvedLight {
@@ -1583,7 +1580,7 @@ pub struct ResolvedLight {
     pub cone_deg: f64,
     pub rotation_deg: f64,
     pub falloff_px: f64,
-    /// Depth in comp pixels, and the two out-of-plane rotations (K-361). The
+    /// Depth in comp pixels, and the two out-of-plane rotations. The
     /// Lens flare ignores these — it works in the projected picture, where a
     /// light is wherever it lands. Shading needs them: a rectangle sitting in
     /// the same plane as the surface it lights is edge-on and throws nothing,
@@ -1595,7 +1592,7 @@ pub struct ResolvedLight {
 
 /// The active camera's evaluated placement at one comp time — what both the
 /// preview and the export pipeline hand to the GPU camera matrix, so the two
-/// can never disagree (K-031).
+/// can never disagree.
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct CameraPose {
     /// Focal distance in comp pixels (the z=0 plane maps 1:1).
@@ -1615,7 +1612,7 @@ pub fn stored_camera_pose(layer: &Layer, t: f64) -> Option<CameraPose> {
 /// [`stored_camera_pose`] at a **layer** time, which is the clock every property
 /// is actually evaluated at.
 ///
-/// Split out because the correction lane's zero (K-578) is captured at layer
+/// Split out because the correction lane's zero is captured at layer
 /// time nought — a fixed moment of the layer's own clock, so moving the layer
 /// along the timeline never moves the correction with it.
 #[must_use]
@@ -1643,7 +1640,7 @@ impl Composition {
     /// The topmost visible Camera layer whose span contains `t` — the one that
     /// is *active*. None → the comp renders flat (3D switches ignored).
     ///
-    /// Split out of [`Self::camera_pose`] because the solve link (K-417) needs
+    /// Split out of [`Self::camera_pose`] because the solve link needs
     /// the layer as well as the numbers: a linked camera's placement is derived
     /// from another layer rather than read off its own properties, and one rule
     /// for which camera is active has to serve both readings.
@@ -1661,7 +1658,7 @@ impl Composition {
     /// stored properties at its layer time. None → the comp renders flat.
     ///
     /// A camera carrying a solve link derives its placement from the tracked
-    /// layer instead ([`crate::track::camera_pose_at`], K-417); this answers
+    /// layer instead ([`crate::track::camera_pose_at`]); this answers
     /// what the document itself holds, which is what the link's fallback reads
     /// and what **Convert to keyframes** writes back.
     pub fn camera_pose(&self, t: f64) -> Option<CameraPose> {
@@ -1669,13 +1666,13 @@ impl Composition {
     }
 
     /// Every visible Light layer whose span contains `t`, evaluated at its own
-    /// layer time and in the comp's own pixels (K-360).
+    /// layer time and in the comp's own pixels.
     ///
     /// Top of the stack first, which is the order the effects that read lights
     /// take them in — so a frame that has more lights than an effect can carry
     /// spends its slots on the ones nearest the top, the same rule the layer
     /// stack uses everywhere else. A light switched off is not a light, exactly
-    /// as a layer switched off is not on the picture (K-230).
+    /// as a layer switched off is not on the picture.
     pub fn lights_at(&self, t: f64) -> Vec<ResolvedLight> {
         self.layers
             .iter()
@@ -1724,7 +1721,7 @@ pub struct TextDocument {
     pub text: String,
     /// When set, the words come from this expression at each frame instead of
     /// from `text` — the same expression language the numeric properties use,
-    /// printed rather than measured (K-210, docs/03-DATA-MODEL.md §9.1).
+    /// printed rather than measured (docs/03-DATA-MODEL.md §9.1).
     ///
     /// `text` is left alone while an expression drives the layer, so switching
     /// the expression off restores the words that were typed there.
@@ -1733,7 +1730,7 @@ pub struct TextDocument {
     /// Pixel size at natural scale.
     pub size: f64,
     pub fill: LinearColour,
-    /// **Text on a path** (K-607): the id of a mask **on this layer** whose
+    /// **Text on a path**: the id of a mask **on this layer** whose
     /// curve the glyphs run along. Unset — the ordinary case — is absent from
     /// the file and lays the line straight, and so is a mask id that names
     /// nothing, so deleting the mask hands the words back rather than
@@ -1754,10 +1751,10 @@ pub struct TextDocument {
         skip_serializing_if = "crate::paint::is_static_zero"
     )]
     pub path_offset: Property,
-    /// **The letters can move separately** (K-609): each animator names a set
+    /// **The letters can move separately**: each animator names a set
     /// of per-letter offsets and the stretch of the words they apply to. Empty
     /// — the ordinary case — is absent from the file, and the layer draws the
-    /// bytes it always drew (K-258).
+    /// bytes it always drew.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub animators: Vec<crate::text::TextAnimator>,
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
@@ -1779,7 +1776,7 @@ impl TextDocument {
 }
 
 /// Per-layer composite operator (docs/06-RENDER-PIPELINE.md §blend domains).
-/// The full After Effects set (K-162, T24): Normal / Add / Multiply run as
+/// The full After Effects set (T24): Normal / Add / Multiply run as
 /// fixed-function linear blends; the perceptual set is computed against the
 /// destination snapshot. Serialised by variant name, so adding modes never
 /// disturbs existing files.
@@ -1811,7 +1808,7 @@ pub enum BlendMode {
     Difference,
     Exclusion,
     /// dst − src per channel, clamped at black — the photographic subtract
-    /// (GEN-1, K-151). Computed in linear light like Add's light-addition twin.
+    /// (GEN-1). Computed in linear light like Add's light-addition twin.
     Subtract,
     Divide,
     // Component (HSL) group.
@@ -1823,7 +1820,7 @@ pub enum BlendMode {
 
 impl BlendMode {
     /// Every blend mode in After Effects' menu order, grouped
-    /// darken → lighten → contrast → comparative → component (K-162). The
+    /// darken → lighten → contrast → comparative → component. The
     /// single source of truth for the layer dropdown and the effect Mode
     /// param (T21), so the two never drift.
     pub const ALL: &'static [BlendMode] = &[
@@ -1858,7 +1855,7 @@ impl BlendMode {
     /// Every mode's display name, in [`Self::ALL`]'s order — the same words
     /// [`Self::name`] returns, as one `'static` list so a schema's Choice
     /// parameter can offer the layer modes verbatim (the injected effect
-    /// Blend row, K-425). `blend_mode_all_is_complete_and_named` holds the two
+    /// Blend row). `blend_mode_all_is_complete_and_named` holds the two
     /// in step.
     pub const NAMES: &'static [&'static str] = &[
         "Normal",
@@ -1939,7 +1936,7 @@ pub struct Layer {
     /// (docs/03-DATA-MODEL.md §5.1 invariants), never an error.
     #[serde(default)]
     pub matte: Option<MatteRef>,
-    /// Parent layer (K-103): this layer's transform is applied *within* the
+    /// Parent layer: this layer's transform is applied *within* the
     /// parent's coordinate space, so moving or rotating the parent carries the
     /// child with it (After Effects parenting / null-object rigs). `None` = no
     /// parent, unchanged behaviour. A missing, deleted, or cyclic parent
@@ -1975,7 +1972,7 @@ pub struct Layer {
     #[serde(default = "Property::zero")]
     pub volume_db: Property,
     /// Per-layer **Pan** — a constant-power stereo balance (docs/09 §6,
-    /// K-694, reversing that section's "Pan is not in v1"). −100 is full
+    /// reversing that section's "Pan is not in v1"). −100 is full
     /// left, 0 centre, +100 full right: a percentage of the way to one side,
     /// so a value well reads "L 50" without doing arithmetic first.
     ///
@@ -1988,7 +1985,7 @@ pub struct Layer {
     #[serde(default = "Property::zero")]
     pub pan: Property,
     /// This layer is **sound and nothing else** — an Audio layer
-    /// ([01-GLOSSARY.md] "Audio layer", docs/09-AUDIO.md §6, K-435).
+    /// ([01-GLOSSARY.md] "Audio layer", docs/09-AUDIO.md §6).
     ///
     /// **In plain terms.** A music file has no picture, so a layer holding one
     /// only ever makes sound. A video file has both — and sometimes you want
@@ -1998,16 +1995,16 @@ pub struct Layer {
     /// for. Set when an audio-only file is placed (there is no picture to
     /// draw), and by *Add audio only* on a footage item that has both.
     ///
-    /// It is a flag on the layer rather than a [`LayerKind`] of its own
-    /// (K-435): the source is still a footage item, so retiming, waveforms,
-    /// mixing and the project file all keep working unchanged, and the only
+    /// It is a flag on the layer rather than a [`LayerKind`] of its own: the
+    /// source is still a footage item, so retiming, waveforms, mixing and the
+    /// project file all keep working unchanged, and the only
     /// thing that differs is that nothing draws. That is why every picture
     /// path — the frame key in `lumit-eval`, the decode plan and the draw
     /// builder in `lumit-render` — skips a layer with this set, exactly as it
     /// skips a hidden one, and why the audio path does not look at it at all.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub audio_only: bool,
-    /// This layer is acting as an **adjustment layer** (K-537): its own picture
+    /// This layer is acting as an **adjustment layer**: its own picture
     /// is set aside and its effect stack runs on the composite of everything
     /// beneath it instead.
     ///
@@ -2028,7 +2025,7 @@ pub struct Layer {
     /// path asks [`Layer::is_adjustment`], which answers for both.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub adjustment: bool,
-    /// Retime (K-197): layer-local time → source time, in seconds. An ordinary
+    /// Retime: layer-local time → source time, in seconds. An ordinary
     /// keyframable [`Property`] like any other — the graph editor, the
     /// stopwatch and the lane diamonds treat it exactly as they treat
     /// Position. `None` means the layer is not retimed at all and plays at
@@ -2049,7 +2046,7 @@ pub struct Layer {
     /// it, exactly as [`crate::sequence::Clip`] has carried its own since it
     /// was written. It used to live inside the layer's segment store, which
     /// tied "how in-betweens are made" to "which retime system you use" for no
-    /// reason; K-249 untangled them when that store went.
+    /// reason. They were untangled when that store went.
     ///
     /// Applies whether or not the layer is retimed: an un-retimed layer whose
     /// comp runs at a different rate from its source is already asking for
@@ -2075,17 +2072,17 @@ pub struct Layer {
     #[serde(default)]
     pub masks: Vec<crate::mask::Mask>,
     /// Paint strokes stamped into the layer's own pixels, before its masks
-    /// gate them and before its effects run (docs/03 §7.1, K-227).
+    /// gate them and before its effects run (docs/03 §7.1).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub paint: Vec<crate::paint::PaintStroke>,
-    /// The layer's **puppet** (docs/impl/puppet.md §4, K-704): the pins that
+    /// The layer's **puppet** (docs/impl/puppet.md §4): the pins that
     /// push its pixels about, and the three numbers the mesh under them is
     /// built from. Warped at the same seam paint and masks act on, right after
     /// them, because a puppet moves the layer's own picture.
     ///
     /// `None` — every layer nobody has pinned — is absent from the file, so a
     /// project written before puppets existed loads and saves back the same
-    /// bytes (K-258). No triangle is ever stored: the mesh is rebuilt from the
+    /// bytes. No triangle is ever stored: the mesh is rebuilt from the
     /// layer's alpha at the block's reference time.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub puppet: Option<crate::puppet::PuppetBlock>,
@@ -2093,7 +2090,7 @@ pub struct Layer {
     /// masks, before transform — docs/06 render order).
     #[serde(default)]
     pub effects: Vec<EffectInstance>,
-    /// The layer's **style stack** (docs/impl/layer-styles.md §1, K-706): the
+    /// The layer's **style stack** (docs/impl/layer-styles.md §1): the
     /// shadow, glow, overlay and stroke a layer wears rather than the effects it
     /// carries.
     ///
@@ -2102,10 +2099,10 @@ pub struct Layer {
     /// to §2's painting order and capped at one instance per style
     /// ([`crate::fx::normalise_styles`], run by the edit commands and restored on
     /// load). Empty is no styles at all, and a layer with none renders and saves
-    /// byte for byte what it did before the field existed (K-258).
+    /// byte for byte what it did before the field existed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub styles: Vec<EffectInstance>,
-    /// The layer's **driver graph** (K-471): the drivers it carries, the wires
+    /// The layer's **driver graph**: the drivers it carries, the wires
     /// from them into parameters and mattes, and where the boxes sit on the
     /// Graph panel's canvas.
     ///
@@ -2130,7 +2127,7 @@ impl Layer {
     /// What Ctrl+Alt+T installs — the AE Time Remap starting state.
     ///
     /// `from` and `to` are the layer's **local** in and out points — its comp
-    /// span less its `start_offset` — not zero and its duration (K-213). A
+    /// span less its `start_offset` — not zero and its duration. A
     /// trimmed layer's visible range does not begin at its own zero, and keys
     /// that stopped short of it froze the tail: past the last key a property
     /// holds, so the part of the layer beyond `duration` played one frame over
@@ -2155,7 +2152,7 @@ impl Layer {
 
     /// Whether a Retime map is the **identity** one — every moment of the layer
     /// showing the same moment of its source, which is what switching Retime on
-    /// installs and what an untouched map still is (K-236).
+    /// installs and what an untouched map still is.
     ///
     /// Worth asking, because "the layer has a Retime property" and "the layer
     /// has been retimed" are different questions, and only the second one
@@ -2191,7 +2188,7 @@ impl Layer {
     }
 
     /// Where the playhead lands inside this layer's nested comp when the user
-    /// opens it from here, standing at outer comp time `t` (K-624).
+    /// opens it from here, standing at outer comp time `t`.
     ///
     /// Over the layer's span the answer is the moment the layer is actually
     /// showing, so it runs through the same two steps the renderer takes — the
@@ -2216,8 +2213,8 @@ impl Layer {
     }
 }
 
-/// The chain of parent layer ids above `layer` in `comp`, nearest first
-/// (K-103). Stops at a layer with no parent or a parent not in the comp, and
+/// The chain of parent layer ids above `layer` in `comp`, nearest first.
+/// Stops at a layer with no parent or a parent not in the comp, and
 /// breaks any cycle, so it always terminates and never repeats an id. Excludes
 /// `layer` itself.
 pub fn layer_parent_chain(comp: &Composition, layer: Uuid) -> Vec<Uuid> {
@@ -2285,8 +2282,8 @@ fn collect_comp_footage(
     walked: &mut Vec<Uuid>,
 ) {
     for layer in &comp.layers {
-        // An Audio layer's file is opened by the mixer, never by the picture
-        // (K-435): naming it here would have the renderer probe and index the
+        // An Audio layer's file is opened by the mixer, never by the picture:
+        // naming it here would have the renderer probe and index the
         // video stream of a clip placed for its sound alone.
         if layer.audio_only {
             continue;
@@ -2428,7 +2425,7 @@ pub struct Document {
     /// Where new solids/comps are filed (see [`AutoFolders`]).
     #[serde(default)]
     pub auto_folders: AutoFolders,
-    /// Project items' colour tags, by item id (K-451, docs/15 §12A.3a): an
+    /// Project items' colour tags, by item id (docs/15 §12A.3a): an
     /// index into the same label palette a layer's chip uses, 0 = untagged.
     ///
     /// # In plain terms
@@ -2481,13 +2478,13 @@ pub struct Document {
     #[serde(default = "default_true", skip_serializing_if = "is_true")]
     pub use_proxies: bool,
     /// How hard the renderer works at the edges of transformed layers
-    /// (K-274, docs/impl/anti-aliasing.md).
+    /// (docs/impl/anti-aliasing.md).
     ///
     /// A **project** property, not a preference, and deliberately so: it
     /// changes what a comp looks like, so it has to travel in the `.lum` and
     /// match when the file is opened on another machine. One value serves both
     /// preview and export — a preview that anti-aliased differently from the
-    /// file would break the K-031 preview-equals-export identity, which the
+    /// file would break the preview-equals-export identity, which the
     /// whole render path is built around.
     #[serde(default)]
     pub anti_aliasing: AntiAliasing,
@@ -2503,7 +2500,7 @@ pub struct Document {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cache_location: Option<CacheLocation>,
     /// This project's colour management: which OCIO config its colour space
-    /// names come from (K-490, docs/impl/ocio.md §3.1).
+    /// names come from (docs/impl/ocio.md §3.1).
     ///
     /// A project property for the same reason `anti_aliasing` is: it changes
     /// what a comp looks like, so it travels in the `.lum` and matches when the
@@ -2513,14 +2510,14 @@ pub struct Document {
     #[serde(default, skip_serializing_if = "ColourManagement::is_default")]
     pub colour: ColourManagement,
     /// The project's own colour shelf: the colours kept for this project, in
-    /// the order they were kept (K-448, docs/07 §6.1).
+    /// the order they were kept (docs/07 §6.1).
     ///
     /// # In plain terms
     ///
     /// Colours a project uses over and over — a brand red, the two greys a
     /// title sits on — are kept here so every picker in the application can
     /// offer them. They live **inside the picker** rather than on a toolbar
-    /// strip (K-448), and inside the *project* rather than in a preference,
+    /// strip, and inside the *project* rather than in a preference,
     /// because they belong to the job: a copy of the `.lum` carries them, and
     /// so does the machine it is opened on next.
     ///
@@ -2532,7 +2529,7 @@ pub struct Document {
     pub swatches: Vec<Swatch>,
     /// How the interface was arranged for this project, as the frontend's own
     /// JSON: the panel layout, which comps were open, where the playhead sat
-    /// (K-245, docs/10-FILE-FORMAT.md §1.2).
+    /// (docs/10-FILE-FORMAT.md §1.2).
     ///
     /// **Opaque to the engine.** Nothing here reads inside it; it is carried,
     /// stored and handed back. That is deliberate — the shape belongs to
@@ -2570,8 +2567,8 @@ pub struct Swatch {
     pub name: Option<String>,
 }
 
-/// How many coverage samples per pixel the composite is drawn with (K-274,
-/// docs/impl/anti-aliasing.md).
+/// How many coverage samples per pixel the composite is drawn with
+/// (docs/impl/anti-aliasing.md).
 ///
 /// # In plain terms
 ///
@@ -2597,11 +2594,11 @@ pub enum AntiAliasing {
     /// Four samples: the standard trade, and what a card that will not give
     /// eight falls back to.
     X4,
-    /// The default (K-274: on by default; K-286). Eight samples smooths the
-    /// shallow diagonals four still steps on, which is where the crawl is
-    /// most visible, and it costs one more multisample attachment beside the
-    /// comp frame rather than more shading. A card that will not give eight
-    /// falls back to [`Self::X4`] and says so.
+    /// The default. Eight samples smooths the shallow diagonals four still
+    /// steps on, which is where the crawl is most visible, and it costs one
+    /// more multisample attachment beside the comp frame rather than more
+    /// shading. A card that will not give eight falls back to [`Self::X4`] and
+    /// says so.
     #[default]
     X8,
 }
@@ -2647,7 +2644,7 @@ pub enum CacheLocation {
     Custom { folder: String },
 }
 
-/// The project's colour management (K-490, docs/impl/ocio.md §3.1).
+/// The project's colour management (docs/impl/ocio.md §3.1).
 ///
 /// In plain terms: an OCIO config is a folder of colour-space definitions that
 /// studios publish, so a Lumit project can agree with a Nuke or Resolve project
@@ -2665,7 +2662,7 @@ pub struct ColourManagement {
     /// colour family only, exactly the behaviour that predates this field.
     ///
     /// A [`MediaRef`] deliberately, rather than a bare path: the relative-path
-    /// serialisation, the never-write-an-absolute-path promise (K-173) and
+    /// serialisation, the never-write-an-absolute-path promise and
     /// content-fingerprint relink all already exist and are tested, so a config
     /// that moved with its project keeps working and one that moved elsewhere
     /// relinks through the machinery footage already uses.
@@ -2840,7 +2837,7 @@ mod tests {
         CompTime(Rational::new(s, 1).unwrap())
     }
 
-    /// **What "has been retimed" means** (K-236). Switching Retime on installs
+    /// **What "has been retimed" means**. Switching Retime on installs
     /// the identity map, so the presence of the property says nothing about
     /// whether the layer has actually been retimed — and only the second
     /// justifies a razor putting keys into both halves of a cut.
@@ -2925,7 +2922,7 @@ mod tests {
         }
     }
 
-    /// **Opening a precomp lands on the frame it is showing** (K-624). Standing
+    /// **Opening a precomp lands on the frame it is showing**. Standing
     /// four seconds into the outer comp is two seconds into a layer that starts
     /// at two, and a half-speed map shows the nested comp's first second there.
     #[test]
@@ -3018,7 +3015,7 @@ mod tests {
 
     #[test]
     fn matte_ref_source_migrates_from_after_effects_bool() {
-        // K-142: a matte saved with K-125's `after_effects` bool migrates to the
+        // A matte saved with the legacy `after_effects` bool migrates to the
         // three-way source, so old projects still load.
         let base = serde_json::json!({
             "layer": Uuid::now_v7(),
@@ -3044,7 +3041,8 @@ mod tests {
         let m: MatteRef = serde_json::from_value(with_false).unwrap();
         assert_eq!(m.source, LayerInputSource::Masks);
 
-        // Absent entirely (pre-K-125) → the default, Effects and masks.
+        // Absent entirely (saved before the bool) → the default, Effects and
+        // masks.
         let m: MatteRef = serde_json::from_value(base.clone()).unwrap();
         assert_eq!(m.source, LayerInputSource::EffectsAndMasks);
 
@@ -3064,11 +3062,11 @@ mod tests {
 
     #[test]
     fn effect_layer_source_reads_choice_then_legacy_bool() {
-        // K-142: `layer_source` prefers the `<id>_source` Choice, falls back to
+        // `layer_source` prefers the `<id>_source` Choice, falls back to
         // the legacy `<id>_after_effects` bool, then the default.
         let mut e = crate::fx::instantiate("dof").unwrap();
         // Fresh instance carries neither sibling, so it is the default
-        // (Effects and masks — owner K-142 follow-up).
+        // (Effects and masks).
         assert_eq!(e.layer_source("depth"), LayerInputSource::EffectsAndMasks);
 
         // A legacy bool is honoured (true → EffectsAndMasks).
@@ -3090,7 +3088,7 @@ mod tests {
 
     #[test]
     fn layer_input_source_maps_each_option_to_its_sampling() {
-        // K-142: the render paths (draws.rs / export.rs) branch on these two
+        // The render paths (draws.rs / export.rs) branch on these two
         // predicates to choose masks and effects, so pin the mapping here — each
         // option selects the intended sampling.
         use LayerInputSource::*;
@@ -3118,7 +3116,7 @@ mod tests {
             ],
             [0, 1, 2]
         );
-        // The default is Effects and masks (owner K-142 follow-up): a new
+        // The default is Effects and masks: a new
         // matte/depth input samples the most complete source unless narrowed.
         assert_eq!(LayerInputSource::default(), EffectsAndMasks);
     }
@@ -3298,7 +3296,7 @@ mod tests {
     }
 
     /// **A line on a path round-trips, and a straight one writes what it always
-    /// wrote** (K-607, K-258). The two new fields are absent from the file
+    /// wrote**. The two new fields are absent from the file
     /// until they are used, so every `.lum` ever saved opens here unchanged —
     /// and, just as importantly, every frame those projects have banked keeps
     /// its name.
@@ -3338,7 +3336,7 @@ mod tests {
         assert!(json.contains("\"path_offset\":37.5"), "{json}");
     }
 
-    /// **A layer with no animators writes no animators key** (K-609, K-258):
+    /// **A layer with no animators writes no animators key**:
     /// the whole per-letter model is absent from the file until somebody adds
     /// one, so every `.lum` saved before it existed opens byte-identical and
     /// every frame those projects have banked keeps its name.
@@ -3374,7 +3372,7 @@ mod tests {
     }
 
     /// **The adjustment switch survives a save/load, and an old file is
-    /// byte-identical** (K-537): a layer that is not an adjustment writes no
+    /// byte-identical**: a layer that is not an adjustment writes no
     /// key at all, so a project saved before the flag existed loads exactly as
     /// it did — and reads back with the switch off.
     ///
@@ -3620,7 +3618,7 @@ mod tests {
         );
     }
 
-    /// K-091: an inner adjustment layer with a live effect stack forces the
+    /// An inner adjustment layer with a live effect stack forces the
     /// intermediate — its effects apply to the composite beneath it within
     /// its own comp, and splicing would hand it the parent stack instead.
     /// A bypassed stack (fx switch off, or every effect disabled) collapses
@@ -4022,7 +4020,7 @@ mod tests {
     }
 
     /// The Path column shows the path the saved project actually carries
-    /// (K-173: the absolute one is never written), and falls back to the
+    /// (the absolute one is never written), and falls back to the
     /// absolute one only when there is no relative path to show — an imported
     /// file in a project that has never been saved.
     #[test]
@@ -4151,8 +4149,8 @@ mod tests {
         assert!(doc.item_is_used(item));
     }
 
-    /// The measurement behind [`Document::item_is_used`] having no cache
-    /// (K-451): a document far past any real one, every item asked, and the
+    /// The measurement behind [`Document::item_is_used`] having no cache: a
+    /// document far past any real one, every item asked, and the
     /// whole sweep well inside a frame. If this ever stops being true the
     /// answer is a table invalidated on edits — not a slower panel.
     #[test]
@@ -4191,7 +4189,7 @@ mod tests {
         );
     }
 
-    /// **Old projects load unchanged** (K-571). A transform written before
+    /// **Old projects load unchanged**. A transform written before
     /// separate axes existed carries no `axis_modes` at all, and reads as the
     /// default: both pairs combined, Scale linked.
     #[test]
@@ -4254,7 +4252,7 @@ mod tests {
         );
     }
 
-    /// **Coming back together does not move the picture** (K-571). Two axes
+    /// **Coming back together does not move the picture**. Two axes
     /// keyed at different times gain each other's key times, and every axis
     /// reads exactly what it read before at every moment.
     #[test]

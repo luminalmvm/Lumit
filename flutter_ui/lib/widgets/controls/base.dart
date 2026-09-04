@@ -28,8 +28,7 @@ const Set<PointerDeviceKind> dragDevices = {
 /// (buttons, checkboxes, value boxes). The global shortcut handler in
 /// `main.dart` stands down while one of these has focus — the same courtesy
 /// it pays a focused text field — so `Enter` or `Space` on a focused control
-/// presses the control and never also runs a panel command underneath it
-/// (K-319).
+/// presses the control and never also runs a panel command underneath it.
 class ControlFocusNode extends FocusNode {
   ControlFocusNode({super.debugLabel});
 }

@@ -37,7 +37,7 @@ soul, one application, GPU-first, open source (GPLv3).
    cutting: the graph editor, the camera, and masks are daily tools, not occasional ones.
    The v1 milestone is theirs — see §4.
 2. **Then: anyone leaving After Effects.** Lumit grows toward a full AE replacement, with
-   its own version of everything AE has (decision K-002), an AE project importer, and OFX
+   its own version of everything AE has, an AE project importer, and OFX
    plugin support so existing tools come along.
 
 ## 3. Pillars
@@ -64,7 +64,7 @@ Everything in the specs traces to one of these; a feature that serves none of th
    and its codebase coherent.
 6. **Open and shareable.** GPLv3; project files portable by design; presets and template
    projects as first-class shareable objects — because sharing is how this scene teaches
-   itself (K-065).
+   itself.
 
 ## 4. The v1 milestone
 
@@ -91,8 +91,8 @@ Phases and gates: [16-ROADMAP.md](16-ROADMAP.md).
 
 ## 6. Name
 
-Lumit — from *lumen*, the unit of light: the app's one output, measured and made (K-087;
-the project began life as *Kiriko*, was briefly *Luminal*, and settled here by the owner,
+Lumit — from *lumen*, the unit of light: the app's one output, measured and made (the
+project began life as *Kiriko*, was briefly *Luminal*, and settled here by the owner,
 2026-07-16). The name is used bare ("Lumit", never "the Lumit app"), and features are named
 per the glossary. The named subsystems keep the astral register: **Nova** is the render
 pipeline, **Nebula** the cache, and **Pulsar** the audio engine whose clock everything

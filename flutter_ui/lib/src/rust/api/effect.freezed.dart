@@ -1931,7 +1931,7 @@ class BridgeParamKind_Float extends BridgeParamKind {
   final double sliderMin;
   final double sliderMax;
 
-  /// Hard bounds, either side open (K-090: a threshold clamps at zero
+  /// Hard bounds, either side open (a threshold clamps at zero
   /// below and runs unbounded above).
   final double? hardMin;
   final double? hardMax;

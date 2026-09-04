@@ -203,8 +203,8 @@ fn render_the_three_transition_effects() {
             &mut wave,
             w,
             h,
-            // Transition width is px@comp since K-558: 45 % of the frame's
-            // width, which is the axis the Left-to-right order runs along.
+            // Transition width is px@comp: 45 % of the frame's width, which
+            // is the axis the Left-to-right order runs along.
             &cw(50.0, 4, 7, fw * 0.45, 0, 0, 0, 0.0).packed(fw, fh),
         );
         write("5-cards-wave", &to_srgb(&over_grey(&wave)));

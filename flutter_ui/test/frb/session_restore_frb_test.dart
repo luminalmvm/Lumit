@@ -91,7 +91,7 @@ void main() {
     expect(workspace.recentProjects, contains(path));
   });
 
-  /// **Each comp remembers where you were** (K-624). Coming back to a comp
+  /// **Each comp remembers where you were**. Coming back to a comp
   /// through the tab strip is a return, not a fresh start: the playhead goes
   /// back to the frame it was left on rather than to zero, and it survives the
   /// project being closed and opened again.
@@ -142,7 +142,7 @@ void main() {
 
   /// Opening a **Precomp layer** is the exception: it enters the nested comp
   /// at the moment that layer is showing, which the engine maps through the
-  /// layer's start offset and Retime (K-624).
+  /// layer's start offset and Retime.
   testWidgets('a precomp opens on the frame the layer is showing',
       (tester) async {
     final state = LumitState()..newProject();
@@ -200,7 +200,7 @@ void main() {
     expect(ui.playheadFrame.value, 7, reason: 'the frame is still the frame');
   });
 
-  /// **The arrangement travels with the file** (K-245). The second half of this
+  /// **The arrangement travels with the file**. The second half of this
   /// stands in for another person's machine: a fresh workspace store that has
   /// never seen the project, so nothing local can answer and the only account
   /// of how the interface was arranged is the one inside the `.lum`.

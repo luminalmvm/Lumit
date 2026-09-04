@@ -1,4 +1,4 @@
-// The graph editor's keyframe clipboard (docs/07 §5.3, K-196): copy, the
+// The graph editor's keyframe clipboard (docs/07 §5.3): copy, the
 // tab-separated text mirror, and paste. Split out of graph_editor_frb.dart,
 // which re-exports it.
 
@@ -17,13 +17,13 @@ import 'graph_maths.dart';
 import 'layer_fold_frb.dart';
 
 // ---------------------------------------------------------------------------
-// The keyframe clipboard (docs/07 §5.3, K-196).
+// The keyframe clipboard (docs/07 §5.3).
 // ---------------------------------------------------------------------------
 
 /// One copied channel: where it came from (for the AE text's property line)
 /// and its keys with full easing fidelity.
 ///
-/// A row with **no keyframes at all** copies too (K-301): it has a value, and
+/// A row with **no keyframes at all** copies too: it has a value, and
 /// a value is the thing being copied. Such a clip carries [staticValue] and no
 /// keys, and pastes as a value rather than as a curve.
 class GraphClipChannel {
@@ -58,7 +58,7 @@ String lumitVersion() {
 /// *and* easing — so a copied ramp can be scripted, inspected, or carried into
 /// another tool.
 ///
-/// **Returns whether anything was taken** (K-529). It used to return nothing
+/// **Returns whether anything was taken**. It used to return nothing
 /// at all, so a caller could not tell a copy that captured a curve from one
 /// that captured nothing — and the Timeline's caller reported success either
 /// way, which swallowed `Ctrl+C` and left the previous copy on the clipboard
@@ -130,7 +130,7 @@ bool copySelectedKeys({
 }
 
 /// Copy **whole rows** — every key of an animated channel, or the plain value
-/// of one that has none (K-301). What `Ctrl+C` does with property rows selected
+/// of one that has none. What `Ctrl+C` does with property rows selected
 /// and no individual keyframes picked.
 ///
 /// A row that is not animated still has a value, and that value is what a user
@@ -271,7 +271,7 @@ LumitClipGroup _transformClipGroup(
 /// keyframe text on the system clipboard is parsed — with its easing when it
 /// carries any. Channels are matched in order.
 ///
-/// [project] is what makes a paste **one undo step** (K-458): a clipboard that
+/// [project] is what makes a paste **one undo step**: a clipboard that
 /// came off three properties on two layers writes one op per layer per kind,
 /// and one press of Ctrl+V is one press. Optional, so a caller with no project
 /// to hand — a widget test — pastes exactly as it always did.
@@ -285,7 +285,7 @@ Future<bool> pasteKeysAtPlayhead({
 }) async {
   if (channels.isEmpty) return false;
 
-  // A value copied from a row with no keyframes pastes as a value (K-301): onto
+  // A value copied from a row with no keyframes pastes as a value: onto
   // a target that is not animated it simply replaces the number, and onto one
   // that is it sets a key at the playhead — which is what "put this value here"
   // means on a row that already moves.

@@ -1,5 +1,5 @@
 // The Camera track effect's status, under its Analyse and Cancel buttons
-// (K-417, docs/08 §3.85).
+// (docs/08 §3.85).
 //
 // **In plain terms.** Tracking a shot takes minutes, and it happens somewhere
 // else — on its own thread, over the media file, while you carry on editing.
@@ -25,7 +25,7 @@ import 'status_poller.dart';
 
 /// The sentence for a refusal.
 ///
-/// The engine sends a **reason**, never these words (K-303): its own
+/// The engine sends a **reason**, never these words: its own
 /// `AnalysisError` carries English, and English crossing the bridge would ship
 /// untranslated inside a translated window. The switch is exhaustive over the
 /// generated enum, so a reason added to the engine is a compile error here
@@ -37,8 +37,8 @@ String trackFailureSentence(BridgeTrackFailure failure) => switch (failure) {
       BridgeTrackFailure.noFeatures => l10n.trackFailedNoFeatures,
       BridgeTrackFailure.rotationOnly => l10n.trackFailedRotationOnly,
       BridgeTrackFailure.noSolve => l10n.trackFailedNoSolve,
-      // A planar refusal, reached only from the Planar track's own status
-      // (K-579). The two effects share a tracker and so share its refusals;
+      // A planar refusal, reached only from the Planar track's own status.
+      // The two effects share a tracker and so share its refusals;
       // a second set of words for them would be a second thing to translate.
       BridgeTrackFailure.notPlanar => l10n.trackFailedNotPlanar,
     };
@@ -120,7 +120,7 @@ class TrackSpanBar extends StatelessWidget {
   }
 }
 
-/// **Edited since track** (K-578): a small filled dot in the accent.
+/// **Edited since track**: a small filled dot in the accent.
 ///
 /// **In plain terms.** A tracked camera can be nudged — dragged or keyed on top
 /// of the solve — and once it has been, the motion on screen is no longer purely
@@ -171,7 +171,7 @@ class CameraTrackDisplayFrb extends StatefulWidget {
   /// subscribe to, so the panel says so with a number.
   final int pressed;
 
-  /// A camera following this shot carries a correction (K-578) — read from the
+  /// A camera following this shot carries a correction — read from the
   /// read model by the panel, never asked for here, because it moves with the
   /// document and this widget's own sampling stops the moment the analysis does.
   final bool corrected;
@@ -279,8 +279,7 @@ class _CameraTrackDisplayFrbState extends State<CameraTrackDisplayFrb>
   }
 }
 
-/// A Camera layer's solve-link badge, and the one command that ends the link
-/// (K-417).
+/// A Camera layer's solve-link badge, and the one command that ends the link.
 ///
 /// **In plain terms.** A camera that follows a tracked shot works its placement
 /// out per frame from the solve, and this says so: that it is following, that it
@@ -288,7 +287,7 @@ class _CameraTrackDisplayFrbState extends State<CameraTrackDisplayFrb>
 /// followed at all.
 ///
 /// The rows below it are still the user's to drag — what they hold is a
-/// **correction** on top of the solve (K-578), and once one has been made the
+/// **correction** on top of the solve, and once one has been made the
 /// dot appears and **Clear corrections** takes it back without touching the
 /// track.
 ///
@@ -303,7 +302,7 @@ class CameraLinkBadge extends StatefulWidget {
   final int playheadFrame;
   final VoidCallback onChanged;
 
-  /// This camera's correction lane holds something (K-578) — from the read
+  /// This camera's correction lane holds something — from the read
   /// model, so it moves with the document rather than with the playhead.
   final bool corrected;
 
@@ -331,8 +330,8 @@ class _CameraLinkBadgeState extends State<CameraLinkBadge> {
   @override
   void didUpdateWidget(CameraLinkBadge old) {
     super.didUpdateWidget(old);
-    // Once per frame change, never per rebuild — the Levels histogram's rule
-    // (K-413), for the same reason: the answer only moves when the playhead or
+    // Once per frame change, never per rebuild — the Levels histogram's rule,
+    // for the same reason: the answer only moves when the playhead or
     // the document does, and the bridge-call budget is the gate.
     if (old.playheadFrame != widget.playheadFrame ||
         old.camera.internallayerId != widget.camera.internallayerId) {

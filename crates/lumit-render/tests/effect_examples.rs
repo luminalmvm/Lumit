@@ -104,7 +104,7 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
             ("gain", colour([1.18, 1.0, 0.82, 1.0])),
         ],
         // The classic S: shadows down, highlights up, the middle left alone. The
-        // master curve is a drawn curve now (K-412), so the S is four points.
+        // master curve is a drawn curve now, so the S is four points.
         "curves" => vec![(
             "master",
             EffectValue::Curve(vec![[0.0, 0.0], [0.25, 0.17], [0.75, 0.86], [1.0, 1.0]]),
@@ -156,10 +156,10 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
             ("intensity", f(7.0)),
         ],
         "median" => vec![("radius", f(3.0))],
-        // Radial blur's centre is px@comp since K-558, and the schema default
-        // is the nominal 1080p middle. This plate is 1920x816, so the picture
-        // asks for *its* middle — which is what `instantiate_for_raster` would
-        // have written had the effect been dropped on this comp.
+        // Radial blur's centre is px@comp, and the schema default is the
+        // nominal 1080p middle. This plate is 1920x816, so the picture asks
+        // for *its* middle — which is what `instantiate_for_raster` would have
+        // written had the effect been dropped on this comp.
         "radial_blur" => vec![
             ("centre_x", f(f64::from(W) * 0.5)),
             ("centre_y", f(f64::from(H) * 0.5)),
@@ -748,7 +748,7 @@ fn example_doc(
 fn wire_aux(inst: &mut EffectInstance) {
     let aux = id("Aux");
     // Displacement map and Set matte take their second picture from the Matte
-    // row itself, which is the deeper meaning K-395 gives that row.
+    // row itself, which is the deeper meaning that row carries.
     let rows: &[&str] = if matches!(
         inst.effect.match_name.as_str(),
         "displacement_map" | "set_matte"

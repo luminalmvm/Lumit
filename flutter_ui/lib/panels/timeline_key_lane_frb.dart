@@ -52,7 +52,7 @@ class KeyLane extends StatefulWidget {
   final List<SnapTarget> snapTargets;
   final Set<String> selectedKeys;
 
-  /// The block stretch in flight (K-458). A key this gesture holds draws where
+  /// The block stretch in flight. A key this gesture holds draws where
   /// the stretch puts it, so the diamonds travel with the box rather than
   /// waiting for the release — the same live reading a bar drag gives.
   final ValueNotifier<KeyStretch?> stretch;
@@ -194,7 +194,7 @@ class _KeyLaneState extends State<KeyLane> {
   void _beginKeyDrag(int i) {
     final keyboard = HardwareKeyboard.instance;
     // Read at the gesture's **start**, because the modifier decides what the
-    // gesture means when it begins (K-500 §2.1).
+    // gesture means when it begins.
     _additive = keyboard.isShiftPressed ||
         keyboard.isControlPressed ||
         keyboard.isMetaPressed;
@@ -280,10 +280,10 @@ class _KeyLaneState extends State<KeyLane> {
 
   /// Tell every lane how far the gesture has carried the selection (6.24).
   ///
-  /// Broadcast rather than kept here for the reason the block stretch is
-  /// (K-458): the keys in hand sit on rows in another part of the tree, and a
-  /// travel only this lane knew about would move one diamond while the rest of
-  /// the selection sat still until the release put them somewhere they had not
+  /// Broadcast rather than kept here for the reason the block stretch is: the
+  /// keys in hand sit on rows in another part of the tree, and a travel only
+  /// this lane knew about would move one diamond while the rest of the
+  /// selection sat still until the release put them somewhere they had not
   /// been seen to go.
   ///
   /// Nothing to say while the travel is zero, and so nothing published: a
@@ -313,11 +313,11 @@ class _KeyLaneState extends State<KeyLane> {
   }
 
   /// The release: every key the gesture held written where it has been seen to
-  /// travel, as one undo step (6.24, K-458).
+  /// travel, as one undo step (6.24).
   ///
   /// **A gesture that never moved was a click**, and a click on a key selects
-  /// exactly that key (K-500 §2.1). The two are told apart here rather than by
-  /// a second recogniser because the diamond has only one, deliberately: a tap
+  /// exactly that key. The two are told apart here rather than by a second
+  /// recogniser because the diamond has only one, deliberately: a tap
   /// recogniser beside the drag would make the drag wait out the slop, and the
   /// pixels it waited through are frames the key would never travel.
   void _commit(int index) {
@@ -342,7 +342,7 @@ class _KeyLaneState extends State<KeyLane> {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     // Rebuilt while a block stretch runs, so this lane's keys travel with the
-    // box (K-458). Listening rather than reading once: the stretch is written
+    // box. Listening rather than reading once: the stretch is written
     // by a handle in another part of the tree, and a lane that only read it at
     // build time would show the box moving over keys that had not.
     return ValueListenableBuilder<KeyStretch?>(
@@ -390,9 +390,9 @@ class _KeyLaneState extends State<KeyLane> {
               chosen: t.textPrimary,
               hovered: dense ? null : _hovered,
               hoverOf: dense ? _hoverIx : null,
-              // The same size and the same shapes in both modes (K-457,
-              // K-459): a key says its interpolation wherever it is drawn,
-              // and says it at the size it is aimed at.
+              // The same size and the same shapes in both modes: a key says
+              // its interpolation wherever it is drawn, and says it at the
+              // size it is aimed at.
               shapes: [for (final k in widget.keys) keyShapeOf(k)],
             ),
           ),
@@ -482,9 +482,9 @@ class _KeyLaneState extends State<KeyLane> {
                   // the lanes (F9, the bottom bar's buttons) had nothing to act
                   // on and looked like it did nothing.
                   supportedDevices: dragDevices,
-                  // The key's own menu (K-500 §2.1) — Linear / Easy ease / Hold
-                  // / Ease… / Delete key, the graph key's menu, on the mark the
-                  // lanes draw.
+                  // The key's own menu — Linear / Easy ease / Hold / Ease… /
+                  // Delete key, the graph key's menu, on the mark the lanes
+                  // draw.
                   onSecondaryTapUp: (d) =>
                       widget.onKeyMenu(i, d.globalPosition),
                   onHorizontalDragStart: (_) => _beginKeyDrag(i),
@@ -613,7 +613,7 @@ class _RenderKeyStripHit extends RenderBox {
 /// than straddle two, gives both halves the identical crisp line.
 ///
 /// [blanks] are stretches to leave unruled, as (top, bottom) pairs: an open
-/// sequence view is one table cell, not six rows of one (K-248).
+/// sequence view is one table cell, not six rows of one.
 List<double> rowSeamOffsets({
   required double step,
   required double height,
@@ -644,7 +644,7 @@ List<double> rowSeamOffsets({
 }
 
 /// The lane area's row seams: one hairline per row, the full width of the
-/// area (K-190).
+/// area.
 ///
 /// Drawn as one overlay rather than given to each row as a border because a
 /// decorated box absorbs pointers — a border per row would quietly eat the
@@ -658,8 +658,7 @@ class RowDividerPainter extends CustomPainter {
   ///
   /// An open sequence view is one table cell, not six rows of one — ruling it
   /// into rows drew lines through the clips and straight across the middle of
-  /// the speed envelope, which read as the graph having been chopped up
-  /// (K-248).
+  /// the speed envelope, which read as the graph having been chopped up.
   final List<(double, double)> blanks;
 
   /// How far the first seam sits above the top edge — the outline's overlay
@@ -698,7 +697,7 @@ class RowDividerPainter extends CustomPainter {
 
   /// The blanks are compared **by value**, not by identity: they are rebuilt
   /// fresh on every build, so an identity test said "changed" every time and
-  /// both overlays repainted whatever had actually moved (K-293). The list is
+  /// both overlays repainted whatever had actually moved. The list is
   /// one entry per open sequence view, so comparing it is nothing.
   @override
   bool shouldRepaint(RowDividerPainter old) =>

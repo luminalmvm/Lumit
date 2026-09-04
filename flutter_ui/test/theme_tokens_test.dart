@@ -1,4 +1,4 @@
-// The token list, custom themes, and the two Timeline colours (K-202).
+// The token list, custom themes, and the two Timeline colours.
 
 import 'dart:math' as math;
 
@@ -35,7 +35,7 @@ void main() {
         // by spec (15-DESIGN §2.1/§11) — a grade cannot be judged against a
         // tinted surround, so it is the one colour taste does not reach.
         //
-        // Nor are the five `port.*` wire colours (K-472), for the same kind of
+        // Nor are the five `port.*` wire colours, for the same kind of
         // reason: on the Graph panel colour *is* the legend — the strip along
         // the canvas says "amber is a number" — so a palette taste could
         // retint would be a legend that lies. See [PortColours].
@@ -225,7 +225,7 @@ void main() {
     });
   });
 
-  /// The token that says "this is animated or in hand" (K-439, 15-DESIGN
+  /// The token that says "this is animated or in hand" (15-DESIGN
   /// §3.1). Every scheme has to carry one — a keyframe diamond nobody can see
   /// is worse than no colour at all — and it has to hold against the panel it
   /// is drawn on, which on a light scheme means a much darker amber than the

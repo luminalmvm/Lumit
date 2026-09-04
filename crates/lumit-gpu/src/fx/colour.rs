@@ -27,7 +27,7 @@ struct FlashParams {
     _pad: [f32; 2],
 }
 
-/// One resolved colour balance (docs/08 §3.10 as amended by K-090): gain →
+/// One resolved colour balance (docs/08 §3.10, as amended): gain →
 /// lift → gamma per channel, in linear on unpremultiplied colour.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ColourBalanceOp {
@@ -46,16 +46,16 @@ struct ColourBalanceParams {
     gamma: [f32; 4],
     gain: [f32; 4],
     mix_amt: f32,
-    /// 1 = pull Lift toward 0 and Gamma and Gain toward 1 by the matte (K-395).
+    /// 1 = pull Lift toward 0 and Gamma and Gain toward 1 by the matte.
     matte_on: f32,
     _pad: [f32; 2],
 }
 
-/// One resolved saturation (docs/08 §3.10 as amended by K-090): scale about
+/// One resolved saturation (docs/08 §3.10, as amended): scale about
 /// Rec. 709 luma, in linear on unpremultiplied colour.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SaturationOp {
-    /// 0 = greyscale, 1 = neutral, 2 = doubled, open above (K-135).
+    /// 0 = greyscale, 1 = neutral, 2 = doubled, open above.
     pub saturation: f32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
@@ -66,16 +66,16 @@ pub struct SaturationOp {
 struct SaturationParams {
     saturation: f32,
     mix_amt: f32,
-    /// 1 = pull Saturation toward 1 by the matte (K-395).
+    /// 1 = pull Saturation toward 1 by the matte.
     matte_on: f32,
     _pad0: f32,
 }
 
-/// One resolved vibrancy (docs/08 §3.10, K-152): a saturation boost weighted
+/// One resolved vibrancy (docs/08 §3.10): a saturation boost weighted
 /// by each pixel's current colourfulness, in linear on unpremultiplied colour.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct VibrancyOp {
-    /// 0 = neutral; higher lifts less-saturated pixels more, open above (K-135).
+    /// 0 = neutral; higher lifts less-saturated pixels more, open above.
     pub amount: f32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
@@ -86,7 +86,7 @@ pub struct VibrancyOp {
 struct VibrancyParams {
     amount: f32,
     mix_amt: f32,
-    /// 1 = scale Amount by the matte (K-395).
+    /// 1 = scale Amount by the matte.
     matte_on: f32,
     _pad0: f32,
 }
@@ -97,7 +97,7 @@ struct VibrancyParams {
 /// untouched. `factor == 1.0` (0 stops) is the bit-exact neutral point.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ExposureOp {
-    /// The Stops the factor was made from, for the matted branch (K-395).
+    /// The Stops the factor was made from, for the matted branch.
     pub stops: f32,
     /// The linear gain, `2^stops`. 1.0 is the neutral point.
     pub factor: f32,
@@ -111,7 +111,7 @@ struct ExposureParams {
     factor: f32,
     mix_amt: f32,
     /// The stops behind `factor`, read only under a matte: the gain there is
-    /// `exp2(stops * k)` (K-395).
+    /// `exp2(stops * k)`.
     stops: f32,
     /// 1 = scale Stops toward 0 by the matte.
     matte_on: f32,
@@ -120,7 +120,7 @@ struct ExposureParams {
 /// One resolved temperature (docs/08 §3.20): a warm/cool white-balance shift as
 /// a per-channel gain in scene-linear light. `gain_r`/`gain_b` are computed
 /// host-side (`gain_r = max(0, 1 + 0.75·k)`, `gain_b = max(0, 1 − 0.75·k)` for
-/// `k = temperature / 100`, K-135), so the CPU reference and the kernel multiply
+/// `k = temperature / 100`), so the CPU reference and the kernel multiply
 /// by byte-identical numbers; green and alpha are untouched. Gains `(1.0, 1.0)`
 /// (temperature 0)
 /// are the bit-exact neutral point. Premultiplied, exactly like [`ExposureOp`]:
@@ -128,7 +128,7 @@ struct ExposureParams {
 /// unpremultiply round trip.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TemperatureOp {
-    /// Temperature / 100 clamped to +-2, for the matted branch (K-395).
+    /// Temperature / 100 clamped to +-2, for the matted branch.
     pub t: f32,
     /// The scene-linear red gain. 1.0 (with `gain_b` 1.0) is the neutral point.
     pub gain_r: f32,
@@ -145,7 +145,7 @@ struct TemperatureParams {
     gain_b: f32,
     mix_amt: f32,
     /// Temperature / 100, read only under a matte: the gains there are
-    /// rebuilt from `t * k` (K-395).
+    /// rebuilt from `t * k`.
     t: f32,
     /// 1 = scale Temperature toward 0 by the matte.
     matte_on: f32,
@@ -237,7 +237,7 @@ pub struct GammaOp {
 struct GammaParams {
     gamma: f32,
     mix_amt: f32,
-    /// 1 = pull Gamma toward 1 by the matte (K-395).
+    /// 1 = pull Gamma toward 1 by the matte.
     matte_on: f32,
     _pad1: f32,
 }
@@ -251,7 +251,7 @@ pub const CURVE_TABLE: usize = 257;
 /// multiple of four.
 const CURVE_VEC4S: usize = CURVE_TABLE.div_ceil(4);
 
-/// One resolved Curves (docs/08 §3.30, K-412): five baked tone-curve tables
+/// One resolved Curves (docs/08 §3.30): five baked tone-curve tables
 /// and the mix. The spline is fitted host-side by `Curves::packed`, so this
 /// kernel looks up and interpolates and does nothing else — which is what
 /// leaves the §1.6 oracle checking the lookup rather than two spline fits.
@@ -318,7 +318,7 @@ struct BrightnessParams {
     b: f32,
     k: f32,
     mix_amt: f32,
-    /// 1 = pull Brightness toward 0 and Contrast toward 1 by the matte (K-395).
+    /// 1 = pull Brightness toward 0 and Contrast toward 1 by the matte.
     matte_on: f32,
 }
 
@@ -338,7 +338,7 @@ pub struct HueSaturationOp {
 struct HueSaturationParams {
     bands: [[f32; 4]; 7],
     mix_amt: f32,
-    /// 1 = scale every adjustment toward 0 by the matte (K-395).
+    /// 1 = scale every adjustment toward 0 by the matte.
     matte_on: f32,
     _pad: [f32; 2],
 }
@@ -349,8 +349,8 @@ struct HueSaturationParams {
 /// matrix is the neutral point; alpha is untouched.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct HueShiftOp {
-    /// The Angle in radians and which matrix it makes (K-136), for the matted
-    /// branch (K-395); `m` is the host matrix for the unmatted one.
+    /// The Angle in radians and which matrix it makes, for the matted
+    /// branch; `m` is the host matrix for the unmatted one.
     pub angle_rad: f32,
     pub preserve: bool,
     /// Row-major 3×3: `[m00,m01,m02, m10,m11,m12, m20,m21,m22]`.
@@ -364,11 +364,11 @@ pub struct HueShiftOp {
 struct HueParams {
     m: [f32; 9],
     mix_amt: f32,
-    /// 1 = scale Angle toward 0 by the matte (K-395): the kernel then builds
+    /// 1 = scale Angle toward 0 by the matte: the kernel then builds
     /// the matrix for `angle_rad * k` itself, from the same coefficients.
     matte_on: f32,
     angle_rad: f32,
-    /// 1 = the constant-luminance matrix, 0 = the plain-RGB spin (K-136).
+    /// 1 = the constant-luminance matrix, 0 = the plain-RGB spin.
     preserve: f32,
     _pad: [f32; 3],
 }
@@ -404,7 +404,7 @@ impl FxEngine {
         out
     }
 
-    /// Apply one colour balance (docs/08 §3.10 as amended by K-090) to a
+    /// Apply one colour balance (docs/08 §3.10, as amended) to a
     /// linear working texture, returning a new texture of the same size.
     /// One pointwise pass; the §2.2 unpremultiply wrap is fused into the
     /// kernel, and fully neutral parameters short-circuit inside it.
@@ -440,7 +440,7 @@ impl FxEngine {
         out
     }
 
-    /// Apply one saturation (docs/08 §3.10 as amended by K-090) to a linear
+    /// Apply one saturation (docs/08 §3.10, as amended) to a linear
     /// working texture, returning a new texture of the same size. One
     /// pointwise pass; the §2.2 unpremultiply wrap is fused into the
     /// kernel, and saturation 1 short-circuits inside it.
@@ -473,7 +473,7 @@ impl FxEngine {
         out
     }
 
-    /// Apply one vibrancy (docs/08 §3.10, K-152) to a linear working texture,
+    /// Apply one vibrancy (docs/08 §3.10) to a linear working texture,
     /// returning a new texture of the same size. One pointwise pass; the §2.2
     /// unpremultiply wrap is fused into the kernel, and amount 0 short-circuits
     /// inside it to the bit-exact identity.
@@ -888,7 +888,7 @@ pub struct PosterizeOp {
 struct PosterizeParams {
     n: f32,
     mix_amt: f32,
-    /// 1 = pull the step count toward 255 by the matte (K-395).
+    /// 1 = pull the step count toward 255 by the matte.
     matte_on: f32,
     _pad1: f32,
 }
@@ -911,7 +911,7 @@ struct ThresholdParams {
     level: f32,
     hw: f32,
     mix_amt: f32,
-    /// 1 = scale the level by the matte (K-559).
+    /// 1 = scale the level by the matte.
     matte_on: f32,
 }
 
@@ -956,7 +956,7 @@ struct PhotoFilterParams {
     density: f32,
     preserve: f32,
     mix_amt: f32,
-    /// 1 = scale Density by the matte (K-395).
+    /// 1 = scale Density by the matte.
     matte_on: f32,
 }
 
@@ -1018,11 +1018,11 @@ struct ShadowHighlightParams {
     contrast: f32,
     colour_correction: f32,
     mix_amt: f32,
-    /// 1 = scale Shadow amount and Highlight amount by the matte (K-395).
+    /// 1 = scale Shadow amount and Highlight amount by the matte.
     matte_on: f32,
 }
 
-/// Wave 2's Stylise I batch (docs/08 §3.58–§3.63, K-404): six tone and colour
+/// Wave 2's Stylise I batch (docs/08 §3.58–§3.63): six tone and colour
 /// effects, five of them one pointwise pass and the sixth one gaussian plus a
 /// pointwise pass.
 impl FxEngine {
@@ -1061,7 +1061,7 @@ impl FxEngine {
     /// Apply one Threshold (docs/08 §3.59) to a linear working texture,
     /// returning a new texture of the same size. One pointwise pass; alpha is
     /// untouched, so a thresholded picture keeps its shape. A bound `matte`
-    /// scales the level per pixel (K-559).
+    /// scales the level per pixel.
     pub fn threshold(
         &self,
         ctx: &GpuContext,

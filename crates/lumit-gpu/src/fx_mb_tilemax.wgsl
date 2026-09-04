@@ -25,7 +25,7 @@ const SCORE_FLOOR: f32 = 0.25; // lumit_core::fx::cpu::MB_SCORE_FLOOR
 // make this struct 32 bytes against the host's 16.
 struct Params {
     tile: i32,          // MB_TILE: tile side in pixels
-    vector_scale: f32,  // px@raster a full Motion vectors channel means (K-429)
+    vector_scale: f32,  // px@raster a full Motion vectors channel means
     pad1: i32,
     pad2: i32,
 };
@@ -34,7 +34,7 @@ struct Params {
 @group(0) @binding(1) var tiles: texture_storage_2d<rgba32float, write>;
 @group(0) @binding(2) var<uniform> p: Params;
 
-// A supplied **Motion vectors** layer read as a flow field (K-429, docs/08
+// A supplied **Motion vectors** layer read as a flow field (docs/08
 // §3.2) — the twin of lumit_core::fx::cpu::motion_vectors_field. Red is
 // sideways, green is up-and-down, mid-grey is standing still, and
 // `vector_scale` says how many pixels a full channel means. Confidence is 1

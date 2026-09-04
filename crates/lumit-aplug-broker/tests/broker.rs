@@ -7,9 +7,9 @@
 //! misbehave through the broker's environment, because a plugin in another
 //! process cannot be reached any other way.
 //!
-//! Since K-707 the same fixture is laid out **both ways** — a `.clap` file and a
-//! `.vst3` bundle — and driven through the same broker binary. The VST3 cases
-//! near the end are not a second suite: they are the same assertions, asked of a
+//! The same fixture is laid out **both ways** — a `.clap` file and a `.vst3`
+//! bundle — and driven through the same broker binary. The VST3 cases near the
+//! end are not a second suite: they are the same assertions, asked of a
 //! standard whose front end is the only thing that changed.
 //!
 //! They live in this crate rather than in `lumit-aplug` for one flat Cargo
@@ -75,7 +75,7 @@ fn a_module_in(root: &Path) -> Option<PathBuf> {
     Some(target)
 }
 
-/// Lay the test plugin out as a `.vst3` **bundle** in `root` (K-707).
+/// Lay the test plugin out as a `.vst3` **bundle** in `root`.
 ///
 /// The same library, the other face: a folder with the binary at
 /// `Contents/<architecture>/`, which is what a real installer writes and what
@@ -330,7 +330,7 @@ fn a_crash_costs_exactly_one_block_and_the_blocks_after_it_flow() {
     assert!(held.restarts() >= 1, "the broker must have been restarted");
 }
 
-/// **The mix seam over a broker that really dies** (K-700, the note's §3 rule
+/// **The mix seam over a broker that really dies** (the note's §3 rule
 /// and §7 plan 5 met at the layer where sound is made).
 ///
 /// The block above proves the *broker* survives a plugin aborting mid-block.
@@ -480,7 +480,7 @@ fn a_plugin_switched_off_mid_session_is_skipped_on_the_next_batch() {
     );
 }
 
-/// **A described VST3 plugin crosses the same pipe** (K-707, plan 1 through the
+/// **A described VST3 plugin crosses the same pipe** (plan 1 through the
 /// broker).
 ///
 /// Nothing here is new code: the module is opened, started and enumerated inside
@@ -571,7 +571,7 @@ fn a_brokered_scan_offers_a_vst3_bundle_as_an_ordinary_effect() {
     );
 }
 
-/// **The mix seam over a VST3 broker that really dies** (K-707; the CLAP twin of
+/// **The mix seam over a VST3 broker that really dies** (the CLAP twin of
 /// this test is above, and the assertions are deliberately identical).
 ///
 /// A dying plugin costs one block, shipped dry, whichever standard it spoke.

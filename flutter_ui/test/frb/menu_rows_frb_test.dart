@@ -1,9 +1,9 @@
-// The Layer and Animation menu rows that stopped being "(Not implemented)"
-// (K-244), tested against the real engine.
+// The Layer and Animation menu rows that stopped being "(Not implemented)",
+// tested against the real engine.
 //
 // Each of these is a second door onto a call the Timeline already makes, so
 // what is worth asserting is not the call — it is that the row reaches it, that
-// it reaches it for *every* selected layer (K-523), and that a row whose
+// it reaches it for *every* selected layer, and that a row whose
 // precondition is missing greys out rather than failing when pressed.
 //
 // The bar is mounted the way menu_bar_frb_test mounts it, because the enablement
@@ -90,7 +90,7 @@ void main() {
     /// Re-read the model and rebuild the bar.
     ///
     /// `tester.pump()` with no duration does not move the fake clock, and the
-    /// read model groups its re-reads by frame timestamp (K-184) — so between
+    /// read model groups its re-reads by frame timestamp — so between
     /// two menu gestures in one test the bar would otherwise draw from the
     /// document as it stood before the first. The application never sees this:
     /// its frames really do advance, and the engine's change stream refreshes
@@ -132,7 +132,7 @@ void main() {
       expect(staticOf(after.opacity), 100);
     });
 
-    /// K-523: a row invoked on a selection runs on every layer in it.
+    /// A row invoked on a selection runs on every layer in it.
     testWidgets('Layer ▸ Transform ▸ Flip horizontally flips all of them',
         (tester) async {
       final p = withComp();
@@ -300,7 +300,7 @@ void main() {
       final p = withComp();
       final layer = p.comp.addSolidLayer();
       // A keyed property: Set keyframe adds to a curve, it does not start one
-      // (K-447 — the stopwatch is the whole model).
+      // (the stopwatch is the whole model).
       layer.setTransform(
         prop: BridgeTransformProp.positionX,
         value: BridgeScalar.keyframed([
@@ -496,9 +496,9 @@ void main() {
       expect((after as BridgeScalar_Expression).field0, 'time * 2');
     });
 
-    /// K-466 left the wireframes, the handles and the hover highlight on one
-    /// switch, and gave it a seat in the Viewer's own view menu. This row is
-    /// the second door onto that switch, so it has to move the same state.
+    /// The wireframes, the handles and the hover highlight sit on one switch,
+    /// which also has a seat in the Viewer's own view menu. This row is the
+    /// second door onto that switch, so it has to move the same state.
     testWidgets('View ▸ Show wireframe flips the layer controls',
         (tester) async {
       final p = withComp();
@@ -513,7 +513,7 @@ void main() {
       expect(p.uiState.viewerLayerControls, isTrue);
     });
 
-    /// The chord is bound to the **slot**, not to the name (K-574), and the
+    /// The chord is bound to the **slot**, not to the name, and the
     /// dialogue says which slot that is rather than letting it be a surprise
     /// the first time a rename moves it.
     testWidgets('Window ▸ Assign shortcut names the slot it will bind',
@@ -555,7 +555,7 @@ void main() {
           isNot(contains('4')));
     });
 
-    /// **The three View rows that used to say nothing** (K-689, docs/07 §2.2
+    /// **The three View rows that used to say nothing** (docs/07 §2.2
     /// item 6). Each is a toggle, so the menu stays open and all three can be
     /// set in one visit — and each reaches the state the Viewer actually
     /// draws from, rather than a second copy of it.
@@ -613,9 +613,9 @@ void main() {
     });
 
     /// The two preset rows are a second door onto the `.lumfx` the Effects &
-    /// presets panel writes and reads (K-244), so what is worth asserting is
+    /// presets panel writes and reads, so what is worth asserting is
     /// that the menu reaches the same document — and that Apply reaches every
-    /// selected layer (K-523).
+    /// selected layer.
     group('Animation ▸ preset rows', () {
       late Directory dir;
 
@@ -678,7 +678,7 @@ void main() {
         expect(b.getEffects().length, 1);
         expect(a.getInfo().effects.first.id,
             isNot(b.getInfo().effects.first.id),
-            reason: 'each layer gets its own instance (K-065)');
+            reason: 'each layer gets its own instance');
       });
 
       testWidgets('both rows grey with nothing selected', (tester) async {

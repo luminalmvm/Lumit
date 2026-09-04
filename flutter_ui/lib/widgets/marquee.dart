@@ -34,11 +34,11 @@ class MarqueeBox extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           // **What is selected is one colour, and it is not the accent**
-          // (K-439, docs/impl/timeline-interaction.md P4): the box that says
-          // what is about to be selected draws in the same `text_primary` the
-          // selection it makes will, over the drawings' 12% wash. The accent's
-          // list is closed — the playhead, one filled button, the active tab's
-          // tick — and a box in it read as a second playhead being dragged out.
+          // (docs/impl/timeline-interaction.md P4): the box that says what is
+          // about to be selected draws in the same `text_primary` the selection
+          // it makes will, over the drawings' 12% wash. The accent's list is
+          // closed — the playhead, one filled button, the active tab's tick —
+          // and a box in it read as a second playhead being dragged out.
           color: t.textPrimary.withValues(alpha: marqueeWashAlpha),
           border: Border.all(color: t.textPrimary, width: 1),
         ),
@@ -49,7 +49,7 @@ class MarqueeBox extends StatelessWidget {
 
 class MarqueeSelect extends StatefulWidget {
   /// The finished box, in this widget's own coordinates, and whether the drag
-  /// was **additive** — `Shift` or `Ctrl` held when it started (K-500 §2.1).
+  /// was **additive** — `Shift` or `Ctrl` held when it started.
   ///
   /// Read at the drag's *start* rather than at its release, because that is
   /// when the gesture was decided: letting go of Shift half way through a box

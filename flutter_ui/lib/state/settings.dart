@@ -22,7 +22,7 @@ enum PlaybackMode {
 }
 
 /// The Viewer's working preferences (Settings → Performance). The shared
-/// texture is the only frame transport (K-183), so there is no toggle for it.
+/// texture is the only frame transport, so there is no toggle for it.
 class PerformanceSettings {
   /// Which playback behaviour the Viewer uses. Kept here rather than only in
   /// the Viewer's own state so the choice survives a restart — it is a working
@@ -46,13 +46,13 @@ class PerformanceSettings {
   int? diskBudgetBytes;
 
   /// Render a live drag at the Viewer's own resolution rather than the drag
-  /// budget (K-744).
+  /// budget.
   ///
-  /// Off by default, which is K-383's rule: a drag preview is capped at a
-  /// 640x360 raster so the picture stays attached to the pointer. On, a dragged
-  /// frame is as sharp as a committed one and takes as long to make, which on a
-  /// heavy composition is the stall the cap exists to avoid — so this is a
-  /// choice for somebody whose machine can afford it, not a better default.
+  /// Off by default: a drag preview is capped at a 640x360 raster so the
+  /// picture stays attached to the pointer. On, a dragged frame is as sharp as
+  /// a committed one and takes as long to make, which on a heavy composition
+  /// is the stall the cap exists to avoid — so this is a choice for somebody
+  /// whose machine can afford it, not a better default.
   bool fullResDragPreviews;
 
   /// Where parked frames live, as the engine's own enum name
@@ -67,7 +67,7 @@ class PerformanceSettings {
   String? diskCacheFolder;
 
   PerformanceSettings({
-    // **Every frame is the shipped default** (K-670). Adaptive keeps time by
+    // **Every frame is the shipped default**. Adaptive keeps time by
     // dropping resolution, which is the right answer for a rough timing pass
     // and the wrong one for the first thing anybody does with a new install —
     // look at the picture. A preview that quietly softens itself reads as the
@@ -129,7 +129,7 @@ BridgeCacheLocation cacheLocationFromName(String name) =>
       orElse: () => BridgeCacheLocation.appData,
     );
 
-/// How the Viewer's chrome is laid out round the picture (K-448, K-466).
+/// How the Viewer's chrome is laid out round the picture.
 ///
 /// The approved drawing splits it: the magnification, the preview quality and
 /// the colour pipeline in a header strip above the picture, everything else in
@@ -146,7 +146,7 @@ enum ViewerBars {
   bottom,
 }
 
-/// What the chrome says: a word, or the glyph that stands for it (K-440).
+/// What the chrome says: a word, or the glyph that stands for it.
 ///
 /// In plain terms: every button, tab and toggle in Lumit has a word and a
 /// drawing that mean the same thing. This chooses which of the two is shown.
@@ -154,10 +154,10 @@ enum ViewerBars {
 /// unnameable — and content the user typed is never turned into a picture.
 ///
 /// **Icons is the shipped default**, by the owner's ruling after desktop
-/// testing; K-440 wrote Words. The first surface to read this setting is the
-/// Timeline's Switches / Modes / Parent column toggles, and the owner's answer
-/// on seeing them was that a row of three short words is a sentence to read
-/// where three marks are a thing to aim at.
+/// testing, which replaced an earlier Words default. The first surface to read
+/// this setting is the Timeline's Switches / Modes / Parent column toggles,
+/// and the owner's answer on seeing them was that a row of three short words
+/// is a sentence to read where three marks are a thing to aim at.
 enum ChromeLabels {
   /// The word, everywhere.
   words,
@@ -169,11 +169,11 @@ enum ChromeLabels {
   iconsEverywhere,
 }
 
-/// The presentation baseline the whole interface is drawn on top of (K-560).
+/// The presentation baseline the whole interface is drawn on top of.
 ///
 /// In plain terms: the owner tested Lumit at 110% and ruled that size right, so
 /// **what 110% showed is what 100% now draws**. The drawings stay authoritative
-/// at their logical sizes (K-450) and no metric, manifest or mockup moves — the
+/// at their logical sizes and no metric, manifest or mockup moves — the
 /// interface is simply presented a tenth larger than it lays out, underneath
 /// whatever factor the user sets for themselves.
 const double uiScaleBaseline = 1.1;
@@ -183,11 +183,11 @@ const double uiScaleBaseline = 1.1;
 /// half, so its percentages are against the new 100% rather than the old one.
 double effectiveUiScale(double userScale) => userScale * uiScaleBaseline;
 
-/// Interface (Settings → Interface): UI scale and tooltips (K-117), plus the
-/// two editing preferences that make Lumit behave the Vegas way (K-246).
+/// Interface (Settings → Interface): UI scale and tooltips, plus the two
+/// editing preferences that make Lumit behave the Vegas way.
 class InterfaceSettings {
   /// The user's own scale factor, 1.0 being the shipped size — *not* what the
-  /// interface is scaled by, which is this over [uiScaleBaseline] (K-560).
+  /// interface is scaled by, which is this over [uiScaleBaseline].
   double uiScale;
   bool showTooltips;
 
@@ -201,34 +201,33 @@ class InterfaceSettings {
   bool transformInEffectControls;
 
   /// Whether a Retime channel opens in the graph editor showing playback speed
-  /// rather than source position (K-246, realising K-075's preference).
+  /// rather than source position.
   ///
   /// On, the channel opens to its Velocity lens and that lens is the **speed
-  /// envelope** of K-247 — one point per key, whose height is the speed. Off,
-  /// it opens to Time and the speed view keeps the ordinary two-sided
-  /// derivative shape every other property has. Ordinary properties are
-  /// unaffected either way; this is a Retime-only preference.
+  /// envelope** — one point per key, whose height is the speed. Off, it opens
+  /// to Time and the speed view keeps the ordinary two-sided derivative shape
+  /// every other property has. Ordinary properties are unaffected either way;
+  /// this is a Retime-only preference.
   bool retimeOpensToSpeed;
 
   /// Whether the Retime row shows its source position in **seconds** rather
-  /// than as a timecode (K-287).
+  /// than as a timecode.
   ///
   /// Off by default: a Retime says which moment of the source is showing, and
   /// every other time in the editor says that as `HH:MM:SS:FF` — a lone
   /// decimal number of seconds meant doing arithmetic to line a retime up with
-  /// anything else (K-075 asked for the timecode). On is for the people who
-  /// think in seconds, and for the sub-frame precision a whole-frame clock
-  /// face cannot show.
+  /// anything else. On is for the people who think in seconds, and for the
+  /// sub-frame precision a whole-frame clock face cannot show.
   bool retimeInSeconds;
 
   /// Whether video footage and image sequences added to a comp arrive as a
-  /// one-clip Sequence layer rather than a Footage layer (K-246).
+  /// one-clip Sequence layer rather than a Footage layer.
   ///
   /// Still images never do: there is nothing to cut in a single frame.
   bool videoAsSequenceLayer;
 
   /// Whether stopping playback leaves the playhead on the frame that was on
-  /// screen, rather than putting it back where play started (K-254).
+  /// screen, rather than putting it back where play started.
   ///
   /// Off by default: playback is a preview of the moment you are working on,
   /// and coming back to a different frame than you left means finding your
@@ -238,7 +237,7 @@ class InterfaceSettings {
   bool playheadStaysOnStop;
 
   /// Whether a pasted layer keeps the time it was copied at, rather than
-  /// starting at the playhead (K-275).
+  /// starting at the playhead.
   ///
   /// Off by default: pasting is nearly always "put one here", and the playhead
   /// is where *here* is. On is for the other job — rebuilding the same moment
@@ -248,7 +247,7 @@ class InterfaceSettings {
   bool pasteLayersAtOriginalTime;
 
   /// Whether a waveform draws as the three-band **multiwave** stack rather
-  /// than one plain wave (K-280).
+  /// than one plain wave.
   ///
   /// On by default: a single wave says how loud a moment is and nothing about
   /// what is in it, and a mastered track is one solid block whichever
@@ -258,7 +257,7 @@ class InterfaceSettings {
   bool multiwaveWaveforms;
 
   /// Whether a waveform stands on the floor of its row rather than being
-  /// centred about silence (K-285).
+  /// centred about silence.
   ///
   /// Off by default: centred is what the eye expects of a *wave*, and it is
   /// what Lumit has always drawn. On, each column is folded onto the baseline
@@ -268,7 +267,7 @@ class InterfaceSettings {
   /// the single wave and the stack alike.
   bool waveformsFromBottom;
 
-  /// Whether the Viewer bar carries its tone map button (K-314).
+  /// Whether the Viewer bar carries its tone map button.
   ///
   /// Off by default: tone mapping is a preview-only way of reading a picture
   /// brighter than the screen can show, which most work never needs, and a
@@ -279,7 +278,7 @@ class InterfaceSettings {
   bool showToneMap;
 
   /// Whether the graph editor's **Easing…** button opens the shape editor as a
-  /// popup over the footer, rather than docking the Easing panel (K-349).
+  /// popup over the footer, rather than docking the Easing panel.
   ///
   /// Off by default: a popup closes on any click outside it, and choosing
   /// different keyframes *is* a click outside — so one drawn shape could only
@@ -290,7 +289,7 @@ class InterfaceSettings {
   bool easingInPopup;
 
   /// Whether a layer's name is written along its bar in the Timeline's lane
-  /// area (K-514).
+  /// area.
   ///
   /// **Off by default**, by the owner's explicit ruling after desktop testing.
   /// The approved mockups draw the name on every bar and the editor did the
@@ -300,7 +299,7 @@ class InterfaceSettings {
   bool layerNamesOnBars;
 
   /// Whether rows are drawn a pixel or two tighter than the approved mockups
-  /// render them (K-454, `DensityTokens` in `theme/theme.dart`).
+  /// render them (`DensityTokens` in `theme/theme.dart`).
   ///
   /// Off by default, and that default is the point of the setting: the
   /// mockups' own room is what the editor should look like, and this is the
@@ -309,8 +308,7 @@ class InterfaceSettings {
   /// heights — no colour, no size of type, nothing about what anything means.
   bool compact;
 
-  /// How the Viewer's two strips are arranged round the picture (K-448,
-  /// K-466).
+  /// How the Viewer's two strips are arranged round the picture.
   ///
   /// [ViewerBars.split] by default, because it is what the approved drawing
   /// draws: the three pickers in a header above the picture, the ways of
@@ -319,16 +317,16 @@ class InterfaceSettings {
   /// controls in the same order, on one row instead of two.
   ViewerBars viewerBars;
 
-  /// What the chrome says: words, or the icon set's glyphs (K-440).
+  /// What the chrome says: words, or the icon set's glyphs.
   ///
-  /// [ChromeLabels.icons] by default — see the enum for why that is not
-  /// K-440's own Words. A settings file written before this field existed
-  /// adopts it, deliberately: the ruling is about what the editor should look
-  /// like, not about who asked first, and Words is one click away.
+  /// [ChromeLabels.icons] by default — see the enum for why that is not Words.
+  /// A settings file written before this field existed adopts it,
+  /// deliberately: the ruling is about what the editor should look like, not
+  /// about who asked first, and Words is one click away.
   ChromeLabels chromeLabels;
 
   /// The interface language, as a BCP-47 tag (`en`, `de`, `zh`), or null to
-  /// follow whatever the machine is set to (K-303).
+  /// follow whatever the machine is set to.
   ///
   /// Null by default and stored only once chosen, so a user who never opens the
   /// picker follows their operating system for ever — including after they
@@ -362,7 +360,7 @@ class InterfaceSettings {
         'chrome_labels': chromeLabels.name,
         // The user's factor under its own key: the old `ui_scale` held the
         // whole scale, and reading one as the other would resize every
-        // interface written before K-560 by a tenth. See `fromJson`.
+        // interface written before the rebase by a tenth. See `fromJson`.
         'ui_scale_user': uiScale,
         'show_tooltips': showTooltips,
         'transform_in_effect_controls': transformInEffectControls,
@@ -392,7 +390,7 @@ class InterfaceSettings {
           (c) => c.name == j['chrome_labels'],
           orElse: () => ChromeLabels.icons,
         ),
-        // K-560's one migration, and it is a key rename rather than a file
+        // The rebase's one migration, and a key rename rather than a file
         // version because it is one number: `ui_scale` was the whole scale,
         // `ui_scale_user` is the user's half of it. A file written before the
         // rebase divides by the baseline once — so an interface that was at
@@ -414,7 +412,7 @@ class InterfaceSettings {
         retimeInSeconds: j['retime_in_seconds'] as bool? ?? false,
         videoAsSequenceLayer: j['video_as_sequence_layer'] as bool? ?? false,
         // Absent means off here too, but for the opposite reason: the returning
-        // playhead is the *new* default (K-254), so a settings file written
+        // playhead is the *new* default, so a settings file written
         // before this field existed adopts it rather than being pinned to the
         // old behaviour by its own silence.
         playheadStaysOnStop: j['playhead_stays_on_stop'] as bool? ?? false,
@@ -422,7 +420,7 @@ class InterfaceSettings {
         // settings file written before this field existed already did.
         pasteLayersAtOriginalTime:
             j['paste_layers_at_original_time'] as bool? ?? false,
-        // Absent means on: the multiwave stack is the new default (K-280),
+        // Absent means on: the multiwave stack is the new default,
         // and a settings file written before this field existed should get
         // the better picture rather than be pinned to the old one.
         multiwaveWaveforms: j['multiwave_waveforms'] as bool? ?? true,
@@ -433,11 +431,11 @@ class InterfaceSettings {
         // written before this field existed adopts it — a comp that stored an
         // engaged tone map is disengaged with it rather than left stranded.
         showToneMap: j['show_tone_map'] as bool? ?? false,
-        // Absent means off: the panel is the default (K-349), and the popup
+        // Absent means off: the panel is the default, and the popup
         // this replaced never shipped in a release, so no settings file can be
         // asking for it by silence.
         easingInPopup: j['easing_in_popup'] as bool? ?? false,
-        // Absent means off (K-514). Every settings file written before this
+        // Absent means off. Every settings file written before this
         // field existed was written by a build that always drew the names, so
         // those users lose them — deliberately, because off is the owner's
         // ruling on what the editor should look like, and the labels are one
@@ -446,7 +444,7 @@ class InterfaceSettings {
         // Absent means off, which is the roomy default — and every settings
         // file written before this field existed was written by a build that
         // drew the tight rows. Those users get the extra pixel or two back,
-        // deliberately: the mockups' room is the decision (K-454), and the
+        // deliberately: the mockups' room is the decision, and the
         // tight set is now something to ask for rather than something to
         // inherit by silence.
         compact: j['compact'] as bool? ?? false,

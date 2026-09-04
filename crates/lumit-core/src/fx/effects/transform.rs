@@ -7,8 +7,8 @@ use lumit_fx_macros::Effect;
 
 /// Transform's controls.
 ///
-/// The four point components are px@comp (K-260: point parameters are pixels,
-/// never per cent), declared `Px` so the resolve step scales them by the §2.3
+/// The four point components are px@comp (point parameters are pixels, never
+/// per cent), declared `Px` so the resolve step scales them by the §2.3
 /// preview factor and
 /// [`ResolvedStack::rescale_spatial`](crate::fx::ResolvedStack::rescale_spatial)
 /// moves them again if the stack is reused at another size — exactly what the old
@@ -26,7 +26,7 @@ use lumit_fx_macros::Effect;
     roi = FullFrame,
 )]
 pub struct Transform {
-    /// px@comp, exactly like the layer transform's Anchor; unbounded (K-090).
+    /// px@comp, exactly like the layer transform's Anchor; unbounded.
     #[slider(min = -1000.0, max = 1000.0, default = 0.0, unit = Px)]
     pub anchor_x: f32,
 
@@ -52,10 +52,10 @@ pub struct Transform {
     #[slider(label = "Scale y %", min = 0.0, max = 400.0, default = 100.0, unit = Percent)]
     pub scale_y: f32,
 
-    /// After Effects' unitless Skew amount (K-666), read as the lean angle in
+    /// After Effects' unitless Skew amount, read as the lean angle in
     /// degrees: 45 shears the picture by one unit of x per unit of y, 0 is no
     /// shear at all and is byte-identical to a stack that has never heard of
-    /// the control (K-258). Hard-limited short of ±90, where the lean would be
+    /// the control. Hard-limited short of ±90, where the lean would be
     /// infinite.
     #[slider(
         min = -70.0,

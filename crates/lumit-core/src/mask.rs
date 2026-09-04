@@ -9,7 +9,7 @@
 //! mode (add, subtract, intersect, difference), and each can be softened
 //! (feather) or grown/shrunk (expansion) before it joins the stack. The path
 //! can be **keyframed** (see [`PathKeyframe`]), and the feather can be given a
-//! width **per vertex** rather than one width all the way round (K-545).
+//! width **per vertex** rather than one width all the way round.
 
 use std::borrow::Cow;
 
@@ -64,9 +64,9 @@ pub enum MaskMode {
     Add,
     Subtract,
     Intersect,
-    /// The greater of this mask and what the stack holds (K-545).
+    /// The greater of this mask and what the stack holds.
     Lighten,
-    /// The lesser of the two (K-545).
+    /// The lesser of the two.
     Darken,
     Difference,
 }
@@ -97,8 +97,8 @@ fn is_static_zero(p: &Property) -> bool {
 /// and a `Property` normally writes itself as an object. If these three fields
 /// started doing that, every `.lum` ever saved would have to be migrated, and —
 /// worse — every frame every project has banked would be retired, because the
-/// frame cache names a frame partly by the bytes its masks serialise to
-/// (K-338, K-339 made a point of not doing that).
+/// frame cache names a frame partly by the bytes its masks serialise to.
+/// Earlier work made a point of not retiring banked frames.
 ///
 /// So the encoding stays what it was for the case that is almost always true.
 /// A still value writes as the number; only a mask somebody has actually keyed
@@ -131,7 +131,7 @@ pub(crate) mod still_or_keyed {
 }
 
 /// The same bare-number-while-still encoding as [`still_or_keyed`], for the
-/// per-vertex feather list (K-545). A list of plain numbers is what a mask
+/// per-vertex feather list. A list of plain numbers is what a mask
 /// nobody has keyed writes, so a `.lum` stays readable by eye.
 pub(crate) mod still_or_keyed_vec {
     use super::{Animation, Property};
@@ -179,7 +179,7 @@ pub struct Mask {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub path_keys: Vec<PathKeyframe>,
     pub inverted: bool,
-    /// 0..100, and animatable like any transform property (K-340). Written as
+    /// 0..100, and animatable like any transform property. Written as
     /// a bare number while it is still — see [`still_or_keyed`].
     #[serde(with = "still_or_keyed")]
     pub opacity: Property,
@@ -188,7 +188,7 @@ pub struct Mask {
     #[serde(default, skip_serializing_if = "MaskMode::is_add")]
     pub mode: MaskMode,
     /// Total width of the soft edge, in layer pixels, half either side of the
-    /// path (0 = the hard, antialiased edge). Animatable (K-340).
+    /// path (0 = the hard, antialiased edge). Animatable.
     #[serde(
         default = "Property::zero",
         with = "still_or_keyed",
@@ -196,7 +196,7 @@ pub struct Mask {
     )]
     pub feather: Property,
     /// A width of its own for each **vertex** of the path, in layer pixels,
-    /// running linearly along each segment between them (K-545). Empty — the
+    /// running linearly along each segment between them. Empty — the
     /// ordinary mask — means [`Self::feather`] all the way round, and is
     /// absent from the file, so a mask nobody has varied writes exactly the
     /// bytes it always did. An entry short of the path's vertex count falls
@@ -207,7 +207,7 @@ pub struct Mask {
         skip_serializing_if = "Vec::is_empty"
     )]
     pub vertex_feather: Vec<Property>,
-    /// Grow (+) or shrink (−) the shape, in layer pixels. Animatable (K-340).
+    /// Grow (+) or shrink (−) the shape, in layer pixels. Animatable.
     #[serde(
         default = "Property::zero",
         with = "still_or_keyed",
@@ -236,7 +236,7 @@ impl Mask {
     }
 
     /// The feather this mask asks for at `t`, in layer pixels: one width, and
-    /// the per-vertex widths **only when they actually differ** (K-545).
+    /// the per-vertex widths **only when they actually differ**.
     ///
     /// `n` is the vertex count of the path being drawn, which is not always
     /// [`Self::path`]'s: an animated path whose keys hold different point
@@ -376,7 +376,7 @@ impl Mask {
 /// The shape `keys` describe at time `t`, or `still` where there are none.
 ///
 /// One implementation for both things in the document that hold a keyed path:
-/// a mask's shape (K-224) and a shape item's (K-606). The rules are the same
+/// a mask's shape and a shape item's. The rules are the same
 /// because the geometry is — one `BezierPath`, one set of maths — and the whole
 /// of "morphing" is this function plus [`lerp_paths`] beneath it.
 pub fn path_at<'a>(keys: &'a [PathKeyframe], still: &'a BezierPath, t: f64) -> Cow<'a, BezierPath> {
@@ -564,7 +564,7 @@ pub fn rasterise(path: &BezierPath, w: u32, h: u32, sx: f64, sy: f64) -> Vec<u8>
 /// coverages afterwards is a different sum — it double-counts where two rings
 /// overlap — so the contours are walked together and the even-odd crossing
 /// count decides, exactly as it does for one ring. That is what makes a path
-/// boolean's result (K-605) fill with its holes empty: the crossings alternate
+/// boolean's result fill with its holes empty: the crossings alternate
 /// in and out down every scanline, whichever ring they came from.
 ///
 /// One contour hands back byte for byte what [`rasterise`] always did.
@@ -696,7 +696,7 @@ fn mask_coverage(mask: &Mask, w: u32, h: u32, sx: f64, sy: f64, t: f64) -> Vec<u
 }
 
 /// The feather width, in **raster** pixels, at every pixel of a mask whose
-/// vertices carry widths of their own (K-545).
+/// vertices carry widths of their own.
 ///
 /// In plain terms: the soft edge can be wide in one place and narrow in
 /// another, so "how wide is the ramp here" stops being one number and becomes
@@ -1063,7 +1063,7 @@ pub fn combined_coverage(
                 MaskMode::Subtract => t.saturating_sub(c),
                 MaskMode::Intersect => (*t).min(c),
                 // Max and min against what the stack holds, which is what
-                // After Effects means by these two (K-545).
+                // After Effects means by these two.
                 MaskMode::Lighten => (*t).max(c),
                 MaskMode::Darken => (*t).min(c),
                 MaskMode::Difference => t.abs_diff(c),
@@ -1145,11 +1145,11 @@ fn coverage_key(masks: &[Mask], w: u32, h: u32, sx: f64, sy: f64, t: f64) -> u12
 }
 
 // ---------------------------------------------------------------------------
-// The mask-path carriage (K-408): a mask's geometry, on its way to an effect.
+// The mask-path carriage: a mask's geometry, on its way to an effect.
 // ---------------------------------------------------------------------------
 
 /// How closely a flattened mask path follows the curve it came from, in
-/// **pixels at composition scale** (K-408, docs/08 §2.3's unit).
+/// **pixels at composition scale** (docs/08 §2.3's unit).
 ///
 /// A constant on purpose, and this is the whole reason it is one: the polyline
 /// is part of what an effect renders, so if the tolerance could vary — with the
@@ -1166,7 +1166,7 @@ pub const MASK_PATH_TOLERANCE_PX: f64 = 0.5;
 const MAX_SEGMENT_STEPS: usize = 1024;
 
 /// One mask path flattened for an effect: an **arc-length-parameterised
-/// polyline** in layer pixels at composition scale (K-408).
+/// polyline** in layer pixels at composition scale.
 ///
 /// # In plain terms
 ///
@@ -1203,19 +1203,18 @@ pub struct MaskPolyline {
     /// perimeter and a consumer never has to special-case the join.
     pub closed: bool,
     /// The mask's own soft-edge width at this frame, px@comp — total width,
-    /// half either side of the curve, exactly as the mask itself draws it
-    /// (K-546). Zero for a hard edge, and for every way of naming nothing.
+    /// half either side of the curve, exactly as the mask itself draws it.
+    /// Zero for a hard edge, and for every way of naming nothing.
     ///
     /// It rides here because an effect that *fills* the shape has to feather
     /// its fill the way the mask feathers its coverage; an effect that merely
-    /// walks the curve ignores it. One number, not the K-545 per-vertex
-    /// widths: a varying width would have to ride per segment, and the only
-    /// consumer so far is a garbage matte, where the mask's own uniform width
-    /// is what the eye is comparing against.
+    /// walks the curve ignores it. One number, not the per-vertex widths: a
+    /// varying width would have to ride per segment, and the only consumer so
+    /// far is a garbage matte, where the mask's own uniform width is what the
+    /// eye is comparing against.
     pub feather: f32,
     /// The mask's own grow (+) / shrink (−) at this frame, px@comp — where the
-    /// edge sits relative to the drawn curve (K-546). Zero for an unexpanded
-    /// mask.
+    /// edge sits relative to the drawn curve. Zero for an unexpanded mask.
     pub expansion: f32,
 }
 
@@ -1232,10 +1231,10 @@ impl MaskPolyline {
         self.arc.last().copied().unwrap_or(0.0)
     }
 
-    /// The point `s` px along the path, `s` clamped into `0..=length()`
-    /// (K-408). The lookup [`Self::arc`] exists for: a consumer asking "where
-    /// is 60 % of the way round" gets an answer without re-measuring the curve,
-    /// and every consumer gets the *same* answer.
+    /// The point `s` px along the path, `s` clamped into `0..=length()`. The
+    /// lookup [`Self::arc`] exists for: a consumer asking "where is 60 % of the
+    /// way round" gets an answer without re-measuring the curve, and every
+    /// consumer gets the *same* answer.
     ///
     /// A binary search rather than a walk, because Stroke asks it once per
     /// brush stamp and a walk would make placing `n` stamps quadratic in the
@@ -1252,7 +1251,7 @@ impl MaskPolyline {
     }
 
     /// The **unit direction** the path is running in `s` px along it, `s`
-    /// clamped the way [`Self::point_at`] clamps it (K-607).
+    /// clamped the way [`Self::point_at`] clamps it.
     ///
     /// The edge's own direction, not a smoothed one: the flattening already
     /// chose the chords, so two consumers reading the same polyline get the
@@ -1301,7 +1300,7 @@ impl MaskPolyline {
 }
 
 /// Flatten one bezier path to an arc-length-parameterised polyline within
-/// `tolerance_px` (K-408). Deterministic: the subdivision count of each cubic
+/// `tolerance_px`. Deterministic: the subdivision count of each cubic
 /// comes from the control points and the tolerance alone, so the same path
 /// always flattens to the same bytes.
 #[must_use]
@@ -1384,7 +1383,7 @@ pub fn flatten_path(path: &BezierPath, tolerance_px: f64) -> MaskPolyline {
 
 /// Which of `masks` a [`ParamKind::MaskPath`](crate::fx::ParamKind::MaskPath)
 /// row names: the one it names, else the first when the schema's `self_default`
-/// says an unset row means "First mask" (K-408).
+/// says an unset row means "First mask".
 ///
 /// **One place**, because two answers would be two different pictures: the
 /// frame key hashes what this returns and the render flattens what this
@@ -1414,7 +1413,7 @@ pub fn mask_index_for_path_param(
 }
 
 /// The polyline a mask-path row comes to at time `t`, in layer pixels at
-/// composition scale — the whole carriage in one call (K-408). Empty for every
+/// composition scale — the whole carriage in one call. Empty for every
 /// way of naming nothing.
 #[must_use]
 pub fn mask_path_at(
@@ -1427,7 +1426,7 @@ pub fn mask_path_at(
         Some(mask) => {
             let path = mask.path_at(t);
             let mut poly = flatten_path(&path, MASK_PATH_TOLERANCE_PX);
-            // The soft edge and the expansion travel with the curve (K-546):
+            // The soft edge and the expansion travel with the curve:
             // an effect filling the shape has to soften and slide its fill
             // exactly where the mask itself would. Read through the same
             // accessors `mask_coverage` reads, so a garbage matte and the
@@ -1446,11 +1445,11 @@ pub fn mask_path_at(
 mod tests {
     use super::*;
 
-    /// **The same document at the same frame flattens to the same bytes**
-    /// (K-408). The whole reason the tolerance is a constant: the polyline is
-    /// part of what an effect draws, so a flattening that could vary — with the
-    /// preview raster, with a run, with the order the masks happen to be walked
-    /// in — would let one frame key name two pictures.
+    /// **The same document at the same frame flattens to the same bytes**. The
+    /// whole reason the tolerance is a constant: the polyline is part of what
+    /// an effect draws, so a flattening that could vary — with the preview
+    /// raster, with a run, with the order the masks happen to be walked in —
+    /// would let one frame key name two pictures.
     #[test]
     fn a_mask_path_flattens_deterministically() {
         let mut layer_a = vec![Mask::ellipse(60.0, 40.0, 30.0, 18.0)];
@@ -1491,7 +1490,7 @@ mod tests {
         assert!((first[0] - last[0]).abs() < 1e-4 && (first[1] - last[1]).abs() < 1e-4);
     }
 
-    /// **The direction a path is running in, at a distance along it** (K-607) —
+    /// **The direction a path is running in, at a distance along it** —
     /// what a line of type leans by, and what a mask-walking effect turns its
     /// stamp to. A square gives four directions with nothing to argue about,
     /// and the corner reads as the edge it is about to leave.
@@ -1564,7 +1563,7 @@ mod tests {
         );
     }
 
-    /// Which mask a path row comes to (K-408) — and every way of coming to
+    /// Which mask a path row comes to — and every way of coming to
     /// none, all of which are the effect's documented no-op rather than a fault.
     #[test]
     fn a_mask_path_row_resolves_or_is_a_no_op() {
@@ -1901,9 +1900,9 @@ mod tests {
         );
     }
 
-    /// **Lighten and Darken are max and min against what the stack holds**
-    /// (K-545). Read at half opacity, where they are visibly not Add and not
-    /// Subtract: Add would saturate the overlap and Lighten must not.
+    /// **Lighten and Darken are max and min against what the stack holds**.
+    /// Read at half opacity, where they are visibly not Add and not Subtract:
+    /// Add would saturate the overlap and Lighten must not.
     #[test]
     fn lighten_and_darken_take_the_greater_and_the_lesser() {
         // A at 50 %, B at 80 %, overlapping down the middle as `overlapping`
@@ -1962,7 +1961,7 @@ mod tests {
         assert_eq!(at(&cov, 12), 0);
     }
 
-    /// **The soft edge is as wide as the vertices near it say** (K-545): a
+    /// **The soft edge is as wide as the vertices near it say**: a
     /// rectangle sharp along its left edge and soft along its right one.
     ///
     /// Measured as the count of partly covered pixels on a row, which is what
@@ -2077,7 +2076,7 @@ mod tests {
 
     /// The list is absent from the file until somebody uses it, so every mask
     /// ever saved writes the bytes it always did — which is what keeps the
-    /// frame cache's banked frames (K-338's promise, kept).
+    /// frame cache's banked frames.
     #[test]
     fn an_unvaried_mask_serialises_as_it_always_did() {
         let m = Mask::rectangle(0.0, 0.0, 8.0, 8.0);
@@ -2143,7 +2142,7 @@ mod tests {
 
     /// **A still mask still writes bare numbers; only a keyed one grows.**
     ///
-    /// The three values became animatable in K-340, and animatable normally
+    /// The three values became animatable, and animatable normally
     /// means an object in the file. That would have retired every frame every
     /// project has banked, because the frame key names a mask by the bytes it
     /// serialises to — so the encoding stays a bare number until somebody

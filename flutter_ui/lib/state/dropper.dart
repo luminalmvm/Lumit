@@ -61,7 +61,7 @@ enum DropperReads {
 /// parameter index on the far side of the picture, which is the arrangement the
 /// egui build had and the source of its "target has since moved" silence.
 ///
-/// **A pick is a drag, not a click** (K-532). The press starts it, every move
+/// **A pick is a drag, not a click**. The press starts it, every move
 /// stages a fresh sample and previews it, and the release commits once — the
 /// same stage/preview/commit the value fields use, so sweeping a colour or
 /// sliding a point across the picture is watched rather than guessed at. The

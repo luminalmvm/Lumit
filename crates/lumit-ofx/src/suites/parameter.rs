@@ -21,7 +21,7 @@
 //! parameter values while `kOfxActionCreateInstance` is still running, and a
 //! host that refuses there has the library throw before the instance exists —
 //! which from a layer looks like every plugin failing to apply, for a different
-//! reason each time (K-595). What the write does not do is reach the document;
+//! reason each time. What the write does not do is reach the document;
 //! see [`write_param`].
 //!
 //! Keyframing, and the derivative and integral of an animated control, are
@@ -604,7 +604,7 @@ unsafe fn value_from_slots(
 /// there has the library throw, the action fail, and the instance never appear
 /// — which from a layer looks like every plugin refusing to apply, with a
 /// different status each time depending on what the vendor's own handler did
-/// with the exception (K-595, docs/impl/ofx-host.md §5).
+/// with the exception (docs/impl/ofx-host.md §5).
 ///
 /// What the write does **not** do is reach the document. Lumit owns parameter
 /// storage (docs/12 §2.2), so the next render replaces the snapshot with the

@@ -1,4 +1,4 @@
-// Where the puppet's mesh actually is, at the frame on screen (K-704, PU3).
+// Where the puppet's mesh actually is, at the frame on screen (PU3).
 //
 // In plain terms: the wireframe the Viewer draws under a puppet tool is the
 // engine's own mesh, bent by the pins. It is never in the document and never in
@@ -9,7 +9,7 @@
 //
 // **Why this is a cache and not a call in the paint path.** The Viewer rebuilds
 // on every movement of the pointer, and a bridge call per rebuild is what
-// K-184's budget exists to stop (K-681 gates it at zero). The answer changes for
+// the rebuild budget exists to stop, gated at zero. The answer changes for
 // exactly three reasons — a different layer, a new frame from the engine, an
 // edit — and it is held against exactly those three, so a hover asks nothing.
 

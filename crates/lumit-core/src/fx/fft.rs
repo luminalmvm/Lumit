@@ -1,5 +1,5 @@
 //! A small in-house complex FFT and fractional Fourier transform for the
-//! Lens flare bakes (docs/impl/lens-flare.md §5, K-256). Power-of-two sizes
+//! Lens flare bakes (docs/impl/lens-flare.md §5). Power-of-two sizes
 //! only; runs on the CPU at parameter-change time, never per frame, so
 //! clarity beats micro-speed. All internals are f64 (the chirp phases of the
 //! FRFT lose visible precision in f32); callers convert to f32 at the edge.

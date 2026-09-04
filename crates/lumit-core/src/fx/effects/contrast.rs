@@ -18,7 +18,7 @@ use lumit_fx_macros::Effect;
 pub struct Contrast {
     /// Per cent about mid-grey: 0 = flat grey, 100 = neutral, 200 = doubled.
     /// Hard min 0 (no inversion); unbounded above. The response between those
-    /// points is quadratic in the distance from 100 (K-737), so the first few
+    /// points is quadratic in the distance from 100, so the first few
     /// per cent are a nudge rather than a jump.
     #[slider(min = 0.0, max = 200.0, default = 100.0, hard_min = 0.0, unit = Percent)]
     pub contrast: f32,
@@ -42,7 +42,7 @@ impl Contrast {
     ///
     /// `k = 1 + t|t|`, where `t` is the distance from neutral in hundredths
     /// (`contrast / 100 − 1`): the response is **quadratic** in that distance,
-    /// not linear (K-737). A per cent either side of 100 moves a hundredth of
+    /// not linear. A per cent either side of 100 moves a hundredth of
     /// what it used to, which is what the slider needed to be usable near
     /// neutral, and the two ends are exactly where they were — 0 flattens to
     /// grey, 200 doubles. Neutral is `t == 0`, so 100 % is still the bit-exact

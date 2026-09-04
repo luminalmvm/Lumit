@@ -1,4 +1,4 @@
-// Movable, resizable modal windows (K-242): dragging moves one, the corner grip
+// Movable, resizable modal windows: dragging moves one, the corner grip
 // resizes one, and both are remembered in the workspace store so the window
 // opens where it was left — this session and the next.
 
@@ -150,7 +150,7 @@ void main() {
   });
 
   /// The panels hang their keyboard commands off the hardware keyboard, so
-  /// they have to be told a window is up (K-243) — and told it is gone again
+  /// they have to be told a window is up — and told it is gone again
   /// however it left, including having its tree taken down under it. A count
   /// that stuck above zero would leave the keyboard dead for the session.
   testWidgets('a window says it is open, and stops when it goes',

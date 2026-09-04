@@ -1,4 +1,4 @@
-//! Combine (K-471 §1.3): four numbers put back together as a colour.
+//! Combine (node-graph.md §1.3): four numbers put back together as a colour.
 //!
 //! **In plain terms.** The other half of [`split`](super::split). Wire a number
 //! into Red, another into Green, another into Blue — an audio level, a wiggle,
@@ -22,7 +22,7 @@ use lumit_fx_macros::Effect;
 /// point of the node is that a number arriving by wire becomes a channel, and a
 /// swatch has nowhere for four separate wires to land. The 0..1 slider is the
 /// range a colour is usually written in; a wire may carry any number, since a
-/// driver's own sockets are never held to a range (K-510).
+/// driver's own sockets are never held to a range.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "combine",

@@ -1,4 +1,4 @@
-// A shape layer's size (K-237): the box its art fills.
+// A shape layer's size: the box its art fills.
 //
 // This is the one number a shape layer shares with the engine — the renderer
 // sizes the raster with `shape::ShapeItem::bounds` and the Viewer draws the
@@ -79,7 +79,7 @@ void main() {
     expect(size, const Size(25, 10));
   });
 
-  /// An outline pushed out of the path is art outside the path (K-554), and
+  /// An outline pushed out of the path is art outside the path, and
   /// the engine grows its raster the same way.
   test('an offset outline grows the box, and pulling it in does not', () {
     final art = [corner(0, 0), corner(10, 0), corner(10, 10), corner(0, 10)];
@@ -90,7 +90,7 @@ void main() {
   });
 
   /// The repeater puts art where the path is not, so the layer has to be big
-  /// enough to hold it (K-553) — the engine sizes its raster the same way.
+  /// enough to hold it — the engine sizes its raster the same way.
   test("a repeated shape's box holds every copy", () {
     final art = [corner(0, 0), corner(6, 0), corner(6, 6), corner(0, 6)];
     expect(shapeContentsBounds([item(art)]), const Size(6, 6));

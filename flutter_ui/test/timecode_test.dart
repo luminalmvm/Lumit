@@ -1,4 +1,4 @@
-// The shared clock face, and the two things K-287 added to it: how wide a
+// The shared clock face, and the two things added to it later: how wide a
 // timecode is at a given rate, and a timecode that can be negative (a Retime
 // asking for a moment before the start of its media).
 

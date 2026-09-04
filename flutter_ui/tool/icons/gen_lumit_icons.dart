@@ -4,7 +4,7 @@
 //
 // A glyph is edited in the JSON — one line, the inside of a 16x16 <svg> — and
 // this script wraps each body in the one document shape the set is drawn to
-// (docs/15-DESIGN.md §5, K-440) and gives it a camelCase constant so a call
+// (docs/15-DESIGN.md §5) and gives it a camelCase constant so a call
 // site cannot misspell a name.
 
 import 'dart:convert';
@@ -56,7 +56,7 @@ void main() {
     ..writeln('//')
     ..writeln('//   dart run tool/icons/gen_lumit_icons.dart')
     ..writeln('//')
-    ..writeln('// The set is Lumit\'s own (docs/15-DESIGN.md §5, K-440): a 16px')
+    ..writeln('// The set is Lumit\'s own (docs/15-DESIGN.md §5): a 16px')
     ..writeln('// grid, a 1.5px stroke, round caps, one weight, and')
     ..writeln('// currentColor throughout, so a glyph takes the text colour of')
     ..writeln('// wherever it sits. LumitIcon (lib/icons/lumit_icon.dart) draws')

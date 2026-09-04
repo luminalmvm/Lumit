@@ -64,8 +64,8 @@ pub const ROUGHEN_EDGES_ENABLED_WHEN: &[EnabledWhen] = &[
     seeded = true,
     groups = ROUGHEN_EDGES_GROUPS,
     enabled_when = ROUGHEN_EDGES_ENABLED_WHEN,
-    // K-428: the matte scales the amount, inside the kernel (the owner's rule
-    // for mattes); the generic strength dissolve does not also run.
+    // The matte scales the amount, inside the kernel (the owner's rule for
+    // mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales Border per pixel: white chews the outline at the full Border,          grey takes finer bites, black leaves it alone",

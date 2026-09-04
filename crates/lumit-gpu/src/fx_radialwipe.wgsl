@@ -10,7 +10,7 @@
 // away from zero and WGSL rounds them to even, and one pixel landing on the
 // wrong side of the wedge is exactly what §1.6 exists to catch.
 //
-// One atan2 a pixel — §3.42's admission again (K-399): the angle IS a function
+// One atan2 a pixel — §3.42's admission again: the angle IS a function
 // of the pixel and cannot be lifted host-side, so the oracle is judged on
 // absolute difference rather than in fp16 ULPs.
 //
@@ -26,7 +26,7 @@ struct Params {
     completion: f32,     // 0..1
     feather: f32,        // the soft edge's width at the arc, raster px, floored above zero
     mix_amt: f32,        // 0..1, blended against the unprocessed input
-    matte_on: f32,       // 1 = the matte scales Completion per pixel (K-429)
+    matte_on: f32,       // 1 = the matte scales Completion per pixel
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -34,14 +34,14 @@ struct Params {
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
 
-// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// The Matte (docs/08 §2.6), bound for every kernel on this layout and
 // read only under `matte_on` — bound to `src` when there is none, since a
 // texture binding cannot be left empty.
 @group(0) @binding(4) var matte: texture_2d<f32>;
 
 // This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
 // luma, clamped. The Channel pick and Invert already happened, once, at the
-// seam (fx_matte_prepare.wgsl, K-425).
+// seam (fx_matte_prepare.wgsl).
 fn matte_k(xy: vec2<i32>) -> f32 {
     let m = textureLoad(matte, xy, 0);
     return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
@@ -72,7 +72,7 @@ fn radial_wipe(@builtin(global_invocation_id) gid: vec3<u32>) {
     // The wedge's half-width, with a half-band lead-in at each end so
     // Completion 0 and 100 are the exact identity and the exact empty frame.
     // The matte pulls Completion toward 0 per pixel, before the edge is
-    // placed (K-429): a gradient wipe, which a strength dissolve cannot make.
+    // placed: a gradient wipe, which a strength dissolve cannot make.
     var completion = p.completion;
     if (p.matte_on != 0.0) {
         completion = matte_toward(p.completion, 0.0, matte_k(xy));

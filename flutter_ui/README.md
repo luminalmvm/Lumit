@@ -1,12 +1,11 @@
 # lumit_flutter — the Flutter frontend
 
-Lumit's interface (decision K-174). The Rust engine crates are untouched; Talks
-to the engine through `crates/lumit-bridge`.
+Lumit's interface. The Rust engine crates are untouched; it talks to the engine
+through `crates/lumit-bridge`.
 
 **How the frontend and engine communicate is specified in
-[`docs/17-BRIDGE-CONTRACT.md`](../docs/17-BRIDGE-CONTRACT.md).** Read
-`docs/GUIDE.md` §9 for the plain-English framing. The historical port notes
-(strategy, UI inventory, parity checklist) are archived under
+[`docs/17-BRIDGE-CONTRACT.md`](../docs/17-BRIDGE-CONTRACT.md).** The historical port
+notes (strategy, UI inventory, parity checklist) are archived under
 [`docs/archive/flutter-port/`](../docs/archive/flutter-port/README.md).
 
 ## Running

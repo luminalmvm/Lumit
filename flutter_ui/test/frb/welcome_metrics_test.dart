@@ -1,7 +1,7 @@
 // The welcome screen, measured against the approved drawing, and made to work.
 //
 // **Why this file exists.** The screen is the first thing anybody sees, and it
-// is built entirely to one mockup (K-451, K-464): every width, every row
+// is built entirely to one mockup: every width, every row
 // height, every face is a number read off that drawing, and a value that
 // disagrees with it is a defect. So the first half of this file is a ruler.
 //
@@ -112,7 +112,7 @@ void main() {
       expect(header.top - cards.bottom, welcomeBlockGap);
     });
 
-    /// 2. **The wordmark is the brand's own lockup** (K-480), not the word set
+    /// 2. **The wordmark is the brand's own lockup**, not the word set
     /// in mono: the blue key, `umi`, and the violet key that is the blue one
     /// turned through 180°. The two keys are brand tokens, so they are the same
     /// in every colour scheme; only the lettering follows the theme.
@@ -186,8 +186,8 @@ void main() {
     /// 3. **Two start cards, 63 tall with 10 between them.** The height is
     /// 14 of padding round a 13px title, a 4px gap and the 9px note, with the
     /// hairline counted in — §12A.6's rule that a mockup height is the
-    /// effective one. There were three until K-617 took the folder-first card
-    /// off the page; the two that are left share the same 560 column.
+    /// effective one. There were three until the folder-first card came off
+    /// the page; the two that are left share the same 560 column.
     testWidgets('the start cards are the drawing\'s size', (tester) async {
       await mount(tester);
 
@@ -232,8 +232,8 @@ void main() {
       expect(styleOf(tester, l10n.welcomeClearRecent).letterSpacing, 0.54);
     });
 
-    /// 5. **Three rows measure 160 inside a hairline.** 52 apiece (K-468: the
-    /// row grew from 40 to carry a picture), with a seam under all but the
+    /// 5. **Three rows measure 160 inside a hairline.** 52 apiece (the row
+    /// grew from 40 to carry a picture), with a seam under all but the
     /// last, so the eye reads 53 / 53 / 52.
     testWidgets('the recents well is the drawing\'s height', (tester) async {
       await mount(tester, recents: paths);
@@ -255,7 +255,7 @@ void main() {
     /// owner asked for taking its room out of the flexible name column — step
     /// 1 of §12A.6's ladder, which is where width is meant to come from.
     ///
-    /// **And there is no format column** (K-468). The reserved 120px that held
+    /// **And there is no format column**. The reserved 120px that held
     /// `1920×1080 · 25` is gone entirely: a size and a rate belong to a
     /// composition, and a project has as many of those as it likes.
     testWidgets('a recent row carries the drawing\'s columns', (tester) async {
@@ -298,7 +298,7 @@ void main() {
               welcomeForgetColumnWidth,
           348,
           reason: 'the name column is 348 inside the well\'s hairline — 28 '
-              'wider than it was before the format column went (K-468)');
+              'wider than it was before the format column went');
 
       // The newest project is the last one remembered.
       expect(find.text('Set me free'), findsOneWidget,
@@ -338,7 +338,7 @@ void main() {
 
     // --- What it does -----------------------------------------------------
 
-    /// 8. **New project hands the window over and nothing else** (K-617). The
+    /// 8. **New project hands the window over and nothing else**. The
     /// empty project the application boots with is already loaded, so this
     /// card has nothing to make and nothing to ask: where the file goes is a
     /// question for the first save. It was the *Blank project* card until the
@@ -356,7 +356,7 @@ void main() {
           reason: 'saved later, as the card says');
     });
 
-    /// 9c. **Escape closes the screen with nothing open** (K-481). It is the
+    /// 9c. **Escape closes the screen with nothing open**. It is the
     /// standard way out of anything that has taken the window, and it is safe
     /// because the shell behind it offers the same two ways to start.
     testWidgets('Escape closes the welcome screen', (tester) async {
@@ -369,7 +369,7 @@ void main() {
     });
 
     /// 9d. **The footer says which Lumit this is**, not which library printed
-    /// the boot line (K-480): "Lumit 0.2.0", the one product version Settings ▸
+    /// the boot line: "Lumit 0.2.0", the one product version Settings ▸
     /// General shows too.
     testWidgets('the version line is the product\'s, not the crate\'s',
         (tester) async {
@@ -456,7 +456,7 @@ void main() {
           reason: 'and the document is already being read behind it');
     });
 
-    // --- The picture on a row (K-468) -------------------------------------
+    // --- The picture on a row ---------------------------------------------
 
     /// A `.lum` to save to, and the thumbnail it would be filed under, both
     /// cleaned up after the test. The thumbnails themselves land beside the
@@ -592,8 +592,8 @@ void main() {
           reason: 'and the row simply shows its placeholder');
     });
 
-    /// 18. **A save with no Viewer up still files a picture** (K-468). This is
-    /// the whole regression: an After Effects conversion, an agent, a save from
+    /// 18. **A save with no Viewer up still files a picture**. This is
+    /// the whole regression: an After Effects conversion, a script, a save from
     /// a workspace with the Viewer closed — every one of them photographed a
     /// Viewer that was not there, filed nothing, and left the owner's welcome
     /// screen a column of empty wells. The engine draws the fronted composition
@@ -618,7 +618,7 @@ void main() {
       await tester.runAsync(() async {
         await saveProjectFrb(p.state, p.uiState,
             forcePicker: true, picker: () async => scratch.project);
-        // The picture is deliberately not awaited by the save (K-468), so let
+        // The picture is deliberately not awaited by the save, so let
         // the road it was sent down finish before reading the folder.
         await Future<void>.delayed(const Duration(milliseconds: 200));
       });
@@ -630,7 +630,7 @@ void main() {
       expect(scratch.thumb.readAsBytesSync(), onePixelPng);
     });
 
-    /// 19. **Opening a project with no picture grows one, once** (K-468). The
+    /// 19. **Opening a project with no picture grows one, once**. The
     /// backfill is what gives the owner's already-converted projects their
     /// rows back: they were saved before the engine could draw a thumbnail, so
     /// nothing but opening them will ever fill their wells.
@@ -680,7 +680,7 @@ void main() {
     });
   }, skip: !engineAvailable);
 
-  // --- The empty shell (K-481) ---------------------------------------------
+  // --- The empty shell -----------------------------------------------------
   //
   // The welcome screen can be closed with nothing open, so something has to be
   // behind it. The two ways to start work stand in the Viewer until
@@ -714,7 +714,7 @@ void main() {
       expect(find.byKey(const ValueKey('welcome-card-new')), findsOneWidget);
       expect(find.byKey(const ValueKey('welcome-card-open')), findsOneWidget);
       expect(find.byKey(const ValueKey('welcome-card-blank')), findsNothing,
-          reason: 'the same two the welcome offers, and no third (K-617)');
+          reason: 'the same two the welcome offers, and no third');
       expect(find.text(l10n.selectACompositionFirst), findsNothing);
     });
 

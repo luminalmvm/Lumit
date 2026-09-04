@@ -53,7 +53,7 @@ const REFERENCE = {
       category_slug: "stylise",
       groups: [],
       params: [
-        // A closed range (K-414): the ends are the slider and the hard bounds
+        // A closed range: the ends are the slider and the hard bounds
         // at once, so the row must read as an ordinary slider with no "any
         // value by typing" after it.
         {

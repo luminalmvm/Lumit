@@ -35,7 +35,7 @@ use crate::api::{layer::LayerReference, state::PROJECTS, BridgeError};
 /// One built-in effect as the Add-effect menu needs it: the stable `name` to
 /// pass to [`crate::api::layer::LayerReference::add_effect`], the sentence-case
 /// `label` to draw, and the category to group under. `category` is a stable
-/// machine key the menu sorts by; `category_label` is its heading (K-090).
+/// machine key the menu sorts by; `category_label` is its heading.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BridgeEffectInfo {
@@ -52,7 +52,7 @@ pub struct BridgeEffectInfo {
     /// browser needs it for every row it draws.
     pub namespace: String,
     /// The sockets an instance of this entry would draw, from its declaration
-    /// alone (K-471 §1.3) — the parameters that can take a wire.
+    /// alone — the parameters that can take a wire.
     ///
     /// Here because the Graph panel has to know an entry's ports *before* it is
     /// in the document: it is what lets adding a driver and joining it to the
@@ -82,7 +82,7 @@ pub fn list_effects() -> Vec<BridgeEffectInfo> {
     catalogue(|_| true)
 }
 
-/// **All nine layer styles** (docs/impl/layer-styles.md §1, K-706), in §2's
+/// **All nine layer styles** (docs/impl/layer-styles.md §1), in §2's
 /// pinned painting order.
 ///
 /// Deliberately **not** part of [`list_effects`]: the effect browser, the
@@ -130,7 +130,7 @@ pub struct BridgeStyleInfo {
     pub offered: bool,
 }
 
-/// The Drivers family (K-471 §1.3) — the Graph panel's own search list, in the
+/// The Drivers family — the Graph panel's own search list, in the
 /// same shape and the same schema order as [`list_effects`].
 ///
 /// Its own listing rather than a filter the frontend applies, because the
@@ -148,13 +148,13 @@ pub const NAMESPACE_BUILTIN: &str = "builtin";
 /// An entry that came out of an OFX plugin on this machine (docs/12 §2.6).
 pub const NAMESPACE_OFX: &str = "ofx";
 /// An entry that came out of an **audio plugin** — CLAP or VST3, told apart
-/// only by the match name's own prefix (K-707, AP5). One value for both
+/// only by the match name's own prefix (AP5). One value for both
 /// standards because the browser draws them the same: one Audio plugins
 /// group, one switch-off command, one provenance line.
 pub const NAMESPACE_AUDIO: &str = "audio";
 
 /// Whether a catalogue name is an audio plugin's — the match name's own prefix,
-/// which is the one place provenance is carried (K-707).
+/// which is the one place provenance is carried.
 #[frb(ignore)]
 fn is_audio_match_name(match_name: &str) -> bool {
     lumit_core::fx::audio_plugin_id(match_name).is_some()
@@ -179,7 +179,7 @@ fn plugin_category_key(grouping: &str) -> String {
 /// The catalogue walk both listings share, so the two cannot drift apart on
 /// what an entry looks like.
 ///
-/// **The whole catalogue, not the built-in slice** (K-593/K-594): the run-time
+/// **The whole catalogue, not the built-in slice**: the run-time
 /// half is where a discovered plugin lives, and walking `BUILTINS` would have
 /// left every plugin out of the one listing the browser reads. The built-ins
 /// still come first and in schema order, because that is the order the
@@ -236,7 +236,7 @@ fn catalogue(keep: impl Fn(lumit_core::fx::FxCategory) -> bool) -> Vec<BridgeEff
                 // Lumit; they part company for a definition registered by some
                 // other route, and calling that one a built-in would have the
                 // frontend offer to do built-in things to somebody else's
-                // effect (K-595).
+                // effect.
                 namespace: if lumit_core::fx::BUILTIN_DEFS
                     .builtins()
                     .any(|def| def.schema().match_name == schema.match_name)
@@ -277,7 +277,7 @@ pub struct BridgePluginScan {
 /// it — the start-up scan and the rescan command are the same call.
 ///
 /// Registration is additive and idempotent: calling this twice registers each
-/// plugin once (K-593), so a rescan after installing something new is safe at
+/// plugin once, so a rescan after installing something new is safe at
 /// any moment.
 pub fn rescan_plugins() -> BridgePluginScan {
     let prefs = lumit_project::PluginPrefs::load_default();
@@ -304,8 +304,7 @@ pub fn rescan_plugins() -> BridgePluginScan {
 }
 
 /// The **audio** half of a rescan: the machine's CLAP *and VST3* folders,
-/// described in a broker process, registered into the same catalogue (K-700,
-/// K-707).
+/// described in a broker process, registered into the same catalogue.
 ///
 /// One call for both standards on purpose. `search_paths` is both standards'
 /// folders, `scan_brokered` spawns the same broker binary for either kind of
@@ -313,7 +312,7 @@ pub fn rescan_plugins() -> BridgePluginScan {
 /// an effect by exactly the road a CLAP one does, and the frontend cannot tell
 /// which it got except by the match name.
 ///
-/// One list of switched-off identifiers serves both hosts (K-594), and the
+/// One list of switched-off identifiers serves both hosts, and the
 /// session's copy is written before the scan for the same reason the OFX one
 /// is: a plugin switched off earlier must be switched off for *this* session's
 /// mixes too, not merely absent from the listing.
@@ -368,7 +367,7 @@ fn scan_audio_plugins(prefs: &lumit_project::PluginPrefs, scan: &mut BridgePlugi
 /// answer still holds for this session.
 #[frb(sync)]
 pub fn set_plugin_enabled(effect: String, enabled: bool) -> Result<(), BridgeError> {
-    // Three prefixes, two hosts, one preference file (K-594, K-707): the name's
+    // Three prefixes, two hosts, one preference file: the name's
     // own prefix says which host is told, and the file is written the same way
     // whichever it was. CLAP and VST3 are one host and one switched-off list —
     // the identifier is a plugin id or a class id, and the list holds either.
@@ -432,8 +431,8 @@ pub fn list_presets() -> Vec<BridgePresetInfo> {
         .unwrap_or_default()
 }
 
-/// Every `.lumgrp` **node group** in the same library folder, sorted by name
-/// (K-651) — what the graph canvas's search offers beside the drivers.
+/// Every `.lumgrp` **node group** in the same library folder, sorted by name —
+/// what the graph canvas's search offers beside the drivers.
 ///
 /// The same folder as the effect presets, because it is the same kind of thing:
 /// something this person saved to use again, on any project.
@@ -687,7 +686,7 @@ pub struct BridgeParamInfo {
     pub id: String,
     pub label: String,
     pub kind: BridgeParamKind,
-    /// What the number *is* (K-443): the rider the row draws beside the value,
+    /// What the number *is*: the rider the row draws beside the value,
     /// and — on a point pair — the unit a Viewer pick has to write in. Declared
     /// per parameter engine-side, so a row's unit travels with the row rather
     /// than with its id and the panel never has to guess.
@@ -708,7 +707,7 @@ pub enum BridgeParamKind {
         /// `hard_min`/`hard_max` may not.
         slider_min: f64,
         slider_max: f64,
-        /// Hard bounds, either side open (K-090: a threshold clamps at zero
+        /// Hard bounds, either side open (a threshold clamps at zero
         /// below and runs unbounded above).
         hard_min: Option<f64>,
         hard_max: Option<f64>,
@@ -759,15 +758,15 @@ pub enum BridgeParamKind {
     },
     Layer,
     /// One of the **owning layer's masks**, whose geometry the effect walks
-    /// (K-408, docs/08 §1.2). The panel draws the layer's masks by name, with
+    /// (docs/08 §1.2). The panel draws the layer's masks by name, with
     /// "First mask" as the unset entry; the mask names come from the read model
     /// the panel already holds, so the row costs no call of its own.
     MaskPath,
-    /// A tone curve, drawn as a curve editor (K-412). The panel edits the
+    /// A tone curve, drawn as a curve editor. The panel edits the
     /// point list itself; there is no range to declare, because the points
     /// live in the unit square by definition.
     Curve,
-    /// A closed range (K-414), drawn as a track and thumb with the value
+    /// A closed range, drawn as a track and thumb with the value
     /// beside it. `min`/`max` are the travel *and* the hard bound — that is
     /// what closed means — so the row refuses a typed value outside them.
     ///
@@ -780,7 +779,7 @@ pub enum BridgeParamKind {
         min: f64,
         max: f64,
     },
-    /// A **button** (K-417), drawn as one and pressed through
+    /// A **button**, drawn as one and pressed through
     /// [`crate::api::layer::LayerReference::fire_effect_action`]. It carries no
     /// value at all — no default, no range, nothing in
     /// [`BridgeEffectInstanceInfo::values`] — because a press is an event and
@@ -799,8 +798,8 @@ pub enum BridgeParamKind {
 pub fn list_parameters(effect: String) -> Vec<BridgeParamInfo> {
     // The **whole** catalogue: a plugin's parameters have to reach Effect
     // controls exactly as a built-in's do, and `BUILTINS` is the compile-time
-    // half alone (K-593/K-594). `def` rather than the catalogue itself, so a
-    // **layer style** answers here too (K-706): styles are a second list, and a
+    // half alone. `def` rather than the catalogue itself, so a
+    // **layer style** answers here too: styles are a second list, and a
     // style's rows are drawn by these same widgets.
     let Some(schema) = lumit_core::fx::def(&effect).map(lumit_core::fx::EffectDef::schema) else {
         return Vec::new();
@@ -831,7 +830,7 @@ pub(crate) fn bridge_param(param: &lumit_core::fx::ParamSchema) -> BridgeParamIn
             hard_min: hard.0,
             hard_max: hard.1,
         },
-        // A closed range (K-414) crosses as its own kind now that the
+        // A closed range crosses as its own kind now that the
         // panel draws one: a track and thumb with the value beside it.
         // The *value* still crosses as a Float scalar, so the row keeps
         // every float path — keyframes, the graph editor, the
@@ -876,12 +875,12 @@ pub(crate) fn bridge_param(param: &lumit_core::fx::ParamSchema) -> BridgeParamIn
             filter_name: filter_name.to_owned(),
         },
         ParamKind::Angle { default, dial_step } => BridgeParamKind::Angle { default, dial_step },
-        // `self_default` is an engine-side instantiation detail
-        // (K-288) — the panel draws the same picker either way, and
+        // `self_default` is an engine-side instantiation detail —
+        // the panel draws the same picker either way, and
         // the value it edits already carries the layer id.
         ParamKind::Layer { .. } => BridgeParamKind::Layer,
-        // `self_default` is an engine-side resolution detail here too
-        // (K-408): the panel always offers "First mask" as its unset
+        // `self_default` is an engine-side resolution detail here too:
+        // the panel always offers "First mask" as its unset
         // entry, and what an unset row comes to is the render's answer,
         // not a control the panel draws differently.
         ParamKind::MaskPath { .. } => BridgeParamKind::MaskPath,
@@ -890,7 +889,7 @@ pub(crate) fn bridge_param(param: &lumit_core::fx::ParamSchema) -> BridgeParamIn
         // so the panel draws the curve it stores, never one the seam
         // had to describe.
         ParamKind::Curve { .. } => BridgeParamKind::Curve,
-        // A button (K-417). The row crosses so the panel can draw one;
+        // A button. The row crosses so the panel can draw one;
         // the *value* never does, because there is none — the press
         // goes back as an event on the owning layer
         // (`fire_effect_action`), not as a write.
@@ -904,12 +903,12 @@ pub(crate) fn bridge_param(param: &lumit_core::fx::ParamSchema) -> BridgeParamIn
     }
 }
 
-/// The unit a parameter's number is in (K-443) — what the row draws as its
+/// The unit a parameter's number is in — what the row draws as its
 /// rider beside the value, and what a point pick has to write in.
 ///
 /// Mirrors [`lumit_core::fx::Unit`] with the two the seam has no use for
 /// folded away: `Unset` is a build failure engine-side, so nothing that ships
-/// can carry it, and `PctDiag` is forbidden to every parameter (K-419). Both
+/// can carry it, and `PctDiag` is forbidden to every parameter. Both
 /// arrive here as [`BridgeUnit::Raw`] — the panel draws no rider, which is the
 /// honest answer for a unit that must not exist.
 #[frb(non_opaque)]
@@ -919,7 +918,7 @@ pub enum BridgeUnit {
     Raw,
     /// Per cent, where 100 is the whole of whatever it is a share of.
     Percent,
-    /// Pixels at composition size (px@comp) — the one spatial unit (K-419).
+    /// Pixels at composition size (px@comp) — the one spatial unit.
     Px,
     Degrees,
     Seconds,
@@ -943,7 +942,7 @@ pub(crate) fn bridge_unit(unit: lumit_core::fx::Unit) -> BridgeUnit {
 }
 
 /// One **vector pair** of an effect: two adjacent `_x`/`_y` Float parameters
-/// the panel draws as one row of two wells with a chain between them (K-443).
+/// the panel draws as one row of two wells with a chain between them.
 ///
 /// The convention used to be read off the ids at the seam, by whoever needed
 /// it; [`lumit_core::fx::EffectSchema::pairs`] is the declaration answering it
@@ -960,7 +959,7 @@ pub struct BridgeParamPair {
 
 /// An effect's vector pairs, in schema order — the fourth static list beside
 /// [`list_parameters`], and memoised on the Dart side for the same reason
-/// (K-183: the schema never changes, and a fetch per card per rebuild is
+/// (the schema never changes, and a fetch per card per rebuild is
 /// exactly the traffic the budget test forbids).
 ///
 /// An unknown match name is an empty list rather than an error, like every
@@ -970,8 +969,8 @@ pub struct BridgeParamPair {
 pub fn list_pairs(effect: String) -> Vec<BridgeParamPair> {
     // The **whole** catalogue: a plugin's parameters have to reach Effect
     // controls exactly as a built-in's do, and `BUILTINS` is the compile-time
-    // half alone (K-593/K-594). `def` rather than the catalogue itself, so a
-    // **layer style** answers here too (K-706): styles are a second list, and a
+    // half alone. `def` rather than the catalogue itself, so a
+    // **layer style** answers here too: styles are a second list, and a
     // style's rows are drawn by these same widgets.
     let Some(schema) = lumit_core::fx::def(&effect).map(lumit_core::fx::EffectDef::schema) else {
         return Vec::new();
@@ -986,13 +985,13 @@ pub fn list_pairs(effect: String) -> Vec<BridgeParamPair> {
         .collect()
 }
 
-/// One collapsible parameter group of an effect (docs/08 §1.2, K-145/K-257):
+/// One collapsible parameter group of an effect (docs/08 §1.2):
 /// the panel tucks the named member rows behind a twirl. An empty `label`
 /// renders headerless (the rows appear in place, no twirl) — the shape a
 /// conditional run of parameters takes. `visible_when_param` with a
 /// non-empty `visible_when_values` shows the group only while that sibling
 /// Choice parameter holds one of those indices.
-// A group whose schema says its rows are per glass element of a lens (K-371)
+// A group whose schema says its rows are per glass element of a lens
 // arrives as exactly that same shape: `visible_when_param` is the Lens
 // dropdown and `visible_when_values` lists the lenses whose prescription has
 // enough elements for the row. The panel therefore has one visibility rule to
@@ -1014,7 +1013,7 @@ pub struct BridgeParamGroup {
 }
 
 /// The Lens flare's lens-pick parameter, whose value the per-element coating
-/// rows' visibility is resolved against (K-371).
+/// rows' visibility is resolved against.
 ///
 /// Spelled once, here, because getting it wrong is silent: the panel looks the
 /// sibling up by id, finds nothing, and hides every row that names it — which
@@ -1031,8 +1030,8 @@ pub(crate) const LENS_PICK_PARAM: &str = "lens_model";
 pub fn list_parameter_groups(effect: String) -> Vec<BridgeParamGroup> {
     // The **whole** catalogue: a plugin's parameters have to reach Effect
     // controls exactly as a built-in's do, and `BUILTINS` is the compile-time
-    // half alone (K-593/K-594). `def` rather than the catalogue itself, so a
-    // **layer style** answers here too (K-706): styles are a second list, and a
+    // half alone. `def` rather than the catalogue itself, so a
+    // **layer style** answers here too: styles are a second list, and a
     // style's rows are drawn by these same widgets.
     let Some(schema) = lumit_core::fx::def(&effect).map(lumit_core::fx::EffectDef::schema) else {
         return Vec::new();
@@ -1044,7 +1043,7 @@ pub fn list_parameter_groups(effect: String) -> Vec<BridgeParamGroup> {
             label: g.label.to_owned(),
             params: g.params.iter().map(|p| (*p).to_owned()).collect(),
             collapsed: g.collapsed,
-            // The per-element rows (K-371) become an ordinary "this sibling
+            // The per-element rows become an ordinary "this sibling
             // Choice holds one of these" rule, resolved from the lens library
             // here so the frontend needs no new mechanism and no notion of an
             // element. The two conditions are mutually exclusive by
@@ -1113,8 +1112,8 @@ pub fn list_enabled_when(effect: String) -> Vec<BridgeEnabledWhen> {
 
     // The **whole** catalogue: a plugin's parameters have to reach Effect
     // controls exactly as a built-in's do, and `BUILTINS` is the compile-time
-    // half alone (K-593/K-594). `def` rather than the catalogue itself, so a
-    // **layer style** answers here too (K-706): styles are a second list, and a
+    // half alone. `def` rather than the catalogue itself, so a
+    // **layer style** answers here too: styles are a second list, and a
     // style's rows are drawn by these same widgets.
     let Some(schema) = lumit_core::fx::def(&effect).map(lumit_core::fx::EffectDef::schema) else {
         return Vec::new();
@@ -1238,8 +1237,8 @@ pub struct BridgeKeyframe {
 
 impl BridgeKeyframe {
     /// One key, its time carried into **comp** time by `offset` — the layer's
-    /// `start_offset`, where its own zero sits on the composition's clock
-    /// (K-213). The engine keys every property in layer-local seconds so a
+    /// `start_offset`, where its own zero sits on the composition's clock.
+    /// The engine keys every property in layer-local seconds so a
     /// layer's animation travels with it; the interface draws and edits in comp
     /// frames. This is the one place the two are reconciled.
     #[frb(ignore)]
@@ -1291,7 +1290,7 @@ pub enum BridgeScalar {
 
 impl BridgeScalar {
     /// This channel with its keys on the composition's clock — see
-    /// [`BridgeKeyframe::read_at`] for why the seam converts (K-213). Pass the
+    /// [`BridgeKeyframe::read_at`] for why the seam converts. Pass the
     /// layer's `start_offset`; the offset is never guessed, so a caller that
     /// has no layer cannot forget one.
     #[frb(ignore)]
@@ -1367,7 +1366,7 @@ pub struct BridgeColour {
 
 /// A file parameter: the paths it references, and the index that selects which
 /// one is live. Two paths cannot be blended, so the index only ever steps
-/// (hold keyframes, K-111); the common case is one path and a static index.
+/// (hold keyframes); the common case is one path and a static index.
 /// An empty `paths` means unset, which the consuming effect treats as identity.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq)]
@@ -1398,11 +1397,11 @@ pub enum BridgeEffectValue {
     Seed(u32),
     File(BridgeFileParam),
     Layer(Option<Uuid>),
-    /// Which of the owning layer's masks an effect walks (K-408): the mask id,
+    /// Which of the owning layer's masks an effect walks: the mask id,
     /// or `None` for "First mask". The *geometry* never crosses — the render
     /// flattens it engine-side, beside the op.
     MaskPath(Option<Uuid>),
-    /// A tone curve as its own control points (K-412): 2..=16 `[x, y]` pairs
+    /// A tone curve as its own control points: 2..=16 `[x, y]` pairs
     /// in the unit square, in x order. Crosses as written — the engine
     /// straightens what it reads (`CurvePoints::sanitised`), so a panel
     /// mid-drag need not, and a curve is never refused for being momentarily
@@ -1412,7 +1411,7 @@ pub enum BridgeEffectValue {
 
 impl BridgeEffectValue {
     /// `offset` is the owning layer's `start_offset`, carrying every key onto
-    /// the composition's clock (K-213).
+    /// the composition's clock.
     #[frb(ignore)]
     fn read_at(value: &EffectValue, offset: Rational) -> BridgeEffectValue {
         match value {
@@ -1540,7 +1539,7 @@ impl BridgeEffectValue {
 /// **A slider's travel is not a bound.** Typing past it is allowed, and that is
 /// the whole difference between a soft range and a hard one — so only the `hard`
 /// pair, a closed [`ParamKind::Slider`]'s range (which is both its travel and
-/// its bound, K-414) and a colour's per-channel range answer here. Every other
+/// its bound) and a colour's per-channel range answer here. Every other
 /// kind is unbounded by declaration, an `Angle` deliberately so: it winds
 /// through full turns rather than stopping at 360.
 ///
@@ -1604,13 +1603,13 @@ fn clamp_animation(animation: Animation, bounds: (Option<f64>, Option<f64>)) -> 
 /// committing").
 #[frb(opaque)]
 pub struct BridgeEffectInstance {
-    // `pub(crate)` since K-713: the Roto brush's stroke accessors live in
+    // `pub(crate)` because the Roto brush's stroke accessors live in
     // `api::roto`, next to the rest of that effect's surface, and stage on the
     // same copy every other row stages on.
     pub(crate) effect: EffectInstance,
     /// Where the owning layer's own zero sits on the composition's clock, so a
     /// handle read out of a layer still knows how to speak comp time about its
-    /// keyframes (K-213). Carried rather than looked up: the handle is a
+    /// keyframes. Carried rather than looked up: the handle is a
     /// snapshot, and the layer it came from is the only place this is known.
     offset: Rational,
 }
@@ -1624,7 +1623,7 @@ pub struct BridgeParamValue {
     pub value: BridgeEffectValue,
 }
 
-/// Everything a panel draws for one effect instance, in one crossing (K-183):
+/// Everything a panel draws for one effect instance, in one crossing:
 /// its id, match name, bypass state, and every parameter's current value. The
 /// instance is an opaque handle, so `id()`/`name()`/`get_value()` each cross
 /// the bridge — a card that read them one at a time cost a call per field per
@@ -1634,13 +1633,13 @@ pub struct BridgeParamValue {
 pub struct BridgeEffectInstanceInfo {
     pub id: Uuid,
     pub name: String,
-    /// The user's own name for the instance (K-321), or `None` to show the
+    /// The user's own name for the instance, or `None` to show the
     /// effect's label. `name` stays the `match_name` either way — it is the
     /// schema key, not a display string.
     pub custom_name: Option<String>,
     pub enabled: bool,
     pub values: Vec<BridgeParamValue>,
-    /// The stems of the vector pairs this instance has chained (K-443), sorted.
+    /// The stems of the vector pairs this instance has chained, sorted.
     /// Empty is "every pair unlinked", which is what every older project means.
     ///
     /// In the read model rather than asked per pair, for the reason every other
@@ -1651,7 +1650,7 @@ pub struct BridgeEffectInstanceInfo {
     /// §2.3) — one of [`BADGE_REASONS`], or `None` for the ordinary case.
     ///
     /// A **key**, not a sentence: the panel draws the calm badge in the user's
-    /// own language (K-303). Four things it can say — the plugin failed, the
+    /// own language. Four things it can say — the plugin failed, the
     /// plugin is switched off, the plugin is not installed on this machine, or
     /// this build has never heard of the effect at all. The last two are the
     /// placeholder docs/12 §1 requires: the instance is kept, values and all,
@@ -1728,7 +1727,7 @@ fn badge_of(effect: &EffectInstance) -> (Option<String>, Option<String>) {
         return (Some("shader_failed".to_owned()), Some(why));
     }
     // `def`, so a **layer style** is an instance this build knows rather than
-    // one wearing the "never heard of it" badge (K-706).
+    // one wearing the "never heard of it" badge.
     if lumit_core::fx::def(name).is_some() {
         return (None, None);
     }
@@ -1737,7 +1736,7 @@ fn badge_of(effect: &EffectInstance) -> (Option<String>, Option<String>) {
     // project made on somebody else's machine; anything else is an effect from
     // a newer Lumit. Both are inert placeholders and neither is an error
     // (docs/12 §1, docs/08 §5) — an audio plugin's inertness being that its
-    // link is left out of the chain and the sound goes through dry (K-700).
+    // link is left out of the chain and the sound goes through dry.
     if matches!(
         effect.effect.namespace,
         lumit_core::model::EffectNamespace::Ofx | lumit_core::model::EffectNamespace::Clap
@@ -1755,7 +1754,7 @@ fn badge_of(effect: &EffectInstance) -> (Option<String>, Option<String>) {
 ///
 /// Somebody typed a program. Either it works, or the compiler has something to
 /// say about it — and the words are the compiler's own, untranslated, because it
-/// is somebody else's sentence about somebody else's code (K-303). The line
+/// is somebody else's sentence about somebody else's code. The line
 /// numbers in it have been moved back onto the text the user is looking at, so
 /// "line 3" means the third line they typed rather than the third line of the
 /// wrapper Lumit put around it.
@@ -1773,7 +1772,7 @@ pub struct BridgeShaderStatus {
     pub notes: Vec<String>,
 }
 
-// --- The inner shader graph (docs/impl/custom-shader.md §4, K-642, CS4) -----
+// --- The inner shader graph (docs/impl/custom-shader.md §4, CS4) ------------
 
 /// What a wire in the inner graph carries, for the canvas to colour sockets
 /// by. Widths one to three are numbers, a vec4 is a colour, and a picture is
@@ -1863,9 +1862,9 @@ pub fn list_shader_nodes() -> Vec<BridgeShaderNodeKind> {
 /// A pure question — nothing is staged and no document moves — which is also
 /// how the canvas refuses a drop: build the candidate graph, ask, and decline
 /// visually when the answer names a mismatch or a cycle. The engine stays the
-/// single validator; the panel never learns the type rules (K-183's spirit:
-/// display and forward, decide in Rust). Called on gestures and reloads, never
-/// in a rebuild.
+/// single validator; the panel never learns the type rules (display and
+/// forward, decide in Rust). Called on gestures and reloads, never in a
+/// rebuild.
 #[frb(sync)]
 pub fn shader_graph_view(graph: String) -> BridgeShaderGraphView {
     use lumit_core::fx::shader::graph::{ports_of, ShaderGraph};
@@ -1932,7 +1931,7 @@ pub fn shader_graph_view(graph: String) -> BridgeShaderGraphView {
 ///   numbering the person typing has.
 ///
 /// A fresh instance with no source is **not** a failure: an effect the user has
-/// not filled in yet is a passthrough, not a fault (K-111), and it wears no
+/// not filled in yet is a passthrough, not a fault, and it wears no
 /// badge.
 #[frb(ignore)]
 fn shader_error(effect: &EffectInstance) -> Option<String> {
@@ -2013,7 +2012,7 @@ fn fill_derived(effect: &mut EffectInstance) {
     // not a borrow of the instance — so the read is over before the write.
     for param in def.derived(effect) {
         let Some(value) = lumit_core::fx::default_param_value(&param.kind) else {
-            continue; // a button has nothing to fill (K-417)
+            continue; // a button has nothing to fill
         };
         if !effect.params.iter().any(|have| have.id == param.id) {
             effect.params.push(EffectParam {
@@ -2034,7 +2033,7 @@ fn derived_params_of(effect: &EffectInstance) -> Vec<BridgeParamInfo> {
 }
 
 /// Build one instance's [`BridgeEffectInstanceInfo`] — the shared body of
-/// [`BridgeEffectInstance::get_info`] and the comp read model (K-184).
+/// [`BridgeEffectInstance::get_info`] and the comp read model.
 #[frb(ignore)]
 pub(crate) fn read_instance_info(
     effect: &EffectInstance,
@@ -2042,7 +2041,7 @@ pub(crate) fn read_instance_info(
 ) -> BridgeEffectInstanceInfo {
     // Report every parameter the schema declares, not only the ones this
     // instance happens to carry — the same filling [`BridgeEffectInstance::new`]
-    // does, for the other way in: the comp read model (K-184) hands raw
+    // does, for the other way in: the comp read model hands raw
     // `EffectInstance`s straight here without a handle. Without it a parameter
     // added after the instance was saved draws a blank row.
     //
@@ -2075,7 +2074,7 @@ pub(crate) fn read_instance_info(
 
 impl BridgeEffectInstance {
     /// Rust-side only (`frb(ignore)`): a handle is made *from a layer*, which is
-    /// where the keyframe offset comes from (K-213). It was exposed to Dart and
+    /// where the keyframe offset comes from. It was exposed to Dart and
     /// never called from there — an instance can only be got from the layer
     /// that owns it — and a Dart constructor with no layer would have no
     /// honest offset to take.
@@ -2128,7 +2127,7 @@ impl BridgeEffectInstance {
         self.effect.enabled
     }
 
-    /// Stage the user's own name for this instance (K-321) — an empty or
+    /// Stage the user's own name for this instance — an empty or
     /// whitespace name clears it back to the effect's label. Staging only, like
     /// `set_value`: `LayerReference::set_effects` is the commit.
     #[frb(sync)]
@@ -2147,7 +2146,7 @@ impl BridgeEffectInstance {
         self.effect.enabled = enabled;
     }
 
-    /// Whether the vector pair keyed by `stem` is chained (K-443). A stem this
+    /// Whether the vector pair keyed by `stem` is chained. A stem this
     /// effect has no pair for is unlinked, never an error.
     #[frb(sync)]
     pub fn pair_linked(&self, stem: String) -> bool {
@@ -2230,7 +2229,7 @@ impl BridgeEffectInstance {
     /// `origin` is the file the text was read from, or `None` for text the user
     /// typed — which is the honest answer once they have typed it, since it no
     /// longer says what that file says. An empty `source` clears the block back
-    /// to a fresh instance: a passthrough with no badge (K-111).
+    /// to a fresh instance: a passthrough with no badge.
     ///
     /// The rows the new source declares are **offered**, not adopted: the
     /// document keeps the values it has, an id that has gone keeps its row and
@@ -2253,7 +2252,7 @@ impl BridgeEffectInstance {
             block.insert("origin".to_owned(), json!(path));
         }
         // Anything else already under the key — §4's `graph`, a field a newer
-        // Lumit wrote (K-065) — is kept: this call owns the text, not the block.
+        // Lumit wrote — is kept: this call owns the text, not the block.
         if let Some(serde_json::Value::Object(had)) = self.effect.extra.get(EXTRA_KEY) {
             for (key, value) in had {
                 block.entry(key.clone()).or_insert_with(|| value.clone());
@@ -2394,8 +2393,8 @@ impl BridgeEffectInstance {
     /// Refused when `value` is of a different kind from the parameter, so a
     /// control can never quietly change what a parameter *is*.
     ///
-    /// **The hard range is enforced here, not in the panel** (docs/08 §1.2,
-    /// K-620). Every way a number reaches an effect parameter — typed, scrubbed,
+    /// **The hard range is enforced here, not in the panel** (docs/08 §1.2).
+    /// Every way a number reaches an effect parameter — typed, scrubbed,
     /// dragged in the graph editor, picked off the Viewer, wired from a node,
     /// pasted, loaded from a preset — passes through this one call, and both the
     /// preview and the commit stage through it, so clamping once here is what
@@ -2441,7 +2440,7 @@ impl BridgeEffectInstance {
 mod tests {
     use super::*;
 
-    /// **The coating rows resolve against a parameter that exists** (K-371).
+    /// **The coating rows resolve against a parameter that exists**.
     ///
     /// A group's visibility is looked up in the panel by sibling id, and a
     /// sibling that is not there fails silently — the rows naming it simply

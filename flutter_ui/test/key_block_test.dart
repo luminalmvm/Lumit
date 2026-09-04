@@ -1,4 +1,4 @@
-// The block tools' arithmetic (K-458): what a selection measures, where a
+// The block tools' arithmetic: what a selection measures, where a
 // stretch handle puts each key, and what Reverse and Stagger do to a time.
 //
 // Pure, so none of it needs a widget tree or the engine — the same bargain

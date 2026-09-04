@@ -1,4 +1,4 @@
-//! The same eight fixtures, wearing VST3's face (K-707).
+//! The same eight fixtures, wearing VST3's face.
 //!
 //! # In plain terms
 //!

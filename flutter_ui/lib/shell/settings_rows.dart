@@ -2,11 +2,11 @@
 // inside it.
 //
 // They live here rather than in the Settings window because the Settings window
-// is no longer the only form that uses them — Project settings (K-286) asks its
+// is no longer the only form that uses them — Project settings asks its
 // questions in the same voice, and two windows that look alike should be alike
 // because they share the drawing, not because someone kept them in step.
 //
-// **The drawing decides the shape** (K-465). A row is a label in a fixed 190px
+// **The drawing decides the shape**. A row is a label in a fixed 190px
 // column, a 12px gap, and its control at the *start* of what is left — not
 // pushed to the right edge, which is what these rows used to do. A section is a
 // kicker over its rows with a rule and a little air above it, and no card

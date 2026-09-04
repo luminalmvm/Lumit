@@ -1,4 +1,4 @@
-// The Timeline's **layer group** rows (K-702): the header row in the outline,
+// The Timeline's **layer group** rows: the header row in the outline,
 // and the combined bar the lane half draws beside it.
 //
 // A group is a labelled band over a run of layers, and nothing more — it moves
@@ -52,7 +52,7 @@ bool groupSelectedLayers({
 /// Every group rather than one, so Ctrl+Shift+G on a band picked by its header
 /// row does the obvious thing without asking which of the layers in hand was
 /// meant. A plain forward: the engine resolves the touched bands and commits
-/// them as **one** undo step (K-720) — one commit per band was one undo step
+/// them as **one** undo step — one commit per band was one undo step
 /// per band, which is not what one keypress did.
 bool ungroupSelection({
   required CompositionReference comp,
@@ -67,7 +67,7 @@ bool ungroupSelection({
 /// its own, which is the whole reason the rest of the Timeline needed no
 /// changes: `rows` stays one entry per visible layer, so the block heights, the
 /// stack-drag arithmetic and both halves' [LazyBlocks] windows keep the shapes
-/// K-638/K-678 gate. The header is simply drawn above its carrier's own row,
+/// they already had. The header is simply drawn above its carrier's own row,
 /// inside the carrier's block.
 ///
 /// When [folded] is true the carrier draws **only** the header: its own row,
@@ -79,7 +79,7 @@ class GroupHeader {
   final BridgeLayerGroup group;
   final bool folded;
 
-  /// Whether the header's **effect lanes** are twirled open (K-731): the
+  /// Whether the header's **effect lanes** are twirled open: the
   /// header twirls like a layer, showing its stack's rows and keyframes
   /// beneath it. Session state beside [folded], and independent of it — the
   /// wardrobe's lanes belong to the band, not to the members it may have
@@ -126,7 +126,7 @@ class GroupActions {
   /// The combined bar was dragged by this many frames — every member moves.
   final void Function(BridgeLayerGroup group, int deltaFrames) onShift;
 
-  /// Twirl the header's effect lanes open or shut (K-731) — the fx tick's own
+  /// Twirl the header's effect lanes open or shut — the fx tick's own
   /// press, session state like [onToggleFold]'s.
   final ValueChanged<String> onToggleFxFold;
 
@@ -155,10 +155,10 @@ class GroupOutlineRow extends StatefulWidget {
   final Map<TimelineGroup, double> widths;
   final GroupActions actions;
 
-  /// The id `Enter` has just asked to rename (K-243's road, reached for a
-  /// group when its header was the last thing chosen) — the panel's one
-  /// notifier, shared with the layer rows: a group's id and a layer's are
-  /// both [UuidValue]s, and only the row the value names has anything to do.
+  /// The id `Enter` has just asked to rename — reached for a group when its
+  /// header was the last thing chosen. The panel's one notifier, shared with
+  /// the layer rows: a group's id and a layer's are both [UuidValue]s, and
+  /// only the row the value names has anything to do.
   final ValueNotifier<UuidValue?> renameRequest;
   const GroupOutlineRow({
     super.key,
@@ -313,7 +313,7 @@ class _GroupOutlineRowState extends State<GroupOutlineRow> {
           child: Text('${_group.members.length}',
               style: t.mono.copyWith(fontSize: 10, color: t.textMuted)),
         ),
-        // **The fx tick** (K-731): an effected group is visible in the
+        // **The fx tick**: an effected group is visible in the
         // outline, and the tick doubles as the header's own twirl — pressing
         // it opens the wardrobe's lanes beneath the header, the way a layer's
         // caret opens its property lanes. Absent entirely while the header
@@ -493,7 +493,7 @@ class _GroupOutlineRowState extends State<GroupOutlineRow> {
             key: const ValueKey('tl-group-menu-ungroup'),
             onPressed: () => close('ungroup'),
             child: Text(l10n.menuUngroup)),
-        // The heavy fold, one click from the light one (K-702). A group is
+        // The heavy fold, one click from the light one. A group is
         // organisation; this is the same set of layers packed into a comp of
         // their own, which is what "collapse it all into a single layer"
         // actually means — and it is the existing precompose road, not a

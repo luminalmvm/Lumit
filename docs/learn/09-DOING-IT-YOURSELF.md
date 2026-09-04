@@ -97,7 +97,7 @@ cargo build --workspace --release
 **The workspace has two products, not one.** `lumit_bridge.dll` is the engine the
 app loads; `target\debug\lumit-ofx-broker.exe` is a small separate program that
 opens one OFX plugin bundle in a process of its own, so a third-party plugin that
-crashes takes nothing with it (K-592). `cargo build --workspace` makes both.
+crashes takes nothing with it. `cargo build --workspace` makes both.
 `-BridgeOnly` stops at the library, which is all `flutter test` needs and not
 enough to open an OFX plugin.
 
@@ -225,7 +225,7 @@ cargo test -p lumit-gpu
 The GPU tests need no special treatment. They share one graphics device and
 one set of compiled shaders per test process, taking turns on it, so the
 `lumit-gpu` crate runs in under a minute and `lumit-render` in a few
-([GUIDE.md](../GUIDE.md) §6 explains the arrangement). It used to be hours,
+([GUIDE.md](../GUIDE.md) covers the arrangement). It used to be hours,
 because every test opened the card and compiled every shader for itself.
 
 Everything, the way CI does it:
@@ -469,7 +469,7 @@ The macOS **application** icon is not made there. It is the layered Icon
 Composer document `assets/brand/lumit-icon.icon`, which Xcode compiles during
 `flutter build macos`, and `check-icon.py` exists because Icon Composer can
 write two settings into it that make Apple's `actool` crash part-way through
-with a message that says nothing about the cause (K-312). CI runs that check;
+with a message that says nothing about the cause. CI runs that check;
 run it yourself after opening the document in Icon Composer.
 
 ## The app's screenshots
@@ -633,7 +633,7 @@ say in the message which language gained how many strings.
 Two more, run rarely. `seed` records today's English for translations already in
 the files and is safe to run again — it only fills in what the sidecar is missing.
 `prune` deletes translations of keys English no longer has, and expires the stale
-ones (K-653: a translation whose English moved on falls back to English rather
+ones (a translation whose English moved on falls back to English rather
 than answering the old question), so run it after a sweep that rewords strings.
 `.\scripts\translations.ps1 -SelfTest` runs the whole round trip against a
 throwaway folder in `%TEMP%` and touches nothing here.

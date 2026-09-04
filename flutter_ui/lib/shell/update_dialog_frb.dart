@@ -1,4 +1,4 @@
-// The windows an update puts up, and the order they come in (K-296).
+// The windows an update puts up, and the order they come in.
 //
 // # In plain terms
 //
@@ -192,7 +192,7 @@ class _OfferUpdate extends StatelessWidget {
                 HouseButton(
                   key: const ValueKey('update-offer-yes'),
                   small: true,
-                  // The window's default action (K-319): Enter downloads.
+                  // The window's default action: Enter downloads.
                   primary: true,
                   autofocus: true,
                   onPressed: () => onChoose(true),
@@ -296,7 +296,7 @@ class _RestartToFinish extends StatelessWidget {
   /// button on this window rather than leaving the choice to be regretted.
   final bool dirty;
 
-  /// How the update will be applied (K-297), which is what this window is
+  /// How the update will be applied, which is what this window is
   /// really about: a swap and a restart, an installer and a restart, or a file
   /// handed to Flatpak while Lumit stays open.
   final UpdateDelivery delivery;
@@ -381,7 +381,7 @@ class _RestartToFinish extends StatelessWidget {
                   HouseButton(
                     key: const ValueKey('update-save-restart'),
                     small: true,
-                    // The default (K-319): Enter takes the safe restart — the
+                    // The default: Enter takes the safe restart — the
                     // one that saves.
                     primary: true,
                     autofocus: true,

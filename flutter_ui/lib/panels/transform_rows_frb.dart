@@ -66,7 +66,7 @@ class TransformAxis {
 
 /// One row: its label, the axes it edits, and — on the three properties that
 /// have more than one axis — which pair it belongs to and how that pair is
-/// being shown (K-571).
+/// being shown.
 class TransformGroup {
   final String label;
   final List<TransformAxis> axes;
@@ -98,7 +98,7 @@ class TransformGroup {
 /// know *how many* rows a layer will take before it draws them — its lanes have
 /// to leave exactly that much room or the bars stop lining up with the names.
 ///
-/// **Separated axes are more rows, not different data** (K-571). The axes are
+/// **Separated axes are more rows, not different data**. The axes are
 /// separate scalar properties in the document whatever the mode says; a
 /// separated pair simply hands each of them a row of its own, with its own
 /// stopwatch, its own lane and its own curve. Which is why every surface that
@@ -188,12 +188,12 @@ class TransformRowsFrb extends StatelessWidget {
   final CompositionReference comp;
   final LayerReference layer;
 
-  /// The layer's transform and 3D flag, from the read model (K-184) — so
+  /// The layer's transform and 3D flag, from the read model — so
   /// drawing the rows costs no bridge calls.
   final BridgeTransform transform;
   final bool threeD;
 
-  /// How each pair is shown (K-571) — which decides how many rows there are.
+  /// How each pair is shown — which decides how many rows there are.
   final BridgeAxisModes axisModes;
   final int playheadFrame;
   final ValueChanged<int> onSeek;
@@ -261,7 +261,7 @@ class TransformRowFrb extends StatefulWidget {
   final LayerReference layer;
 
   /// The layer's transform as the owner last read it — one read shared by all
-  /// the rows, rather than one crossing per row (K-183).
+  /// the rows, rather than one crossing per row.
   final BridgeTransform transform;
   final TransformGroup group;
   final int playheadFrame;
@@ -292,7 +292,7 @@ class TransformRowFrb extends StatefulWidget {
   final bool twoColumn;
 
   /// The group this row came out of, drawn before its name on a **flat
-  /// sheet** (K-499): the dope sheet lists `Transform · Position`, where the
+  /// sheet**: the dope sheet lists `Transform · Position`, where the
   /// fold-out draws `Position` under the Transform twirl. Null everywhere the
   /// row sits inside its own group.
   final String? nameGroup;
@@ -329,7 +329,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
   /// so the pointer's last position always reaches the picture.
   final PreviewThrottle _throttle = PreviewThrottle();
 
-  /// A linked row's y:x ratio, taken once per gesture (K-571). Once, because
+  /// A linked row's y:x ratio, taken once per gesture. Once, because
   /// re-reading it every tick would read the value the tick before had just
   /// written — the ratio would hold trivially and the link would do nothing —
   /// and because sampling costs a crossing the drag does not need to pay
@@ -412,7 +412,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
 
   Widget _row(BridgeTransform transform, TransformGroup group, int frame) {
     final t = ThemeScope.of(context).theme;
-    // A linked row draws one box for two axes (K-571): the second follows the
+    // A linked row draws one box for two axes: the second follows the
     // first through [_ratio], so a box for it would be a box that can only ever
     // be told what it already knows. The stopwatch above still covers both.
     final cells = group.isLinked ? group.axes.sublist(0, 1) : group.axes;
@@ -426,7 +426,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
       playheadFrame: frame,
       onSeek: widget.onSeek,
       rowKey: '${widget.keyPrefix}-${group.axes.first.prop.name}',
-      // The Effect controls panel's fixed columns (K-443); the Timeline's
+      // The Effect controls panel's fixed columns; the Timeline's
       // fold-out draws the same rows against its own column group and keeps
       // the loose layout.
       fixedColumns: widget.twoColumn && widget.valueColumn == null,
@@ -442,7 +442,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
 
     // The name is the row's handle for the graph editor, so it is built once
     // and drawn by whichever layout the row takes. Right-clicking it opens the
-    // axis menu (K-571) — on the name rather than the whole row, for the reason
+    // axis menu — on the name rather than the whole row, for the reason
     // the left click is on the name: grabbing a value box must never be a
     // gesture about the property's shape.
     final label = GestureDetector(
@@ -675,7 +675,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
   }
 
   /// The playhead has no key on this property and a drag is starting, so one is
-  /// planted there holding the value already showing (K-333). Nothing moves —
+  /// planted there holding the value already showing. Nothing moves —
   /// it is the same value — and the drag then has a key to carry, which is what
   /// makes it visible in the graph as it goes rather than only on release.
   void _keyOnDragStart(
@@ -694,7 +694,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
 
   /// A tick of a drag on an *animated* property: render the curve the release
   /// will write — the key at the playhead moved, or a linear one planted there
-  /// — without writing it (K-333). The same patched-clone door a static drag
+  /// — without writing it. The same patched-clone door a static drag
   /// uses, carrying a whole animation instead of one number.
   void _liveKeyed(BridgeTransformProp prop, BridgeScalar scalar, double value,
       int frame, BridgeTransformProp? partner) {
@@ -710,7 +710,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
       scalarWithValueAt(scalar, value, widget.comp, frame),
     );
     // A linked row previews both axes, or the release would move the picture
-    // one last time on a drag that looked finished (K-571).
+    // one last time on a drag that looked finished.
     if (partner != null) {
       staged = writeScalar(
         staged,
@@ -734,7 +734,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
   }
 
   /// Write `value` into the animated property's key at `frame` (or plant one
-  /// there) — one op, one undo step. A linked row (K-571) writes its partner
+  /// there) — one op, one undo step. A linked row writes its partner
   /// axis in the same breath, and `setTransforms` batches the pair so it stays
   /// one step.
   void _commitKeyed(BridgeTransformProp prop, BridgeScalar scalar, double value,
@@ -797,7 +797,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
   }
 
   /// Release, or a typed value: one op for the one property that changed — or,
-  /// on a linked row (K-571), one batch for the pair, which is still one step.
+  /// on a linked row, one batch for the pair, which is still one step.
   void _commit(BridgeTransformProp prop, double value,
       [BridgeTransformProp? partner, int frame = 0]) {
     // The commit is the last word on this gesture: a held preview tick after it
@@ -820,7 +820,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
     widget.onChanged();
   }
 
-  /// The row's axis menu (K-571): tell the pair's axes apart, or put them back
+  /// The row's axis menu: tell the pair's axes apart, or put them back
   /// together. Scale carries the link as well, because a scale that has stopped
   /// being proportional is nearly always a mistake — so it is a state you leave
   /// on purpose rather than one you fall out of.

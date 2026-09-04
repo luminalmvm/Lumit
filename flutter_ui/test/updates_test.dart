@@ -1,4 +1,4 @@
-// Finding, fetching and applying a newer Lumit (K-296).
+// Finding, fetching and applying a newer Lumit.
 //
 // Every seam the updater has with the outside world is injected, so this suite
 // never reaches the network, never writes an installer anywhere but a scratch
@@ -389,7 +389,7 @@ void main() {
     });
   });
 
-  group('choosing how to update (K-297)', () {
+  group('choosing how to update', () {
     test('a per-user installation is offered the package, not the installer',
         () {
       final release = UpdateRelease.parse(
@@ -411,7 +411,7 @@ void main() {
         replaceable: false,
       );
       expect(release?.delivery, UpdateDelivery.installer);
-      // **And it downloads the installer, not the archive** (K-745). This test
+      // **And it downloads the installer, not the archive**. This test
       // used to assert the opposite — the archive as the preferred asset, with
       // only the delivery changing — which is what shipped, and it cannot work:
       // `installer` delivery *runs the downloaded file*, and running a `.zip`
@@ -469,7 +469,7 @@ void main() {
     });
   });
 
-  group('replacing Lumit in place (K-297)', () {
+  group('replacing Lumit in place', () {
     late Directory tmp;
     setUp(() => tmp = Directory.systemTemp.createTempSync('lumit-inplace'));
     tearDown(() {
@@ -756,7 +756,7 @@ Map<String, dynamic> _releaseJson({
       'draft': draft,
       'prerelease': prerelease,
       'html_url': 'https://github.com/luminalmvm/lumit/releases/tag/$tag',
-      // What a release actually carries (K-297): an installer and a package
+      // What a release actually carries: an installer and a package
       // per platform, plus the Flatpak bundle.
       'assets': assets ??
           [

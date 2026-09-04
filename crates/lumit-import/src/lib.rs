@@ -12,7 +12,7 @@
 //! vanishing. The split is deliberate, and the reason is testing: the script side
 //! needs a real copy of After Effects to run, so no test suite of ours can ever
 //! check it, whereas everything in here is ordinary Rust that the tests watch
-//! closely (K-410). So the untestable half is kept too simple to get wrong, and
+//! closely. So the untestable half is kept too simple to get wrong, and
 //! all the thinking lives on the half that can be proved.
 //!
 //! A **bundle** is what the courier writes: a folder (or a zip of one) holding
@@ -30,7 +30,7 @@
 //! what changed on the way across. Import always makes a *new* project —
 //! merging a capture into one that is already open is later work.
 //!
-//! Since K-418 there is a **second front door**: [`aep::open_aep`] reads an
+//! There is also a **second front door**: [`aep::open_aep`] reads an
 //! After Effects project file directly and fills the same [`Capture`], so the
 //! user picks the `.aep` and nothing has to be run inside After Effects at all.
 //! It is a second front end, never a second importer — everything downstream is
@@ -70,8 +70,7 @@ pub struct Bundle {
     /// Which route produced this. The two are interchangeable downstream, but
     /// the import report says so, because their honest failure modes differ:
     /// the Bridge cannot read a `CUSTOM_VALUE` blob and the direct parser can,
-    /// while a new After Effects may break the parser and never the Bridge
-    /// (K-418).
+    /// while a new After Effects may break the parser and never the Bridge.
     pub source: BundleSource,
 }
 
@@ -81,7 +80,7 @@ pub enum BundleSource {
     /// A Lumit Bridge bundle — a folder or a zip written by the walker script.
     #[default]
     Bridge,
-    /// An After Effects project file, read directly (K-418).
+    /// An After Effects project file, read directly.
     Aep,
 }
 
@@ -103,7 +102,7 @@ pub enum ImportError {
     TooNew { version: String },
 }
 
-/// Open whatever the user picked (K-418): an After Effects project file, a
+/// Open whatever the user picked: an After Effects project file, a
 /// `.lum-bundle` folder, or a zip of one.
 ///
 /// The route is decided here rather than in the frontend, so both front doors
@@ -390,7 +389,7 @@ mod tests {
 
     /// **A bezier key and a hold key keep every side of every handle.**
     ///
-    /// Keyframes are copied value-for-value (K-025), so this is the capture's
+    /// Keyframes are copied value-for-value, so this is the capture's
     /// highest-stakes shape: interpolation per *side*, and ease as an array
     /// with one entry per dimension. Both are easy to flatten by accident —
     /// reading a single ease instead of the array loses separated dimensions,
@@ -572,7 +571,7 @@ mod tests {
     /// report.**
     ///
     /// After Effects' own scripting cannot read a `CUSTOM_VALUE` property —
-    /// Curves' point list is the standing example (K-410). The whole point of
+    /// Curves' point list is the standing example. The whole point of
     /// capturing it as an `unreadable` node rather than omitting it is that the
     /// effect keeps its slot and its shape, so the import can say *this
     /// property* was unreadable rather than silently shipping a Curves with no
@@ -763,7 +762,7 @@ mod tests {
         ));
     }
 
-    /// **The one front door reads the bytes, not the name (K-418).**
+    /// **The one front door reads the bytes, not the name.**
     ///
     /// The picker offers `.aep` and `.zip` in one filter, so the extension is
     /// worth nothing: a project someone renamed must still open, and a bundle

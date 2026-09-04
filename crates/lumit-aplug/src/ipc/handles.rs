@@ -15,7 +15,7 @@
 //! *answer* matters — a bad handle must come back as one calm
 //! [`BrokerMessage::Failed`](crate::ipc::proto::BrokerMessage::Failed) sentence
 //! rather than as a block silently processed by the wrong plugin, which is the
-//! failure that would be found six months later in an export (K-589).
+//! failure that would be found six months later in an export.
 
 use std::collections::BTreeMap;
 

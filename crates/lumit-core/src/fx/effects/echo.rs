@@ -3,7 +3,7 @@
 //!
 //! **In plain terms.** Echo does not read its neighbours' *parameters*, it reads
 //! their *pictures*: the render decodes the layer's source at offsets −1…−16 and
-//! hands the whole list to the GPU pass beside the resolved op (K-387). Nothing
+//! hands the whole list to the GPU pass beside the resolved op. Nothing
 //! about which frames those are is a control — the window follows from the
 //! `temporal` trait declared here — so what the effect resolves to is the trail
 //! itself: one weight per offset, the blend that combines them, and Mix.
@@ -31,9 +31,9 @@ use lumit_fx_macros::Effect;
     // It reads whole neighbour frames.
     cost = Cheap,
     roi = FullFrame,
-    // The 16-frame window (FX-17/K-149, raised from 8) the render decodes for.
+    // The 16-frame window (FX-17, raised from 8) the render decodes for.
     temporal = &[0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10, -11, -12, -13, -14, -15, -16],
-    // K-429: the matte scales the amount, inside the kernel (the owner's rule
+    // The matte scales the amount, inside the kernel (the owner's rule
     // for mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
@@ -44,7 +44,7 @@ use lumit_fx_macros::Effect;
 )]
 pub struct Echo {
     /// Count of trailing frames; each is one comp frame further back (v1 fixed
-    /// spacing). Capped at the 16-frame window (FX-17/K-149, raised from 8).
+    /// spacing). Capped at the 16-frame window (FX-17, raised from 8).
     #[slider(min = 1.0, max = 16.0, default = 4.0, hard_min = 1.0, hard_max = 16.0, unit = Raw)]
     pub echoes: f32,
 

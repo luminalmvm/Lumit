@@ -1,5 +1,5 @@
 // Turning a real keypress into chord text — the one half of the keymap that is
-// the frontend's (docs/07-UI-SPEC.md §15, K-199).
+// the frontend's (docs/07-UI-SPEC.md §15).
 //
 // Pure Dart, no engine: what is under test here is whether Flutter's idea of a
 // key and the keymap's idea of a key agree. They have to agree exactly, because

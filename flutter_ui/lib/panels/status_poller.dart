@@ -90,7 +90,7 @@ mixin StatusPoller<T, W extends StatefulWidget> on State<W> {
     if (next != was) setState(() => status = next);
     if (hasLanded(was, next)) {
       onChanged();
-      // Re-reading is not enough on its own (K-430). A job landing moves
+      // Re-reading is not enough on its own. A job landing moves
       // neither the playhead nor the document's revision, so the picture would
       // still be the one banked before it, and the Viewer — keyed by exactly
       // those two — would have no reason to ask the engine again. Both are told

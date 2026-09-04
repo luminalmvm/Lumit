@@ -4,7 +4,7 @@
 // **Why this file exists.** `graph_panel_frb_test` is about what the panel
 // *does* — what a drag wires, what a delete takes with it. This one is about
 // what it *looks like*: the numbers the drawing's own computed styles resolved
-// to (K-451, K-454, K-456, K-458). Nothing here names a private widget class,
+// to. Nothing here names a private widget class,
 // because none of these claims is about how the panel is built — each is
 // something a person could point at on screen and measure with a ruler.
 //
@@ -85,7 +85,7 @@ void main() {
       );
 
       // Auto-wire and Heal are `HouseToggle`s, on, which is `animated`
-      // everywhere a pill switch is (K-465, K-473's note).
+      // everywhere a pill switch is.
       expect(find.byKey(const ValueKey<String>('graph-auto-wire')),
           findsOneWidget);
       expect(find.byKey(const ValueKey<String>('graph-heal')), findsOneWidget);
@@ -98,7 +98,7 @@ void main() {
       expect(find.text('100%'), findsOneWidget);
 
       expect(at(tester, 'graph-frame-all').width, graphIconSize,
-          reason: 'the drawing\'s 13x13 glyph (K-456)');
+          reason: 'the drawing\'s 13x13 glyph');
     });
 
     /// 2. **A node card is 150 wide inside a hairline**, with a 21px header
@@ -145,7 +145,7 @@ void main() {
     });
 
     /// 4. **A socket and its word take the port's type colour**, which is the
-    /// whole of the canvas's colour coding (K-472). Five colours, seven types.
+    /// whole of the canvas's colour coding. Five colours, seven types.
     testWidgets('a port draws in its type\'s token', (tester) async {
       final p = withBlur();
       await mount(tester, p);
@@ -176,7 +176,7 @@ void main() {
           reason: 'hollow: the card\'s own ground shows through');
     });
 
-    /// 5. **The header wears the application's own grammar** (K-645): an
+    /// 5. **The header wears the application's own grammar**: an
     /// enable tick left of the name — the Effect controls heading's switch
     /// face, the same widget at the same scale — and a twirl beside it that
     /// opens the box up. No lettered badges: the canvas says what it means
@@ -325,7 +325,7 @@ void main() {
       expect(find.text('Types'), findsOneWidget);
     });
 
-    /// 8. **Ctrl+Space opens the console over the graph** (K-645, K-673),
+    /// 8. **Ctrl+Space opens the console over the graph**,
     /// wearing the canvas's own words: the one key in the head's kicker, and a
     /// foot line saying what picking a row will do. The popover's own shape is
     /// the console's now, so its numbers are asserted where it lives rather
@@ -345,7 +345,7 @@ void main() {
       expect(
           find.byKey(const ValueKey<String>('fx-console-bar')), findsOneWidget);
       expect(find.text('Ctrl+Space'), findsOneWidget,
-          reason: 'one surface, one key — the Tab door went (K-673)');
+          reason: 'one surface, one key — the Tab door went');
       expect(find.text('Adds a box to the graph'), findsOneWidget,
           reason: 'no wire in hand, so the foot says what a pick will do');
       expect(find.byKey(const ValueKey<String>('fx-console-item-Wiggle')),
@@ -353,7 +353,7 @@ void main() {
           reason: 'and with no ring to offer the list stands open');
     });
 
-    /// 10. **A Custom shader box wears the viz tint** (K-675, owner item
+    /// 10. **A Custom shader box wears the viz tint** (owner item
     /// 13b): its header is `curve[0]` washed over the ordinary ground, so
     /// the one box with an inside reads at a glance — and every other box's
     /// header stays plain `surface_2`.

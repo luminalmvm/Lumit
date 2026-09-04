@@ -1,17 +1,17 @@
 # OCIO colour management — implementation note
 
-**Decision:** K-489 (OCIO is hosted natively; one implementation, baked artefacts),
-K-490 (the v1 scope: five surfaces, the working space stays fixed, the config is a
-project property).
-**Related:** K-026/K-069 (the working space and depth), K-031 (preview equals export
-through one colour path), K-034 (perceptual operations in Oklab), K-024 (interpretation
-never touches the file), K-173 (paths are relative, absolute never serialised), K-185
-(one render walk), K-303/K-005 (engine words), K-304 (three platforms gate a release),
-K-479 (`ColourSpace::Ocio(name)` exists and refuses), the export colour family landing
-under the concurrent export-colour work in `crates/lumit-render/src/export.rs`. This
-note is the *how* for the whole of OCIO support: the hosting decision, the transform
-engine, the config parser, the bake, the render paths, the seam, the UI surfaces, the
-conformance plan, and the ordered work packages.
+**Decision:** OCIO is hosted natively (one implementation, baked artefacts), and the v1
+scope is: five surfaces, the working space stays fixed, the config is a project
+property.
+**Related:** the working space and depth, preview equals export through one colour
+path, perceptual operations in Oklab, interpretation never touches the file, paths are
+relative and absolute never serialised, one render walk, engine words, three platforms
+gate a release, `ColourSpace::Ocio(name)` exists and refuses, and the export colour
+family landing under the concurrent export-colour work in
+`crates/lumit-render/src/export.rs`. This note is the *how* for the whole of OCIO
+support: the hosting decision, the transform engine, the config parser, the bake, the
+render paths, the seam, the UI surfaces, the conformance plan, and the ordered work
+packages.
 
 ## In plain terms
 
@@ -33,7 +33,7 @@ appears wherever Lumit already asks a colour question.
 The one decision that shapes everything else is **who does the colour maths**. The
 official OCIO library is C++, and it deliberately computes differently on the CPU and
 the GPU — good enough for film work, but Lumit's foundational promise is that the
-preview *is* the export, bit for bit (K-031), and a library with two answers cannot
+preview *is* the export, bit for bit, and a library with two answers cannot
 keep that promise for us. So Lumit implements the config format itself, in Rust, the
 same way it hosts OpenFX itself (docs/impl/ofx-host.md) and parses `.cube` files
 itself (docs/impl/lut.md): every transform a config describes is resolved once, on the
@@ -43,21 +43,21 @@ Whether our answer matches the *official* one is not left to hope: a suite of go
 fixtures — inputs and expected outputs generated with the reference library, checked
 into the repository — gates every transform we claim to support (§7).
 
-## 1. The hosting decision (K-489)
+## 1. The hosting decision
 
 The fork was: (a) link the official OpenColorIO C++ library, or (b) implement the
 config format's core natively in Rust. **Native Rust**, for four reasons, recorded in
 the order they weigh:
 
-1. **K-031 is structural, not aspirational.** OCIO v2 ships a CPU path (exact ops) and
-   a GPU path (generated shader text, optionally baked to LUTs), and documents that
-   they differ. Wiring the library in honestly would mean either running its CPU path
-   per pixel per frame in the Viewer (unaffordable) or accepting that preview and
-   export diverge (forbidden). Extracting only its resolved transforms and baking them
-   ourselves — the workable middle — already means writing the bake, the sampling
-   shader, and the CPU oracle natively; at that point the library is being used as a
-   config parser with a very large build attached.
-2. **Build weight on three platforms (K-304).** OpenColorIO drags yaml-cpp, Imath,
+1. **Preview equals export is structural, not aspirational.** OCIO v2 ships a CPU
+   path (exact ops) and a GPU path (generated shader text, optionally baked to LUTs),
+   and documents that they differ. Wiring the library in honestly would mean either
+   running its CPU path per pixel per frame in the Viewer (unaffordable) or accepting
+   that preview and export diverge (forbidden). Extracting only its resolved
+   transforms and baking them ourselves — the workable middle — already means writing
+   the bake, the sampling shader, and the CPU oracle natively; at that point the
+   library is being used as a config parser with a very large build attached.
+2. **Build weight on three platforms.** OpenColorIO drags yaml-cpp, Imath,
    pystring and minizip-ng, needs CMake and a C++17 toolchain in CI on Windows, macOS
    and Linux, and would be the workspace's second foreign build system after ffmpeg —
    which is already the single most painful seam in the repository. A parser and some
@@ -84,7 +84,7 @@ outside the implemented set is **refused by name** — "this config needs
 wrong picture that looks plausible is the one failure mode this design refuses to
 ship.
 
-## 2. Scope of v1 (K-490)
+## 2. Scope of v1
 
 All five surfaces ship together, because each is small once the core exists and a
 colour pipeline with a missing edge is worse than none:
@@ -109,7 +109,7 @@ The tempting alternative is what Nuke does: the working space *becomes* the conf
 `scene_linear` role, ACEScg under an ACES config. Lumit does not do this in v1, and
 the reason is honest rather than convenient: the engine hard-codes its primaries in
 places that are correct today and would silently become wrong. `lumit-gpu::oklab`'s
-matrices assume Rec.709 primaries (K-034); the perceptual blend modes and the scopes
+matrices assume Rec.709 primaries; the perceptual blend modes and the scopes
 take Rec.709 luma of an sRGB encode (docs/06 §3.5); the tone-map curve, the NV12
 decode target and the hardware sRGB texture trick (docs/impl/gpu-foundation.md) all
 assume the same. A config-defined working space is a real feature — it is the ACES
@@ -147,14 +147,14 @@ struct Document {
     colour: ColourManagement,   // serde default; absent from the file when default
 }
 
-/// The project's colour management (K-490). A project property, not a
+/// The project's colour management. A project property, not a
 /// preference, for the same reason anti_aliasing is: it changes what a comp
 /// looks like, so it travels in the `.lum` and matches on another machine.
 #[derive(Default)]
 struct ColourManagement {
     /// The OCIO config file. None = the built-in family only, exactly today's
     /// behaviour. A MediaRef, deliberately: relative path saved, absolute
-    /// never serialised (K-173), fingerprint relink for free.
+    /// never serialised, fingerprint relink for free.
     config: Option<MediaRef>,
 }
 
@@ -203,8 +203,9 @@ A missing, moved, unreadable or refused config must never hold the project hosta
   frame is always produced and is honestly labelled (the Viewer picker's face shows
   the missing state, §6.2).
 - **Export refuses, by name** — `ColourSpace::Ocio(name)` with no loaded config keeps
-  K-479's behaviour: a wrong colour space in a delivered file is worse than an export
-  that did not run. Preview degrades, delivery refuses; that asymmetry is deliberate.
+  refusing, as it always did: a wrong colour space in a delivered file is worse than
+  an export that did not run. Preview degrades, delivery refuses; that asymmetry is
+  deliberate.
 - **A refused config says why** (the unsupported op, the missing LUT file, the parse
   error), in one calm sentence on the project settings row (§6.4), and behaves exactly
   like a missing one otherwise.
@@ -237,7 +238,7 @@ The transforms real configs are made of, each with forward and (where noted) inv
 
 Three notes on that table, each one a real config's doing rather than a design flourish.
 
-**Matrix coefficients are `f64`, and neighbouring matrices fold** (K-516). A config states
+**Matrix coefficients are `f64`, and neighbouring matrices fold.** A config states
 one direction of a space and Lumit inverts it for the other, so a space-to-space chain
 routinely carries a matrix immediately followed by its own inverse. Walking that pair in
 single precision, rather than composing it away, cost 2 × 10⁻⁵ on a real ACEScc → ACEScg
@@ -246,14 +247,14 @@ because a kept near-identity still spreads one overflowed channel across the oth
 Evaluation is unchanged: `matrix::apply` rounds to `f32` first, so the processor and the
 graphics card multiply the same twelve numbers.
 
-**A curve carries its own reading of negatives** (K-517). `Op::Negatives` wraps a curve in
+**A curve carries its own reading of negatives.** `Op::Negatives` wraps a curve in
 `mirror` (apply to the magnitude, put the sign back) or `pass_thru` (carry it through).
 Every display encoding in the ACES v2 configs mirrors, including the ones whose names do
 not say so — and the key a config *file* writes is `style`, not the API's `negativeStyle`,
 which is a distinction worth a line here because reading the wrong one finds nothing,
 applies the default, and is invisible above zero.
 
-**ST 2084 is an op, not a bake** (K-517). The reference library expresses the PQ display
+**ST 2084 is an op, not a bake.** The reference library expresses the PQ display
 encodings as a 65536-entry half-domain table, but that table is the standard's published
 formula and four published constants, so it lands in tier one with the other curves.
 
@@ -275,14 +276,14 @@ builtins at all; the file-transform path covers them wholesale.
 and all eight display encodings the CG config names. Tier two holds five artefacts — the
 four ACES 2.0 output transforms and the ACES 1.3 Reference Gamut Compression LMT — at 47
 MiB in `crates/lumit-colour/vendored/`, read at runtime from a `colour/` data directory
-shipped beside the executable (K-527: `data/colour/` on Windows and Linux,
+shipped beside the executable (`data/colour/` on Windows and Linux,
 `Contents/Resources/colour/` on macOS, the crate's own `vendored/` in a development
 checkout) rather than compiled into every binary; a style whose file is absent refuses by
 name, exactly as if it had never been vendored. A vendored
 artefact is turned into ordinary chain steps rather than executed specially: the lg2
 shaper *is* a log curve with a lin-side offset and the cube *is* a 3D table, so a bake
 composes with a display encoding like anything else. **What tier two costs at the gamut
-edge is measured and stated in K-518 and §5.4** — 0.117 at the Rec.709 blue primary — and
+edge is measured and stated in §5.4** — 0.117 at the Rec.709 blue primary — and
 it is the number the Rust ports exist to reduce.
 
 Everything else a config can name — `FixedFunctionTransform`, `GradingTone`-family,
@@ -364,7 +365,7 @@ display names and view names are separate namespaces from colour space names.
 
 Config-supplied names (spaces, displays, views) are **user data, not engine strings**:
 they cross the bridge verbatim and get no `app_en.arb` keys, exactly like file names.
-The K-303 gate applies to Lumit's own new labels only (§6.5).
+The engine-words gate applies to Lumit's own new labels only (§6.5).
 
 ## 5. The bake, and where transforms run
 
@@ -393,8 +394,9 @@ config load on the CPU:
   differ from the CPU oracle exactly where wide-gamut negatives and HDR highlights
   live, which is where a colour pipeline is judged. Sampling the tail instead makes
   both sides run the same two lines — `shaper.forward_signed`, then the table lerp —
-  so K-031 holds off the end of the range as well as inside it. The cost is stated in
-  §5.4 and it is small; the alternative had no cost that could be stated at all.
+  so preview equals export off the end of the range as well as inside it. The cost is
+  stated in §5.4 and it is small; the alternative had no cost that could be stated at
+  all.
 
   A chain that would factorise into more stages than `curve → matrix → curve` takes
   the cube form instead. Real chains never do; the guard exists so the shader has
@@ -437,14 +439,14 @@ never the hardware filter, which breaks CPU/GPU equality).
   double-encode.
 - **Export runs the same pass.** The export path already reads back the
   display-encoded frame from the same `ColourEngine` blit the Viewer presents
-  (K-185: there is one walk). `ColourSpace::Ocio(name)` resolves to a baked artefact
+  (there is one walk). `ColourSpace::Ocio(name)` resolves to a baked artefact
   and the export's blit binds it exactly as the Viewer's does — preview equals export
   because they are the same dispatch, not because two implementations agree. The
   prompt-level alternative — a separate CPU transform at the pack stage — would be
   deterministic too, but it would be a *second* implementation of the same transform
-  in the delivery path, which is the exact structure K-031 exists to forbid. The CPU
-  sampler still exists, as the oracle every effect already has (docs/08 §1.6) and as
-  the conformance suite's engine; it is simply not the exporter.
+  in the delivery path, which is the exact structure the one-path promise exists to
+  forbid. The CPU sampler still exists, as the oracle every effect already has (docs/08
+  §1.6) and as the conformance suite's engine; it is simply not the exporter.
 - **Container tagging**: the concurrent export work tags containers for the built-in
   family. An OCIO name has no reliable primaries/transfer metadata in general, so a
   file exported through one is written **untagged** rather than mis-tagged; the known
@@ -508,7 +510,7 @@ encoded to gamma 2.2 should be 6.6 × 10⁻⁴ and the table says 6.4 × 10⁻�
 size does better with a curve of infinite slope; the bound is the height of that first cell.
 
 The fourth is **the number this section's out-of-domain warning becomes when a real ACES 2.0
-rendering meets a 65-point grid** (K-518). It is not an interpolation wobble: the eight
+rendering meets a 65-point grid**. It is not an interpolation wobble: the eight
 corners of the cell containing the Rec.709 blue primary span 0.165 in Z and are not even
 monotone in blue. Inside the gamut the same bake holds 2 × 10⁻³. The upgrade path is §4.1's
 recorded one — port the output styles to tier one, one at a time — and these rows are the
@@ -551,7 +553,7 @@ Colour state folds into the existing keys; nothing new is invented:
   quality field — edit the config *or one of its LUTs* on disk and every frame
   retires. The LUT files enumerate through `LoadedConfig::files_read`, and each
   counts by path, length and last-modified stamp rather than by its bytes — the
-  identity the effect LUT cache already uses (K-271) — because this is recomputed at
+  identity the effect LUT cache already uses — because this is recomputed at
   the top of every render and re-reading tens of megabytes of cube per frame to be
   told nothing changed is not a cost worth paying. The ceiling is an edit that
   changes neither length nor stamp; reloading the project picks that up;
@@ -581,7 +583,7 @@ paths:
   `Option<(display, view)>`, `None` = the built-in transform. Session state, stored
   in `ui_state` like the channel isolation it sits beside; never in the document.
 - **Export**: `BridgeExportSpec.colour_space` already crosses as a `String` ("" =
-  built-in, name = `Ocio(name)`, K-479) — **the seam does not change shape**; the
+  built-in, name = `Ocio(name)`) — **the seam does not change shape**; the
   engine's refusal simply starts saying yes when the name is the loaded config's.
   Coordinate with the export-colour work's built-in family so the one string field
   namespaces both (built-in names are the enum's own; config names are whatever the
@@ -594,7 +596,7 @@ menu was built as "a row rather than a label because the list grows the day a se
 one exists". This is that day. The menu becomes: the built-in transform row; then,
 when a config is loaded, one section per display (§12A menu conventions: section
 label, then rows), each view a tick-row; the tone-map row stays at the bottom and
-composes with whichever transform is ticked (it sits inside the display stage, K-314,
+composes with whichever transform is ticked (it sits inside the display stage,
 and that does not change). The closed face names the view in force ("sRGB — ACES
 1.0"), keeps the amber engaged tint for exposure/tone-map, and shows the calm missing
 state ("Config missing") when degraded (§3.3). No new panel, no new widget kind.
@@ -604,10 +606,10 @@ state ("Config missing") when degraded (§3.3). No new panel, no new widget kind
 The colour-space dropdown the export work landed gains the config's names under a
 section header, exactly as the picker does. A name the capability table refuses
 (missing config, refused config) is disabled-not-hidden with the reason as its
-tooltip — K-485's standing rule for controls a format cannot honour, applied
+tooltip — the standing rule for controls a format cannot honour, applied
 unchanged.
 
-### 6.4 The Project settings window (§13.5, K-286)
+### 6.4 The Project settings window (§13.5)
 
 Colour management is the project's, not the machine's — docs/07 §13.5 already says it
 "lands here when built". A **Colour** group: a config row (path well + browse +
@@ -625,7 +627,7 @@ the built-in defaults plus the config's spaces. Until that dialogue exists as dr
 the Project panel's item context menu carries a **Colour space** submenu with the
 same list — the smallest honest surface, replaced when the dialogue lands.
 
-**K-303/K-005 gate**: the new Lumit-authored strings — the picker's missing state,
+**Engine-words gate**: the new Lumit-authored strings — the picker's missing state,
 the settings rows, the refusal sentences the engine can send, the submenu label —
 land with their `app_en.arb` keys in the same commit, engine-sent ones also in
 `engine_labels.dart`; new keys listed in the commit message and PR for translation.
@@ -661,7 +663,7 @@ Fidelity is proven, not asserted, and the proof is data checked into the reposit
    coefficients. Every one is stated per file in `clf/clf.fixture`.
 4. **CPU = GPU**: the WGSL samplers against the CPU samplers, ≤ 2 fp16 ULP on random
    cubes and curves — the lut.md pattern, skip-on-no-GPU as ever.
-5. **K-031 parity**: the standing preview-equals-export matrix gains an OCIO row — a
+5. **Parity**: the standing preview-equals-export matrix gains an OCIO row — a
    reference comp under a loaded config, Viewer readback bit-identical to the export
    bytes, in every shipped colour configuration (docs/06 §3.3's gate, now with a
    config in it).
@@ -671,7 +673,7 @@ Fidelity is proven, not asserted, and the proof is data checked into the reposit
 
 ## 8. Work packages
 
-Ordered; each sized for one agent; each lands with its tests (K-007). WP1 → WP2 →
+Ordered; each sized for one pull request; each lands with its tests. WP1 → WP2 →
 WP3 → WP4 → WP5 → WP6, with WP6's fixtures authored alongside WP1–2 (the fixture
 *format* is WP1's, so later packages land against real expectations, not hope).
 
@@ -713,7 +715,7 @@ blit.
 **Tests**: old-file byte-identical round-trip; op undo symmetry; missing-config
 degrade renders the built-in frame; key sensitivity (config edit retires frames,
 item reassignment retires that item's, view switch re-encodes only); the
-double-encode trap pinned (baked identity view == built-in output exactly); K-031
+double-encode trap pinned (baked identity view == built-in output exactly); the
 parity row (§7.5), skip-on-no-GPU.
 
 **Landed.** The seam WP1 left open — a factorised stage's analytic tail — is closed in
@@ -736,8 +738,8 @@ replaces `check` wherever a project is in hand.
 
 `colour_summary`, `set_colour_config`, `set_colour_space`, the viewer look call's
 view field, in `crates/lumit-bridge/src/api/**` (then codegen; generated files never
-edited). Engine-sent refusal sentences into `engine_labels.dart` + `app_en.arb`
-(K-005), keys listed for translation.
+edited). Engine-sent refusal sentences into `engine_labels.dart` + `app_en.arb`,
+keys listed for translation.
 **Tests**: `engine_labels_test.dart` green; an frb test loading a fixture config and
 walking assign/undo through the seam; `bridge_call_budget_test.dart` unchanged at 0.
 
@@ -783,7 +785,7 @@ fixed working space stated as a reading. There is no separate relink: choosing a
 Three shapes the note did not settle, decided in the building:
 
 - **The summary is held on `LumitUiState`, refreshed off the app state's own
-  notification.** It reads the config file, so no `build` may ask for it (K-183); a
+  notification.** It reads the config file, so no `build` may ask for it; a
   document change is the only thing that can alter it, and that is exactly when
   `LumitState` notifies. Every surface reads that one field — the picker directly, the
   export dialog and the item menu through the context they are raised from — so there
@@ -795,7 +797,7 @@ Three shapes the note did not settle, decided in the building:
   same reason the region is. There is exactly one caller of `set_viewer_look`, which is
   what makes that safe.
 - **A dropdown learned per-option refusal.** `BareDropdown` gained `disabledReason`, so
-  K-485's disabled-not-hidden rule works inside a list and not only on a whole control;
+  the disabled-not-hidden rule works inside a list and not only on a whole control;
   the export's colour dropdown asks `can_deliver_colour_space` once per config name as
   the dialog opens, never per rebuild. A file written through a config's transform is
   stated as untagged where the choice is made (§5.2).
@@ -852,18 +854,18 @@ Both were expected to be pure data drops. Neither was, and what they found is th
 argument for having run them:
 
 - **Five reader faults**, each invisible without a real config. Adjacent matrices were
-  walked rather than composed, so a matrix meeting its own inverse left 2 × 10⁻⁵ behind
-  (K-516). A shared view's `<USE_DISPLAY_NAME>` placeholder was not resolved, so *every*
+  walked rather than composed, so a matrix meeting its own inverse left 2 × 10⁻⁵ behind.
+  A shared view's `<USE_DISPLAY_NAME>` placeholder was not resolved, so *every*
   view of *every* OCIO v2 ACES config failed to resolve at all. A conversion touching a
   **data** space still ran the working-space bridge, putting a primaries matrix through a
   matte. A view transform stating only `from_display_reference` had that transform read as
   a scene-referred one and inverted, silently dropping the rendering. And the negative
-  style on an exponent was read from `negativeStyle` when a config file writes `style`
-  (K-517). Every one is now held by a unit regression as well as by fixture rows.
+  style on an exponent was read from `negativeStyle` when a config file writes `style`.
+  Every one is now held by a unit regression as well as by fixture rows.
 - **Four new §5.4 measurements**, in the table there: the ACES log decode's own sampling
   error, the gamma encode below the shaper's first cell, the cube past the shaper's reach,
   and — the one that matters — 0.117 at the Rec.709 blue primary through a vendored ACES
-  2.0 output bake (K-518).
+  2.0 output bake.
 
 The recipes that produced them are checked in beside the data: `tests/fixtures/README.md`
 and its `generate.py`, `vendored/README.md` and its `bake.py`.
@@ -877,9 +879,10 @@ measured against the rows that gate the bake it replaces.
 
 Beyond the per-package tests, the properties a regression would betray:
 
-1. **Old files are untouched**: any pre-K-490 fixture loads, saves, byte-compares.
+1. **Old files are untouched**: any fixture from before colour management loads,
+   saves, byte-compares.
 2. **One implementation**: Viewer readback equals export bytes under every colour
-   configuration, config loaded or not (K-031's gate, extended — §7.5).
+   configuration, config loaded or not (the parity gate, extended — §7.5).
 3. **We match the reference or we refuse**: every claimed transform passes its golden
    fixtures at the stated bound; everything unclaimed refuses by name; there is no
    third state (§7.2, §7.6).

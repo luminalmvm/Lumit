@@ -30,7 +30,7 @@ class FlutterWindow : public Win32Window {
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
 
-  // The zero-copy Viewer texture bridge (K-177), created once the engine is up.
+  // The zero-copy Viewer texture bridge, created once the engine is up.
   std::unique_ptr<ViewerTextureBridge> viewer_texture_bridge_;
 };
 

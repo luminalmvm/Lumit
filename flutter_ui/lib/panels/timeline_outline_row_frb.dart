@@ -31,16 +31,16 @@ import 'timeline_outline_frb.dart';
 /// life of the process, and every outline row was re-fetching it per rebuild.
 List<String>? _blendModes;
 
-/// The label-colour dot beside a layer's name — the mockup's own 6px bullet
-/// (K-451), drawn round whatever the shape is: this is a colour swatch, not a
-/// control, and Sharp's square corners have nothing to say about a bullet.
+/// The label-colour dot beside a layer's name — the mockup's own 6px bullet,
+/// drawn round whatever the shape is: this is a colour swatch, not a control,
+/// and Sharp's square corners have nothing to say about a bullet.
 const double _labelDotSize = 6;
 
 class OutlineRow extends StatefulWidget {
   final CompositionReference comp;
   final BridgeLayerEntry entry;
 
-  /// Open or close this layer's sequence view (K-248) — what a double-click
+  /// Open or close this layer's sequence view — what a double-click
   /// on a Sequence layer means, where on other kinds it opens the source.
   final VoidCallback? onOpenSequence;
 
@@ -53,7 +53,7 @@ class OutlineRow extends StatefulWidget {
   final List<TimelineGroup> groupOrder;
   final Map<TimelineGroup, double> widths;
 
-  /// Whether the matte column carries its mode toggles' room (K-463) — the
+  /// Whether the matte column carries its mode toggles' room — the
   /// panel's answer for the whole comp, not this row's: a row with no matte
   /// still leaves the slot when a row above it has one.
   final bool matteToggles;
@@ -66,7 +66,7 @@ class OutlineRow extends StatefulWidget {
   final bool highlighted;
   final bool open;
 
-  /// What this layer can do (K-435), so the switches column offers only that:
+  /// What this layer can do, so the switches column offers only that:
   /// no audible switch where there is no sound, no visibility switch where
   /// there is no picture. Passed down from the panel — probing for either
   /// answer must never happen in a row's build.
@@ -78,10 +78,10 @@ class OutlineRow extends StatefulWidget {
 
   /// The panel's drag state: this row is where the gesture is made — the name
   /// is the stack handle — and setting it here is what lets the lanes beside
-  /// the outline move with it (K-208).
+  /// the outline move with it.
   final ValueNotifier<LayerDrag?> layerDrag;
 
-  /// The layer the panel has just been asked to rename (`Enter`, K-243), or
+  /// The layer the panel has just been asked to rename (`Enter`), or
   /// null. A notifier rather than a rebuild because only the one row it names
   /// has anything to do about it.
   final ValueNotifier<UuidValue?> renameRequest;
@@ -148,7 +148,7 @@ class _OutlineRowState extends State<OutlineRow> {
   int get index => widget.index;
   int get count => widget.count;
 
-  /// What a command invoked on this row acts on (K-523): **the whole selection
+  /// What a command invoked on this row acts on: **the whole selection
   /// when this row is part of it, and this row alone when it is not**.
   ///
   /// The same rule the Project panel's `_targets` states — a right-click on an
@@ -158,7 +158,7 @@ class _OutlineRowState extends State<OutlineRow> {
   ///
   /// Read from the shell rather than passed down, and only ever from a
   /// handler: a row's build must not ask what is selected beyond the `selected`
-  /// flag it is already given (K-184).
+  /// flag it is already given.
   List<BridgeLayerEntry> _menuTargets() {
     final picked =
         Provider.of<LumitUiState>(context, listen: false).selectedLayerIds;
@@ -194,7 +194,7 @@ class _OutlineRowState extends State<OutlineRow> {
         () => _rename = TextEditingController(text: widget.entry.info.name));
   }
 
-  /// Escape: shut the editor and rename nothing (K-323). Shares the closing
+  /// Escape: shut the editor and rename nothing. Shares the closing
   /// half of [_commitRename] — the write is the only difference between them.
   void _cancelRename() {
     if (!mounted || _rename == null) return;
@@ -230,8 +230,7 @@ class _OutlineRowState extends State<OutlineRow> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    // ZERO bridge calls: everything this row draws is in the read model
-    // (K-184).
+    // ZERO bridge calls: everything this row draws is in the read model.
     final info = widget.entry.info;
 
     // Selection happens on the DOWN, for the whole row, outside the gesture
@@ -251,7 +250,7 @@ class _OutlineRowState extends State<OutlineRow> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         // A tap that does nothing, so that nothing is what happens: the empty
-        // ground behind these rows deselects on tap (K-203), and a row that
+        // ground behind these rows deselects on tap, and a row that
         // entered no tap into the arena let the ground win and throw away the
         // selection the pointer-down had just made.
         onTap: () {},
@@ -292,7 +291,7 @@ class _OutlineRowState extends State<OutlineRow> {
               : widget.highlighted
                   ? t.selectionFill.withValues(alpha: 0.45)
                   : null,
-          // No seam of its own: K-192's overlay draws the seams for the whole
+          // No seam of its own: the overlay draws the seams for the whole
           // outline, and a border here drew a *second* line a fraction of a
           // pixel from it — the overlay is phased by the scroll offset, which
           // a trackpad leaves fractional, so the two lines pulled apart as the
@@ -340,7 +339,7 @@ class _OutlineRowState extends State<OutlineRow> {
   /// their glyph when off — a closed eye, a muted speaker — rather than only
   /// dimming, so the off state reads at a glance.
   ///
-  /// **Only what the layer can do** (K-435). The eye is drawn for a layer with
+  /// **Only what the layer can do**. The eye is drawn for a layer with
   /// a picture, the speaker for a layer with sound — so an Audio layer has no
   /// eye, and a solid, a title, a shape or an image-only clip has no speaker.
   /// A control that does nothing when clicked is worse than no control: you
@@ -388,7 +387,7 @@ class _OutlineRowState extends State<OutlineRow> {
               switches.shy, BridgeLayerSwitch.shy,
               offIcon: LumitIcon.shy,
               tip: switches.shy ? l10n.switchShy : l10n.switchMarkShy),
-          // Guide (K-497), the cell beside shy that docs/07 §4.2 names for it.
+          // Guide, the cell beside shy that docs/07 §4.2 names for it.
           // **Drawn on every row**, unlike the kind-gated cells in the Modes
           // column: any layer can be reference-only — a match photograph, a
           // grid, an animatic — so there is no kind the mark would do nothing
@@ -409,8 +408,8 @@ class _OutlineRowState extends State<OutlineRow> {
     );
   }
 
-  /// Group 2: twirl · layer number · label dot · name (K-461 — the mockup's
-  /// own order; the dot and the number used to stand the other way round).
+  /// Group 2: twirl · layer number · label dot · name (the mockup's own order;
+  /// the dot and the number used to stand the other way round).
   Widget _identityCells(
       BuildContext context, LumitTheme t, BridgeLayerInfo info) {
     final id = layer.internallayerId.toString();
@@ -441,7 +440,7 @@ class _OutlineRowState extends State<OutlineRow> {
         const SizedBox(width: identityGap),
         // The layer number: **mono**, because it is a number (§7.1's rule has
         // no exceptions), muted, and in the same 18px cell the header's `#`
-        // stands in. It comes **before** the label dot (K-461): the number is
+        // stands in. It comes **before** the label dot: the number is
         // the row's address and the dot belongs to the name it colours, which
         // is how the mockup's rows read and how they are indexed aloud.
         SizedBox(
@@ -467,7 +466,7 @@ class _OutlineRowState extends State<OutlineRow> {
         // A `Draggable` carries a floating copy of the thing being moved,
         // which is why this used to show a little name label under the
         // pointer while the real row stayed behind. Both halves of the
-        // table already slide (K-208), so the stack shows the move
+        // table already slide, so the stack shows the move
         // truthfully on its own — the label was a second, worse answer to
         // a question already answered, and the row it named did not move.
         // The row travels; nothing floats.
@@ -506,21 +505,21 @@ class _OutlineRowState extends State<OutlineRow> {
   ///
   /// **The L6 arrangement** (owner's ruling; 3D and motion blur swapped on the
   /// owner's 2026-08-31 desktop testing): fx leads the column, collapse has
-  /// come out of the cell it shared with flow (K-168's flow-or-collapse) and
+  /// come out of the cell it shared with flow (the old flow-or-collapse) and
   /// stands on its own at the end, and flow sits immediately left of it. A
   /// column each means a Precomp that is also retimed footage shows both, and
   /// neither has to be read off the layer's kind to know which switch it is.
   ///
   /// Three of the six cells are drawn by kind, on the same rule: a cell is
   /// there when the row can act on it, and blank otherwise. **Footage shows
-  /// Flow** (K-088/K-331), a Precomp shows collapse, and the adjustment cell
-  /// (K-537) is drawn on every row that shows something in the Viewer, which is
-  /// all of them but the four that draw nothing.
+  /// Flow**, a Precomp shows collapse, and the adjustment cell is drawn on every
+  /// row that shows something in the Viewer, which is all of them but the four
+  /// that draw nothing.
   ///
   /// **And only what the column has room for** (T4): dragged narrower it gives
   /// its cells up in [modeHideOrder] — flow, then adjustment, then motion blur
   /// — leaving fx, 3D and collapse.
-  /// Whether the adjustment cell is drawn on a row of this kind (K-537): every
+  /// Whether the adjustment cell is drawn on a row of this kind: every
   /// kind that puts something in the Viewer, which is everything except the
   /// four with no picture of their own.
   ///
@@ -555,10 +554,10 @@ class _OutlineRowState extends State<OutlineRow> {
           ModeCell.threeD => _switch(context, id, '3d', LumitIcon.cube3d,
               switches.threeD, BridgeLayerSwitch.threeD,
               tip: l10n.switchThreeD),
-          // The adjustment cell (K-537), where accepts lights used to stand
-          // (K-483). An ordinary switch cell like the ones beside it: it
-          // writes `BridgeLayerSwitch.adjustment`, so it inherits the plural
-          // handler and applies to the whole selection (K-523).
+          // The adjustment cell, where accepts lights used to stand. An
+          // ordinary switch cell like the ones beside it: it writes
+          // `BridgeLayerSwitch.adjustment`, so it inherits the plural handler
+          // and applies to the whole selection.
           //
           // **On every row that shows something in the Viewer** — footage,
           // solid, precomp, text, shape, sequence and a layer born an
@@ -576,8 +575,8 @@ class _OutlineRowState extends State<OutlineRow> {
               : blank,
           // The Flow cell: shaped exactly like a switch but writing the
           // layer's interpolation policy rather than a `BridgeLayerSwitch`,
-          // because that is what flow *is* underneath (K-088: "the option
-          // surfaces the policy").
+          // because that is what flow *is* underneath ("the option surfaces
+          // the policy").
           ModeCell.flow => info.kind == BridgeLayerKind.footage
               ? _switch(context, id, 'flow', LumitIcon.flow, info.flow, null,
                   tip: info.flow ? l10n.tipFlowOn : l10n.tipFlowOff, onTap: () {
@@ -658,9 +657,9 @@ class _OutlineRowState extends State<OutlineRow> {
     }
   }
 
-  /// Double-clicking a layer opens it (K-243). A **Sequence** layer opens its
-  /// own view in place — its clips and their speed envelope, inside its row
-  /// (K-248) — because cutting is done against the beat you can see, so the
+  /// Double-clicking a layer opens it. A **Sequence** layer opens its
+  /// own view in place — its clips and their speed envelope, inside its row —
+  /// because cutting is done against the beat you can see, so the
   /// music and the ruler have to stay on screen. A Precomp opens the comp it
   /// draws, the way it does in the Project panel and the Hierarchy; every
   /// other kind will open in a Viewer of its own once there is one to open,
@@ -688,7 +687,7 @@ class _OutlineRowState extends State<OutlineRow> {
         autofocus: true,
         onSubmitted: (_) => _commitRename(),
         // Clicking anywhere else finishes the edit and keeps what was typed.
-        // It used to leave the field open and lose the change (K-243).
+        // It used to leave the field open and lose the change.
         onTapOutside: _commitRename,
         onCancelled: _cancelRename,
       );
@@ -723,7 +722,7 @@ class _OutlineRowState extends State<OutlineRow> {
         final picked = await showLabelPicker(context, d.globalPosition,
             keyPrefix: 'tl-label');
         if (picked == null) return;
-        // Every selected layer (K-523), the Project panel's `_setLabel` being
+        // Every selected layer, the Project panel's `_setLabel` being
         // the reference: one call each, because one call is what the engine's
         // op is. A label is one of the three writes a locked layer still
         // takes, so nothing is skipped.
@@ -734,16 +733,16 @@ class _OutlineRowState extends State<OutlineRow> {
       },
       child: SizedBox(
         // 16, not the dot's 6: the swatch opens a picker, so the cell is the
-        // hit target (K-452) and the dot is what is drawn in the middle of
+        // hit target and the dot is what is drawn in the middle of
         // it. Its 5px of inset either side is also the mockup's own gap
         // between the dot and the name that follows it.
         width: 16,
         height: t.density.laneRow,
         child: Center(
-          // A 6px **dot** (K-451: the mockup's own diameter). It was a 10px
-          // rounded square, which read as a swatch competing with the name
-          // beside it; the mockup marks the layer with a bullet, and a bullet
-          // is what a label colour is for.
+          // A 6px **dot**, the mockup's own diameter. It was a 10px rounded
+          // square, which read as a swatch competing with the name beside it;
+          // the mockup marks the layer with a bullet, and a bullet is what a
+          // label colour is for.
           child: Container(
             width: _labelDotSize,
             height: _labelDotSize,
@@ -784,10 +783,10 @@ class _OutlineRowState extends State<OutlineRow> {
     bool on,
     BridgeLayerSwitch? which, {
     LumitIcon? offIcon,
-    // Lumit's own set (K-440), where the caller passes a glyph directly:
+    // Lumit's own set, where the caller passes a glyph directly:
     // [mark]/[offMark] take the place of [icon]/[offIcon] and are drawn from
     // lumit_icons.dart. The [LumitIcon] pair stays for the cells not yet
-    // ported — it resolves to the same set (K-611), so this is which name the
+    // ported — it resolves to the same set, so this is which name the
     // caller uses, not which family draws.
     String? mark,
     String? offMark,
@@ -813,12 +812,12 @@ class _OutlineRowState extends State<OutlineRow> {
       behavior: HitTestBehavior.opaque,
       onTap: onTap ??
           () {
-            // **Every selected layer, not only this row** (K-523) — this is
+            // **Every selected layer, not only this row** — this is
             // the one choke point all the switches pass through, so it is the
             // one place the rule has to be written. They all take *this*
             // row's new state rather than each flipping its own, so a column
             // of mixed eyes comes out even — and the whole click is **one**
-            // bridge call and one undo step (K-720): a Ctrl+A click used to
+            // bridge call and one undo step: a Ctrl+A click used to
             // commit one edit per layer, and undoing it walked back through
             // all fifty-three.
             //
@@ -843,7 +842,7 @@ class _OutlineRowState extends State<OutlineRow> {
         height: t.density.laneRow,
         // **On whole pixels, not centred** (§6.20). A 16px glyph centred in a
         // 23px row starts at 3.5, and the icons carry a half-pixel nudge of
-        // their own to land their strokes on pixel centres (K-456): the two
+        // their own to land their strokes on pixel centres: the two
         // halves added up, so the whole switch column drew a pixel down and
         // to the right of the grid, with the strokes smeared across it. The
         // cell is the same size and takes the same click; only the paint
@@ -872,7 +871,7 @@ class _OutlineRowState extends State<OutlineRow> {
       width: width,
       child: BareDropdown<int>(
         key: ValueKey<String>('tl-blend-${layer.internallayerId}'),
-        // In an outline row, so the mockup's 16/10 face (§12A.6, K-451).
+        // In an outline row, so the mockup's 16/10 face (§12A.6).
         dense: true,
         value: current < modes.length ? current : 0,
         options: [for (var i = 0; i < modes.length; i++) i],
@@ -898,7 +897,7 @@ class _OutlineRowState extends State<OutlineRow> {
         MenuRow(
             onPressed: () => close('duplicate'),
             child: Text(l10n.menuDuplicate)),
-        // **Accepts lights (K-361) is a setting, and this is where it is set.**
+        // **Accepts lights is a setting, and this is where it is set.**
         // It had a cell in the Modes column and left it on the owner's ruling:
         // a fifth mark in a row of switches, on something that does nothing at
         // all in a comp with no Light layers. A ticked menu entry says the same
@@ -922,7 +921,7 @@ class _OutlineRowState extends State<OutlineRow> {
             MenuRow(
                 onPressed: () => close('down'), child: Text(l10n.sendBackward)),
           // In and out of the clip-editing surface, for anyone. The Vegas
-          // preference decides what an *import* becomes (K-246), never
+          // preference decides what an *import* becomes, never
           // what a layer is allowed to be — and coming back out is
           // offered wherever going in is, so a user who tries it can
           // change their mind.
@@ -936,7 +935,7 @@ class _OutlineRowState extends State<OutlineRow> {
                 key: const ValueKey('tl-row-from-sequence'),
                 onPressed: () => close('from-sequence'),
                 child: Text(l10n.menuConvertToFootageLayer)),
-          // **Detach audio** (K-701): the layer's sound onto a row of its own,
+          // **Detach audio**: the layer's sound onto a row of its own,
           // directly below, with this row muted. Not offered on a row that is
           // already nothing but sound — there is nothing to separate it from —
           // and a row that turns out to make no sound says so in the status
@@ -949,7 +948,7 @@ class _OutlineRowState extends State<OutlineRow> {
                 child: Text(l10n.menuDetachAudio)),
           // **Retime's own commands** (docs/04 §12.1), on the layers that have
           // a Retime to command. A Sequence layer's maps belong to its clips
-          // (K-075) and are commanded from the clips' own menu in the sequence
+          // and are commanded from the clips' own menu in the sequence
           // view, so offering them on the row would be offering something the
           // engine is right to refuse.
           if (widget.entry.info.kind != BridgeLayerKind.sequence) ...[
@@ -971,7 +970,7 @@ class _OutlineRowState extends State<OutlineRow> {
         ],
         // The shape — the cuts, the gaps and the ramps, with no media in
         // it — from the layer itself, so carrying a cut onto a depth pass
-        // never needs either row opened first (K-248). Offered on a locked
+        // never needs either row opened first. Offered on a locked
         // layer too: copying is not editing.
         if (widget.entry.info.kind == BridgeLayerKind.sequence) ...[
           MenuRow(
@@ -988,7 +987,7 @@ class _OutlineRowState extends State<OutlineRow> {
           MenuRow(onPressed: () => close('delete'), child: Text(l10n.delete)),
         ],
         // Only when there is something to clear. A layer carries markers
-        // when a composition was dropped in with some (K-254); most layers
+        // when a composition was dropped in with some; most layers
         // have none and should not be offered a command that does nothing.
         if (!locked && widget.entry.info.markers.isNotEmpty)
           MenuRow(
@@ -997,7 +996,7 @@ class _OutlineRowState extends State<OutlineRow> {
               child: Text(l10n.deleteAllMarkers)),
       ],
     );
-    // Every command below this line runs on the whole picked set (K-523), and
+    // Every command below this line runs on the whole picked set, and
     // every one of them keeps its own `try`/`catch` so that one layer's
     // refusal - a lock, a kind that cannot do it, a row of several clips -
     // leaves the rest of the batch standing.
@@ -1052,7 +1051,7 @@ class _OutlineRowState extends State<OutlineRow> {
         }
       case 'accepts-lights':
         // This row's new state, for all of them, so a mixed set comes out even
-        // — one batched call, one undo step, like the switch cells (K-720).
+        // — one batched call, one undo step, like the switch cells.
         try {
           widget.comp.setSwitchOnLayers(
             clicked: layer.internallayerId,

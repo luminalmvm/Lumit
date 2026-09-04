@@ -9,7 +9,7 @@
 //
 // The measurements here are the mockups' *computed* styles, as everywhere else
 // in this panel: the browser's own resolved numbers rather than a reading of
-// the CSS (K-450, K-454).
+// the CSS.
 
 import 'dart:ui' as ui;
 
@@ -51,9 +51,9 @@ const double _scrollTrackHeight = 4;
 const double _scrollTrackInset = 8;
 
 /// The bottom bar. **20, not the 18 a secondary row usually gets** — the
-/// mockup renders it at 20 and K-454 makes the mockup's own breathing room the
-/// default density, so §12A.6's table gained a project-panel line rather than
-/// this bar being shaved to fit the old one.
+/// mockup renders it at 20 and the mockup's own breathing room is the default
+/// density, so §12A.6's table gained a project-panel line rather than this bar
+/// being shaved to fit the old one.
 const double projectFooterHeight = 20;
 const double _footerPad = 10;
 const double _footerGap = 12;
@@ -65,11 +65,11 @@ const double _footerIconGap = 5;
 const double _footerLabelTracking = 0.72;
 const double _footerCountTracking = 0.54;
 
-/// The bottom bar's glyphs (K-456), drawn at the size its own mockup computed.
+/// The bottom bar's glyphs, drawn at the size its own mockup computed.
 const double projectFooterIconSize = 13;
 
 /// The colour filter's one square, *inside* the search well at its left
-/// (K-726, superseding K-634's row of dots): 10 square, standing in the
+/// (replacing the earlier row of dots): 10 square, standing in the
 /// leading-mark slot with the well's own 6px inset standing it off the edge,
 /// and `HouseTextField` puts the usual 5 between a leading mark and the text
 /// after it.
@@ -227,7 +227,7 @@ Widget projectSearchRow(
             // shade darker.
             fill: t.surface2,
             hint: l10n.searchProject,
-            // **The swatch filter lives inside the well** (K-634), where a
+            // **The swatch filter lives inside the well**, where a
             // search field's leading mark goes — one control that narrows
             // the list rather than two beside each other, and the well is
             // the row's full width again. It is the one leading in the app
@@ -269,12 +269,12 @@ Widget projectHueSquare(LumitTheme t, {required double size}) => ClipRRect(
       ),
     );
 
-/// The colour-swatch filter, inside the search well at its left (§12A.3a,
-/// K-634): **one square that opens the eight-colour picker** (K-726, the
-/// owner's ask, replacing the row of five dots). It wears the held colour
-/// while one is held and the hue square while none is, so the control states
-/// its value the way every other control does — and it never changes size, so
-/// the row keeps its resting width (§12A.5).
+/// The colour-swatch filter, inside the search well at its left (§12A.3a):
+/// **one square that opens the eight-colour picker** (the owner's ask,
+/// replacing the row of five dots). It wears the held colour while one is
+/// held and the hue square while none is, so the control states its value
+/// the way every other control does — and it never changes size, so the row
+/// keeps its resting width (§12A.5).
 ///
 /// The picker's first chip is the neutral one, and picking it shows
 /// everything — the same way back out the row menu's chip strip offers.
@@ -442,7 +442,7 @@ Widget projectFooter(
             ),
           ),
         ),
-        // **The project-wide proxies switch** (K-501, docs/07 §3.3). It sits
+        // **The project-wide proxies switch** (docs/07 §3.3). It sits
         // on the bottom bar after a divider, apart from the new-item
         // controls, for the reason the Timeline's own comp-wide toggles do
         // (§12A.1): a switch that governs the whole document reads apart

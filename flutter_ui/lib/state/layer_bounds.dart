@@ -1,5 +1,5 @@
 // How big a layer is, in its own pixels — the rectangle the Viewer draws a
-// wireframe round and hit-tests a click against (K-217).
+// wireframe round and hit-tests a click against.
 //
 // **In plain terms.** A layer's transform says where it sits, how big it is
 // drawn and which way up. It does not say how big the *thing* is: that comes
@@ -47,7 +47,7 @@ const Size nullLayerBounds = Size(100, 100);
 double estimatedTextWidth(String text, double size) =>
     text.runes.length * size * 0.5;
 
-/// A text layer's box, in layer pixels (K-230).
+/// A text layer's box, in layer pixels.
 ///
 /// **The height is the point size and nothing more.** It used to be the whole
 /// composition — text had no measured bounds on this frontend, and the comp was
@@ -64,19 +64,19 @@ Size textLayerBounds(String text, double size) => Size(
     );
 
 /// The box a shape layer's art fills, in the **art's** own coordinates, or null
-/// when there is no art (K-237).
+/// when there is no art.
 ///
 /// The **control points** bound the curve rather than the curve itself — a cubic
 /// never leaves its own control hull — which is the same rule `lumit-core`'s
 /// `shape::ShapeItem::bounds` follows. The two must agree: the engine sizes the
 /// raster with its version and the wireframe is drawn from this one.
 ///
-/// **Art coordinates are not layer pixels** (K-308). The engine draws a shape
+/// **Art coordinates are not layer pixels**. The engine draws a shape
 /// layer's picture as exactly this box, so the layer's pixel (0, 0) is this
 /// box's top-left corner — a vertex at art (x, y) is at layer pixel
 /// (x − left, y − top). [shapeContentsBounds] answers the size, which is all a
 /// wireframe box needs; anything drawing the *points* needs the corner too.
-/// **The repeater's copies are part of the box** (K-553), so it is measured at
+/// **The repeater's copies are part of the box**, so it is measured at
 /// a time: a keyed repeater puts its copies somewhere new each frame. [t] is
 /// seconds on the composition's clock, which is the clock the bridge already
 /// hands a shape item's keys over on.
@@ -84,7 +84,7 @@ Rect? shapeContentsRect(List<BridgeShapeItem> contents, {double t = 0}) {
   double? minX, minY, maxX, maxY;
   for (final item in contents) {
     // Half the outline sits outside the path, and an outline pushed *out* of
-    // it (K-554) sits further out still. Pulled in it never needs more room.
+    // it sits further out still. Pulled in it never needs more room.
     final half = (item.stroke != null ? item.strokeWidth / 2 : 0.0) +
         math.max(0.0, evaluateScalar(item.offsetAmount, t));
     double? ix0, iy0, ix1, iy1;
@@ -132,8 +132,7 @@ Size? shapeContentsBounds(List<BridgeShapeItem> contents, {double t = 0}) {
 }
 
 /// The transform each of [item]'s repeated copies is drawn with at [t], as
-/// `[a, b, c, d, e, f]` mapping `(x, y)` to `(ax + cy + e, bx + dy + f)`
-/// (K-553).
+/// `[a, b, c, d, e, f]` mapping `(x, y)` to `(ax + cy + e, bx + dy + f)`.
 ///
 /// The engine's `ShapeItem::copies_at` in the same six numbers, and it has to
 /// stay that way: the engine sizes the raster from its version and the
@@ -247,11 +246,11 @@ class LayerBoundsCache extends ChangeNotifier {
   }) {
     _atRevision(revision);
     final id = entry.layer.internallayerId;
-    // A shape layer is measured fresh every time: since K-553 its box can move
-    // with the *playhead* as well as with the document, and a cache keyed on
-    // the revision alone would hand back yesterday's box while a keyed
-    // repeater played. Measuring one is a walk over its own points, which is
-    // what this cache exists to keep media probes out of, not arithmetic.
+    // A shape layer is measured fresh every time: its box can move with the
+    // *playhead* as well as with the document, and a cache keyed on the
+    // revision alone would hand back yesterday's box while a keyed repeater
+    // played. Measuring one is a walk over its own points, which is what this
+    // cache exists to keep media probes out of, not arithmetic.
     if (entry.info.kind == BridgeLayerKind.shape) {
       return _measure(entry, compSize, t);
     }
@@ -271,7 +270,7 @@ class LayerBoundsCache extends ChangeNotifier {
     if (entry.info.kind == BridgeLayerKind.nullLayer) return nullLayerBounds;
 
     // A shape layer is exactly as big as its art, and **that changes as the art
-    // is edited** (K-237) — the first kind whose size is not fixed by a source.
+    // is edited** — the first kind whose size is not fixed by a source.
     // The cache follows the document's revision, so it keeps up; this comment
     // is here because the rest of this file was written when "a layer's size"
     // was a constant.
@@ -280,7 +279,7 @@ class LayerBoundsCache extends ChangeNotifier {
       return art ?? _compSize(compSize);
     }
 
-    // Text measures its own line (K-230): the point size tall, and as wide as
+    // Text measures its own line: the point size tall, and as wide as
     // the engine's estimate of the glyphs makes it.
     if (entry.info.kind == BridgeLayerKind.text) {
       try {
@@ -294,7 +293,7 @@ class LayerBoundsCache extends ChangeNotifier {
       return _compSize(compSize);
     }
 
-    // **All three of these come off the read model** (K-680), which is what
+    // **All three of these come off the read model**, which is what
     // makes an edit cheap: this cache is emptied on every document revision, so
     // asking the engine per layer here cost a `get_source_item` — and a
     // `get_size` or a `get_definition` behind it — for every layer on screen,

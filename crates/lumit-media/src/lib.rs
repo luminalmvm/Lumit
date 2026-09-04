@@ -44,7 +44,7 @@ impl From<rsmpeg::error::RsmpegError> for MediaError {
     }
 }
 
-/// The linked FFmpeg (libavformat) version, for the boot log (K-008).
+/// The linked FFmpeg (libavformat) version, for the boot log.
 pub fn ffmpeg_version() -> String {
     format!(
         "{}.{}.{}",

@@ -129,7 +129,7 @@ class CustomEasings {
   }
 
   /// [wanted] when no saved shape holds it, else the same with a number after
-  /// it; null when it is blank. The same rule custom themes follow (K-298), so
+  /// it; null when it is blank. The same rule custom themes follow, so
   /// saving twice in a row never quietly overwrites the first attempt.
   static String? _free(String wanted) {
     if (wanted.isEmpty) return null;

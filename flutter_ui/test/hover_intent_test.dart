@@ -1,4 +1,4 @@
-// The safe hover triangle (K-318): the geometry, and the submenu behaviour it
+// The safe hover triangle: the geometry, and the submenu behaviour it
 // exists for — crossing a sibling row on the diagonal to a flyout must not
 // take the flyout away, and settling on a sibling still must.
 
@@ -170,7 +170,7 @@ void main() {
 
     testWidgets('the debug overlay draws without changing what the guard does',
         (tester) async {
-      // The Debug panel's switch (K-318) only draws. It must decide nothing —
+      // The Debug panel's switch only draws. It must decide nothing —
       // the same journey must end the same way — and it must take its overlay
       // down again, since an OverlayEntry outlives the widget that inserted it.
       debugShowSafeTriangles.value = true;

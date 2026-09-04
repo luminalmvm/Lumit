@@ -3,9 +3,9 @@
 //
 // EVERY BLOCK BOUNDARY IS AN INTEGER DIVISION, deliberately. A block edge
 // decided by floor(x / block_width) in floating point puts a pixel in different
-// blocks on the two paths wherever the division comes out exact — K-399's rule
-// about a threshold, arriving on a coordinate — and integer division has no such
-// tie. The stratified sample positions are integers for the same reason.
+// blocks on the two paths wherever the division comes out exact — a general
+// rule about thresholds arriving on coordinates — and integer division has no
+// such tie. The stratified sample positions are integers for the same reason.
 //
 // The averaged mode reads at most 8x8 positions of the block rather than all of
 // it: a true mean of a block of a 1080p frame at the default grid is thousands

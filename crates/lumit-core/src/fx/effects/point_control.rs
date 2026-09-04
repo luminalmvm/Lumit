@@ -25,7 +25,7 @@ use lumit_fx_macros::Effect;
     matte = false,
 )]
 pub struct PointControl {
-    /// px@comp (K-260 — point parameters are pixels, never per cent of frame).
+    /// px@comp (point parameters are pixels, never per cent of frame).
     /// The schema default is the nominal 1080p centre; `instantiate_for_raster`
     /// centres a fresh instance on the actual comp, because a control that
     /// lands in the top-left corner of a 4K frame is a control somebody has to

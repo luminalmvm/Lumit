@@ -1,4 +1,4 @@
-// File → Project settings: the project's anti-aliasing setting (K-274, K-286).
+// File → Project settings: the project's anti-aliasing setting.
 //
 // Its value lives in the *project* rather than in this machine's settings file,
 // which is what these tests are actually about: the control has to write through
@@ -44,7 +44,7 @@ void main() {
     testWidgets('a new project is anti-aliased, and the row says so',
         (tester) async {
       final p = await openRendering(tester);
-      // K-274: on by default; K-286: eight samples is the shipped choice.
+      // On by default, and eight samples is the shipped choice.
       expect(p.state.project!.antiAliasing(), 8);
       expect(find.text('8 samples'), findsWidgets);
     });

@@ -1,4 +1,4 @@
-//! **Layer styles, end to end** (docs/impl/layer-styles.md §9, K-706).
+//! **Layer styles, end to end** (docs/impl/layer-styles.md §9).
 //!
 //! # In plain terms
 //!
@@ -24,8 +24,8 @@
 //!   the cache serves the undressed frame for the dressed layer.
 //! - **The two paths agreeing.** The CPU reference is the oracle (docs/08 §1.6),
 //!   and a style is only shipped when the kernel matches it.
-//! - **Nothing at all, for a layer with no styles.** The K-258 regression: the
-//!   field's serde default must leave the file and the picture as they were.
+//! - **Nothing at all, for a layer with no styles.** The field's serde default
+//!   must leave the file and the picture as they were.
 
 // A test binary: a failed setup step should stop this test, loudly, and the
 // no-panic rule of docs/14 is about the engine's own paths.
@@ -132,7 +132,7 @@ fn style(name: &str, edits: &[(&str, f64)]) -> EffectInstance {
 /// *effect* has always behaved the same way, and the note names the shared
 /// padding path as the place that changes when one arrives.) Wrapping the square
 /// in a full-size comp gives the layer a 64 × 64 raster with real geometry on
-/// it, which is the authoring route K-266 already describes.
+/// it, which is how a layer like this is authored anyway.
 fn project(styles: Vec<EffectInstance>) -> (Arc<Document>, Uuid) {
     let def = Uuid::now_v7();
     let mut doc = Document::new();
@@ -174,8 +174,9 @@ fn tint(inst: &mut EffectInstance, id: &str, colour: [f64; 4]) {
     }
 }
 
-/// **K-258.** A layer that wears no styles saves without the key and renders the
-/// frame it always rendered — the whole cost of the new field, measured.
+/// **Nothing at all.** A layer that wears no styles saves without the key and
+/// renders the frame it always rendered — the whole cost of the new field,
+/// measured.
 #[test]
 fn a_layer_with_no_styles_is_the_file_and_the_frame_it_always_was() {
     let (doc, comp) = project(Vec::new());

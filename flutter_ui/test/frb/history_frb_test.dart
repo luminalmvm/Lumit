@@ -1,5 +1,5 @@
-// The History window and the two composition commands beside it (K-686..K-688),
-// against the real engine.
+// The History window and the two composition commands beside it, against the
+// real engine.
 //
 // Three things are worth holding down. The list has to name the edits that were
 // actually made, in the order they were made; clicking a row has to put the
@@ -28,7 +28,7 @@ void main() {
       comp.addSolidLayer();
       comp.addTextLayer();
 
-      // A batch is named after the first thing it did (K-688), which is what
+      // A batch is named after the first thing it did, which is what
       // makes the solid's row read "Add item": making a solid layer starts by
       // adding the solid itself to the project, and the layer follows in the
       // same step.

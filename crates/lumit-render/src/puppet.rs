@@ -1,5 +1,5 @@
 //! What the Viewer's puppet overlay draws, published by the render that already
-//! worked it out (docs/impl/puppet.md §5, K-704 PU3).
+//! worked it out (docs/impl/puppet.md §5).
 //!
 //! # In plain terms
 //!

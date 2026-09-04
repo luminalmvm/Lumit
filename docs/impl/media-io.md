@@ -32,8 +32,8 @@ deterministic ([05-ARCHITECTURE.md](../05-ARCHITECTURE.md)).
   the true pts table retained for an opt-out. Surface a badge on the footage item.
 - Audio gets a coarser index (packet pts every ~250 ms) — sample-accurate positioning comes
   from decode + skip within a packet.
-- **An image sequence's index is arithmetic, and is never cached** (K-539,
-  [03-DATA-MODEL.md](../03-DATA-MODEL.md) §3.1). A run of numbered stills is opened through
+- **An image sequence's index is arithmetic, and is never cached**
+  ([03-DATA-MODEL.md](../03-DATA-MODEL.md) §3.1). A run of numbered stills is opened through
   FFmpeg's `image2` demuxer (pattern + `start_number` + `framerate`), so every file is one
   packet and one keyframe, evenly spaced, and how many there are was already counted off the
   directory. Read the first two packets for where the clock starts and how far it steps, then
@@ -77,7 +77,7 @@ GpuFrame }` with the CPU path as the always-working fallback:
   - **Determinism trap (measured, 2026-07-27)**: swscale's `nv12→rgba` and `yuv420p→rgba`
     paths interpolate chroma DIFFERENTLY (≈9 % of bytes off, up to 161/255, on test-pattern
     edges), so a hardware-decoded frame converted straight from NV12 disagrees with the
-    software decoder's pixels — breaking preview == export across machines (K-031). The fix
+    software decoder's pixels — breaking preview == export across machines. The fix
     shipped with the baseline: repack the transferred NV12 as planar `yuv420p` (a lossless
     layout change, `SWS_POINT` same-size) and run the identical conversion. Guarded by the
     `hardware_and_software_decode_agree_on_the_pixels` regression test.
@@ -95,7 +95,7 @@ GpuFrame }` with the CPU path as the always-working fallback:
   not error. (Precedent: Cap ships exactly this pattern.)
 - macOS dev build: VideoToolbox gives `CVPixelBuffer`; `wgpu::hal::metal` can wrap its
   IOSurface-backed `MTLTexture`. Same trait, same fallback discipline.
-- **Do not** attempt Vulkan Video or NVDEC-via-CUDA in v1 (K-014 keeps CUDA per-node and
+- **Do not** attempt Vulkan Video or NVDEC-via-CUDA in v1 (CUDA stays per-node and
   optional).
 
 ## 5. NV12 → linear RGBA (WGSL, decode end of the colour rule)
@@ -144,7 +144,7 @@ shader on GPU → readback 8-bit/10-bit NV12 → encoder. Muxing: mp4 with `+fas
 4. Colour golden: synthetic NV12 ramps → known linear values within 1 LSB of 16-bit.
 5. Throughput gate: 4K60 H.264 sustained decode ≥ 60 fps on reference hardware via the
    baseline path (hw decode, CPU copy) — proves v1 is viable even if interop slips.
-6. Image sequences (K-539): frame N of a run decodes file N, out of order as well as
+6. Image sequences: frame N of a run decodes file N, out of order as well as
    forward; the run detected from any file of it is the same run; a gap ends it and the
    frames past the gap are unreachable rather than shifted into place; and what Lumit's own
    image-sequence export writes reads back as the run it is. Built with Netpbm fixtures —

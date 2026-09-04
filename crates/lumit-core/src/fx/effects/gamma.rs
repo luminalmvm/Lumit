@@ -14,8 +14,8 @@ use lumit_fx_macros::Effect;
     roi = Exact,
     // §2.2: a non-linear curve shifts matte edges.
     premultiplied = false,
-    // K-395: the matte scales the amount, inside the kernel (the owner's
-    // rule for mattes); the generic strength dissolve does not also run.
+    // The matte scales the amount, inside the kernel (the owner's rule for
+    // mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "pulls Gamma toward 1 per pixel: white applies the full Gamma, grey \

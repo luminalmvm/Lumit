@@ -13,7 +13,7 @@
 // in one place rather than two.
 //
 // A **clip** has no duration well. A clip's place and length are fixed by the
-// beat-sync covenant (K-022) — re-speeding one never moves its edges — so a
+// beat-sync covenant — re-speeding one never moves its edges — so a
 // duration to type would be a promise the engine is right to refuse.
 
 import 'package:flutter/services.dart';
@@ -90,7 +90,7 @@ class _StretchBodyState extends State<_StretchBody> {
     final t = ThemeScope.of(context).theme;
     final frames = widget.durationFrames;
     // The dialogue takes focus when it opens, and Enter applies wherever that
-    // focus sits — the same rule the Pre-compose dialogue follows (K-243).
+    // focus sits — the same rule the Pre-compose dialogue follows.
     return Focus(
       autofocus: true,
       onKeyEvent: (_, event) {
@@ -182,7 +182,7 @@ class _StretchBodyState extends State<_StretchBody> {
     );
   }
 
-  /// Label left, control right — the dialogue pattern's row (K-444).
+  /// Label left, control right — the dialogue pattern's row.
   Widget _row(LumitTheme t, {required String label, required Widget child}) =>
       Row(
         children: [

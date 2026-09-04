@@ -1,4 +1,4 @@
-//! Split (K-471 §1.3): a colour taken apart into its four numbers.
+//! Split (node-graph.md §1.3): a colour taken apart into its four numbers.
 //!
 //! **In plain terms.** Wire a colour into it — a Colour cycle, a Colour
 //! control, or just the swatch on its own row — and out come four numbers: how

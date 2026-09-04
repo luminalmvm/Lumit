@@ -6,8 +6,8 @@
 // list — the same list the Timeline twirls open under a layer — so it is drawn
 // as one now: a heading bar per section, a hairline under every row, names down
 // the left and their controls down the right. The columns are not divided by
-// anything visible; they line up because every row starts them at the same x
-// (K-443): the stopwatch, then a keyframe-navigation slot that is reserved even
+// anything visible; they line up because every row starts them at the same x:
+// the stopwatch, then a keyframe-navigation slot that is reserved even
 // when the property is not animated, then the label, then the control.
 //
 // **The heading row.** Left column: the section's own enable switch where it
@@ -16,7 +16,7 @@
 // effect cost in the last measured frame. Hard against the right edge: the
 // close mark, kept apart from the actions because removing is not an adjustment.
 //
-// **Round mode keeps its bubble** (K-092). Sharp draws the section edge to edge
+// **Round mode keeps its bubble**. Sharp draws the section edge to edge
 // with hairlines, which is the After Effects reading; round wraps the same rows
 // in the floating-card chrome, so the two shapes differ in chrome and not in
 // layout.
@@ -28,7 +28,7 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/dashed_outline.dart';
 
-/// **The fixed column edges** (K-443, docs/15 §12A.3). Every row in the panel
+/// **The fixed column edges** (docs/15 §12A.3). Every row in the panel
 /// lays out on the same four x positions: the stopwatch, then a keyframe-
 /// navigation slot that stays empty until the property is animated, then the
 /// label, then the control. The label therefore never moves when a stopwatch is
@@ -77,8 +77,7 @@ const double fxKeyframeGutter = 18;
 /// rather than one of its values: what §12A.6's table states is the height a
 /// row **occupies**, and the section spends [_fxRowChrome] of that on its own
 /// 2 px above, 2 px below and the hairline under the row. So the content box
-/// is whatever is left — 22 of 27 under Regular, 21 of 26 under Compact
-/// (K-454).
+/// is whatever is left — 22 of 27 under Regular, 21 of 26 under Compact.
 ///
 /// Controls taller than this than sit inside it rather than pushing it out —
 /// their padding is squeezed by the constraint, never their text. The one
@@ -95,7 +94,7 @@ double fxRowHeight(LumitTheme t) => t.density.propertyRow - _fxRowChrome;
 /// §12A.6's table and the box inside them cannot drift apart.
 const double _fxRowChrome = 5;
 
-/// A section heading's height (K-451, docs/15 §12A.6): **24**, fixed, so a
+/// A section heading's height (docs/15 §12A.6): **24**, fixed, so a
 /// stack of effects steps at one pitch whatever each heading carries. Its
 /// padding comes out of that, leaving 20 for the switch, the twirl, the kicker
 /// and the heading's own actions.
@@ -103,7 +102,7 @@ const double fxHeadingHeight = 24;
 
 /// The effect enable switch's **hit target** on a heading (owner, desk test).
 ///
-/// [HouseCheckbox] draws K-450's 9px mark inside a 14px box, which is the right
+/// [HouseCheckbox] draws a 9px mark inside a 14px box, which is the right
 /// size for a settings page and too small to aim at in a stack of effect
 /// headings — the one control in the panel a person reaches for over and over,
 /// and the one they were missing. The mark keeps its language; the *target*
@@ -134,7 +133,7 @@ class FxEnablePaint {
   const FxEnablePaint(this.to);
 }
 
-/// **The enable switch's face**, on its own: K-450's checkbox at
+/// **The enable switch's face**, on its own: the checkbox at
 /// [fxEnableMarkScale] and nothing around it.
 ///
 /// Shared because a second surface wears the same control. A node card in the
@@ -156,7 +155,7 @@ Widget fxEnableMark({
 /// One effect's enable switch, with the drag that paints its neighbours
 /// (item 6.2, owner's desk test for the hit area).
 ///
-/// The mark keeps K-450's language at [fxEnableMarkScale]; the target is the
+/// The mark keeps its language at [fxEnableMarkScale]; the target is the
 /// whole stopwatch column for the whole height of the heading. A click toggles
 /// this one; a drag off it sets every switch it crosses to whatever this one
 /// just became.
@@ -221,10 +220,10 @@ class FxSection extends StatelessWidget {
 
   /// A right-click on the heading, with the pointer's global position — where
   /// the actions that are not worth a permanent button live (an effect's
-  /// reordering, K-276). Null leaves the secondary click unclaimed.
+  /// reordering). Null leaves the secondary click unclaimed.
   final void Function(Offset at)? onContextMenu;
 
-  /// A click on the heading's name **picks this section** (K-300) — an effect
+  /// A click on the heading's name **picks this section** — an effect
   /// is a thing that can be selected, copied and cut, and the click that says
   /// which one is the one on its name. Null (Source, Transform: sections that
   /// are not one of several) leaves the name doing what the twirl does, which
@@ -253,16 +252,16 @@ class FxSection extends StatelessWidget {
   final List<Widget> rows;
 
   /// While true the heading's name is an inline editor instead of a label —
-  /// how an effect is renamed (`Enter` on the selected effect, K-321).
+  /// how an effect is renamed (`Enter` on the selected effect).
   /// Sections that cannot be renamed (Source, Transform) never set it.
   final bool renaming;
 
   /// The rename's commit: the typed name, empty to clear back to the
   /// effect's own label. Called on Enter and on clicking away, the same
-  /// contract every inline rename in the application has (K-243).
+  /// contract every inline rename in the application has.
   final ValueChanged<String>? onRenamed;
 
-  /// `Escape` while renaming: close the editor and keep the old name (K-323).
+  /// `Escape` while renaming: close the editor and keep the old name.
   final VoidCallback? onRenameCancelled;
 
   /// False while the effect is **bypassed**. The heading takes a dashed outline
@@ -388,7 +387,7 @@ class FxSection extends StatelessWidget {
 
   Widget _heading(LumitTheme t) => GestureDetector(
         behavior: HitTestBehavior.opaque,
-        // **The name picks the effect; only the twirl folds it** (K-300). A
+        // **The name picks the effect; only the twirl folds it**. A
         // click that both picked and collapsed took the parameters away at the
         // moment you said which effect you meant, which is the opposite of what
         // selecting one is for. A section that cannot be picked (Source,
@@ -415,7 +414,7 @@ class FxSection extends StatelessWidget {
                 child: Row(
                   children: [
                     // Enable switch, twirl, name — the order the redesign's
-                    // heading reads in (K-443): what the effect *is doing*
+                    // heading reads in: what the effect *is doing*
                     // before what the heading does to the list under it. The
                     // switch sits centred in the stopwatch column so the two
                     // glyphs share an axis down the panel.
@@ -470,10 +469,10 @@ class FxSection extends StatelessWidget {
       );
 }
 
-/// The heading's inline rename editor (K-321): opens with the current name
+/// The heading's inline rename editor: opens with the current name
 /// selected — a name is retyped far more often than amended — commits on
-/// Enter or on clicking away, like every inline rename (K-243), and throws the
-/// edit away on Escape (K-323).
+/// Enter or on clicking away, like every inline rename, and throws the
+/// edit away on Escape.
 class _RenameField extends StatefulWidget {
   final String initial;
   final ValueChanged<String> onDone;
@@ -511,7 +510,7 @@ class _RenameFieldState extends State<_RenameField> {
       );
 }
 
-/// One property row on the panel's fixed columns (K-443): the keyframe slot,
+/// One property row on the panel's fixed columns: the keyframe slot,
 /// the [name], and the [control], each starting at the same x on every row.
 ///
 /// [keyframeControls] sits in a slot of [fxKeyColumnWidth] whose space is
@@ -550,7 +549,7 @@ Widget fxTwoColumnRow({
       ),
     );
 
-/// A parameter group's own twirl inside a section (P4, K-145): the sub-heading
+/// A parameter group's own twirl inside a section (P4): the sub-heading
 /// an effect tucks its advanced controls behind — Bokeh's Depth map, Shake's
 /// Per-axis wobble, Matte key's Screen matte.
 ///
@@ -563,7 +562,7 @@ Widget fxTwoColumnRow({
 ///
 /// Its twirl sits in the stopwatch column and its label starts at the label
 /// column's x, so the fold reads as belonging to the rows beneath it and the
-/// panel keeps one straight label edge from top to bottom (K-443). The label is
+/// panel keeps one straight label edge from top to bottom. The label is
 /// a kicker, as every container label is (§7.1).
 Widget fxGroupHeaderRow(
   BuildContext context, {

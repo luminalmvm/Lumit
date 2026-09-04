@@ -1,5 +1,5 @@
 //! Which standard a file speaks, and the one module and the one plugin the rest
-//! of the crate holds (K-707).
+//! of the crate holds.
 //!
 //! # In plain terms
 //!
@@ -13,7 +13,7 @@
 //!
 //! It is an enum rather than a trait on purpose. There are exactly two
 //! standards, both are known at compile time, and a trait object would buy an
-//! open set nobody wants — VST2 is dead for us and recorded as such (K-683).
+//! open set nobody wants — VST2 is dead for us and recorded as such.
 //! What the enum costs is a `match` per question, which is the shortest honest
 //! spelling of "these two things answer the same fourteen questions".
 
@@ -38,7 +38,7 @@ pub enum Abi {
     /// CLAP (clap.audio), the MIT-licensed one AP1 built against.
     #[default]
     Clap,
-    /// VST3 (Steinberg), hosted under the SDK's GPLv3 branch (K-707).
+    /// VST3 (Steinberg), hosted under the SDK's GPLv3 branch.
     Vst3,
 }
 

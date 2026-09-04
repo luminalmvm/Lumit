@@ -32,7 +32,7 @@ import 'state.dart';
 List<String> listBlendModes() =>
     BridgeLib.instance.api.crateApiCompositionListBlendModes();
 
-/// One animated mask's shape at a moment (K-342): which mask, on which layer,
+/// One animated mask's shape at a moment: which mask, on which layer,
 /// and the path it is showing there.
 class BridgeAnimatedMaskPath {
   final UuidValue layer;
@@ -58,7 +58,7 @@ class BridgeAnimatedMaskPath {
           vertices == other.vertices;
 }
 
-/// The comp read model (K-184): what one `get_model` crossing carries. Dart
+/// The comp read model: what one `get_model` crossing carries. Dart
 /// holds this and refreshes it when the engine reports a change; panels draw
 /// from it with no bridge calls at all.
 class BridgeCompModel {
@@ -73,7 +73,7 @@ class BridgeCompModel {
   final int fpsNum;
   final int fpsDen;
 
-  /// The comp's master motion-blur shutter (K-120): whether layers with
+  /// The comp's master motion-blur shutter: whether layers with
   /// their own motion-blur switch actually blur. Drawn by the Timeline's
   /// master button; written through `set_motion_blur_enabled`.
   final bool motionBlurEnabled;
@@ -81,11 +81,11 @@ class BridgeCompModel {
   /// The comp's background colour, scene-linear RGBA — what the Viewer
   /// bar's swatch shows. In the model so a bar that rebuilds on every
   /// arriving frame reads the held copy rather than asking the engine per
-  /// rebuild (K-184); writes still go through `set_background`.
+  /// rebuild; writes still go through `set_background`.
   final F32Array4 background;
   final List<BridgeLayerEntry> layers;
 
-  /// The comp's layer groups (K-702), in document order and already resolved
+  /// The comp's layer groups, in document order and already resolved
   /// to the run each one draws over. Empty for a comp nobody has grouped,
   /// which is every comp until someone presses Ctrl+G.
   final List<BridgeLayerGroup> groups;
@@ -137,7 +137,7 @@ class BridgeCompModel {
 /// editable in the same dialog, and a frame count means nothing without knowing
 /// which rate it was counted at: applying "1800 frames" after changing 60 fps to
 /// 30 halved the comp's real length while every layer kept its own seconds, which
-/// is what made the layers look retimed (K-180). Seconds are what the document
+/// is what made the layers look retimed. Seconds are what the document
 /// stores, so the rate can change without the comp getting longer or shorter.
 /// Callers wanting the count ask [`CompositionReference::duration_frames`].
 class BridgeCompSettings {
@@ -148,14 +148,14 @@ class BridgeCompSettings {
   final int fpsDen;
   final BridgeRational duration;
 
-  /// The comp's background, scene-linear RGBA — the drawing's Background row
-  /// (K-469). It rides in the settings block because `SetCompSettings`
-  /// carries it anyway: without it here the op had to be handed the colour
-  /// the comp already had, purely so the dialog could not change it.
+  /// The comp's background, scene-linear RGBA — the drawing's Background row.
+  /// It rides in the settings block because `SetCompSettings` carries it
+  /// anyway: without it here the op had to be handed the colour the comp
+  /// already had, purely so the dialog could not change it.
   final F32Array4 background;
 
   /// The master shutter's angle in degrees, and how many sub-frame samples a
-  /// blurred layer is drawn at (K-120) — the drawing's Motion blur section.
+  /// blurred layer is drawn at — the drawing's Motion blur section.
   /// The shutter's *phase* is not in the dialog and is left as it stands.
   final double shutterAngle;
   final int motionBlurSamples;
@@ -231,7 +231,7 @@ class BridgeCompSize {
 }
 
 /// Which of the four broadcast switches a group header press moves
-/// ([`CompositionReference::set_group_switch`], K-702). The same four switches
+/// ([`CompositionReference::set_group_switch`]). The same four switches
 /// a layer row already carries — a group press just sets them on every member
 /// at once, as one undo step.
 enum BridgeGroupSwitch {
@@ -242,7 +242,7 @@ enum BridgeGroupSwitch {
   ;
 }
 
-/// One layer of the comp read model (K-184): the plain-data handle Dart
+/// One layer of the comp read model: the plain-data handle Dart
 /// addresses edits by, and everything the panels draw for it.
 class BridgeLayerEntry {
   final LayerReference layer;
@@ -265,7 +265,7 @@ class BridgeLayerEntry {
           info == other.info;
 }
 
-/// One **layer group** as the Timeline draws it (K-702): the header row's
+/// One **layer group** as the Timeline draws it: the header row's
 /// name, colour and switch faces, the members folded under it, and the span
 /// its combined bar covers.
 ///
@@ -275,12 +275,12 @@ class BridgeLayerEntry {
 /// and whether every one of them is visible. Working any of that out on the
 /// Dart side would be a second opinion about the document living in the view,
 /// which is the thing the read model exists to prevent — and it would cost a
-/// walk of the whole stack on every rebuild, which is the cost K-184 removed.
+/// walk of the whole stack on every rebuild, the cost the read model removed.
 class BridgeLayerGroup {
   final UuidValue id;
   final String name;
 
-  /// Index into the theme's label palette (K-567), like a layer's own.
+  /// Index into the theme's label palette, like a layer's own.
   final int label;
 
   /// The layers the header actually spans, topmost first. Empty for a group
@@ -301,10 +301,10 @@ class BridgeLayerGroup {
   final bool solo;
   final bool locked;
 
-  /// The header's own effect stack (docs/impl/group-effects.md §6, K-731) —
-  /// the same listing a layer's `BridgeLayerInfo::effects` carries, resolved
-  /// at comp time (a group has no layer clock). Empty for the K-702 group,
-  /// which is what the fx tick and the header's fold key their visibility on.
+  /// The header's own effect stack (docs/impl/group-effects.md §6) — the same
+  /// listing a layer's `BridgeLayerInfo::effects` carries, resolved at comp
+  /// time (a group has no layer clock). Empty for a plain group, which is
+  /// what the fx tick and the header's fold key their visibility on.
   final List<BridgeEffectInstanceInfo> effects;
 
   const BridgeLayerGroup({
@@ -360,7 +360,7 @@ class BridgeLayerGroup {
 /// wrote (docs/10 §1.1); neither has a control, so neither crosses. They are
 /// **not** lost on a write-back: [`core_markers`] merges each incoming marker
 /// onto the one the document already holds under that id, so the panel edits
-/// what it can see and the rest survives untouched (K-270).
+/// what it can see and the rest survives untouched.
 class BridgeMarker {
   final UuidValue id;
   final BridgeRational time;
@@ -378,10 +378,10 @@ class BridgeMarker {
   /// it.
   final PlatformInt64? durationFrames;
 
-  /// Whether this marker was generated by beat detection (K-698). Read-only
+  /// Whether this marker was generated by beat detection. Read-only
   /// across the seam — the ruler draws a beat as a tick in the beat band
   /// rather than as a flag — and ignored on a write-back, where the merge's
-  /// kind-by-id rule (K-270) is what keeps a beat a beat.
+  /// kind-by-id rule is what keeps a beat a beat.
   final bool isBeat;
 
   const BridgeMarker({
@@ -429,7 +429,7 @@ enum BridgePlaybackMode {
   /// **Every frame, at the resolution asked for, however long it takes** — and
   /// kept, so the second pass over the same stretch plays properly. Sound
   /// plays while rendering holds the comp's rate and is paused by the worker
-  /// if the picture falls genuinely behind (K-171): a paused track over a
+  /// if the picture falls genuinely behind: a paused track over a
   /// slow-motion picture, never a drifting one.
   everyFrame,
   ;
@@ -451,7 +451,7 @@ class CompositionReference {
         that: this,
       );
 
-  /// Add **the sound of** this footage item as its own layer (K-435): an
+  /// Add **the sound of** this footage item as its own layer: an
   /// Audio layer.
   ///
   /// The layer keeps the footage item as its source — its waveform, its
@@ -477,7 +477,7 @@ class CompositionReference {
   /// Place `footage` into this composition as a new top layer.
   ///
   /// The layer's span is the media's own duration in comp frames, and its
-  /// transform is anchored on the media's own centre at the comp centre (K-150),
+  /// transform is anchored on the media's own centre at the comp centre,
   /// so a placed clip appears centred and pivots about its middle. Both fall
   /// back to the comp's duration and size when the media cannot be probed —
   /// a missing file still places, so the user can relink it rather than being
@@ -489,7 +489,7 @@ class CompositionReference {
   /// Place `footage` in this composition as a new layer.
   ///
   /// `as_sequence` is Settings ▸ Interface ▸ Editing ▸ *Video arrives as a
-  /// Sequence layer* (K-246), forwarded by the frontend. On, media that
+  /// Sequence layer*, forwarded by the frontend. On, media that
   /// **runs** — a video stream longer than a single frame — arrives as a
   /// one-clip Sequence layer, ready to be cut on its own row; a still image
   /// never does, because there is nothing in one frame to cut. Off, and for
@@ -505,12 +505,12 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceAddFootageLayer(
               that: this, footage: footage, asSequence: asSequence);
 
-  /// Append the built-in effect named `name` to a group header's stack
-  /// (K-731) — the group arm of `LayerReference::add_effect`, and the same
-  /// road every Add-effect surface drives.
+  /// Append the built-in effect named `name` to a group header's stack — the
+  /// group arm of `LayerReference::add_effect`, and the same road every
+  /// Add-effect surface drives.
   ///
   /// A **driver** is refused: a group carries no graph for the node to land
-  /// on (K-731's named v1 boundary), and silently dropping it on some
+  /// on (the v1 boundary), and silently dropping it on some
   /// member would be an edit nobody asked for. Self-pointing layer
   /// references are pointed at the group itself, which the render reads as
   /// "the unit's own picture" — the Lens flare's natural matte.
@@ -519,7 +519,7 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceAddGroupEffect(
               that: this, group: group, name: name);
 
-  /// Add a Light layer at the comp centre (K-360).
+  /// Add a Light layer at the comp centre.
   ///
   /// `kind` is 0 point, 1 spot, 2 area — an integer rather than the enum
   /// because that is the shape every other frb choice takes. An **area**
@@ -556,7 +556,7 @@ class CompositionReference {
         that: this,
       );
 
-  /// Add a Shape layer holding `contents`, at the top of the stack (K-237).
+  /// Add a Shape layer holding `contents`, at the top of the stack.
   ///
   /// The art is in the layer's own coordinates, and the layer is placed so
   /// that art lands where it was drawn: the anchor sits on the art's own
@@ -584,7 +584,7 @@ class CompositionReference {
       );
 
   /// Add a text layer **where the Type tool clicked**, already holding the
-  /// document it should hold, as one op (K-230).
+  /// document it should hold, as one op.
   ///
   /// The tool used to make a layer and then correct it: `add_text_layer`
   /// starts a layer saying "Text" in the middle of the composition, and the
@@ -605,9 +605,9 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceAddTextLayerAt(
               that: this, document: document, x: x, y: y);
 
-  /// The **shape every animated mask is actually showing** at `frame`
-  /// (K-342), so the Viewer can draw a keyed mask's wireframe where the
-  /// picture has it rather than where its still path used to be.
+  /// The **shape every animated mask is actually showing** at `frame`, so the
+  /// Viewer can draw a keyed mask's wireframe where the picture has it rather
+  /// than where its still path used to be.
   ///
   /// Only masks that carry path keys are listed — a still mask's own
   /// vertices already say where it is, and sending them again would put the
@@ -615,7 +615,7 @@ class CompositionReference {
   /// the ordinary case, means "nothing moved; use what you have".
   ///
   /// Evaluated engine-side on purpose: interpolating two paths means
-  /// reconciling vertex counts by splitting cubics (K-339), and a second
+  /// reconciling vertex counts by splitting cubics, and a second
   /// implementation of that in Dart would drift from the one that draws the
   /// pixels — the wireframe would stop matching the mask it describes.
   List<BridgeAnimatedMaskPath> animatedMaskPathsAt(
@@ -642,7 +642,7 @@ class CompositionReference {
   /// This composition's background colour, scene-linear RGBA (docs/07 §2.2
   /// item 10). What the composite is drawn onto where nothing covers it, and
   /// what an export writes there — distinct from the Viewer's transparency
-  /// grid (K-352), which only decides whether that backdrop is *drawn*.
+  /// grid, which only decides whether that backdrop is *drawn*.
   F32Array4 background() =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceBackground(
         that: this,
@@ -650,7 +650,7 @@ class CompositionReference {
 
   /// Which frames of this composition are held, one byte each — **two
   /// nibbles**, because the bar says not just "cached" but "cached at what
-  /// size" (K-441, docs/15 §6.3).
+  /// size" (docs/15 §6.3).
   ///
   /// The **low** nibble (`byte & 0x0F`) is the storage state the bar has
   /// always drawn:
@@ -702,15 +702,15 @@ class CompositionReference {
         that: this,
       );
 
-  /// **Crop comp to region of interest** (K-687): the comp's frame becomes
+  /// **Crop comp to region of interest**: the comp's frame becomes
   /// `region`, and every unparented layer moves back by its corner so the
   /// picture inside it stays put.
   ///
-  /// `region` is the Viewer's own `[u0, v0, u1, v1]` in comp fractions
-  /// (K-362), which is what the session holds; the conversion to pixels
-  /// happens here, once, rather than in each caller. A region that is not
-  /// four numbers, is not finite, or comes to less than a pixel either way is
-  /// refused — there is no composition in it.
+  /// `region` is the Viewer's own `[u0, v0, u1, v1]` in comp fractions, which
+  /// is what the session holds; the conversion to pixels happens here, once,
+  /// rather than in each caller. A region that is not four numbers, is not
+  /// finite, or comes to less than a pixel either way is refused — there is
+  /// no composition in it.
   void cropToRegion({required List<double> region}) => BridgeLib.instance.api
       .crateApiCompositionCompositionReferenceCropToRegion(
           that: this, region: region);
@@ -729,7 +729,7 @@ class CompositionReference {
   /// The document's revision number: bumped once per committed change, undo,
   /// redo or recovery. The Dart read model compares it per rebuild — one
   /// cheap crossing — and re-reads [`Self::get_model`] only when it moved,
-  /// so a rebuild of an unchanged document costs exactly one call (K-184).
+  /// so a rebuild of an unchanged document costs exactly one call.
   BigInt documentRevision() => BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceDocumentRevision(
         that: this,
@@ -754,7 +754,7 @@ class CompositionReference {
   ///
   /// **On the composition rather than free-standing** because a colour space
   /// is one of the settings, and whether a name can be delivered is a
-  /// question about *this project's* colour config (K-490) — one check, so
+  /// question about *this project's* colour config — one check, so
   /// the footer and the exporter cannot disagree about the same spec.
   String exportSpecCheck({required BridgeExportSpec spec}) => BridgeLib
       .instance.api
@@ -775,7 +775,7 @@ class CompositionReference {
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceFrameAtTime(
           that: this, time: time);
 
-  /// The comp's confirmed beat grid (K-698), or `None` while no detection
+  /// The comp's confirmed beat grid, or `None` while no detection
   /// with a tempo has run — what the beat band numbers bars from.
   BridgeBeatGrid? getBeatGrid() =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceGetBeatGrid(
@@ -783,7 +783,7 @@ class CompositionReference {
       );
 
   /// A group header's effect stack as staged copies (docs/impl/
-  /// group-effects.md §6, K-731), exactly as `LayerReference::get_effects`
+  /// group-effects.md §6), exactly as `LayerReference::get_effects`
   /// hands out a layer's: ordinary
   /// [`BridgeEffectInstance`](crate::api::effect::BridgeEffectInstance)
   /// handles, so `get_value` / `set_value` and the
@@ -807,7 +807,7 @@ class CompositionReference {
         that: this,
       );
 
-  /// The whole comp as the panels draw it, in ONE crossing (K-184): every
+  /// The whole comp as the panels draw it, in ONE crossing: every
   /// layer's handle and its full [`BridgeLayerInfo`] (switches, blend, span
   /// as frames, transform, every effect's every value), plus the comp's
   /// length. This is the Dart read model's refresh: read once per document
@@ -845,7 +845,7 @@ class CompositionReference {
         that: this,
       );
 
-  /// Fold the given layers into a new group (K-702) and answer its id.
+  /// Fold the given layers into a new group and answer its id.
   ///
   /// Refused with [`BridgeError::OpError`] when they are not an unbroken run
   /// of the stack, or when one of them is already in a group — see
@@ -860,7 +860,7 @@ class CompositionReference {
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceGroupLayers(
           that: this, layerIds: layerIds, name: name);
 
-  /// This comp's **master fader**, in dB (docs/09 §3.1, K-691). 0 is unity;
+  /// This comp's **master fader**, in dB (docs/09 §3.1). 0 is unity;
   /// −100 and below is exact silence, the same −∞ knee a layer's Volume has.
   double masterVolumeDb() => BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceMasterVolumeDb(
@@ -870,19 +870,19 @@ class CompositionReference {
   /// The frame **nearest** `time` — the same inverse as
   /// [`Self::frame_at_time`], rounded instead of floored.
   ///
-  /// What the playhead is moved by when this comp's frame rate changes
-  /// (K-572). The moment it sits at is read as a time before the rate is
-  /// written and asked for again after, so it stays where it was on the
-  /// clock; the new grid rarely contains that moment exactly, and rounding
-  /// keeps the playhead within half a frame of it instead of dragging it
-  /// earlier every time the rate is touched.
+  /// What the playhead is moved by when this comp's frame rate changes. The
+  /// moment it sits at is read as a time before the rate is written and asked
+  /// for again after, so it stays where it was on the clock; the new grid
+  /// rarely contains that moment exactly, and rounding keeps the playhead
+  /// within half a frame of it instead of dragging it earlier every time the
+  /// rate is touched.
   PlatformInt64 nearestFrameAtTime({required BridgeRational time}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceNearestFrameAtTime(
               that: this, time: time);
 
   /// Paste a layer copied by [`crate::api::layer::LayerReference::copy_layer`]
-  /// into this composition, at the top of the stack (K-275).
+  /// into this composition, at the top of the stack.
   ///
   /// `at_frame` is where the layer's **in point** lands: the playhead, in the
   /// ordinary case. `None` keeps the time it was copied at, which is the
@@ -916,11 +916,11 @@ class CompositionReference {
   ///
   /// The sound is started here too, so "play" is one call rather than a pair
   /// the frontend has to keep in step — in BOTH modes. Every-frame used to
-  /// play silent outright, which was coarser than K-171 asks for: sound
+  /// play silent outright, which was coarser than it needed to be: sound
   /// plays while rendering keeps the comp's rate (which, cached, it mostly
   /// does now), and the worker PAUSES it if the picture falls genuinely
   /// behind — a paused track is honest, a drifting one is a lie in sync's
-  /// clothing. Timestretch-to-match is K-171's recorded "later".
+  /// clothing. Timestretch-to-match is a recorded "later".
   ///
   /// `mode` comes from the frontend because it is a user *setting*, kept in the
   /// workspace file the frontend owns — stating it is not deciding anything.
@@ -944,8 +944,8 @@ class CompositionReference {
   /// (`Ctrl+Shift+C`, docs/07 §13.4).
   ///
   /// The new comp inherits this one's size, rate, background and — unless
-  /// `adjust_duration` asks otherwise — its duration too, which is what K-068
-  /// asks of a comp created inside an active one.
+  /// `adjust_duration` asks otherwise — its duration too, which is the rule
+  /// for a comp created inside an active one.
   ///
   /// `leave_attributes` is the dialogue's first choice, and only ever offered
   /// for a single layer: the layer moves into the new comp stripped back to
@@ -964,7 +964,7 @@ class CompositionReference {
   ///
   /// The layers go in at the depth of the topmost one, so a precompose in
   /// the middle of a stack does not send it to the front. The comp auto-files
-  /// into the Compositions folder however it was made (K-068), and the whole
+  /// into the Compositions folder however it was made, and the whole
   /// move is one [`Op::Batch`], so one undo step puts the layers back.
   ///
   /// A packed layer whose parent or matte stayed behind keeps the id it
@@ -972,7 +972,7 @@ class CompositionReference {
   /// the parent chain stops there (`layer_parent_chain`). Nothing dangles
   /// into a crash, and clearing them here would only spell the same result.
   /// `group` names the layer group being pre-composed, when the command came
-  /// from a group header's *Pre-compose group* (K-702, K-731): the header's
+  /// from a group header's *Pre-compose group*: the header's
   /// effect stack moves onto the new Precomp layer — where it means exactly
   /// what it meant, because a live group renders as that precompose already —
   /// and the emptied band is ungrouped in the same batch, so one undo puts
@@ -1012,7 +1012,7 @@ class CompositionReference {
   /// Below 1.0 the engine decodes and composites smaller, which is how a
   /// Viewer that is not filling the screen stays cheap.
   ///
-  /// `prefix` is the Viewer's "at effect" chip (K-528): the layer whose
+  /// `prefix` is the Viewer's "at effect" chip: the layer whose
   /// effect stack to cut short and the effect to stop after, or `None` for
   /// the picture as the document has it. It rides *this* request rather than
   /// having a call of its own, so turning the chip on or off costs the one
@@ -1034,7 +1034,7 @@ class CompositionReference {
   /// transform it cannot be previewed by re-compositing pixels that are
   /// already in hand: the provisional map has to reach the render plan, and
   /// it does that by riding along with the request and being patched onto a
-  /// clone (K-247).
+  /// clone.
   void renderFrameWithClipRetime(
           {required BigInt frame,
           required double scale,
@@ -1052,7 +1052,7 @@ class CompositionReference {
 
   /// Ask for `frame` with `layer`'s **driver graph nodes** replaced by
   /// `drivers` — the live drag on a driver's number, which never touches the
-  /// document (K-471 §5).
+  /// document.
   ///
   /// The stack's twin, one function up, and for the same reason: a driver's
   /// value is one op per drag and not one per tick, so the picture is kept in
@@ -1073,7 +1073,7 @@ class CompositionReference {
               drivers: drivers);
 
   /// Ask for `frame` with `layer`'s masks replaced by `masks` — the mask's
-  /// half of the two calls above (K-240).
+  /// half of the two calls above.
   void renderFrameWithMaskPreview(
           {required BigInt frame,
           required double scale,
@@ -1088,11 +1088,10 @@ class CompositionReference {
               masks: masks);
 
   /// Ask for `frame` with `layer`'s paint replaced by `strokes` — the same
-  /// live path as the three above, for a stroke being dragged in the Timeline
-  /// (K-239).
+  /// live path as the three above, for a stroke being dragged in the Timeline.
   ///
   /// A stroke's opacity is committed once, on release, so the drag is one undo
-  /// step (K-238). Without a preview that also meant the picture did not move
+  /// step. Without a preview that also meant the picture did not move
   /// until the button came up, which is the wrong half of the trade: a value
   /// you drag has to show what it is doing. The whole list rides along rather
   /// than one stroke's opacity, because paint is stored and committed as a
@@ -1130,14 +1129,14 @@ class CompositionReference {
   /// drag on the Retime channel, which never touches the document.
   ///
   /// The same reason as [`Self::render_frame_with_clip_retime`] one function
-  /// up, for the layer's own map (K-197) rather than a clip's: a retime
+  /// up, for the layer's own map rather than a clip's: a retime
   /// decides *which frame of the source* is decoded, so it cannot be
   /// previewed by re-compositing pixels already in hand. Without it the
   /// picture does not move until the key is let go, which is the one edit
   /// where watching it matters most.
   ///
   /// `retime` arrives on the comp clock like every keyframed value that
-  /// crosses the seam (K-213); the worker returns it to the layer's own.
+  /// crosses the seam; the worker returns it to the layer's own.
   void renderFrameWithRetime(
           {required BigInt frame,
           required double scale,
@@ -1152,12 +1151,12 @@ class CompositionReference {
               retime: retime);
 
   /// Ask for `frame` with `layer`'s art replaced by `contents` — the shape
-  /// layer's half of the call above (K-239).
+  /// layer's half of the call above.
   ///
   /// `transform` is for the one caller that needs both at once: a point drag
   /// that moves the art's bounding box has to move the layer with it, or the
-  /// preview shows the untouched art sliding and the commit puts it back
-  /// (K-308). Every other caller passes `None`.
+  /// preview shows the untouched art sliding and the commit puts it back.
+  /// Every other caller passes `None`.
   void renderFrameWithShapePreview(
           {required BigInt frame,
           required double scale,
@@ -1174,7 +1173,7 @@ class CompositionReference {
               transform: transform);
 
   /// Ask for `frame` with `layer`'s text document replaced by `document` —
-  /// the same live path as the two above, for the Type tool (K-225).
+  /// the same live path as the two above, for the Type tool.
   ///
   /// Typing is the one edit where the provisional value changes many times a
   /// second and the document must *not*: a `set_text` per keystroke would be
@@ -1266,14 +1265,14 @@ class CompositionReference {
               scale: scale,
               layer: layer);
 
-  /// Set this composition's background colour — one op, one undo step
-  /// (K-357). A document edit that reaches the export, unlike the Viewer's
-  /// preview-only grid.
+  /// Set this composition's background colour — one op, one undo step. A
+  /// document edit that reaches the export, unlike the Viewer's preview-only
+  /// grid.
   void setBackground({required F32Array4 rgba}) => BridgeLib.instance.api
       .crateApiCompositionCompositionReferenceSetBackground(
           that: this, rgba: rgba);
 
-  /// Confirm — or clear, with `None` — the beat grid by hand (K-698): the
+  /// Confirm — or clear, with `None` — the beat grid by hand: the
   /// road a typed BPM or a tap takes when no detection ran, and the road a
   /// test seeds a grid down. One op, one undo step; a tempoless grid is
   /// refused by the op itself.
@@ -1291,7 +1290,7 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceSetGroupName(
               that: this, group: group, name: name);
 
-  /// Set one switch on **every member** of a group, as one undo step (K-702).
+  /// Set one switch on **every member** of a group, as one undo step.
   ///
   /// The broadcast the group header's switch cells perform: the face reads on
   /// only when all of them are on ([`BridgeLayerGroup::visible`] and friends),
@@ -1326,7 +1325,7 @@ class CompositionReference {
       .crateApiCompositionCompositionReferenceSetMasterVolumeDb(
           that: this, db: db);
 
-  /// Turn the comp's master motion-blur shutter on or off (K-120), keeping
+  /// Turn the comp's master motion-blur shutter on or off, keeping
   /// the shutter's angle, phase and sample count as they are. One op, one
   /// undo step — the Timeline's master button.
   void setMotionBlurEnabled({required bool on_}) => BridgeLib.instance.api
@@ -1338,18 +1337,18 @@ class CompositionReference {
   /// Dimensions are clamped to 16..=16384 and the duration to at least one frame,
   /// so a dialog cannot commit a comp that is zero pixels wide or zero frames
   /// long. The shutter needs an op of its own, so the two are folded into one
-  /// undo group: the dialog was one press of one button (K-469).
+  /// undo group: the dialog was one press of one button.
   ///
   /// Changing only the frame rate changes only the frame rate: the duration
   /// crosses as seconds, so the comp keeps its real length and every layer keeps
   /// its own timing — the comp shows more (or fewer) frames per second and
-  /// nothing plays faster (K-180).
+  /// nothing plays faster.
   void setSettings({required BridgeCompSettings settings}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceSetSettings(
           that: this, settings: settings);
 
-  /// Set one switch on **every given layer**, as one undo step (K-720) —
-  /// what a switch cell clicked on a multi-selection commits (K-523). Every
+  /// Set one switch on **every given layer**, as one undo step —
+  /// what a switch cell clicked on a multi-selection commits. Every
   /// layer takes the same `on`, the clicked row's new state, so a column of
   /// mixed eyes comes out even; a layer already there contributes no op, and
   /// a batch with nothing to do commits nothing at all.
@@ -1373,9 +1372,9 @@ class CompositionReference {
               on_: on_);
 
   /// Set what the Viewer looks *through*, whole: `stops` of exposure and
-  /// whether the tone map is engaged (K-314, docs/07 §2.2 items 12-13), and
+  /// whether the tone map is engaged (docs/07 §2.2 items 12-13), and
   /// whether the comp's background colour is left out of the composite so
-  /// the transparency grid can show through what nothing covers (K-352).
+  /// the transparency grid can show through what nothing covers.
   ///
   /// **Preview only.** It moves how every frame the session renderer makes
   /// from here on is composited and display-encoded, and nothing else — no
@@ -1389,8 +1388,8 @@ class CompositionReference {
   /// made of, and without an ask the picture would not move until something
   /// else did.
   ///
-  /// `colour_view` is the OCIO display and view the picture is shown through
-  /// (K-490), as the two-element list `[display, view]`; anything else —
+  /// `colour_view` is the OCIO display and view the picture is shown through,
+  /// as the two-element list `[display, view]`; anything else —
   /// including omitting it — is the built-in transform. It rides this message
   /// rather than getting one of its own for the reason the rest of the look
   /// does, and **that is the trap to know**: a caller that sends a look
@@ -1418,7 +1417,7 @@ class CompositionReference {
           that: this, span: span);
 
   /// Slide every member of a group along the timeline by `delta` frames, as
-  /// one undo step — what dragging the group's combined bar commits (K-702).
+  /// one undo step — what dragging the group's combined bar commits.
   ///
   /// A **move**, never a trim: each member's in point, out point and start
   /// offset all travel together, so the group's contents keep their timing
@@ -1436,7 +1435,7 @@ class CompositionReference {
           that: this, group: group, delta: delta);
 
   /// Slide the given layers along the timeline by `delta` frames, as one
-  /// `Op::Batch` (K-720) — what releasing a move drag on a multi-selection's
+  /// `Op::Batch` — what releasing a move drag on a multi-selection's
   /// bar commits. The same arithmetic and the same wall as a group's
   /// combined bar ([`Self::shift_group`], whose road this is): each layer's
   /// in point, out point and start offset travel together, and a drag that
@@ -1467,10 +1466,10 @@ class CompositionReference {
       );
 
   /// One small still of this composition at `frame`, its longest edge
-  /// `max_edge` pixels — the picture a project's welcome row carries (K-468).
+  /// `max_edge` pixels — the picture a project's welcome row carries.
   ///
   /// **Why a still may cross when a frame may not.** Zero-copy is the only
-  /// Viewer transport (K-183): a composition frame reaches the frontend as a
+  /// Viewer transport: a composition frame reaches the frontend as a
   /// texture handle, and the read-back path was deleted because serialising a
   /// 1080p frame a byte at a time measured 8.8 ms. This is 128 px across — 36
   /// KiB, a seventh of a scope trace — and it is asked for once, after a save.
@@ -1480,7 +1479,7 @@ class CompositionReference {
   /// Before this, the welcome screen photographed the Viewer widget, so a
   /// project saved with no Viewer on screen — a headless save, an After
   /// Effects conversion, a workspace with the panel closed — got no picture at
-  /// all. This is the road K-468 named as the one that would replace it.
+  /// all. This is the road that replaces it.
   ///
   /// Async rather than `#[frb(sync)]` deliberately: it renders, and a render
   /// on the interface thread is the interface stopped. The snapshot is taken
@@ -1529,13 +1528,13 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceTimesOfFrames(
               that: this, first: first, count: count);
 
-  /// **Trim comp to work area** (K-686): the comp becomes as long as its work
+  /// **Trim comp to work area**: the comp becomes as long as its work
   /// area, and everything on the timeline slides back with it.
   ///
   /// Takes nothing — the work area is in the document, so the engine reads
   /// what it is trimming to rather than being told a span that could have
   /// gone stale between the click and the commit. A comp with no work area is
-  /// already its own work area (K-203) and nothing happens.
+  /// already its own work area and nothing happens.
   void trimToWorkArea() => BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceTrimToWorkArea(
         that: this,
@@ -1546,9 +1545,9 @@ class CompositionReference {
   void ungroup({required UuidValue group}) => BridgeLib.instance.api
       .crateApiCompositionCompositionReferenceUngroup(that: this, group: group);
 
-  /// Take away **every group the given layers touch**, as one undo step
-  /// (K-720) — what Ctrl+Shift+G on a multi-selection commits. Answers
-  /// whether anything went; one undo restores every band in its old slot,
+  /// Take away **every group the given layers touch**, as one undo step —
+  /// what Ctrl+Shift+G on a multi-selection commits. Answers whether
+  /// anything went; one undo restores every band in its old slot,
   /// because [`lumit_core::Op::UngroupLayers`]'s inverse carries it.
   bool ungroupSelection({required List<UuidValue> layerIds}) =>
       BridgeLib.instance.api

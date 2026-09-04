@@ -7,7 +7,7 @@ use lumit_fx_macros::Effect;
 
 /// The Unsharp mask's controls.
 ///
-/// Labelled "Unsharp mask" since K-138 split the plain 3×3 Sharpen out beside
+/// Labelled "Unsharp mask" since the plain 3×3 Sharpen was split out beside
 /// it; the `match_name` stays "sharpen" so saved projects are unchanged.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
@@ -20,8 +20,8 @@ use lumit_fx_macros::Effect;
     roi = PaddedPx(100.0),
     // §2.2: operates on unpremultiplied colour.
     premultiplied = false,
-    // K-395: the matte scales the amount, inside the kernel (the owner's
-    // rule for mattes); the generic strength dissolve does not also run.
+    // The matte scales the amount, inside the kernel (the owner's rule for
+    // mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales Amount per pixel: white adds the full Amount of detail \

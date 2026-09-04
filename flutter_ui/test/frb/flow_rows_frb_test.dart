@@ -1,4 +1,4 @@
-// The Flow group on frb: the layer option K-088 specified and K-331 built.
+// The Flow group on frb: the layer option, specified then built.
 //
 // Two things are being pinned here. That flow is reachable *only* as a switch —
 // it left the in-between-frames dropdown, so it can no longer be picked as if
@@ -58,9 +58,9 @@ void main() {
         (tester) async {
       // The regression this pins: the group was first built into the Effect
       // controls panel, which hides its layer sections behind a setting that
-      // is *off* by default (K-193) — so turning flow on showed no controls at
-      // all. K-088 says "in the expanded layer", and the expanded layer is the
-      // Timeline's twirl-down, which is where Transform actually is.
+      // is *off* by default — so turning flow on showed no controls at all.
+      // The decision says "in the expanded layer", and the expanded layer is
+      // the Timeline's twirl-down, which is where Transform actually is.
       final p = withComp();
       final layer = footageLayer(p);
       layer.setFlowEnabled(on_: true);
@@ -104,8 +104,8 @@ void main() {
       final layer = footageLayer(p);
       await mount(tester, p);
 
-      // The section heading is a kicker since K-443, so its word reaches the
-      // screen capitalised while the string itself stays sentence case.
+      // The section heading is a kicker, so its word reaches the screen
+      // capitalised while the string itself stays sentence case.
       expect(find.text('FLOW'), findsNothing,
           reason: 'a layer not using flow has no flow group');
 
@@ -231,7 +231,7 @@ void main() {
 
       // Anime commonly switches between 2s and 3s inside one cut, so the
       // conform has to be able to follow it rather than being one number for
-      // the whole clip (K-160's reason for a value field over a preset list).
+      // the whole clip (the reason for a value field over a preset list).
       expect(find.byKey(const ValueKey('kf-stopwatch-flow-input-rate')),
           findsOneWidget);
       await tester

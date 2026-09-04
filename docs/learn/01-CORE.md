@@ -51,7 +51,7 @@ of 11 `Property` scalars. A `Layer` also holds matte, parent, masks, paint, effe
 switches, optional retime, and blend mode.
 
 One `LayerKind` is worth naming on its own. `LayerKind::Light { light: Box<LightDef> }`
-(K-360) is a layer that emits rather than one that draws: `LightKind` is Point, Spot or
+is a layer that emits rather than one that draws: `LightKind` is Point, Spot or
 Area, and `LightDef` carries animatable colour, intensity, falloff distance, spot cone
 angle and — for an Area light — a half-width and half-height in comp pixels (half, so it
 measures from the centre outward like the flare's own source dials). The *placement* is
@@ -87,7 +87,7 @@ f64 value, and per-side interpolation (`Hold | Linear | Bezier { speed, influenc
 This is the After Effects model, so imports are lossless. Between two bezier keys the
 curve is a cubic. "What value at time t" solves that cubic with bracketed Newton
 (`solve_u`). `insert_key_preserving_shape` splits the cubic (de Casteljau), so adding
-a key never changes the curve (K-221).
+a key never changes the curve.
 
 ## Edits, undo, snapshots
 
@@ -95,8 +95,8 @@ Every edit is one `Op`, a big serde-tagged enum of small, invertible commands.
 `ops::apply(&mut doc, &op)` mutates the document and returns the **exact inverse
 op** (mostly via `std::mem::replace`, see the `Op::SetMediaRef` arm in `ops.rs`). List-valued edits replace
 the whole list, which makes the inverse trivial. `Batch` reverts applied members
-if a later member fails. `apply` enforces layer lock centrally (K-291,
-the `lock_guards` table).
+if a later member fails. `apply` enforces layer lock centrally (the
+`lock_guards` table).
 
 `DocumentStore` (`store.rs`) is where threads meet the document:
 
@@ -116,7 +116,7 @@ keyframable map from layer-local seconds to source seconds. `None` means "not
 retimed", which is different from an identity map. A `Static` map is a freeze.
 `Interpolation` (Nearest/Blend/Flow) and `FlowParams` are render policy, separate
 from the map. The older segment store in `retime.rs` survives for the 0.1.0→0.2.0
-file migration (K-249).
+file migration.
 
 ## Expressions
 
@@ -131,15 +131,15 @@ depth 100. A failed script evaluates to −1.0 (or "" for text), never a failed 
 ## Effects
 
 Every effect is declared once, in its own file under `fx/effects/` — 35 of them,
-registered in `fx/catalogue.rs` in Add-effect menu order (K-137), which the macro expands
+registered in `fx/catalogue.rs` in Add-effect menu order, which the macro expands
 into `BUILTINS: &[EffectSchema]`. `instantiate` copies a schema's defaults into an
 `EffectInstance`. `resolve_stack` evaluates every declared parameter at layer time into
 the parameter arena (`ResolvedStack`), and dispatch is a lookup: `lumit-render`'s GPU
-table and each effect's own `apply_cpu` (the CPU reference, and the GPU's test oracle,
-K-019) read the same bag. Preview equals export because both read the same resolution
-(K-031). Read `docs/impl/effect-registry.md` before touching any of it.
+table and each effect's own `apply_cpu` (the CPU reference, and the GPU's test oracle)
+read the same bag. Preview equals export because both read the same resolution.
+Read `docs/impl/effect-registry.md` before touching any of it.
 
-### An effect declared once (K-381)
+### An effect declared once
 
 The complaint the new machinery answers: an effect was written down five or six times — a
 schema literal in `builtins.rs`, a variant of `Resolved`, an arm of `resolve_one`, an arm
@@ -171,13 +171,13 @@ Two details in `params.rs` carry the weight, and both exist to keep properties t
   lives contiguously in a single `ResolvedStack` arena; a `ResolvedFx` borrows the run that
   is its own and stays `Copy`. That is one allocation per stack — one *fewer* than the
   `Vec<Resolved>` it replaces.
-- **The frame key is fed field by field.** `Resolved` was hashed byte-wise (K-143), which
+- **The frame key is fed field by field.** `Resolved` was hashed byte-wise, which
   `Value` cannot be: it has padding, and a padding byte in a cache key is a wrong picture
   that only reproduces on one machine. `ResolvedStack::feed_hash` writes the effect name,
   its version, then each parameter's id, a tag byte and its live bytes.
 
 Every numeric parameter also declares a `Unit` (`Raw`, `Px`, `Degrees`, `Seconds`;
-`PctDiag` exists but no parameter may use it, K-419). That is what turns the old per-variant `rescale_px` into one generic pass
+`PctDiag` exists but no parameter may use it). That is what turns the old per-variant `rescale_px` into one generic pass
 (`rescale_spatial`): an effect can no longer be *forgotten* there, which is how a preview
 raster and a full-size export come to disagree.
 
@@ -193,7 +193,7 @@ transition still needs the old sites; migrating one is a commit that changes no 
 `lumit-project` serialises the `Document` to the `.lum` container. It appends every
 committed op to the on-disk operation journal. On crash recovery it rebuilds
 `last snapshot + journal replay`. It owns the 0.1.0→0.2.0 migration (segment
-Retime → property Retime, K-249). Details: [10-FILE-FORMAT.md](../10-FILE-FORMAT.md).
+Retime → property Retime). Details: [10-FILE-FORMAT.md](../10-FILE-FORMAT.md).
 
 ## Traps
 

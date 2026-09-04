@@ -10,7 +10,7 @@ publish = false
 # The pixel pass: decode planning, per-layer decoding, draw-list building, GPU
 # compositing, the frame-cache tiers, the headless render seam and export. An
 # engine crate — it depends on no frontend and knows nothing about egui, Flutter
-# or the bridge (docs/05-ARCHITECTURE.md). Both frontends drive it (K-178).
+# or the bridge (docs/05-ARCHITECTURE.md). Both frontends drive it.
 [dependencies]
 lumit-core = { path = "../lumit-core" }
 lumit-audio = { path = "../lumit-audio" }
@@ -22,11 +22,11 @@ lumit-gpu = { path = "../lumit-gpu" }
 lumit-media = { path = "../lumit-media" }
 lumit-project = { path = "../lumit-project" }
 lumit-text = { path = "../lumit-text" }
-# The camera tracker (K-415). The analysis job lives here because it is the one
+# The camera tracker. The analysis job lives here because it is the one
 # crate that can both decode a clip and hold the solve where the render path
 # reads it (docs/impl/tracking.md §5b).
 lumit-track = { path = "../lumit-track" }
-# The roto brush's arithmetic (K-708). The propagation job lives here for the
+# The roto brush's arithmetic. The propagation job lives here for the
 # tracker's reason: this is the one crate that can decode a clip, measure its
 # flow and hold the answer where the render path reads it (impl/roto.md §5).
 lumit-roto = { path = "../lumit-roto" }
@@ -38,7 +38,7 @@ wgpu = "24"
 # name with the same hash lumit-eval builds the name with, not with a hasher
 # whose output may move with the toolchain.
 blake3 = "1"
-# The `track/` sidecar's body (K-417), in the same form the media index uses for
+# The `track/` sidecar's body, in the same form the media index uses for
 # the same reason: a compact record of a struct, rebuilt whenever it disagrees.
 bincode = "1"
 # The `roto/` tier's mattes, compressed the way the frame cache compresses its
@@ -54,12 +54,12 @@ uuid = { version = "1", features = ["v7"] }
 # (headless.rs, `test_support`). Test-only: enabled by this crate's own
 # dev-dependency on itself, never by a shipped build.
 test-fixtures = ["lumit-gpu/test-fixtures"]
-# The Windows zero-copy Viewer path (K-177). Off by default; forwarded from
+# The Windows zero-copy Viewer path. Off by default; forwarded from
 # whichever frontend builds it (the bridge's shipped `.dll`).
 shared-texture = ["lumit-gpu/shared-texture"]
-# The Linux DMA-BUF sibling (K-177).
+# The Linux DMA-BUF sibling.
 shared-texture-linux = ["lumit-gpu/shared-texture-linux"]
-# The macOS IOSurface sibling (K-195).
+# The macOS IOSurface sibling.
 shared-texture-macos = ["lumit-gpu/shared-texture-macos"]
 
 [dev-dependencies]

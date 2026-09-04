@@ -1,5 +1,5 @@
 // Tab hops between value wells, and the well it lands on is ready to type in
-// (15-DESIGN §12A.3, K-529).
+// (15-DESIGN §12A.3).
 //
 // Two halves, both binding behaviour of every value field rather than of any
 // one panel: a well reached by keyboard traversal **opens its editor with the

@@ -7,9 +7,9 @@ property. This note is the *how*: what the language is, what it can see, and the
 things about the implementation that look odd until you know why.
 
 It describes **what ships**, not what was once planned. The engine is
-[Rhai](https://rhai.rs), settled in **K-305**, which supersedes K-063's choice of
-JavaScript on QuickJS-ng. If this note and the code ever disagree again, the code wins and
-this note is wrong — say so in the same commit that fixes it.
+[Rhai](https://rhai.rs), which replaced the earlier choice of JavaScript on QuickJS-ng. If
+this note and the code ever disagree again, the code wins and this note is wrong — say so
+in the same commit that fixes it.
 
 ## 1. What is actually there
 
@@ -25,7 +25,7 @@ this note is wrong — say so in the same commit that fixes it.
 Entry points, all in `expression.rs`:
 
 - `evaluate(expr, context) -> f64` — a numeric property. A failure resolves to `-1.0`.
-- `evaluate_text(expr, context) -> String` — a text layer's line (K-306). Any result type
+- `evaluate_text(expr, context) -> String` — a text layer's line. Any result type
   prints; a failure prints nothing rather than failing the frame.
 - `evaluate_range(expr, context, start, end, samples) -> Vec<f64>` — the graph editor's
   curve. Compiled once, run per sample. An expression that does not compile yields **no**
@@ -35,7 +35,7 @@ Entry points, all in `expression.rs`:
 
 ## 2. Determinism: what is promised and what is not
 
-**K-305 is the binding statement; this is the engineering consequence.**
+**The decision record is the binding statement; this is the engineering consequence.**
 
 Lumit promises **reproducibility**: the same project, on the same machine, gives the same
 frames on every run. That is what the frame cache key relies on and what the tests assert
@@ -148,7 +148,7 @@ interrupted, so a pathological one can stall a render thread. Rhai supports this
 - **Numeric properties** — `Property::value_at_with_context`, in `anim.rs`. The plain
   `value_at` passes no context, so an expression read through it sees no `time`; every
   render and cache-key path uses the context form.
-- **Text layers** — `TextDocument::resolved_text` (K-306). The rasteriser and the frame
+- **Text layers** — `TextDocument::resolved_text`. The rasteriser and the frame
   cache key both go through it, so they cannot disagree about what the layer says. Hashing
   the *stored* text for a driven layer would key every frame identically and freeze the
   number on screen.
@@ -163,7 +163,7 @@ Implemented in `expression.rs`'s test module unless noted.
 
 1. **Reproducibility** — the same expression at the same time gives the same answer, and a
    different one at a different time (`resolution_is_deterministic`). Cross-platform
-   byte-identity is explicitly *not* asserted, per K-305.
+   byte-identity is explicitly *not* asserted.
 2. **`time` without a comp** — the regression test for scoping it to a comp lookup
    (`time_is_readable_without_a_comp`), plus `expression_driven_text_keys_per_frame` in
    `lumit-eval`, which fails if a driven caption keys the same every frame.
@@ -192,5 +192,5 @@ Named so they are not rediscovered as bugs:
 - **Scalars only.** Point and colour properties cannot be driven yet.
 - **No AE-compatible library** — no `wiggle`, `loopOut`, `valueAtTime`, `linear`, `ease`,
   marker access. [12-PLUGINS.md](../12-PLUGINS.md) §scripting still describes the
-  JavaScript-shaped API that K-063 assumed; it has not been rewritten for Rhai, and the
+  JavaScript-shaped API the QuickJS plan assumed; it has not been rewritten for Rhai, and the
   names above are the gap between what it promises and what exists.

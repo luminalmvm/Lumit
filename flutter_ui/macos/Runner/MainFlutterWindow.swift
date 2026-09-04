@@ -2,7 +2,7 @@ import Cocoa
 import FlutterMacOS
 
 class MainFlutterWindow: NSWindow {
-  // The zero-copy Viewer bridge (K-195): holds the 'lumit/viewer_texture'
+  // The zero-copy Viewer bridge: holds the 'lumit/viewer_texture'
   // channel and the IOSurface textures registered on it for as long as the
   // window's engine lives. See windows/runner/flutter_window.cpp for the
   // sibling. Only the main window draws the Viewer, so only it needs one.

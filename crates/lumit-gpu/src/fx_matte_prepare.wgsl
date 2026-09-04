@@ -1,4 +1,4 @@
-// The matte's Channel pick and Invert, once at the seam (K-425, docs/08 §2.6).
+// The matte's Channel pick and Invert, once at the seam (docs/08 §2.6).
 //
 // Every kernel that reads a matte reads its premultiplied Rec. 709 luma, and
 // so does the generic dissolve. Rather than teach each of them which channel
@@ -11,7 +11,7 @@
 // `channel_of` table (0 Luminance, 1 Alpha, 2 Red, 3 Green, 4 Blue), the same
 // clamp-then-invert order. Never dispatched for Luminance with Invert off —
 // the kernels already read exactly that, and a pass through an fp16 texture
-// would requantise it (K-258). Shares the adjustment blend's bind-group
+// would requantise it. Shares the adjustment blend's bind-group
 // layout: the matte is bound in all three sampled slots and only the first is
 // read.
 

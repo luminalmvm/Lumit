@@ -12,11 +12,11 @@ import '../widgets/smooth_zoom.dart';
 import 'timeline_metrics_frb.dart';
 import 'timeline_outline_frb.dart';
 
-/// The two landscapes flanking the zoom slider (K-293). Painter-drawn, so
-/// K-209's 16px floor — which is about an icon-set glyph's 1.5-unit stroke
-/// falling on less than a pixel — does not apply: a filled shape has no stroke
-/// to lose. They sit inside a 20px bar, and the pair has to differ plainly
-/// enough to read as "less of this / more of this" at a glance.
+/// The two landscapes flanking the zoom slider. Painter-drawn, so the 16px
+/// floor — which is about an icon-set glyph's 1.5-unit stroke falling on less
+/// than a pixel — does not apply: a filled shape has no stroke to lose. They
+/// sit inside a 20px bar, and the pair has to differ plainly enough to read as
+/// "less of this / more of this" at a glance.
 const double _zoomGlyphSmall = 9;
 const double _zoomGlyphLarge = 14;
 
@@ -30,13 +30,13 @@ const double _zoomGlyphLarge = 14;
 /// foot (`KeyCommandStrip`), beside the column toggles: they act on what is
 /// selected in the outline above them, so that is where the eye already is.
 ///
-/// A panel bottom bar, and so a **secondary row**: `t.density.secondaryRow`
-/// (K-451, K-454). The outline reserves the same height below its own rows —
+/// A panel bottom bar, and so a **secondary row**: `t.density.secondaryRow`.
+/// The outline reserves the same height below its own rows —
 /// see `_outlineHalf`, where the reason is written down.
 class LaneBottomBar extends StatelessWidget {
   /// Where the zoom is *going*, not where the flight has reached — so the
   /// handle sits under the finger that put it there rather than trailing the
-  /// animation by a flight's length (K-293).
+  /// animation by a flight's length.
   final double zoom;
 
   /// The far end of the slider: the zoom at which the lanes show
@@ -51,7 +51,7 @@ class LaneBottomBar extends StatelessWidget {
   /// the motion, so this one arrives at once.
   final ValueChanged<double> onZoomLive;
 
-  /// The drag's ends, so the panel can anchor once per gesture (K-319).
+  /// The drag's ends, so the panel can anchor once per gesture.
   final VoidCallback? onZoomDragStart;
   final VoidCallback? onZoomDragEnd;
   final bool magnet;
@@ -83,7 +83,7 @@ class LaneBottomBar extends StatelessWidget {
   ///
   /// Painter-drawn and small, both deliberately: the pair only says
   /// "less / more" if the sizes plainly differ, and a stroked glyph under 16px
-  /// crunches (K-209), so these are filled shapes with no stroke to lose.
+  /// crunches, so these are filled shapes with no stroke to lose.
   /// One end of the slider: the landscape, and **a click on it nudges the
   /// zoom one step** (§6.5). The pair had been decoration — a picture of what
   /// the two ends mean — while every other icon in this bar does something,
@@ -122,11 +122,11 @@ class LaneBottomBar extends StatelessWidget {
     final t = ThemeScope.of(context).theme;
     return Container(
       // Keyed so the density tests have a secondary row they can measure
-      // whole; every other one is a strip with no handle on it (K-454).
+      // whole; every other one is a strip with no handle on it.
       key: const ValueKey('tl-lane-bottom-bar'),
       height: t.density.secondaryRow,
       // A panel bottom bar, and so `surface_2` — the same value the panel
-      // header wears at the other end of the panel (K-451).
+      // header wears at the other end of the panel.
       color: t.surface2,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       child: Row(
@@ -157,9 +157,9 @@ class LaneBottomBar extends StatelessWidget {
                       width: 96,
                       showValue: false,
                       // Dragged, the zoom follows the finger with no flight;
-                      // tapped, it flies to where the track was clicked
-                      // (K-293). The drag's ends bracket the gesture so the
-                      // panel anchors once (K-319).
+                      // tapped, it flies to where the track was clicked. The
+                      // drag's ends bracket the gesture so the panel anchors
+                      // once.
                       onChangeStart: onZoomDragStart,
                       onChangeEnd: onZoomDragEnd,
                       onChangeLive: (v) =>

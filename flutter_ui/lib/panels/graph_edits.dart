@@ -38,7 +38,7 @@ void commitChannelEdits(Map<GraphChannel, BridgeScalar> edits) {
       (slot.$2[channel.effect!.id.toString()] ??= {})[channel.param!.id] = next;
     } else if (channel.animatorValue case final value?) {
       // One number of one animator, written through the whole document —
-      // which is the op (K-609), so two curves on one animator are two writes
+      // which is the op, so two curves on one animator are two writes
       // and two undo steps, exactly as two on one mask are.
       writeTextAnimatorScalar(
         layer: channel.entry.layer,
@@ -48,7 +48,7 @@ void commitChannelEdits(Map<GraphChannel, BridgeScalar> edits) {
       );
     } else if (channel.isMaskPath && channel.mask != null) {
       // A shape key holds a path, not a number, so only its time and its eases
-      // can be written — which is exactly what a graph edit changes (K-344).
+      // can be written — which is exactly what a graph edit changes.
       channel.entry.layer.setMaskPathKeys(
         id: channel.mask!.id,
         keys: keysOf(next),
@@ -84,7 +84,7 @@ void commitChannelEdits(Map<GraphChannel, BridgeScalar> edits) {
 /// scalars [commitChannelEdits] writes on release, rendered through the
 /// engine's patched clone.
 ///
-/// **Why this exists.** A drag is one op on release (K-192), so between the
+/// **Why this exists.** A drag is one op on release, so between the
 /// first move and the mouse-up the document still holds the old curve and the
 /// Viewer still shows it. On a transform or an effect that is merely awkward;
 /// on a **Retime** it is the whole edit — you are choosing which frame of the
@@ -246,13 +246,13 @@ void applyTangentModeToSelection({
 
 /// Plant a key at [frame] on every channel here, each taking the value its own
 /// curve already reads there — so the picture does not move. Adding a key is a
-/// place to grab, not an edit (docs/07 §4.3, K-500 §2.1's lane gesture).
+/// place to grab, not an edit (docs/07 §4.3, the lane gesture).
 ///
 /// A channel with nothing keyed is left alone: the gesture is *"plant a key on
 /// this keyed row"*, and turning a static property into an animated one is the
 /// stopwatch's job, not a Ctrl-click's. A channel that already has a key on
 /// that frame is left alone too, because two keys at one time is not a curve
-/// the engine will take (K-301). A mask's **shape** channel is skipped: a path
+/// the engine will take. A mask's **shape** channel is skipped: a path
 /// key holds a whole path, which the mask's own control plants.
 ///
 /// Returns whether anything was written. One call, so a two-axis row's key
@@ -280,7 +280,7 @@ bool plantKeyOnChannels({
 }
 
 /// Remove every key in [selectedKeys] from [channels] — the graph's Delete and
-/// the lane key menu's *Delete key* are the same removal (K-500 §2.1).
+/// the lane key menu's *Delete key* are the same removal.
 ///
 /// The last key of a curve leaves a static value holding what it held: a
 /// property that has lost its animation still has to read something.
@@ -315,7 +315,7 @@ bool deleteKeysFromChannels({
 }
 
 /// Every selected key's frame, across every channel — what the block tools
-/// measure before they move anything (K-458).
+/// measure before they move anything.
 ///
 /// The span a Reverse mirrors within is the *selection's*, not each channel's:
 /// three rows selected together are one block, and mirroring each row inside
@@ -338,7 +338,7 @@ List<double> selectedKeyFrames({
 }
 
 /// Give every selected key a new time, [frameOf] deciding where each one goes
-/// from where it is and which channel it is on (K-458).
+/// from where it is and which channel it is on.
 ///
 /// The shared body of Reverse and of the Ease popover's Stagger. Each channel's
 /// list is rebuilt whole and **re-sorted**, because a move can change the order
@@ -405,7 +405,7 @@ void moveSelectedKeys({
 }
 
 /// Reverse the selection in time: the block plays backwards where it stands
-/// (K-458, the Keys mode bottom bar).
+/// (the Keys mode bottom bar).
 ///
 /// Each key's new time is its old one reflected through the middle of the
 /// block, so the earliest becomes the latest and the whole run stays exactly
@@ -445,7 +445,7 @@ void reverseSelection({
 
 /// Fan the selection out in time: each row's keys pushed [step] frames further
 /// than the row before it, so a run of properties arrives one after another
-/// rather than together (K-458, the Ease popover's Stagger).
+/// rather than together (the Ease popover's Stagger).
 ///
 /// [order] is the list of property paths, top to bottom as the outline lists
 /// them — a channel's rank is where its own path sits in it, so the two axes of

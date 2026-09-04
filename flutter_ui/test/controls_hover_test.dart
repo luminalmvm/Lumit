@@ -84,7 +84,7 @@ void main() {
     });
   });
 
-  group('The active control (K-394)', () {
+  group('The active control', () {
     BoxDecoration decorationOf(WidgetTester tester) =>
         tester.widget<AnimatedContainer>(
           find.descendant(
@@ -115,7 +115,7 @@ void main() {
       expect(labelOf(tester), t.surface0);
     });
 
-    /// Sharp is untouched by K-394: the armed tint, not a filled pill.
+    /// Sharp does not take the fill: the armed tint, not a filled pill.
     testWidgets('under Sharp it stays the tint', (tester) async {
       final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.sharp);
       await tester.pumpWidget(host(

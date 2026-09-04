@@ -46,13 +46,13 @@ BarGrab barGrabAt(double dx, double width) {
 }
 /// The live preview of a bar drag in flight: how far each edge and the start
 /// offset have moved, in frames. Published by the bar and read by the waveform
-/// lane, so the transients travel with the bar rather than jumping on release
-/// (K-172). Null between gestures.
+/// lane, so the transients travel with the bar rather than jumping on release.
+/// Null between gestures.
 class BarDragPreview {
   /// The layer whose bar the hand is on.
   final String layerId;
 
-  /// Every layer the drag carries (K-720): [layerId] alone for a trim or a
+  /// Every layer the drag carries: [layerId] alone for a trim or a
   /// single-layer move, the whole unlocked selection when a move drag starts
   /// on a selected bar. Each travels by the same three deltas, because only a
   /// move is ever plural and a move's three deltas are one number.
@@ -67,7 +67,7 @@ class BarDragPreview {
 /// What a grab of [grab] moved by [delta] frames does to a layer's span.
 /// Moving carries the content with the bar, so the start offset travels too;
 /// a trim leaves the content where it is and moves one edge over it.
-/// [moving] is the selection travelling with a move (K-720), the grabbed
+/// [moving] is the selection travelling with a move, the grabbed
 /// layer included; trims stay single-layer whatever is selected.
 BarDragPreview barDragPreview(String layerId, BarGrab grab, int delta,
         {Set<String>? moving}) =>
@@ -82,16 +82,16 @@ BarDragPreview barDragPreview(String layerId, BarGrab grab, int delta,
 /// (§6.26).
 ///
 /// The **start offset's** travel, not an edge's: a keyframe's time is the
-/// layer's own, carried onto the comp's clock by that offset (K-213), so a
+/// layer's own, carried onto the comp's clock by that offset, so a
 /// move slides every key with the bar and a trim slides none. Answered for
-/// **every** layer the drag carries (K-720), so a selection-mate's keys travel
+/// **every** layer the drag carries, so a selection-mate's keys travel
 /// with its bar; zero for a layer outside the drag, and zero between gestures.
 int keyShiftOf(BarDragPreview? preview, String layerId) =>
     preview != null && preview.layers.contains(layerId)
         ? preview.offsetShift
         : 0;
 
-/// The selection's share of a move drag (K-720): every **unlocked** selected
+/// The selection's share of a move drag: every **unlocked** selected
 /// layer — a locked layer sits still, exactly as it refuses its share of a
 /// switch batch — and the wall the set stops at.
 class SelectionMove {
@@ -105,7 +105,7 @@ class SelectionMove {
   const SelectionMove(this.layerIds, this.minIn);
 }
 
-/// How far a layer's ends may be dragged, in comp frames (K-211).
+/// How far a layer's ends may be dragged, in comp frames.
 ///
 /// **In plain terms:** a Footage, audio or Precomp layer can only show what its
 /// source actually holds, so its bar stops where the media does — its head
@@ -191,7 +191,7 @@ int clampBarDelta({
   }
 }
 
-/// An exact time as a comp frame number, without asking the engine (K-184).
+/// An exact time as a comp frame number, without asking the engine.
 ///
 /// The same floor `FrameRate::frame_at` takes, in whole integers so a long
 /// timeline cannot drift the way a double would: a time `num/den` seconds at
@@ -206,7 +206,7 @@ int frameOfTime(BridgeRational time, int fpsNum, int fpsDen) {
   return scaled % den != 0 && scaled < 0 ? quotient - 1 : quotient;
 }
 
-/// The corner marks that say a bar has run out of source (K-211): a small
+/// The corner marks that say a bar has run out of source: a small
 /// triangle in the top-left corner when the head is as early as its media
 /// allows, and one in the top-right when the tail is as late. Drawn only on the
 /// kinds that have a source to run out of, and never on a retimed layer, whose
@@ -269,7 +269,7 @@ class Bar extends StatefulWidget {
   /// Read when the razor is clicked, not captured when the bar is built.
   final int Function() playheadFrame;
 
-  /// A razor click on this bar, at the frame under the pointer (K-220) — the
+  /// A razor click on this bar, at the frame under the pointer — the
   /// panel decides what that cuts, because Shift cuts layers this bar knows
   /// nothing about.
   final void Function(int frame) onRazor;
@@ -282,7 +282,7 @@ class Bar extends StatefulWidget {
   final VoidCallback onSelect;
 
   /// Double-clicking this bar opens what double-clicking its name opens: a
-  /// Sequence layer's view in place (K-248), or the comp a Precomp draws
+  /// Sequence layer's view in place, or the comp a Precomp draws
   /// (owner, 2026-08-31) — the clips or the comp are what you came for, and
   /// the bar is where you were already looking. Null on every other kind.
   final VoidCallback? onOpenSequence;
@@ -291,13 +291,13 @@ class Bar extends StatefulWidget {
   /// Where the live preview is published, for the waveform lane to follow.
   final ValueNotifier<BarDragPreview?> dragPreview;
 
-  /// How far this layer's ends may be dragged (K-211). [BarBounds.free] for
+  /// How far this layer's ends may be dragged. [BarBounds.free] for
   /// every kind that has no source to run out of.
   final BarBounds bounds;
 
   /// Whether this layer is in the selection. The bar is the only mark a
   /// selected layer has on the lane side, and with several chosen at once
-  /// (K-217) the outline's lit rows are off the side of the panel.
+  /// the outline's lit rows are off the side of the panel.
   final bool selected;
 
   /// Every key on the layer, drawn on its row at half scale while it is shut
@@ -317,12 +317,12 @@ class Bar extends StatefulWidget {
   final bool magnet;
 
   /// Whether the layer's name is written along the bar — Settings ▸ Interface
-  /// ▸ Panels, **off by default** (K-514). Handed down rather than read here,
+  /// ▸ Panels, **off by default**. Handed down rather than read here,
   /// because a bar rebuilds on every hover and a build has no business
-  /// reaching for a settings object (K-184's spirit).
+  /// reaching for a settings object.
   final bool showName;
 
-  /// What a move drag on a **selected** bar carries (K-720): the unlocked
+  /// What a move drag on a **selected** bar carries: the unlocked
   /// selection and its comp-zero wall. A callback rather than a value because
   /// it is read once, at drag start, from a handler — the selection at the
   /// moment the hand closes, not the one the panel last built with.
@@ -379,7 +379,7 @@ class _BarState extends State<Bar> {
   /// release, so abandoning it is simply not making that call.
   final DragEscape _escape = DragEscape();
 
-  /// The selection travelling with this bar's move drag (K-720), read once at
+  /// The selection travelling with this bar's move drag, read once at
   /// drag start; null for a trim or a single-layer move.
   SelectionMove? _moving;
 
@@ -387,7 +387,7 @@ class _BarState extends State<Bar> {
   /// rather than sixty times a second in [_publishPreview].
   Set<String>? _movingIds;
 
-  /// How far a selection-mate's move drag says **this** bar travels (K-720):
+  /// How far a selection-mate's move drag says **this** bar travels:
   /// non-zero only while another selected bar is being dragged and this layer
   /// rides along. Fed by the shared preview notifier, so a drag repaints the
   /// bars it carries and nothing else — the panel never hears a pointer move.
@@ -450,7 +450,7 @@ class _BarState extends State<Bar> {
   Offset? _downAt;
 
   /// The last press landed on an already-selected bar and left the selection
-  /// standing for a possible selection drag (K-720); the tap, if the gesture
+  /// standing for a possible selection drag; the tap, if the gesture
   /// turns out to be one, owes the select the down withheld.
   bool _keptSelection = false;
 
@@ -519,7 +519,7 @@ class _BarState extends State<Bar> {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final round = t.shape == ThemeShape.round;
-    // ZERO bridge calls (K-184): the span already mapped to comp frames, the
+    // ZERO bridge calls: the span already mapped to comp frames, the
     // kind, and the clip split positions all ride in on the read model.
     final info = widget.entry.info;
     final inFrame = info.inFrame;
@@ -534,7 +534,7 @@ class _BarState extends State<Bar> {
       BarGrab.trimIn => (inFrame + _delta, outFrame),
       BarGrab.trimOut => (inFrame, outFrame + _delta),
       // Not necessarily at rest: while a selection-mate's bar is being moved,
-      // this bar rides along by the same frames (K-720).
+      // this bar rides along by the same frames.
       null => (inFrame + _followShift, outFrame + _followShift),
     };
 
@@ -545,13 +545,13 @@ class _BarState extends State<Bar> {
     // timeline carries its start offset, so the media it can show moves with
     // it. Without this the marks and the ghost stayed behind while the bar
     // went, and a bar at its limit looked as though it had left the limit.
-    // A bar riding a selection-mate's drag is being moved too (K-720).
+    // A bar riding a selection-mate's drag is being moved too.
     final shift = _grab == BarGrab.move ? _delta : _followShift;
     final minIn =
         widget.bounds.minIn == null ? null : widget.bounds.minIn! + shift;
     final maxOut =
         widget.bounds.maxOut == null ? null : widget.bounds.maxOut! + shift;
-    // Where the untrimmed source would reach (K-212): drawn behind the bar, so
+    // Where the untrimmed source would reach: drawn behind the bar, so
     // what shows past each end is exactly the material trimmed away. Only when
     // there is something to show — a bar filling its source draws no ghost.
     final ghost = (minIn != null && maxOut != null) &&
@@ -559,14 +559,14 @@ class _BarState extends State<Bar> {
         ? (widget.axis.xOf(minIn), widget.axis.xOf(maxOut))
         : null;
 
-    // **16 inside the row, whatever the row measures** (§12A.6's table, K-451,
-    // K-454): the bar is one of the few heights the table gives the same under
-    // both densities, so what changes with the setting is the lane ground above
-    // and below it — three pixels under Compact, three and a half under
-    // Regular. That ground is the point: a stack of bars reads as a stack
-    // rather than as one continuous slab, and the row seams the lane overlay
-    // draws (K-190) fall on it instead of through a bar's edge. The bar used to
-    // fill the row's whole height.
+    // **16 inside the row, whatever the row measures** (§12A.6's table): the
+    // bar is one of the few heights the table gives the same under both
+    // densities, so what changes with the setting is the lane ground above and
+    // below it — three pixels under Compact, three and a half under Regular.
+    // That ground is the point: a stack of bars reads as a stack rather than
+    // as one continuous slab, and the row seams the lane overlay draws fall on
+    // it instead of through a bar's edge. The bar used to fill the row's whole
+    // height.
     return SizedBox(
       height: t.density.laneRow,
       // **Both children are keyed.** The ghost comes and goes as the bar is
@@ -650,7 +650,7 @@ class _BarState extends State<Bar> {
                 onPointerDown: (event) {
                   if (event.buttons != kPrimaryButton) return;
                   // A plain press on a bar **already in the selection** leaves
-                  // the selection standing (K-720): the gesture may be a move
+                  // the selection standing: the gesture may be a move
                   // drag of the whole set, and collapsing on the way down
                   // threw the set away before the drag could carry it. A
                   // press that turns out to be only a click still collapses —
@@ -668,7 +668,7 @@ class _BarState extends State<Bar> {
                   _downAt = event.position;
                 },
                 // The bar opens what its name opens on a double-click — a
-                // Sequence layer's view (K-248), a Precomp's comp — counted
+                // Sequence layer's view, a Precomp's comp — counted
                 // with raw timestamps rather than an `onDoubleTap` below,
                 // because a double-tap recogniser beside the razor's `onTapUp`
                 // makes the arena hold every single tap back, and the razor
@@ -701,7 +701,7 @@ class _BarState extends State<Bar> {
                       : null,
                   // Selection usually happened on the down; registering the tap
                   // keeps the click out of any parent recogniser's hands either
-                  // way. When the down kept a multi-selection standing (K-720)
+                  // way. When the down kept a multi-selection standing
                   // and no drag claimed the gesture, the tap is the click it
                   // turned out to be, and selects now — on the way up, exactly
                   // what the down used to do.
@@ -726,7 +726,7 @@ class _BarState extends State<Bar> {
                             _deltaPx = 0;
                             _grab = barGrabAt(_downDx, width);
                             // A move that starts on a selected bar carries the
-                            // whole unlocked selection (K-720); a real plural
+                            // whole unlocked selection; a real plural
                             // only, and only while this bar is still in it — a
                             // Ctrl press on the way down may have just toggled
                             // it out. Trims stay single-layer whatever is
@@ -761,7 +761,7 @@ class _BarState extends State<Bar> {
                           setState(() {
                             _deltaPx += d.delta.dx;
                             // The pointer keeps travelling; the bar does not.
-                            // Held against the source's ends (K-211) and against
+                            // Held against the source's ends and against
                             // itself, so a trim can neither run past the media
                             // nor turn the bar inside out — and dragging back
                             // picks the edge up again from where it stuck.
@@ -772,7 +772,7 @@ class _BarState extends State<Bar> {
                               outFrame: outFrame,
                               bounds: widget.bounds,
                             );
-                            // The selection's wall (K-720): the earliest bar
+                            // The selection's wall: the earliest bar
                             // in the set meeting comp zero stops all of them,
                             // the same clamp the engine's slide applies — so
                             // the preview and the commit agree to the frame.
@@ -798,7 +798,7 @@ class _BarState extends State<Bar> {
                     key: ValueKey<String>(
                         'tl-bar-fill-${widget.entry.layer.internallayerId}'),
                     decoration: BoxDecoration(
-                      // The layer's label colour (K-188): the same chip the
+                      // The layer's label colour: the same chip the
                       // outline swatch shows, so recolouring a layer recolours
                       // its bar — and each kind starts on its own colour.
                       // **Desaturated** under the redesign (§12A.1): the fill is
@@ -816,7 +816,7 @@ class _BarState extends State<Bar> {
                           : t
                               .labelColour(info.label)
                               .withValues(alpha: clipFillAlpha),
-                      // Stadium ends under Round (K-394, §12.1) — the control
+                      // Stadium ends under Round (§12.1) — the control
                       // radius is the sentinel that clamps to half the bar's own
                       // height. **The bar's HIT rect is unchanged and stays
                       // rectangular**: a BoxDecoration's radius paints, it does
@@ -857,7 +857,7 @@ class _BarState extends State<Bar> {
                           ),
                         ),
                         // The layer's name, on its bar (§6.1, §7.1): **Hanken at
-                        // 10**, the mockup's own size (K-451), set clear of the
+                        // 10**, the mockup's own size, set clear of the
                         // leading edge. It was mono at 11 — but a layer's name is
                         // something the *user* named, and §7.1 sets those in
                         // sentence-case Hanken; the mono row keeps the axis
@@ -867,7 +867,7 @@ class _BarState extends State<Bar> {
                         // name opaque. Quieting it only made a name over a pale
                         // label colour harder to read than the bar it sits on.
                         //
-                        // **Only when asked for** (K-514): the mockups draw
+                        // **Only when asked for**: the mockups draw
                         // the name on every bar and so did the editor, and the
                         // owner's ruling from desktop testing is that it reads
                         // as the outline's own column of names said twice.
@@ -895,10 +895,10 @@ class _BarState extends State<Bar> {
                           ),
                         // A Sequence layer's bar stays a plain bar: the clips and
                         // their edit points are the sequence view's to draw, and
-                        // split lines up here only said the same thing twice
-                        // (K-248). What the bar does show is where its clips are
+                        // split lines up here only said the same thing twice.
+                        // What the bar does show is where its clips are
                         // *not* — the gaps, faint, the way a trimmed footage
-                        // layer shows the source it is not using (K-212).
+                        // layer shows the source it is not using.
                         if (info.kind == BridgeLayerKind.sequence)
                           Positioned.fill(
                             child: IgnorePointer(
@@ -921,7 +921,7 @@ class _BarState extends State<Bar> {
                           _trimCursor(width, left: false),
                         ],
                         // The corner marks: this bar is as long as its source
-                        // allows in that direction (K-211).
+                        // allows in that direction.
                         Positioned.fill(
                           child: IgnorePointer(
                             child: CustomPaint(
@@ -968,7 +968,7 @@ class _BarState extends State<Bar> {
                 ),
               ),
             ),
-          // The layer's own markers (K-254), over the bar so they take the
+          // The layer's own markers, over the bar so they take the
           // pointer ahead of it — a flag is a much smaller target than a bar,
           // and a right-click meant for one must not open the bar's menu.
           // They travel with a move, because they are part of the layer.
@@ -1006,8 +1006,7 @@ class _BarState extends State<Bar> {
   ///
   /// Deleting here touches **this layer's** list and nothing else. A layer's
   /// markers are its own copy of whatever composition was dropped in, so a
-  /// delete cannot reach into that comp — or into the other places it is used
-  /// (K-254).
+  /// delete cannot reach into that comp — or into the other places it is used.
   void _markerMenu(BuildContext context, BridgeMarker marker, Offset at) {
     showMarkerMenuFrb(
       context: context,
@@ -1041,7 +1040,7 @@ class _BarState extends State<Bar> {
   }
 
   /// Publish where the gesture has the bar right now — and, on a selection
-  /// move (K-720), where it has every bar riding along — for the waveform
+  /// move, where it has every bar riding along — for the waveform
   /// lanes, the key lanes and the mates' own bars to follow.
   void _publishPreview() {
     final grab = _grab;
@@ -1053,7 +1052,7 @@ class _BarState extends State<Bar> {
 
   /// One write for the whole gesture, so a move that shifted the in point
   /// and the start offset together is a single undo step — and a move that
-  /// carried the whole selection is **still one** (K-720): a single
+  /// carried the whole selection is **still one**: a single
   /// `slide_layers` batch, not one `set_span` per layer.
   void _commit(int inFrame, int outFrame) {
     final grab = _grab;

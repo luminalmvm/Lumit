@@ -227,7 +227,7 @@ impl ItemReference {
     }
 
     /// This item's colour tag: an index into the same label palette a layer's
-    /// chip uses, `0` for untagged (K-451). Every item of a project saved
+    /// chip uses, `0` for untagged. Every item of a project saved
     /// before tags existed answers 0.
     #[frb(sync)]
     pub fn label(&self) -> Result<u8, BridgeError> {
@@ -246,7 +246,7 @@ impl ItemReference {
     /// Untagging leaves the document exactly as it was found — the engine
     /// stores tags as a map beside the items and removes the entry rather than
     /// writing a zero — so a project nobody has tagged gains no line in the
-    /// file (K-258).
+    /// file.
     #[frb(sync)]
     pub fn set_label(&self, label: u8) -> Result<(), BridgeError> {
         self.item()?;

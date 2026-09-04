@@ -1,4 +1,4 @@
-//! `lumit-aplug` — Lumit's audio plugin host (K-683; docs/12 §4a says what it
+//! `lumit-aplug` — Lumit's audio plugin host (docs/12 §4a says what it
 //! must do, docs/impl/audio-plugins.md says how).
 //!
 //! # In plain terms
@@ -18,7 +18,7 @@
 //! complete host rather than a partial one. The five are `audio-ports`,
 //! `params`, `state`, `latency` and `render`.
 //!
-//! [`vst3`] is the second front end onto the same road (K-707): a `.vst3` bundle
+//! [`vst3`] is the second front end onto the same road: a `.vst3` bundle
 //! whose classes are COM-style objects, split into a component that makes the
 //! sound and a controller that owns the knobs. It answers with the same
 //! [`PluginDescriptor`] and plays the same 512 frames, and [`abi`] is where the
@@ -45,7 +45,7 @@
 //! # What is here and what is elsewhere
 //!
 //! The mix seam — where a layer's chain is baked, a dead block goes dry and the
-//! latency shift happens — is `lumit_core::fx::audio_chain` (K-700), and it
+//! latency shift happens — is `lumit_core::fx::audio_chain`, and it
 //! knows nothing about either standard. What is here is provable on its own: the
 //! order of actions, the sound, the state, the events, and a plugin dying
 //! without taking anything with it.
@@ -110,7 +110,7 @@ pub use vst3::{Vst3Instance, Vst3Module};
 ///
 /// Written down so the order is a thing a test can compare against rather than
 /// a thing spread across three functions (docs/impl/audio-plugins.md §7 plan 2,
-/// the same discipline as the OFX host's `RENDER_ACTIONS`, K-591). Getting this
+/// the same discipline as the OFX host's `RENDER_ACTIONS`). Getting this
 /// order wrong is how a host breaks plugins that are otherwise blameless: a
 /// state blob loaded while the plugin is active is undefined, and parameters
 /// set *before* the state are parameters the state then overwrites.
@@ -156,7 +156,7 @@ pub const HOST_ACTIONS: [&str; 21] = [
     "destroy",
 ];
 
-/// The same list for **VST3**, whose words are its own (K-707).
+/// The same list for **VST3**, whose words are its own.
 ///
 /// It is a separate list rather than a translation of [`HOST_ACTIONS`] because
 /// the two standards genuinely differ in what the host does, not only in what it

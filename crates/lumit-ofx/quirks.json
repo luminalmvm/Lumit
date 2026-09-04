@@ -3,7 +3,7 @@
     {
       "identifier": "com.redgiantsoftware.Universe_*",
       "present_as": "DaVinciResolve",
-      "note": "Reads kOfxPropName in describeInContext and answers kOfxStatErrMissingHostFeature to any host it was not tested against; DaVinci Resolve and Vegas are accepted, Lumit, Natron and Nuke are not. Shown Resolve's name, every plugin describes and renders on the CPU path (K-757)."
+      "note": "Reads kOfxPropName in describeInContext and answers kOfxStatErrMissingHostFeature to any host it was not tested against; DaVinci Resolve and Vegas are accepted, Lumit, Natron and Nuke are not. Shown Resolve's name, every plugin describes and renders on the CPU path."
     }
   ]
 }

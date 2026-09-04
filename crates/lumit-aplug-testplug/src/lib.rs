@@ -8,7 +8,7 @@
 //! plugins of our own — the smallest things that are genuinely plugins. A
 //! `.clap` file is a shared library exporting one symbol, `clap_entry`; a
 //! `.vst3` bundle is a shared library exporting `GetPluginFactory`. This crate
-//! builds **one** library that exports both (K-707), so the eight personalities
+//! builds **one** library that exports both, so the eight personalities
 //! below can be laid out either way and the host tested against both standards
 //! without a second fixture drifting from the first. VST3's own half is
 //! [`vst3`].
@@ -135,7 +135,7 @@ impl Kind {
 
     /// The parameters this kind declares: id, name, range, default, flags.
     ///
-    /// One table, both faces (K-707): the VST3 controller mints its own
+    /// One table, both faces: the VST3 controller mints its own
     /// `ParameterInfo` from exactly these, so the two cannot claim different
     /// ranges for the same knob.
     #[must_use]

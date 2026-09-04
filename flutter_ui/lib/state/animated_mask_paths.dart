@@ -1,4 +1,4 @@
-// Where a keyed mask's shape actually is, at the frame on screen (K-342).
+// Where a keyed mask's shape actually is, at the frame on screen.
 //
 // In plain terms: once a mask's path is animated, the shape stored on the mask
 // is no longer the shape the picture shows — the picture interpolates between
@@ -8,12 +8,12 @@
 // ended.
 //
 // Asking the engine is the only honest answer: interpolating two paths means
-// reconciling their vertex counts by splitting cubics (K-339), and a second
+// reconciling their vertex counts by splitting cubics, and a second
 // copy of that here would drift from the one that draws the pixels.
 //
 // **Why this is a cache and not a call in the paint path.** The Viewer rebuilds
 // on every movement of the pointer, and a bridge call per rebuild is what
-// K-184's budget exists to stop. The answer only changes when the document
+// the rebuild budget exists to stop. The answer only changes when the document
 // changes or the playhead moves, so it is held against exactly those two and a
 // hover asks nothing.
 

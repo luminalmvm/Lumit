@@ -1,7 +1,7 @@
 /// The **constant-luminance** hue-rotation matrix for `deg` degrees, row-major
 /// (docs/08 §3.17). Rec.709 luma weights keep perceived brightness fixed as the
 /// hue turns — the standard SVG `feColorMatrix` hue-rotate — so this is the Hue
-/// shift effect's Preserve-luminance mode (K-136, on by default). Computed
+/// shift effect's Preserve-luminance mode (on by default). Computed
 /// host-side (f64 then cast) so the CPU reference and the WGSL kernel multiply
 /// by the identical `f32` coefficients. Exactly the identity at 0°, so the
 /// effect's neutral point is bit-exact.
@@ -26,7 +26,7 @@ pub fn hue_matrix(deg: f64) -> [f32; 9] {
 }
 
 /// The **plain-RGB** hue-rotation matrix for `deg` degrees, row-major (docs/08
-/// §3.17, K-136): a geometric rotation of the RGB vector about the neutral grey
+/// §3.17): a geometric rotation of the RGB vector about the neutral grey
 /// axis `(1,1,1)/√3` (Rodrigues' formula). It is *not* luminance-weighted, so it
 /// preserves the raw R+G+B sum rather than perceived brightness — a saturated
 /// colour may brighten or dim as its hue turns, the plain colour-wheel spin.
@@ -73,7 +73,7 @@ pub const NO_SKEW: [f32; 2] = [0.0, 0.0];
 /// degenerate (|s| < 1e-6): the image has collapsed to nothing and renders
 /// fully transparent — never a division blow-up (docs/14 no-panic rule).
 ///
-/// **The order is After Effects' own** (K-666): anchor, scale, skew,
+/// **The order is After Effects' own**: anchor, scale, skew,
 /// rotation, position, which is the order its Transform effect lists the
 /// controls in and the order its layer transform composes them. So a skew
 /// leans the *scaled* picture and the rotation then turns the leaned one —
@@ -87,7 +87,7 @@ pub const NO_SKEW: [f32; 2] = [0.0, 0.0];
 /// same sense as the Rotation dial. `K` has determinant 1, so a skew never
 /// collapses the picture and adds no degenerate case. **A zero amount skips
 /// the multiply entirely**, which is what keeps a stack saved before the pair
-/// existed byte-identical (K-258): `R(a)·I·R(−a)` is only *approximately* the
+/// existed byte-identical: `R(a)·I·R(−a)` is only *approximately* the
 /// identity in floating point, and approximately is not byte-identical.
 pub fn transform_inverse(
     anchor: [f32; 2],
@@ -233,7 +233,7 @@ pub struct ShakeWobble {
     pub z_amp: f32,
     pub x_freq: f64,
     pub y_freq: f64,
-    /// Frequency multiplier for the twist (K-541). 1 is the rate the master
+    /// Frequency multiplier for the twist. 1 is the rate the master
     /// Frequency sets, which is what the twist had before it got a row.
     pub rot_freq: f64,
     pub z_freq: f64,
@@ -255,7 +255,7 @@ impl ShakeWobble {
     }
 }
 
-/// One sub-frame state of a shake's own motion blur (T18, K-165): the wobble
+/// One sub-frame state of a shake's own motion blur (T18): the wobble
 /// sampled at one point in the shutter, in the same `(offset_px, rotation_deg,
 /// zoom)` form the frame-time shake carries. The dispatch turns each into an
 /// affine through [`shake_affine`] and averages the resamples.
@@ -279,13 +279,13 @@ impl ShakeSample {
 }
 
 /// The fixed number of sub-frame samples the shake's own motion blur averages
-/// (T18, K-165): odd, so the centre sample lands exactly on the frame time.
+/// (T18): odd, so the centre sample lands exactly on the frame time.
 /// A fixed count and order keep the smear deterministic (docs/14 §3), and the
 /// value is small because a shake moves little — a Cheap effect stays cheap.
 pub const SHAKE_MB_SAMPLES: usize = 9;
 
 /// The motion-blur shutter's full width in the noise base domain at amount 1
-/// (T18, K-165). The wobble is a pure function of time, so its motion blur
+/// (T18). The wobble is a pure function of time, so its motion blur
 /// samples it across `± SHAKE_MB_SPAN_BASE · amount / 2` around the frame's
 /// base. The window is expressed in **base units** (local time × frequency),
 /// not seconds: this keeps the smear frame-rate independent and needs no fps
@@ -295,7 +295,7 @@ pub const SHAKE_MB_SAMPLES: usize = 9;
 pub const SHAKE_MB_SPAN_BASE: f64 = 1.0;
 
 /// The signed base offsets of the motion-blur sub-frames across the shutter
-/// (T18, K-165), symmetric about 0 so the centre sample is the frame itself.
+/// (T18), symmetric about 0 so the centre sample is the frame itself.
 /// `amount` is the shutter fraction, clamped to 0..1.
 pub fn shake_mb_offsets(amount: f64) -> [f64; SHAKE_MB_SAMPLES] {
     let window = amount.clamp(0.0, 1.0) * SHAKE_MB_SPAN_BASE;
@@ -370,8 +370,8 @@ pub const GLITCH_TICK_HZ: f64 = 8.0;
 /// [`transform_op`] / [`cpu::transform`], wobbling about the frame centre.
 /// Both the CPU reference and the GPU path build from this one function,
 /// so every path consumes bit-identical numbers. The revealed border is the
-/// caller's Edges policy (P3, K-145), applied by the resample itself — there
-/// is no cover-scale any more (FX-11/K-146 dropped Auto-scale).
+/// caller's Edges policy (P3), applied by the resample itself — there
+/// is no cover-scale any more (FX-11 dropped Auto-scale).
 pub fn shake_affine(
     w: u32,
     h: u32,
@@ -441,7 +441,7 @@ pub fn aperture_blades(blade_count: u32, rotation_deg: f32) -> ([[f32; 2]; MAX_B
 }
 
 /// The wavelength → linear-sRGB basis behind the RGB split's Wavelength
-/// mode (docs/08 §3.6, K-090): nine taps across the visible spectrum. Tap
+/// mode (docs/08 §3.6): nine taps across the visible spectrum. Tap
 /// `i` sits at spectral fraction `t = i/4 − 1`, sampling `position +
 /// t·offset` — so the red end (t = −1, 650 nm) lands where the classic
 /// mode's R samples and the blue end (t = +1, 450 nm) where its B does,
@@ -453,7 +453,7 @@ pub fn aperture_blades(blade_count: u32, rotation_deg: f32) -> ([[f32; 2]; MAX_B
 /// reads this table directly and the WGSL kernel receives it in its
 /// uniform, so both paths consume bit-identical numbers.
 /// Normalise a three-tap tint set per CHANNEL so the taps sum to 1 in each of
-/// r, g and b (owner T17 retest / K-167): wherever the three taps sample the
+/// r, g and b (owner T17 retest): wherever the three taps sample the
 /// same colour (an aligned, locally uniform region), the tinted sum then
 /// reproduces the input exactly — the picker recolours only the misaligned
 /// fringes, never the whole picture. A channel whose three tints are all 0
@@ -473,7 +473,7 @@ pub fn normalise_tint_columns(mut tints: [[f32; 3]; 3]) -> [[f32; 3]; 3] {
 }
 
 /// The three picker colours sampled as a smooth gradient at offset fraction
-/// `t ∈ [-1, +1]` (A1/K-163): `tints[0]` at −1, `tints[1]` at 0, `tints[2]`
+/// `t ∈ [-1, +1]` (A1): `tints[0]` at −1, `tints[1]` at 0, `tints[2]`
 /// at +1, linearly interpolated between the stops. This gradient replaces the
 /// old fixed physical spectral basis, so the three-colour picker now drives the
 /// Wavelength dispersion (the owner's choice): the default red / green / blue
@@ -492,26 +492,26 @@ pub fn tint_gradient(tints: [[f32; 3]; 3], t: f64) -> [f64; 3] {
 }
 
 /// The largest number of spectral samples the Wavelength dispersion supports
-/// (docs/08 §3.6, K-090/K-144): the GPU uniform carries a fixed-size basis
+/// (docs/08 §3.6): the GPU uniform carries a fixed-size basis
 /// array, so the sample count clamps here — the same bounded-cost shape Motion
 /// blur's 64-tap cap uses. High enough that a heavy dispersion reads as a
 /// smooth rainbow rather than a few discrete stacked copies.
 pub const SPECTRAL_MAX_SAMPLES: i32 = 64;
 
-/// Build `samples` spectral taps for the Wavelength dispersion (docs/08 §3.6,
-/// K-090; the "more samples" refinement K-144; picker-driven since A1/K-163).
-/// Each entry is `[r_weight, g_weight, b_weight, fraction]`: the RGB weight to
-/// multiply the tap's sample by, and the offset **fraction** in `[-1, +1]`
-/// (−1 = the `tints[0]` end, +1 = the `tints[2]` end). The colour column at each
-/// tap is the three-colour picker sampled as a gradient ([`tint_gradient`]),
-/// then each colour column is normalised to sum 1 across the taps, so a uniform
-/// image still passes through unchanged (the dispersion tints the fringe, never
-/// the exposure). More taps simply fill the same `±offset` span more densely, so
-/// a large offset disperses smoothly instead of showing a few discrete copies.
-/// Computed host-side in f64 then cast, so the CPU reference and the WGSL kernel
-/// (which reads the fraction straight from each tap's `w`) consume bit-identical
-/// `f32` numbers. `samples` is clamped to `3..=SPECTRAL_MAX_SAMPLES` so the
-/// middle stop (`tints[1]`) is always represented.
+/// Build `samples` spectral taps for the picker-driven Wavelength dispersion
+/// (docs/08 §3.6, A1). Each entry is `[r_weight, g_weight, b_weight, fraction]`:
+/// the RGB weight to multiply the tap's sample by, and the offset **fraction**
+/// in `[-1, +1]` (−1 = the `tints[0]` end, +1 = the `tints[2]` end). The
+/// colour column at each tap is the three-colour picker sampled as a gradient
+/// ([`tint_gradient`]), then each colour column is normalised to sum 1 across
+/// the taps, so a uniform image still passes through unchanged (the dispersion
+/// tints the fringe, never the exposure). More taps simply fill the same
+/// `±offset` span more densely, so a large offset disperses smoothly instead
+/// of showing a few discrete copies. Computed host-side in f64 then cast, so
+/// the CPU reference and the WGSL kernel (which reads the fraction straight
+/// from each tap's `w`) consume bit-identical `f32` numbers. `samples` is
+/// clamped to `3..=SPECTRAL_MAX_SAMPLES` so the middle stop (`tints[1]`) is
+/// always represented.
 pub fn spectral_taps(samples: i32, tints: [[f32; 3]; 3]) -> Vec<[f32; 4]> {
     let n = samples.clamp(3, SPECTRAL_MAX_SAMPLES) as usize;
     let mut taps: Vec<[f64; 4]> = Vec::with_capacity(n);

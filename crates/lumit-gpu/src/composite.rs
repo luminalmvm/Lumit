@@ -30,7 +30,7 @@ struct LayerUniform {
 
 /// Composite operator (docs/06-RENDER-PIPELINE.md §blend). Normal / Add /
 /// Multiply are fixed-function linear blends; the rest are shader-computed
-/// from a destination snapshot (the full After Effects set, K-162 / T24).
+/// from a destination snapshot (the full After Effects set, T24).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Blend {
     #[default]
@@ -47,10 +47,10 @@ pub enum Blend {
     Lighten,
     Darken,
     /// dst − src per channel, clamped at black — the photographic subtract
-    /// (GEN-1, K-151), computed in linear (Add's darkening twin). Snapshot
+    /// (GEN-1), computed in linear (Add's darkening twin). Snapshot
     /// path so opacity and mattes mix correctly.
     Subtract,
-    // The rest of the After Effects set (K-162, T24): all snapshot-computed,
+    // The rest of the After Effects set (T24): all snapshot-computed,
     // in the encoded (display-referred) domain to match AE's 8/16-bit look.
     ColourBurn,
     LinearBurn,
@@ -134,7 +134,7 @@ pub struct CompositeLayer<'a> {
     pub opacity: f32,
     pub matte: Option<MatteInput<'a>>,
     pub blend: Blend,
-    /// 2.5D placement (K-023): z position and x/y rotations, honoured when
+    /// 2.5D placement: z position and x/y rotations, honoured when
     /// the comp provides a camera.
     pub z: f32,
     pub rotation_x_deg: f32,
@@ -150,7 +150,7 @@ pub struct CompositeLayer<'a> {
     pub pre: Option<[[f32; 4]; 4]>,
 }
 
-/// One sub-frame placement for per-layer motion blur (docs/06 §4, K-120): the
+/// One sub-frame placement for per-layer motion blur (docs/06 §4): the
 /// layer's own transform re-evaluated at one shutter sample time. The layer's
 /// SAME texture is drawn at each of these placements and the draws averaged
 /// ([`Compositor::motion_blur_average`]), so the layer smears along its own
@@ -198,7 +198,7 @@ pub fn concat_place(outer: [[f32; 4]; 4], inner: [[f32; 4]; 4]) -> [[f32; 4]; 4]
     (Mat4::from_cols_array_2d(&outer) * Mat4::from_cols_array_2d(&inner)).to_cols_array_2d()
 }
 
-/// A **region of interest** (K-362): the sub-rectangle of a composition the
+/// A **region of interest**: the sub-rectangle of a composition the
 /// preview is asked to composite, in logical comp pixels. Never reaches the
 /// export renderer, exactly as the preview scale never does.
 ///
@@ -245,7 +245,7 @@ pub fn scaled_size(width: u32, height: u32, scale: f32) -> (u32, u32) {
 
 impl CompositeLayer<'_> {
     /// comp pixel space → NDC, with the layer transform applied.
-    /// Full 4×4 (K-023). Order: quad(0..1) → layer px → −anchor → scale →
+    /// Full 4×4. Order: quad(0..1) → layer px → −anchor → scale →
     /// rotate → +position → (parent `pre`, when collapsed) → NDC.
     fn matrix(
         &self,
@@ -254,7 +254,7 @@ impl CompositeLayer<'_> {
         camera: Option<&Mat4>,
         region: Option<Region>,
     ) -> Mat4 {
-        // Comp pixels → NDC. With a region of interest (K-362) the target
+        // Comp pixels → NDC. With a region of interest the target
         // covers only that sub-rectangle, so the mapping shifts its origin and
         // divides by the region's size rather than the comp's. The camera
         // matrix is untouched: it projects comp space, and this maps a window
@@ -836,17 +836,17 @@ impl Compositor {
     /// uniform (which normalises the frag position to comp UV for matte and
     /// snapshot sampling) take the ACTUAL [`scaled_size`] dims. NDC does the
     /// rest: the same full-frame geometry lands on a smaller raster. 1.0 is
-    /// the bit-identical full-size path export always takes (K-031).
+    /// the bit-identical full-size path export always takes.
     ///
-    /// `samples` is the project's anti-aliasing count (K-274,
-    /// docs/impl/anti-aliasing.md). 1 draws exactly as this function always did.
+    /// `samples` is the project's anti-aliasing count
+    /// (docs/impl/anti-aliasing.md). 1 draws exactly as this function always did.
     /// Above 1 a multisample colour texture sits beside `target` for the whole
     /// composite and every pass resolves into `target`, so what the caller
     /// receives — and what every read-back, snapshot copy, scope trace and
     /// display blit then reads — is always the single-sample resolved picture.
     /// It is **orthogonal to `render_scale`**: a half-resolution preview is a
     /// smaller picture with the same edge treatment, and export passes the same
-    /// count the Viewer does, which is what makes K-031 hold with AA on.
+    /// count the Viewer does, so preview and export stay identical with AA on.
     ///
     /// The count is expected to have been through
     /// [`crate::supported_sample_count`] already — passing one the adapter
@@ -1202,7 +1202,7 @@ impl Compositor {
             });
         }
         // Recording ends here; whether the buffer goes to the driver now or at
-        // the end of the frame's batch is the encoder guard's business (K-290).
+        // the end of the frame's batch is the encoder guard's business.
         // The seed's buffer and bind group are released after it either way —
         // the recorded commands hold their own references to what they use, so
         // the deferred submission still has them.
@@ -1212,7 +1212,7 @@ impl Compositor {
     }
 
     /// The premultiplied average of one layer drawn at N sub-frame placements —
-    /// the per-layer motion-blur smear (docs/06 §4, K-120).
+    /// the per-layer motion-blur smear (docs/06 §4).
     ///
     /// The SAME `texture` is composited at each [`MbSample`] placement into a
     /// fresh transparent comp-sized target with a pure-additive blend (BOTH
@@ -1231,7 +1231,7 @@ impl Compositor {
     /// image, never per sub-copy.
     ///
     /// This is the single helper both the preview and the export path call, so
-    /// per-layer motion blur is identical between them (K-031). An empty
+    /// per-layer motion blur is identical between them. An empty
     /// `samples` returns a transparent frame (the caller only invokes this with
     /// a non-empty set, so that is a defensive no-op, never a panic).
     ///
@@ -1947,9 +1947,9 @@ mod tests {
         assert!((r - 128).abs() > 10, "blend looks gamma-naive: r {r}");
     }
 
-    /// One matte layer gates a consumer without duplication or precomping
-    /// (the K-020-era matte model): alpha matte passes the covered half,
-    /// inverted flips it — verified per pixel.
+    /// One matte layer gates a consumer without duplication or precomping:
+    /// alpha matte passes the covered half, inverted flips it — verified
+    /// per pixel.
     #[test]
     fn matte_gates_a_layer_per_pixel() {
         let Some(ctx) = crate::test_support::lease() else {
@@ -2221,7 +2221,7 @@ mod tests {
     }
 
     /// Every encoded-domain (perceptual) blend mode matches a Rust reference of
-    /// its formula (K-162, T24). An opaque full-frame source over an opaque
+    /// its formula (T24). An opaque full-frame source over an opaque
     /// full-frame destination isolates the blend: the shown pixel is the
     /// encoded-domain blend result, byte-for-byte within fp16 + 8-bit rounding.
     /// The reference mirrors composite.wgsl's `blend_encoded` op-for-op — the
@@ -2625,7 +2625,7 @@ mod tests {
         );
     }
 
-    /// Subtract removes light in LINEAR (GEN-1, K-151): a darker grey layer
+    /// Subtract removes light in LINEAR (GEN-1): a darker grey layer
     /// over a lighter grey background lands at sRGB-encode(max(dst − src, 0)),
     /// the photographic subtract, and never goes negative. Its snapshot path
     /// mixes by coverage, so full-opacity opaque solids read the raw formula.
@@ -2803,7 +2803,7 @@ mod tests {
         );
     }
 
-    /// Per-layer motion blur (docs/06 §4, K-120): averaging a moving layer's
+    /// Per-layer motion blur (docs/06 §4): averaging a moving layer's
     /// sub-frame placements widens its coverage, while a static layer (every
     /// placement equal) averages back to a full-alpha copy of itself — the
     /// premultiplied-average property the pure-additive accumulator gives that
@@ -3081,7 +3081,7 @@ mod tests {
         assert!(px(4, 8) < 5 && px(11, 8) < 5, "outside the scaled quad");
     }
 
-    // ---- Anti-aliasing (K-274, docs/impl/anti-aliasing.md §5) ----
+    // ---- Anti-aliasing (docs/impl/anti-aliasing.md §5) ----
 
     /// A layer covering the whole comp, rotated by `deg` about its centre, on a
     /// transparent background. The rotation is what puts the quad's edge across

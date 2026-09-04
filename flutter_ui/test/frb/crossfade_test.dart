@@ -1,4 +1,4 @@
-// Crossfade handles on Sequence clip joins (K-695, the AudioWorkspace
+// Crossfade handles on Sequence clip joins (the AudioWorkspace
 // board): where two clips overlap, the join draws the opposed-fades pair
 // with a handle at either end, and dragging a handle adjusts the fade by
 // trimming the clip whose ramp it is.

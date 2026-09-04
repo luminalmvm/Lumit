@@ -1,5 +1,5 @@
 //! Image sequences: a folder of numbered stills read as one piece of footage
-//! (docs/03-DATA-MODEL.md §3, K-539).
+//! (docs/03-DATA-MODEL.md §3).
 //!
 //! In plain terms: a 3D application's output arrives as thousands of files —
 //! `Depth000000_depth.exr`, `Depth000001_depth.exr`, and so on — which
@@ -15,7 +15,7 @@
 //! number and a length, and every existing probe, index, decode and cache path
 //! works unchanged.
 //!
-//! **A gap ends the run** (K-539). Given `0001…0100` with `0050` missing and
+//! **A gap ends the run**. Given `0001…0100` with `0050` missing and
 //! `0007` picked, the sequence is `0001…0049`: the unbroken block the picked
 //! file sits in. Refusing outright would make one deleted frame reject a whole
 //! shot, and silently bridging the hole would show the wrong picture at the
@@ -236,8 +236,7 @@ pub struct MediaSource {
     pub path: PathBuf,
     /// `Some((num, den))` reads the numbered run `path` belongs to as one piece
     /// of footage at exactly that rate. The rate is the item's, not the files'
-    /// — stills carry no frame rate of their own, so somebody has to say
-    /// (K-539).
+    /// — stills carry no frame rate of their own, so somebody has to say.
     pub sequence_fps: Option<(u32, u32)>,
 }
 
@@ -388,7 +387,7 @@ mod tests {
 
     #[test]
     fn a_gap_ends_the_run_on_the_side_it_is_on() {
-        // 1..=4, hole at 5, 6..=9 (K-539: clamp, never bridge).
+        // 1..=4, hole at 5, 6..=9 (clamp, never bridge).
         let dir = tempfile::tempdir().unwrap();
         write_run(dir.path(), "f", 3, ".ppm", &[1, 2, 3, 4, 6, 7, 8, 9]);
 

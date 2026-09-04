@@ -76,14 +76,14 @@ class BridgeRangeSelector {
           shape == other.shape;
 }
 
-/// What a range selector counts (K-609).
+/// What a range selector counts.
 enum BridgeSelectorBasis {
   characters,
   words,
   ;
 }
 
-/// How a range selector's weight falls off across its range (K-609).
+/// How a range selector's weight falls off across its range.
 enum BridgeSelectorShape {
   square,
   ramp,
@@ -120,7 +120,7 @@ class BridgeSolidDef {
 }
 
 /// One animator group: what a reached letter is asked to do, and the range
-/// saying which letters those are (K-609).
+/// saying which letters those are.
 ///
 /// Every animator carries all five property groups — the decision entry argues
 /// why there is no menu of properties to add them from — defaulted to values
@@ -197,15 +197,15 @@ class BridgeTextDocument {
   final double size;
   final BridgeColourRgba fill;
 
-  /// The mask **on this layer** whose curve the glyphs run along (K-607).
+  /// The mask **on this layer** whose curve the glyphs run along.
   /// Unset lays the line straight, and so does a mask id that names nothing.
   final UuidValue? path;
 
   /// How far along that curve the line starts, px@comp, on the composition's
-  /// clock like every other animatable channel that crosses here (K-213).
+  /// clock like every other animatable channel that crosses here.
   final BridgeScalar pathOffset;
 
-  /// The animator groups moving the letters separately (K-609). Empty is the
+  /// The animator groups moving the letters separately. Empty is the
   /// ordinary text layer.
   final List<BridgeTextAnimator> animators;
 

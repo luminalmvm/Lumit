@@ -7,17 +7,16 @@
 //! this writes its *behaviour*. Two halves, and they are deliberately apart:
 //!
 //! * [`AudioEffectDef`] is the catalogue entry — one value implementing the
-//!   same [`EffectDef`] trait every built-in implements (K-593), so nothing
+//!   same [`EffectDef`] trait every built-in implements, so nothing
 //!   downstream can tell an EQ plugin from a Gaussian blur except by what it
 //!   does. **Both plugin standards collapse into this one type**: VST3 mints
-//!   the same declaration as CLAP, and nothing after describe changed to let it
-//!   (K-707).
+//!   the same declaration as CLAP, and nothing after describe changed to let it.
 //! * [`AudioHost`] is where the sound goes. One method per thing the chain
 //!   worker needs — a block, the latency, the blob to save — and two
 //!   implementations behind it: [`LocalHost`], which loads the plugin into this
 //!   process and is for tests, and the broker host AP2 lands, which is what
 //!   ships. The seam exists now so that the shipping one drops in without
-//!   anything above it noticing (the OFX lesson, K-589).
+//!   anything above it noticing (the OFX lesson).
 //!
 //! # Why the lock is not a lock across FFI
 //!
@@ -300,7 +299,7 @@ impl<'a> BlockJob<'a> {
 /// One broker per module — a `.clap` file or a `.vst3` bundle — shared by every
 /// plugin in it and by every
 /// instance of every plugin in it, behind one lock: a module holding forty
-/// effects gets one process, not forty (K-592). The lock is short and
+/// effects gets one process, not forty. The lock is short and
 /// uncontended by construction — one instance is driven by one chain worker,
 /// and parallelism is across layers — and **no FFI happens under it**, because
 /// all the FFI is in the other process. What happens under it is a pipe write
@@ -358,9 +357,9 @@ impl BrokerHost {
     /// side of the splice. A batch never stops early, because the block after a
     /// dead one is very often fine (the broker has already restarted by then).
     ///
-    /// The **switched-off list is read once, here, at the top of the batch**
-    /// (K-594): a plugin the user turns off mid-session stops being asked on the
-    /// next batch, and none of its blocks reach a plugin at all.
+    /// The **switched-off list is read once, here, at the top of the batch**: a
+    /// plugin the user turns off mid-session stops being asked on the next
+    /// batch, and none of its blocks reach a plugin at all.
     pub fn process_batch(
         &self,
         jobs: &[BlockJob<'_>],
@@ -431,10 +430,10 @@ impl Drop for BrokerHost {
     }
 }
 
-/// An audio plugin, as an entry in the effect catalogue (K-593).
+/// An audio plugin, as an entry in the effect catalogue.
 ///
-/// One type for both standards, and since K-707 both really do fill it: nothing
-/// downstream of describe knows which standard a plugin speaks.
+/// One type for both standards, and both really do fill it: nothing downstream
+/// of describe knows which standard a plugin speaks.
 pub struct AudioEffectDef {
     schema: &'static EffectSchema,
     routes: Vec<ValueRoute>,
@@ -486,7 +485,7 @@ impl AudioEffectDef {
 
     /// The plugin parameter one schema row addresses. A CLAP parameter id or a
     /// VST3 `ParamID` — the same `u32` either way, which is why one route table
-    /// serves both (K-707).
+    /// serves both.
     #[must_use]
     pub fn plugin_param(&self, row: ParamId) -> Option<u32> {
         self.routes
@@ -546,7 +545,7 @@ impl EffectDef for AudioEffectDef {
         false
     }
 
-    /// One live instance of this plugin, in a broker process (K-700).
+    /// One live instance of this plugin, in a broker process.
     ///
     /// This is the whole of the mix seam from the catalogue's side: the mixer
     /// walks a layer's stack, asks every definition in it this question, and
@@ -562,10 +561,11 @@ impl EffectDef for AudioEffectDef {
         values: &[(ParamId, f64)],
         offline: bool,
     ) -> Option<Arc<dyn AudioProcessor>> {
-        // A switched-off plugin is refused before any of its code runs (K-594's
-        // rule, kept for audio): the chain heals around the missing link, the
-        // sound goes through dry, and the badge comes from the bridge reading
-        // the same list rather than from a block that was never asked for.
+        // A switched-off plugin is refused before any of its code runs (the
+        // switched-off rule, kept for audio): the chain heals around the
+        // missing link, the sound goes through dry, and the badge comes from
+        // the bridge reading the same list rather than from a block that was
+        // never asked for.
         if crate::ipc::broker::session_disabled()
             .lock()
             .is_ok_and(|list| list.contains(&self.plugin_id))
@@ -589,7 +589,7 @@ impl EffectDef for AudioEffectDef {
 /// row by its [`ParamId`] hash and the plugin by its own stable `u32`, and
 /// [`ValueRoute`] is the map between them, worked out once at describe. Both
 /// standards land here — VST3's front end fills the same routes from its own
-/// `ParamID`s, and nothing below this line changed to let it (K-707).
+/// `ParamID`s, and nothing below this line changed to let it.
 pub struct HostedAudio {
     host: Box<dyn AudioHost>,
     routes: Vec<ValueRoute>,
@@ -622,7 +622,7 @@ impl AudioProcessor for HostedAudio {
     ) -> bool {
         // One event per row this block carries a number for, at the block's
         // first frame — the ~10 ms control rate the Volume envelope already
-        // uses (K-172). A row the plugin does not know is simply not routed.
+        // uses. A row the plugin does not know is simply not routed.
         let events: Vec<ParamEvent> = values
             .iter()
             .filter_map(|(id, value)| {

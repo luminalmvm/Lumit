@@ -93,7 +93,7 @@ pub(crate) fn lookahead_frames(p95_cost: Option<f64>, fps: f64) -> usize {
 ///
 /// A present more than one whole period late is a genuine stall, and there the
 /// grid is re-anchored at now instead: every-frame never skips a frame and
-/// never bursts faster than the comp's rate to catch up (K-171), so time lost
+/// never bursts faster than the comp's rate to catch up, so time lost
 /// to a stall stays lost — playback continues at rate from where it is.
 pub(crate) fn next_present_due(
     scheduled: Option<std::time::Instant>,
@@ -272,7 +272,7 @@ mod tests {
         }
 
         // A genuine stall — later than one whole period — re-anchors: every-frame
-        // never bursts to catch up (K-171), so lost time stays lost and playback
+        // never bursts to catch up, so lost time stays lost and playback
         // continues at rate from where it is.
         let stalled = due + period * 3;
         let after = next_present_due(Some(due), stalled, period);

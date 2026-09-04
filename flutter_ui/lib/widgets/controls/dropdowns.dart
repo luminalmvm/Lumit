@@ -19,9 +19,9 @@ import 'text_field.dart';
 /// there is room, so nothing that fits changes shape.
 ///
 /// [face] replaces the label with a mark of the caller's own — the Viewer
-/// bar's channel picker, whose answer is a tinted glyph rather than a word
-/// (K-411). The caret is the same one either way, so an icon dropdown still
-/// reads as a dropdown.
+/// bar's channel picker, whose answer is a tinted glyph rather than a word. The
+/// caret is the same one either way, so an icon dropdown still reads as a
+/// dropdown.
 Widget dropdownFace(LumitTheme t, String label, {Widget? face}) =>
     LayoutBuilder(builder: (context, c) {
       // In a cell too tight for even the caret and its gap (a fold-out value
@@ -50,7 +50,7 @@ Widget dropdownFace(LumitTheme t, String label, {Widget? face}) =>
 /// The **in-row** dropdown's label size (§12A.6's table): the pickers that sit
 /// inside a Timeline row — matte, blend and parent — carry a 10px label, as the
 /// approved mockups draw them. Their *height* is a density token
-/// (`DensityTokens.inRowPicker`, K-454) because it is one of the handful of
+/// (`DensityTokens.inRowPicker`) because it is one of the handful of
 /// measurements the Compact setting moves; the label size is not, and never
 /// will be — Compact takes room out of rows, never legibility out of words.
 const double inRowDropdownTextSize = 10;
@@ -69,8 +69,8 @@ const double inRowDropdownTextSize = 10;
 /// mockups' measurements are measurements and not consequences: a face that
 /// grew out of its own font drifted every time the type did. [dense] is the
 /// in-row face — the pickers inside a Timeline row — and the other is every
-/// dropdown in a panel row or a bar. Both come from the density tokens
-/// (K-454), so the Compact setting moves them together.
+/// dropdown in a panel row or a bar. Both come from the density tokens, so the
+/// Compact setting moves them together.
 ///
 /// **Horizontal 6, not the button's 8**: every `.dd` the mockups compute pads
 /// its label by exactly 6 either side, in both sizes.
@@ -120,10 +120,10 @@ class BareDropdown<T> extends StatelessWidget {
   final Widget? face;
 
   /// The in-row face: 16 tall with a 10px label, for a picker that sits inside
-  /// a Timeline row rather than in a dialog or a bar (§12A.6, K-451).
+  /// a Timeline row rather than in a dialog or a bar (§12A.6).
   final bool dense;
 
-  /// Why an option cannot be chosen, or null where it can — K-485's
+  /// Why an option cannot be chosen, or null where it can — the
   /// disabled-not-hidden rule inside a list. The row stays in the menu, drawn
   /// quiet, with the reason on hover; a list that removed it would leave the
   /// reader hunting for a name they know exists.
@@ -210,15 +210,15 @@ class BareDropdown<T> extends StatelessWidget {
 }
 
 /// Options at or above this count get [BareSearchDropdown] instead of the
-/// plain [BareDropdown] (K-262). A plain dropdown builds every row eagerly
-/// inside an `IntrinsicWidth`, which walks all of them twice — fine for the
-/// handful of options every parameter has today — and fatal for the
-/// K-262-era Lens flare library, whose 1299 rows took the app down in
-/// layout. The flare is a curated twenty since K-264; the guard stays.
+/// plain [BareDropdown]. A plain dropdown builds every row eagerly inside an
+/// `IntrinsicWidth`, which walks all of them twice — fine for the handful of
+/// options every parameter has today — and fatal for the original Lens flare
+/// library, whose 1299 rows took the app down in layout. The flare is a curated
+/// twenty now; the guard stays.
 const int searchableOptionThreshold = 40;
 
 /// A dropdown for long option lists: a search field over a **lazily built**
-/// list, with the group headings drawn inline (K-262).
+/// list, with the group headings drawn inline.
 ///
 /// The list is a `ListView.builder` inside a bounded box, so only the rows
 /// on screen are ever built no matter how many options there are — the
@@ -432,7 +432,7 @@ class BareLazyDropdown<T> extends StatelessWidget {
   final ValueChanged<T> onChanged;
 
   /// The in-row face: 16 tall with a 10px label, for a picker that sits inside
-  /// a Timeline row rather than in a dialog or a bar (§12A.6, K-451).
+  /// a Timeline row rather than in a dialog or a bar (§12A.6).
   final bool dense;
 
   const BareLazyDropdown({

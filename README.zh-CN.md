@@ -67,14 +67,14 @@ cargo test --workspace
 
 ```sh
 brew install ffmpeg  # see docs/TODO.md: Homebrew has no ffmpeg@8 yet, and plain ffmpeg is 9.x
-# Point the build at it (K-204):
+# Point the build at it:
 export FFMPEG_PKG_CONFIG_PATH="$(brew --prefix ffmpeg)/lib/pkgconfig"
 cargo test --workspace
 ```
 </details>
 
 <details>
-<summary><b>Linux</b> (K-082)</summary>
+<summary><b>Linux</b></summary>
 
 这里不需要为 FFmpeg 设置环境变量——开发包会把 .pc 文件放在构建系统默认会查找的位置。
 
@@ -100,15 +100,14 @@ cargo test --workspace
 
 
 用户界面部分在 [flutter_ui/](flutter_ui/) 并需要 Flutter SDK —
- [flutter_ui/README.md](flutter_ui/README.md). 逐步构建的说明见 [docs/GUIDE.md](docs/GUIDE.md) §8.
+ [flutter_ui/README.md](flutter_ui/README.md). 逐步构建的说明见 [docs/GUIDE.md](docs/GUIDE.md)。
 
 ## 仓库结构
 
 | | |
 |---|---|
-| [docs/README.md](docs/README.md) | 索引——从这里开始。十八份带编号的规格说明，从愿景到路线图。 |
-| [docs/GUIDE.md](docs/GUIDE.md) | 原本是写给不懂 Rust 的人看的简明英文指南，介绍每个 crate 的作用以及如何安全地修改代码。不过现在已经变成了一个大块头文件，有些部分完全可以忽略。如果你在找信息，我现在更推荐 [docs.lumitlab.com](docs.lumitlab.com) |
-| [docs/02-DECISIONS.md](docs/02-DECISIONS.md) | 每个设计决策及其理由，只追加不修改。用来搜索，别从头读。 |
+| [docs/README.md](docs/README.md) | 索引——从这里开始。十七份带编号的规格说明，从愿景到路线图。 |
+| [docs/GUIDE.md](docs/GUIDE.md) | 贡献者指南：每个 crate 的作用、代码必须遵守的规则，以及如何构建和运行。 |
 | [docs/impl/](docs/impl/) | 实现笔记。 |
 | [docs/TODO.md](docs/TODO.md) | 接下来、稍后以及更远期要做的工作。 |
 

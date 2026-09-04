@@ -204,15 +204,15 @@ class BridgeDiskCacheStats {
 }
 
 /// Where this process's memory has gone: what each tier admits to holding, and
-/// what the operating system says the process holds (K-294).
+/// what the operating system says the process holds.
 ///
 /// **The field that matters is [`Self::unaccounted_bytes`].** Every tier here
 /// is byte-budgeted and evicts to stay inside its budget, so a report where the
 /// tiers add up to their budgets and the process is a hundred times larger is
 /// not a cache problem at all — it is memory nobody in this list is counting,
 /// which is a different search entirely. Lumit has twice been reported holding
-/// tens of gigabytes (K-277 and after it), and both times that question took
-/// days to answer from the outside. It is one call from the inside.
+/// tens of gigabytes, and both times that question took days to answer from the
+/// outside. It is one call from the inside.
 class BridgeMemoryReport {
   /// What the operating system says this process holds — Activity Monitor's
   /// **Memory** on macOS, the working set on Windows, `VmRSS` on Linux. 0
@@ -244,7 +244,7 @@ class BridgeMemoryReport {
   final BigInt openDecoders;
 
   /// How many frames are waiting to be written to disk — the write-behind
-  /// queue K-277 bounded at eight. A count rather than bytes on purpose: each
+  /// queue, bounded at eight. A count rather than bytes on purpose: each
   /// waiting frame shares its allocation with the frame cache above (one
   /// `Arc`, both tiers), so charging it twice would make the report lie in
   /// the one direction that matters.

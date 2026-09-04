@@ -1,5 +1,5 @@
 //! The Custom shader's GPU-side tests (docs/impl/custom-shader.md §8 items 11,
-//! 12, 15, 16, 17, 18, 19 and the line-number half of 10, K-650).
+//! 12, 15, 16, 17, 18, 19 and the line-number half of 10).
 //!
 //! **In plain terms.** The half of the effect that needs a graphics card, and the
 //! half that only needs the shader compiler. The compiler half runs everywhere,
@@ -88,7 +88,7 @@ fn picture(w: u32, h: u32) -> Vec<f32> {
 
 #[test]
 fn the_assembled_module_validates() {
-    // The host's own wrapper, round every fixture, through the K-263 road — so a
+    // The host's own wrapper, round every fixture, through the validator — so a
     // change to the prologue or the epilogue cannot ship broken. No graphics
     // card involved.
     for (name, source) in [
@@ -182,7 +182,7 @@ fn a_golden_shader_renders_deterministically() {
     let second = draw();
     assert_eq!(
         first, second,
-        "the same inputs render bit-identically twice (K-031)"
+        "the same inputs render bit-identically twice"
     );
     // And it is Invert: unpremultiplied colour taken from one, alpha untouched.
     for i in (0..first.len()).step_by(4) {
@@ -246,7 +246,7 @@ fn gradient_graph() -> lumit_core::fx::shader::graph::ShaderGraph {
     }
 }
 
-/// Every box in the v1 vocabulary, compiled and taken through the K-263 road —
+/// Every box in the v1 vocabulary, compiled and taken through the validator —
 /// so the graph compiler cannot emit WGSL the validator refuses. No card.
 #[test]
 fn a_graph_of_every_node_assembles_and_validates() {

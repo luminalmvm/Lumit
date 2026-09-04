@@ -80,7 +80,7 @@ class _DebugPanelState extends State<DebugPanel> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         PerformanceMonitor(),
-        // The menu guard is invisible by nature (K-318), so testing it means
+        // The menu guard is invisible by nature, so testing it means
         // being able to see it. Amber while it is actually holding a row
         // switch back; accent otherwise.
         Padding(

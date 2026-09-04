@@ -27,8 +27,8 @@ use lumit_fx_macros::Effect;
     // slider's 500 px@comp doubled, and the pin ramp only shortens the slide.
     roi = PaddedPx(1000.0),
     premultiplied = true,
-    // K-427: the matte scales the displacement, inside the kernel (the
-    // owner's rule for mattes); the generic strength dissolve does not also run.
+    // The matte scales the displacement, inside the kernel (the owner's rule
+    // for mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales Wave height per pixel: white slides the full height, grey less, \

@@ -28,7 +28,7 @@ void main() {
     }
 
     Future<void> mount(WidgetTester tester, dynamic p) async {
-      // The Transform card is off by default (K-193); this file asserts it
+      // The Transform card is off by default; this file asserts it
       // sits beside the Source card, so it asks for it.
       (p.uiState as LumitUiState)
           .workspace
@@ -50,7 +50,7 @@ void main() {
       p.uiState.selectedLayer.value = text;
       await mount(tester, p);
 
-      // A kicker since K-443: capitals on the way to the screen.
+      // A kicker now: capitals on the way to the screen.
       expect(find.text('SOURCE'), findsOneWidget);
       expect(find.byKey(const ValueKey('src-text')), findsOneWidget);
 
@@ -96,7 +96,7 @@ void main() {
       expect(text.getText()!.text, 'placeholder');
     });
 
-    // Text on a path (K-607): the words follow one of the layer's own masks,
+    // Text on a path: the words follow one of the layer's own masks,
     // picked by name, and the offset dial only appears once there is a curve
     // to slide along.
     testWidgets('a text layer runs its words along one of its masks',
@@ -217,7 +217,7 @@ void main() {
       p.uiState.selectedLayer.value = layer;
       await mount(tester, p);
 
-      // The card's rival retiming system is gone (K-249): retiming is
+      // The card's rival retiming system is gone: retiming is
       // Ctrl+Alt+T and the graph, and what is left here is the render policy,
       // which was never part of the map.
       expect(find.byKey(const ValueKey('src-retime-on')), findsNothing);

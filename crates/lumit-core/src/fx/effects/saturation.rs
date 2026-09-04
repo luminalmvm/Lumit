@@ -14,8 +14,8 @@ use lumit_fx_macros::Effect;
     roi = Exact,
     // §2.2: grading premultiplied shifts matte edges.
     premultiplied = false,
-    // K-395: the matte scales the amount, inside the kernel (the owner's
-    // rule for mattes); the generic strength dissolve does not also run.
+    // The matte scales the amount, inside the kernel (the owner's rule for
+    // mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "pulls Saturation toward 100 per pixel: white applies the full \
@@ -25,7 +25,7 @@ use lumit_fx_macros::Effect;
 pub struct Saturation {
     /// Per cent about Rec. 709 luma: 0 = greyscale, 100 = neutral, 200 =
     /// doubled. The maths (a mix of luma and colour by saturation ÷ 100) simply
-    /// keeps extrapolating above 200, so the hard ceiling is open (K-135): the
+    /// keeps extrapolating above 200, so the hard ceiling is open: the
     /// slider reaches a heavy 400, and typing higher pushes further.
     #[slider(min = 0.0, max = 400.0, default = 100.0, hard_min = 0.0, unit = Percent)]
     pub saturation: f32,
@@ -50,7 +50,7 @@ impl Saturation {
     /// WGSL kernel cannot drift apart — the §1.6 oracle only checks the kernel
     /// against the reference, never the two conversions against each other.
     ///
-    /// Floored at 0 (greyscale), open above (K-135): the luma/colour mix
+    /// Floored at 0 (greyscale), open above: the luma/colour mix
     /// extrapolates past 200 % cleanly, so no upper clamp.
     pub fn packed(self) -> (f32, f32) {
         (

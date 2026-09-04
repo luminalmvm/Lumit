@@ -1,4 +1,4 @@
-// One Escape, one step back: the ladder every surface registers on (K-575).
+// One Escape, one step back: the ladder every surface registers on.
 //
 // **In plain terms.** Escape means "take that back", and in an application this
 // dense several things could plausibly be taken back at once — a drag in
@@ -43,7 +43,7 @@ enum EscapeRung {
 /// steps.
 ///
 /// A focused text editor is deliberately not on this ladder: it answers Escape
-/// on its own focus node (K-323), which Flutter runs after this, and it is the
+/// on its own focus node, which Flutter runs after this, and it is the
 /// last thing to get a look in.
 abstract final class EscapeLadder {
   static final Map<EscapeRung, List<bool Function()>> _claims = {

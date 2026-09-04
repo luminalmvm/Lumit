@@ -13,7 +13,7 @@
 //! stable id plus its facts (`blend_mode_unavailable` + `ae_mode: "Dissolve"`),
 //! because a sentence built with `format!` cannot be translated: the frontend's
 //! lookup is by whole text, and "blend mode Dissolve has no equivalent" is a
-//! different whole text for every blend mode (K-303, docs/17 §"Display text
+//! different whole text for every blend mode (docs/17 §"Display text
 //! crosses the bridge in English"). `english` rides along as the fallback for a
 //! reason the frontend has no sentence for yet, which is the same courtesy
 //! `engine_labels.dart` extends to an effect label it has never seen.
@@ -115,7 +115,7 @@ pub struct BridgeImportedProject {
 
 impl LumitBridgeState {
     /// Import an After Effects project and make it the open one — either front
-    /// door (K-418): an `.aep` read directly, or a Lumit Bridge bundle as a
+    /// door: an `.aep` read directly, or a Lumit Bridge bundle as a
     /// `.lum-bundle` folder or a zip of one. `lumit_import::open_ae` decides
     /// which by the bytes, so this is one call and one report whichever the
     /// user picked.
@@ -170,7 +170,7 @@ impl LumitBridgeState {
         // The project is unsaved — an import is not a file (see above) — so the
         // media root is passed separately rather than derived from a path.
         // No progress stream: an import runs behind its own card, and the one
-        // phased bar there is belongs to opening a `.lum` (K-628).
+        // phased bar there is belongs to opening a `.lum`.
         let (project, missing) = adopt(doc, None, &media_root, on_change_stream, None)?;
 
         for name in missing {

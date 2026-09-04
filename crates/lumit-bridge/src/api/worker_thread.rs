@@ -16,7 +16,7 @@ use uuid::Uuid;
 // Windows and macOS share the handle-shaped frame: an opaque integer naming a
 // surface (an NT handle there, an `IOSurfaceID` here) plus its size, which is
 // why they share this import, the `publish_zero_copy` body and the Dart
-// `RenderedSharedTexture` case (K-195).
+// `RenderedSharedTexture` case.
 #[cfg(any(
     all(windows, feature = "shared-texture"),
     all(target_os = "macos", feature = "shared-texture-macos")
@@ -35,7 +35,7 @@ use crate::api::{
 
 #[frb(ignore)]
 pub struct WorkerState {
-    /// The realtime preview-tier controller (K-030/K-171). Held so the worker
+    /// The realtime preview-tier controller. Held so the worker
     /// can feed it measured render costs and read the tier back, which is not
     /// wired yet — see docs/TODO.md, "Bridge".
     #[allow(dead_code)]
@@ -58,12 +58,12 @@ pub struct WorkerState {
     /// How the Viewer is looking at the picture — exposure, tone map,
     /// transparency, region, OCIO view. Session state the renderer holds, kept
     /// here as well so it can be put back on a renderer built to replace one
-    /// whose device was lost (K-585). Without the copy, coming back from a
+    /// whose device was lost. Without the copy, coming back from a
     /// device reset would quietly *reset the view too*: full exposure, the
     /// built-in transform, the region of interest gone.
     look: ViewerLook,
     /// Where the Viewer is cutting a layer's effect stack short — the "at
-    /// effect" chip, off when `None` (K-528).
+    /// effect" chip, off when `None`.
     ///
     /// Held here rather than carried by every request for the same reason
     /// [`Self::last_shown`] is: it says what the Viewer is *showing*, not what
@@ -126,7 +126,7 @@ pub struct WorkerState {
     /// When the last request arrived — the fill waits out a ~200 ms lull
     /// after it (docs/06 §5.5), so a scrub in progress is never contended.
     last_request: std::time::Instant,
-    /// The flare-bake generation this worker has already reacted to (K-350).
+    /// The flare-bake generation this worker has already reacted to.
     /// When the renderer's moves past it, a bake has been queued or has landed
     /// — and a landing is the moment the picture on screen stops being the
     /// right one, because the frame showing was drawn with the lens before it.
@@ -140,7 +140,7 @@ pub struct WorkerState {
     /// A frame the user asked for while the render-time column was measuring,
     /// that a tier served instead of a composite — so it has no numbers yet.
     /// The idle turn composites it once more, measured, and discards the
-    /// picture (K-420: serve the hit, measure afterwards). One slot: only the
+    /// picture (serve the hit, measure afterwards). One slot: only the
     /// frame being looked at is worth the numbers.
     pending_measure: Option<(Uuid, u64, lumit_render::Quality)>,
 }
@@ -181,7 +181,7 @@ fn frame_name(
 struct LayerSample {
     /// `(comp, frame, layer, document revision)` — what this render is of. The
     /// revision is what retires it when an edit lands: the frame cache has no
-    /// generation counter any more (K-214 names every frame by its content), and
+    /// generation counter any more (every frame is named by its content), and
     /// a soloed render is of a document nobody else holds, thus it cannot be
     /// named the same way.
     stamp: (Uuid, u64, Uuid, u64),
@@ -190,7 +190,7 @@ struct LayerSample {
     rgba: Vec<u8>,
 }
 
-/// The Viewer's session look, as one value (K-585).
+/// The Viewer's session look, as one value.
 ///
 /// Exactly the five things [`WorkerRequest::SetViewerLook`] carries, kept
 /// together for the same reason that message keeps them together: **the
@@ -219,7 +219,7 @@ fn apply_viewer_look(renderer: &mut HeadlessRenderer, look: &ViewerLook) {
     renderer.set_colour_view(look.colour_view.clone());
 }
 
-/// Whose turn it is to build a renderer (K-434). Held only across
+/// Whose turn it is to build a renderer. Held only across
 /// [`HeadlessRenderer::new`] — never across a render, a lock on document state,
 /// or anything that can await — so it orders GPU device creation and nothing
 /// else. See the note at its one use in [`worker_loop`] for why the order
@@ -229,11 +229,10 @@ fn apply_viewer_look(renderer: &mut HeadlessRenderer, look: &ViewerLook) {
 /// against docs/14 §"A lock MUST NOT be held across … an FFI call". The rule
 /// exists so a slow call cannot stall a thread waiting for *data*; this guards
 /// no data, and the slow call is the very thing being ordered — a queue for it,
-/// written as a mutex because that is what a queue of one is. K-434 records the
-/// deviation and what it buys.
+/// written as a mutex because that is what a queue of one is.
 static BUILDING_RENDERER: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-/// Whether a renderer is still worth building for this project (K-434).
+/// Whether a renderer is still worth building for this project.
 ///
 /// Asked once, after the worker's turn to build has come round: a project
 /// closed while it waited has nothing left to draw and no one left to ask, so
@@ -309,14 +308,14 @@ fn sync_caches(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
     // Nothing here clears a tier because the document changed. It used to: the
     // frames were named by position, so a committed edit did not rename any of
     // them and the only safe answer was to throw them all away. They are named
-    // by content now (K-178, docs/06 §5.2), so an edit renames exactly the frames
+    // by content now (docs/06 §5.2), so an edit renames exactly the frames
     // it changed and leaves the rest addressable — which is what keeps the cache
     // bar green through a rename, and what makes an undo instantly valid.
     let budget = crate::framecache::vram::budget();
     if budget != state.applied_vram_budget {
         state.applied_vram_budget = budget;
         // One VRAM budget, shared: a quarter holds the per-effect and nested
-        // intermediates (K-421, K-422), the rest holds finished frames. Without
+        // intermediates, the rest holds finished frames. Without
         // the split the intermediates sat outside the number the user set.
         let intermediates = budget / 4;
         state.renderer.set_effect_cache_budget(intermediates);
@@ -338,13 +337,13 @@ fn sync_caches(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
         state.fill_exhausted = false;
     }
     crate::framecache::publish_comp_decodes(state.renderer.decoded_frames());
-    // The decoded-frame pool's share of the memory report (K-294). Published on
+    // The decoded-frame pool's share of the memory report. Published on
     // the same turn as the rest, so the numbers a report adds up were all read
     // at one moment rather than across a second of drift.
     let (decoded_bytes, decoders) = state.renderer.decode_memory();
     crate::framecache::decode::publish(decoded_bytes as u64, decoders as u64);
     crate::framecache::disk::publish_pending_parks(state.disk.pending_parks() as u64);
-    // Hand back what this turn dropped (K-295). A frame that has been evicted,
+    // Hand back what this turn dropped. A frame that has been evicted,
     // a read-back that has been taken, an intermediate the compositor finished
     // with: all of them are only *marked* destroyed when they are dropped, and
     // the driver reclaims them on the device's next maintain. Rendering into a
@@ -358,7 +357,7 @@ fn sync_caches(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
     // The driver's own accounting. The byte figures are Vulkan and D3D12 only
     // — Metal keeps none — so the live-object counts ride with them: those
     // every backend keeps, and they are what says whether a dropped frame was
-    // actually destroyed (K-294).
+    // actually destroyed.
     let (allocated, reserved) = state.renderer.gpu_allocator_bytes().unwrap_or((0, 0));
     let (textures, buffers) = state.renderer.gpu_live_objects();
     crate::framecache::gpu::publish(allocated, reserved, textures, buffers);
@@ -482,7 +481,7 @@ fn drain_demotions(state: &mut WorkerState) {
         let bytes = std::sync::Arc::new(std::mem::take(&mut demoted.rgba));
         // `park` rather than a bare send: it refuses a frame already on its way
         // down and refuses everything once the queue is full, which is what
-        // keeps a write-behind queue from becoming a memory leak (K-277). A
+        // keeps a write-behind queue from becoming a memory leak. A
         // refusal costs this frame its place on disk and nothing else — it is
         // still on the card and in memory, and it will be offered again.
         //
@@ -1041,7 +1040,7 @@ fn wants_disk_lead(on_card: bool, in_memory: bool, on_disk: bool, already_asked:
 /// preview, or the republish after a lens bake.
 ///
 /// It is the scale the caller asked for, and deliberately **not** scaled by
-/// the adaptive tier (K-372). The tier is playback's own instrument: it buys a
+/// the adaptive tier. The tier is playback's own instrument: it buys a
 /// cheaper composite so a run keeps time, and [`playback_quality`] applies it
 /// where that trade is being made. Nothing still is being paced.
 ///
@@ -1053,7 +1052,7 @@ fn still_quality(scale: f32) -> lumit_render::Quality {
 }
 
 /// The quality one **playback** frame is made and named under: the run's scale,
-/// coarsened by the adaptive tier when the run is Adaptive (K-186).
+/// coarsened by the adaptive tier when the run is Adaptive.
 ///
 /// `tier` is passed rather than read so the trade is visible at the call site,
 /// where the cost it explains is measured — and so the distinction from
@@ -1102,11 +1101,11 @@ fn prepare_frame(
     let name = cacheable
         .then(|| state.renderer.frame_key(document, comp, frame, quality))
         .flatten();
-    // A held frame is served even while the render-time column is measuring
-    // (K-420). A frame promoted from memory cost a copy, not a composite, so
-    // it has no per-layer numbers to give; the worker notes that below and
-    // composites it again for the numbers when it is next idle, rather than
-    // making the user wait for a picture the bar already shows as held.
+    // A held frame is served even while the render-time column is measuring. A
+    // frame promoted from memory cost a copy, not a composite, so it has no
+    // per-layer numbers to give; the worker notes that below and composites it
+    // again for the numbers when it is next idle, rather than making the user
+    // wait for a picture the bar already shows as held.
     let measuring = state.renderer.measuring();
     if let Some(key) = name.filter(|key| !state.renderer.has_frame_texture(*key, bgra)) {
         let provenance = lumit_render::FrameProvenance {
@@ -1172,7 +1171,7 @@ fn prepare_frame(
         .renderer
         .render_prepared_named(document, comp, frame, quality, bgra, name);
     // Answered from the card: no numbers were made, so note the frame for the
-    // idle measure (K-420).
+    // idle measure.
     if measuring && state.renderer.frame_texture_hits() > hits_before {
         state.pending_measure = Some((comp, frame, quality));
     }
@@ -1192,8 +1191,7 @@ fn prepare_frame(
 }
 
 /// Composite the frame a tier served while the column was measuring, measured
-/// this time, and throw the picture away (K-420: serve the hit, measure
-/// afterwards).
+/// this time, and throw the picture away (serve the hit, measure afterwards).
 ///
 /// The picture on screen is already right — it came from a tier, and a tier
 /// holds exactly what a composite would make — so nothing is published here.
@@ -1305,7 +1303,7 @@ fn idle_backup(state: &mut WorkerState) {
     // Two disjoint borrows of the worker's state: the renderer walks its held
     // frames, the disk mirror answers which of them are already parked.
     //
-    // **Already parked OR already on its way** (K-277). A frame counts as
+    // **Already parked OR already on its way**. A frame counts as
     // parked only once the write has finished, so asking `contains` alone made
     // every frame in the write queue look like one that had never been
     // offered: this loop wakes every couple of milliseconds, so it read the
@@ -1322,7 +1320,7 @@ fn idle_backup(state: &mut WorkerState) {
 }
 
 /// Render ONE uncached frame near the playhead into the VRAM frame cache —
-/// Make the shown frame again when a Lens flare's bake has landed (K-350).
+/// Make the shown frame again when a Lens flare's bake has landed.
 ///
 /// While a bake is in flight the Viewer keeps showing the lens before it — that
 /// is the whole point, a wait instead of a freeze — but nothing else would ever
@@ -1351,11 +1349,11 @@ fn republish_after_bake(state: &mut WorkerState, stream: &mut WorkerResponseStre
 /// Make the frame the Viewer is showing again and send it.
 ///
 /// Two callers, both of which have changed something about *how* the picture is
-/// made without the frontend asking for anything: a lens finishing its bake
-/// (K-350), and a renderer rebuilt after a device loss (K-585). Neither will be
-/// asked for a frame — from the frontend's side nothing happened — so the
-/// worker has to offer one, or the picture on screen stays as it was until the
-/// user happens to move something.
+/// made without the frontend asking for anything: a lens finishing its bake,
+/// and a renderer rebuilt after a device loss. Neither will be asked for a
+/// frame — from the frontend's side nothing happened — so the worker has to
+/// offer one, or the picture on screen stays as it was until the user happens
+/// to move something.
 ///
 /// Nothing at all when the Viewer has never shown anything, or the project has
 /// closed under us.
@@ -1392,7 +1390,7 @@ fn republish_last_frame(state: &mut WorkerState, stream: &mut WorkerResponseStre
 /// nothing (or no room) left, so an idle editor stops spending the GPU.
 #[frb(ignore)]
 fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
-    // A non-neutral Viewer view makes every frame unnameable (K-314), so the
+    // A non-neutral Viewer view makes every frame unnameable, so the
     // fill would render frame after frame and bank none of them, never reach
     // the end of its list, and never stop — GPU work for nothing, for as long
     // as the exposure is off zero. There is nothing to fill while the picture
@@ -1401,7 +1399,7 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
         state.fill_exhausted = true;
         return;
     }
-    // Same shape while a Lens flare's bake is being made (K-350): every frame
+    // Same shape while a Lens flare's bake is being made: every frame
     // is unnameable until it lands, so filling would render and bank nothing.
     // `republish_after_bake` sets the fill going again when it does.
     if state.renderer.flare_bake_pending() {
@@ -1447,7 +1445,7 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
         None => (0, frames - 1),
     };
     // The same derivation the display path uses, so a frame the fill banks is
-    // one a scrub can find (K-372).
+    // one a scrub can find.
     let quality = still_quality(scale);
     let bgra = zero_copy_wants_bgra();
     let (_, budget, _) = state.renderer.frame_texture_stats();
@@ -1589,15 +1587,15 @@ pub enum WorkerRequest {
     TraceScope(RenderScopeRequest),
     /// Read the pixels under the dropper (docs/07 §6.1).
     SamplePixels(SamplePixelsRequest),
-    /// Make the picture at one graph node — the Node preview panel (K-486).
+    /// Make the picture at one graph node — the Node preview panel.
     /// Start playing. The worker paces itself from here until it is stopped or
     /// runs off the end.
     Play(PlayRequest),
     /// Stop playing. Harmless when nothing is playing.
     StopPlayback,
     /// Set the whole of how the Viewer is looking, in one message: exposure
-    /// and tone map (K-314) plus whether the comp's background colour is left
-    /// out of the composite while the transparency grid is up (K-352). A
+    /// and tone map plus whether the comp's background colour is left
+    /// out of the composite while the transparency grid is up. A
     /// *setting*, not a picture: it changes how every frame from here on is
     /// made and display-encoded and nothing about the document. Preview only —
     /// an export builds its own renderer, which nobody sends this to. One
@@ -1607,13 +1605,13 @@ pub enum WorkerRequest {
         stops: f64,
         tone_map: bool,
         transparent_background: bool,
-        /// The region of interest as comp fractions `[u0, v0, u1, v1]`
-        /// (K-362), or `None` for the whole frame. It rides the look message
+        /// The region of interest as comp fractions `[u0, v0, u1, v1]`,
+        /// or `None` for the whole frame. It rides the look message
         /// rather than getting one of its own for the same reason the
         /// background flag does: the renderer must never hold half a look, and
         /// this is a way of viewing like the rest of it.
         region: Option<[f32; 4]>,
-        /// The OCIO display and view the picture is shown through (K-490), or
+        /// The OCIO display and view the picture is shown through, or
         /// `None` for the built-in transform. Session state like the exposure
         /// beside it: it changes what every frame from here on is
         /// display-encoded through, and never the document.
@@ -1631,7 +1629,7 @@ pub enum WorkerRequest {
 /// asked for it, with a hand-rolled in-flight counter to stop the requests
 /// piling up. That is a scheduler living on the far side of an FFI boundary from
 /// everything it needs to schedule against. The frontend now says "play from
-/// here" and paints what arrives (K-181).
+/// here" and paints what arrives.
 #[frb(ignore)]
 pub struct PlayRequest {
     pub comp: CompositionReference,
@@ -1710,7 +1708,7 @@ struct Playback {
     /// True while the sound is stopped **because the picture is not keeping the
     /// composition's rate**, as against stopped because the user asked.
     /// Every-frame playback stops the track rather than let it run over a
-    /// picture that has fallen out of time with it (K-171), and this is what
+    /// picture that has fallen out of time with it, and this is what
     /// remembers to start it again — see [`chase_audio`].
     audio_held_for_picture: bool,
     /// How many pictures in a row have gone out at the composition's rate, this
@@ -1812,8 +1810,8 @@ impl Playback {
     ///   is always the front — but no sooner than its due time on the present
     ///   grid ([`crate::playback::next_present_due`]). It may fall behind (a
     ///   heavy comp plays slow); it is never allowed to run ahead, however
-    ///   full the cache fills the ring (K-171: "replays at full speed" means
-    ///   the comp's own rate). The grid, not a stopwatch from the last actual
+    ///   full the cache fills the ring ("replays at full speed" means the
+    ///   comp's own rate). The grid, not a stopwatch from the last actual
     ///   present: a stopwatch added every scrap of loop lateness to every
     ///   frame, so a 60 fps comp could never actually play at 60.
     /// * **Adaptive** keeps time: the NEWEST queued frame the clock has
@@ -1864,7 +1862,7 @@ impl Playback {
     ///
     /// * **Every-frame** never skips — that is the mode's entire promise, since
     ///   the point of it is to render and cache every frame at full quality
-    ///   however long that takes (K-171). It simply counts.
+    ///   however long that takes. It simply counts.
     /// * **Adaptive** keeps time, so it never schedules a frame the clock has
     ///   already passed — it jumps to where playback actually is. Running
     ///   *ahead* of the clock is fine now (that is what the ring is for);
@@ -1941,7 +1939,7 @@ fn clock_seconds() -> Option<f64> {
 
 /// Stop the sound the moment the picture is not running at the composition's
 /// rate, and start it again — level with the picture — once the picture has held
-/// that rate for a while. Every-frame playback's half of A/V sync (K-171).
+/// that rate for a while. Every-frame playback's half of A/V sync.
 ///
 /// # What is measured, and why it is not the clock
 ///
@@ -2101,7 +2099,7 @@ pub struct RenderCompRequest {
     pub comp: CompositionReference,
     pub frame: u64,
     /// Where to cut this layer's effect stack short, or `None` for the picture
-    /// as the document has it (K-528). Latched onto [`WorkerState::prefix`],
+    /// as the document has it. Latched onto [`WorkerState::prefix`],
     /// so it describes the Viewer from here until the next render says
     /// otherwise.
     pub prefix: Option<crate::api::state::BridgePrefixPoint>,
@@ -2170,7 +2168,7 @@ pub struct SamplePixelsRequest {
 /// Chosen to be worth a read — a pointer can travel sixty pixels in any
 /// direction before the frontend needs another one — while staying far below
 /// the size at which a pixel payload stops being a reading and becomes a frame
-/// transport (a 1080p frame is 8 MiB, and 8.8 ms in the codec: K-183).
+/// transport (a 1080p frame is 8 MiB, and 8.8 ms in the codec).
 #[frb(ignore)]
 pub const MAX_WINDOW: u32 = 129;
 
@@ -2182,7 +2180,7 @@ pub struct RenderCompRequestWithPreview {
     pub layer: LayerReference,
     pub effects: Option<Vec<EffectInstance>>,
     /// The layer's driver graph **nodes**, while one of their numbers is being
-    /// dragged (K-471 §5). Exactly `effects`' reason, for the other half of the
+    /// dragged. Exactly `effects`' reason, for the other half of the
     /// layer's parameters: a driver's value is one op per drag, not one per
     /// tick, and a driven parameter is the thing the picture is following — so
     /// without this the picture does not move until the pointer is let go. The
@@ -2190,32 +2188,32 @@ pub struct RenderCompRequestWithPreview {
     /// changes none of them.
     pub drivers: Option<Vec<EffectInstance>>,
     pub transform: Option<crate::api::layer::BridgeTransform>,
-    /// A text layer's document, while it is being typed (K-225). The Type tool
+    /// A text layer's document, while it is being typed. The Type tool
     /// writes the layer once, when the edit ends; this is what keeps the
     /// picture in step in the meantime without an undo step per keystroke.
     pub text: Option<crate::api::assets::BridgeTextDocument>,
-    /// A layer's whole paint list, while one of its strokes is being dragged
-    /// (K-239). The same reason as `text` above: a stroke's opacity is one op
+    /// A layer's whole paint list, while one of its strokes is being dragged.
+    /// The same reason as `text` above: a stroke's opacity is one op
     /// per drag, not one per tick, so the picture is kept in step by previewing
     /// rather than by writing.
     pub paint: Option<Vec<crate::api::layer::BridgeStroke>>,
-    /// One clip's retime map, while its envelope point is being dragged
-    /// (K-247). The same reason as `text` and `paint`: a re-speed is one op
+    /// One clip's retime map, while its envelope point is being dragged.
+    /// The same reason as `text` and `paint`: a re-speed is one op
     /// per drag, not one per tick, and a retime decides *which frame* is
     /// decoded — so without this the picture simply does not move until the
     /// pointer is let go, which is the one edit where watching it matters
     /// most.
     pub clip_retime: Option<(Uuid, crate::api::effect::BridgeScalar)>,
-    /// The layer's own Retime map (K-197), while a key of it is being dragged
+    /// The layer's own Retime map, while a key of it is being dragged
     /// in the graph editor. Exactly `clip_retime`'s reason, for the property
     /// rather than a clip: the map decides which source frame is decoded, so
     /// the drag cannot ride the retained pixels and the provisional map has to
     /// reach the render plan.
     pub retime: Option<crate::api::effect::BridgeScalar>,
-    /// A shape layer's whole art list, while one of its items is being dragged
-    /// (K-239). The same reason as `paint` above.
+    /// A shape layer's whole art list, while one of its items is being dragged.
+    /// The same reason as `paint` above.
     pub contents: Option<Vec<crate::api::layer::BridgeShapeItem>>,
-    /// A layer's whole mask list, while one of them is being dragged (K-240).
+    /// A layer's whole mask list, while one of them is being dragged.
     /// The same reason as `paint` and `contents` above.
     pub masks: Option<Vec<crate::api::layer::BridgeMask>>,
 }
@@ -2269,22 +2267,22 @@ pub fn run_worker(project: ProjectReference, stream: WorkerResponseStream) {
 }
 
 /// Build the Viewer's renderer, with everything a Viewer's renderer carries —
-/// the turn-taking of K-434, the deferred flare bakes of K-350, and the two
-/// profiler sinks. `None` when there is no reason or no way to build one.
+/// the turn-taking, the deferred flare bakes, and the two profiler sinks.
+/// `None` when there is no reason or no way to build one.
 ///
 /// One function rather than a block inside [`worker_loop`] because it is done
-/// **twice**: once when the worker starts, and again after a device loss
-/// (K-585). A rebuild that missed any of this would come back subtly different
-/// from the renderer it replaced — a flare freezing the picture again, or a
-/// progress bar that never moves — which is the kind of fault nobody connects
-/// to a driver reset five minutes earlier.
+/// **twice**: once when the worker starts, and again after a device loss. A
+/// rebuild that missed any of this would come back subtly different from the
+/// renderer it replaced — a flare freezing the picture again, or a progress
+/// bar that never moves — which is the kind of fault nobody connects to a
+/// driver reset five minutes earlier.
 #[frb(ignore)]
 fn build_viewer_renderer(
     project: &ProjectReference,
     stream: &WorkerResponseStream,
 ) -> Option<HeadlessRenderer> {
     // **One renderer is built at a time, and none at all for a project that
-    // has already gone** (K-434). Building one means a GPU device and every
+    // has already gone**. Building one means a GPU device and every
     // pipeline the compositor needs — seconds of driver work where there is no
     // warm shader cache — and it cannot be interrupted once started. The
     // editor never notices this lock, because it has one project open and so
@@ -2322,7 +2320,7 @@ fn build_viewer_renderer(
     };
     drop(building);
     // This is the *Viewer's* renderer, so a Lens flare's bake is made beside
-    // the frame rather than inside it (K-350): picking a lens shows the lens
+    // the frame rather than inside it: picking a lens shows the lens
     // before it and swaps the new one in when the optics are done, instead of
     // stopping the picture for about half a second. The exporter builds its
     // own renderer and never asks for this, so an export still bakes exactly
@@ -2365,7 +2363,7 @@ fn build_viewer_renderer(
     Some(renderer)
 }
 
-/// Come back from a lost graphics device (K-585, budget B9).
+/// Come back from a lost graphics device (budget B9).
 ///
 /// **In plain terms.** A graphics device can be taken away from a program that
 /// has done nothing wrong: a driver update mid-session, a dispatch the
@@ -2582,7 +2580,7 @@ fn one_turn(
 ) -> Turn {
     // Before anything else asks the renderer for anything: a device that
     // has gone answers nothing, and every step below would fail one at a
-    // time until the session looked broken (K-585).
+    // time until the session looked broken.
     recover_lost_device(state, stream);
     sync_caches(state, stream);
 
@@ -2615,7 +2613,7 @@ fn one_turn(
             Ok(request) => Some(request),
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                 // A lens finished baking: the picture on screen was drawn
-                // with the lens before it, so make it again (K-350). This
+                // with the lens before it, so make it again. This
                 // is what turns the old half-second freeze into a wait —
                 // the frame the user is looking at keeps its old flare and
                 // is replaced the moment the new optics are ready.
@@ -2623,7 +2621,7 @@ fn one_turn(
                 let lull = state.last_request.elapsed() >= std::time::Duration::from_millis(200);
                 if lull {
                     // The numbers for the frame on screen, if a tier served
-                    // it unmeasured (K-420) — before the fill, so the column
+                    // it unmeasured — before the fill, so the column
                     // fills one idle turn after the picture.
                     measure_pending(state);
                     if !state.fill_exhausted {
@@ -2779,7 +2777,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             // that gets composited.
             let document = viewed(state.prefix, document);
             // The adaptive tier applies at RENDER time — the whole point of a
-            // coarser tier is a cheaper composite (K-186), so it must be in
+            // coarser tier is a cheaper composite, so it must be in
             // force while the frame is made, not when it is shown. Read before
             // the render so the cost can be attributed to it afterwards.
             let tier = crate::realtime::tier();
@@ -2921,7 +2919,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                         playback.costs.push(cost);
                         // Tell the realtime controller what that frame cost, so
                         // playback can drop to a coarser preview when this machine
-                        // cannot hold the composition's rate (K-171). Here because
+                        // cannot hold the composition's rate. Here because
                         // this is the only place that knows both halves: what the
                         // worker measured, and whether the clock has run away from
                         // it regardless (`observed_cost`).
@@ -3202,7 +3200,7 @@ fn handle_requests(
                     colour_view,
                 } => {
                     // Kept as well as applied, so a renderer rebuilt after a
-                    // device loss is looked *through* the same way (K-585).
+                    // device loss is looked *through* the same way.
                     state.look = ViewerLook {
                         stops,
                         tone_map,
@@ -3239,7 +3237,7 @@ fn handle_requests(
 /// How the drain treats each request kind.
 ///
 /// A [`WorkerRequest::RenderComp`] is always newest-wins, WHATEVER its mode:
-/// since playback moved into the worker (K-181) the only RenderComp traffic
+/// since playback moved into the worker the only RenderComp traffic
 /// is "show me the frame under the playhead", and a playhead position the
 /// user has already dragged past will never be looked at. Treating every-frame
 /// scrubs as keep-all — a leftover from the deleted Dart-side playback
@@ -3248,7 +3246,7 @@ fn handle_requests(
 ///
 /// Transport commands are not pictures and must never be dropped: superseding
 /// a Stop would leave playback running with nothing left to stop it. A display
-/// view (K-314) is not a picture either, and for the same reason: the last one
+/// view is not a picture either, and for the same reason: the last one
 /// queued is the state the renderer must end up in, so dropping one because a
 /// newer request of another kind arrived would leave the Viewer exposing frames
 /// after the user had set it back to neutral.
@@ -3374,7 +3372,7 @@ fn profile_of(p: &lumit_render::FrameProfile) -> crate::api::state::BridgeFrameP
 /// rather than in each render path is what stops a later caller forgetting it.
 /// The one other measured render is [`measure_pending`]'s: the same frame
 /// this one asked for, composited again in an idle moment because a tier
-/// served it without numbers (K-420).
+/// served it without numbers.
 ///
 /// The closing report is sent whatever happened inside, including a frame that
 /// faulted or one served straight from the cache with no report at all: a bar
@@ -3402,7 +3400,7 @@ fn watched<R>(
     out
 }
 
-/// Latch the "at effect" prefix the Viewer is asking under (K-528).
+/// Latch the "at effect" prefix the Viewer is asking under.
 ///
 /// **A prefix is a way of looking, and a way of looking renames every frame.**
 /// The name memo is keyed by `(comp, frame, quality)` against a document
@@ -3424,8 +3422,7 @@ fn set_prefix(state: &mut WorkerState, prefix: Option<crate::api::state::BridgeP
 }
 
 /// `document` as the Viewer is showing it: the committed snapshot, with the
-/// prefix layer's stack cut short after the picked effect while the chip is on
-/// (K-528, superseding K-486's thumbnail).
+/// prefix layer's stack cut short after the picked effect while the chip is on.
 ///
 /// **In plain terms.** The image chain a layer has *is* its effect stack, so
 /// "the picture at the third effect" is the picture the composition makes with
@@ -3516,7 +3513,7 @@ fn render_comp(
     Ok(())
 }
 
-/// Replace a text layer's document with the one being typed (K-225).
+/// Replace a text layer's document with the one being typed.
 ///
 /// Only a text layer has a document to replace; anything else is a preview from
 /// a layer that changed kind under the tool, and is ignored rather than failing
@@ -3601,7 +3598,7 @@ fn render_comp_with_preview(
         apply_text_preview(&mut comp.layers[index].kind, document, offset);
     }
     if let Some(paint) = req.paint {
-        // Keys cross the seam on the comp clock (K-213), so the layer's own
+        // Keys cross the seam on the comp clock, so the layer's own
         // zero comes back off on the way in, exactly as the retime below does.
         let offset = comp.layers[index].start_offset.0;
         comp.layers[index].paint = paint
@@ -3610,7 +3607,7 @@ fn render_comp_with_preview(
             .collect::<Result<Vec<_>, _>>()?;
     }
     if let Some(map) = req.retime {
-        // Keys cross the seam on the comp clock (K-213), so the layer's own
+        // Keys cross the seam on the comp clock, so the layer's own
         // zero comes back off on the way in. A layer with no Retime is left
         // alone rather than given one: a preview must not invent a state the
         // document cannot be in.
@@ -3655,7 +3652,7 @@ fn render_comp_with_preview(
         // The frame being previewed, in composition time: a point drag on an
         // item whose **shape** is keyed lands on the key sitting there, and the
         // preview has to show it landing there rather than on the still path
-        // nothing reads (K-606, and K-340's reason for the mask).
+        // nothing reads (the same as a shape edit on a keyed mask).
         let at = comp
             .frame_rate
             .time_of_frame(req.frame as i64)
@@ -3676,14 +3673,14 @@ fn render_comp_with_preview(
     }
     if let Some(transform) = &req.transform {
         // The preview's keys arrive on the composition's clock like every other
-        // read (K-213); the layer's own offset carries them back.
+        // read; the layer's own offset carries them back.
         let offset = comp.layers[index].start_offset.0;
         transform.write_at(&mut comp.layers[index].transform, offset)?;
     }
 
     // A drag is not playback, so EveryFrame: the adaptive tier learns from a
     // dozen measured frames and a drag is over before it has finished, which is
-    // why the drag has a resolution rule of its own (K-383). Every call that
+    // why the drag has a resolution rule of its own. Every call that
     // reaches here is a live drag — a release commits and comes back through
     // the ordinary render path at the Viewer's own scale — so the reduction is
     // unconditional here rather than being flagged from Dart, and it covers
@@ -3736,7 +3733,7 @@ fn trace_scope(
     // made at. Scopes read the *values* in a frame, so any size answers the
     // question — and compositing the composition a second time to ask it was
     // doubling the cost of every played frame with the panel open.
-    // Only a frame that is still what this position *shows* will do (K-330):
+    // Only a frame that is still what this position *shows* will do:
     // an edit renames every frame it touches, and the entry the edit orphaned
     // keeps claiming the position it was made for. Asked at the quality each
     // candidate was made at, so a Half-resolution frame is judged by the Half
@@ -3788,9 +3785,9 @@ fn trace_scope(
                 Some(hit) => Some(hit),
                 None => {
                     // A flare that fell back to the previous lens during the
-                    // render (K-350) made a picture the name taken before it
+                    // render made a picture the name taken before it
                     // no longer describes. Banked only when no flare stood
-                    // anything in (K-431).
+                    // anything in.
                     let subs_before = state.renderer.flare_substitutions();
                     let made = state
                         .renderer
@@ -3842,7 +3839,7 @@ fn trace_scope(
 /// every change of sample size, instead of a request, a render lookup and a
 /// stream message per mouse move. It stays a *reading* rather than a picture:
 /// 129×129 is 66 KiB, a fraction of a millisecond in the codec, against 8 MiB
-/// for a 1080p frame (K-183's reason for deleting the read-back transport).
+/// for a 1080p frame (the reason the read-back transport went).
 ///
 /// The picture comes from the same places a trace's does, in the same order:
 /// the frame **held on the card**, which on a zero-copy build is where the one
@@ -3919,7 +3916,7 @@ fn sample_pixels(
             // that came down off the card is BGRA on two of the three
             // platforms, thus the window — and only the window — is put right
             // after the cut. Stale entries are passed over here for the same
-            // reason as in `trace_scope` (K-330): a dropper reading the picture
+            // reason as in `trace_scope`: a dropper reading the picture
             // frame 12 used to show is a wrong number, not a stale one.
             let still_current = |key: u128, quality: lumit_render::Quality| {
                 state
@@ -3957,7 +3954,7 @@ fn sample_pixels(
                     // not keep is worse than no entry. A flare can also fall
                     // back to the previous lens *during* the render, which
                     // only the render can report — hence the count read
-                    // either side of it (K-350, K-431).
+                    // either side of it.
                     let provenance = lumit_render::FrameProvenance {
                         comp: req.comp.id,
                         frame: req.frame,
@@ -4125,14 +4122,14 @@ pub(crate) fn cut_patch(
     })
 }
 
-/// Render one frame and publish it to Dart — always as a GPU handle (K-183).
+/// Render one frame and publish it to Dart — always as a GPU handle.
 ///
 /// Two implementations, selected at compile time, because the zero-copy entry
 /// points only *exist* under their own platform and feature:
 ///
-/// 1. Linux + `shared-texture-linux` → a DMA-BUF handle (K-177).
-/// 2. Windows + `shared-texture` → a shared D3D12 texture handle (K-177), and
-///    macOS + `shared-texture-macos` → an `IOSurfaceID` (K-195). One body: both
+/// 1. Linux + `shared-texture-linux` → a DMA-BUF handle.
+/// 2. Windows + `shared-texture` → a shared D3D12 texture handle, and
+///    macOS + `shared-texture-macos` → an `IOSurfaceID`. One body: both
 ///    report one opaque integer naming a surface, plus its size.
 ///
 /// The engine draws straight into a texture the runner displays and no pixels
@@ -4160,7 +4157,7 @@ fn publish_frame(
         // Everything that reaches here is a scrub, an edit's render or a drag
         // — never playback or the idle fill, which call `prepare_frame`
         // directly. Of those, only a committed document's render may add to
-        // the per-effect cache (K-421); a drag's provisional pictures read
+        // the per-effect cache; a drag's provisional pictures read
         // from it and leave it alone. Off again afterwards, so the flag can
         // never leak into a playback run.
         state.renderer.keep_effect_outputs(cacheable);
@@ -4192,14 +4189,14 @@ fn publish_zero_copy(
     cacheable: bool,
 ) {
     // **A still frame is rendered at the scale it was asked for.** The
-    // adaptive tier is playback's own instrument (K-186) — it buys a cheaper
+    // adaptive tier is playback's own instrument — it buys a cheaper
     // composite so a run keeps time — and playback applies it itself, where
     // it is read beside the cost it is about to explain (`play_one_frame`).
     // Nothing that reaches here is playback: it is a scrub, a drag preview,
     // or the republish after a lens bake. Applying the tier to those was a
-    // leftover from before K-181 moved playback into the worker, and it cost
-    // real time (K-372): the tier survives a run, so after any heavy pass
-    // every later scrub asked for `scale × tier` while the idle fill went on
+    // leftover from before playback moved into the worker, and it cost real
+    // time: the tier survives a run, so after any heavy pass every later
+    // scrub asked for `scale × tier` while the idle fill went on
     // banking at `scale` — different content names, so a frame the fill had
     // already made was invisible to the scrub that wanted it, and the picture
     // was composited from scratch with the cache bar showing green over it.
@@ -4241,7 +4238,7 @@ fn publish_zero_copy(
         drm_fourcc: shared.drm_fourcc,
         modifier: shared.modifier,
         // A still frame is made at Full, whatever playback last settled on,
-        // so it must not report a tier it was not rendered at (K-372).
+        // so it must not report a tier it was not rendered at.
         tier: lumit_eval::schedule::FINEST_TIER,
     }));
 }
@@ -4262,14 +4259,14 @@ fn publish_zero_copy(
     cacheable: bool,
 ) {
     // **A still frame is rendered at the scale it was asked for.** The
-    // adaptive tier is playback's own instrument (K-186) — it buys a cheaper
+    // adaptive tier is playback's own instrument — it buys a cheaper
     // composite so a run keeps time — and playback applies it itself, where
     // it is read beside the cost it is about to explain (`play_one_frame`).
     // Nothing that reaches here is playback: it is a scrub, a drag preview,
     // or the republish after a lens bake. Applying the tier to those was a
-    // leftover from before K-181 moved playback into the worker, and it cost
-    // real time (K-372): the tier survives a run, so after any heavy pass
-    // every later scrub asked for `scale × tier` while the idle fill went on
+    // leftover from before playback moved into the worker, and it cost real
+    // time: the tier survives a run, so after any heavy pass every later
+    // scrub asked for `scale × tier` while the idle fill went on
     // banking at `scale` — different content names, so a frame the fill had
     // already made was invisible to the scrub that wanted it, and the picture
     // was composited from scratch with the cache bar showing green over it.
@@ -4307,7 +4304,7 @@ fn publish_zero_copy(
             height: shared.height,
             // A still frame is made at Full, whatever playback last
             // settled on, so it must not report a tier it was not rendered
-            // at (K-372).
+            // at.
             tier: lumit_eval::schedule::FINEST_TIER,
         },
     ));
@@ -4323,7 +4320,7 @@ mod tests {
     use std::sync::mpsc::channel;
     use uuid::Uuid;
 
-    /// **A scrub must find what the fill banked** (K-372).
+    /// **A scrub must find what the fill banked**.
     ///
     /// The adaptive tier survives the run that set it, so before this a heavy
     /// playback pass left every later scrub asking for `scale × tier` while
@@ -4374,7 +4371,7 @@ mod tests {
         }
     }
 
-    /// **The Viewer's own prefix cut, on the interactive path** (K-528).
+    /// **The Viewer's own prefix cut, on the interactive path**.
     ///
     /// Three things, and each is a way the chip could look as if it worked
     /// while showing the wrong picture:
@@ -4491,11 +4488,11 @@ mod tests {
         );
     }
 
-    /// **Turning the chip on renames every frame without moving the document**
-    /// (K-528) — the one case the name memo's revision check cannot see, and
-    /// the same trap the viewer look fell into. Left standing, the memo serves
-    /// the full stack's name for the cut picture and the Viewer shows the
-    /// frame it already had: the chip looks dead and nothing else is wrong.
+    /// **Turning the chip on renames every frame without moving the document** —
+    /// the one case the name memo's revision check cannot see, and the same
+    /// trap the viewer look fell into. Left standing, the memo serves the full
+    /// stack's name for the cut picture and the Viewer shows the frame it
+    /// already had: the chip looks dead and nothing else is wrong.
     #[test]
     fn latching_a_new_prefix_empties_the_name_memo() {
         let (project, comp) = project_with_solid_of(4);
@@ -4559,8 +4556,7 @@ mod tests {
         );
     }
 
-    /// **A worker builds no renderer for a project that has already gone**
-    /// (K-434).
+    /// **A worker builds no renderer for a project that has already gone**.
     ///
     /// Building one is a GPU device and every pipeline the compositor needs,
     /// and it cannot be interrupted once begun — so a process that opens
@@ -4587,7 +4583,7 @@ mod tests {
     }
 
     /// **The worker comes back from a lost graphics device and draws again**
-    /// (K-585, budget B9).
+    /// (budget B9).
     ///
     /// The loss is real: `simulate_device_loss` destroys the device, so
     /// everything the renderer held is genuinely gone and the driver's own
@@ -4870,15 +4866,14 @@ mod tests {
         (project, comp_id)
     }
 
-    /// **A held frame is shown at once, and measured afterwards** (K-420).
+    /// **A held frame is shown at once, and measured afterwards**.
     ///
-    /// The regression: render-time measuring is on by default (K-276 rev 8),
-    /// and a measured request stepped over every tier — so a frame the cache
-    /// bar showed green was composited again, fenced at every layer, the
-    /// moment the playhead landed on it. Now the tier answers, and the idle
-    /// turn composites the frame once more for its numbers. Fails without
-    /// either half: the first assertion if the hit is refused, the last if
-    /// the numbers never come.
+    /// The regression: render-time measuring is on by default, and a measured
+    /// request stepped over every tier — so a frame the cache bar showed green
+    /// was composited again, fenced at every layer, the moment the playhead
+    /// landed on it. Now the tier answers, and the idle turn composites the
+    /// frame once more for its numbers. Fails without either half: the first
+    /// assertion if the hit is refused, the last if the numbers never come.
     #[test]
     fn a_held_frame_is_served_while_measuring_and_measured_on_the_idle_turn() {
         let (project, comp) = project_with_solid();
@@ -4958,7 +4953,7 @@ mod tests {
     fn the_fill_keeps_going_into_memory_once_the_card_is_full() {
         // "Held in memory" is a claim about the process-wide cache, and a test
         // clearing it two threads over made frame 7 vanish between the fill
-        // and the assertion (K-752).
+        // and the assertion.
         let _cache = crate::framecache::test_guard();
         let (project, comp) = project_with_solid_of(50);
         // A still solid names every frame the same (content keying), so the
@@ -5015,7 +5010,7 @@ mod tests {
         // Read-backs still in flight land over the next few turns — of the
         // card's clock, not this loop's. Two hundred bare polls were enough on
         // a real driver and not on the macOS runner's software Metal, which
-        // is why frame 7 read as held nowhere three runs running (K-753).
+        // is why frame 7 read as held nowhere three runs running.
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
         while state.renderer.demotions_in_flight() > 0 && std::time::Instant::now() < deadline {
             super::drain_demotions(&mut state);
@@ -5053,7 +5048,7 @@ mod tests {
         // And an eviction past the in-flight ceiling never starts a read-back
         // at all; on a software device whose read-backs are slow the ceiling
         // fills while the fill is still evicting, and the oldest texture on
-        // the card is the shown frame (K-753).
+        // the card is the shown frame.
         let refused = state.renderer.demotions_failed();
         let dropped = state.renderer.demotions_dropped();
         assert!(
@@ -5110,7 +5105,7 @@ mod tests {
             let bytes = std::sync::Arc::new(bytes);
             // A refused park is "the queue is busy, offer it again", not a
             // failure: `park` declines while its own lock is contended and while
-            // the write-behind queue is full (K-277).
+            // the write-behind queue is full.
             let mut taken = false;
             for _ in 0..500 {
                 if state.disk.park(key, w, h, bgra, bytes.clone(), 1, 1000) {
@@ -5255,7 +5250,7 @@ mod tests {
     }
 
     /// Every-frame never skips, whatever it costs — that is the mode's whole
-    /// definition (K-171); when it cannot keep the comp's rate it plays slow
+    /// definition; when it cannot keep the comp's rate it plays slow
     /// and the sound pauses rather than drifting.
     #[test]
     fn every_frame_playback_never_skips() {
@@ -5418,7 +5413,7 @@ mod tests {
     }
 
     /// **The playhead-drag regression.** A scrub render is newest-wins in
-    /// EVERY transport mode: since playback moved into the worker (K-181),
+    /// EVERY transport mode: since playback moved into the worker,
     /// a RenderComp only ever means "show the frame under the playhead", and
     /// classifying every-frame scrubs as keep-all made a drag render every
     /// frame it crossed, in order, long after the pointer had let go.
@@ -5625,7 +5620,7 @@ mod tests {
         );
         // And the cap really is a cap on the payload: the biggest reply the
         // dropper can ask for stays two orders of magnitude below a frame
-        // (8 MiB at 1080p, K-183), which is what keeps this a reading.
+        // (8 MiB at 1080p), which is what keeps this a reading.
         let biggest = super::cut_patch(&rgba, 2, 2, 0.5, 0.5, u32::MAX).expect("cut");
         assert_eq!(biggest.window, super::MAX_WINDOW);
         assert!(biggest.rgba.len() < 100_000, "{}", biggest.rgba.len());
@@ -5636,7 +5631,7 @@ mod tests {
         assert!(super::cut_patch(&rgba, 0, 0, 0.0, 0.0, 1).is_none());
     }
 
-    /// The Type tool's live preview (K-225): the picture keeps up with what is
+    /// The Type tool's live preview: the picture keeps up with what is
     /// being typed, and the document is not touched until the edit ends.
     #[test]
     fn a_text_preview_replaces_only_a_text_layer() {
@@ -5685,8 +5680,8 @@ mod tests {
         assert!(matches!(other, LayerKind::Adjustment));
     }
 
-    /// A dragged stroke previews through the same door the typed word does
-    /// (K-239): the whole paint list rides along with the render request and
+    /// A dragged stroke previews through the same door the typed word does:
+    /// the whole paint list rides along with the render request and
     /// lands on a clone, so the picture moves while the document does not.
     ///
     /// What this pins is the *conversion*. The preview carries bridge strokes
@@ -5756,8 +5751,8 @@ mod bar_strip_tests {
     };
     use crate::framecache::bar::pack;
 
-    /// **The bar says not just "cached" but "cached at what size"** (K-441,
-    /// docs/15-DESIGN.md §6.3). Each case names one frame's holdings and
+    /// **The bar says not just "cached" but "cached at what size"**
+    /// (docs/15-DESIGN.md §6.3). Each case names one frame's holdings and
     /// checks the whole strip byte: the storage state the bar has always
     /// drawn, and the preview divisor the picture it found was actually made
     /// at.
@@ -5896,7 +5891,7 @@ mod bar_strip_tests {
     ///
     /// Every-frame playback shows every frame however long each takes, thus the
     /// picture can fall out of time with the sound. Lumit stops the sound rather
-    /// than let it run over a picture that is not keeping up (K-171).
+    /// than let it run over a picture that is not keeping up.
     ///
     /// Three rules were tried and the first two were wrong, each in its own way:
     ///

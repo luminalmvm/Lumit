@@ -1,4 +1,4 @@
-// The Rotation tool (K-219, docs/07 §1.7): the curved pointer, and the drag
+// The Rotation tool (docs/07 §1.7): the curved pointer, and the drag
 // that turns whatever is selected about its own anchor point.
 //
 // **In plain terms.** With this tool in hand the pointer becomes a curved arrow
@@ -44,7 +44,7 @@ const double rotateCursorEdgeSweep = 1.1; // ~63°
 const double rotateCursorCornerSweep = 2.1; // ~120°
 
 /// How many positions the pointer takes: the four edges and the four corners,
-/// and nothing between (K-230).
+/// and nothing between.
 ///
 /// It used to lean by a continuously varying angle, which was true to the
 /// geometry and worse to read — a mark that is never twice the same shape is a
@@ -153,7 +153,7 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
   /// Where the turn is measured from: the point the pointer went *down*, not
   /// where the framework recognised the drag.
   ///
-  /// The same trap the gizmo's handles fell into (K-217): a pan is only
+  /// The same trap the gizmo's handles fell into: a pan is only
   /// recognised after the pointer has travelled its slop, so `DragStartDetails`
   /// is already some way round the circle — and every turn came out short by
   /// however far that was.
@@ -260,8 +260,8 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
   void _onPanUpdate(DragUpdateDetails details) {
     setState(() => _pointer = details.localPosition);
     final turned = _rotations();
-    // What the boxes over the picture are drawn at while the turn is in flight
-    // (K-230). Published for every selected layer, not only the one that
+    // What the boxes over the picture are drawn at while the turn is in flight.
+    // Published for every selected layer, not only the one that
     // previews: the wireframe follows the pointer whether or not the picture
     // underneath can.
     widget.uiState.liveRotations.value = {
@@ -281,7 +281,7 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
           transform: transformWith(box.layer.getTransform(), rotation: degrees),
         );
       } catch (_) {
-        // A preview is a courtesy; the turn still lands (K-217).
+        // A preview is a courtesy; the turn still lands.
       }
     });
   }

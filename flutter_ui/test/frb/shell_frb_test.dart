@@ -75,20 +75,20 @@ void main() {
       await tester.pumpAndSettle();
 
       // General opens first. What this build *is* is no longer stated here —
-      // that is Help ▸ About Lumit now (K-244); Settings is for what you
+      // that is Help ▸ About Lumit now; Settings is for what you
       // change, and a version number is not that.
       expect(find.textContaining('lumit-bridge'), findsNothing);
       expect(find.byKey(const ValueKey('settings-reset-workspace')),
           findsOneWidget);
 
-      // The engine's own readouts and buttons live on Performance (K-193).
+      // The engine's own readouts and buttons live on Performance.
       await tester
           .tap(find.byKey(const ValueKey('settings-page-previewAndCache')));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('settings-tier')), findsOneWidget);
       expect(find.byKey(const ValueKey('settings-cache-used')), findsOneWidget);
 
-      // The budget is a typed number now (K-194), not a pick from a list:
+      // The budget is a typed number now, not a pick from a list:
       // dragging it changes what the engine holds, not just the label.
       final before = cacheStats().budgetBytes.toInt();
       await tester.drag(find.byKey(const ValueKey('settings-cache-budget')),
@@ -105,7 +105,7 @@ void main() {
       await tester.pump();
       expect(playbackTier().tier, 1);
 
-      // Where the memory has gone (K-294), at the foot of the page: the rows
+      // Where the memory has gone, at the foot of the page: the rows
       // above each report one store, and this reports the whole process and
       // what none of them accounts for. Scrolled to, because the page is
       // taller than the window — and a memory report is a thing you go and
@@ -113,7 +113,7 @@ void main() {
       final unaccounted =
           find.byKey(const ValueKey('settings-memory-unaccounted'));
       // The page's own scrollable, named rather than taken as the first in the
-      // tree: the title strip's search field carries one of its own (K-465).
+      // tree: the title strip's search field carries one of its own.
       await tester.scrollUntilVisible(unaccounted, 200,
           scrollable: find
               .descendant(
@@ -282,7 +282,7 @@ void main() {
     });
 
     /// The pages are the point of the window: each shows its own settings and
-    /// only its own, and a preference edited on one sticks (K-193).
+    /// only its own, and a preference edited on one sticks.
     testWidgets('the pages divide the settings, and a choice persists',
         (tester) async {
       final p = freshProject();
@@ -313,7 +313,7 @@ void main() {
           find.byKey(const ValueKey('settings-reset-workspace')), findsNothing);
 
       // The Transform card's toggle: off by default, and it stays where it
-      // is put (K-193).
+      // is put.
       expect(p.uiState.workspace.interface.transformInEffectControls, isFalse,
           reason: 'the Effect controls panel is about effects by default');
       await tester.tap(find.byKey(const ValueKey('settings-transform-in-fx')));
@@ -321,7 +321,7 @@ void main() {
       expect(p.uiState.workspace.interface.transformInEffectControls, isTrue);
     });
 
-    /// **Nothing was lost in the rebuild** (K-465). The window was taken apart
+    /// **Nothing was lost in the rebuild.** The window was taken apart
     /// and put back to a new drawing with six pages instead of five, and every
     /// control it hosted has to still be somewhere. This walks the pages and
     /// names them: a setting dropped on the way would fail here rather than be
@@ -566,7 +566,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // The title is a kicker now the dialogue wears the shared frame, so the
-      // capitals are the style rather than the string (K-444).
+      // capitals are the style rather than the string.
       expect(find.text('RECOVER WORK'), findsOneWidget);
       expect(find.byKey(const ValueKey('recover-journal')), findsOneWidget);
       expect(find.byKey(const ValueKey('recover-autosave')), findsOneWidget);
@@ -579,7 +579,7 @@ void main() {
       expect(listAutosaves(project: path), hasLength(1));
     });
 
-    /// Each button is its own answer (K-488), and the close mark is none of
+    /// Each button is its own answer, and the close mark is none of
     /// them — the shape changed, what the dialogue can answer did not.
     ///
     /// *Restore all changes* is the case driven here because replaying the
@@ -828,7 +828,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    /// The dialog's fields default to the composition's own facts (K-201): the
+    /// The dialog's fields default to the composition's own facts: the
     /// frame rate is the comp's, and the span is the work area exactly as the
     /// Timeline set it — already typed, not re-derived by the user.
     testWidgets('the rate and span default to the comp and its work area',
@@ -856,7 +856,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    /// What a format can carry decides what is live (K-479, K-485): an mp4 has
+    /// What a format can carry decides what is live: an mp4 has
     /// no alpha and only eight bits, a PNG sequence has both but no sound and
     /// no bitrate, and a WAV has no picture at all. Every one of those controls
     /// is **drawn** in each case — a control that vanished would leave the
@@ -868,7 +868,7 @@ void main() {
 
       // A dropdown's face is a HouseButton: no `onPressed` is the disabled
       // face, which is exactly what a format that cannot honour the row asks
-      // for (K-479).
+      // for.
       bool live(String key) =>
           tester
               .widget<HouseButton>(find.descendant(
@@ -963,7 +963,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    /// *Still* is gone (K-485): an image sequence of one frame is a still, and
+    /// *Still* is gone: an image sequence of one frame is a still, and
     /// the span already says how many frames there are.
     testWidgets('there is no Still output type', (tester) async {
       await open(tester);
@@ -975,7 +975,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    /// The bitrate is three answers, not two (K-479). *Auto* works one out from
+    /// The bitrate is three answers, not two. *Auto* works one out from
     /// the frame and the rate; unticking it hands over a field, and a **blank**
     /// field means the encoder chooses its own quality — which is why the
     /// footer stops estimating a size the moment it is blank.
@@ -992,13 +992,13 @@ void main() {
           reason: 'unticking Auto hands over the field');
       expect(find.textContaining('≈'), findsNothing,
           reason: 'a blank field is a quality nobody chose and a size nobody '
-              'can estimate (K-119)');
+              'can estimate');
 
       await tester.tap(find.byKey(const ValueKey('export-close')));
       await tester.pumpAndSettle();
     });
 
-    /// The crop is four numbers in pixels at composition size (K-419), and the
+    /// The crop is four numbers in pixels at composition size, and the
     /// engine resolves them: the Picture group's reading and the footer's size
     /// are one answer, from `crop_for`.
     testWidgets('a crop takes pixels off the delivered frame', (tester) async {
@@ -1060,9 +1060,9 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    /// A preset is the whole settings payload under a name (K-479's store):
-    /// saving one lists it, applying it fills the fields back in, and deleting
-    /// it takes it off the list. The built-ins are read-only and say so.
+    /// A preset is the whole settings payload under a name: saving one lists
+    /// it, applying it fills the fields back in, and deleting it takes it off
+    /// the list. The built-ins are read-only and say so.
     testWidgets('a preset saves, applies and is forgotten again',
         (tester) async {
       await open(tester);
@@ -1153,11 +1153,10 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    /// Every row K-485 drew dead is a setting now (K-493, K-497, K-498, K-501,
-    /// K-502, carried over the seam by K-503). Changing each one and saving the
-    /// result as a preset is the assertion, because a preset is the whole
-    /// settings payload: what comes back out of the store is what the dialog
-    /// put into the spec.
+    /// Every row that was drawn dead is a setting now. Changing each one and
+    /// saving the result as a preset is the assertion, because a preset is the
+    /// whole settings payload: what comes back out of the store is what the
+    /// dialog put into the spec.
     testWidgets('the rows that were drawn dead now reach the spec',
         (tester) async {
       await open(tester);
@@ -1204,10 +1203,10 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    /// The new rows obey the capability row exactly as the old ones do
-    /// (K-479): AAC stores coefficients rather than samples, so an mp4 or an
-    /// m4a offers one sample width and a `.wav` offers both; a sound file has
-    /// no colour to state and no picture to resize.
+    /// The new rows obey the capability row exactly as the old ones do: AAC
+    /// stores coefficients rather than samples, so an mp4 or an m4a offers one
+    /// sample width and a `.wav` offers both; a sound file has no colour to
+    /// state and no picture to resize.
     testWidgets('a format that cannot carry a setting says so', (tester) async {
       await open(tester);
 
@@ -1224,7 +1223,7 @@ void main() {
       expect(live('export-audio-sample-rate'), isTrue);
       expect(live('export-audio-layout'), isTrue);
       expect(live('export-audio-depth'), isFalse,
-          reason: 'AAC has no sample width to set (K-493)');
+          reason: 'AAC has no sample width to set');
       expect(live('export-colour-space'), isTrue,
           reason: 'an mp4 states its colour in its own box');
       expect(live('export-resample'), isTrue);
@@ -1249,7 +1248,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    /// **A field of one's own is named by whoever added it** (K-619). Adding
+    /// **A field of one's own is named by whoever added it.** Adding
     /// one seeded the key `field_6` and left it there, in a well that took no
     /// typing — so a container filled up with fields named after nothing. The
     /// key is a plain string on the way to FFmpeg, so it is typed like the
@@ -1300,7 +1299,7 @@ void main() {
     });
 
     /// **A section the format cannot use is dead all the way through**
-    /// (K-618, widening docs/15 §12A.3d's per-row rule). A sound file has no
+    /// (widening docs/15 §12A.3d's per-row rule). A sound file has no
     /// picture, so every control in Picture is disabled — the resize tick, the
     /// fields behind it, the aspect lock, the crop wells and *use region of
     /// interest* — and an image sequence has nowhere to keep metadata, so the
@@ -1373,7 +1372,7 @@ void main() {
     });
 
     /// The Colour section lists what the *format* can state, and says which of
-    /// the two it is doing (K-498): a still sequence carries no tag, so it is
+    /// the two it is doing: a still sequence carries no tag, so it is
     /// offered only the space an untagged file is universally taken to be.
     testWidgets('the colour list and its reading follow the container',
         (tester) async {
@@ -1401,7 +1400,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('states no space'), findsNothing,
           reason: 'a still sequence tags nothing, and the dead list is how it '
-              'says so (K-618): the line under the rows has gone');
+              'says so: the line under the rows has gone');
       expect(
           tester
               .widget<HouseButton>(find.descendant(
@@ -1418,7 +1417,7 @@ void main() {
 
     /// A setting the format cannot honour is still refused in the footer
     /// before anything is queued — the new rows reach `ExportSpec::check` the
-    /// same way the depth always has (K-479, K-493).
+    /// same way the depth always has.
     testWidgets('a 24-bit setting an AAC file cannot carry is refused here',
         (tester) async {
       final target = '${Directory.systemTemp.path}/refused-24.m4a';
@@ -1534,9 +1533,9 @@ void main() {
 
   /// The queue's order is the order the exports run in, so it is draggable —
   /// with the application's own reorder gesture, and only for what is still
-  /// waiting (K-503: the engine refuses a row that is running, has run, or has
-  /// gone). The list and the move are both injected, because what is asserted
-  /// here is the window's gesture rather than the engine's slot.
+  /// waiting (the engine refuses a row that is running, has run, or has gone).
+  /// The list and the move are both injected, because what is asserted here is
+  /// the window's gesture rather than the engine's slot.
   group('Export queue reorder (frb)', () {
     BridgeExportQueueItem item(int id, String name,
             {BridgeExportQueueState state =
@@ -1655,10 +1654,10 @@ void main() {
     });
   }, skip: !engineAvailable);
 
-  /// The boot splash is the window until boot ends (K-008), and the welcome
-  /// screen is the window after it (K-464): the shell must not be in the tree
-  /// behind either, or the first-run question would open underneath a screen
-  /// nothing can be clicked through.
+  /// The boot splash is the window until boot ends, and the welcome screen is
+  /// the window after it: the shell must not be in the tree behind either, or
+  /// the first-run question would open underneath a screen nothing can be
+  /// clicked through.
   group('The boot splash', () {
     testWidgets('is the whole window, and hands over to the welcome screen',
         (tester) async {
@@ -1689,16 +1688,16 @@ void main() {
       expect(find.byType(LumitAppView), findsNothing,
           reason: 'and the shell is still not behind it');
 
-      // New project is the way straight through (K-617).
+      // New project is the way straight through.
       await tester.tap(find.byKey(const ValueKey('welcome-card-new')));
       await tester.pumpAndSettle();
       expect(find.byType(LumitAppView), findsOneWidget);
     });
 
-    /// Settings ▸ General can stand the welcome screen down for every launch
-    /// (K-481). Lumit then opens straight into the shell, whose Viewer offers
-    /// the same two ways to start until something is displayed — so the
-    /// setting hides no choice.
+    /// Settings ▸ General can stand the welcome screen down for every launch.
+    /// Lumit then opens straight into the shell, whose Viewer offers the same
+    /// two ways to start until something is displayed — so the setting hides
+    /// no choice.
     testWidgets('the launch setting is honoured', (tester) async {
       tester.view.physicalSize = const Size(1800, 1100);
       tester.view.devicePixelRatio = 1.0;

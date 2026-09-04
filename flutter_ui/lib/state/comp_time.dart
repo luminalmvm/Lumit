@@ -81,7 +81,7 @@ int frameAtTime(CompositionReference comp, BridgeRational time) {
   return frames[time] ??= comp.frameAtTime(time: time);
 }
 
-/// A comp's markers, remembered until the document changes (K-254).
+/// A comp's markers, remembered until the document changes.
 ///
 /// Same bargain as the two above, and the one that made it worth having: the
 /// time ruler draws markers on every rebuild — sixty times a second while
@@ -108,7 +108,7 @@ void writeMarkers(CompositionReference comp, List<BridgeMarker> markers) {
   _markers.remove(comp);
 }
 
-/// A comp's confirmed beat grid (K-698), remembered until the document
+/// A comp's confirmed beat grid, remembered until the document
 /// changes — the ruler's beat band reads it on every rebuild, and what it
 /// answers can only change when the document does. `null` is an answer too
 /// (no grid confirmed), so presence in the map is what "asked already" means.
@@ -131,7 +131,7 @@ BridgeBeatGrid? beatGridOf(CompositionReference comp) {
 
 /// The engine's answers to "what does this curve read at this time",
 /// remembered per (scalar, time): the engine still computes each answer, once,
-/// rather than once per rebuild of every animated row (K-184). A freezed
+/// rather than once per rebuild of every animated row. A freezed
 /// scalar compares by value, so an edited curve is a new question here, never
 /// a stale answer; the ceiling only stops a long session growing forever.
 final Map<(BridgeScalar, BridgeRational), double> _scalarSamples = {};
@@ -196,7 +196,7 @@ void _markHot(BridgeScalar scalar, BridgeRational time) {
 /// Forget everything. Called on every committed engine change.
 /// Forget what the document has made stale.
 ///
-/// **Frame ↔ time only when the item tree moved** (K-680). The two maps above
+/// **Frame ↔ time only when the item tree moved**. The two maps above
 /// hold a *frame rate's* arithmetic, and the header of this file has always
 /// said what can make one wrong: comp settings, or an undo of one — which is
 /// an item-scoped change (`op_scope` sets the flag for it, because the name

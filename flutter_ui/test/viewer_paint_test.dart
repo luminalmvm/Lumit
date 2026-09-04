@@ -1,4 +1,4 @@
-// The painting tools' arithmetic (K-227): which mode each tool commits, and the
+// The painting tools' arithmetic: which mode each tool commits, and the
 // thinning every stroke goes through before it crosses the bridge.
 //
 // A stroke is a record of a gesture, and a gesture arrives as hundreds of
@@ -78,7 +78,7 @@ void main() {
     });
   });
 
-  group('Reading the stylus (K-583)', () {
+  group('Reading the stylus', () {
     PointerDownEvent event(PointerDeviceKind kind,
             {double pressure = 1, double min = 0, double max = 1}) =>
         PointerDownEvent(

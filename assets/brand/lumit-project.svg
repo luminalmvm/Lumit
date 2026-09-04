@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
-  <!-- File-type icon, .lum (docs/15-DESIGN.md, brand; K-251). -->
+  <!-- File-type icon, .lum (docs/15-DESIGN.md, brand). -->
   <defs>
     <linearGradient id="key-a" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#6fdca8"/><stop offset="1" stop-color="#b6e84f"/>

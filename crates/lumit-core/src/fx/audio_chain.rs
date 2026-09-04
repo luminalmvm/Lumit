@@ -1,5 +1,5 @@
 //! The layer's **audio insert chain**: sound in, sound out, one plugin at a
-//! time (docs/impl/audio-plugins.md §2 and §3, K-700).
+//! time (docs/impl/audio-plugins.md §2 and §3).
 //!
 //! # In plain terms
 //!
@@ -50,7 +50,7 @@ use std::sync::Arc;
 use super::ParamId;
 
 /// Frames in one block — fixed at 512 (~10.7 ms at the session's 48 kHz), the
-/// same control rate the Volume envelope already uses (K-172).
+/// same control rate the Volume envelope already uses.
 pub const AUDIO_BLOCK_FRAMES: usize = 512;
 
 /// Channels. v1 hosts stereo effect plugins only
@@ -215,7 +215,7 @@ pub fn run_chain(chain: &[ChainLink], input: &[f32]) -> ChainOutput {
 /// nothing there to blend.
 ///
 /// **Linear, not equal power**, which is where this departs from
-/// docs/impl/audio-plugins.md §3's word (K-700 records the reversal).
+/// docs/impl/audio-plugins.md §3's word.
 ///
 /// Equal power is the law for two *uncorrelated* signals — two different shots
 /// across a dissolve, which is why [`crate::sequence`]'s clip crossfades use it.
@@ -409,8 +409,8 @@ mod tests {
     }
 
     /// **A ramp between two identical signals changes nothing** — the property
-    /// an equal-power crossfade would break, and the reason `splice` is linear
-    /// (K-700). A passthrough plugin that dies mid-run must leave the sound
+    /// an equal-power crossfade would break, and the reason `splice` is
+    /// linear. A passthrough plugin that dies mid-run must leave the sound
     /// exactly as it found it, ramps and all.
     #[test]
     fn a_dry_splice_through_a_passthrough_leaves_the_sound_alone() {

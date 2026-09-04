@@ -1,4 +1,4 @@
-// The History window (K-688), on the flutter_rust_bridge API.
+// The History window, on the flutter_rust_bridge API.
 //
 // Undo and redo have always walked a list nobody could see. This shows it: one
 // row per edit, oldest at the top, and clicking a row takes the project to how
@@ -8,16 +8,16 @@
 //
 // **The engine names the rows and the engine does the walking.** A row's phrase
 // is `Op::name` on the far side, translated on arrival like every other engine
-// word (K-303, `engine_labels.dart`); a jump is `jump_history`, which presses
+// word (`engine_labels.dart`); a jump is `jump_history`, which presses
 // the ordinary undo or redo in a loop, so nothing here can reach a state the
 // keyboard could not. This file holds the list and nothing else — no idea of
 // what an op is, no arithmetic about what a jump would do.
 //
 // **The list is read when it opens and after each jump, never in a build.**
-// Rebuilds are hot (docs/13, K-681): the rows live in state and are refreshed
+// Rebuilds are hot (docs/13): the rows live in state and are refreshed
 // on purpose, so opening a menu over the window costs no bridge call.
 //
-// The frame is the dialog pattern's (K-444): title strip, body, footer.
+// The frame is the dialog pattern's: title strip, body, footer.
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
@@ -35,7 +35,7 @@ import 'dialog_frame.dart';
 /// space" at 11 sets to 176) with room for a translation to run half as long
 /// again, and tall enough for a dozen rows — which is more than a Ctrl-Z run
 /// anybody counts. The window is resizable from its corner and remembers where
-/// it was left (K-242), so a long session can make it as tall as the screen.
+/// it was left, so a long session can make it as tall as the screen.
 const double historyDialogWidth = 320;
 const double historyListHeight = 320;
 

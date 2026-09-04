@@ -1,7 +1,7 @@
 // Renders the dock tree (state/dock.dart): weighted splits with draggable
 // dividers, tab groups as pill tab bars (dock.rs::tab_ui styling), solo panes
-// bare (K-086), and the Sharp/Round pane chrome (K-092). A tab drags to re-dock
-// (dock.rs drag-to-redock, via egui_tiles): a ghost pill follows the cursor, the
+// bare, and the Sharp/Round pane chrome. A tab drags to re-dock (dock.rs
+// drag-to-redock, via egui_tiles): a ghost pill follows the cursor, the
 // hovered pane shows a drop-zone preview, and release commits the move through
 // movePanel. Every pane is a drop target, bare ones included.
 
@@ -19,9 +19,9 @@ typedef PanelBuilder = Widget Function(BuildContext context, Panel panel);
 /// drag rather than a click.
 const double _dragSlop = 6.0;
 
-/// **The width below which a panel stops giving way and starts sliding**
-/// (K-451's degradation ladder, step 5, and the "every panel declares a
-/// minimum" the same entry asks for).
+/// **The width below which a panel stops giving way and starts sliding** (the
+/// degradation ladder, step 5, and the "every panel declares a minimum" rule
+/// that goes with it).
 ///
 /// In plain terms: a panel shrinks by shedding — a word here, a column there —
 /// but every panel reaches a width where there is nothing left to shed and the
@@ -47,9 +47,9 @@ double panelMinWidth(Panel panel) => switch (panel) {
       // A parameter row: its name, its wells and its keyframe marks.
       Panel.effectControls => 300,
       // The toolbar's fixed controls — save group, the two toggles, the snap
-      // magnet and the view cluster — measure 471 px once the magnet landed
-      // (K-689); the sweep overflowed at the old 320 floor. Below this the
-      // floor slides, which is what a canvas panel wants anyway.
+      // magnet and the view cluster — measure 471 px once the magnet landed.
+      // The sweep overflowed at the old 320 floor. Below this the floor
+      // slides, which is what a canvas panel wants anyway.
       Panel.graph => 480,
       Panel.effectsAndPresets => 180,
       Panel.node => 200,
@@ -179,7 +179,7 @@ class _DockWidgetState extends State<DockWidget> {
   }
 
   /// Drop a panel out of the arrangement — the same thing the Window menu's
-  /// tick does, reached from the tab's own right-click menu (K-521).
+  /// tick does, reached from the tab's own right-click menu.
   void _closePanel(Panel panel) {
     setState(() => setPanelVisible(widget.root, panel, false));
     widget.onLayoutChanged();
@@ -251,11 +251,11 @@ class _DockWidgetState extends State<DockWidget> {
     final a = split.shares[i] + deltaShare;
     final b = split.shares[i + 1] - deltaShare;
     if (a < minShare || b < minShare) return;
-    // **The seam stops at the panels' own minimums** (K-451: "every panel
-    // declares a minimum; the dock will not shrink it past that"). Across a
-    // horizontal split that minimum is a width, so the drag is refused rather
-    // than clamped — a seam that slid on while the panel underneath stopped
-    // moving was how a panel ended up narrower than anything it could draw.
+    // **The seam stops at the panels' own minimums.** Every panel declares a
+    // minimum, and the dock will not shrink it past that. Across a horizontal
+    // split that minimum is a width, so the drag is refused rather than
+    // clamped — a seam that slid on while the panel underneath stopped moving
+    // was how a panel ended up narrower than anything it could draw.
     if (split.axis == DockAxis.horizontal) {
       final aPx = a / total * totalExtent;
       final bPx = b / total * totalExtent;
@@ -462,7 +462,7 @@ class _GhostLayer extends StatelessWidget {
           if (panel == null || t == null) return const SizedBox.shrink();
           // The pointer is a window coordinate and the pill is placed in the
           // overlay's own space; at any UI scale but 100% those differ, and
-          // the pill would trail the pointer by the difference (K-560).
+          // the pill would trail the pointer by the difference.
           final at = overlayLocal(context, drag.pointer);
           return Positioned(
             left: at.dx + 10,
@@ -495,8 +495,8 @@ class _GhostPill extends StatelessWidget {
   }
 }
 
-/// The panel header's live-mark under Round (K-394, §12.1): a small accent dot
-/// before the panel's name in its tab.
+/// The panel header's live-mark under Round (§12.1): a small accent dot before
+/// the panel's name in its tab.
 ///
 /// **Decorative and static.** It never blinks, never fills and never means
 /// anything — it is not a status light, and no state may be routed through it.
@@ -670,10 +670,10 @@ class _TabGroup extends StatelessWidget {
         // state — scroll offsets, twirl-downs — survives a tab switch, so a
         // hidden tab's subtree stays MOUNTED (the TF round 5 fix, pinned by
         // dock_panel_state_test). And a hidden tab is never BUILT (Airyzz's
-        // "dont build invisible panels", restored after K-182's merge
-        // overwrote it): not at all before it is first shown, and not again
-        // while hidden — _KeepAlivePane returns the same built instance, and
-        // an identical child short-circuits Flutter's rebuild, so the dock
+        // "dont build invisible panels", restored after a merge overwrote
+        // it): not at all before it is first shown, and not again while
+        // hidden — _KeepAlivePane returns the same built instance, and an
+        // identical child short-circuits Flutter's rebuild, so the dock
         // rebuilding sixty times a second never reaches a hidden panel.
         Expanded(
           child: Stack(
@@ -768,12 +768,12 @@ class _TabPillState extends State<_TabPill> {
     final Color fill;
     final Color textColour;
     if (widget.active) {
-      // Round keeps its filled accent pill (K-394, §12.1). **Sharp draws no
-      // box at all**: the mockups' `.kick.on` is bare text on the strip's own
-      // grey — transparent fill, no border — and which tab is fronted reads
-      // from the word brightening to `text_primary` alone. It had worn an
-      // accent outline, which spends the accent on a resting state and makes
-      // the strip's one lit tab look like a control to press.
+      // Round keeps its filled accent pill (§12.1). **Sharp draws no box at
+      // all**: the mockups' `.kick.on` is bare text on the strip's own grey —
+      // transparent fill, no border — and which tab is fronted reads from the
+      // word brightening to `text_primary` alone. It had worn an accent
+      // outline, which spends the accent on a resting state and makes the
+      // strip's one lit tab look like a control to press.
       fill = round ? t.accent : const Color(0x00000000);
       textColour = round ? t.surface0 : t.textPrimary;
     } else if (_hover) {
@@ -791,11 +791,11 @@ class _TabPillState extends State<_TabPill> {
           _hover && !widget.active ? t.hairlineStrong : const Color(0x00000000),
       width: 1,
     );
-    // A panel's name is a container label, so it is a kicker (§7.1, K-438):
-    // one size, one weight, capitals applied here rather than in the arb file.
-    // Which tab is fronted reads from the colour and the accent tick alone —
-    // never from a bigger or heavier word, which would shuffle the strip every
-    // time the front tab changed.
+    // A panel's name is a container label, so it is a kicker (§7.1): one size,
+    // one weight, capitals applied here rather than in the arb file. Which tab
+    // is fronted reads from the colour and the accent tick alone — never from
+    // a bigger or heavier word, which would shuffle the strip every time the
+    // front tab changed.
     final style =
         (widget.active ? t.kickerOn : t.kicker).copyWith(color: textColour);
     final label = Text(widget.title.toUpperCase(), style: style);
@@ -849,13 +849,13 @@ class _TabPillState extends State<_TabPill> {
     );
   }
 
-  /// The tab's right-click menu (K-521): close the panel, and the pop-out that
-  /// is not built yet, listed disabled rather than left off.
+  /// The tab's right-click menu: close the panel, and the pop-out that is not
+  /// built yet, listed disabled rather than left off.
   ///
   /// **Pop out is greyed and says why.** Tearing a panel into its own window
   /// needs real operating-system windows, and Flutter has not shipped those on
-  /// a stable release (K-449, `docs/impl/multi-window.md`) — so the row names
-  /// the gate in its tooltip instead of quietly doing something else. It is
+  /// a stable release (`docs/impl/multi-window.md`) — so the row names the
+  /// gate in its tooltip instead of quietly doing something else. It is
   /// deliberately *not* faked with a floating in-window panel: a panel that
   /// says it popped out and then cannot leave the app window is a worse answer
   /// than a disabled row.
@@ -958,11 +958,12 @@ class _PaneChrome extends StatelessWidget {
             clipBehavior: round ? Clip.antiAlias : Clip.none,
             child: Stack(
               children: [
-                // **Nothing paints outside its pane** (K-451, step 5): below
-                // the panel's declared minimum the content keeps that width
-                // and slides. Wrapped here rather than in each panel so a
-                // panel that has not thought about narrow widths still cannot
-                // overflow — and so there is one place to read the rule.
+                // **Nothing paints outside its pane**, step 5 of the
+                // degradation ladder: below the panel's declared minimum the
+                // content keeps that width and slides. Wrapped here rather
+                // than in each panel so a panel that has not thought about
+                // narrow widths still cannot overflow — and so there is one
+                // place to read the rule.
                 PanelFloor(minWidth: panelMinWidth(panel), child: child),
                 Positioned.fill(child: _DropPreview(panel: panel, drag: drag)),
               ],

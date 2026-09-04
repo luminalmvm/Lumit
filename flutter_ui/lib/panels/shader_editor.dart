@@ -33,7 +33,7 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 
 /// The editor's width and the height of the code well inside it — the dialog
-/// pattern's frame (K-444) at the one size a page of code wants.
+/// pattern's frame at the one size a page of code wants.
 const double shaderEditorWidth = 640;
 const double shaderEditorWellHeight = 320;
 
@@ -312,8 +312,8 @@ class _ShaderEditorState extends State<_ShaderEditor> {
     final t = ThemeScope.of(context).theme;
     return Focus(
       // Ctrl+Enter applies from wherever the caret is — the chord a code box
-      // needs, because Enter itself belongs to the text (K-319: the window's
-      // default action, reachable without leaving the keyboard).
+      // needs, because Enter itself belongs to the text (the window's default
+      // action, reachable without leaving the keyboard).
       onKeyEvent: (_, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
         final enter = event.logicalKey == LogicalKeyboardKey.enter ||
@@ -326,7 +326,7 @@ class _ShaderEditorState extends State<_ShaderEditor> {
       },
       child: DialogFrame(
         // No width of its own: the window has the size, so the grip can
-        // change it (K-242).
+        // change it.
         children: [
           dialogTitleBar(
             t,
@@ -375,7 +375,7 @@ class _ShaderEditorState extends State<_ShaderEditor> {
   /// What the compiler makes of the text: its own sentence when it refuses,
   /// one line per annotation it could not read, and a quiet confirmation when
   /// it is happy. An empty box says nothing — a shader nobody has written yet
-  /// is not a broken one (K-111).
+  /// is not a broken one.
   ///
   /// Never red and never an alarm: the composition is still compositing, the
   /// effect is drawing the last program that worked, and this is the sentence

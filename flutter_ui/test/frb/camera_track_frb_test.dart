@@ -1,5 +1,5 @@
 // The Camera track effect's interface: its buttons, its status line, its point
-// cloud, and the badge a solve-linked Camera layer wears (K-417).
+// cloud, and the badge a solve-linked Camera layer wears.
 //
 // Every document operation here is genuine; see frb_test_support.dart. What is
 // *not* genuine is the solve behind the point cloud, and it cannot be: a solve
@@ -307,8 +307,8 @@ void main() {
       expect(asked[0], 1, reason: 'one read when the overlay appears');
 
       // Rebuild the overlay, and select in it, without moving the playhead:
-      // the number must not move (K-413's rule, and what the bridge-call
-      // budget exists to protect).
+      // the number must not move, which is what the bridge-call budget exists
+      // to protect.
       for (var i = 0; i < 6; i++) {
         frame.notifyListeners();
         await tester.pump();
@@ -328,7 +328,7 @@ void main() {
       expect(asked[0], 3);
     });
 
-    /// **Switching the effect off takes the cloud with it** (K-430).
+    /// **Switching the effect off takes the cloud with it**.
     ///
     /// The cloud is found in the read model, and the model changing is a thing
     /// to listen to. It was read outside any listener, so the dots stayed on
@@ -371,7 +371,7 @@ void main() {
           reason: 'and it took no frame change to notice');
     });
 
-    /// **A solve landing makes the cloud appear** (K-430).
+    /// **A solve landing makes the cloud appear**.
     ///
     /// The read is keyed by the frame and the document's revision, and a solve
     /// moves neither: it is the answer to an analysis, not an edit. Without a
@@ -469,7 +469,7 @@ void main() {
           reason: 'the bake writes one key per frame');
     });
 
-    // **Track once, then nudge** (K-578). The engine's arithmetic — solve plus
+    // **Track once, then nudge**. The engine's arithmetic — solve plus
     // correction — is asserted in Rust; what is asserted here is that both rows
     // say a nudge has happened, that Clear corrections is only offered when
     // there is something to clear, and that pressing it puts the dot out.

@@ -11,7 +11,7 @@
 //
 // The fold uses floor(x + 0.5) and NOT round(), for fx_radialwipe.wgsl's reason.
 //
-// One atan2 a pixel — §3.47's admission again (K-399): the angle IS a function
+// One atan2 a pixel — §3.47's admission again: the angle IS a function
 // of the pixel and cannot be lifted host-side, so the oracle is judged on
 // absolute difference rather than in fp16 ULPs.
 //
@@ -27,9 +27,9 @@ struct Params {
     rotation: f32,       // radians, from straight up, clockwise
     band: f32,           // the feather's width, raster px, floored above zero
     has_shape: f32,      // 0 when Outer radius is 0 — there is no polygon
-                         // (`active` is a WGSL reserved keyword, K-405's `target` again)
+                         // (`active` is a WGSL reserved keyword, like `target`)
     mix_amt: f32,        // 0..1, blended against the unprocessed input
-    matte_on: f32,       // 1 = the matte scales the polygon's radius per pixel (K-429)
+    matte_on: f32,       // 1 = the matte scales the polygon's radius per pixel
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -37,14 +37,14 @@ struct Params {
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
 
-// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// The Matte (docs/08 §2.6), bound for every kernel on this layout and
 // read only under `matte_on` — bound to `src` when there is none, since a
 // texture binding cannot be left empty.
 @group(0) @binding(4) var matte: texture_2d<f32>;
 
 // This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
 // luma, clamped. The Channel pick and Invert already happened, once, at the
-// seam (fx_matte_prepare.wgsl, K-425).
+// seam (fx_matte_prepare.wgsl).
 fn matte_k(xy: vec2<i32>) -> f32 {
     let m = textureLoad(matte, xy, 0);
     return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
@@ -72,7 +72,7 @@ fn iris_wipe(@builtin(global_invocation_id) gid: vec3<u32>) {
     let r = sqrt(dx * dx + dy * dy);
     let a = abs(phi - p.period * floor(phi / p.period + 0.5));
     let point = vec2<f32>(r * cos(a), r * sin(a));
-    // The matte scales the whole polygon about its centre (K-429): the solved
+    // The matte scales the whole polygon about its centre: the solved
     // vertex is the only place a radius survives into this expression, so one
     // multiply moves the outer and inner radii together and leaves the edge's
     // direction — and so the normal — alone. k = 1 multiplies by one.

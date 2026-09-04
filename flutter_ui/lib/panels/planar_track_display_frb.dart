@@ -1,5 +1,5 @@
 // The Planar track effect's status, under its Analyse, Cancel and Create
-// corner pin buttons (K-579, docs/08 §3.86).
+// corner pin buttons (docs/08 §3.86).
 //
 // **In plain terms.** A planar track follows one flat thing in the shot — a
 // phone screen, a sign, a poster — and works out where its four corners are on
@@ -9,7 +9,7 @@
 // what decides what the user does next.
 //
 // **Read, not subscribed to**, and sampled only while it is moving — the Camera
-// track's rule (K-417), for the same reason: the engine keeps the reading as a
+// track's rule, for the same reason: the engine keeps the reading as a
 // value and a stream would be a second mechanism for the same fact.
 
 import 'package:flutter/widgets.dart';

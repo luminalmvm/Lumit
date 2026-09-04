@@ -1,4 +1,4 @@
-// The localisation seam (K-303): choosing a language, falling back when a
+// The localisation seam: choosing a language, falling back when a
 // translation is missing, and surviving a settings file that names a language
 // Lumit has never heard of.
 //

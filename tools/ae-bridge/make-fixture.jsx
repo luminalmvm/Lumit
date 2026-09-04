@@ -232,7 +232,7 @@
         fx.property("ADBE HUE SATURATION-0005").setValue(15);
     });
     // Curves is the unreadable: its point list is CUSTOM_VALUE data that AE's
-    // own scripting DOM will not hand over (K-410). Nothing to set.
+    // own scripting DOM will not hand over. Nothing to set.
     step("Curves (the unreadable)", function () { addFx("ADBE CurvesCustom"); });
     step("Drop Shadow", function () {
         var fx = addFx("ADBE Drop Shadow");

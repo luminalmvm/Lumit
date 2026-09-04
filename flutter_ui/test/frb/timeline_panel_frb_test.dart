@@ -45,7 +45,7 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'frb_test_support.dart';
 
 /// A ticked menu row's mark: the set's checkmark, not the character it used to
-/// be (K-440's tick).
+/// be (the icon set's tick).
 final Finder _tick = find.byWidgetPredicate(
     (w) => w is glyph.LumitIcon && w.glyph == LumitIcons.tick);
 
@@ -83,7 +83,7 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    /// **The time navigator** (T5, K-648): the whole comp as a strip, with the
+    /// **The time navigator** (T5): the whole comp as a strip, with the
     /// visible span as a window on it. Dragging the window's right-hand end
     /// inward narrows the view — which is a zoom in — about its left-hand end,
     /// and the lanes widen to match.
@@ -113,7 +113,7 @@ void main() {
               'pixels per frame');
     });
 
-    /// The Razor tool (K-220). Clicking a bar cuts that layer **where the
+    /// The Razor tool. Clicking a bar cuts that layer **where the
     /// pointer is**, not at the playhead — the difference between a razor and
     /// the Cut-at-playhead command.
     testWidgets('the razor splits a layer in two where it is clicked',
@@ -218,7 +218,7 @@ void main() {
           matching: find.byType(EditableText),
         );
 
-    /// The toolbar's two readouts are typed into, not merely read (K-287),
+    /// The toolbar's two readouts are typed into, not merely read,
     /// and neither can send the playhead out of the composition.
     testWidgets('typing a timecode moves the playhead, clamped to the comp',
         (tester) async {
@@ -278,7 +278,7 @@ void main() {
       expect(p.uiState.playheadFrame.value, last);
     });
 
-    /// **Both readouts sit in value wells** (K-460): the inset `surface_0`
+    /// **Both readouts sit in value wells**: the inset `surface_0`
     /// face inside a hairline that every editable number in the editor wears,
     /// because that recess is the whole of what says "you may type here".
     /// They were bare text that happened to answer a click.
@@ -303,7 +303,7 @@ void main() {
             reason: 'inside a hairline, like every other value well');
         // One height, whatever size their own type is — 11 for the clock, 10
         // for the frame count — and under Regular that height is the one the
-        // Timeline's chrome row states for everything standing in it (K-512),
+        // Timeline's chrome row states for everything standing in it,
         // not the readout's own [readoutWellHeight]. Compact states none and
         // the well measures itself.
         expect(tester.getRect(find.byKey(ValueKey<String>(key))).height,
@@ -343,7 +343,7 @@ void main() {
           findsNothing);
     });
 
-    /// **The frame count drops its `f` while it is being typed** (K-460): the
+    /// **The frame count drops its `f` while it is being typed**: the
     /// letter names the clock rather than counting in it, so an edit that
     /// began by stepping over it began wrong. It goes back on at commit.
     testWidgets('editing the frame count edits the bare number',
@@ -383,7 +383,7 @@ void main() {
     /// mockup's `F48 / 250`, the whole phrase in one muted colour. It said
     /// only `F48`, which left the reader with no idea how far in that was.
     ///
-    /// **No space after the slash** (K-529, the owner after desktop testing):
+    /// **No space after the slash** (the owner after desktop testing):
     /// the mockup writes one, and on a real composition the phrase then broke
     /// into three marks — a number, a lone stroke, another number — where it
     /// is one reading. The stroke binds to the count it introduces.
@@ -497,7 +497,7 @@ void main() {
           layer.internallayerId);
     });
 
-    /// **Cutting a retimed layer gives each half an end of its own (K-221).**
+    /// **Cutting a retimed layer gives each half an end of its own.**
     ///
     /// Both halves keep the whole speed map, so without a key at the cut the
     /// two ramps stay welded: bending one half's speed would bend the other's,
@@ -524,7 +524,7 @@ void main() {
       return retime is BridgeScalar_Keyframed ? retime.field0.length : 0;
     }
 
-    /// **A cut only keys a layer that has actually been retimed** (K-236).
+    /// **A cut only keys a layer that has actually been retimed.**
     /// Switching Retime on installs the identity map, so the property being
     /// there says nothing about whether the layer has been retimed — and a cut
     /// that dropped keys into an untouched map left the user keys to notice and
@@ -580,7 +580,7 @@ void main() {
     });
 
     /// Masks appear in the fold-out under their own heading, and only once the
-    /// layer has one — the same rule Effects follows (K-222).
+    /// layer has one — the same rule Effects follows.
     testWidgets('a masked layer grows a Masks heading in its twirl-down',
         (tester) async {
       final p = withComp();
@@ -668,7 +668,7 @@ void main() {
       expect(find.text(name), findsOneWidget);
     }
 
-    /// **A mask's opacity was not undoable (K-234).** Its field wrote on every
+    /// **A mask's opacity was not undoable.** Its field wrote on every
     /// drag tick, so a drag left a stack of near-identical steps and one Ctrl+Z
     /// backed out a single percent — which looks like nothing happening. The
     /// drag is staged now, exactly as every other value row here stages its.
@@ -696,10 +696,10 @@ void main() {
           reason: 'ONE undo returns the opacity it had before the drag');
     });
 
-    /// **A mask opacity drag shows while it is dragged** (K-240). The last of
-    /// the three whole-list rows to preview: K-234 staged it so the drag was one
-    /// undo step, which left the picture still until the button came up, and
-    /// K-239 fixed exactly that for paint and shape art.
+    /// **A mask opacity drag shows while it is dragged.** The last of
+    /// the three whole-list rows to preview: staging the drag made it one undo
+    /// step, which left the picture still until the button came up, and paint
+    /// and shape art had exactly that fixed first.
     testWidgets('a mask opacity drag shows before it commits', (tester) async {
       final p = withComp();
       final layer = p.comp.addSolidLayer();
@@ -745,7 +745,7 @@ void main() {
       return gesture;
     }
 
-    /// **A mask's mode is on its row (K-222).** How a mask combines with the
+    /// **A mask's mode is on its row.** How a mask combines with the
     /// ones above it is a document edit like any other: one pick, one op, one
     /// undo step.
     testWidgets('the mask mode dropdown writes through to the document',
@@ -772,7 +772,7 @@ void main() {
 
     /// **Feather is a row under the mask, in layer pixels.** Staged and
     /// previewed exactly as the opacity is, so the drag is one op and one undo
-    /// step (K-234, K-240).
+    /// step.
     testWidgets('dragging a mask feather is ONE undo step and previews first',
         (tester) async {
       final p = withComp();
@@ -847,7 +847,7 @@ void main() {
     });
 
     /// **Every mask value keyframes, with the same stopwatch as everything
-    /// else** (K-340). The branch that added mask animation exposed none of it
+    /// else.** The branch that added mask animation exposed none of it
     /// to the frontend: there was no Path row at all, and no mask property
     /// carried a clock.
     testWidgets('every mask property has a stopwatch and keys with it',
@@ -884,8 +884,8 @@ void main() {
           100);
     });
 
-    /// **The shape keyframes too, and its row is diamonds without a field**
-    /// (K-339, K-340): a path has no number to put in one.
+    /// **The shape keyframes too, and its row is diamonds without a field**:
+    /// a path has no number to put in one.
     testWidgets('the mask path row keys the shape and shows no value field',
         (tester) async {
       final p = withComp();
@@ -912,7 +912,7 @@ void main() {
       expect(layer.getMasks().single.vertices, hasLength(before));
     });
 
-    /// **A mask's rows select like every other property row** (K-341), and a
+    /// **A mask's rows select like every other property row**, and a
     /// keyed one puts its diamonds on the lane. Both were missing: a mask value
     /// row could not be picked at all, so its curve never reached the graph,
     /// and a key planted on one left the lane empty.
@@ -926,7 +926,7 @@ void main() {
       // Every one of the four rows picks itself when its name is clicked —
       // the same as a transform or an effect parameter row.
       final masks = masksPath(layer.internallayerId.toString());
-      // Not the per-point feather (K-545): this mask has one width, so it
+      // Not the per-point feather: this mask has one width, so it
       // has no per-point rows to click.
       for (final value in MaskValue.values) {
         if (value == MaskValue.vertexFeather) continue;
@@ -954,7 +954,7 @@ void main() {
               'the key planted by the stopwatch has no diamond on the lane');
     });
 
-    /// **A mask row stays picked after the mouse comes up** (K-343). Reported
+    /// **A mask row stays picked after the mouse comes up.** Reported
     /// from the app: "if I click one it briefly looks like it selects while the
     /// mouse is down then it resets." The row selected on the press and the
     /// ground under the outline took the *tap* on the release, clearing it —
@@ -968,7 +968,7 @@ void main() {
       final id = layer.getMasks().single.id;
       final masks = masksPath(layer.internallayerId.toString());
 
-      // Not the per-point feather (K-545): this mask has one width, so it
+      // Not the per-point feather: this mask has one width, so it
       // has no per-point rows to click.
       for (final value in MaskValue.values) {
         if (value == MaskValue.vertexFeather) continue;
@@ -993,8 +993,8 @@ void main() {
           reason: 'the mask row lost the selection when the mouse came up');
     });
 
-    /// **The Viewer picking a row, then a click on that row, keeps it picked**
-    /// (K-343). Reported from the app: after a mask path drag planted a key the
+    /// **The Viewer picking a row, then a click on that row, keeps it picked.**
+    /// Reported from the app: after a mask path drag planted a key the
     /// Path row lit up correctly, and clicking it then dropped the selection
     /// and would not take it back.
     testWidgets('a row the Viewer picked stays picked when clicked',
@@ -1023,7 +1023,7 @@ void main() {
           reason: 'the row could not be picked again');
     });
 
-    /// **Picking a property row says which layer it belongs to** (K-341), so
+    /// **Picking a property row says which layer it belongs to**, so
     /// the Viewer can outline that layer and its masks. Before this the
     /// selection stayed inside the Timeline and the picture showed nothing.
     testWidgets('picking a mask row publishes it to the shell', (tester) async {
@@ -1031,7 +1031,7 @@ void main() {
       final layer = p.comp.addSolidLayer();
       await openMaskRow(tester, p, layer, 'Ellipse');
 
-      // Opening the fold already picked the Masks heading (K-300), so what
+      // Opening the fold already picked the Masks heading, so what
       // matters is that the pick *moves* to the mask when its row is clicked.
       await tester.tap(find.text('Ellipse'));
       await tester.pump();
@@ -1040,7 +1040,7 @@ void main() {
           '${masksPath(layer.internallayerId.toString())}/${layer.getMasks().single.id}');
     });
 
-    /// **A mask row is a property row (K-234).** It joins the same selection
+    /// **A mask row is a property row.** It joins the same selection
     /// every other row is in, so it lights up, the heading holding it marks
     /// itself, and Delete has something to act on.
     testWidgets('clicking a mask selects its row', (tester) async {
@@ -1067,7 +1067,7 @@ void main() {
           reason: 'the heading holding it marks itself, a shade dimmer');
     });
 
-    /// **Delete removes the selected mask (K-234).** The shell's Delete deletes
+    /// **Delete removes the selected mask.** The shell's Delete deletes
     /// the selected *layers*; with a mask row picked it stands down and this
     /// claim runs instead, so the key acts on what is actually selected rather
     /// than on the layer the mask sits on.
@@ -1112,8 +1112,7 @@ void main() {
     /// The default naming already worked; nothing could change it afterwards,
     /// so an ellipse and a second ellipse were both just "Ellipse". A
     /// double-click on the name opens the editor, and the commit is one write
-    /// through `setMask` — one op, one undo step, like every other mask edit
-    /// (K-234).
+    /// through `setMask` — one op, one undo step, like every other mask edit.
     testWidgets('double-clicking a mask name renames it in ONE undo step',
         (tester) async {
       final p = withComp();
@@ -1184,7 +1183,7 @@ void main() {
     });
 
     /// **The regression that matters.** A single tap on the name still selects
-    /// the row and nothing else — selection is what `Delete` acts on (K-234),
+    /// the row and nothing else — selection is what `Delete` acts on,
     /// so a rename that opened on one click would take the key away from it.
     testWidgets('a single tap on a mask name selects and does not rename',
         (tester) async {
@@ -1226,7 +1225,7 @@ void main() {
     });
 
     /// **A feather per point is switched on from the mask's own menu, and
-    /// gives every point a row** (K-545).
+    /// gives every point a row.**
     ///
     /// Switching it on must not move the picture: each point starts at the
     /// width the mask already had, so the change is an offer of control and
@@ -1284,7 +1283,7 @@ void main() {
     });
 
     /// Paint strokes list under their own heading, between Masks and Effects —
-    /// the order the picture is built in (K-227).
+    /// the order the picture is built in.
     testWidgets('a painted layer grows a Paint heading in its twirl-down',
         (tester) async {
       final p = withComp();
@@ -1341,7 +1340,7 @@ void main() {
       expect(layer.getPaint().single.opacity, 40);
     });
 
-    /// A stroke's Start and End (K-549) get rows of their own under it, and
+    /// A stroke's Start and End get rows of their own under it, and
     /// both write through — the pair that makes a stroke draw itself on.
     testWidgets('a stroke grows Start and End rows that write through',
         (tester) async {
@@ -1391,7 +1390,7 @@ void main() {
           reason: 'and Start is left where it was');
     });
 
-    /// A stroke's blend mode is the layer blend list, on its own row (K-550).
+    /// A stroke's blend mode is the layer blend list, on its own row.
     testWidgets('a stroke row picks a blend mode from the layer list',
         (tester) async {
       final p = withComp();
@@ -1436,7 +1435,7 @@ void main() {
     });
 
     /// **A stroke's opacity was not undoable.** The same fault the mask row had
-    /// under K-234, and for the same reason: the row was written from the mask
+    /// earlier, and for the same reason: the row was written from the mask
     /// row as it stood *before* that fix, so it committed on every tick of the
     /// drag. A drag left a stack of near-identical ops and one `Ctrl+Z` backed
     /// out a single percent, which reads as undo not working at all.
@@ -1488,9 +1487,9 @@ void main() {
           reason: 'ONE undo returns the opacity it had before the drag');
     });
 
-    /// **A dragged stroke opacity shows while it is dragged** (K-239).
+    /// **A dragged stroke opacity shows while it is dragged.**
     ///
-    /// Staging the drag made it one undo step (K-238) but stopped the picture
+    /// Staging the drag made it one undo step but stopped the picture
     /// moving until the button came up — the wrong half of the bargain. The
     /// tick previews and the release commits, so the row reads the value under
     /// the pointer while the document still holds the old one.
@@ -1550,7 +1549,7 @@ void main() {
     });
 
     /// A shape layer lists its art under a Contents heading, above Masks and
-    /// Effects — the order the picture is built in (K-237).
+    /// Effects — the order the picture is built in.
     testWidgets('a shape layer grows a Contents heading in its twirl-down',
         (tester) async {
       final p = withComp();
@@ -1638,7 +1637,7 @@ void main() {
       // This item has no outline, so it has no dashes to set.
       expect(find.text('Dash'), findsNothing);
 
-      // The offset applies before the trim, and reads as one length (K-554).
+      // The offset applies before the trim, and reads as one length.
       expect(find.text('Offset path'), findsOneWidget);
       final offset =
           find.byKey(ValueKey<String>('tl-shape-offsetPath-${item.id}'));
@@ -1652,7 +1651,7 @@ void main() {
     });
 
     /// The dashes belong to the outline: their rows appear under an item that
-    /// has one, and writing either half makes the pair (K-552).
+    /// has one, and writing either half makes the pair.
     testWidgets('a stroked shape item carries the dash rows', (tester) async {
       final p = withComp();
       BridgeVertex corner(double x, double y) => BridgeVertex(
@@ -1724,7 +1723,7 @@ void main() {
     });
 
     /// A gradient fill is a choice, a second colour and two points, and none of
-    /// them is on screen until there is a fill to ramp (K-555).
+    /// them is on screen until there is a fill to ramp.
     testWidgets('a filled shape item carries the gradient rows',
         (tester) async {
       final p = withComp();
@@ -1804,7 +1803,7 @@ void main() {
     });
 
     /// A shape item's own path keys, so a drawn shape can morph into another
-    /// one (K-606). The row is a stopwatch and its diamonds and nothing else:
+    /// one. The row is a stopwatch and its diamonds and nothing else:
     /// a shape has no single number to show.
     testWidgets('a shape item carries a Path row that keys its shape',
         (tester) async {
@@ -1888,7 +1887,7 @@ void main() {
 
     /// The Combine row belongs to the item **above**: the first piece of art
     /// in the list has nothing in front of it to join, and an item that joins
-    /// the run lends its path and nothing else (K-605).
+    /// the run lends its path and nothing else.
     testWidgets('a shape item after the first carries the Combine row',
         (tester) async {
       final p = withComp();
@@ -1960,7 +1959,7 @@ void main() {
     });
 
     /// The repeater's step is nine rows of nothing until there is more than
-    /// one copy to step between, so Copies is the row that opens them (K-553).
+    /// one copy to step between, so Copies is the row that opens them.
     testWidgets('a repeated shape item carries the repeater rows',
         (tester) async {
       final p = withComp();
@@ -2385,7 +2384,7 @@ void main() {
           reason: 'frames come from the pixel total, not per-event rounding');
     });
 
-    /// Retime is an ordinary property row (K-197): hidden until the layer is
+    /// Retime is an ordinary property row: hidden until the layer is
     /// given one, then sitting above Transform — outside it, not inside — and
     /// editable exactly like Opacity. Fails if it is filed under Transform, or
     /// if it shows on a layer with no Retime.
@@ -2425,9 +2424,9 @@ void main() {
           reason: 'the edit landed in the key under the playhead');
     });
 
-    /// The Retime row reads as a clock, not as a decimal number of seconds
-    /// (K-287, realising K-075) — and the Settings switch puts the seconds
-    /// field back for anyone who wants sub-frame precision.
+    /// The Retime row reads as a clock, not as a decimal number of seconds —
+    /// and the Settings switch puts the seconds field back for anyone who
+    /// wants sub-frame precision.
     testWidgets('Retime reads as a timecode, or as seconds when asked',
         (tester) async {
       final p = withComp();
@@ -2674,7 +2673,7 @@ void main() {
       // The sizes themselves, not only their ratio: a diamond that shrank at
       // both ends would keep the ratio and lose the mark. A property's own
       // key is the drawing's 11 point to point in **both** modes (half 5.5,
-      // K-459 — it was 8 here); the summary diamond is the **8** the drawing
+      // it was 8 here); the summary diamond is the **8** the drawing
       // renders (2026-08-24), a 4px square with a 1px border stood on its
       // corner, and it had been drawn at 5.
       expect(lane.half, laneKeyHalf, reason: 'a lane key is 11 across');
@@ -3187,7 +3186,7 @@ void main() {
           reason: "and so does the property's layer");
     });
 
-    /// **The fold-out says *driven* too** (K-471, K-627). The Timeline builds
+    /// **The fold-out says *driven* too.** The Timeline builds
     /// the same parameter row Effect controls does, so a wire feeding a
     /// parameter has to reach it here as well: the mark stands where the
     /// stopwatch was, and the value field is deaf.
@@ -3232,7 +3231,7 @@ void main() {
           reason: 'and the number it shows cannot be dragged');
     });
 
-    /// **Any press that acts on a row selects it** (K-334): the stopwatch, the
+    /// **Any press that acts on a row selects it**: the stopwatch, the
     /// navigator, a value drag. Touching a row's controls is choosing it — and
     /// it is what puts the channel in the graph before a drag's first tick.
     testWidgets('pressing a row control selects the row', (tester) async {
@@ -3261,14 +3260,14 @@ void main() {
           reason: 'pressing the stopwatch chose the row');
     });
 
-    /// **Picking a layer on the picture reaches the Timeline** (K-275).
+    /// **Picking a layer on the picture reaches the Timeline.**
     ///
     /// The Viewer's click goes straight to the shell's selection
     /// (`setSelection`), never through this panel's own click path — so the
     /// property selection, the graph's keys and the row highlight, all of which
     /// belong to the layer that *was* chosen, stayed behind. The previous
     /// layer's rows kept their fill while a different layer was selected: two
-    /// layers appearing chosen at once, which is what K-203 set out to remove.
+    /// layers appearing chosen at once, which is what the fix set out to remove.
     testWidgets('a selection made outside the panel clears the property one',
         (tester) async {
       final p = withComp();
@@ -3313,7 +3312,7 @@ void main() {
           reason: 'the old layer stops looking chosen');
     });
 
-    /// **The highlight with nowhere to sit (K-203).** A selected property
+    /// **The highlight with nowhere to sit.** A selected property
     /// stayed selected when its layer was twirled shut — invisible, but still
     /// the selection — so it came back lit when the layer reopened, and it
     /// went on colouring the layer's row while the user worked on a different
@@ -3347,7 +3346,7 @@ void main() {
     });
 
     /// Clicking a layer means "this layer", not "this layer and whatever was
-    /// picked on the last one" (K-203).
+    /// picked on the last one".
     testWidgets('selecting another layer clears the property selection',
         (tester) async {
       final p = withComp();
@@ -3379,7 +3378,7 @@ void main() {
           second.internallayerId);
     });
 
-    /// **No way out of a selection (K-203).** Every command that reads the
+    /// **No way out of a selection.** Every command that reads the
     /// selection — Delete, the Retime chord, U — was stuck with whatever was
     /// picked last, because the only way to change it was to pick something
     /// else. A click on empty ground is the way out.
@@ -3405,7 +3404,7 @@ void main() {
 
     /// With nothing selected, the reveal is the whole composition's: "show me
     /// what is animated" is a question about the comp as often as about one
-    /// layer (K-203).
+    /// layer.
     testWidgets('U with nothing selected reveals every animated layer',
         (tester) async {
       final p = withComp();
@@ -3738,7 +3737,7 @@ void main() {
       final p = withComp();
       final layer = p.comp.addSolidLayer();
       // Unlinked, not separated: Scale ships linked and draws one box for
-      // both axes (K-571); unlinking it puts x and y in the same row.
+      // both axes; unlinking it puts x and y in the same row.
       layer.setAxisMode(
           pair: BridgeTransformPair.scale, mode: BridgeAxisMode.combined);
       await mount(tester, p);
@@ -3770,10 +3769,10 @@ void main() {
       }
     });
 
-    /// The bottom bar takes a column group away and gives it back (K-448,
-    /// §12A.1), so the outline pares down to names and bars. What lines up
-    /// with a hidden group has to go somewhere sensible: the fold-out's value
-    /// cells stay on the panel rather than being pushed off its right edge.
+    /// The bottom bar takes a column group away and gives it back (§12A.1),
+    /// so the outline pares down to names and bars. What lines up with a
+    /// hidden group has to go somewhere sensible: the fold-out's value cells
+    /// stay on the panel rather than being pushed off its right edge.
     testWidgets('the bottom bar hides and restores a column group',
         (tester) async {
       final p = withComp();
@@ -3804,7 +3803,7 @@ void main() {
       expect(switches, findsOneWidget, reason: 'and it comes back');
     });
 
-    /// **The column headers are words, not icons** (§12A.1, K-451) — and the
+    /// **The column headers are words, not icons** (§12A.1) — and the
     /// bottom bar's toggles say the same words, because a toggle that named a
     /// column differently from the column's own heading would be naming two
     /// things.
@@ -3845,7 +3844,7 @@ void main() {
     /// What this pins is that it stands **over the dots**: the heading's cell
     /// and the row's swatch cell are the same 16, and the heading sits over
     /// its column by exactly the shift every other heading has. The header row
-    /// is inset 10 where the layer rows are inset 8 (K-454), so *no* heading
+    /// is inset 10 where the layer rows are inset 8, so *no* heading
     /// is centred on its column to the pixel — LAYER stands two right of the
     /// names too. Comparing the two shifts says the real thing without
     /// re-stating that 2, and still catches a heading that has come off its
@@ -3891,7 +3890,7 @@ void main() {
     /// composition; dragging right widens the time axis, and a slider zoom has
     /// no pointer to zoom about, so it holds the **playhead** still — the
     /// middle of the scrollbar, which it held first, is a place nobody is
-    /// looking at (K-293).
+    /// looking at.
     testWidgets('the zoom slider widens the lanes about the playhead',
         (tester) async {
       final p = withComp();
@@ -3924,7 +3923,7 @@ void main() {
           reason: 'the playhead kept the screen position it had');
     });
 
-    /// **A dragged slider does not fly** (K-293). The flight fills the gap
+    /// **A dragged slider does not fly.** The flight fills the gap
     /// between zooms that arrive in steps; a drag is already the motion, and
     /// animating towards a target the finger keeps moving left the lanes
     /// trailing the handle by a whole flight — reported as the slider being
@@ -3966,8 +3965,7 @@ void main() {
     });
 
     /// The slider's two ends are drawn, not looked up, and plainly different
-    /// sizes — which is the whole of what says "less of this / more of this"
-    /// (K-293, K-209).
+    /// sizes — which is the whole of what says "less of this / more of this".
     testWidgets('the slider is flanked by a small landscape and a large one',
         (tester) async {
       final p = withComp();
@@ -3983,10 +3981,10 @@ void main() {
           reason: 'the pair reads as small and large');
       expect(sizes.last, lessThan(16),
           reason: 'both fit the 20px bar, which is why they are painter-drawn '
-              'rather than icon-set glyphs (K-209)');
+              'rather than icon-set glyphs');
     });
 
-    /// The bar wears the layer's label colour (K-188) — **desaturated**
+    /// The bar wears the layer's label colour — **desaturated**
     /// (§12A.1): the chip thinned over the lane's ground, with the leading
     /// edge carrying it whole. Recolouring the label recolours both — and a solid starts on the solid chip.
     testWidgets('the bar wears the label colour, thinned', (tester) async {
@@ -4023,7 +4021,7 @@ void main() {
       expect(edgeColour(), t.labelColour(6),
           reason: 'and its leading edge with it');
 
-      // Selection brightens the bar rather than outlining it (K-317): the
+      // Selection brightens the bar rather than outlining it: the
       // label colour lerps toward textPrimary, so the hue still says which
       // layer this is while the lit bar says it is the one in hand.
       p.uiState.setSelection([layer]);
@@ -4070,7 +4068,7 @@ void main() {
       expect(reorderedGroups(defaultGroupOrder, g[1], g[1]), defaultGroupOrder);
     });
 
-    /// **The hide ladders** (K-633). A switch column narrowed by a drag gives
+    /// **The hide ladders.** A switch column narrowed by a drag gives
     /// its cells up in a named order rather than clipping whichever happened
     /// to be last, and two of them are never in the ladder at all.
     test('a narrowed switch column sheds its cells in order', () {
@@ -4104,7 +4102,7 @@ void main() {
       expect(minGroupWidth(TimelineGroup.switches), 2 * switchCellWidth);
     });
 
-    /// **Seams snap** (K-633): a switch column to whole cells, everything else
+    /// **Seams snap**: a switch column to whole cells, everything else
     /// back to the width it shipped at when the drag passes near it.
     test('snapGroupWidth settles a dragged seam', () {
       expect(snapGroupWidth(TimelineGroup.switches, 4 * switchCellWidth + 4),
@@ -4145,7 +4143,7 @@ void main() {
       expect(valueColumnFor(renderLast, defaultGroupWidths).rightInset, 0);
 
       // The value cells span the render group as it stands, so dragging that
-      // group's seam widens the fields under it (K-192).
+      // group's seam widens the fields under it.
       final wider = {
         ...defaultGroupWidths,
         TimelineGroup.render: renderGroupWidth + 60,
@@ -4154,8 +4152,8 @@ void main() {
           renderGroupWidth + 60);
     });
 
-    /// A group the outline is not drawing (its bottom-bar toggle is off,
-    /// K-448) has nothing to its right — what lines up with it sits at the
+    /// A group the outline is not drawing (its bottom-bar toggle is off) has
+    /// nothing to its right — what lines up with it sits at the
     /// outline's own edge. The loop used to start from index zero for a group
     /// it could not find, counting *every* column as being to the right of one
     /// that was not there and pushing the value cells off the panel.
@@ -4200,7 +4198,7 @@ void main() {
       expect(rulerLabelStepSeconds(pixelsPerSecond: 100), 1);
       expect(rulerLabelStepSeconds(pixelsPerSecond: 20), 5);
       expect(rulerLabelStepSeconds(pixelsPerSecond: 2), 60);
-      // Unpadded seconds, as the mockup's ruler reads them (K-451).
+      // Unpadded seconds, as the mockup's ruler reads them.
       expect(rulerLabelOf(0), '00s');
       expect(rulerLabelOf(5), '05s');
       expect(rulerLabelOf(0.5), '0.5s');
@@ -4264,7 +4262,7 @@ void main() {
             reason: 'the ruler subdivides at the resting zoom ($px px/s)');
       }
 
-      // And it subdivides **at the mockup's density** (K-451): 70 px/s labels
+      // And it subdivides **at the mockup's density**: 70 px/s labels
       // every two seconds, with a tick on each half second between them —
       // three ticks 35px apart, not the comb a finer rung would draw. The rate
       // does not decide it: the ladder's rungs below a half second differ by
@@ -4278,7 +4276,7 @@ void main() {
     });
 
     /// What a grab does to the waveform's preview of the span — the mapping
-    /// the lane draws while the gesture is still in flight (K-172).
+    /// the lane draws while the gesture is still in flight.
     test('barDragPreview maps each grab onto the span', () {
       final move = barDragPreview('a', BarGrab.move, 5);
       expect((move.deltaIn, move.deltaOut, move.offsetShift), (5, 5, 5));
@@ -4301,7 +4299,7 @@ void main() {
       expect(barGrabAt(8, 9), BarGrab.trimOut);
     });
 
-    /// The rule the ends obey (K-211): a source-backed layer stops where its
+    /// The rule the ends obey: a source-backed layer stops where its
     /// media does, and Retime takes the limits off.
     test('barBounds pins a source-backed layer and frees a retimed one', () {
       expect(
@@ -4351,7 +4349,7 @@ void main() {
           reason: 'pulling it back towards the source is always allowed');
     });
 
-    /// Frames from exact times, in integers (K-184): the panel maps a start
+    /// Frames from exact times, in integers: the panel maps a start
     /// offset without asking the engine, and must floor the way `frame_at`
     /// does — including for a layer that starts before the comp.
     test('frameOfTime floors the way the engine does', () {
@@ -4367,7 +4365,7 @@ void main() {
     });
 
     /// A Precomp layer cannot be trimmed past the comp it holds — and turning
-    /// Retime on takes the limit off (K-211). Fails without the clamp: the
+    /// Retime on takes the limit off. Fails without the clamp: the
     /// tail simply followed the pointer.
     testWidgets('a precomp bar stops at the end of its source', (tester) async {
       final p = withComp();
@@ -4433,7 +4431,7 @@ void main() {
           reason: 'no limit, no mark');
     });
 
-    /// Switching Retime on keys the layer where it *is* (K-213): the two
+    /// Switching Retime on keys the layer where it *is*: the two
     /// diamonds land on its own start and end, not at the start of the
     /// composition. Fails without the comp-clock conversion at the seam — the
     /// keys drew at frames 0 and (duration) however far along the layer sat.
@@ -4503,7 +4501,7 @@ void main() {
     });
 
     /// A trimmed source-backed layer shows where its media would reach — the
-    /// faint outline behind the bar (K-212) — and stops showing it once the bar
+    /// faint outline behind the bar — and stops showing it once the bar
     /// fills the source, or once Retime makes "the source's reach" meaningless.
     /// The one-frame bug: the ghost outline appearing part-way through a trim
     /// took the bar's place in its Stack, so the bar's element — and the
@@ -4702,7 +4700,7 @@ void main() {
       expect(find.byKey(const ValueKey('tl-work-area')), findsOneWidget);
 
       // Clearing it does not take the bar away: a comp that has not been
-      // narrowed has a work area of the whole comp (K-203), which is what the
+      // narrowed has a work area of the whole comp, which is what the
       // engine's null means and what leaves its ends there to grab.
       final narrowed =
           tester.getRect(find.byKey(const ValueKey('tl-work-area')));
@@ -4825,8 +4823,8 @@ void main() {
     /// move it on screen and not only in the notifier.
     ///
     /// The line's own drawn position is read, not only the frame the notifier
-    /// holds: the playhead is painted through a transform behind its own layer
-    /// (K-649), so what a test that read the notifier alone would prove is that
+    /// holds: the playhead is painted through a transform behind its own
+    /// layer, so what a test that read the notifier alone would prove is that
     /// a number changed.
     testWidgets(
         'a scrub moves the line on every pointer event, with no frame '
@@ -5034,7 +5032,7 @@ void main() {
       expect(inner.getLayers(), isEmpty);
     });
 
-    /// **The cut lands under the blade, not under the playhead (K-220).**
+    /// **The cut lands under the blade, not under the playhead.**
     ///
     /// The razor used to cut at the playhead wherever the bar was clicked,
     /// which made it a slower way of pressing Ctrl+Shift+D. docs/07 §4.4 has
@@ -5127,9 +5125,9 @@ void main() {
 
       double dx(String key) =>
           tester.getTopLeft(find.byKey(ValueKey<String>(key))).dx;
-      // No `tl-audible` here: a solid has never made a sound, so since K-435 it
-      // is offered no speaker. Its cell keeps its width, which is why the
-      // switches after it still line up with the header's columns.
+      // No `tl-audible` here: a solid has never made a sound, so it is offered
+      // no speaker. Its cell keeps its width, which is why the switches after
+      // it still line up with the header's columns.
       final order = [
         'tl-visible-$id',
         'tl-solo-$id',
@@ -5143,7 +5141,7 @@ void main() {
         // 3D left of motion blur (owner, 2026-08-31 — the pair swapped).
         'tl-3d-$id',
         'tl-mb-$id',
-        // A solid draws the adjustment cell (K-484); most kinds do not.
+        // A solid draws the adjustment cell; most kinds do not.
         'tl-adjust-$id',
         'tl-matte-$id',
         'tl-blend-$id',
@@ -5155,7 +5153,7 @@ void main() {
       }
     });
 
-    /// **Flow and collapse have a cell each** (K-632). They shared one slot,
+    /// **Flow and collapse have a cell each.** They shared one slot,
     /// which meant the same square was a frame-interpolation policy on footage
     /// and a rasterisation rule on a Precomp — and a Precomp made from retimed
     /// footage had nowhere to say both. Each is drawn only on the kind it acts
@@ -5266,7 +5264,7 @@ void main() {
     });
 
     /// **Accepts lights has no cell in the Modes column** (owner's ruling): the
-    /// column is four switches, and the setting (K-361) is reached from the
+    /// column is four switches, and the setting is reached from the
     /// layer's own right-click menu, ticked when it is on.
     testWidgets('accepts lights left the Modes column for the row menu',
         (tester) async {
@@ -5310,7 +5308,7 @@ void main() {
     /// **Retime's own commands live on the layer's right-click** (docs/04
     /// §12.1): switching Retime on or off, Stretch, and a freeze at the
     /// playhead. A Sequence layer is offered none of them — its clips carry
-    /// the maps (K-075) and are commanded from the sequence view.
+    /// the maps and are commanded from the sequence view.
     testWidgets('the row menu carries the Retime commands', (tester) async {
       final p = withComp();
       final layer = p.comp.addSolidLayer();
@@ -5374,7 +5372,7 @@ void main() {
     });
 
     /// **Freeze at the playhead holds a second and leaves the length alone**
-    /// (docs/04 §7.3, K-022).
+    /// (docs/04 §7.3).
     testWidgets('the row menu freezes the frame at the playhead',
         (tester) async {
       final p = withComp();
@@ -5397,7 +5395,7 @@ void main() {
       expect(layer.getRetimeProperty(), isNotNull);
     });
 
-    /// **The adjustment switch is the Modes column's fifth cell** (K-537), and
+    /// **The adjustment switch is the Modes column's fifth cell**, and
     /// it is drawn on **every row that shows something in the Viewer** —
     /// footage, solid, precomp, text, and a layer born an adjustment. Only the
     /// four kinds with no picture to set aside leave it empty. A hidden layer
@@ -5432,7 +5430,7 @@ void main() {
     /// The cell lights the way the rest of the column does — `text_primary`
     /// when the layer is acting as an adjustment, `text_muted` when it is not —
     /// and it writes both ways, one click each. On a **footage** layer, which
-    /// is the case the K-484 kind flip could not express at all.
+    /// is the case the old kind flip could not express at all.
     testWidgets('the adjustment cell lights by state and writes both ways',
         (tester) async {
       final p = withComp();
@@ -5472,7 +5470,7 @@ void main() {
       expect(tint(), ColorFilter.mode(t.textMuted, BlendMode.srcIn));
     });
 
-    /// **The switch applies to the whole selection** (K-523): it is an ordinary
+    /// **The switch applies to the whole selection**: it is an ordinary
     /// `_switch` cell, so it joins the choke point the other five already pass
     /// through rather than writing the clicked row alone.
     testWidgets('the adjustment cell applies to every selected layer',
@@ -5492,7 +5490,7 @@ void main() {
           reason: 'the unclicked selected row went with it');
     });
 
-    /// **The guide switch (K-497)**, the sixth cell in the A/V column. Unlike
+    /// **The guide switch**, the sixth cell in the A/V column. Unlike
     /// the two kind-gated cells in the Modes column it is drawn on every row —
     /// any layer can be reference-only — and it lights the way the rest of the
     /// column does, writing the document both ways.
@@ -5589,7 +5587,7 @@ void main() {
           reason: 'shy is a document switch, so it survives the session');
       expect(find.text('Backplate'), findsOneWidget,
           reason: 'marking a layer shy does not hide it yet — the name is in '
-              'the outline, and on the bar only if the setting asks (K-514)');
+              'the outline, and on the bar only if the setting asks');
 
       await tester.tap(find.byKey(const ValueKey('tl-hide-shy')));
       await tester.pump();
@@ -5644,7 +5642,7 @@ void main() {
       expect(stack(), ['Top', 'Middle', 'Bottom']);
     });
 
-    /// Mid-drag, **both halves of the table move** (K-208): the name in the
+    /// Mid-drag, **both halves of the table move**: the name in the
     /// outline and the bar in the lanes belong to one layer, and the lanes
     /// used to sit still while the names slid, because only the outline knew
     /// a drag was happening.
@@ -5735,7 +5733,7 @@ void main() {
           reason: 'a locked name does not open the editor');
     });
 
-    /// **The Timeline's half of Copy effect** (K-275). An effect's heading in
+    /// **The Timeline's half of Copy effect.** An effect's heading in
     /// the fold-out offers it; the groupings around it — Transform, Effects,
     /// Masks, Audio — are not things that can be copied and offer nothing.
     testWidgets("an effect's heading in the fold-out copies that effect",
@@ -5780,7 +5778,7 @@ void main() {
           reason: 'Transform is a grouping, not a thing that can be copied');
     });
 
-    /// **Clicking an effect's heading picks it** (K-300). A heading only
+    /// **Clicking an effect's heading picks it.** A heading only
     /// twirled before, so an effect could not be selected in the Timeline at
     /// all — and Copy, which acts on the selection, had nothing to take from
     /// here. The pick is the shell's, so the Effect controls panel shows the
@@ -5816,7 +5814,7 @@ void main() {
           reason: 'Copy took the picked effect, not the layer under it');
     });
 
-    /// **A locked layer's property rows are read-only too** (K-291). The lock
+    /// **A locked layer's property rows are read-only too.** The lock
     /// used to guard only the *gestures* — the bar, the razor, rename, reorder,
     /// delete — while the fold-out's transform, effect and volume rows went on
     /// editing the layer, so the switch did not mean what it says.
@@ -5874,7 +5872,7 @@ void main() {
       );
     });
 
-    /// Enter turns the selected layer's name into an editor (K-243); submitting
+    /// Enter turns the selected layer's name into an editor; submitting
     /// renames the layer through the document (one op, undoable like any
     /// other). It used to be a double-click, which now opens the layer.
     testWidgets('Enter renames the selected layer', (tester) async {
@@ -5902,7 +5900,7 @@ void main() {
       expect(find.byKey(ValueKey<String>('tl-rename-$id')), findsNothing,
           reason: 'submitting leaves the editor');
 
-      // Escape leaves it the other way (K-323): editor shut, nothing written.
+      // Escape leaves it the other way: editor shut, nothing written.
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pump();
       await tester.enterText(
@@ -5916,7 +5914,7 @@ void main() {
     });
 
     /// Clicking away from the rename editor finishes the edit and keeps what
-    /// was typed (K-243). Pressing Enter is not the only way people leave a
+    /// was typed. Pressing Enter is not the only way people leave a
     /// field, and the edit used to sit there open and then be lost.
     testWidgets('clicking elsewhere commits the rename', (tester) async {
       final p = withComp();
@@ -5948,7 +5946,7 @@ void main() {
 
     /// **A group renames the same as any other row** (owner, 2026-08-31):
     /// with its header chosen, `Enter` opens the header's own editor through
-    /// the layer rename's road (K-243) — the same notifier, carrying the
+    /// the layer rename's road — the same notifier, carrying the
     /// group's id instead of a layer's.
     testWidgets('Enter renames a group whose header chose the selection',
         (tester) async {
@@ -6011,7 +6009,7 @@ void main() {
           reason: 'Enter renames the layer once the band is no longer chosen');
     });
 
-    /// Double-clicking a Precomp layer opens the comp it draws (K-243) — the
+    /// Double-clicking a Precomp layer opens the comp it draws — the
     /// same thing the Project panel and the Hierarchy do, and what a
     /// double-click means everywhere else in the application.
     testWidgets('double-clicking a precomp layer opens its comp',
@@ -6145,7 +6143,7 @@ void main() {
 
       Color? rowColour(UuidValue id) {
         // The row's fill rides in the body's decoration, inside the drop
-        // target that makes the row a reorder destination (K-193).
+        // target that makes the row a reorder destination.
         final deco = tester
             .widget<Container>(find.byKey(ValueKey<String>('tl-rowbody-$id')))
             .decoration as BoxDecoration;
@@ -6203,7 +6201,7 @@ void main() {
       await mount(tester, p);
 
       expect(layer.getInfo().label, 2,
-          reason: 'a solid starts on its kind\'s default chip (K-188)');
+          reason: 'a solid starts on its kind\'s default chip');
       await tester.tap(
           find.byKey(ValueKey<String>('tl-label-${layer.internallayerId}')));
       await tester.pumpAndSettle();
@@ -6274,7 +6272,7 @@ void main() {
           reason: 'the parameter drag reached the document');
     });
 
-    /// **The switches column shows only what the layer can do (K-435).**
+    /// **The switches column shows only what the layer can do.**
     ///
     /// A music track has never shown anything, so it is offered no eye; a solid
     /// has never made a sound, so it is offered no speaker. Both halves are
@@ -6323,9 +6321,9 @@ void main() {
       expect(dx('tl-shy-$audioId'), dx('tl-shy-$solidId'));
     });
 
-    /// The outline's switches are drawn from Lumit's own icon set (K-440,
-    /// §12A.1) wherever the set has the mark, and each still flips its glyph
-    /// rather than only dimming — a closed eye, a muted speaker, an open lock.
+    /// The outline's switches are drawn from Lumit's own icon set (§12A.1)
+    /// wherever the set has the mark, and each still flips its glyph rather
+    /// than only dimming — a closed eye, a muted speaker, an open lock.
     /// Behaviour is untouched: the same key, the same write.
     testWidgets('the switches wear the Lumit glyphs and still flip',
         (tester) async {
@@ -6385,7 +6383,7 @@ void main() {
       await tester.pump();
       expect(find.text('Volume'), findsOneWidget);
 
-      // The waveform lane (K-172): behind its own twirl under Audio, and its
+      // The waveform lane: behind its own twirl under Audio, and its
       // lane paints once opened.
       expect(find.text('Waveform'), findsOneWidget);
       expect(
@@ -6420,7 +6418,7 @@ void main() {
           reason: 'a tone is not silence');
 
       // The multiwave stack: the same buckets three times over, bass, middle
-      // and treble (K-280).
+      // and treble.
       final stack = await tester.runAsync(() => footageLayer.audioPeaks(
             startSeconds: 0,
             endSeconds: 0.1,
@@ -6445,7 +6443,7 @@ void main() {
 
       // Zooming in asks for a shorter window, and what comes back is a summary
       // of *that* window — which is what makes the drawn detail follow the
-      // zoom instead of stretching one fixed summary (K-280).
+      // zoom instead of stretching one fixed summary.
       final zoomed = await tester.runAsync(() => footageLayer.audioPeaks(
             startSeconds: 0.02,
             endSeconds: 0.03,
@@ -6463,7 +6461,7 @@ void main() {
     });
 
     /// The open lane is drawn over **both** rows — its own, and the empty one
-    /// the Waveform twirl sits in directly above it (K-437). The row itself
+    /// the Waveform twirl sits in directly above it. The row itself
     /// keeps its height; only the painting reaches up, so nothing in the
     /// outline or the lane stack moves.
     testWidgets('the waveform lane is drawn across both rows', (tester) async {
@@ -6497,13 +6495,13 @@ void main() {
     });
 
     /// A clip on a Sequence layer draws its own sound inside its own box, the
-    /// way a Footage layer's lane does (K-280): a cut is aimed at what you can
+    /// way a Footage layer's lane does: a cut is aimed at what you can
     /// see, and on a Sequence layer what you are cutting is the clip.
     testWidgets('a Sequence layer\'s clips draw their sound', (tester) async {
       final p = withComp();
       // Two files, because no test can hand-write a container holding both a
       // picture and a soundtrack. The y4m is what makes this a Sequence layer
-      // at all — only media that *runs* is placed as clips (K-246) — and the
+      // at all — only media that *runs* is placed as clips — and the
       // relink then points that same item at a file with sound in it, which is
       // what the clip's waveform is drawn from.
       final footage =
@@ -6546,7 +6544,7 @@ void main() {
           reason: 'and what it draws is the sound, not silence');
     });
 
-    /// **A retimed layer's wave stretches with its map** (K-436). The buckets
+    /// **A retimed layer's wave stretches with its map.** The buckets
     /// are taken in the layer's own clock and mapped through its Retime, so a
     /// half-speed layer showing the first tenth of its bar is showing the
     /// first *twentieth* of its source — which for this file is the silent
@@ -6625,7 +6623,7 @@ void main() {
       expect(loudest(wide, 34, 64), greaterThan(0.2));
     });
 
-    /// `L` opens a layer's sound, `LL` its waveform, `LLL` shuts it (K-281) —
+    /// `L` opens a layer's sound, `LL` its waveform, `LLL` shuts it —
     /// the same three-tap shape `U` has. A layer selected but silent is left
     /// alone rather than opened onto a group it has not got.
     testWidgets('L, LL and LLL cycle a layer\'s Audio open and shut',
@@ -6696,24 +6694,24 @@ void main() {
     });
 
     // ---------------------------------------------------------------------
-    // The keyframe block and the bottom bar's strip (K-458), in Layers mode.
+    // The keyframe block and the bottom bar's strip, in Layers mode.
     //
-    // Keys mode — the dope sheet these were written against — is gone
-    // (K-529), and the strip came with them to the Layers bar. The machinery
+    // Keys mode — the dope sheet these were written against — is gone, and
+    // the strip came with them to the Layers bar. The machinery
     // never was the sheet's: the block box, its stretch handles, the Ease
     // popover and the seven commands all act on the lane key selection, which
     // is the same selection in every view.
     // ---------------------------------------------------------------------
 
     /// Twirl a layer open onto its Transform group, which is how a keyed
-    /// property's lane is reached (K-529: it used to be a tap on the Keys
+    /// property's lane is reached (it used to be a tap on the Keys
     /// tab, and the sheet opened every layer for you).
     Future<void> openKeyLane(WidgetTester tester, LayerReference layer) async {
       await openFold(tester, layer.internallayerId, group: 'Transform');
       await tester.pumpAndSettle();
     }
 
-    /// **Two mode tabs, not three** (K-529): Keys is gone, and the tab that
+    /// **Two mode tabs, not three**: Keys is gone, and the tab that
     /// opened it with it.
     testWidgets('the mode tabs read Layers and Graph, in that order',
         (tester) async {
@@ -6767,7 +6765,7 @@ void main() {
       expect(keyShapeOf(keys[1]), (KeyShape.diamond, KeyShape.diamond));
 
       // And a bezier side is the hourglass, which supersedes the rounded
-      // shape the Keys mode first drew (K-457).
+      // shape the Keys mode first drew.
       expect(
           keyShapeOfSide(const BridgeSideInterp.bezier(
               BridgeBezierSide(speed: 0, influence: 33))),
@@ -6776,7 +6774,7 @@ void main() {
       expect(keyShapeOfSide(const BridgeSideInterp.linear()), KeyShape.diamond);
     });
     // ---------------------------------------------------------------------
-    // The block tools (K-458): the selection box with its stretch handles and
+    // The block tools: the selection box with its stretch handles and
     // badge, the Ease popover, and the Keys bottom bar's strip.
     //
     // All of it lives in the machinery both modes share, so the claims below
@@ -6896,7 +6894,7 @@ void main() {
           reason: 'the box spans the block, not the row');
 
       // The handle marks themselves are the drawing's 3 × 6, inside a hit
-      // target wide enough to aim at (K-452).
+      // target wide enough to aim at.
       final mark = tester.getRect(find.descendant(
         of: find.byKey(const ValueKey('tl-block-handle-start')),
         matching: find.byType(ColoredBox),
@@ -7053,7 +7051,7 @@ void main() {
       expect(framesOf(p, layer), [1050, 1200, 1500]);
     });
 
-    /// The claim K-458 makes about *where* these tools live: the box is drawn
+    /// The claim about *where* these tools live: the box is drawn
     /// by the lane area, which is one widget serving both modes, so Layers
     /// mode has it without a line of its own.
     testWidgets('Layers mode has the same block box and stretch',
@@ -7129,7 +7127,7 @@ void main() {
     });
 
     /// **The strip lives at the outline's foot**. It was drawn for Keys mode,
-    /// came to the lane bar when that mode went (K-529), and moved again when
+    /// came to the lane bar when that mode went, and moved again when
     /// the lane bar was pared back to the zoom and the scrollbar: the commands
     /// act on a key selection, which is made in the outline above them. It is
     /// there from the moment the panel is, because a selection is not a view.
@@ -7148,7 +7146,7 @@ void main() {
         expect(find.byKey(ValueKey<String>(key)), findsOneWidget, reason: key);
       }
       // Reverse, Copy and Paste at playhead are gone from the bar (owner,
-      // 2026-08-31, K-722); Copy and Paste keep their Ctrl+C / Ctrl+V roads.
+      // 2026-08-31); Copy and Paste keep their Ctrl+C / Ctrl+V roads.
       for (final key in const ['keys-reverse', 'keys-copy', 'keys-paste']) {
         expect(find.byKey(ValueKey<String>(key)), findsNothing, reason: key);
       }
@@ -7172,7 +7170,7 @@ void main() {
     });
 
     /// Interpolation, from the strip: the selected keys' two sides, set at a
-    /// press, using K-457's vocabulary — and drawn with K-457's shapes.
+    /// press, using the keys' own vocabulary — and drawn with their shapes.
     testWidgets(
         'the strip\'s Interpolation words set the selected keys\' sides',
         (tester) async {
@@ -7203,14 +7201,14 @@ void main() {
     });
 
     // Reverse's and the Copy/Paste buttons' widget tests went with the
-    // buttons (owner, 2026-08-31, K-722): the copy/paste road that remains is
+    // buttons (owner, 2026-08-31): the copy/paste road that remains is
     // the chord, round-tripped below; Reverse's arithmetic keeps its pins in
     // key_block_test.dart.
 
     /// **The interpolation entries are glyphs, named by their tooltips**
-    /// (K-725, the owner's ask): the set's own line, step, curve and handled
+    /// (the owner's ask): the set's own line, step, curve and handled
     /// curve where four capitalised words stood, each tooltip the control's
-    /// word (K-482) and each glyph carrying it as its semantic label.
+    /// word and each glyph carrying it as its semantic label.
     testWidgets('the strip\'s interpolation entries draw the set\'s glyphs',
         (tester) async {
       final p = withComp();
@@ -7242,7 +7240,7 @@ void main() {
     });
 
     // ---------------------------------------------------------------------
-    // The owner's desktop-testing batch (K-529, K-530).
+    // The owner's desktop-testing batch.
     // ---------------------------------------------------------------------
 
     /// **Each column toggle hides the columns its own word names.** The bug
@@ -7303,9 +7301,9 @@ void main() {
     });
 
     /// **The three toggles are glyphs by default and words on request**
-    /// (K-440's Chrome labels setting, consumed here for the first time —
-    /// K-530). A tooltip carries the word in either mode, which is what makes
-    /// the glyph readable at all.
+    /// (the Chrome labels setting, consumed here for the first time). A
+    /// tooltip carries the word in either mode, which is what makes the glyph
+    /// readable at all.
     testWidgets('the column toggles are icons by default, words when asked',
         (tester) async {
       final p = withComp();
@@ -7344,7 +7342,7 @@ void main() {
       }
     });
 
-    /// **The floating tag rides the cursor** (K-529). Flutter's default anchors
+    /// **The floating tag rides the cursor.** Flutter's default anchors
     /// the feedback where the pointer sat inside the *child*, and the child is
     /// a header a couple of hundred pixels wide — so a header grabbed anywhere
     /// but its left edge drew its own name back at the header's x.
@@ -7379,7 +7377,7 @@ void main() {
     });
 
     /// **The lane bar is the zoom, the magnet and the scrollbar, in every
-    /// view** (K-529 put the zoom first; the commands that used to follow it
+    /// view** (the zoom comes first; the commands that used to follow it
     /// have gone to the outline's foot). Nothing that acts on a key stands
     /// under the lanes any more, in either view.
     testWidgets('the zoom and the magnet lead the bottom bar in both views',
@@ -7427,9 +7425,9 @@ void main() {
           reason: 'the graph\'s own commands are at the outline\'s foot too');
     });
 
-    /// **A seam drag moves the columns as it goes** (K-633, moving K-529's
-    /// pin). Column widths are pure view state, so nothing reaches the document
-    /// either way — the lag K-529 was answering was the *panel* rebuilding
+    /// **A seam drag moves the columns as it goes**, moving an earlier pin.
+    /// Column widths are pure view state, so nothing reaches the document
+    /// either way — the lag that pin was answering was the *panel* rebuilding
     /// whole on every pointer move, and the live width now reaches the outline
     /// alone. The gesture still draws its own line, where the pointer is rather
     /// than where the snapped column has settled, and the travel lands once:
@@ -7517,7 +7515,7 @@ void main() {
 
     /// **`Ctrl+C` then `Ctrl+V` round-trips a block of keys — in Layers.**
     /// The chord goes through the shell's own copy/paste, which hands it to
-    /// whichever panel has claimed it (K-300).
+    /// whichever panel has claimed it.
     testWidgets('Ctrl+C and Ctrl+V round-trip keys in Layers mode',
         (tester) async {
       final p = withComp();
@@ -7570,7 +7568,7 @@ void main() {
       expect(framesOf(p, layer), containsAll(<int>[600, 900, 1800, 2100]));
     });
 
-    /// **A copy that took nothing says so** (K-529). It used to claim the
+    /// **A copy that took nothing says so.** It used to claim the
     /// chord anyway, which swallowed `Ctrl+C` and left the *previous* copy on
     /// the clipboard for the next paste to put down — the shape "Copy does
     /// nothing" took on the owner's desktop.
@@ -7588,7 +7586,7 @@ void main() {
     });
 
     // ---------------------------------------------------------------------
-    // An action on a multi-selection applies to every selected layer (K-523).
+    // An action on a multi-selection applies to every selected layer.
     //
     // Every one of these was the same typo in a different cell: the row widget
     // holds a handle to *its* layer and calls the document with it, never
@@ -7623,7 +7621,7 @@ void main() {
 
       expect(upper.getInfo().label, 5);
       expect(lower.getInfo().label, 5,
-          reason: 'the other picked layer took the colour too (K-523)');
+          reason: 'the other picked layer took the colour too');
     });
 
     testWidgets('a switch cell flips every selected layer', (tester) async {
@@ -7642,13 +7640,13 @@ void main() {
       expect(lower.getSwitches().visible, isFalse,
           reason: 'the six switches share one choke point, so all six do this');
 
-      // **One edit, not one per layer** (K-720 — the owner's Ctrl+A undo
-      // walked back through fifty-three separate steps): a single undo
-      // restores every layer at once.
+      // **One edit, not one per layer** (the owner's Ctrl+A undo walked back
+      // through fifty-three separate steps): a single undo restores every
+      // layer at once.
       p.state.project!.undo();
       expect(upper.getSwitches().visible, isTrue);
       expect(lower.getSwitches().visible, isTrue,
-          reason: 'one undo restored the whole selection (K-720)');
+          reason: 'one undo restored the whole selection');
     });
 
     /// The batch keeps the loop's manners about locks: a locked *sibling*
@@ -7715,7 +7713,7 @@ void main() {
     });
 
     // ---------------------------------------------------------------------
-    // Dragging one selected bar drags the whole selection (K-720): every
+    // Dragging one selected bar drags the whole selection: every
     // selected bar previews the travel live, and release commits ONE batched
     // slide — so one undo puts the whole set back.
     // ---------------------------------------------------------------------
@@ -7753,7 +7751,7 @@ void main() {
       // Mid-gesture, the selection-mate's bar travels live with the drag —
       // not on release, and not only the grabbed bar.
       expect(tester.getRect(mate).left, greaterThan(mateBefore.left + 60),
-          reason: 'the mate\'s bar previews the same travel (K-720)');
+          reason: 'the mate\'s bar previews the same travel');
       await gesture.up();
       await tester.pumpAndSettle();
 
@@ -7767,7 +7765,7 @@ void main() {
       p.state.project!.undo();
       expect(inOf(upper), upperIn);
       expect(inOf(lower), lowerIn,
-          reason: 'one undo restored the whole selection (K-720)');
+          reason: 'one undo restored the whole selection');
     });
 
     /// The other half of the rule: grabbing a bar **outside** the selection

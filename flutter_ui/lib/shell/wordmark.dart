@@ -1,4 +1,4 @@
-// The Lumit wordmark (K-480).
+// The Lumit wordmark.
 //
 // In plain terms: this draws the word "lumit" exactly as the website draws it —
 // the `l` and the `t` are the mark's two keys, a blue one and a violet one, and

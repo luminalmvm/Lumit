@@ -120,7 +120,7 @@ enum NavigatorGrab { start, end, body }
 /// It stands over the lane area alone, above the ruler; [trailing] is the
 /// width it leaves blank over the lanes' scroll gutter. The two halves are one
 /// table, so the outline spends exactly this widget's [band] growing its
-/// toolbar row to the panel top (K-682, the owner's ruling): the strip first
+/// toolbar row to the panel top (the owner's ruling): the strip first
 /// spanned the whole panel and stood blank over the outline, which read as a
 /// sliver of dead ground above the timecode row. Either way the halves spend
 /// the same height above the chrome pair the ruler is derived from, which is
@@ -325,7 +325,7 @@ class _TimelineNavigatorState extends State<TimelineNavigator> {
           onHorizontalDragEnd: (_) => _end(),
           onHorizontalDragCancel: _end,
           child: RepaintBoundary(
-            // Its own layer (K-626): the window follows a zoom flight and the
+            // Its own layer: the window follows a zoom flight and the
             // playhead follows playback, and neither may repaint the lanes
             // beside it.
             child: ListenableBuilder(

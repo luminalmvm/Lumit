@@ -1,4 +1,4 @@
-// MAKE-PROXY on the status line (K-501, K-504).
+// MAKE-PROXY on the status line.
 //
 // **Why this is a test.** A proxy takes minutes and shows nothing while it
 // runs, so the whole of what a user sees of it is this strip: what it is doing,

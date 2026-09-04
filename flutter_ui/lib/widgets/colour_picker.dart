@@ -186,7 +186,7 @@ class PickedColour {
 }
 
 /// The project's colour shelf as the picker needs it: the colours it holds,
-/// and the one way to change them (K-448, docs/07 §6.1).
+/// and the one way to change them (docs/07 §6.1).
 ///
 /// **The whole list, not an add and a remove**, because that is the engine's
 /// op: keeping a colour is the list with one more, forgetting one is the list
@@ -286,7 +286,7 @@ Future<void> showColourPicker({
   );
 }
 
-/// A colour chip that opens the picker above (K-555).
+/// A colour chip that opens the picker above.
 ///
 /// The chip itself, not the row it sits on: a caller supplies the label and the
 /// width. Panels that need one had each drawn their own before this existed;
@@ -810,7 +810,7 @@ class _ColourPickerBodyState extends State<_ColourPickerBody> {
       );
 
   /// The one thing a kept colour offers: forgetting it. On the ordinary popup
-  /// chain, so a click anywhere else takes it down (K-519).
+  /// chain, so a click anywhere else takes it down.
   void _forgetMenu(Offset at, int index) {
     showLumitPopup<void>(
       context: context,

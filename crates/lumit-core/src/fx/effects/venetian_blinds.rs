@@ -25,8 +25,8 @@ use lumit_fx_macros::Effect;
     // The picture is scaled by a coverage, which is the premultiplied form of
     // "less of this pixel" (§3.46's reasoning).
     premultiplied = true,
-    // K-429: the matte scales the amount, inside the kernel (the owner's rule
-    // for mattes); the generic strength dissolve does not also run.
+    // The matte scales the amount, inside the kernel (the owner's rule for
+    // mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales Completion per pixel: the slats stand further open where the \
@@ -37,7 +37,7 @@ use lumit_fx_macros::Effect;
 pub struct VenetianBlinds {
     /// How far the slats have closed, per cent. **50 by default, where AE's is
     /// 0**, for docs/08 §3.46's reason (§1.2: no no-op defaults).
-    /// Closed 0..100 (K-414): a wipe cannot be less than begun or more than
+    /// Closed 0..100: a wipe cannot be less than begun or more than
     /// complete, so the range is the parameter, and typing past either end
     /// would offer a picture that does not exist.
     #[bounded(min = 0.0, max = 100.0, default = 50.0, unit = Percent)]

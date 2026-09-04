@@ -1,4 +1,4 @@
-# Builds the Windows installer (K-252): a release build of the app, then the
+# Builds the Windows installer: a release build of the app, then the
 # Inno Setup compile of packaging/windows/lumit.iss. Output lands in
 # packaging/windows/dist/.
 #

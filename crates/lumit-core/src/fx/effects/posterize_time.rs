@@ -14,7 +14,7 @@ use lumit_fx_macros::Effect;
 
 /// Posterize time's controls.
 ///
-/// The Scope choice was removed (owner, 2026-07-19 / K-166): the reach is implied
+/// The Scope choice was removed (owner, 2026-07-19): the reach is implied
 /// by the carrier now — a plain layer holds its own source and effect stack, an
 /// adjustment layer holds everything below (that *is* its effect input). A stored
 /// `scope` on an old instance is simply unread.

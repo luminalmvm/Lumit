@@ -3,7 +3,7 @@
 /// writes `l10n.importFootage`, and `l10n` hands back that phrase in whichever
 /// language the user has chosen. The phrases themselves live in `app_en.arb`
 /// (English, written by hand) and in the `app_*.arb` files beside it, which the
-/// translation ingest tool writes (K-303, K-653).
+/// translation ingest tool writes.
 ///
 /// Why a plain global rather than the usual Flutter `Strings.of(context)`: a
 /// good third of Lumit's text is decided outside a widget — in `state/keymap.dart`,

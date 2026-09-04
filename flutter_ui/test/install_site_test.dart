@@ -1,4 +1,4 @@
-// Replacing Lumit with a newer Lumit, from inside Lumit (K-297).
+// Replacing Lumit with a newer Lumit, from inside Lumit.
 //
 // This is the part of updating that can destroy an installation if it is wrong,
 // so it is tested against real folders on disk rather than a pretend
@@ -144,7 +144,7 @@ void main() {
     });
 
     test('the swap works from inside the folder being replaced', () {
-      // **The v0.2 -> v0.3 upgrade that never happened** (K-746). Lumit's own
+      // **The v0.2 -> v0.3 upgrade that never happened**. Lumit's own
       // current directory is its install folder — Inno's shortcut takes
       // `WorkingDir` from `{app}` — and Windows will not rename a folder a
       // process is standing in. So the first rename threw, the update was

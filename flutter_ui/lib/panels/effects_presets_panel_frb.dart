@@ -2,7 +2,7 @@
 //
 // Every built-in effect under its category heading, filtered by a search field,
 // with the selected layer's `.lumfx` save and load beneath. An effect applies by
-// double-click — to every selected layer, as the Effect menu does (K-217) — or by
+// double-click — to every selected layer, as the Effect menu does — or by
 // dragging it onto the Effect controls panel, which carries an `EffectDragData`
 // and lands on that panel's one layer.
 //
@@ -10,7 +10,7 @@
 // the panel never holds a copy of what effects exist. Adding a built-in to the
 // engine puts it here with no Dart change at all.
 //
-// **Plugins are in that same list** (docs/12 §2.6, K-594). An OFX plugin the
+// **Plugins are in that same list** (docs/12 §2.6). An OFX plugin the
 // engine found on this machine arrives as one more entry, under a heading that
 // is its own declared grouping rather than one of Lumit's ten categories, and
 // it groups, folds, searches, stars and drags exactly as a built-in does. The
@@ -166,7 +166,7 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
       // grouping at all has nothing to head it with, and this is the only place
       // that knows the word for that — audio plugins deliberately declare none
       // (neither standard has OFX's menu path), so the one Audio plugins group
-      // sits beside the OFX ones (AP5, K-594's grammar).
+      // sits beside the OFX ones (AP5).
       final heading = effect.categoryLabel.isEmpty
           ? (effect.namespace == _audioNamespace
               ? l10n.effectsAudioPlugins
@@ -254,7 +254,7 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
   }
 
   /// Apply to **every** selected layer, as the Effect menu and the effects
-  /// console do (K-217). This panel used to reach for the primary layer alone,
+  /// console do. This panel used to reach for the primary layer alone,
   /// so the same effect on the same selection landed on three layers from the
   /// menu and on one from here — the sort of difference that is read as the
   /// selection having been lost rather than as two paths disagreeing.
@@ -384,7 +384,7 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
   }
 
   /// Apply a library preset's whole stack to **every** selected layer, exactly
-  /// as [_apply] does with a single effect (K-523): the two rows sit in the
+  /// as [_apply] does with a single effect: the two rows sit in the
   /// same list and are double-clicked with the same gesture, so one of them
   /// quietly meaning "the first layer only" would read as the selection having
   /// been lost.
@@ -640,7 +640,7 @@ class _EffectRow extends StatelessWidget {
 class _PresetBar extends StatelessWidget {
   /// Every picked layer. **Save** takes the first — a preset file is one
   /// stack, and saving four would mean choosing which one survives — while
-  /// **Load** lands on all of them, the way every other add here does (K-523).
+  /// **Load** lands on all of them, the way every other add here does.
   final List<LayerReference> layers;
   final Future<String?> Function()? savePicker;
   final Future<String?> Function()? loadPicker;

@@ -12,7 +12,7 @@
 // particle is), the soft reading interpolates the same lattice. One extra hash,
 // and both ends of the control are correct.
 //
-// The grain is added on the PERCEPTUAL value (§3.58's curve, K-404) and squared
+// The grain is added on the PERCEPTUAL value (§3.58's curve) and squared
 // back, which is what makes Intensity mean one thing across the frame.
 // Unpremultiplied (§2.2), for §3.36's reason.
 //
@@ -29,7 +29,7 @@ struct Params {
     seed: u32,
     tick: i32,             // the frame's draw; 0 when Animate is off
     monochrome: u32,       // 1 reads one lane for all three channels
-    matte_on: f32,         // 1 = the matte scales Intensity per pixel (K-428)
+    matte_on: f32,         // 1 = the matte scales Intensity per pixel
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -37,14 +37,14 @@ struct Params {
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
 
-// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// The Matte (docs/08 §2.6), bound for every kernel on this layout and
 // read only under `matte_on` — bound to `src` when there is none, since a
 // texture binding cannot be left empty.
 @group(0) @binding(4) var matte: texture_2d<f32>;
 
 // This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
 // luma, clamped. The Channel pick and Invert already happened, once, at the
-// seam (fx_matte_prepare.wgsl, K-425).
+// seam (fx_matte_prepare.wgsl).
 fn matte_k(xy: vec2<i32>) -> f32 {
     let m = textureLoad(matte, xy, 0);
     return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
@@ -94,7 +94,7 @@ fn add_grain(@builtin(global_invocation_id) gid: vec3<u32>) {
         }
         let g = grain_at(qx, qy, lane);
         // The matte pulls Intensity toward 0 per pixel, before the grain is
-        // added (K-428): half the Intensity is a finer grain, not a half-fade.
+        // added: half the Intensity is a finer grain, not a half-fade.
         var amp = p.amplitude[c];
         if (p.matte_on != 0.0) {
             amp = matte_toward(amp, 0.0, matte_k(xy));

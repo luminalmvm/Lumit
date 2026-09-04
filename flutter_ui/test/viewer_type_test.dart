@@ -1,4 +1,4 @@
-// The Type tool's arithmetic (K-225): where a click falls in the composition,
+// The Type tool's arithmetic: where a click falls in the composition,
 // how wide a line is reckoned to be, and where that puts a new layer's anchor.
 //
 // All three are estimates the *engine* also makes — a text layer's anchor is
@@ -11,8 +11,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/viewer_shape_layer.dart'
     show ShapeSpace;
 import 'package:lumit_flutter/panels/viewer_type.dart';
-// The width estimate lives with the other "how big is a layer" answers now
-// (K-230): the same sum places the caret, the anchor and the wireframe.
+// The width estimate lives with the other "how big is a layer" answers now:
+// the same sum places the caret, the anchor and the wireframe.
 import 'package:lumit_flutter/state/layer_bounds.dart';
 
 void main() {
@@ -56,7 +56,7 @@ void main() {
     });
   });
 
-  /// The box the Viewer draws round a line of text (K-230). It used to be the
+  /// The box the Viewer draws round a line of text. It used to be the
   /// whole composition — text had no measured bounds and the comp was the
   /// fallback — so a click with the Type tool put a box the size of the frame
   /// round twelve-pixel text.

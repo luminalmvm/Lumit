@@ -1,5 +1,5 @@
 //! The effects catalogue as machine-readable JSON — the manual's source of
-//! truth for every effect's parameter table (K-303's sibling for docs).
+//! truth for every effect's parameter table.
 //!
 //! # In plain terms
 //!
@@ -57,7 +57,7 @@ pub struct Effect {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub enabled_when: Vec<EnabledWhen>,
     /// The Matte row's deeper meaning, for the effects that claim it inside
-    /// their own maths (K-395). Absent for the great majority, whose matte is
+    /// their own maths. Absent for the great majority, whose matte is
     /// the generic strength dissolve — that sentence is the same for all of
     /// them, and the manual writes it once in the Effects overview rather than
     /// thirty-odd times in thirty-odd tables.
@@ -65,7 +65,7 @@ pub struct Effect {
     pub matte: Option<Matte>,
     /// The Matte row's role, spelled out: "strength", "own" or "none". The
     /// manual needs the third value: Set matte declares no universal matte
-    /// (K-429) yet owns rows *called* Matte and Invert, and without the role
+    /// yet owns rows *called* Matte and Invert, and without the role
     /// a generator that finds a param named `matte` prints the strength
     /// sentence for an effect the dissolve never runs on.
     pub matte_role: &'static str,
@@ -75,7 +75,7 @@ pub struct Effect {
 #[derive(Debug, Serialize)]
 pub struct Matte {
     /// The parameter the layer reference is stored under — `matte` for most,
-    /// `depth` for Depth of field (K-065 keeps the older id).
+    /// `depth` for Depth of field, which keeps its older id.
     pub param: &'static str,
     /// One sentence, from the effect's own declaration.
     pub meaning: &'static str,
@@ -231,7 +231,7 @@ fn param(schema: &'static super::schema::ParamSchema) -> Param {
             p.hard_max = hard.1;
         }
         // A closed range prints its ends as both the slider and the hard
-        // bounds, because that is what closed means (K-414): the manual's
+        // bounds, because that is what closed means: the manual's
         // table then says the same thing for a Slider as for a Float whose
         // two ranges happen to coincide, and only the kind differs.
         ParamKind::Slider { default, range } => {
@@ -302,7 +302,7 @@ fn param(schema: &'static super::schema::ParamSchema) -> Param {
             p.self_default = Some(self_default);
         }
         // A curve's default is its shape, so it prints as the point list
-        // itself (K-412) — the identity diagonal, for every built-in that
+        // itself — the identity diagonal, for every built-in that
         // declares one.
         ParamKind::Curve { default } => {
             p.kind = "curve";
@@ -317,7 +317,7 @@ fn param(schema: &'static super::schema::ParamSchema) -> Param {
                     .collect(),
             ));
         }
-        // A button (K-417): no default, no range, no options — the label and
+        // A button: no default, no range, no options — the label and
         // the kind are the whole of what the manual's table can say about it.
         ParamKind::Action => p.kind = "action",
     }

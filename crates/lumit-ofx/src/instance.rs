@@ -506,7 +506,7 @@ fn seed_instance_properties(
     // **The project's size, and this instance's own tiles answer.** The OFX
     // support library reads all of these when a plugin is constructed, and a
     // plugin that cannot find one of them throws before it exists — six of the
-    // conformance bench's plugins died on `ProjectExtent` alone (K-595).
+    // conformance bench's plugins died on `ProjectExtent` alone.
     //
     // The numbers here are a standing default; [`set_project_size`] replaces
     // them with the frame actually being rendered before the plugin is asked

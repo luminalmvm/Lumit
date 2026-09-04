@@ -5,9 +5,9 @@
     remembers the English each line was translated from.
 
 .DESCRIPTION
-    This is the second half of K-653. A translator fills in https://lumitlab.com/translate,
-    the page hands them a .json, they send it back as a GitHub issue, and this reads it in.
-    Nothing else writes an app_<locale>.arb.
+    This is the second half of the translation round trip. A translator fills in
+    https://lumitlab.com/translate, the page hands them a .json, they send it back as a
+    GitHub issue, and this reads it in. Nothing else writes an app_<locale>.arb.
 
     The sidecar, flutter_ui/lib/l10n/translation-state.json, is the whole point. An .arb
     file says what the German for a string is; it does not say what the English was when
@@ -25,7 +25,7 @@
       status                  Per locale: translated, missing, stale, orphaned.
       ingest <file.json>      Validate a translator's file and merge it.
       prune                   Drop translations of keys English no longer has, and expire
-                              the stale ones (K-653: a translation whose English moved on
+                              the stale ones (a translation whose English moved on
                               is deleted, not served).
 
     A locale entry counts as translated when the key is present and either differs from the

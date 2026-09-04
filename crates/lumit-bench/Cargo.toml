@@ -11,7 +11,7 @@ publish = false
 # one; docs/13-PERFORMANCE-RULES.md §7.3 and the CI gate both call it that way.
 default-run = "lumit-bench"
 
-# The headless performance harness (docs/13-PERFORMANCE-RULES.md §7.3, K-389).
+# The headless performance harness (docs/13-PERFORMANCE-RULES.md §7.3).
 # A **development** crate: it builds docs/13 §1's reference comp in code and
 # times the engine against it. Nothing depends on it — the shipped `.dll` is
 # `lumit-bridge`, which has never heard of this crate — so it cannot reach the

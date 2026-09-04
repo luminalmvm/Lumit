@@ -1,4 +1,4 @@
-// About Lumit — the window Help ▸ About Lumit opens (K-244).
+// About Lumit — the window Help ▸ About Lumit opens.
 //
 // It used to be a section at the bottom of Settings ▸ General, which is where
 // nobody looks for it: Settings is for things you change, and none of this is.
@@ -27,8 +27,7 @@ Future<void> showAboutWindowFrb(BuildContext context) => showLumitModal<void>(
 /// [lumitProductVersion] for that.
 String lumitVersion() => bootLog().isEmpty ? 'unknown' : bootLog().first;
 
-/// **The product's version**, as somebody would say it out loud: `Lumit 0.2.0`
-/// (K-480).
+/// **The product's version**, as somebody would say it out loud: `Lumit 0.2.0`.
 ///
 /// The number is the boot line's, and that is not a shortcut: the whole
 /// repository is versioned together — `Cargo.toml`'s `workspace.package` and

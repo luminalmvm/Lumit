@@ -24,7 +24,7 @@ use crate::process::ParamEvent;
 /// The version both sides must agree on. Bump it whenever a message changes
 /// shape: an old broker beside a new host is a mismatch, not a crash.
 ///
-/// Two, since a descriptor carries the standard the plugin speaks (K-707).
+/// Two, since a descriptor carries the standard the plugin speaks.
 pub const PROTOCOL_VERSION: u32 = 2;
 
 /// Which instance a message is about — the bits of a
@@ -75,7 +75,7 @@ pub enum HostMessage {
     /// Describe every plugin in the module, except these.
     ///
     /// The list travels **with the question**, so a plugin the user has
-    /// switched off is never created and its code never runs (K-594). It is
+    /// switched off is never created and its code never runs. It is
     /// read again at the top of every block batch, on the host's side, where a
     /// switch flicked mid-session can be noticed without asking the broker.
     Describe {

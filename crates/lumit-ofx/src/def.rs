@@ -1,4 +1,4 @@
-//! A described plugin, turned into an entry in the effect catalogue (K-593).
+//! A described plugin, turned into an entry in the effect catalogue.
 //!
 //! # In plain terms
 //!
@@ -149,7 +149,7 @@ impl OfxEffectDef {
         }
     }
 
-    /// Give this definition the `'static` lifetime the catalogue holds (K-593).
+    /// Give this definition the `'static` lifetime the catalogue holds.
     ///
     /// The leak is the honest spelling of that lifetime: an effect discovered at
     /// scan time lives as long as the session. Registering it is the caller's
@@ -271,11 +271,11 @@ impl EffectDef for OfxEffectDef {
         let failed = rendered.error.is_some();
         LAST_ERROR.with(|slot| *slot.borrow_mut() = rendered.error);
         if failed {
-            // **Identity, byte for byte** (K-258's shape). A failed render hands
-            // back the input, and the input is already in `rgba` — writing it
-            // again would put it through the fp16 boundary for nothing, and a
-            // disabled plugin would then change the picture very slightly, which
-            // is the one thing "renders as identity" must not mean.
+            // **Identity, byte for byte**. A failed render hands back the
+            // input, and the input is already in `rgba` — writing it again
+            // would put it through the fp16 boundary for nothing, and a
+            // disabled plugin would then change the picture very slightly,
+            // which is the one thing "renders as identity" must not mean.
             return;
         }
         for (pixel, out) in rendered
@@ -378,9 +378,9 @@ impl LocalHost {
             .ok_or_else(|| "the plugin is no longer in the bundle".to_owned())?;
 
         // The lock is over the **pool**, and the render inside it is what the
-        // plugin's own declared thread safety serialises (K-066, and
-        // `render_lock` is where that happens). No host state lock is held
-        // across the call into the plugin, which is docs/14 §7's rule.
+        // plugin's own declared thread safety serialises (`render_lock` is
+        // where that happens). No host state lock is held across the call into
+        // the plugin, which is docs/14 §7's rule.
         let mut pool = self.instances.lock();
         if let std::collections::btree_map::Entry::Vacant(slot) = pool.entry(instance) {
             let made = Instance::create(plugin, &self.descriptor, self.context, params)
@@ -435,7 +435,7 @@ impl PluginHost for LocalHost {
 /// One broker per bundle behind one lock, because a broker owns a pipe and a
 /// shared-memory ring and both are single-conversation things. That lock is the
 /// bundle serialisation an unsafe plugin needs anyway; a fully safe plugin pays
-/// for it too, which is the recorded ceiling — K-066's parallelism is across
+/// for it too, which is the recorded ceiling — the parallelism is across
 /// *brokers* until one broker can carry two conversations at once.
 pub struct BrokerHost {
     /// **Shared**, because a bundle holds many plugins and docs/12 §2.3 puts

@@ -1,4 +1,4 @@
-//! Text animators: a Text layer's words moved a letter at a time (K-609).
+//! Text animators: a Text layer's words moved a letter at a time.
 //!
 //! # In plain terms
 //!
@@ -358,9 +358,9 @@ pub fn unit_indices(text: &str, basis: SelectorBasis) -> (Vec<usize>, usize) {
 
 /// What each character of `text` is asked to do at layer time `lt`.
 ///
-/// Empty when there are no animators, which is the whole of the K-258
-/// byte-identity guarantee: the caller draws the line the way it always drew it
-/// rather than taking a second code path that happens to agree.
+/// Empty when there are no animators, which is the whole of the byte-identity
+/// guarantee: the caller draws the line the way it always drew it rather than
+/// taking a second code path that happens to agree.
 ///
 /// Two animators reaching the same letter **compose**: their pushes, turns and
 /// tints add, their scales and opacities multiply. That is the only combination

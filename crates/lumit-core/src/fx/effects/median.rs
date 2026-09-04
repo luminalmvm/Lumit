@@ -33,8 +33,8 @@ use lumit_fx_macros::Effect;
     // §2.2: a median of premultiplied colour would rank a soft edge by its
     // coverage rather than by its colour.
     premultiplied = false,
-    // K-428: the matte scales the amount, inside the kernel (the owner's rule
-    // for mattes); the generic strength dissolve does not also run.
+    // The matte scales the amount, inside the kernel (the owner's rule for
+    // mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales Radius per pixel: white takes the middle of the full window,          grey of a smaller one, black leaves the pixel alone",

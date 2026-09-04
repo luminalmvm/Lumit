@@ -1,6 +1,6 @@
 {
   "@@locale": "en",
-  "@@x-notes": "Lumit's user-facing text, British English (K-005), the single source translation works from (K-303). Edit this file; every other app_*.arb in this folder comes back from Crowdin and is overwritten by the next sync. Voice: sentence case, calm, no exclamation marks, no emoji, glossary terms exactly (docs/01-GLOSSARY.md section 9 - layer not track, speed not velocity, Retime not time remap, export not render, playhead not CTI). Tooltips are the control's name, not a sentence about it (docs/07-UI-SPEC.md section 13.2): one or two words, never more.",
+  "@@x-notes": "Lumit's user-facing text, British English, the single source translation works from. Edit this file; every other app_*.arb in this folder comes back from Crowdin and is overwritten by the next sync. Voice: sentence case, calm, no exclamation marks, no emoji, glossary terms exactly (docs/01-GLOSSARY.md section 9 - layer not track, speed not velocity, Retime not time remap, export not render, playhead not CTI). Tooltips are the control's name, not a sentence about it (docs/07-UI-SPEC.md section 13.2): one or two words, never more.",
   "aboutBlurb": "A motion-graphics and compositing editor. Free software under the GNU General Public Licence, version 3.",
   "@aboutBlurb": {
     "description": "About window: what Lumit is, and its licence. The licence name is a proper noun — keep it recognisable, and do not translate \"GNU\"."
@@ -6218,7 +6218,7 @@
   },
   "tipCacheDisk": "{path}",
   "@tipCacheDisk": {
-    "description": "Tooltip on the disk cache meter, which is the folder frames are parked in and nothing else. {path} is that folder and is not translated. A tooltip is a name, never more than two words (K-482).",
+    "description": "Tooltip on the disk cache meter, which is the folder frames are parked in and nothing else. {path} is that folder and is not translated. A tooltip is a name, never more than two words.",
     "placeholders": {
       "path": {
         "type": "String"
@@ -6231,11 +6231,11 @@
   },
   "tipCacheEmpty": "Nothing cached",
   "@tipCacheEmpty": {
-    "description": "Tooltip on the memory cache meter before anything has been rendered. A tooltip is a name, never more than two words (K-482)."
+    "description": "Tooltip on the memory cache meter before anything has been rendered. A tooltip is a name, never more than two words."
   },
   "tipCacheRam": "{hits}/{misses} hits/misses",
   "@tipCacheRam": {
-    "description": "Tooltip on the memory cache meter, reading as \"1024/56 hits/misses\". {hits} and {misses} are whole numbers. A tooltip is a name, never more than two words (K-482).",
+    "description": "Tooltip on the memory cache meter, reading as \"1024/56 hits/misses\". {hits} and {misses} are whole numbers. A tooltip is a name, never more than two words.",
     "placeholders": {
       "hits": {
         "type": "String"
@@ -6247,7 +6247,7 @@
   },
   "tipCacheVram": "Graphics-card cache",
   "@tipCacheVram": {
-    "description": "Tooltip on the VRAM cache meter. A tooltip is a name, never more than two words (K-482)."
+    "description": "Tooltip on the VRAM cache meter. A tooltip is a name, never more than two words."
   },
   "tipChooseCacheFolder": "Choose folder",
   "@tipChooseCacheFolder": {
@@ -10109,7 +10109,7 @@
   },
   "audioDuckUnder": "Lower behind…",
   "@audioDuckUnder": {
-    "description": "Audio panel button: opens a list of the other layers, and wires an inverted Audio level chain onto this layer's Volume so its sound is lowered while the chosen layer sounds. Audio engineers call this ducking, but the label stays in plain words (owner ruling, K-730): this sound is lowered behind the picked one. Ellipsis because a choice follows."
+    "description": "Audio panel button: opens a list of the other layers, and wires an inverted Audio level chain onto this layer's Volume so its sound is lowered while the chosen layer sounds. Audio engineers call this ducking, but the label stays in plain words (owner ruling): this sound is lowered behind the picked one. Ellipsis because a choice follows."
   },
   "audioDriveNoTargets": "No free number parameters on this layer's effects.",
   "@audioDriveNoTargets": {

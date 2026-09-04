@@ -1,17 +1,16 @@
-// The Layer menu's built rows (K-244): the commands that were listed and
-// marked "(Not implemented)" while the engine calls behind them already
-// existed.
+// The Layer menu's built rows: the commands that were listed and marked "(Not
+// implemented)" while the engine calls behind them already existed.
 //
 // In plain terms: none of this decides anything. Each row reads what a layer
-// currently holds out of the Dart read model (K-184) and writes the changed
-// thing back through the layer's own handle — the same calls the Timeline's
-// cells make. The menu is a second door onto them, which is the whole of
-// K-244: a command with one route is a command that disappears the day
-// something intercepts that route.
+// currently holds out of the Dart read model and writes the changed thing back
+// through the layer's own handle — the same calls the Timeline's cells make.
+// The menu is a second door onto them, and that is the point: a command with
+// one route is a command that disappears the day something intercepts that
+// route.
 //
-// **Every row acts on the whole selection** (K-523), on each layer that can
-// perform it, as one undo step. A row whose command needs something that is
-// not there — no mask picked, no layer above to gate with — greys out rather
+// **Every row acts on the whole selection**, on each layer that can perform
+// it, as one undo step. A row whose command needs something that is not
+// there — no mask picked, no layer above to gate with — greys out rather
 // than failing when pressed.
 //
 // They live here rather than in menu_bar_frb.dart because that file is the
@@ -40,7 +39,7 @@ import 'number_dialog_frb.dart';
 ///
 /// `listBlendModes` is a table of constants, but it is still a bridge call, and
 /// the menu tree is rebuilt whenever the selection changes — the same reason
-/// the Timeline's own dropdown caches it (K-184's rule about rebuild paths).
+/// the Timeline's own dropdown caches it (the rule about rebuild paths).
 List<String>? _blendModes;
 
 List<String> blendModeNames() => _blendModes ??= listBlendModes();
@@ -60,7 +59,8 @@ double scalarValueAt(BridgeScalar scalar, double seconds) => switch (scalar) {
 ///
 /// Everything below draws from this rather than from `getInfo()` per row: the
 /// model is one bridge call for the whole comp, already made, and a menu that
-/// asked the engine per row per rebuild is the cost K-184 exists to remove.
+/// asked the engine per row per rebuild is the cost the rebuild-path rule
+/// exists to remove.
 List<BridgeLayerEntry> selectedEntries(LumitUiState ui) {
   final ids = {
     for (final layer in ui.selectedLayers.value) layer.internallayerId,
@@ -72,8 +72,8 @@ List<BridgeLayerEntry> selectedEntries(LumitUiState ui) {
   ];
 }
 
-/// Run [body] over every selected layer as **one** undo step (K-523), then
-/// redraw. Null — so the row greys out — with nothing selected.
+/// Run [body] over every selected layer as **one** undo step, then redraw.
+/// Null — so the row greys out — with nothing selected.
 ///
 /// A layer that refuses is skipped rather than taking the interface down: a
 /// command invoked on a mixed selection does what it can and says nothing,
@@ -111,10 +111,10 @@ VoidCallback? onSelection(
 /// The mask a Timeline row has picked, with the layer it sits on — or null
 /// when no mask row is selected.
 ///
-/// The Timeline publishes its picked property paths (`selectedProperties`,
-/// K-341) and a mask's rows live under `<layer>/masks/<id>`, so "which mask do
-/// these commands mean" is already answered without the menu inventing a
-/// selection of its own.
+/// The Timeline publishes its picked property paths (`selectedProperties`) and
+/// a mask's rows live under `<layer>/masks/<id>`, so "which mask do these
+/// commands mean" is already answered without the menu inventing a selection of
+/// its own.
 ({LayerReference layer, BridgeMask mask})? pickedMask(LumitUiState ui) {
   for (final path in ui.selectedProperties.value) {
     final layerId = layerIdOfPath(path);
@@ -132,7 +132,7 @@ VoidCallback? onSelection(
   return null;
 }
 
-/// The shape item a Timeline row has picked, the same way (K-606).
+/// The shape item a Timeline row has picked, the same way.
 ({LayerReference layer, BridgeShapeItem item})? pickedShape(LumitUiState ui) {
   for (final path in ui.selectedProperties.value) {
     final layerId = layerIdOfPath(path);
@@ -210,10 +210,10 @@ List<MenuEntry> maskRows(BuildContext context, LumitState app, LumitUiState ui) 
           : () => write(maskWith(picked.mask, inverted: !picked.mask.inverted)),
       checked: () => pickedMask(ui)?.mask.inverted ?? false,
     ),
-    // Feather and expansion are layer pixels off one signed-distance field
-    // (K-338); opacity is a per cent. Both are animatable (K-340), so a typed
-    // number lands on the key at the playhead when the value is keyed rather
-    // than flattening the curve.
+    // Feather and expansion are layer pixels off one signed-distance field,
+    // and opacity is a per cent. Both are animatable, so a typed number lands
+    // on the key at the playhead when the value is keyed rather than
+    // flattening the curve.
     MenuEntry(
       l10n.menuMaskFeather,
       picked == null
@@ -239,7 +239,7 @@ List<MenuEntry> maskRows(BuildContext context, LumitState app, LumitUiState ui) 
   ];
 }
 
-/// Layer ▸ Mask and shape path: keying the **shape** itself (K-339, K-606).
+/// Layer ▸ Mask and shape path: keying the **shape** itself.
 ///
 /// One row, because a path key holds a whole path: it is planted at the
 /// playhead holding the shape the item already shows, or the key already there
@@ -363,7 +363,7 @@ List<MenuEntry> transformRows(LumitState app, LumitUiState ui) {
 }
 
 /// The three pairs, each offering to separate its axes or put them back
-/// (K-571, docs/03 §6.5) — Layer ▸ Transform's tail, and the whole of
+/// (docs/03 §6.5) — Layer ▸ Transform's tail, and the whole of
 /// Animation ▸ Separate dimensions, which is the same op named the way After
 /// Effects names it.
 ///
@@ -411,12 +411,12 @@ List<MenuEntry> axisModeRows(LumitState app, LumitUiState ui) {
 // Switches, markers, blend and matte
 // ---------------------------------------------------------------------------
 
-/// Layer ▸ Flow (K-088): optical flow on this layer, offered only on Footage,
-/// which is the only kind with source frames to interpolate between.
+/// Layer ▸ Flow: optical flow on this layer, offered only on Footage, which is
+/// the only kind with source frames to interpolate between.
 ///
 /// A ticked row rather than a [MenuEntry.toggle]: the tick says what the switch
-/// is, but this is a **document edit** and one is enough — K-520's menu that
-/// stays open is for the panel switches, which are used several at a time.
+/// is, but this is a **document edit** and one is enough — the menu that stays
+/// open is for the panel switches, which are used several at a time.
 MenuEntry flowRow(LumitState app, LumitUiState ui) {
   bool footage(BridgeLayerEntry e) => e.info.kind == BridgeLayerKind.footage;
   return MenuEntry(
@@ -431,8 +431,8 @@ MenuEntry flowRow(LumitState app, LumitUiState ui) {
   );
 }
 
-/// Layer ▸ 3D layer (K-023): the switch the Timeline's own column carries,
-/// reached from the menu as well.
+/// Layer ▸ 3D layer: the switch the Timeline's own column carries, reached
+/// from the menu as well.
 MenuEntry threeDRow(LumitState app, LumitUiState ui) => MenuEntry(
       l10n.menu3dLayer,
       onSelection(
@@ -447,8 +447,8 @@ MenuEntry threeDRow(LumitState app, LumitUiState ui) => MenuEntry(
           selectedEntries(ui).firstOrNull?.info.switches.threeD ?? false,
     );
 
-/// Layer ▸ Markers (K-254): the layer's own cues, which travel with its bar
-/// and are its own copy — deleting one never reaches the comp it came from.
+/// Layer ▸ Markers: the layer's own cues, which travel with its bar and are
+/// its own copy — deleting one never reaches the comp it came from.
 List<MenuEntry> markerRows(LumitState app, LumitUiState ui) {
   final comp = ui.selectedComp;
   final frame = ui.playheadFrame.value;
@@ -526,8 +526,8 @@ MenuEntry blendStepRow(LumitState app, LumitUiState ui, {required int by}) {
   );
 }
 
-/// The kinds with a picture to gate another layer with (K-194) — everything
-/// except the four that draw no pixels at all.
+/// The kinds with a picture to gate another layer with — everything except the
+/// four that draw no pixels at all.
 bool _gates(BridgeLayerEntry entry) => switch (entry.info.kind) {
       BridgeLayerKind.camera ||
       BridgeLayerKind.light ||
@@ -594,8 +594,8 @@ List<MenuEntry> matteRows(LumitState app, LumitUiState ui) {
   ];
 }
 
-/// Layer ▸ Layer styles: the seven Lumit draws (K-706,
-/// docs/impl/layer-styles.md §6 and §8), in Photoshop's own painting order.
+/// Layer ▸ Layer styles: the seven Lumit draws (docs/impl/layer-styles.md §6
+/// and §8), in Photoshop's own painting order.
 ///
 /// **Greyed once the layer wears it**, because that is the engine's rule rather
 /// than this menu's opinion: the family is nine named slots and `add_style`

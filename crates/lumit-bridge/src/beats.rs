@@ -160,7 +160,7 @@ fn analyse(
     // same "one layer's row" identity the mixer meters by, so a Precomp's beats
     // are found in everything it carries.
     //
-    // **A row asked for by name is always heard** (K-718, owner): the comp mix
+    // **A row asked for by name is always heard** (owner): the comp mix
     // is what is audible, but picking a layer is asking to listen to *that*
     // layer, so its own audible switch and a solo elsewhere are both stepped
     // over. Soloing a precomp and then detecting beats on the music used to

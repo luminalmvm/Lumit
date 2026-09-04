@@ -1,4 +1,4 @@
-//! Wiggle (K-471 §1.3): a number that wobbles.
+//! Wiggle (node-graph.md §1.3): a number that wobbles.
 //!
 //! **In plain terms.** The oldest trick in motion graphics: make something
 //! drift about instead of sitting perfectly still, so it reads as alive rather
@@ -10,7 +10,7 @@
 //! id and read at the layer's time, so it never depends on the wall clock, on
 //! which frame rendered first, or on which machine is rendering. Two Wiggles on
 //! one layer wobble differently (different ids); the same Wiggle wobbles
-//! identically in the preview and in the export, which is K-031's promise.
+//! identically in the preview and in the export.
 
 use crate::fx::{
     noise, DriverCx, EffectDef, EffectMetadata, EffectSchema, Port, PortType, Signature, Value,
@@ -27,7 +27,7 @@ use lumit_fx_macros::Effect;
     cost = Trivial,
     roi = Exact,
     // A driver makes a value, not a picture, so there is nothing for a matte to
-    // gate (K-395's `None`, as the Controls family declares).
+    // gate (the matte carriage's `None`, as the Controls family declares).
     matte = false,
 )]
 pub struct Wiggle {

@@ -12,8 +12,8 @@ use lumit_fx_macros::Effect;
     category = Colour,
     cost = Cheap,
     roi = Exact,
-    // K-395: the matte scales the amount, inside the kernel (the owner's
-    // rule for mattes); the generic strength dissolve does not also run.
+    // The matte scales the amount, inside the kernel (the owner's rule for
+    // mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales Angle toward 0 per pixel: white turns the hue by the full \
@@ -48,7 +48,7 @@ pub struct HueShift {
 }
 
 impl HueShift {
-    /// The rotation matrix this instance carries (K-136).
+    /// The rotation matrix this instance carries.
     ///
     /// The bool only picks which host-computed matrix is used, so the CPU
     /// reference and the WGSL kernel stay in parity: neither of them rotates.

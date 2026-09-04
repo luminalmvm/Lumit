@@ -1,4 +1,4 @@
-// Sharing a theme, and the shelf of verbs around one (K-298): the file a theme
+// Sharing a theme, and the shelf of verbs around one: the file a theme
 // is written to and read from, duplicating, importing under a free name, and
 // renaming.
 

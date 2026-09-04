@@ -10,9 +10,9 @@
 //!
 //! **Retiming itself is not here.** The map from a layer's own clock to its
 //! source's is the layer's `retime` property — an ordinary keyframable property
-//! edited in the graph editor (K-197), reached through `layer.rs`. This file
+//! edited in the graph editor, reached through `layer.rs`. This file
 //! used to hold a second, rival retime store with its own constant-speed,
-//! reverse-gate and enable controls; K-249 deleted it, leaving the one thing
+//! reverse-gate and enable controls. That store is gone, leaving the one thing
 //! that was never part of the map to begin with. §10 is explicit that the
 //! policy and the map are orthogonal, and now the code says so too.
 
@@ -29,12 +29,12 @@ pub enum BridgeRetimeInterp {
     Nearest,
     /// Crossfade the two neighbours.
     Blend,
-    /// Optical-flow synthesis (K-331/K-332): the engine measures how everything
+    /// Optical-flow synthesis: the engine measures how everything
     /// moved between the two frames and paints the one in between.
     Flow,
 }
 
-/// A footage layer's Flow group (docs/08 §3.1, K-331), flat for the bridge.
+/// A footage layer's Flow group (docs/08 §3.1), flat for the bridge.
 ///
 /// Every field is a picture-changing parameter, so every field is part of the
 /// frame's identity — see `feed_interp`. Read and written whole: a group of
@@ -191,7 +191,7 @@ impl LayerReference {
         })
     }
 
-    /// The rate this clip is *interpreted* at for flow (K-095, K-160) — the
+    /// The rate this clip is *interpreted* at for flow — the
     /// Flow group's Input rate, as a keyframeable scalar.
     ///
     /// `0` reads as **Auto**: adjacent source frames, the clip's own rate. Any
@@ -240,13 +240,13 @@ impl LayerReference {
         })
     }
 
-    /// Whether flow is live on this layer — the switch-cluster toggle (K-088).
+    /// Whether flow is live on this layer — the switch-cluster toggle.
     #[frb(sync)]
     pub fn get_flow_enabled(&self) -> Result<bool, BridgeError> {
         Ok(matches!(self.item()?.interpolation, Interpolation::Flow(_)))
     }
 
-    /// Turn flow on or off (K-088). Off returns the layer to Nearest — the
+    /// Turn flow on or off. Off returns the layer to Nearest — the
     /// policy it had before flow is not recorded, and Nearest is the crisp
     /// default docs/04 §10 names.
     ///

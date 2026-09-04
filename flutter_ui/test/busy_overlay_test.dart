@@ -68,7 +68,7 @@ void main() {
   });
 
   // The same card is what opening a project puts up, and *that* job can say how
-  // far it has got (K-628). A fraction fills the bar and writes the percentage
+  // far it has got. A fraction fills the bar and writes the percentage
   // beside the line; no fraction keeps the sweep and says no number at all,
   // because a job that reports nothing has no honest one to show.
   testWidgets('a fraction fills the bar and says the percentage',

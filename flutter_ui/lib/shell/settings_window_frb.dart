@@ -1,20 +1,20 @@
 // The Settings window, on the flutter_rust_bridge API.
 //
-// **The shape (K-465, superseding K-193's five pages).** The approved drawing
-// frames it as a window 760×520: a kicker title strip carrying a search field
-// and a close mark, a 160px sidebar of pages down the left, the page itself on
-// the right, and a footer saying that changes apply immediately with Reset page
-// and Close at its far end. A page is a stack of *sections* — a kicker, a rule
-// above it, and rows under it — and a row is a label in a fixed 190px column
-// with its control beside it. There are no cards and no help sentences: the
-// drawing has room for neither, and what a setting does is said by its name.
+// **The shape.** The approved drawing frames it as a window 760×520: a kicker
+// title strip carrying a search field and a close mark, a 160px sidebar of
+// pages down the left, the page itself on the right, and a footer saying that
+// changes apply immediately with Reset page and Close at its far end. A page
+// is a stack of *sections* — a kicker, a rule above it, and rows under it —
+// and a row is a label in a fixed 190px column with its control beside it.
+// There are no cards and no help sentences: the drawing has room for neither,
+// and what a setting does is said by its name.
 //
 // **The pages are the drawing's, and they are all here now.** General,
 // Appearance, Timeline, Viewer, Audio, Autosave, Export, Preview and cache,
 // Shortcuts. Each of the last three the drawing named arrived with the settings
-// it would hold rather than as an empty promise — Audio (K-586), Autosave
-// (K-587) and Export (K-588), which waited for the engine to have somewhere to
-// keep an export default between sessions.
+// it would hold rather than as an empty promise — Audio, Autosave and Export,
+// which waited for the engine to have somewhere to keep an export default
+// between sessions.
 //
 // **What lives where.** Appearance is Dart's own: the theme is the frontend's
 // and the engine has no opinion about it. Timeline and Viewer are working
@@ -23,9 +23,9 @@
 // that change engine behaviour, and even those are not part of the document, so
 // nothing in this window is undoable.
 //
-// **Shortcuts (K-199)** is the one page that is not a settings form: it is a
-// table of every shortcut, grouped by where it is live, with the action on the
-// left and its chord on the right — click a chord and press the keys you want.
+// **Shortcuts** is the one page that is not a settings form: it is a table of
+// every shortcut, grouped by where it is live, with the action on the left and
+// its chord on the right — click a chord and press the keys you want.
 // It edits the engine's keymap, not a copy, so what the table shows is what the
 // keyboard does. The title strip's search is its search too: on every other
 // page the field hides the rows whose names do not match, and on this one it
@@ -80,9 +80,9 @@ import 'update_dialog_frb.dart';
 /// frame or two and costs more in bookkeeping than it saves.
 const double _minBudgetMib = 64;
 
-/// The ceiling when the machine will not say how much it has (K-194): every
-/// platform but Windows, so far. Generous rather than clever — the engine
-/// clamps to what it can actually allocate either way.
+/// The ceiling when the machine will not say how much it has: every platform
+/// but Windows, so far. Generous rather than clever — the engine clamps to
+/// what it can actually allocate either way.
 const double _unknownMemoryMib = 16384;
 
 // ---- the drawing's measurements ---------------------------------------------
@@ -91,8 +91,8 @@ const double _unknownMemoryMib = 16384;
 // not chosen: `settings_metrics_test` pins them, and a value that disagrees
 // with the drawing is a defect (§12A.6).
 
-/// The size the window opens at: the drawing's own frame (K-465). The corner
-/// grip takes it from here, and where it is left is remembered (K-242).
+/// The size the window opens at: the drawing's own frame. The corner grip
+/// takes it from here, and where it is left is remembered.
 const Size settingsWindowSize = Size(760, 520);
 
 /// Below this the sidebar and the widest setting row stop fitting side by side.
@@ -116,7 +116,7 @@ const double settingsNavTick = 2;
 const double settingsSearchWidth = 174;
 const double settingsSearchHeight = 20;
 
-/// The close mark, at the size the drawing renders it (K-456).
+/// The close mark, at the size the drawing renders it.
 const double settingsCloseGlyph = 12;
 
 /// The two dropdown widths the drawing uses: a wide face for a phrase, a
@@ -217,9 +217,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   /// above. Null until the page has been opened once.
   BridgeAudioDevices? _audio;
 
-  /// The Export page's two engine readings (K-588) — what the export dialog
-  /// opens on, and the presets it could open on — taken when the page comes
-  /// forward and after every edit. Null until the page has been opened once.
+  /// The Export page's two engine readings — what the export dialog opens on,
+  /// and the presets it could open on — taken when the page comes forward and
+  /// after every edit. Null until the page has been opened once.
   BridgeExportDefaults? _exportDefaults;
   List<BridgeExportPresetEntry> _exportPresets = const [];
 
@@ -349,7 +349,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     final ui = Provider.of<LumitUiState>(context);
 
     // No width or height of its own: the window frame around it is what has the
-    // size, so the corner grip can change it (K-242).
+    // size, so the corner grip can change it.
     //
     // Not a `FloatSurface`: that is the *menu* surface — `surface3` with 6px of
     // padding round its rows — and the drawing gives this window the page's own
@@ -578,7 +578,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       // off.** `RawScrollbar` answers a *tap* on its track and a drag on its
       // thumb, and with a mouse nothing else answers a drag at all — a list
       // is not drag-scrolled by a mouse — so a drag that began anywhere on
-      // the gutter fell through to the movable window's own pan (K-242) and
+      // the gutter fell through to the movable window's own pan and
       // took the whole dialog with it. This claims the gutter's own six
       // pixels: translucent, so a tap still reaches the track underneath and
       // pages the way it always did, and above the thumb, whose drag it
@@ -727,9 +727,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         (
           l10n.settingsGroupWorkspace,
           [
-            // Off means Lumit opens straight into the shell (K-481); the
-            // Viewer offers the same two ways to start until something is
-            // displayed, so nothing is hidden by turning this off.
+            // Off means Lumit opens straight into the shell; the Viewer
+            // offers the same two ways to start until something is displayed,
+            // so nothing is hidden by turning this off.
             _flag(t, 'settings-welcome-on-launch', l10n.settingsWelcomeOnLaunch,
                 value: ui.workspace.showWelcomeOnLaunch,
                 set: ui.workspace.setShowWelcomeOnLaunch),
@@ -745,9 +745,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             ),
           ],
         ),
-        // The same updater the Help menu drives, seen from the other side
-        // (K-296): one service, two views, so they can never disagree about
-        // whether a check is running or an update is waiting.
+        // The same updater the Help menu drives, seen from the other side: one
+        // service, two views, so they can never disagree about whether a check
+        // is running or an update is waiting.
         (
           l10n.settingsGroupUpdates,
           [
@@ -826,16 +826,16 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   options: ui.workspace.themeChoices,
                   width: _ddWide,
                   label: (c) => c.label,
-                  // Dark, Light, then the user's own (K-202): seven built-ins
-                  // and a growing list of custom themes is a long flat menu,
-                  // and light/dark is the first thing anyone is choosing by.
+                  // Dark, Light, then the user's own: seven built-ins and a
+                  // growing list of custom themes is a long flat menu, and
+                  // light/dark is the first thing anyone is choosing by.
                   group: (c) => c.group,
                   onChanged: (c) => setState(() => ui.workspace.choose(c)),
                 ),
                 const SizedBox(width: 8),
-                // What the selection actually looks like, beside its name
-                // (K-298). The drawing leaves the rest of the row empty and
-                // this is what it is for.
+                // What the selection actually looks like, beside its name.
+                // The drawing leaves the rest of the row empty and this is
+                // what it is for.
                 ThemeSwatchStrip(
                   key: const ValueKey('settings-theme-swatches'),
                   theme: ui.workspace.theme,
@@ -876,10 +876,10 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         [
           _row(t, l10n.settingsScale, _scaleRow(t, ui)),
           // On or off, and nothing in between: a tooltip is a name, never a
-          // lesson (K-440, docs/07 §13.2), so there is no longer form to
-          // choose between. The switch is the whole setting, and off means
-          // no tooltip anywhere — `LumitTooltip` reads it from the theme
-          // scope and hands back the bare control.
+          // lesson (docs/07 §13.2), so there is no longer form to choose
+          // between. The switch is the whole setting, and off means no
+          // tooltip anywhere — `LumitTooltip` reads it from the theme scope
+          // and hands back the bare control.
           _flag(t, 'settings-tooltips', l10n.settingsTooltips,
               value: settings.showTooltips, set: (on) {
             settings.showTooltips = on;
@@ -902,21 +902,22 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             ),
           ),
           // `recompose`, not `settingsChanged`: density lives on the built
-          // theme (K-454), so the theme has to be rebuilt before anything is
-          // told to redraw. `recompose` notifies; `save` is still ours to call.
+          // theme, so the theme has to be rebuilt before anything is told to
+          // redraw. `recompose` notifies; `save` is still ours to call.
           _flag(t, 'settings-compact', l10n.settingsCompact,
               value: settings.compact, set: (on) {
             settings.compact = on;
             ui.workspace.recompose();
             ui.workspace.save();
           }),
-          // What the chrome says (K-440), on the Appearance page's Interface
-          // section — the place K-465 named for it, drawn now that a surface
-          // reads it.
-          // No description under it (6.12): K-465 leaves the second line to a
-          // *live report* — what the machine has, what a choice costs here and
-          // now — and the four of those stay. A paragraph explaining a setting
-          // is the thing the drawing does not have, however well written.
+          // What the chrome says, on the Appearance page's Interface section —
+          // the place the Settings drawing named for it, drawn now that a
+          // surface reads it.
+          // No description under it (6.12): the drawing leaves the second line
+          // to a *live report* — what the machine has, what a choice costs
+          // here and now — and the four of those stay. A paragraph explaining
+          // a setting is the thing the drawing does not have, however well
+          // written.
           _row(
             t,
             l10n.settingsChromeLabels,
@@ -965,9 +966,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   setState(() => ui.workspace.setThemedViewerSurround(themed)),
             ),
           ),
-          // How the Viewer's chrome is arranged round the picture (K-448's
-          // choice, K-466's drawing). Appearance rather than the Viewer page:
-          // the Viewer page is about the *image*, and this is about where the
+          // How the Viewer's chrome is arranged round the picture, the way
+          // the drawing has it. Appearance rather than the Viewer page: the
+          // Viewer page is about the *image*, and this is about where the
           // chrome round it sits.
           _row(
             t,
@@ -1160,7 +1161,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     );
   }
 
-  // ---- Your themes (K-298) -------------------------------------------------
+  // ---- Your themes ---------------------------------------------------------
 
   /// What the last theme import, export or rename said. Kept beside the
   /// buttons like the keymap page's message, and for the same reason: a file
@@ -1289,11 +1290,10 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   }
 
   /// The Timeline page: how an edit behaves, and what the animation panels
-  /// show. The two the first-run screen sets (K-246), plus the transport's one
-  /// (K-254). They sit here as ordinary rows, and independently of each
-  /// other: the screen offers its pair together, but somebody who wants
-  /// Vegas ramps and After Effects imports is exactly the split docs/07
-  /// §13.1 expects to be common.
+  /// show. The two the first-run screen sets, plus the transport's one. They
+  /// sit here as ordinary rows, and independently of each other: the screen
+  /// offers its pair together, but somebody who wants Vegas ramps and After
+  /// Effects imports is exactly the split docs/07 §13.1 expects to be common.
   List<Widget> _timeline(LumitTheme t, LumitUiState ui) {
     final settings = ui.workspace.interface;
     void changed() => ui.workspace.settingsChanged();
@@ -1347,7 +1347,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             settings.easingInPopup = on;
             changed();
           }),
-          // Off by default (K-514): the lane area draws bars, and the names
+          // Off by default: the lane area draws bars, and the names
           // are already a column away in the outline.
           _flag(t, 'settings-layer-names-on-bars',
               l10n.settingsLayerNamesOnLaneBars,
@@ -1389,9 +1389,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
 
   // ---- Audio ---------------------------------------------------------------
 
-  /// Which output Lumit is heard through (K-586, building K-465's Audio page —
-  /// drawn in the Settings drawing and unbuilt until the engine could name the
-  /// machine's devices).
+  /// Which output Lumit is heard through. The Audio page was drawn in the
+  /// Settings drawing and left unbuilt until the engine could name the
+  /// machine's devices.
   ///
   /// **System default is its own entry**, above the devices themselves and
   /// distinct from picking the same box by name: it means *follow the machine*,
@@ -1428,9 +1428,10 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                       id,
               onChanged: (id) => _chooseAudioDevice(ui.workspace, id),
             ),
-            // A line the row has to report, which is the one thing K-465 still
-            // allows under a setting: the chosen device is not on this machine
-            // at the moment, or there is nothing to play through at all.
+            // A line the row has to report, which is the one thing the
+            // drawing still allows under a setting: the chosen device is not
+            // on this machine at the moment, or there is nothing to play
+            // through at all.
             description: devices == null
                 ? ''
                 : devices.fellBack
@@ -1456,16 +1457,17 @@ class _SettingsWindowState extends State<_SettingsWindow> {
 
   // ---- Autosave ------------------------------------------------------------
 
-  /// How often Lumit writes a spare copy of the work, and how many it keeps
-  /// (K-587, building K-465's Autosave page — drawn in the Settings drawing and
-  /// unbuilt until the engine had a timer to set).
+  /// How often Lumit writes a spare copy of the work, and how many it keeps.
+  /// The Autosave page was drawn in the Settings drawing and left unbuilt
+  /// until the engine had a timer to set.
   ///
   /// Two numbers and nothing else, because there are only two answers to give.
   /// The copies rotate beside the project in an `autosaves/` folder, newest
   /// first, and they are what the recovery dialogue offers after a session that
   /// ended badly. **Zero minutes is off** and is a setting a user is entitled
   /// to hold — the row says so underneath itself rather than refusing the
-  /// number, which is the one thing K-465 still allows a line under a setting.
+  /// number, which is the one thing the drawing still allows a line under a
+  /// setting.
   ///
   /// Nothing here decides *when* a copy is due: the engine holds the timer,
   /// because the engine holds the document and is the only side that knows
@@ -1535,10 +1537,10 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     setState(() => workspace.setAutosave(minutes, keep));
   }
 
-  // ---- Export (K-588) ------------------------------------------------------
+  // ---- Export --------------------------------------------------------------
 
   /// What the export dialog opens on, when nothing in a particular export says
-  /// otherwise (K-588, building the last of K-465's drawn-but-unbuilt pages).
+  /// otherwise. The Export page was the drawing's last one to be built.
   ///
   /// Three answers, and none of them is part of a project: which preset the
   /// dialog starts from, how a suggested file name is built, and where finished
@@ -1586,7 +1588,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 width: _ddWide,
                 fill: t.surface0,
                 // The tokens are the field's own hint rather than a sentence
-                // under the row (K-465): an empty template well has to say what
+                // under the row: an empty template well has to say what
                 // it takes, and a full one no longer needs to.
                 hint: l10n.settingsExportFilenameHint(
                     exportTokenComp, exportTokenDate),
@@ -1703,7 +1705,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         destination: exportDestinationFolder, folder: folder);
   }
 
-  // ---- Shortcuts (K-199) ---------------------------------------------------
+  // ---- Shortcuts -----------------------------------------------------------
 
   /// Every shortcut, grouped by where it is live. The table is the engine's —
   /// this walks what `keymap_groups` answered and draws it. The search is the
@@ -1807,7 +1809,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             ),
           ),
         ),
-      // Panels that have taken a chord over from an app-wide one (K-281). Not
+      // Panels that have taken a chord over from an app-wide one. Not
       // a warning — nothing is ambiguous, the focused panel simply wins — so
       // it is a quiet note rather than a bordered banner. It is said at all
       // because the app-wide meaning does stop working in that one panel, and
@@ -1960,7 +1962,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           // Under the two playback rows because it is the same trade in the
           // same place — how much resolution a moving picture gives up to keep
           // up — and the drawing gives Performance no group of its own for a
-          // drag (K-744).
+          // drag.
           _flag(t, 'settings-full-res-drags',
               l10n.settingsFullResolutionWhileDragging,
               value: ui.workspace.performance.fullResDragPreviews, set: (on) {
@@ -2068,7 +2070,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         ],
       ),
       _diskCache(t, ui),
-      // Where the memory has gone (K-294). Last on the page, under the tiers
+      // Where the memory has gone. Last on the page, under the tiers
       // it weighs: each section above reports one store, and this one reports
       // the whole process and what none of them accounts for.
       //
@@ -2331,8 +2333,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     });
   }
 
-  /// The ceiling for the disk budget. Free disk space is not something the
-  /// engine reports yet (K-194 covers memory only), so the field is generous
+  /// The ceiling for the disk budget. The engine answers for memory only, so
+  /// free disk space is not something it reports yet and the field is generous
   /// rather than guessed at: 500 GB, which no cache should reach and no user
   /// should be stopped short of.
   static const double _diskCeilingMib = 500 * 1024;
@@ -2340,7 +2342,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   // ---- the shapes every page is built from ---------------------------------
 
   /// A cache budget: type a number of megabytes, or drag it, up to what the
-  /// machine actually has (K-194).
+  /// machine actually has.
   ///
   /// A typed box rather than a pick from a fixed list — the old dropdown could
   /// not say "3 GB on a 32 GB machine", and its options were a guess at what
@@ -2380,11 +2382,11 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       );
 
   /// What the machine has, in MiB, falling back to a documented ceiling when
-  /// it will not say. Installed RAM is answered on all three desktops
-  /// (K-204); video memory is Windows-only so far, so that is the one that
-  /// still falls back off Windows. Read once per run — the machine's memory
-  /// does not change under a process, and as getters these were a bridge
-  /// call per rebuild.
+  /// it will not say. Installed RAM is answered on all three desktops, and
+  /// video memory is Windows-only so far, so that is the one that still falls
+  /// back off Windows. Read once per run — the machine's memory does not
+  /// change under a process, and as getters these were a bridge call per
+  /// rebuild.
   static final double _systemMib = _mibOf(systemMemoryBytes());
   static final double _vramMib = _mibOf(videoMemoryBytes());
 
@@ -2418,9 +2420,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
 /// Click it and it listens for the next chord you press — the keypress is
 /// swallowed while it does, so binding `Ctrl+S` does not also save. Escape
 /// leaves it alone; Backspace or Delete clears the binding. It shows *every*
-/// chord an action has, because an action can have two (K-198) and one the
-/// table did not draw would be a key that works with nothing on screen to say
-/// so.
+/// chord an action has, because an action can have two, and one the table did
+/// not draw would be a key that works with nothing on screen to say so.
 class _ChordCell extends StatefulWidget {
   final BridgeKeyBinding binding;
   final KeymapState keymap;

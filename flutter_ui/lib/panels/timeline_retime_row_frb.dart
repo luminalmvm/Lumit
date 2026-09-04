@@ -1,4 +1,4 @@
-// The Timeline's Retime row (K-197).
+// The Timeline's Retime row.
 //
 // Split out of timeline_panel_frb.dart, where its doc comment had drifted from
 // its class; the two are back together here.
@@ -20,14 +20,14 @@ import 'graph_editor_frb.dart';
 import 'package:lumit_flutter/state/preview_throttle.dart';
 import 'keyframe_controls_frb.dart';
 
-/// The layer's Retime (K-197): which moment of the source, in seconds, the
+/// The layer's Retime: which moment of the source, in seconds, the
 /// layer shows at this point on its own timeline.
 ///
 /// An ordinary property row — the same stopwatch, the same navigator, the same
 /// lane diamonds and the same graph lanes as Position. It sits above Transform
 /// and only exists while the layer has been given a Retime (Ctrl+Alt+T), so
 /// unlike Volume its scalar arrives on the fold row rather than being read here
-/// (K-184: no bridge calls while drawing).
+/// (no bridge calls while drawing).
 class RetimeRow extends StatefulWidget {
   final CompositionReference comp;
   final LayerReference layer;
@@ -99,12 +99,12 @@ class _RetimeRowState extends State<RetimeRow> {
   bool _planted = false;
 
   /// A drag tick: render the map the release will write, without writing it —
-  /// and publish it, so the graph's Retime curve follows the drag (K-334).
+  /// and publish it, so the graph's Retime curve follows the drag.
   ///
   /// The first tick on a frame with **no key plants one** holding the value
-  /// already showing (K-333's rule, K-336 for this row): nothing moves, and
-  /// the preview then *replaces* a real key instead of inserting beside the
-  /// document's — the aligned path the transform rows take.
+  /// already showing: nothing moves, and the preview then *replaces* a real
+  /// key instead of inserting beside the document's — the aligned path the
+  /// transform rows take.
   void _live(BridgeScalar scalar, double value, int frame) {
     if (!_planted &&
         scalar is BridgeScalar_Keyframed &&
@@ -140,7 +140,7 @@ class _RetimeRowState extends State<RetimeRow> {
     final animated = scalar is BridgeScalar_Keyframed;
     final ui = Provider.of<LumitUiState>(context, listen: false);
     final playhead = ui.playheadFrame;
-    // Which face the row wears (K-287): the clock by default, seconds for
+    // Which face the row wears: the clock by default, seconds for
     // anyone who asked for them in Settings ▸ Interface ▸ Editing.
     final seconds = ui.workspace.interface.retimeInSeconds;
     // The clock face counts *source* frames, so it runs at the footage's own
@@ -209,11 +209,11 @@ class _RetimeRowState extends State<RetimeRow> {
                           onChangeEnd: (v) => _commitAt(scalar, v, frame),
                           onDragCancel: () => setState(() => _staged = null),
                         ))
-                  // The clock face (K-287, realising K-075): which moment of
-                  // the source is showing, written the way every other time in
-                  // the editor is written. Dragged and typed in whole source
-                  // frames — a timecode cannot say "between two frames", which
-                  // is what the seconds setting is for.
+                  // The clock face: which moment of the source is showing,
+                  // written the way every other time in the editor is written.
+                  // Dragged and typed in whole source frames — a timecode
+                  // cannot say "between two frames", which is what the seconds
+                  // setting is for.
                   : TimeReadout(
                       key: const ValueKey('tl-retime-seconds'),
                       frame: _frameOfSeconds(value, fpsNum, fpsDen),
@@ -226,13 +226,12 @@ class _RetimeRowState extends State<RetimeRow> {
                       // mockup draws anywhere and the one number in the
                       // Timeline that still read a step larger than the rest.
                       style: t.mono.copyWith(fontSize: wellTextSize),
-                      // **In a well, like every other property row's value**
-                      // (K-460's rule, applied here at last): the clock face
-                      // is dragged and typed into exactly as the seconds face
-                      // beside it is, and that face has always been a
-                      // `DragValueField` with a recess round it. This one was
-                      // bare text that happened to answer a drag, which is
-                      // the one thing K-460 says a value must never be.
+                      // **In a well, like every other property row's value**:
+                      // the clock face is dragged and typed into exactly as
+                      // the seconds face beside it is, and that face has
+                      // always been a `DragValueField` with a recess round it.
+                      // This one was bare text that happened to answer a drag,
+                      // which is the one thing a value must never be.
                       well: true,
                       minFrame: -100000,
                       maxFrame: 100000,

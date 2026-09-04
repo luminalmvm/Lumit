@@ -267,7 +267,7 @@ is a convention here that they read as percentages, and conventions like that ar
 worth keeping even when nothing enforces them.
 
 **A pane alone renders bare.** `DockPane(Panel.effectControls)` as a direct child of
-a split has no tab bar over it. That is deliberate (decision K-086): a tab bar over a
+a split has no tab bar over it. That is deliberate: a tab bar over a
 single panel is a control that can do nothing.
 
 **Nothing else needed changing.** No registration, no list of "panels the Audio
@@ -364,7 +364,7 @@ later. `#[frb(ignore)]` means "this is internal; do not offer it to Dart at all"
 **Not everything in the file hangs off a type.** Further down are plain
 functions with no `self` at all — `audio_pause`, `audio_seek`, `audio_stop`,
 `audio_clock`, and the pair that picks which output the machine plays through,
-`list_audio_devices` and `set_audio_device` (K-586). They are free functions
+`list_audio_devices` and `set_audio_device`. They are free functions
 because what they act on is the *machine*, not a document: there is one sound
 device and one thing coming out of it, whatever project is open. The generator
 puts a free function on the Dart side as a top-level function too, so the shape
@@ -1017,16 +1017,14 @@ mostly about the next person:
 - **The translation note.** New key `projectHasSoundCount`, named in the commit message
   and in the pull request, because the other languages are now one string short and
   somebody has to see that it reaches the translation page.
-- **A word in [GUIDE.md](../GUIDE.md)** if the change introduces a concept, not just
-  a value. "Workspaces are trees of splits and tabs" belongs there; "Audio's Effect
-  controls moved" does not.
-- **A decision entry** in `docs/02-DECISIONS.md` if the change reverses one that was
-  logged. Rearranging a workspace is not decision-sized. Deciding that a workspace
-  may add a panel the others do not have was — that is K-349, and the Retiming tests
-  quote it.
-- **The commit message in the house voice**: what changed and why it is right,
-  British English, sentence case, calm, no exclamation marks and no emoji. Read
-  `git log` for a page and the shape is obvious.
+- **A line in [GUIDE.md](../GUIDE.md)** if the change introduces a concept, a crate or a
+  mechanism, not just a value. "Workspaces are trees of splits and tabs" belongs there;
+  "Audio's Effect controls moved" does not.
+- **The spec** if the change reverses a rule it carries. Rearranging a workspace is not
+  that. Deciding that a workspace may add a panel the others do not have was such a
+  rule, and the Retiming tests quote it.
+- **The commit message**: what changed and why, British English, sentence case, no
+  exclamation marks and no emoji.
 
 ---
 
@@ -1035,14 +1033,8 @@ mostly about the next person:
 You have now touched every layer this codebase has except the GPU. Follow whichever
 part you want to understand properly:
 
-- **[GUIDE.md §9, "The Flutter frontend, in plain terms"](../GUIDE.md)** — the panels,
-  the shell, the theme and the strings, with no code background assumed. Start here
-  if Part 1 was the interesting half.
-- **[GUIDE.md §2, "Rust in ten minutes, Lumit edition"](../GUIDE.md)**, then **§3,
-  "Threads, in editing terms"** — ownership, snapshots and why the engine is built
-  the way it is, in editing language rather than computer-science language.
-- **[GUIDE.md §5, "Making a change safely (the recipe)"](../GUIDE.md)** and **§6, "The
-  testing philosophy"** — the habits Part 3 was an example of.
+- **[GUIDE.md](../GUIDE.md)** — the map of the code, the rules, and how a change is
+  made and tested.
 - **[FLUTTER.md](FLUTTER.md)** — the same ground as Part 1 and 2's Dart, taught
   properly and in order: notifiers, the theme's inherited widget, custom painting,
   gestures, tests.

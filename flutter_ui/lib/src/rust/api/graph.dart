@@ -47,10 +47,10 @@ class BridgeGraphNode {
   /// text — `label` is.
   final String matchName;
 
-  /// What the box is called, in English (K-303).
+  /// What the box is called, in English.
   final String label;
 
-  /// The user's own name for this instance (K-321), shown in place of
+  /// The user's own name for this instance, shown in place of
   /// `label`. Always `None` for the derived boxes.
   final String? customName;
 
@@ -109,11 +109,11 @@ class BridgeGraphWiring {
   /// is exposed or not.
   final List<BridgeNodeRef> exposed;
 
-  /// The named regions (K-651).
+  /// The named regions.
   final List<BridgeNodeGroup> groups;
 
   /// The Layer out box's image socket is unplugged, so the layer draws
-  /// nothing (K-738). It rides here rather than as a call of its own so
+  /// nothing. It rides here rather than as a call of its own so
   /// that unplugging it is the same one commit, and the same one undo step,
   /// as every other wiring gesture.
   final bool outUnwired;
@@ -190,7 +190,7 @@ class BridgeLayerGraph {
           wiring == other.wiring;
 }
 
-/// A named region of the canvas: a tinted wash behind a set of boxes (K-651).
+/// A named region of the canvas: a tinted wash behind a set of boxes.
 ///
 /// **No rectangle crosses**, and no colour: the wash is worked out from where
 /// the members are sitting, and `colour` is an index into the frontend's own
@@ -276,8 +276,8 @@ sealed class BridgeOutputRef with _$BridgeOutputRef {
   /// The layer's own masked source alpha at that point in the chain (§1.4).
   const factory BridgeOutputRef.sourceMatte() = BridgeOutputRef_SourceMatte;
 
-  /// A **stack effect's** declared data output — Particulate's Points stream
-  /// (K-492). The effect goes on making its picture for the chain; this taps
+  /// A **stack effect's** declared data output — Particulate's Points stream.
+  /// The effect goes on making its picture for the chain; this taps
   /// the data it declares beside it, and carries no picture itself.
   const factory BridgeOutputRef.effectData({
     required UuidValue effect,
@@ -286,7 +286,7 @@ sealed class BridgeOutputRef with _$BridgeOutputRef {
 }
 
 /// One socket on a box: the id the document writes down, the English word drawn
-/// beside it (K-303), what it carries, and whether a wire is on it.
+/// beside it, what it carries, and whether a wire is on it.
 class BridgePort {
   final String id;
   final String label;
@@ -319,9 +319,9 @@ class BridgePort {
           wired == other.wired;
 }
 
-/// What a socket carries, and so what colour the frontend draws it
-/// (K-472 §6.1). Seven types, five colours: image with matte, number, colour,
-/// shape with points, audio.
+/// What a socket carries, and so what colour the frontend draws it. Seven
+/// types, five colours: image with matte, number, colour, shape with points,
+/// audio.
 enum BridgePortType {
   image,
   matte,

@@ -1,5 +1,5 @@
 // An angle reads as turns AND degrees, and the pair is only ever a *view* of
-// one number (docs/07 §6.1, K-315).
+// one number (docs/07 §6.1).
 //
 // The split matters because 30° and 390° are the same picture but not the same
 // animation: a key at 30 followed by a key at 390 travels a whole turn, and one

@@ -60,7 +60,7 @@ final class FoldGroupRow extends LayerFoldRow {
 }
 
 /// One transform property group — Position, Scale, and so on — with the
-/// layer's transform read once for the whole fold (K-183).
+/// layer's transform read once for the whole fold.
 final class FoldTransformRow extends LayerFoldRow {
   final TransformGroup group;
   final BridgeTransform transform;
@@ -69,7 +69,7 @@ final class FoldTransformRow extends LayerFoldRow {
 }
 
 /// One parameter of one effect — everything the row draws, from the read
-/// model (K-184). Plain data; a write reads fresh instance handles at commit.
+/// model. Plain data; a write reads fresh instance handles at commit.
 final class FoldEffectParamRow extends LayerFoldRow {
   final BridgeEffectInstanceInfo info;
   final BridgeParamInfo param;
@@ -78,13 +78,13 @@ final class FoldEffectParamRow extends LayerFoldRow {
   /// it (a schema newer than the saved document).
   final BridgeEffectValue? value;
 
-  /// The driver wired to this parameter (K-471), or null for the ordinary case.
+  /// The driver wired to this parameter, or null for the ordinary case.
   /// Read once per document revision by the panel and carried here, like every
-  /// other answer on a fold row (K-184).
+  /// other answer on a fold row.
   final DrivenParam? driven;
 
   /// This row's instance is a **layer style** rather than a stack entry
-  /// (K-706, docs/impl/layer-styles.md §5).
+  /// (docs/impl/layer-styles.md §5).
   ///
   /// One bit, and it buys the whole group: a style is an `EffectInstance` like
   /// any other, so the row draws, keys, drags and reads exactly as an effect
@@ -92,8 +92,8 @@ final class FoldEffectParamRow extends LayerFoldRow {
   /// under ([foldRowPath]) and which of the layer's two lists a write reads.
   final bool style;
 
-  /// The **layer group** whose header stack this row belongs to (K-731,
-  /// docs/impl/group-effects.md §6), or null for a layer's own row — the
+  /// The **layer group** whose header stack this row belongs to
+  /// (docs/impl/group-effects.md §6), or null for a layer's own row — the
   /// styles bit's pattern, grown its third arm. A group row draws, keys and
   /// drags as any effect parameter does; what differs is the path prefix
   /// ([groupFoldPrefix]) and that a write reads the header's list
@@ -108,13 +108,13 @@ final class FoldEffectParamRow extends LayerFoldRow {
 /// The layer's Volume.
 final class FoldVolumeRow extends LayerFoldRow {
   /// The Volume scalar, read once per document revision by the panel and
-  /// carried here so the row draws without a bridge call (K-184). Null only
+  /// carried here so the row draws without a bridge call. Null only
   /// for a caller that supplied none, which the panel never is.
   final BridgeScalar? scalar;
   const FoldVolumeRow({this.scalar, required int depth}) : super(depth);
 }
 
-/// The layer's Retime (K-197): source time in seconds, keyframable like any
+/// The layer's Retime: source time in seconds, keyframable like any
 /// other property. It sits above Transform rather than inside it, and only
 /// appears on a layer that has been given one (Ctrl+Alt+T) — which is why the
 /// scalar rides on the row: `null` retime means no row at all, so a row that
@@ -124,21 +124,21 @@ final class FoldRetimeRow extends LayerFoldRow {
   const FoldRetimeRow(this.scalar, {required int depth}) : super(depth);
 }
 
-/// One mask on the layer (K-222): its name, and the switches that decide how it
+/// One mask on the layer: its name, and the switches that decide how it
 /// gates the picture.
 final class FoldMaskRow extends LayerFoldRow {
   final BridgeMask mask;
   const FoldMaskRow(this.mask, {required int depth}) : super(depth);
 }
 
-/// Which of a mask's animatable values a [FoldMaskValueRow] carries (K-340).
+/// Which of a mask's animatable values a [FoldMaskValueRow] carries.
 ///
 /// [path] is the shape itself: a value with no number, so its row carries a
-/// stopwatch and diamonds but no field (K-339).
+/// stopwatch and diamonds but no field.
 enum MaskValue { path, opacity, feather, expansion, vertexFeather }
 
 /// One of a mask's values — its shape, opacity, feather or expansion — on a
-/// row of its own under the mask (K-222, K-340).
+/// row of its own under the mask.
 ///
 /// A row rather than another control squeezed onto the mask's own row: the
 /// value column holds one field, every other number in the fold-out has a row
@@ -149,7 +149,7 @@ final class FoldMaskValueRow extends LayerFoldRow {
   final MaskValue value;
 
   /// Which vertex's own feather this row carries, for
-  /// [MaskValue.vertexFeather] (K-545). `-1` on every other row, which have
+  /// [MaskValue.vertexFeather]. `-1` on every other row, which have
   /// one value each and no point to belong to.
   final int vertex;
   const FoldMaskValueRow(this.mask, this.value,
@@ -157,22 +157,22 @@ final class FoldMaskValueRow extends LayerFoldRow {
       : super(depth);
 }
 
-/// One piece of a shape layer's art (K-237): its name, its fill and its
+/// One piece of a shape layer's art: its name, its fill and its
 /// outline — the row that makes a drawn shape editable after the fact.
 final class FoldShapeRow extends LayerFoldRow {
   final BridgeShapeItem item;
   const FoldShapeRow(this.item, {required int depth}) : super(depth);
 }
 
-/// Which of a shape item's animatable numbers a [FoldShapeValueRow] carries
-/// (K-551). The trim's three are the first of them.
-/// [dash] and [gap] are the first pair of the item's dash list (K-552), which
+/// Which of a shape item's animatable numbers a [FoldShapeValueRow] carries.
+/// The trim's three are the first of them.
+/// [dash] and [gap] are the first pair of the item's dash list, which
 /// is where a dashed outline is set from: writing either into an item that has
-/// no list makes one. The repeater's ten (K-553) are the count, which copy the
-/// original is, and the step every copy is one more of. [offsetPath] (K-554) is
+/// no list makes one. The repeater's ten are the count, which copy the
+/// original is, and the step every copy is one more of. [offsetPath] is
 /// first because it applies first: it makes the outline the rest work on.
 enum ShapeValue {
-  /// The **shape itself** (K-606). It has no number, so its row carries the
+  /// The **shape itself**. It has no number, so its row carries the
   /// stopwatch and its diamonds and nothing else; its keys are whole paths.
   path,
   gradientStartX,
@@ -206,11 +206,11 @@ bool isDashValue(ShapeValue value) => switch (value) {
     };
 
 /// The most copies the engine draws of one repeated item — `MAX_COPIES` in
-/// `lumit-core`'s `shape.rs` (K-553). The row stops where the engine does, so
+/// `lumit-core`'s `shape.rs`. The row stops where the engine does, so
 /// a slider dragged to its end asks for a frame that arrives.
 const double maxShapeCopies = 100;
 
-/// Which of a shape item's numbers aim its **gradient** (K-555) — shown only
+/// Which of a shape item's numbers aim its **gradient** — shown only
 /// where there is a ramp to aim.
 bool isGradientValue(ShapeValue value) => switch (value) {
       ShapeValue.gradientStartX ||
@@ -221,8 +221,8 @@ bool isGradientValue(ShapeValue value) => switch (value) {
       _ => false,
     };
 
-/// Which of a shape item's numbers describe the **step** the repeater takes
-/// (K-553) — everything but the count itself, which is the row that turns the
+/// Which of a shape item's numbers describe the **step** the repeater takes —
+/// everything but the count itself, which is the row that turns the
 /// repeater on and so is always there to find.
 bool isRepeatStepValue(ShapeValue value) => switch (value) {
       ShapeValue.path ||
@@ -253,11 +253,11 @@ bool isRepeated(BridgeShapeItem item) => switch (item.repeatCopies) {
     };
 
 /// Which of a shape item's **colours and choices** a [FoldShapePaintRow]
-/// carries (K-555). None of the three is a number, so none of them keys, which
+/// carries. None of the three is a number, so none of them keys, which
 /// is why they are a row kind of their own rather than more [ShapeValue]s.
 enum ShapePaint {
   /// How this item joins the one before it: apart, union, subtract, intersect
-  /// or exclude (K-605). First, because it decides what the rest of the rows
+  /// or exclude. First, because it decides what the rest of the rows
   /// are painting.
   combine,
 
@@ -273,7 +273,7 @@ enum ShapePaint {
 }
 
 /// A shape item's fill colour, its gradient choice, or its gradient's second
-/// colour, on a row of its own (K-555).
+/// colour, on a row of its own.
 final class FoldShapePaintRow extends LayerFoldRow {
   final BridgeShapeItem item;
   final ShapePaint which;
@@ -289,7 +289,7 @@ String shapePaintLabel(ShapePaint which) => switch (which) {
       ShapePaint.gradientColour => l10n.shapeGradientColour,
     };
 
-/// One of a shape item's numbers on a row of its own under it (K-551). A row
+/// One of a shape item's numbers on a row of its own under it. A row
 /// rather than another control on the item's own row, for the reason
 /// [FoldMaskValueRow] gives: a property without a row has nowhere to put the
 /// stopwatch that animates it.
@@ -300,14 +300,14 @@ final class FoldShapeValueRow extends LayerFoldRow {
       : super(depth);
 }
 
-/// One paint stroke on the layer (K-227): its name, so a stroke can be found,
+/// One paint stroke on the layer: its name, so a stroke can be found,
 /// renamed and deleted after it was painted.
 final class FoldStrokeRow extends LayerFoldRow {
   final BridgeStroke stroke;
   const FoldStrokeRow(this.stroke, {required int depth}) : super(depth);
 }
 
-/// One puppet pin on the layer (K-704): its name, and — for the three kinds
+/// One puppet pin on the layer: its name, and — for the three kinds
 /// that reach — how far it reaches, in the value column where a mask's opacity
 /// sits.
 final class FoldPuppetPinRow extends LayerFoldRow {
@@ -315,14 +315,14 @@ final class FoldPuppetPinRow extends LayerFoldRow {
   const FoldPuppetPinRow(this.pin, {required int depth}) : super(depth);
 }
 
-/// Which of a pin's numbers a [FoldPuppetValueRow] carries (K-704).
+/// Which of a pin's numbers a [FoldPuppetValueRow] carries.
 ///
 /// Not every kind shows every one: a position pin has only a place, a starch or
 /// overlap pin adds how much it stiffens or how far in front it draws, and a
 /// bend pin adds the turn and the size it makes. [puppetValuesFor] is the list.
 enum PuppetValue { positionX, positionY, rotation, scale, amount }
 
-/// One of a pin's numbers on a row of its own under it (K-704) — a place, a
+/// One of a pin's numbers on a row of its own under it — a place, a
 /// turn, an amount. A row rather than a second number squeezed onto the pin's
 /// own row, for the reason [FoldMaskValueRow] gives: a property without a row
 /// has nowhere to put the stopwatch that animates it.
@@ -413,11 +413,11 @@ BridgePuppetPin puppetPinWithScalar(
       PuppetValue.amount => puppetPinCopy(pin, amount: to),
     };
 
-/// Which of a stroke's animatable values a [FoldStrokeValueRow] carries
-/// (K-549). Both are a per cent of the stroke's own length.
+/// Which of a stroke's animatable values a [FoldStrokeValueRow] carries.
+/// Both are a per cent of the stroke's own length.
 enum StrokeValue { start, end }
 
-/// A stroke's Start or End on a row of its own under it (K-549) — the pair
+/// A stroke's Start or End on a row of its own under it — the pair
 /// that makes a stroke draw itself on. A row rather than another number on the
 /// stroke's own row, for the reason [FoldMaskValueRow] gives: a property
 /// without a row has nowhere to put the stopwatch that animates it.
@@ -428,7 +428,7 @@ final class FoldStrokeValueRow extends LayerFoldRow {
       : super(depth);
 }
 
-/// One of an animator's numbers on a row of its own under it (K-609) — the
+/// One of an animator's numbers on a row of its own under it — the
 /// three that say which letters are reached, then the five property groups. A
 /// row rather than another number squeezed onto the animator's own row, for
 /// the reason [FoldMaskValueRow] gives: a property without a row has nowhere to
@@ -442,7 +442,7 @@ final class FoldAnimatorValueRow extends LayerFoldRow {
       : super(depth);
 }
 
-/// One control of a footage layer's Flow group (K-088, K-331). Which control
+/// One control of a footage layer's Flow group. Which control
 /// is the [kind]; all of them read and write the whole group in one op, so a
 /// row needs nothing but its own identity.
 ///
@@ -455,7 +455,7 @@ final class FoldFlowRow extends LayerFoldRow {
   final BridgeScalar? rate;
 
   /// The whole group's parameters, read once per document revision by the
-  /// panel and carried here so the row draws without a bridge call (K-184).
+  /// panel and carried here so the row draws without a bridge call.
   /// Null only for a caller that supplied none, which the panel never is.
   final BridgeFlowParams? params;
   const FoldFlowRow(this.kind, {this.rate, this.params, required int depth})
@@ -491,7 +491,7 @@ enum FlowRowKind {
       };
 }
 
-/// The waveform lane (K-172): the outline names it, the lane side draws the
+/// The waveform lane: the outline names it, the lane side draws the
 /// layer's source peaks through its live in/out/offset.
 final class FoldWaveformRow extends LayerFoldRow {
   const FoldWaveformRow({required int depth}) : super(depth);
@@ -512,8 +512,8 @@ List<BridgeKeyframe> laneKeysOf(LayerFoldRow row) => switch (row) {
           BridgeScalar_Static() => const [],
           BridgeScalar_Expression() => const [],
         },
-      // The Volume's keys are lane diamonds like any other property's
-      // (K-172, K-695): the rubber band draws them on the wave, and the
+      // The Volume's keys are lane diamonds like any other property's:
+      // the rubber band draws them on the wave, and the
       // Volume row's own lane drags them.
       FoldVolumeRow(:final scalar) => switch (scalar) {
           BridgeScalar_Keyframed(:final field0) => field0,
@@ -531,8 +531,8 @@ List<BridgeKeyframe> laneKeysOf(LayerFoldRow row) => switch (row) {
           _ => const [],
         },
       // A mask's numbers key like any other scalar; its **shape** keys as whole
-      // paths, and those keys carry their own eases and a counted-up value
-      // (K-344), so the lane draws their diamonds and the graph can draw the
+      // paths, and those keys carry their own eases and a counted-up value,
+      // so the lane draws their diamonds and the graph can draw the
       // rate the shape is changing at.
       FoldMaskValueRow(:final mask, :final value, :final vertex) =>
         value == MaskValue.path
@@ -558,7 +558,7 @@ List<BridgeKeyframe> laneKeysOf(LayerFoldRow row) => switch (row) {
         },
       // A shape item's numbers key like any other scalar; its **shape** keys as
       // whole paths, and those keys carry their own eases and a counted-up
-      // value (K-344, K-606), so the lane draws their diamonds and the graph
+      // value, so the lane draws their diamonds and the graph
       // can draw the rate the shape is changing at.
       FoldShapeValueRow(:final item, :final value) => value == ShapeValue.path
           ? item.pathKeys
@@ -569,7 +569,7 @@ List<BridgeKeyframe> laneKeysOf(LayerFoldRow row) => switch (row) {
       _ => const [],
     };
 
-/// The rows of [rows] the **Animated filter** admits (K-441, 6.43): every row
+/// The rows of [rows] the **Animated filter** admits (6.43): every row
 /// that actually carries keyframes, and the headings that lead down to one.
 ///
 /// In plain terms: with the filter on, a layer shows its keyed properties and
@@ -589,7 +589,7 @@ List<BridgeKeyframe> laneKeysOf(LayerFoldRow row) => switch (row) {
 List<LayerFoldRow> animatedFoldRows(List<LayerFoldRow> rows) =>
     revealFoldRows(rows, RevealFilter.keyframed);
 
-/// Which rows a reveal keeps (K-684) — the three Animation ▸ Reveal commands,
+/// Which rows a reveal keeps — the three Animation ▸ Reveal commands,
 /// widening one at a time.
 ///
 /// In plain terms: **keyframes** is what `U` shows, the rows with diamonds on
@@ -602,7 +602,7 @@ enum RevealFilter {
   /// `U`'s own rule: the rows carrying keyframes.
   keyframed,
 
-  /// Keyed, expression-driven, or driven by a wire (K-471).
+  /// Keyed, expression-driven, or driven by a wire.
   animated,
 
   /// Anything that differs from what a freshly made layer carries.
@@ -669,7 +669,7 @@ bool foldRowRevealed(
   if (laneKeysOf(row).isNotEmpty) return true;
   if (filter == RevealFilter.keyframed) return false;
   // Moving without diamonds: an expression writes the value at every frame,
-  // and a wire from the node graph hands it over (K-471). Both are animation
+  // and a wire from the node graph hands it over. Both are animation
   // in the only sense that matters here — the number is not the user's to
   // drag, and it is not the same at every frame.
   if (foldRowScalar(row) is BridgeScalar_Expression) return true;
@@ -680,8 +680,8 @@ bool foldRowRevealed(
 
 /// The one animatable number a fold row carries, or null for a row that has
 /// none: a heading, a waveform, a colour or choice, and the **path** rows —
-/// a mask's or a shape's outline keys as whole paths rather than as a scalar
-/// (K-344), which is why [laneKeysOf] reads those two out of the path key list
+/// a mask's or a shape's outline keys as whole paths rather than as a scalar,
+/// which is why [laneKeysOf] reads those two out of the path key list
 /// instead.
 BridgeScalar? foldRowScalar(LayerFoldRow row) => switch (row) {
       // The lead axis, exactly as the row's diamonds are read: the axes of one
@@ -713,7 +713,7 @@ BridgeScalar? foldRowScalar(LayerFoldRow row) => switch (row) {
 /// because somebody made them: an effect applied, a mask drawn, a stroke
 /// painted, a Retime switched on, a shape drawn, a text animator added. A row
 /// like that *is* the modification, whatever its numbers say, which is the
-/// same call the engine makes for the groups (`reveal_groups`, K-199).
+/// same call the engine makes for the groups (`reveal_groups`).
 bool _foldRowChanged(LayerFoldRow row, double compWidth, double compHeight) =>
     switch (row) {
       FoldTransformRow(:final group, :final transform) => group.axes.any((a) {
@@ -796,7 +796,7 @@ double? _transformDefault(BridgeTransformProp prop, double w, double h) =>
       FoldRetimeRow() => (group: null, label: l10n.retime),
       FoldFlowRow(:final kind) => (group: l10n.flowSection, label: kind.label),
       // The user's own name for the effect where one is set, exactly as the
-      // fold-out's own heading reads it (K-321).
+      // fold-out's own heading reads it.
       FoldEffectParamRow(:final info, :final param) => (
           group: info.customName ?? effectLabelOf(info.name),
           label: engineLabel(param.label),
@@ -818,7 +818,7 @@ const Set<String> everyFoldPath = _EveryPath();
 
 /// The **Animated filter**'s answer for every layer there is: keyed rows only,
 /// whichever layer is asked about, so the filter is on for the whole comp
-/// rather than for the handful of layers a reveal opened (K-622, K-684). The
+/// rather than for the handful of layers a reveal opened. The
 /// same trick [everyFoldPath] plays, one map along: a reveal names the layers
 /// it filters, and the strip filters them all.
 const Map<String, RevealFilter> everyLayerKeyframed = _EveryLayer();
@@ -913,7 +913,7 @@ class _EveryPath extends SetBase<String> {
 }
 
 /// Every keyframe anywhere on a layer, in time order — the diamonds a layer's
-/// **own** row shows while it is shut (15-DESIGN §12A.1, K-441).
+/// **own** row shows while it is shut (15-DESIGN §12A.1).
 ///
 /// A twirled-open layer draws its keys per property lane; a shut one has to
 /// say the same thing on one row, so this walks the fold-out as though every
@@ -954,7 +954,7 @@ String strokeValueLabel(StrokeValue value) => switch (value) {
       StrokeValue.end => l10n.strokeEnd,
     };
 
-/// Which of a stroke's two animatable numbers [value] names (K-549).
+/// Which of a stroke's two animatable numbers [value] names.
 BridgeScalar strokeScalarOf(BridgeStroke stroke, StrokeValue value) =>
     switch (value) {
       StrokeValue.start => stroke.start,
@@ -1015,7 +1015,7 @@ BridgeScalar _dashAt(BridgeShapeItem item, int index) =>
         ? item.dashes[index]
         : const BridgeScalar.static_(0);
 
-/// Which of a shape item's animatable numbers [value] names (K-551).
+/// Which of a shape item's animatable numbers [value] names.
 BridgeScalar shapeScalarOf(BridgeShapeItem item, ShapeValue value) =>
     switch (value) {
       // The shape is not a number and asks for the still zero nobody reads,
@@ -1143,7 +1143,7 @@ BridgeRational timeOfSubframe(double frame, int fpsNum, int fpsDen) {
   );
 }
 
-/// Run [body] as **one undo step**, however many ops it commits (K-458).
+/// Run [body] as **one undo step**, however many ops it commits.
 ///
 /// A gesture the model cannot say in a single op — stretching a block of
 /// keyframes that spans two layers, reversing it, pasting a clipboard that came
@@ -1170,8 +1170,7 @@ void asOneUndoStep(ProjectReference? project, void Function() body) {
 }
 
 /// Move **several** of a lane row's keyframes at once, as one op per row — the
-/// block stretch, Reverse and the Ease popover's Stagger all land here
-/// (K-458).
+/// block stretch, Reverse and the Ease popover's Stagger all land here.
 ///
 /// The same rule a single key's drag follows, applied to the whole set at once:
 /// every key keeps its value and its eases, only its time moves, and the write
@@ -1186,7 +1185,7 @@ bool moveLaneKeys({
   required BridgeLayerEntry entry,
   required LayerFoldRow row,
   required Map<int, BridgeRational> times,
-  // Only a **group header's** row reads it (K-731): its list lives on the
+  // Only a **group header's** row reads it: its list lives on the
   // comp, not the layer. Optional so the layer arms stay callable from tests
   // that hold no composition.
   CompositionReference? comp,
@@ -1238,7 +1237,7 @@ bool moveLaneKeys({
 
     case FoldEffectParamRow(:final info, :final param, :final style, :final group):
       // Whichever list holds it — a style's keys move exactly as an effect's
-      // do (K-706), and a group header's the same way (K-731). The row
+      // do, and a group header's the same way. The row
       // already says which, so the list is taken rather than searched for;
       // the commit routes by the engine's shared instance lookup either way.
       final List<BridgeEffectInstance> stack;
@@ -1282,7 +1281,7 @@ bool moveLaneKeys({
     case FoldMaskValueRow(:final mask, :final value, :final vertex):
       if (value == MaskValue.path) {
         // A path key is a whole shape, so a *single* move goes to the engine
-        // rather than the frontend rebuilding a list of them (K-340). Several
+        // rather than the frontend rebuilding a list of them. Several
         // at once cannot: each `moveMaskPathKey` is its own write, and a run
         // of them would each be checked against the list as it stood, so the
         // set has to be re-timed in one go instead.
@@ -1312,7 +1311,7 @@ bool moveLaneKeys({
     case FoldShapeValueRow(:final item, :final value):
       if (value == ShapeValue.path) {
         // A path key is a whole shape, so a *single* move goes to the engine
-        // rather than the frontend rebuilding a list of them (K-340, K-606).
+        // rather than the frontend rebuilding a list of them.
         // Several at once cannot: each move is its own write, checked against
         // the list as it stood, so the set has to be re-timed in one go.
         if (times.length == 1) {
@@ -1393,7 +1392,7 @@ String foldRowPath(String layerId, LayerFoldRow row) => switch (row) {
       FoldGroupRow(:final path) => path,
       FoldTransformRow(:final group) => transformGroupPath(layerId, group),
       // A group header's row roots under the group's own prefix, whichever
-      // layer's block it is drawn inside (K-731) — a group id can never be
+      // layer's block it is drawn inside — a group id can never be
       // mistaken for a layer's, so `layerIdOfPath` answers no layer for it.
       FoldEffectParamRow(:final info, :final param, group: final g?) =>
         '${effectPath(groupFoldPrefix(g), info.id.toString())}/${param.id}',
@@ -1459,12 +1458,12 @@ String effectsPath(String layerId) => '$layerId/effects';
 String effectPath(String layerId, String effectId) =>
     '$layerId/effects/$effectId';
 
-/// The root a **group header's** fold paths sit under (K-731): a prefixed
+/// The root a **group header's** fold paths sit under: a prefixed
 /// form of the group's id, so nothing that expects a layer id can mistake one
 /// for it — `layerIdOfPath` on a group path answers a string no layer has.
 String groupFoldPrefix(UuidValue group) => 'g:$group';
 
-/// The rows a group header's twirl shows (K-731, docs/impl/group-effects.md
+/// The rows a group header's twirl shows (docs/impl/group-effects.md
 /// §6): one heading per header effect, and the ordinary [FoldEffectParamRow]s
 /// under whichever are open — the layer Effects arm's own shape, rooted under
 /// [groupFoldPrefix] and drawn inside the carrier layer's block. No Transform,
@@ -1494,7 +1493,7 @@ List<LayerFoldRow> groupHeaderFoldRows({
   return rows;
 }
 
-/// The path of a layer's **Styles** group (K-706).
+/// The path of a layer's **Styles** group.
 String stylesPath(String layerId) => '$layerId/styles';
 
 /// The path of one style within it. Its own prefix rather than the Effects
@@ -1508,10 +1507,10 @@ String stylePath(String layerId, String styleId) =>
 /// effect's heading (it is the Effects group itself, one parameter under an
 /// effect, or something else entirely). Used by the render-time indicator to
 /// put an effect's measured cost on its own row (docs/13 §7.1), and by the
-/// Timeline's heading menu to know which rows can be copied from (K-275).
+/// Timeline's heading menu to know which rows can be copied from.
 /// Whether a click is carrying one of the selection modifiers — Ctrl (Cmd) or
-/// Shift. A heading twirls on a plain click and only *picks* on a modified one
-/// (K-300): a Shift-click running over a stack of effects must not open every
+/// Shift. A heading twirls on a plain click and only *picks* on a modified one:
+/// a Shift-click running over a stack of effects must not open every
 /// heading it passes.
 bool get isModifiedClick =>
     HardwareKeyboard.instance.isControlPressed ||
@@ -1525,7 +1524,7 @@ String? effectIdOfPath(String path) {
 }
 
 /// The **style** a fold path names, on exactly [effectIdOfPath]'s terms, or
-/// null for anything else (K-706).
+/// null for anything else.
 ///
 /// Kept apart from the effect answer rather than folded into it: the callers of
 /// that one offer copy, paste and a stack reorder, and none of the three is a
@@ -1536,7 +1535,7 @@ String? styleIdOfPath(String path) {
   return parts[2];
 }
 
-/// The path of a Text layer's Animators group (K-609).
+/// The path of a Text layer's Animators group.
 String animatorsPath(String layerId) => '$layerId/animators';
 
 /// The path of one animator within it. Its **index**, because an animator has
@@ -1555,7 +1554,7 @@ String contentsPath(String layerId) => '$layerId/contents';
 /// The path of a layer's Paint group.
 String paintPath(String layerId) => '$layerId/paint';
 
-/// The path of a layer's Puppet group (K-704).
+/// The path of a layer's Puppet group.
 String puppetPath(String layerId) => '$layerId/puppet';
 
 /// The path of a layer's Audio group.
@@ -1571,7 +1570,7 @@ String waveformPath(String layerId) => '$layerId/audio/waveform';
 /// caches it per layer, exactly as the Project panel caches missing media.
 /// `flowParams` and `volumeDb` are passed in for the same reason at a smaller
 /// scale: neither is in the read model, so the panel reads them once per
-/// document revision and the rows carry them (K-184).
+/// document revision and the rows carry them.
 List<LayerFoldRow> layerFoldRows({
   required BridgeLayerEntry entry,
   required Set<String> open,
@@ -1607,7 +1606,7 @@ List<LayerFoldRow> layerFoldRows({
   // built in: the retime picks a moment, flow decides what is *shown* at a
   // moment between two frames, and the transform then places the result. Only
   // on a layer whose flow switch is on — an empty heading is a promise the row
-  // cannot keep (K-088).
+  // cannot keep.
   if (info.flow && !soloed) {
     final flowOpen = open.contains(flowPath(id));
     rows.add(FoldGroupRow(
@@ -1642,7 +1641,7 @@ List<LayerFoldRow> layerFoldRows({
 
   // Contents first of the three: a shape layer's art *is* its picture, so it
   // comes before the masks that gate that picture and the effects that process
-  // it (K-237, docs/06 render order).
+  // it (docs/06 render order).
   if (info.shapeContents.isNotEmpty) {
     final contentsOpen = open.contains(contentsPath(id));
     rows.add(FoldGroupRow(
@@ -1654,7 +1653,7 @@ List<LayerFoldRow> layerFoldRows({
     if (contentsOpen) {
       for (final (index, item) in info.shapeContents.indexed) {
         rows.add(FoldShapeRow(item, depth: 2));
-        // How this item joins the one before it (K-605). The first item of the
+        // How this item joins the one before it. The first item of the
         // list has nothing in front of it to join, so it has no such row.
         if (index > 0) {
           rows.add(FoldShapePaintRow(item, ShapePaint.combine, depth: 3));
@@ -1662,11 +1661,11 @@ List<LayerFoldRow> layerFoldRows({
         // An item combined into the run in front of it lends its **path** and
         // nothing else: the run is drawn once, with the paint and the modifiers
         // of the item that starts it. Showing the rest of its rows would be a
-        // page of settings that change nothing, which is the promise K-552
-        // refused to make for a dash on a fill-only shape.
+        // page of settings that change nothing, the same refusal a dash on a
+        // fill-only shape already gets.
         if (item.combine != 0) continue;
         // What the inside of the path is painted with comes first, because it
-        // is what the rest of the rows modify (K-555). A shape with no fill
+        // is what the rest of the rows modify. A shape with no fill
         // has no colour to show and nothing to ramp.
         if (item.fill != null) {
           rows.add(FoldShapePaintRow(item, ShapePaint.fill, depth: 3));
@@ -1677,7 +1676,7 @@ List<LayerFoldRow> layerFoldRows({
           }
         }
         // Its numbers sit under it, the way a stroke's trim sits under the
-        // stroke (K-549, K-551), and in the order they read: where the art
+        // stroke, and in the order they read: where the art
         // begins, where it ends, and how far the pair is slid along.
         for (final value in ShapeValue.values) {
           // The dashes' rows belong to the outline, so they appear only where
@@ -1686,10 +1685,10 @@ List<LayerFoldRow> layerFoldRows({
           if (isDashValue(value) && item.stroke == null) continue;
           // The repeater's step is nine rows of nothing until there is more
           // than one copy to step between, so Copies is the row that opens
-          // them (K-553).
+          // them.
           if (isRepeatStepValue(value) && !isRepeated(item)) continue;
           // The gradient's two points aim a ramp; with no ramp there is
-          // nothing for them to aim (K-555).
+          // nothing for them to aim.
           if (isGradientValue(value) && item.gradient == 0) continue;
           rows.add(FoldShapeValueRow(item, value, depth: 3));
         }
@@ -1699,7 +1698,7 @@ List<LayerFoldRow> layerFoldRows({
 
   // Animators, above Masks because they are part of the layer's own picture:
   // the letters are moved as the words are drawn, and the masks then gate what
-  // was drawn (K-609, docs/06 render order). Like every other group here the
+  // was drawn (docs/06 render order). Like every other group here the
   // heading appears only once there is something under it.
   if (info.textAnimators.isNotEmpty) {
     final animatorsOpen = open.contains(animatorsPath(id));
@@ -1754,7 +1753,7 @@ List<LayerFoldRow> layerFoldRows({
           if (value == MaskValue.vertexFeather) continue;
           rows.add(FoldMaskValueRow(mask, value, depth: 3));
         }
-        // The per-point widths, under the one width they vary from (K-545),
+        // The per-point widths, under the one width they vary from,
         // and only once the mask actually carries them: a mask feathered the
         // ordinary way shows the four rows it always did.
         for (var i = 0; i < mask.vertexFeather.length; i++) {
@@ -1767,7 +1766,7 @@ List<LayerFoldRow> layerFoldRows({
 
   // Paint, between Masks and Effects, because that is where it happens: strokes
   // are stamped into the layer's own pixels, which the masks then gate and the
-  // effects then process (K-227, docs/06 render order).
+  // effects then process (docs/06 render order).
   if (info.paint.isNotEmpty) {
     final paintOpen = open.contains(paintPath(id));
     rows.add(FoldGroupRow(
@@ -1780,7 +1779,7 @@ List<LayerFoldRow> layerFoldRows({
       for (final stroke in info.paint) {
         rows.add(FoldStrokeRow(stroke, depth: 2));
         // Its two trim values sit under it, the way a mask's numbers sit under
-        // the mask (K-549) — and in the order they read: where the mark
+        // the mask — and in the order they read: where the mark
         // begins, then where it ends.
         for (final value in StrokeValue.values) {
           rows.add(FoldStrokeValueRow(stroke, value, depth: 3));
@@ -1829,7 +1828,7 @@ List<LayerFoldRow> layerFoldRows({
         final effectOpen = open.contains(path);
         rows.add(FoldGroupRow(
           path: path,
-          // The user's own name where one is set (K-321), so the fold-out
+          // The user's own name where one is set, so the fold-out
           // and the Effect controls read the same.
           label: fx.customName ?? effectLabelOf(fx.name),
           open: effectOpen,
@@ -1872,7 +1871,7 @@ List<LayerFoldRow> layerFoldRows({
         rows.add(FoldGroupRow(
           path: path,
           // A style has no custom name of its own to set, but one carried in
-          // from an import is still the name the user was looking at (K-321).
+          // from an import is still the name the user was looking at.
           label: style.customName ?? effectLabelOf(style.name),
           open: styleOpen,
           depth: 2,
@@ -1900,7 +1899,7 @@ List<LayerFoldRow> layerFoldRows({
     ));
     if (audioOpen) {
       rows.add(FoldVolumeRow(scalar: volumeDb, depth: 2));
-      // The waveform behind its own twirl (K-172), so a busy comp only pays
+      // The waveform behind its own twirl, so a busy comp only pays
       // for the lanes actually being looked at.
       final waveOpen = open.contains(waveformPath(id));
       rows.add(FoldGroupRow(

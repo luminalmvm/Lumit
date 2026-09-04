@@ -2,7 +2,6 @@
 autosaves/
 *.kir-cache/
 target/
-.claude/
 # The Flatpak build (release.yml) stages the built bundle and its work dirs
 # here; none of it is committed.
 packaging/flatpak/bundle/

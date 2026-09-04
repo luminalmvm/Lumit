@@ -1,4 +1,4 @@
-//! Every shipped WGSL kernel parses and passes validation (K-263).
+//! Every shipped WGSL kernel parses and passes validation.
 //!
 //! **In plain terms.** The shaders are the little programs that run on the
 //! graphics card. Until now the only thing that ever checked them was the card

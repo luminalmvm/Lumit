@@ -47,8 +47,8 @@ pub const FLIP_ORDER_OPTIONS: &[&str] = &[
 #[effect(
     match_name = "card_wipe",
     label = "Card wipe",
-    // 2: Transition width crossed from a per cent of the frame to px@comp
-    // (K-558). `migrate_percent_to_px` converts a v1 instance on load.
+    // 2: Transition width crossed from a per cent of the frame to px@comp.
+    // `migrate_percent_to_px` converts a v1 instance on load.
     version = 2,
     category = Transition,
     // One hash, one divide and one bilinear tap a pixel.
@@ -57,8 +57,8 @@ pub const FLIP_ORDER_OPTIONS: &[&str] = &[
     // describes the reach (§3.65's reasoning).
     roi = FullFrame,
     premultiplied = true,
-    // K-429: the matte scales the amount, inside the kernel (the owner's rule
-    // for mattes); the generic strength dissolve does not also run.
+    // The matte scales the amount, inside the kernel (the owner's rule for
+    // mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales Completion per pixel: the cards have turned further where the \
@@ -70,13 +70,13 @@ pub const FLIP_ORDER_OPTIONS: &[&str] = &[
 pub struct CardWipe {
     /// How far through the wipe we are, per cent. **50 by default, where AE's is
     /// 0**, for docs/08 §3.46's reason (§1.2: no no-op defaults).
-    /// Closed 0..100 (K-414): a wipe cannot be less than begun or more than
+    /// Closed 0..100: a wipe cannot be less than begun or more than
     /// complete, so the range is the parameter, and typing past either end
     /// would offer a picture that does not exist.
     #[bounded(min = 0.0, max = 100.0, default = 50.0, unit = Percent)]
     pub completion: f32,
 
-    /// How wide the flipping wave is, px@comp (K-558) measured across the frame
+    /// How wide the flipping wave is, px@comp measured across the frame
     /// along whichever axis Flip order runs. As wide as the frame, every card
     /// flips together; a narrow band and they go one after another in a hard
     /// wave. The default is half a nominal 1080p frame's width, and
@@ -158,7 +158,7 @@ impl CardWipe {
     /// order collapses to an axis and an affine pair, so the kernel reads the
     /// ramp rather than branching four ways.
     ///
-    /// The raster is passed because Transition width is px@comp (K-558) and the
+    /// The raster is passed because Transition width is px@comp and the
     /// ramp it describes is a fraction of the frame: the band's width divides
     /// through the raster's own extent along the order axis, once, here — so
     /// the kernel is handed the same two numbers it always was and neither

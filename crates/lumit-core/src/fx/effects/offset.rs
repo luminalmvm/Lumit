@@ -19,8 +19,8 @@ use lumit_fx_macros::Effect;
     // The wrap means any output pixel can come from any input pixel.
     roi = FullFrame,
     premultiplied = true,
-    // K-427: the matte scales the displacement, inside the kernel (the
-    // owner's rule for mattes); the generic strength dissolve does not also run.
+    // The matte scales the displacement, inside the kernel (the owner's rule
+    // for mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales the shift per pixel, read where the pixel lands: white slides \

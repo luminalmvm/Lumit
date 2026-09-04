@@ -1,7 +1,7 @@
 # Phase 0 kickoff: the cold-start build order
 
 > **Historical note.** This plan built the original egui shell (`lumit-ui`/`lumit-app`),
-> which K-174 replaced with the Flutter frontend and K-182 deleted. The engine-crate
+> which the Flutter frontend replaced and which was later deleted. The engine-crate
 > sequencing here still describes how the workspace was bootstrapped; the UI slices are
 > history.
 
@@ -127,7 +127,7 @@ updated 04:00: **lumit-gpu now exists** with the linearise/display pipeline pair
 the gamma, shaders contain none). At the time, the remaining slice-5 work was: route the
 Viewer through it (register the display texture with egui via eframe's render state — an
 app-layer change) and the NV12 plane path once decode stops pre-converting via swscale.
-Those items died with the egui frontend (K-182) and are **not** live work — the living
+Those items died with the egui frontend and are **not** live work — the living
 backlog is [TODO.md](../TODO.md).
 
 ## Slice 6 — playback + audio (runs: Gate 0 demo)
@@ -148,5 +148,5 @@ tag `phase-0`.
   [01-GLOSSARY.md](../01-GLOSSARY.md), including in this scaffold (no `Track`, no `Velocity`).
 - Commit per slice at minimum; the exit test's evidence (test name, numbers) goes in the
   commit message.
-- Anything discovered that is decision-sized goes to [02-DECISIONS.md](../02-DECISIONS.md),
-  not into code comments.
+- Anything discovered that is decision-sized goes into the spec it touches, not into
+  code comments.

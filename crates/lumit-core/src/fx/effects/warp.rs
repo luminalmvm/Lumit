@@ -28,8 +28,8 @@ use lumit_fx_macros::Effect;
     // Every style can pull from anywhere in the frame.
     roi = FullFrame,
     premultiplied = true,
-    // K-427: the matte scales the displacement, inside the kernel (the
-    // owner's rule for mattes); the generic strength dissolve does not also run.
+    // The matte scales the displacement, inside the kernel (the owner's rule
+    // for mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales Bend and both distortions per pixel: white bends the full \

@@ -1,4 +1,4 @@
-//! Visual proof for the K-390 Guertin-class motion blur
+//! Visual proof for the Guertin-class motion blur
 //! (docs/impl/optical-flow.md §4.5 item 3): render the same real frame three
 //! ways — untouched, the way v1 blurred it, and the way v2 does — so the two
 //! claims can be judged by eye rather than asserted.
@@ -36,7 +36,7 @@ use lumit_core::fx::{cpu, MbQuality, MbView};
 /// v1's blur, kept only here and only to be the "before" picture: each pixel
 /// smeared along **its own** vector, the streak scaled to nothing by low
 /// confidence, a fixed tap count and a plain box weight. This is the behaviour
-/// K-390 replaced; it is not reachable from the shipping engine any more.
+/// v2 replaced; it is not reachable from the shipping engine any more.
 #[allow(clippy::too_many_arguments)] // the shape v1 had; changing it would not be v1
 fn motion_blur_v1(
     rgba: &mut [f32],
@@ -265,7 +265,7 @@ fn render_the_before_and_after_pictures() {
 ///   flow_and_blur_frame_cost --ignored --nocapture
 /// ```
 ///
-/// Flow is measured the way the decode worker measures it (half res, K-390's
+/// Flow is measured the way the decode worker measures it (half res, the
 /// census cost), blur at the frame's own size. GPU work is only finished when
 /// something reads it back, so each blur figure is timed with a readback and
 /// the readback's own cost — measured on the same texture immediately after —

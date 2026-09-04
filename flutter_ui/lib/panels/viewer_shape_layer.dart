@@ -1,5 +1,5 @@
 // The shape tools and the Pen over the picture: the drag that draws a mask, and
-// the Pen's point-by-point path (K-222, K-223, docs/07 §2.3).
+// the Pen's point-by-point path (docs/07 §2.3).
 //
 // **In plain terms.** With a shape tool in hand and a layer selected, dragging
 // over the picture draws a mask on that layer — a rectangle, a rounded
@@ -7,10 +7,10 @@
 // dragged, with Shift keeping it square. The **Pen** is different: it builds a
 // path a point at a time, and clicking its first point again closes and applies
 // it. (That gesture was briefly on the polygon tool; it is After Effects' pen,
-// and it belongs on the Pen — K-223.)
+// and it belongs on the Pen.)
 //
 // **What it does with nothing selected.** Makes a *shape layer* — the art
-// itself rather than a hole in someone else's picture (K-237). It is the same
+// itself rather than a hole in someone else's picture. It is the same
 // gesture and the same geometry; the only difference is which thing the path
 // ends up belonging to, and therefore which coordinates it is built in: the
 // layer's when there is one, the composition's when there is not.
@@ -41,7 +41,7 @@ import 'viewer_shapes.dart';
 /// for rather than being a decoration near it.
 const double closingRingRadius = 10;
 
-/// How solid a tool draws the thing it is about to make (K-238).
+/// How solid a tool draws the thing it is about to make.
 ///
 /// Shared by the shape tools and the Pen so every preview reads the same way.
 /// Low enough that the picture underneath still shows — which is what says the
@@ -62,7 +62,7 @@ class ViewerShapeLayer extends StatefulWidget {
   final List<LayerBox> boxes;
 
   /// The composition, for the shape layer a drag makes when nothing is
-  /// selected (K-237).
+  /// selected.
   final CompositionReference comp;
 
   /// Where the picture sits on screen, and the comp's own size — the two that
@@ -98,7 +98,7 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   Offset? _to;
 
   /// Where the pointer went down, for the same reason every other tool records
-  /// it (K-217): the framework only reports a drag once it has travelled its
+  /// it: the framework only reports a drag once it has travelled its
   /// slop, and a shape that started 18px from where you pressed is the wrong
   /// shape.
   Offset? _downAt;
@@ -107,7 +107,7 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   PathDraft _draft = const PathDraft();
   Offset? _penPointer;
 
-  /// Where the pointer is, for the drawn cursor (K-226). Tracked for every
+  /// Where the pointer is, for the drawn cursor. Tracked for every
   /// shape tool, not only the Pen, because every one of them wears one.
   Offset? _pointer;
 
@@ -152,7 +152,7 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   /// and part of why a half-drawn path is never a trap. (Escape, which abandons
   /// the path outright, is [_escape] on the ladder.)
   ///
-  /// **`Ctrl+Z` takes back a point too, while a path is being built** (K-232).
+  /// **`Ctrl+Z` takes back a point too, while a path is being built**.
   /// This is the one place the application's undo means something narrower than
   /// "undo the last edit": the points are not in the document yet — the path is
   /// applied in one op when it closes — so an undo pressed mid-path used to
@@ -172,7 +172,7 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
     return false;
   }
 
-  /// Whether a click where the pointer is would **close** the path (K-232).
+  /// Whether a click where the pointer is would **close** the path.
   ///
   /// The closing tolerance is a fixed number of screen pixels, and until this
   /// was drawn there was nothing at all to say how near "near enough" was: you
@@ -199,8 +199,7 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   LayerBox? get _target =>
       primarySelectedBox(widget.boxes, widget.uiState.selectedLayerIds);
 
-  /// The space the art being drawn lives in, and how to get it back on screen
-  /// (K-238).
+  /// The space the art being drawn lives in, and how to get it back on screen.
   ///
   /// The preview used to be drawn only when a layer was selected, because it
   /// asked that layer's map to place every point. With nothing selected — the
@@ -221,7 +220,7 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
     final target = _target;
     final space = _space;
     return Positioned.fill(
-      // The hardware crosshair leads (K-724): the OS precise pointer moves at
+      // The hardware crosshair leads: the OS precise pointer moves at
       // input rate whatever the application's frame rate is doing, so it is
       // the thing to aim with. The badge beside it, drawn by the app, only
       // says which shape.
@@ -291,7 +290,7 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   void _onPanStart(DragStartDetails details) {
     final at = _downAt ?? details.localPosition;
     // Where the crosshair is drawn is [DrawnPointerRegion]'s business, whichever
-    // button is down (K-230).
+    // button is down.
     if (_isPen) {
       // A click that became a drag: the vertex lands where the press was, and
       // the drag pulls its handles out.
@@ -335,8 +334,8 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
     if ((to - from).distance < 4) return;
 
     // The layer's coordinates when one is selected, the composition's when
-    // not — the same path either way, and only what it will belong to differs
-    // (K-237): a mask on the layer, or a new shape layer at the top of the
+    // not — the same path either way, and only what it will belong to differs:
+    // a mask on the layer, or a new shape layer at the top of the
     // composition.
     final space = _space;
     final path = shapePath(
@@ -367,7 +366,7 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   void _onPenTap(TapUpDetails details) {
     // The path is built in the layer's coordinates when there is a layer, and
     // in the composition's when there is not — the same path either way, and
-    // the difference is only which thing it will belong to (K-237).
+    // the difference is only which thing it will belong to.
     final space = _space;
     final at = space.ofScreen(details.localPosition);
     final start = _draft.first;
@@ -408,7 +407,7 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   // --- Committing -----------------------------------------------------------
 
   /// A new shape layer holding this art, at the top of the composition — what a
-  /// shape tool or the Pen does with nothing selected (K-237).
+  /// shape tool or the Pen does with nothing selected.
   ///
   /// The art takes the toolbar's fill, and its stroke when one has a width: the
   /// two swatches that had nothing to paint until there were shape layers.
@@ -431,25 +430,25 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
             stroke: tools.strokeWidth > 0 ? tools.strokeRgba : null,
             strokeWidth: tools.strokeWidth,
             opacity: 100,
-            // Whole, until somebody trims it (K-551).
+            // Whole, until somebody trims it.
             trimStart: const BridgeScalar.static_(0),
             trimEnd: const BridgeScalar.static_(100),
             trimOffset: const BridgeScalar.static_(0),
-            // Solid, until somebody dashes it (K-552).
+            // Solid, until somebody dashes it.
             dashes: const [],
             dashOffset: const BridgeScalar.static_(0),
-            // A flat fill, until somebody ramps it (K-555).
+            // A flat fill, until somebody ramps it.
             gradient: 0,
             gradientColour: null,
             gradientStartX: const BridgeScalar.static_(0),
             gradientStartY: const BridgeScalar.static_(0),
             gradientEndX: const BridgeScalar.static_(0),
             gradientEndY: const BridgeScalar.static_(0),
-            // On the path itself, until somebody offsets it (K-554).
+            // On the path itself, until somebody offsets it.
             combine: 0,
             pathKeys: const [],
             offsetAmount: const BridgeScalar.static_(0),
-            // Drawn once, until somebody repeats it (K-553).
+            // Drawn once, until somebody repeats it.
             repeatCopies: const BridgeScalar.static_(1),
             repeatOffset: const BridgeScalar.static_(0),
             repeatAnchorX: const BridgeScalar.static_(0),
@@ -491,7 +490,7 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
 /// Where the art being drawn lives, and how to put it on screen.
 ///
 /// A shape tool draws in the selected layer's coordinates when there is one and
-/// in the composition's when there is not (K-237). Both are a pair of maps and
+/// in the composition's when there is not. Both are a pair of maps and
 /// nothing else, so the preview takes the pair rather than a layer it might not
 /// have — which is what used to leave the shape-layer half of the gesture with
 /// no preview at all.
@@ -500,7 +499,7 @@ class ShapeSpace {
   final (double, double) Function(Offset at) ofScreen;
 
   /// How many screen pixels one of this space's pixels covers — what every
-  /// fixed-screen-distance rule (the Pen's closing ring, K-232) divides by.
+  /// fixed-screen-distance rule (the Pen's closing ring) divides by.
   final double screenScale;
 
   const ShapeSpace({
@@ -520,7 +519,7 @@ class ShapeSpace {
       );
 
   /// The composition's own placement — the space a new shape layer's art is
-  /// built in when there is no layer to ask (K-237). The same conversion the
+  /// built in when there is no layer to ask. The same conversion the
   /// Type tool places a click with, so the two cannot drift apart.
   factory ShapeSpace.ofComp({required Rect fitted, required Size compSize}) {
     final scale = compSize.width == 0 ? 1.0 : fitted.width / compSize.width;
@@ -539,7 +538,7 @@ class ShapePreviewPainter extends CustomPainter {
   final ShapeSpace space;
 
   /// The fill and stroke the art would be committed with, so the preview shows
-  /// the shape rather than only its outline (K-238). Translucent, because it is
+  /// the shape rather than only its outline. Translucent, because it is
   /// a shape that does not exist yet.
   final Color fill;
   final Color? stroke;
@@ -553,7 +552,7 @@ class ShapePreviewPainter extends CustomPainter {
   final Offset? handleFrom;
   final Offset? handleTo;
 
-  /// Whether a click where the pointer is would close the path (K-232).
+  /// Whether a click where the pointer is would close the path.
   final bool closing;
   final Color accent;
 
@@ -619,7 +618,7 @@ class ShapePreviewPainter extends CustomPainter {
         canvas.drawCircle(at, i == 0 ? 5 : 3, Paint()..color = accent);
       }
       // Near enough to close: the first vertex grows a ring, and the pointer
-      // wears one too (K-232). Two marks rather than one, because the question
+      // wears one too. Two marks rather than one, because the question
       // has two halves — *which* point closes the path, and whether the click
       // about to be made is that one.
       if (closing) {
@@ -636,7 +635,7 @@ class ShapePreviewPainter extends CustomPainter {
         }
       }
       // The edge that would be drawn if the pointer clicked now — as the curve
-      // it would actually be, not as a straight line (K-230).
+      // it would actually be, not as a straight line.
       //
       // The last point placed may have handles pulled out of it, and those
       // handles bend the edge *leaving* it. Drawing that edge straight promised
@@ -644,7 +643,7 @@ class ShapePreviewPainter extends CustomPainter {
       // curve is the same cubic the committed path uses, with the pointer
       // standing in for a vertex that has no handles yet.
       //
-      // **While the next vertex's own handles are being pulled out** (K-232)
+      // **While the next vertex's own handles are being pulled out**
       // the edge stops being a guess: the vertex is already placed — it is
       // where the press landed — so the curve runs to *there*, and bends into
       // it by the handle facing back along the path, which is the mirror of the
@@ -688,7 +687,7 @@ class ShapePreviewPainter extends CustomPainter {
   }
 
   /// The shape as it would be committed — the fill, then the stroke — under the
-  /// accent outline that says it is still being drawn (K-238).
+  /// accent outline that says it is still being drawn.
   ///
   /// **Translucent on purpose.** A solid preview is indistinguishable from a
   /// shape that already exists, and this one does not: nothing is in the

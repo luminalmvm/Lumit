@@ -1,5 +1,4 @@
-// The Animators section on frb: a text layer's letters moved one at a time
-// (K-609).
+// The Animators section on frb: a text layer's letters moved one at a time.
 //
 // Driven through the Effect controls panel, like the Source rows beside it,
 // because "which rows appear" is half of what the section does: a layer that is
@@ -31,7 +30,7 @@ void main() {
     }
 
     // Deliberately without turning the layer cards on: the Animators section
-    // has to be reachable with the panel as it ships (K-609), unlike Source
+    // has to be reachable with the panel as it ships, unlike Source
     // and Transform which move to the Timeline's fold.
     Future<void> mount(WidgetTester tester, dynamic p) async {
       await tester.pumpWidget(hostPanel(
@@ -59,7 +58,7 @@ void main() {
       p.uiState.selectedLayer.value = text;
       await mount(tester, p);
 
-      // A kicker since K-443: capitals on the way to the screen.
+      // A kicker now: capitals on the way to the screen.
       expect(find.text('ANIMATORS'), findsOneWidget);
       expect(text.getText()!.animators, isEmpty);
 
@@ -127,7 +126,7 @@ void main() {
       );
 
       // The graph editor resolves one of those rows to a curve, with no bridge
-      // call and no second model (K-184).
+      // call and no second model.
       final path = '${animatorPath(id, 0)}/${TextAnimatorValue.rangeOffset.name}';
       expect(foldRowPath(id, rows.whereType<FoldAnimatorValueRow>().firstWhere(
           (r) => r.value == TextAnimatorValue.rangeOffset)), path);

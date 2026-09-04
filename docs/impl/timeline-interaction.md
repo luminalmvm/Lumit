@@ -1,17 +1,15 @@
 # Timeline interaction — implementation note
 
-**Decision:** K-499 (the Keys rows carry the Layers editing anatomy, and the layer number
-returns), K-500 (the timeline selection model: a marquee from any ground, additive Shift,
-a property's name selects its keys). **Related:** K-441 (the Timeline's resting shape),
-K-442 (Graph mode), K-455 (Keys returns), K-457 (a key's shape says its interpolation),
-K-458 (the drawing is authoritative; the block tools), K-459 (one key size in both modes),
-K-439 (the accent's jobs split), K-196/K-203 (property selection and letting go), K-190/
-K-292 (snapping), K-208 (both halves move). This note is the *how* for **timeline
+**Decision:** the Keys rows carry the Layers editing anatomy and the layer number
+returns; the timeline selection model is a marquee from any ground, additive Shift, and a
+property's name selects its keys. **Related:** the Timeline's resting shape, Graph mode,
+Keys returns, a key's shape says its interpolation, the drawing is authoritative, the
+block tools, one key size in both modes, the accent's jobs split, property selection and
+letting go, snapping, both halves move. This note is the *how* for **timeline
 interaction quality**: the binding spec for every gesture the Timeline's three modes take,
 the audited gap list against the approved drawings and the Caddis study, and the ordered
 work packages. The drawings (`Caddis study/mockups/Keys.dc.html`, `GraphMode.dc.html`,
-`Main.dc.html` and their style manifests) govern geometry per K-450/K-458; this note
-governs behaviour.
+`Main.dc.html` and their style manifests) govern geometry; this note governs behaviour.
 
 ## In plain terms
 
@@ -27,7 +25,7 @@ timeline, keyframes do not travel with the block being stretched (a one-characte
 bug), the graph's tangent handles sit still while their key is dragged, and a keyframe's
 mark draws a seam down its own middle. This note names each failure with its file and
 line, states every behaviour as a sentence a test can check, and cuts the fixes into
-packages one agent each.
+packages one pull request each.
 
 ---
 
@@ -50,7 +48,7 @@ These are the study's distilled interaction rules (`Caddis study/notes-editor-ux
 - **P4 — What is selected is one colour, and it is not the accent.** Selected keys, the
   block box, its handles and badge draw in `text_primary`; `animated` says "this is
   keyed"; the accent keeps its closed list (playhead, one filled button, active tab tick —
-  K-439, docs/15 §3.1). Any selection mark in `accent` is a defect.
+  docs/15 §3.1). Any selection mark in `accent` is a defect.
 - **P5 — Everything visible is reachable.** If a key, band or handle is drawn where the
   user works, the obvious gesture on it must do the obvious thing — and the ground between
   things must always admit the marquee. A drawn mark that swallows gestures it does not
@@ -58,11 +56,11 @@ These are the study's distilled interaction rules (`Caddis study/notes-editor-ux
 
 ---
 
-## 2. The selection model (K-500)
+## 2. The selection model
 
 One model for the Layers lanes and the graph. Each sentence is testable.
 
-> **Keys mode is withdrawn** (K-529). Where this note says "Keys mode", read it as history:
+> **Keys mode is withdrawn.** Where this note says "Keys mode", read it as history:
 > the sheet's own surfaces are deleted, and every rule it shared with the lanes is a lane
 > rule and still holds. §2.3 and §3.2 are frozen for that reason; §3.3 is rewritten,
 > because the graph's outline is now the Layers outline.
@@ -85,7 +83,7 @@ One model for the Layers lanes and the graph. Each sentence is testable.
   alongside the box: the graph asked `HardwareKeyboard` at the release instead, so letting
   go of Shift half way through a box turned an adding drag into a replacing one. One
   widget, one answer, both panes.
-- A plain click on any ground deselects everything (K-203, shipped).
+- A plain click on any ground deselects everything (shipped).
 - **Clicking a property's name selects the property and all of its keys** — the name is
   the row's "select all" (After Effects' own gesture). `Ctrl`-click toggles the property's
   keys in and out of the standing key selection; `Shift`-click extends the visible run of
@@ -119,12 +117,12 @@ One model for the Layers lanes and the graph. Each sentence is testable.
 
 ### 2.2 Deselection and scope
 
-- Selection lets go exactly as K-203 says: closing a fold drops what was inside it,
-  selecting a layer clears the property selection, empty-ground click clears all.
+- Selection lets go in three ways: closing a fold drops what was inside it, selecting a
+  layer clears the property selection, empty-ground click clears all.
 - The lane, Keys and graph key selections are one selection wherever the id space allows
   (a lane key fans out to its axes' channels — shipped, `_actionKeySelection`).
 
-### 2.3 Keys mode's ground — **frozen (K-529)**
+### 2.3 Keys mode's ground — **frozen**
 
 > Keys mode is gone and so is its twirl set. Both remaining views use `_open`, Layers
 > mode's shut-by-default set, through the same `_setOpen` / `_shutLayerDeep` pair.
@@ -151,10 +149,10 @@ One model for the Layers lanes and the graph. Each sentence is testable.
 
 ### 3.1 Layers mode
 
-As built and ruled (K-461/K-462/K-463); no interaction change from this note beyond §2's
-property-name rule. Hover on a row washes the row one step (`surface_2`), P1-transient.
+As built and ruled; no interaction change from this note beyond §2's property-name rule.
+Hover on a row washes the row one step (`surface_2`), P1-transient.
 
-**The Animated filter** (6.43, K-441, placed by K-570): one toggle at the right-hand end
+**The Animated filter** (6.43): one toggle at the right-hand end
 of the outline's own bottom bar, beside the column toggles and left of the rule that
 divides them from the document's switches — because it makes the same kind of statement
 they do, about what the outline draws. On, every layer lists only the rows that carry
@@ -169,7 +167,7 @@ stays the keyboard road to the same question (`U` animated, `UU` modified, `UUU`
 twirls one layer open onto what qualifies, where the filter answers for the whole
 composition at once.
 
-### 3.2 Keys mode rows (K-499 — the owner's finding *a*) — **frozen (K-529)**
+### 3.2 Keys mode rows (the owner's finding *a*) — **frozen**
 
 > The sheet is gone. What this section decided outlives it as the reason the fold row is
 > the one property-row implementation: a Keys row *was* a `_FoldRow`, which is why nothing
@@ -178,11 +176,11 @@ composition at once.
 The shipped `_KeysOutline` (timeline_panel_frb.dart:6331) draws name-only property rows
 with a read-only value, and its layer row (`_KeysLayerRow`, :6436) dropped the layer
 number. The owner's ruling — Keys rows **match the Layers fold rows** — supersedes the
-drawing's read-only labels (K-458's own carve-out: the owner personally says otherwise)
-and §12A.1a's bullet. The exact anatomy, recorded:
+drawing's read-only labels (the authoritative drawing's own carve-out: the owner
+personally says otherwise) and §12A.1a's bullet. The exact anatomy, recorded:
 
-- **Layer row**: twirl · **layer number** (muted mono, the same column K-461 gives Layers
-  mode) · label dot · name · `n properties` count hard right. Raised on `surface_2`,
+- **Layer row**: twirl · **layer number** (muted mono, the same column Layers mode uses) ·
+  label dot · name · `n properties` count hard right. Raised on `surface_2`,
   selection fill when picked — as built otherwise.
 - **Property row**: **stopwatch** (square under Sharp, the shared
   `keyframe_controls_frb.dart` control) · **◄ ◆ ► navigator** (drawn once animating) ·
@@ -195,11 +193,11 @@ and §12A.1a's bullet. The exact anatomy, recorded:
 - **Built in TI-4 by making a Keys row *be* a Layers fold row**, not by drawing a second
   one: `_KeysOutline` lists `_FoldRow` itself, which is what makes "the rows match" a
   fact rather than a resemblance to maintain. Three things the note asked for bent to
-  that, and the fold row won each time, because a second answer is the thing K-499 was
-  ruling against:
+  that, and the fold row won each time, because a second answer is the thing the owner's
+  ruling was against:
   - the **navigator has no reserved slot** — it draws where the fold-out's loose gutter
     puts it, once the row is animating. The reserved slot is the Effect controls' fixed
-    columns (K-443); the fold-out is not measured in them, and on this sheet the slot is
+    columns; the fold-out is not measured in them, and on this sheet the slot is
     never empty anyway (Animated, the default, lists only keyed rows).
   - the **unit rides where its own row puts it**: inside the well as a suffix on a
     transform axis (`100%`), outside it as a rider on an effect parameter. That is one
@@ -210,14 +208,14 @@ and §12A.1a's bullet. The exact anatomy, recorded:
   so §2.1's property-name rule is true of every row the sheet can list, and the group
   prefix is one shared `flatGroupPrefix` inside each row's own label.
 - The property-name click follows §2.1 (selects the property **and its keys**); the value
-  well and stopwatch pick the row without taking its keys — K-334's press-selects meeting
-  K-196's rule that a control which edits does not re-aim the *key* selection.
+  well and stopwatch pick the row without taking its keys — a press selects the row, and a
+  control which edits does not re-aim the *key* selection.
 - The rows stay flat (no group headings) and the filters row stays as built.
 
 ### 3.3 Graph mode
 
-Built in TI-6 to K-442's filtered outline; **rebuilt to K-529's**, which is no outline of
-its own at all.
+Built in TI-6 to a filtered outline; **rebuilt to the later ruling's**, which is no outline
+of its own at all.
 
 - **The outline is the Layers outline, identical.** Same twirls, same columns, same rows,
   same widget (`_Outline`) — the panel does not branch on the mode for its left half at
@@ -239,16 +237,16 @@ its own at all.
   bezier at its current speed and the influence asked for). Two or more selected keys are
   a block, whose badge is the readout, and the row draws nothing at all rather than an
   empty strip. This is the graph's, not the filtered outline's, and it stays.
-- **Hovering a key sets no cursor** (K-529). The drag cursors stay — the handle ring's
+- **Hovering a key sets no cursor.** The drag cursors stay — the handle ring's
   `resizeUpDown`, the transform box's edge cursors — because those promise one direction.
-- **A handle drag previews only where the picture can differ** (K-529): an ease changes the
+- **A handle drag previews only where the picture can differ**: an ease changes the
   values between the dragged key and its neighbour and nothing outside them, so with the
   playhead outside that span `_updateHandleDrag` asks for no render at all. An envelope
-  point is exempt — dragging one re-integrates every frame after it (K-247). The budget is
+  point is exempt — dragging one re-integrates every frame after it. The budget is
   pinned in `bridge_call_budget_test`.
 - **A value well is reached the ordinary way** now that the outline is the Layers outline:
-  the fold row's own well, which is what the K-333/K-334/K-336 regression tests drag. The
-  setting that used to be the only route to one is gone with the outline that needed it.
+  the fold row's own well, which is what its regression tests drag. The setting that used
+  to be the only route to one is gone with the outline that needed it.
 
 ---
 
@@ -256,8 +254,8 @@ its own at all.
 
 ### 4.1 Bars
 
-Shipped behaviour stands (move/trim with source bounds, ghost extent, corner marks,
-K-208's both-halves slide, selection on the raw down). Additions:
+Shipped behaviour stands (move/trim with source bounds, ghost extent, corner marks, the
+both-halves slide, selection on the raw down). Additions:
 
 - The bar's **body** shows the move cursor — `grab`, `grabbing` while the bar is actually
   in hand; its end strips keep `resizeLeftRight` (shipped). A locked bar shows the plain
@@ -283,8 +281,8 @@ K-208's both-halves slide, selection on the raw down). Additions:
 
 ### 4.2 Lane keys
 
-- The mark is drawn per K-457/K-459 (11px, split halves) by the **seamless painter of
-  §5**; its grab is the shipped 12px slot at full lane height.
+- The mark is 11px with split halves, drawn by the **seamless painter of §5**; its grab
+  is the shipped 12px slot at full lane height.
 - Cursor over a key: `resizeLeftRight` (shipped) — it is a horizontal-only drag.
 - A key drag selects on the down, moves in time, snaps with target indication, commits
   once (all shipped); **Escape reverts** (TI-2, P3 — the shared `DragEscape`).
@@ -292,8 +290,8 @@ K-208's both-halves slide, selection on the raw down). Additions:
   and its time/value appear nowhere until the drag starts (P1). Built in TI-10: the
   **grab slot is the hover target**, so what brightens is exactly what a press would take
   (P5), and the painter is told which key rather than the key being drawn separately —
-  one painter still serves Layers lanes, Keys mode and the summary row (K-459). Half way
-  is deliberate: a hovered key must not be mistakable for a caught one.
+  one painter still serves Layers lanes, Keys mode and the summary row. Half way is
+  deliberate: a hovered key must not be mistakable for a caught one.
 - **While a key drag or block stretch runs, a badge under the pointer reads
   `f<frame> · <value>`** (frame only for a multi-key stretch: `f<first>–f<last>`), in the
   block badge's own 8px mono on `surface_4`. This is the drawing's value-hint pill and the
@@ -302,10 +300,10 @@ K-208's both-halves slide, selection on the raw down). Additions:
   in hand. The value is the one the lane's **own
   keys** carry — a multi-axis row reads its lead axis, exactly as its diamonds do
   (`laneKeysOf`) — rather than the row's sampled reading: sampling crosses the bridge, and
-  a drag would cross it on every pointer move (K-184). The pill flips to the key's other
-  side where the axis has run out, so the readout is never clipped by the edge.
-- A shut layer's **summary diamonds** stay a statement, not a target (K-441) — but the row
-  they sit on admits the marquee everywhere the bar itself is not (§2.1).
+  a drag would cross it on every pointer move. The pill flips to the key's other side
+  where the axis has run out, so the readout is never clipped by the edge.
+- A shut layer's **summary diamonds** stay a statement, not a target — but the row they
+  sit on admits the marquee everywhere the bar itself is not (§2.1).
 - **A drag on a key already in the catch carries the whole catch** (6.24, landed): the
   travel is worked out from the key in hand — clamped to the axis, taken to the nearest
   target — and then applied to every held key, so a run of keys keeps its shape rather
@@ -317,17 +315,17 @@ K-208's both-halves slide, selection on the raw down). Additions:
   undo step for the whole drag. A key *outside* the catch takes the selection first and
   travels alone.
 - **Click and drag are told apart at the release**, not by a second recogniser: a gesture
-  that ends where it began is a click and selects that key alone (K-500 §2.1); one that
+  that ends where it began is a click and selects that key alone (§2.1); one that
   moved is a drag and leaves the selection as it found it. A tap recogniser beside the
   drag would make the drag wait out the arena's slop, and the pixels waited through are
   frames the key would never travel.
 - **`Delete` removes the selected lane keys** (6.6, landed) — the panel's Delete claim
-  (K-234) with keyframes on its first rung, masks on its second. Each rung is a selection
+  with keyframes on its first rung, masks on its second. Each rung is a selection
   strictly inside the one below it, which is what makes the order the only sane one:
   picking a keyframe and pressing Delete must not cost the layer it sits on. Graph mode's
   keys are not on the ladder; the `edit.delete.selection` handler reaches them first.
 
-### 4.3 The block tools (K-458)
+### 4.3 The block tools
 
 Shipped: the box, the 3×6 end marks in 11px targets, the badge opening the Ease popover,
 whole-frame stretch, one undo step, Reverse / Copy / Paste-at-playhead in the Keys strip.
@@ -373,7 +371,7 @@ everywhere. The block stretch landed in TI-2; the other three, and the graph's, 
 - **One list, one builder.** `timelineSnapTargets` (timeline_panel_frb.dart) is the single
   gatherer both halves of the panel call — the lane area for its keys, bars and ruler, and
   the graph half for its ruler and its pane. It reads the memoised marker list and the read
-  model, so a panel rebuild costs no bridge call (K-184).
+  model, so a panel rebuild costs no bridge call.
 - **Each drag drops itself.** A work-area edge leaves its own kind out, a marker leaves its
   own frame out, a bar leaves both of its ends out. A target where the dragged thing already
   stands is a magnet at zero travel: it does not snap the drag, it forbids it.
@@ -384,7 +382,7 @@ everywhere. The block stretch landed in TI-2; the other three, and the graph's, 
   **grabbed** key alone and then applied to the whole selection, so a run of keys keeps its
   shape; every landmark is on a whole frame, so the existing whole-frame rounding lands the
   key exactly on what caught it. `Ctrl` suspends the *reach*; the magnet's own whole-frame
-  rounding is unchanged by it, as it has been on this pane since K-333.
+  rounding is unchanged by it, as it has been on this pane.
 
 ---
 
@@ -420,7 +418,7 @@ middle of **every** key, same-shape pairs included.
   and the union agreeing with `keyHalfPath` at probes either side. A golden pins one
   picture; the walk pins the rule, for all nine pairs, and needs no image checked in
   (`timeline_alignment_test.dart`).
-- The same painter serves Layers lanes, Keys mode and the shut layer's summary (K-459's
+- The same painter serves Layers lanes, Keys mode and the shut layer's summary (the
   one-painter rule).
 
 ---
@@ -450,7 +448,7 @@ middle of **every** key, same-shape pairs included.
   regression test starts a key drag, moves it, and asserts the handle endpoint translated
   with the key before release.
 - Breaking/joining stays `Alt` at drag start (shipped); the joined partner keeps its
-  screen length (shipped). `Shift` lays the handle flat (shipped, K-333).
+  screen length (shipped). `Shift` lays the handle flat (shipped).
 - Hovering a handle's target ring brightens the ring one step (P1); the cursor over key
   and handle targets is `move`/`resizeUpDown` respectively. **Both landed with TI-5**, in
   the same pass that gave the ring its hover state, so TI-10's cursor sweep found the
@@ -462,10 +460,10 @@ middle of **every** key, same-shape pairs included.
 
 - The graph's key glyphs keep their drawing: circle bezier, diamond linear, square hold
   (`GraphMode.dc.html` draws exactly this; the split-half hourglass is the *lanes'* mark —
-  K-457/K-459 govern lanes and Keys mode, the graph's drawing governs the graph).
+  the lane rules govern lanes and Keys mode, the graph's drawing governs the graph).
 - A **selected** key draws in `text_primary`, one size step larger (the drawing's 7 in a
   6 world) — today `_keyHandles` paints selection in `t.accent`
-  (graph_editor_frb.dart ~2668), which P4/K-439 forbid.
+  (graph_editor_frb.dart ~2668), which P4 forbids.
 - While one key is selected or dragged, the **value hint pill** rides beside it:
   `f<frame> · <value> · <in> / <out> %` in 8px mono on `surface_4` — the drawing's pill.
   It follows a drag live and vanishes with the selection. **One** key: two or more are a
@@ -491,9 +489,8 @@ middle of **every** key, same-shape pairs included.
     the modifier's work instead, which is what the study actually describes: *"Shift locks
     to the dominant drag axis and snaps values to integers with a live readout tooltip"*
     (`Caddis study/notes-editor-ux.md` §4). The axis lock half of that sentence belongs to
-    the box's **slide** — the key drag, where `Shift` has constrained the axis since K-333
-    — and the integer snap half belongs to the edge scale, which is where TI-7 put it.
-    Logged as K-505.
+    the box's **slide** — the key drag, where `Shift` already constrains the axis — and
+    the integer snap half belongs to the edge scale, which is where TI-7 put it.
   - **There are no corner grabs**, only the four edges. A box's corners stand exactly on
     the selection's extreme keys — with two keys selected they *are* those keys — so a
     corner grab would either swallow the key's own click and drag or sit unreachable
@@ -557,7 +554,7 @@ middle of **every** key, same-shape pairs included.
 
 ## 7. The ruler, work area and markers
 
-Shipped: scrub on drag (previews video; stops playback per K-254), staged work-area edge
+Shipped: scrub on drag (previews video; stops playback), staged work-area edge
 drags with the band's edges as handles, marker drag committing once on release, marker
 right-click menu, one-per-frame replacement. Additions, each spec'd already and unbuilt:
 
@@ -605,12 +602,12 @@ claim; missing is drawn/ruled but absent; polish is the study's slickness bar.
 ### Bugs
 
 1. **[bug] Lane keys do not travel with a block stretch.** Escaped string literal
-   `'\${widget.rowId}#\$i'` in `_KeyLaneState._frameOf`. Source: K-458; the file's own
-   comment promises the live travel. (§4.3) — **landed, TI-2.**
+   `'\${widget.rowId}#\$i'` in `_KeyLaneState._frameOf`. Source: the drawing, which is
+   authoritative; the file's own comment promises the live travel. (§4.3) — **landed, TI-2.**
 2. **[bug] Every keyframe mark draws a centre seam**, same-shape pairs included: two
    anti-aliased `drawPath` calls per mark in `_LaneKeysPainter.paint`
    (timeline_panel_frb.dart ~9013, geometry at `keyHalfPath` :159). Source: owner finding
-   b; K-457. (§5) — **landed, TI-3.**
+   b. (§5) — **landed, TI-3.**
 3. **[bug] Graph handles lag a dragged key**: `_keyDrag` never enters `_shownKeys`
    (graph_editor_frb.dart ~2323), so `_handleEndpointFor`/`_tangentHandles`/
    `_HandlesPainter` read unmoved keys while `_keyPoint` (~1902) moves the glyph. Source:
@@ -619,30 +616,31 @@ claim; missing is drawn/ruled but absent; polish is the study's slickness bar.
    opaque tap-only (`_KeysLayerLane`, timeline_panel_frb.dart ~8396) and the shared twirl
    set opens shut (`_open`, :620; `keysLayerRows` reads it, :447), so the default sheet
    is all bands — no marquee, no property rows, no keys to click. Source: the Keys
-   drawing; K-455/K-458. (§2.3) — **landed, TI-1.**
+   drawing. (§2.3) — **landed, TI-1.**
 5. **[bug] Marquee and block box misalign below an open Sequence view**: `_keysIn` /
    `_selectedKeyPlaces` step by `rowHeight` and ignore `sequenceExtra`
-   (timeline_panel_frb.dart, `_LayerArea`). Source: K-248 heights vs K-458 walk. (§4.4)
+   (timeline_panel_frb.dart, `_LayerArea`). Source: the ruled heights vs the drawing's
+   walk. (§4.4)
    — **landed, TI-1.**
 6. **[bug] Selection colours off-token**: graph selected key in `t.accent`
    (graph_editor_frb.dart ~2668); marquee box in `t.accent` (`widgets/marquee.dart`);
-   handle lines/dots in `t.warning` (~3017, ~3090). Source: K-439/§3.1's closed accent
+   handle lines/dots in `t.warning` (~3017, ~3090). Source: docs/15 §3.1's closed accent
    list; the drawings select in `text_primary`. (§6.1, §6.2, §4.4) — **landed**: the
    marquee in **TI-2**, the key and the handles in **TI-5**. `warning` no longer appears
    in `graph_editor_frb.dart` at all. What is left in `accent` on this panel is the
    **snap capture line** (all four of them, lanes, block, ruler and graph), which is not
    a selection mark and predates this note; whether a transient time marker belongs on
-   K-439's list is a question for K-439, not for this programme, and nothing here changed
-   it.
+   the accent's closed list is a question for the ruling that owns it, not for this
+   programme, and nothing here changed it.
 
 ### Missing
 
 7. **[missing] Keys rows' anatomy** — layer number, stopwatch, navigator, value wells
-   (K-499; `_KeysOutline` :6331, `_KeysLayerRow` :6436). Source: owner finding a. (§3.2)
+   (`_KeysOutline` :6331, `_KeysLayerRow` :6436). Source: owner finding a. (§3.2)
    — **landed, TI-4.**
 8. ~~**[missing] Graph mode's outline**~~ — **landed, TI-6**: the filtered colour-ticked
    list, Normalise, the Key readout row with In/Out % wells and the
-   Layers-identical-outline setting. Source: K-442, §12A.2, GraphMode drawing. (§3.3)
+   Layers-identical-outline setting. Source: §12A.2, GraphMode drawing. (§3.3)
 9. ~~**[missing] Dashed handle lines, hollow endpoint rings**~~ — **landed, TI-5**
     (drawing). (§6.1)
 10. ~~**[missing] Value hint pill** beside a selected/dragged graph key, and the lane
@@ -656,8 +654,7 @@ claim; missing is drawn/ruled but absent; polish is the study's slickness bar.
 12. ~~**[missing] Graph selection transform box**~~ — **landed, TI-7**: the four edge
     grabs, time and value scaled about the opposite edge, `Shift` rounding what the scale
     lands on with its readout pill, the badge, one undo step and the Escape revert. No
-    corner grabs and no `Ctrl` taper — both corrections recorded in §6.2 and logged as
-    K-505. (§6.2)
+    corner grabs and no `Ctrl` taper — both corrections recorded in §6.2. (§6.2)
 13. ~~**[missing] Numeric entry**~~ — **landed, TI-7**: double-clicking a key opens its
     exact frame, value and In/Out % (docs/07 §5.3). (§6.2)
 14. ~~**[missing] Right-click menu on lane keys**~~ — **landed, TI-1**; a block's two
@@ -668,7 +665,7 @@ claim; missing is drawn/ruled but absent; polish is the study's slickness bar.
     moving the modifier read into `MarqueeSelect`'s own `onPanDown`, which is what put
     both panes on one answer (§2.1).
 17. ~~**[missing] Property-name click selects the property's keys**~~ — **landed,
-    TI-1**, with its `Ctrl` and `Shift` variants (K-500). (§2.1)
+    TI-1**, with its `Ctrl` and `Shift` variants. (§2.1)
 18. ~~**[missing] Snapping for bar drags, work-area handles, marker drags and the block
     stretch**~~ — the block stretch landed in TI-2; the **bar, work-area, marker and graph
     key drags landed in TI-9**, on one shared gatherer with the capture line on each.
@@ -690,12 +687,12 @@ claim; missing is drawn/ruled but absent; polish is the study's slickness bar.
 23. ~~**[missing] Edge-follow scrolling during playback; `=`/`-`/`\` zoom keys**~~ —
     **landed, TI-9.** Edge-follow is a **page flip** (the playhead leaving the viewport
     puts the lanes on the next page), guarded by the transport being on — and a scrub
-    stops the transport (K-254), which is what keeps the promise that nothing recentres
-    under a hand. The *smooth* alternative and the setting that chooses between the two
-    are deferred with docs/07 §4.6, as is `Shift+=` (zoom to work area), which this note
+    stops the transport, which is what keeps the promise that nothing recentres under a
+    hand. The *smooth* alternative and the setting that chooses between the two are
+    deferred with docs/07 §4.6, as is `Shift+=` (zoom to work area), which this note
     never listed. The zoom keys hold the **playhead** still, the answer the slider already
-    gives a zoom with no pointer to zoom about (K-293); `\` remembers the magnification it
-    came away from, so pressing it twice is a round trip.
+    gives a zoom with no pointer to zoom about; `\` remembers the magnification it came
+    away from, so pressing it twice is a round trip.
 24. **[missing] Acceleration lens, auto view, beat-marker lines in the graph, waveform
     ghosting, Retime lenses** (docs/07 §5.1–5.3 still-to-build — recorded here for
     completeness; they stay on their existing TODO lines and are not in this
@@ -709,8 +706,8 @@ claim; missing is drawn/ruled but absent; polish is the study's slickness bar.
     shape is doing most of the affordance work"). One thing is deliberately **not** done:
     the study's **scissors** while the razor is armed. Flutter's cursor set has no
     scissors, so it would have to be a drawn pointer over the whole panel — the Viewer's
-    own machinery (K-230), a job of its own rather than a line in a cursor table. Left on
-    the polish list. (§4.1, §6.1)
+    own machinery, a job of its own rather than a line in a cursor table. Left on the
+    polish list. (§4.1, §6.1)
 26. ~~**[polish] Hover states**~~ — **landed, TI-10**: the lane key brightens half way to
     `text_primary`, a bar's leading edge leans one step the same way, the marker flag —
     pill and triangle — lifts, and the graph's handle ring already brightened from TI-5.
@@ -749,7 +746,7 @@ concurrent export-workflow session has landed its commits** — it works in the 
 (`timeline_panel_frb.dart`, `timeline_extras_frb.dart`, the l10n arbs); rebase on its
 result rather than merging around it. New user-facing strings (menu rows, keymap labels,
 the badge) land in `app_en.arb` in the same commit, with `engine_labels.dart` entries for
-anything the engine names (K-303, K-005); PRs list the new keys for translation.
+anything the engine names; PRs list the new keys for translation.
 
 - **TI-1 — Selection reaches everywhere** (§2; gaps 4, 14–17, and bug 4). **Landed.**
   Marquee from
@@ -769,9 +766,9 @@ anything the engine names (K-303, K-005); PRs list the new keys for translation.
   note asked for — a walk over every shape pair asserting one contour and no edge on the
   centre line (§5). Files: `timeline_panel_frb.dart` (painter + `keyHalfPath` oracle),
   `test/frb/timeline_alignment_test.dart`. No new strings.
-- **TI-4 — Keys rows to K-499** (§3.2; gap 7). **Landed.** Layer number, stopwatch,
-  navigator and value wells on the Keys property rows via the shared row machinery —
-  by listing `_FoldRow` itself. Files:
+- **TI-4 — Keys rows to the Layers anatomy** (§3.2; gap 7). **Landed.** Layer number,
+  stopwatch, navigator and value wells on the Keys property rows via the shared row
+  machinery — by listing `_FoldRow` itself. Files:
   `timeline_panel_frb.dart` (`_KeysOutline`, `_KeysLayerRow`),
   `keyframe_controls_frb.dart` reuse; widget tests pinning the anatomy.
 - **TI-5 — Graph handles and drag geometry** (§6.1–6.2; bugs 3, 6; gaps 9–10).
@@ -789,12 +786,12 @@ anything the engine names (K-303, K-005); PRs list the new keys for translation.
   selection box with **edge** scaling of time and of value about the opposite edge,
   `Shift` rounding the result with its live readout, sharing TI-2's escape and one-undo
   behaviour; the double-click exact-fields popover. No corner grabs, no `Ctrl` taper
-  (§6.2, K-505). Files: `graph_editor_frb.dart`, `key_block.dart` (`scaledAbout`, the
+  (§6.2). Files: `graph_editor_frb.dart`, `key_block.dart` (`scaledAbout`, the
   shared block maths), `timeline_panel_frb.dart` (the Key readout row's influence write
   moved to the shared `sideWithInfluence`), arb keys.
 - **TI-8 — Tangent modes** (§6.3; gap 11). **Landed.** The per-side Auto/Clamp/Free mode
   through engine, bridge and strip, with the Free-round-trip-keeps-the-ease test; the
-  maths is docs/impl/keyframe-eval.md §6 (K-506). It is an arm of `SideInterp` rather
+  maths is docs/impl/keyframe-eval.md §6. It is an arm of `SideInterp` rather
   than a field beside it, which is what lets the remembered ease cross the bridge and
   come back without a merge on the write path. Files: `crates/lumit-core/src/anim.rs`
   (+`sequence.rs`), `crates/lumit-bridge/src/api/effect.rs`, codegen,
@@ -850,8 +847,8 @@ against the code and the suites (2026-08-25). What it found:
   `Ctrl`+click stay the only planting gesture (docs/07 §4.3's, shipped)? Leaning: keep
   `Ctrl`+click only, since double-click is being given to numeric entry on a key and two
   double-click meanings a few pixels apart misfire.
-- ~~Whether the Keys-mode value wells write through the playhead edit rule K-189
-  unchanged~~ — **closed in TI-4, by test rather than by ruling.** They do, because they
+- ~~Whether the Keys-mode value wells write through the playhead edit rule unchanged~~ —
+  **closed in TI-4, by test rather than by ruling.** They do, because they
   are the fold-out's own wells: a typed value lands on the key under the playhead,
   flattening nothing and planting nothing
   (`timeline_panel_frb_test.dart`, "a Keys value well writes into the key at the

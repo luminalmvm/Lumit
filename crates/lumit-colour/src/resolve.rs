@@ -9,7 +9,7 @@
 //!
 //! The part that needs stating out loud is the **bridge**. A config's reference
 //! space is its own; Lumit's working space is fixed — scene-linear Rec.709,
-//! premultiplied fp16 (K-490) — and the two are not the same thing. There are
+//! premultiplied fp16 — and the two are not the same thing. There are
 //! three ways this crate joins them, and which one is in force is something the
 //! project settings face states rather than hides:
 //!
@@ -882,7 +882,7 @@ display_colorspaces:
     fn an_exponent_s_negative_style_is_read_from_the_key_a_config_file_writes() {
         // `style`, not `negativeStyle`: the config file's spelling. Read for
         // the wrong key it finds nothing and clamps, and nothing above zero
-        // ever shows it (K-517).
+        // ever shows it.
         let text = r#"
 ocio_profile_version: 2
 roles:

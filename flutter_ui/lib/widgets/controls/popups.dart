@@ -1,4 +1,4 @@
-// The popup chain (K-519): one authority over every menu, dropdown, picker and
+// The popup chain: one authority over every menu, dropdown, picker and
 // flyout on screen, the layout that keeps them inside the window, and the
 // tooltip that is placed by the same delegate.
 
@@ -18,7 +18,7 @@ class _PopupHandle {
   final VoidCallback dismiss;
 }
 
-/// **The one chain of open popups, outermost first** (K-519).
+/// **The one chain of open popups, outermost first**.
 ///
 /// Every menu, dropdown, picker and flyout in the application goes through
 /// [showLumitPopup], and each call used to push an overlay entry of its own
@@ -79,7 +79,7 @@ class _PopupScope extends InheritedWidget {
 }
 
 /// A window point in the coordinate space of the overlay that is going to draw
-/// it (K-560).
+/// it.
 ///
 /// **In plain terms.** A control says where it is with `localToGlobal`, which
 /// answers in window pixels. A popup is not laid out in the window, though — it
@@ -103,7 +103,7 @@ Future<T?> showLumitPopup<T>({
   required BuildContext context,
   // Where the popup is anchored, in **window** coordinates — what a control's
   // `localToGlobal` hands back. It is converted into the overlay's own space
-  // here (K-560), once, so no call site has to know what is between them.
+  // here, once, so no call site has to know what is between them.
   required Offset position,
   required Widget Function(void Function(T?) close) builder,
   // Whether what is underneath still feels the pointer while this popup is up.
@@ -157,7 +157,7 @@ Future<T?> showLumitPopup<T>({
                   ? HitTestBehavior.translucent
                   : HitTestBehavior.opaque,
               // One click away is one dismissal: the whole chain goes, not
-              // just the popup whose barrier caught the click (K-519).
+              // just the popup whose barrier caught the click.
               onTap: closeLumitPopups,
               onSecondaryTap: closeLumitPopups,
             ),

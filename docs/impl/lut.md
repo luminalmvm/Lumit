@@ -73,7 +73,7 @@ interpolation precision is not guaranteed bit-for-bit across GPUs, so it will
 not hold the ≤2 fp16 ULP oracle against the CPU reference. Instead **`textureLoad`
 the eight integer corners and do the three lerps in the shader in f32**, byte for
 byte the same as §2. The sampler is then only a nearest fetch. This keeps
-preview == export (K-031) and CPU == GPU regardless of hardware.
+preview == export and CPU == GPU regardless of hardware.
 
 Domain mapping, the `(N-1)` scale and the edge clamp all live in the shader
 identically to the CPU. Feed the LUT its input in the effect's working space and
@@ -82,7 +82,7 @@ map, so it must not see premultiplied values; unpremult → look up → repremul
 the same discipline the affine grades (saturation, colour balance) use, i.e.
 `premultiplied: false` in the traits.
 
-### 3a. Input space (closed, K-543)
+### 3a. Input space (closed)
 
 The review above is answered. Most creative `.cube` LUTs are authored for
 display-encoded input while Lumit works scene-linear, so the effect carries an
@@ -115,8 +115,8 @@ Three things this pins:
   guard is what makes the two op-for-op.
 - **Linear is arithmetic-free.** `LutSpace::Linear` returns its argument by
   identity and the shader's `to_space`/`to_linear` return `c`, so a LUT saved
-  before this row renders the bits it always did (K-258) — the oracle test's
-  Linear cases are the pre-K-543 cases unchanged.
+  before this row renders the bits it always did — the oracle test's Linear
+  cases are unchanged from before this row.
 
 The oracle is now `Lut3d::sample_in(space, rgb)` rather than `sample`; the GPU
 test runs every space against the same corpus and also asserts that each space
@@ -124,13 +124,13 @@ renders a *different* picture from Linear, since an oracle alone would be
 equally satisfied by a shader that ignored the row and a reference that ignored
 it too.
 
-Status (closed, K-271): the domain gap is gone. `LutParams` carries the six
+Status (closed): the domain gap is gone. `LutParams` carries the six
 domain floats (as two padded `vec4`s — a uniform `vec3` is 16-byte aligned
 anyway) and the shader remaps through them operation for operation with
 `axis()`, zero-span guard included: a `DOMAIN_MIN` equal to its `DOMAIN_MAX`
 reads as 0 on both paths rather than dividing. The oracle test now covers a cube
 over an asymmetric non-default domain and a degenerate zero-span one; on the
-shader as it stood before, the first of those missed by 23684 fp16 ULP. (K-114
+shader as it stood before, the first of those missed by 23684 fp16 ULP. (v1
 shipped assuming `0..1`, so such a cube rendered silently wrong while the CPU
 reference was right.)
 
@@ -143,13 +143,13 @@ frame; parse+upload only on a miss (path changed, or the file was edited on
 disk). Bound the cache (a handful of entries — a comp rarely references many
 LUTs at once) and evict LRU. The parse cost is then paid once per distinct file.
 
-Status (closed, K-271): one `LutCache` (`lumit-render::fxops`) behind the one
+Status (closed): one `LutCache` (`lumit-render::fxops`) behind the one
 `Realiser::load_luts` both preview and export drive, keyed by `(path, mtime)`
 and bounded to eight entries, most recently used first. An edited `.cube` is
 re-parsed and re-uploaded on the next frame, and a stale entry for that path is
 replaced rather than kept beside the new one. A path that cannot be stat'd keys
 as `None`, which still matches itself, so such a file is cached by path exactly
-as before rather than re-read every frame. (K-114 shipped keyed by path alone,
+as before rather than re-read every frame. (v1 shipped keyed by path alone,
 so a re-exported grade never appeared until the app was restarted.)
 
 ## 5. Animating which file is live (the File parameter)
@@ -205,7 +205,7 @@ the effects that need them):
 - **The loaded LUT is threaded alongside `ops`.** `run_ops` takes a parameter
   parallel to `ops` — `luts: &[Option<LoadedLut>]`, one slot per `lut` op, `Some`
   only for an op whose file loaded. The GPU pass declares
-  `aux() == AuxKind::Lut` (K-387, effect-registry.md §2.5a), so `run_ops`
+  `aux() == AuxKind::Lut` (effect-registry.md §2.5a), so `run_ops`
   advances the LUT counter and hands the slot in; the pass binds that texture and
   calls `FxEngine::lut`. A `None` slot (unset path, or a parse/IO failure) is a
   passthrough — the §3.11 "missing file is a labelled no-op, never a fault" rule
@@ -218,7 +218,7 @@ the effects that need them):
   list; for each `lut` effect they read its File param with
   `EffectInstance::path_at("file", lt)`, run it through the cache (§4), and fill
   the parallel `luts` slot. Both paths call the one shared `run_ops`, so preview
-  == export (K-031) for free.
+  == export for free.
 - **CPU fallback / the oracle.** Because the LUT data never reaches the CPU
   dispatcher, `LutDef` keeps `EffectDef::apply_cpu`'s identity default — a
   **passthrough** (the CPU degradation rung renders a LUT as a no-op —
@@ -227,13 +227,13 @@ the effects that need them):
   whose oracle reference lives outside the CPU dispatcher, precisely because its
   parameter is a file, not a number.
 
-**v1 shipped subset (to log as K-114 with the effect).** The §3.11 spec lists
-File, Input space, Interpolation and Mix; v1 ships **File + Mix** only, **3D
-trilinear** only (Tetrahedral deferred), applied in the scene-linear working
-space **as-is** (no Input-space transfer — a `.cube` authored for a different
-space is applied directly, flagged for the owner). The Input-space control,
-Tetrahedral interpolation, the content-hash cache key, and embedding small LUTs
-in the project (K-040) are all recorded follow-ups.
+**v1 shipped subset.** The §3.11 spec lists File, Input space, Interpolation
+and Mix; v1 ships **File + Mix** only, **3D trilinear** only (Tetrahedral
+deferred), applied in the scene-linear working space **as-is** (no Input-space
+transfer — a `.cube` authored for a different space is applied directly,
+flagged for the owner). The Input-space control, Tetrahedral interpolation, the
+content-hash cache key, and embedding small LUTs in the project are all
+recorded follow-ups.
 
 ## Feeds
 

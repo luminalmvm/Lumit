@@ -17,11 +17,11 @@
 // **Effects that want their own display** are the exception this layout
 // expects. [customEffectDisplay] is asked for a widget to draw *above* the
 // rows, and Levels claims it: a histogram of the frame with its input handles
-// over it and the output range beneath (K-413). The rows themselves are
+// over it and the output range beneath. The rows themselves are
 // unchanged — the display writes the same values through the same callbacks.
 // Curves' spline is not a display but a **fold**: its five channel curves are
 // five declared parameters folded into one tabbed editor, the way an `_x`/`_y`
-// pair folds into one point row (K-412).
+// pair folds into one point row.
 //
 // Every animatable row carries the stopwatch and the ◄ ◆ ► navigator
 // (keyframe_controls_frb.dart). An animated row shows "animated" in place of its
@@ -146,10 +146,10 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     });
   }
 
-  /// The effect whose heading is an inline rename editor, or null (K-321).
+  /// The effect whose heading is an inline rename editor, or null.
   UuidValue? _renamingEffect;
 
-  /// A double-click counter per Custom shader heading (K-642 §4.2), so two
+  /// A double-click counter per Custom shader heading, so two
   /// clicks on two different headings are not one double-click. Counted with
   /// [DoubleTap] rather than `onDoubleTap`, which would make every single
   /// click on a heading wait out the recogniser.
@@ -188,7 +188,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   /// undo step.
   Future<void> _editShaderOn(LayerReference layer, UuidValue effect) async {
     // The live preview rides the drag path exactly as a parameter does
-    // (K-650, and `render_frame_with_preview`'s own words: "the live drag
+    // (`render_frame_with_preview`'s own words: "the live drag
     // path, which never touches the document"). The editor calls this when
     // the text it has settled on compiles; nothing here commits.
     final ui = context.read<LumitUiState>();
@@ -214,14 +214,14 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     if (applied && mounted) context.read<LumitUiState>().model.refresh();
   }
 
-  /// How many Action buttons have been pressed in this panel's life (K-417).
+  /// How many Action buttons have been pressed in this panel's life.
   ///
   /// A press changes nothing in the document — it is an event, not an edit —
   /// so there is no revision for a status line to compare against. This number
   /// is what an effect's own display watches to know a button was pushed.
   int _actionPressed = 0;
 
-  /// Which parameters a driver is wired to (K-471), by `effectId/paramId`,
+  /// Which parameters a driver is wired to, by `effectId/paramId`,
   /// with the driver's own name and what its wire carries.
   ///
   /// Read from `getGraph` at the two moments the graph can change — the
@@ -237,7 +237,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   @override
   void initState() {
     super.initState();
-    // `Enter` renames the selected effect (K-321) — registered on the
+    // `Enter` renames the selected effect — registered on the
     // hardware keyboard like every panel command; stands down for modals,
     // focused fields, and whenever this panel is not the active one.
     HardwareKeyboard.instance.addHandler(_onKey);
@@ -252,11 +252,11 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     _boundUi = ui;
     ui.selectedLayer.addListener(_readDriven);
     ui.model.addListener(_readDriven);
-    // `Ctrl+A` here means every effect on the layer (K-522), not every layer
+    // `Ctrl+A` here means every effect on the layer, not every layer
     // in the composition — the shell routes the chord to the focused panel.
     ui.selectAllRequest.addListener(_onSelectAllRequested);
     // **Delete means the picked effects while this panel is the focused one**
-    // (item 6.6, K-234's mechanism). Claimed rather than handled on the
+    // (item 6.6, the claim mechanism). Claimed rather than handled on the
     // keyboard: every hardware-keyboard handler runs on every key, so
     // answering the chord here would remove the effects *and* let the shell
     // remove the layer under them. The shell asks the claim first and stands
@@ -268,8 +268,8 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     // anything else falls through to the claim it displaced.
     if (ui.deleteClaim != _deleteClaim) _priorDeleteClaim = ui.deleteClaim;
     ui.deleteClaim = _deleteClaim;
-    // Copy and Paste are claimed the same way, and for the same reason
-    // (K-300). They were answered on the keyboard instead for a while, which
+    // Copy and Paste are claimed the same way, and for the same reason.
+    // They were answered on the keyboard instead for a while, which
     // took the chord here *and* left the shell's own Paste to run: one press
     // put the effects on the layer twice.
     if (ui.copyClaim != _copyClaim) _priorCopyClaim = ui.copyClaim;
@@ -417,7 +417,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     return false;
   }
 
-  /// **`Ctrl+C` on this panel copies the picked effects** (K-275, K-300).
+  /// **`Ctrl+C` on this panel copies the picked effects**.
   ///
   /// The chord had no handler here at all, so it went to the shell — where
   /// `copySelectionFrb` offers it first to whichever panel has *claimed* copy
@@ -454,7 +454,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   /// Claimed only when the tray actually holds effects. A layer on the
   /// clipboard is the shell's business, and an empty tray is too: the shell's
   /// paste reads the *system* clipboard for a document copied in another Lumit
-  /// window (K-302), which is asynchronous and has no place in a claim that
+  /// window, which is asynchronous and has no place in a claim that
   /// must answer yes or no on the spot.
   bool _pastePickedEffects(LumitUiState ui) {
     if (ui.clipboard.kind != ClipboardKind.effects) return false;
@@ -505,8 +505,8 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
       builder: (context, groupId, _) => ValueListenableBuilder<LayerReference?>(
         valueListenable: ui.selectedLayer,
         builder: (context, layer, _) {
-          // A picked group header is the subject the way a picked layer is
-          // (K-731): its stack, its Add-effect, its parameter rows. The model
+          // A picked group header is the subject the way a picked layer is:
+          // its stack, its Add-effect, its parameter rows. The model
           // no longer holding the group — ungrouped, another comp fronted —
           // falls back to the layer subject rather than a dead card.
           if (groupId != null) {
@@ -528,8 +528,8 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     );
   }
 
-  /// The panel with a **group header** as its subject (K-731,
-  /// docs/impl/group-effects.md §6): the header's own stack drawn with the
+  /// The panel with a **group header** as its subject
+  /// (docs/impl/group-effects.md §6): the header's own stack drawn with the
   /// same cards a layer's is, and the Add-effect road targeting the group.
   /// Null when the model no longer holds the group, or it has no member left
   /// to route writes through.
@@ -630,7 +630,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     );
   }
 
-  /// One header effect's card (K-731): the layer card with the group as the
+  /// One header effect's card: the layer card with the group as the
   /// list its commands read — like a style's, it takes no part in the effect
   /// selection, and its heading only twirls.
   Widget _groupEffectCard(
@@ -695,7 +695,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     LayerReference layer,
   ) {
     // A layer subject reads no group's stack: the editor's third place to
-    // look is only armed while a header is the subject (K-731).
+    // look is only armed while a header is the subject.
     _effects.groupStack = null;
     final ui = Provider.of<LumitUiState>(context, listen: false);
     // **The panel does not listen to the playhead.** Every row that reads it —
@@ -708,10 +708,10 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     // for the few rows that cannot listen for themselves, and those are wrapped
     // in [_AtPlayhead] where they are built.
     //
-    // Which effects are picked is the shell's (K-300) — the Timeline picks them
+    // Which effects are picked is the shell's — the Timeline picks them
     // too — so the headings redraw when that changes, wherever the click
-    // happened. The read model repaints the panel when anything commits
-    // (K-184): an undo, a redo, or the same property dragged in the Timeline.
+    // happened. The read model repaints the panel when anything commits:
+    // an undo, a redo, or the same property dragged in the Timeline.
     return ListenableBuilder(
       listenable: ui.model,
       builder: (context, _) =>
@@ -719,7 +719,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     );
   }
 
-  /// Every layer an add from this panel should land on (K-523): the whole
+  /// Every layer an add from this panel should land on: the whole
   /// selection when the layer these rows are for is part of it, and that layer
   /// alone when it is not.
   ///
@@ -729,7 +729,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   /// selected means the stack that is being looked at, not nothing.
   ///
   /// Read from the shell in the handler rather than in the build, the way the
-  /// Timeline's row menu reads its own targets (K-184).
+  /// Timeline's row menu reads its own targets.
   List<LayerReference> _addTargets(LumitUiState ui, LayerReference shown) {
     final picked = ui.selectedLayers.value;
     return picked.any((l) => l.internallayerId == shown.internallayerId)
@@ -840,7 +840,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                       ),
                       // Flow sits between what the layer is made of and where it
                       // sits, because that is what it is: how the source is
-                      // *sampled* (K-088). It shows itself only when the layer's
+                      // *sampled*. It shows itself only when the layer's
                       // flow switch is on.
                       _AtPlayhead(
                         builder: (context, at) => FlowRowsFrb(
@@ -862,9 +862,9 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                         transform: info.transform,
                         axisModes: info.axisModes,
                         // A camera is 3D by construction whatever its switch
-                        // says (K-023) — its z and rotation rows must always
+                        // says — its z and rotation rows must always
                         // draw. Decided here from the model the panel already
-                        // holds, not by asking the engine per rebuild (K-184).
+                        // holds, not by asking the engine per rebuild.
                         threeD: info.switches.threeD ||
                             info.kind == BridgeLayerKind.camera,
                         isCamera: info.kind == BridgeLayerKind.camera,
@@ -876,7 +876,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                         onToggle: () => _toggle('transform'),
                       ),
                     ],
-                    // **The letters, one at a time** (K-609), and outside the
+                    // **The letters, one at a time**, and outside the
                     // choice above on purpose. Transform, Source and Retime move
                     // between this panel and the Timeline's fold because they
                     // exist in both; the Animators section has no Timeline home
@@ -898,8 +898,8 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                     ),
                     // A null layer has no picture, so nothing here changes one
                     // — but the parameters are real, animatable values, which is
-                    // exactly what a null is for once expressions can read them
-                    // (K-274). Said plainly, once, rather than refusing the drop.
+                    // exactly what a null is for once expressions can read them.
+                    // Said plainly, once, rather than refusing the drop.
                     if (info.kind == BridgeLayerKind.nullLayer &&
                         info.effects.isNotEmpty)
                       Padding(
@@ -964,7 +964,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   }
 
   /// The stack positions of the audio-typed entries, or of everything else —
-  /// two walks of a list the model already holds, no bridge call (K-184).
+  /// two walks of a list the model already holds, no bridge call.
   List<int> _stackIndices(List<BridgeEffectInstanceInfo> effects,
           {required bool audio}) =>
       [
@@ -1014,8 +1014,8 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     );
   }
 
-  /// The **Styles** heading over the layer's styles (K-706,
-  /// docs/impl/layer-styles.md §6), twirling like the Audio one, with the
+  /// The **Styles** heading over the layer's styles
+  /// (docs/impl/layer-styles.md §6), twirling like the Audio one, with the
   /// add-a-style menu on its own button.
   ///
   /// The menu lists the seven Lumit draws, each greyed once the layer wears it
@@ -1103,7 +1103,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   /// Audio heading. `index` is the effect's **stack** position, which is what
   /// every command on the card acts through.
   ///
-  /// With `style` set it draws a **layer style** instead (K-706): the same
+  /// With `style` set it draws a **layer style** instead: the same
   /// card, indexing the layer's other list. A style takes no part in the effect
   /// selection — Copy, Paste, Delete and the reorder all act on the stack, and
   /// nine fixed slots can do none of the four — so it is drawn unpicked and its
@@ -1154,7 +1154,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                             setState(() => _renamingEffect = null);
                             ui.model.refresh();
                           },
-                          // Escape: close the editor, write nothing (K-323).
+                          // Escape: close the editor, write nothing.
                           onRenameCancelled: () =>
                               setState(() => _renamingEffect = null),
                           onStartRename: () =>
@@ -1167,9 +1167,9 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                               order: [for (final e in info.effects) e.id],
                             );
                             // **Double-clicking a Custom shader's heading
-                            // enters its inner graph** (K-642 §4.2) — the
+                            // enters its inner graph** — the
                             // heading and the Graph panel's box are one
-                            // selection (K-300), so they are one door. The
+                            // selection, so they are one door. The
                             // first click still picks, exactly as it did.
                             if (fx.name == 'custom_shader' &&
                                 _headingTaps
@@ -1367,7 +1367,7 @@ class _Header extends StatelessWidget {
 }
 
 /// The Add-effect menu: one row per category, each opening onto its effects
-/// (K-090, K-194 — Add effect → Stylise → Glow).
+/// (Add effect → Stylise → Glow).
 ///
 /// [context] is the *button's*, so the menu drops from it rather than from the
 /// panel's left edge. The whole list used to be one 380 px scroller, which is
@@ -1437,7 +1437,7 @@ Future<void> _showAddMenu(
 
 /// One effect: its heading row and a row per declared parameter.
 ///
-/// Drawn entirely from the read model (K-184) — no bridge calls in build. The
+/// Drawn entirely from the read model — no bridge calls in build. The
 /// heading-row ops need a live instance handle, which is fetched fresh at click
 /// time (the model's data is not a handle, deliberately: frb consumes handles
 /// passed by value).
@@ -1446,14 +1446,14 @@ class _EffectSection extends StatelessWidget {
   final bool open;
   final VoidCallback onToggle;
 
-  /// Picked out of the stack, and the click that picks it (K-300). The same
+  /// Picked out of the stack, and the click that picks it. The same
   /// selection the Timeline's fold-out shows, so an effect chosen in one place
   /// is lit in the other — and Copy takes it from either.
   final bool selected;
   final VoidCallback onSelect;
 
   /// Which of this layer's parameters a driver is wired to, by
-  /// `effectId/paramId` (K-471). Read once by the panel and passed down, so a
+  /// `effectId/paramId`. Read once by the panel and passed down, so a
   /// card costs no question of its own.
   final Map<String, ({String driver, BridgePortType type, bool noStream})>
       driven;
@@ -1464,8 +1464,8 @@ class _EffectSection extends StatelessWidget {
   final int index;
   final int count;
 
-  /// This card is a **layer style** rather than a stack entry (K-706,
-  /// docs/impl/layer-styles.md §6).
+  /// This card is a **layer style** rather than a stack entry
+  /// (docs/impl/layer-styles.md §6).
   ///
   /// One bit, and everything the card draws is unchanged by it: a style is an
   /// `EffectInstance`, so the heading, the enable tick, Reset, the removal
@@ -1475,8 +1475,8 @@ class _EffectSection extends StatelessWidget {
   /// paste, none of which nine fixed slots in a pinned order can perform.
   final bool style;
 
-  /// This card sits on a **group header's** stack (K-731,
-  /// docs/impl/group-effects.md §6) — the styles bit's pattern, grown its
+  /// This card sits on a **group header's** stack
+  /// (docs/impl/group-effects.md §6) — the styles bit's pattern, grown its
   /// third arm. Every command still goes through [layer] (the group's first
   /// member): the engine's shared instance lookup routes a group instance to
   /// `SetGroupEffects`, so the card's remove, bypass, reorder, reset and
@@ -1485,7 +1485,7 @@ class _EffectSection extends StatelessWidget {
   final LayerReference layer;
 
   /// Every layer in the comp, from the read model — what a layer-valued
-  /// parameter picks from (K-194).
+  /// parameter picks from.
   final List<BridgeLayerEntry> allLayers;
   final CompositionReference comp;
   final int playheadFrame;
@@ -1494,16 +1494,16 @@ class _EffectSection extends StatelessWidget {
   /// The stack itself changed (enabled, reordered, removed) — re-read it.
   final VoidCallback onStackChanged;
 
-  /// The heading is an inline rename editor (K-321), its commit, and the
-  /// Escape that throws the edit away instead (K-323).
+  /// The heading is an inline rename editor, its commit, and the
+  /// Escape that throws the edit away instead.
   final bool renaming;
   final ValueChanged<String>? onRenamed;
   final VoidCallback? onRenameCancelled;
 
   /// Open that editor — the heading menu's Rename. `Enter` on the selected
   /// effect already did this from the keyboard (`effect.rename`); this is the
-  /// mouse's way in, and it is the same way in a project item has (K-321's own
-  /// pairing, and the reason K-191 took renaming off the second click).
+  /// mouse's way in, and it is the same way in a project item has (the same
+  /// pairing, and the reason renaming came off the second click).
   final VoidCallback? onStartRename;
 
   /// Write a parameter — a typed value, or the release of a drag. One op.
@@ -1515,7 +1515,7 @@ class _EffectSection extends StatelessWidget {
       onLive;
 
   /// Several parameters of one effect in one op — what a chained pair's
-  /// proportional write commits through, so it costs one undo step (K-610).
+  /// proportional write commits through, so it costs one undo step.
   final void Function(UuidValue effect, Map<String, BridgeEffectValue> values)?
       onWritePair;
 
@@ -1526,12 +1526,12 @@ class _EffectSection extends StatelessWidget {
   final bool Function(String path, bool collapsedByDefault) isGroupOpen;
   final void Function(String path, bool collapsedByDefault) onToggleGroup;
 
-  /// An Action row's press (K-417), and the panel's running count of them —
+  /// An Action row's press, and the panel's running count of them —
   /// what an effect's own display watches to know one happened.
   final void Function(UuidValue effect, String param) onAction;
   final int pressed;
 
-  /// A camera following this layer's Camera track has been nudged (K-578) —
+  /// A camera following this layer's Camera track has been nudged —
   /// drawn as a dot on the status row. From the read model, like everything
   /// else this card draws.
   final bool trackCorrected;
@@ -1583,8 +1583,8 @@ class _EffectSection extends StatelessWidget {
     this.onCurvePlotSize,
   });
 
-  /// Freshly read handles for **everything a command on this card acts on**
-  /// (K-523): the picked run when this effect is part of one, and this effect
+  /// Freshly read handles for **everything a command on this card acts on**:
+  /// the picked run when this effect is part of one, and this effect
   /// alone when it is not.
   ///
   /// Which is exactly the question `effectsToCopy` already answers for Copy —
@@ -1595,8 +1595,8 @@ class _EffectSection extends StatelessWidget {
   List<BridgeEffectInstance> _handles(BuildContext context) {
     // A style is never part of a picked *run*: the effect selection is the
     // stack's, and a style has no place in it. So this card's own instance is
-    // the whole answer (K-706) — and a group header's card takes the same
-    // road for the same reason (K-731).
+    // the whole answer — and a group header's card takes the same
+    // road for the same reason.
     if (style || group != null) {
       return [
         for (final candidate in _instances())
@@ -1612,8 +1612,8 @@ class _EffectSection extends StatelessWidget {
     ];
   }
 
-  /// The list this card's instance is on — a group header's stack (K-731),
-  /// the layer's style list, or its effect stack (K-706). Written back
+  /// The list this card's instance is on — a group header's stack,
+  /// the layer's style list, or its effect stack. Written back
   /// through `setEffects` either way: the engine routes a staged list to the
   /// list its ids name.
   List<BridgeEffectInstance> _instances() => switch (group) {
@@ -1640,7 +1640,7 @@ class _EffectSection extends StatelessWidget {
     onStackChanged();
   }
 
-  /// Chain or unchain a vector pair (K-443).
+  /// Chain or unchain a vector pair.
   ///
   /// Staged onto a fresh handle and committed with the stack, exactly as a
   /// rename is: one `SetLayerEffects`, one undo step, the shape every effect
@@ -1689,7 +1689,7 @@ class _EffectSection extends StatelessWidget {
     for (final instance in stack) {
       if (instance.id() != info.id) continue;
       for (final param in _rows) {
-        // A button has no value to put back (K-417).
+        // A button has no value to put back.
         if (defaultEffectValue(param.kind) case final value?) {
           instance.setValue(id: param.id, value: value);
         }
@@ -1731,7 +1731,7 @@ class _EffectSection extends StatelessWidget {
         );
 
     return FxSection(
-      // The user's own name where one is set (K-321); the effect's label
+      // The user's own name where one is set; the effect's label
       // otherwise.
       title: info.customName ?? effectLabelOf(info.name),
       open: open,
@@ -1794,7 +1794,7 @@ class _EffectSection extends StatelessWidget {
         }
         onStackChanged();
       },
-      // Right-click is where the rest of the reordering lives (K-276): the two arrows that
+      // Right-click is where the rest of the reordering lives: the two arrows that
       // used to sit here spent permanent space on a rare act, and the render
       // time — read constantly while a comp is being made faster — earns that
       // space instead. Nothing is lost: the menu moves an effect a step, and
@@ -1811,7 +1811,7 @@ class _EffectSection extends StatelessWidget {
           onStackChanged();
         },
       ),
-      // An effect with its own display (Levels' histogram, K-413) draws it
+      // An effect with its own display (Levels' histogram) draws it
       // above its rows; the rows themselves are unchanged.
       rows: [
         // Above everything, because it is the reason the rows beneath it are
@@ -1830,8 +1830,8 @@ class _EffectSection extends StatelessWidget {
     );
   }
 
-  /// The parameter rows, folded through the schema's groups (docs/08 §1.2,
-  /// K-145/K-257) and the `_x`/`_y` point-pair convention (docs/07 §6.1):
+  /// The parameter rows, folded through the schema's groups (docs/08 §1.2)
+  /// and the `_x`/`_y` point-pair convention (docs/07 §6.1):
   ///
   /// - a labelled group renders as a sub-twirl at its first member's
   ///   position, its members inside;
@@ -1857,14 +1857,14 @@ class _EffectSection extends StatelessWidget {
       final want = g.visibleWhenValues;
       if (param == null || want.isEmpty) return true;
       return switch (values[param]) {
-        // A group may answer to SEVERAL modes (K-259: the flare's
+        // A group may answer to SEVERAL modes (the flare's
         // source-colour toggle belongs to Matte and Lights alike).
         BridgeEffectValue_Choice(:final field0) => want.contains(field0),
         _ => false,
       };
     }
 
-    // Which rows another parameter has taken over (`EnabledWhen`, K-313).
+    // Which rows another parameter has taken over (`EnabledWhen`).
     // Judged on what the panel is SHOWING, staged drag included, so ticking a
     // checkbox greys its dependent row on the spot rather than after the commit
     // round-trips.
@@ -1874,13 +1874,13 @@ class _EffectSection extends StatelessWidget {
     };
     final disabled = disabledParams(info.name, shown);
 
-    // **The uniform Matte row** (K-395, K-425) and **the Mix row**. A Layer
+    // **The uniform Matte row** and **the Mix row**. A Layer
     // picker carries its Channel choice and Invert switch beside it on one
     // row, a Mix slider its Blend choice, and none of the riders gets a row of
     // its own. A rider is found by id convention among the parameters the
     // schema places RIGHT AFTER its host — `matte` + `matte_invert` +
     // `matte_channel`, Depth of field's older `depth` + `depth_invert`, whose
-    // stored ids K-065 keeps, and `mix` + `blend` — so the injected rows and
+    // stored ids are kept, and `mix` + `blend` — so the injected rows and
     // the effects that predate them fold the same way without a table here
     // naming them, and a channel an effect declares elsewhere for itself
     // (Depth of field's `depth_channel`, three twirls down) stays the row it
@@ -1939,7 +1939,7 @@ class _EffectSection extends StatelessWidget {
       );
     }
 
-    // **The curve fold** (K-412, docs/08 §3.30). A run of neighbouring Curve
+    // **The curve fold** (docs/08 §3.30). A run of neighbouring Curve
     // parameters is one editor with a tab each, not one plot per row: five
     // stacked squares would be five times the height and would still make the
     // user compare shapes across them. The same folding the `_x`/`_y` point
@@ -1972,8 +1972,8 @@ class _EffectSection extends StatelessWidget {
     // curve runs. Both folds live here rather than only in the outer walk,
     // because a schema is free to put them inside a **group** — Particulate's
     // two over-life curves sit under the Particle kicker, and before this they
-    // came out as two stacked plots, which is the shape K-412 exists to
-    // prevent.
+    // came out as two stacked plots, which is the shape the curve fold
+    // exists to prevent.
     List<Widget> foldRows(List<BridgeParamInfo> run) {
       final out = <Widget>[];
       var i = 0;
@@ -2020,7 +2020,7 @@ class _EffectSection extends StatelessWidget {
             // declares them.
             enabled:
                 !disabled.contains(param.id) || !disabled.contains(next.id),
-            // The chain (K-443). The stem is the schema's key for the pair,
+            // The chain. The stem is the schema's key for the pair,
             // and which pairs are tied is on the instance, so both come out of
             // data the card already holds — no call rides this rebuild.
             linked: stem != null && info.linkedPairs.contains(stem),
@@ -2103,8 +2103,8 @@ class _EffectSection extends StatelessWidget {
   /// removing it. Reordering is a handful of acts in a session, so it lives
   /// here rather than in two buttons on every heading — and unlike the arrows
   /// it can send an effect to the top or the bottom in one go.
-  /// Put this effect on the clipboard (K-275) — with the rest of the picked run
-  /// when it is part of one (K-300).
+  /// Put this effect on the clipboard — with the rest of the picked run
+  /// when it is part of one.
   ///
   /// A failure is swallowed the way the neighbouring effect commands' are: the
   /// effect went away between the menu opening and the row being chosen, and an
@@ -2123,7 +2123,7 @@ class _EffectSection extends StatelessWidget {
   void _stackMenu(BuildContext context, Offset at) {
     final id = info.id;
     void move(int to) {
-      // **The order several picked effects land in** (K-523). Each one is
+      // **The order several picked effects land in**. Each one is
       // taken out of the stack and put back *at* `to`, so the last one moved
       // ends up in front of the others: an upward move therefore takes the
       // bottom-most first and a downward one the topmost, and either way the
@@ -2149,11 +2149,10 @@ class _EffectSection extends StatelessWidget {
             // path to its own editor at all — `Enter` on the selection was the
             // only way in, and a keyboard-only act is one nobody finds. It is
             // the menu's entry rather than a double-click on the name because
-            // that is the pattern the application already settled on: K-191
-            // took renaming off a list row's second click precisely because a
-            // slow double-click and a deliberate click were the same gesture,
-            // and K-321 put it on the row menu instead. An effect heading is a
-            // list row.
+            // that is the pattern the application already settled on: renaming
+            // came off a list row's second click precisely because a slow
+            // double-click and a deliberate click were the same gesture, and it
+            // went on the row menu instead. An effect heading is a list row.
             if (onStartRename case final start?)
               MenuRow(
                 key: ValueKey<String>('fx-menu-rename-$id'),
@@ -2164,8 +2163,8 @@ class _EffectSection extends StatelessWidget {
                 child: Text(l10n.rename),
               ),
             // The move rows and Copy are the *stack*'s: nine named slots in a
-            // pinned order have nowhere to move to and no clipboard to go on
-            // (K-706), so a style's menu is Rename and Remove.
+            // pinned order have nowhere to move to and no clipboard to go on,
+            // so a style's menu is Rename and Remove.
             if (!style && index > 0) ...[
               MenuRow(
                 key: ValueKey<String>('fx-menu-up-$id'),
@@ -2202,7 +2201,7 @@ class _EffectSection extends StatelessWidget {
                 child: Text(l10n.moveToBottom),
               ),
             ],
-            // **Copy this one effect** (K-275). The engine has taken one or a
+            // **Copy this one effect**. The engine has taken one or a
             // whole stack since copy/paste landed — `copy_effects(Some(id))` —
             // and the Edit menu's Copy takes the *layer*, so until now there
             // was no way to pick a single effect and no way to reach the call.
@@ -2259,8 +2258,8 @@ class _EffectSection extends StatelessWidget {
   }
 }
 
-/// One collapsible parameter group inside an effect's card (docs/08 §1.2,
-/// K-145): a small twirl header, its member rows indented under it. Open
+/// One collapsible parameter group inside an effect's card (docs/08 §1.2):
+/// a small twirl header, its member rows indented under it. Open
 /// state is session-local (a fresh panel starts groups at their declared
 /// `collapsed`).
 class _ParamGroupSection extends StatefulWidget {
@@ -2287,7 +2286,7 @@ class _ParamGroupSectionState extends State<_ParamGroupSection> {
         children: [
           // The shared header row, so a group's twirl sits in the stopwatch
           // column and its label starts where every other label does. The
-          // members are NOT indented: K-443's straight label edge runs the
+          // members are NOT indented: the straight label edge runs the
           // whole panel, and a fold says what it is with its kicker.
           fxGroupHeaderRow(
             context,
@@ -2316,15 +2315,15 @@ class _TransformSection extends StatelessWidget {
   final BridgeTransform transform;
   final bool threeD;
 
-  /// How each two-axis property is shown (K-571).
+  /// How each two-axis property is shown.
   final BridgeAxisModes axisModes;
 
   /// Whether this layer is a Camera — the one kind whose transform can be
-  /// **derived** rather than held (K-417), and so the one kind whose heading
+  /// **derived** rather than held, and so the one kind whose heading
   /// carries a link badge.
   final bool isCamera;
 
-  /// This camera's solve link carries a correction (K-578) — the dot beside the
+  /// This camera's solve link carries a correction — the dot beside the
   /// badge, and what makes Clear corrections worth offering.
   final bool corrected;
   final int playheadFrame;
@@ -2357,7 +2356,7 @@ class _TransformSection extends StatelessWidget {
         // A solve-linked camera says so where its numbers are, because that is
         // where the surprise would otherwise be: the rows below are still
         // editable, but what they hold is a correction on top of the solve
-        // rather than a pose (K-578). Convert to keyframes
+        // rather than a pose. Convert to keyframes
         // sits beside the badge — it is the one command that ends the link,
         // and it belongs next to the thing it ends.
         actions: [
@@ -2414,7 +2413,7 @@ Color? curveChannelColour(String paramId) => switch (paramId) {
 /// The display an effect draws *above* its rows, or null for the effects that
 /// draw none — which is nearly all of them.
 ///
-/// **Levels is the one that claims it** (K-413): a histogram of the frame with
+/// **Levels is the one that claims it**: a histogram of the frame with
 /// its input handles over it and the output range beneath, which is not a list
 /// of numbered rows and would be the wrong control forced into one. The numbers
 /// keep their rows underneath, unchanged; this is presentation, and it writes
@@ -2447,7 +2446,7 @@ Widget? customEffectDisplay(
           onWrite: onWrite,
           onLive: onLive,
         ),
-      // Camera track's display is a *status*, not a control (K-417): how far
+      // Camera track's display is a *status*, not a control: how far
       // an analysis running elsewhere has got, and what its solve came to. It
       // writes no parameter, which is why it takes neither callback.
       'camera_track' => CameraTrackDisplayFrb(
@@ -2458,7 +2457,7 @@ Widget? customEffectDisplay(
           corrected: trackCorrected,
         ),
       // Planar track's display is the same kind of thing and not the same
-      // thing (K-579): a status, but about a *surface* rather than a camera,
+      // thing: a status, but about a *surface* rather than a camera,
       // and filed under this instance rather than under the media — which is
       // why it is the one custom display that needs its effect's own id.
       'planar_track' => PlanarTrackDisplayFrb(
@@ -2468,7 +2467,7 @@ Widget? customEffectDisplay(
           onChanged: onChanged,
           pressed: pressed,
         ),
-      // The Roto brush's is a status too (K-717), with one control in it: the
+      // The Roto brush's is a status too, with one control in it: the
       // base frame the propagation runs outward from, which is the one thing
       // about a matte that is neither a parameter nor a stroke — it is *which
       // frame* the strokes are read from, and moving it retires the run.
@@ -2487,7 +2486,7 @@ Widget? customEffectDisplay(
 /// work, or when this build has never heard of it at all (docs/12 §1, §2.3).
 ///
 /// Four things it can say, and the engine sends a **key** for each rather than a
-/// sentence, so the words are the user's own (K-303): the plugin failed, the
+/// sentence, so the words are the user's own: the plugin failed, the
 /// plugin is switched off, the plugin is not installed on this machine, or the
 /// effect came from a newer Lumit. Where the engine or the plugin has words of
 /// its own about a failure they go underneath, verbatim — it is somebody else's

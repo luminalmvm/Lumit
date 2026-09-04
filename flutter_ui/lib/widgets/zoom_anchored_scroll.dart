@@ -1,5 +1,5 @@
 // A horizontal scroll that holds one frame still while the thing it scrolls
-// grows underneath it (docs/07-UI-SPEC.md §4.6, K-293).
+// grows underneath it (docs/07-UI-SPEC.md §4.6).
 //
 // **In plain terms.** Zooming the Timeline widens the lanes. If the scroll
 // offset stayed where it was, whatever you were looking at would slide off to

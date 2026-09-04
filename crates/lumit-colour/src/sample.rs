@@ -13,7 +13,7 @@
 //!
 //! The formulation here is **binding**: the WGSL sampler WP3 writes must be this
 //! arithmetic byte for byte, ties broken the same way, or preview stops equalling
-//! export (K-031). It is copied from docs/impl/ocio.md §4.3, top branch first,
+//! export. It is copied from docs/impl/ocio.md §4.3, top branch first,
 //! `≥` exactly as written.
 
 use crate::error::{ColourError, Result};
@@ -92,7 +92,7 @@ impl Cube {
             let hi = self.domain_max[c];
             let span = hi - lo;
             // A zero-span axis reads as 0 rather than dividing (the guard
-            // docs/impl/lut.md §3 pinned for the LUT effect after K-271).
+            // docs/impl/lut.md §3 pinned for the LUT effect).
             let g = if span == 0.0 {
                 0.0
             } else {

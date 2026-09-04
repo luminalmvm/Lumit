@@ -1,4 +1,4 @@
-// The screen matte's two neighbourhood stages (docs/08-EFFECTS.md §3.21, K-546):
+// The screen matte's two neighbourhood stages (docs/08-EFFECTS.md §3.21):
 // shrink/grow and despot. Mirrors lumit_core::fx::cpu::matte_morph and
 // ::matte_despot op-for-op (§1.6: the CPU is the oracle).
 //
@@ -39,7 +39,7 @@ fn opv(a: f32, b: f32) -> f32 {
     return min(a, b);
 }
 
-// STAGE 3 (K-546): one separable morphological pass. The edge marches without
+// STAGE 3: one separable morphological pass. The edge marches without
 // softening -- that is the whole difference between this and Softness. The
 // outermost ring eases in with `frac` so the control is continuous across a
 // whole-pixel boundary and the §1.6 oracle still holds.
@@ -61,7 +61,7 @@ fn matte_morph(@builtin(global_invocation_id) gid: vec3<u32>) {
     textureStore(dst, xy, vec4<f32>(v));
 }
 
-// STAGE 5 (K-546): remove isolated specks. A speck is a pixel that disagrees
+// STAGE 5: remove isolated specks. A speck is a pixel that disagrees
 // with ALL eight of its neighbours, so a pixel on a real edge -- which always
 // has a neighbour on its own side -- is left alone. The two amounts are 0..1
 // blends, so 0 is the bit-exact identity.

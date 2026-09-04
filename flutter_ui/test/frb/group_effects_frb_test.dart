@@ -1,4 +1,4 @@
-// Effects on a group header, on frb (K-731, docs/impl/group-effects.md §6-§7
+// Effects on a group header, on frb (docs/impl/group-effects.md §6-§7
 // test 11): the header's stack crosses on the read model, the Timeline shows
 // the fx tick exactly while it is non-empty and twirls real lanes under the
 // header, a parameter edit round-trips through the shared instance lookup, and

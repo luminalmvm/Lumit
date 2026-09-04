@@ -126,7 +126,7 @@ struct AudioState {
     /// a swap re-places without re-decoding).
     decoded: HashMap<Uuid, Arc<lumit_media::AudioBuffer>>,
     /// Which layer each meter slot of the installed plan belongs to, in the
-    /// order the mixer draws its strips (K-690). Replaced with the plan, so
+    /// order the mixer draws its strips. Replaced with the plan, so
     /// a poll can never name a strip the sound is not on.
     meter_strips: Vec<Uuid>,
 }
@@ -192,8 +192,8 @@ pub(crate) fn jobs_signature(jobs: &[AudioJob], duration_s: f64, master_db: f64)
         if let Some(d) = &j.driven {
             format!("{:?}", d.graph).hash(&mut h);
         }
-        // The layer's insert chain, the same way and for the same reason
-        // (K-700): dropping a plugin on the row, dragging one of its knobs or
+        // The layer's insert chain, the same way and for the same reason:
+        // dropping a plugin on the row, dragging one of its knobs or
         // bypassing it all change what the comp sounds like without touching a
         // Volume keyframe, so the whole stack and its wiring fold in. Debug
         // text, like the graph above — session-only, and a stack is a handful
@@ -255,7 +255,7 @@ pub(crate) fn build_plan(
     master_db: f64,
 ) -> (Arc<MixPlan>, Vec<Uuid>) {
     let total_frames = (duration_s * f64::from(rate)).round().max(0.0) as usize;
-    // Meter slots in first-sounding order, one per strip (K-690): several
+    // Meter slots in first-sounding order, one per strip: several
     // jobs from one Precomp layer share its slot, and past the bank's size
     // the extras play unmetered rather than being dropped.
     let mut strips: Vec<Uuid> = Vec::new();
@@ -270,7 +270,7 @@ pub(crate) fn build_plan(
                 buffer.samples.len() / 2,
                 rate,
             )?;
-            // The layer's insert chain, ahead of Volume and Pan (K-700). The
+            // The layer's insert chain, ahead of Volume and Pan. The
             // processed span **replaces** the decoded buffer in the plan, so
             // the realtime callback plays finished sound and never waits on a
             // plugin's process; a layer whose stack opens nothing keeps the
@@ -682,8 +682,8 @@ pub(crate) fn pause() {
 /// Start the sound again where it stopped, with no re-bake and no seek — the
 /// other half of [`pause`].
 ///
-/// Every-frame playback stops the sound when the picture falls behind (K-171:
-/// a held track over a slow picture, never a track that drifts away from it).
+/// Every-frame playback stops the sound when the picture falls behind (a held
+/// track over a slow picture, never a track that drifts away from it).
 /// The picture then catches up, and the sound must start again on its own; a
 /// user who must stop and start playback to get the sound back has been given a
 /// fault to work around. Nothing is re-prepared here: the plan and the position
@@ -890,7 +890,7 @@ mod tests {
     }
 
     /// Two rows of the comp are two slots; a Precomp row's several sources
-    /// share one, because that is the one strip the mixer draws (K-690).
+    /// share one, because that is the one strip the mixer draws.
     /// Past the bank's size the extras still sound and simply have no bar.
     #[test]
     fn meter_slots_follow_the_mixer_strips_and_the_bank_is_bounded() {
@@ -1155,7 +1155,7 @@ mod tests {
         })
     }
 
-    /// **A layer with no audio effect is the mix it always was** (K-700, the
+    /// **A layer with no audio effect is the mix it always was** (the
     /// note's §7 plan 3): the plan holds the *same* decoded buffer, not a copy
     /// of it, so an empty chain costs no memory, no arithmetic and no chance of
     /// drift. A stack full of picture effects is the same thing — the catalogue
@@ -1179,7 +1179,7 @@ mod tests {
         }
     }
 
-    /// **Preview is export** through a plugin (K-031, the note's §7 plan 3).
+    /// **Preview is export** through a plugin (the note's §7 plan 3).
     ///
     /// Not "they agree to within a tolerance": the live plan and the baked
     /// mixdown run the *same* chain over the *same* placement, so the two are
@@ -1380,7 +1380,7 @@ mod tests {
         );
     }
 
-    /// The mix signature hears the rack, not only the fader (K-700): dropping a
+    /// The mix signature hears the rack, not only the fader: dropping a
     /// plugin on the row, nudging one of its knobs, bypassing it or reordering
     /// the stack each change what the comp sounds like, and each must re-plan.
     #[test]

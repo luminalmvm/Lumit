@@ -23,7 +23,7 @@ BridgeRotoStatus rotoStatus(
     BridgeLib.instance.api.crateApiRotoRotoStatus(layer: layer, effect: effect);
 
 /// Which frame of the **file** this layer is showing at composition frame
-/// `frame` (K-248, K-717).
+/// `frame`.
 ///
 /// A stroke's `frame` is a source frame index, and the viewer only knows the
 /// composition's ruler. Between the two sit the layer's start offset and its
@@ -34,7 +34,7 @@ BridgeRotoStatus rotoStatus(
 /// against the wrong frame of a retimed layer would seed a frame the user never
 /// looked at and be silently, invisibly wrong.
 ///
-/// Read on a frame change and held, never per rebuild (K-681).
+/// Read on a frame change and held, never per rebuild.
 ///
 /// `NotFootage` for anything but a footage layer, and for media that will not
 /// probe: a Roto brush on a layer with no file behind it has no source frame to
@@ -45,7 +45,7 @@ PlatformInt64 rotoSourceFrame(
         .crateApiRotoRotoSourceFrame(layer: layer, frame: frame);
 
 /// Where the propagated matte's **edge** runs at `frame`, as
-/// `[x0, y0, x1, y1, …]` in source raster pixels (K-717).
+/// `[x0, y0, x1, y1, …]` in source raster pixels.
 ///
 /// The Roto brush's **Boundary** view keeps the picture and asks the viewer to
 /// draw the edge over it (`lumit_core::fx::effects::roto_brush::VIEW_OPTIONS`),
@@ -69,7 +69,7 @@ Float32List rotoBoundary(
         .crateApiRotoRotoBoundary(effect: effect, frame: frame);
 
 /// Solve the scribbled frame's own matte, now — the release-time feedback a
-/// committed stroke asks for (K-723, docs/impl/roto.md §6 step 1).
+/// committed stroke asks for (docs/impl/roto.md §6 step 1).
 ///
 /// The same job a Propagate press builds, stopped after `frame`: the walk runs
 /// from the base toward it, lends back every cached frame whose strokes did not
@@ -92,7 +92,7 @@ bool rotoSolveFrame(
 
 /// Why a propagation produced no mattes.
 ///
-/// A **reason, not a sentence** (K-303): the engine's own `RotoFailure` carries
+/// A **reason, not a sentence**: the engine's own `RotoFailure` carries
 /// English, and English crossing here would ship untranslated inside a
 /// translated window. Dart switches over this and picks the arb key, which is
 /// the shape `BridgeTrackFailure` already uses.
@@ -137,7 +137,7 @@ enum BridgeRotoStage {
   /// There is a run in the store.
   done,
 
-  /// Stopped between frames. **The finished prefix was kept** (K-540), so the
+  /// Stopped between frames. **The finished prefix was kept**, so the
   /// span below is real and a later Propagate resumes from it.
   cancelled,
 
@@ -227,7 +227,7 @@ class BridgeRotoStatus {
 class BridgeRotoStroke {
   final UuidValue id;
 
-  /// `[x0, y0, x1, y1, …]` in source raster pixels (K-248).
+  /// `[x0, y0, x1, y1, …]` in source raster pixels.
   final Float32List points;
   final double radius;
   final BridgeRotoStrokeKind kind;

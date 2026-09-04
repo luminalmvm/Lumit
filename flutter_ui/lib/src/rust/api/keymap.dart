@@ -30,7 +30,7 @@ List<BridgeKeyConflict> keymapConflicts() =>
     BridgeLib.instance.api.crateApiKeymapKeymapConflicts();
 
 /// Every chord a panel takes over from an app-wide binding, described for
-/// display (K-281). Said out loud beside the table rather than flagged as
+/// display. Said out loud beside the table rather than flagged as
 /// something to fix — the shipped default carries one on purpose (`L`).
 List<BridgeKeyShadow> keymapShadows() =>
     BridgeLib.instance.api.crateApiKeymapKeymapShadows();
@@ -53,7 +53,7 @@ String? keymapLookup(
 /// actions' keys impossible. Within one context the previous owner is left
 /// unbound and its row goes blank; a panel-scoped binding taking an app-wide
 /// chord leaves both alive, the panel's winning where it is focused, and
-/// [`keymap_shadows`] says so (K-281).
+/// [`keymap_shadows`] says so.
 Future<List<BridgeKeymapGroup>> keymapRebind(
         {required BridgeKeyContext context,
         required String action,
@@ -93,7 +93,7 @@ String keymapToJson() => BridgeLib.instance.api.crateApiKeymapKeymapToJson();
 /// Rejects anything that is not a keymap rather than half-applying it, so a
 /// corrupt stored blob or somebody else's JSON leaves the current map alone.
 ///
-/// **Laid over the shipped defaults, not swapped for them** (K-302). A file
+/// **Laid over the shipped defaults, not swapped for them**. A file
 /// only knows the actions that existed when it was written, and it used to
 /// replace the map whole — so every action added since was left with no chord
 /// at all for anyone who had ever saved a keymap. That is how `Ctrl+C` came to
@@ -116,9 +116,8 @@ class BridgeKeyBinding {
 
   /// The chord in its canonical text form, e.g. `"Mod+Shift+P"`. Empty when
   /// the action is currently unbound, which is a state the table shows
-  /// rather than hides. One chord per row — K-200 settled that no shipped
-  /// action carries two, so a list here would be structure with nothing to
-  /// hold.
+  /// rather than hides. One chord per row — no shipped action carries two,
+  /// so a list here would be structure with nothing to hold.
   final String chord;
 
   const BridgeKeyBinding({
@@ -184,7 +183,7 @@ enum BridgeKeyContext {
   ;
 }
 
-/// One chord a panel takes over from an app-wide binding (K-281).
+/// One chord a panel takes over from an app-wide binding.
 ///
 /// **Not a clash.** The focused panel gets first refusal and the app-wide
 /// binding is the fallback, so the chord runs exactly one action and which one

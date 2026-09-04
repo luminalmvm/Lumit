@@ -6,7 +6,7 @@
 //! a hand does, and wavering as it goes.
 //!
 //! It is the first effect to read the **shape of a mask** rather than the hole
-//! the mask cuts (K-408, docs/08 §1.2). A coverage buffer says which pixels are
+//! the mask cuts (docs/08 §1.2). A coverage buffer says which pixels are
 //! inside; it cannot say where the boundary *runs*, and a hatch has to know
 //! that to know where each stroke stops.
 //!
@@ -37,15 +37,15 @@ use lumit_fx_macros::Effect;
     premultiplied = true,
     seeded = true,
     enabled_when = SCRIBBLE_ENABLED_WHEN,
-    // K-428: the matte scales the amount, inside the kernel (the owner's rule
-    // for mattes); the generic strength dissolve does not also run.
+    // The matte scales the amount, inside the kernel (the owner's rule for
+    // mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales Opacity per pixel: white draws the scribble in full, grey          faintly, black nothing at all",
     ),
 )]
 pub struct Scribble {
-    /// Which of the layer's masks to fill (K-408). Unset is **First mask**,
+    /// Which of the layer's masks to fill. Unset is **First mask**,
     /// because the effect is usually added before the mask is drawn.
     #[mask_path(label = "Mask")]
     pub path: bool,
@@ -188,8 +188,8 @@ impl Scribble {
     pub const WIGGLE_STATIC: u32 = 0;
 
     /// Raster pixels per comp pixel (§2.3), pushed at resolve because the seam
-    /// hands its vertices over in px@comp and the drawing happens in the raster
-    /// (K-408). Never a panel row.
+    /// hands its vertices over in px@comp and the drawing happens in the
+    /// raster. Never a panel row.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
     /// Where in the waver's evolution this frame sits — already a number rather
@@ -227,7 +227,7 @@ impl Scribble {
         // Static is pinned **here as well as at resolve**, Add grain's Animate
         // toggle exactly: the effect's own numbers must say a still scribble is
         // still, rather than trusting a derived value that a bag could carry
-        // over from another wiggle type (K-258).
+        // over from another wiggle type.
         p.wiggle_tick = if self.wiggle_type == Self::WIGGLE_STATIC {
             0.0
         } else {

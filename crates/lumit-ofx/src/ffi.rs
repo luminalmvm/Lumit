@@ -267,7 +267,7 @@ pub struct OfxMessageSuiteV1 {
 /// host offers no overlays (`kOfxImageEffectPropSupportsOverlays` is nought),
 /// so no interact is ever made; the suite exists because the stock support
 /// library treats fetching it as mandatory and refuses to describe without
-/// it (K-757).
+/// it.
 #[repr(C)]
 pub struct OfxInteractSuiteV1 {
     pub interact_swap_buffers: unsafe extern "C" fn(interact: *mut c_void) -> OfxStatus,
@@ -279,7 +279,7 @@ pub struct OfxInteractSuiteV1 {
 }
 
 /// `OfxMessageSuiteV2` — V1's `message` plus a message that stays up until
-/// the plugin clears it. HitFilm refuses to load a host without it (K-757).
+/// the plugin clears it. HitFilm refuses to load a host without it.
 #[repr(C)]
 pub struct OfxMessageSuiteV2 {
     pub message: unsafe extern "C" fn(
@@ -570,7 +570,7 @@ pub mod prop_keys {
     /// `OfxImageEffectPropMultipleClipDepths`, and a host that seeds the macro's
     /// own name has the property under a name no plugin ever asks for. ntsc-rs
     /// reads this one during `kOfxActionLoad` and refuses to load without it,
-    /// which is how it was found (K-595).
+    /// which is how it was found.
     pub const SUPPORTS_MULTIPLE_CLIP_DEPTHS: &str = "OfxImageEffectPropMultipleClipDepths";
     pub const SUPPORTS_MULTIPLE_CLIP_PARS: &str = "OfxImageEffectPropSupportsMultipleClipPARs";
     pub const SETABLE_FRAME_RATE: &str = "OfxImageEffectPropSetableFrameRate";
@@ -634,7 +634,7 @@ pub mod prop_keys {
     pub const PROJECT_EXTENT: &str = "OfxImageEffectPropProjectExtent";
     /// How long the effect runs, in frames. An instance property, and one the
     /// OFX support library reads when a plugin is constructed — a plugin that
-    /// cannot find it does not exist (K-595).
+    /// cannot find it does not exist.
     pub const EFFECT_DURATION: &str = "OfxImageEffectInstancePropEffectDuration";
     /// As [`SUPPORTS_MULTIPLE_CLIP_DEPTHS`]: the macro is
     /// `kOfxImageEffectPropProjectPixelAspectRatio`, the string is not.
@@ -648,7 +648,7 @@ pub mod prop_keys {
     /// The clip instance's unmapped frame range. Spelled `OfxImageEffectProp…`
     /// rather than `OfxImageClipProp…` — it is a clip property with an effect
     /// property's name, which is what the header says and what the OFX support
-    /// library reads (K-595).
+    /// library reads.
     pub const CLIP_UNMAPPED_FRAME_RANGE: &str = "OfxImageEffectPropUnmappedFrameRange";
     pub const CLIP_UNMAPPED_COMPONENTS: &str = "OfxImageClipPropUnmappedComponents";
     /// `kOfxImageClipPropUnmappedPixelDepth`
@@ -704,7 +704,7 @@ pub mod param_types {
     /// A curve a plugin evaluates itself. Accepted by `paramDefine` — refusing
     /// a type the spec defines is how a plugin fails to describe at all — but
     /// it has no schema row, because Lumit's own curve is its *control points*
-    /// (K-412) and a parametric parameter is a function, not points.
+    /// and a parametric parameter is a function, not points.
     pub const PARAMETRIC: &str = "OfxParamTypeParametric";
 
     /// Every type above, for the "is this a type at all" check.
@@ -759,7 +759,7 @@ pub mod prop_values {
     pub const COMPONENT_RGBA: &str = "OfxImageComponentRGBA";
     pub const BIT_DEPTH_FLOAT: &str = "OfxBitDepthFloat";
     /// `kOfxImageEffectHostPropNativeOriginBottomLeft` — the way up the host
-    /// hands its pictures over (K-756).
+    /// hands its pictures over.
     pub const NATIVE_ORIGIN_BOTTOM_LEFT: &str = "OfxImageEffectHostPropNativeOriginBottomLeft";
     /// The string OFX 1.5 spells a GPU render capability with when there is none.
     pub const FALSE: &str = "false";
@@ -780,11 +780,11 @@ pub mod prop_values {
     pub const TYPE_CLIP: &str = "OfxTypeClip";
     pub const TYPE_IMAGE: &str = "OfxTypeImage";
     /// The only premultiplication state this host hands out (docs/12 §2.1).
-    /// The macro is `kOfxImagePreMultiplied`; the string is not (K-595).
+    /// The macro is `kOfxImagePreMultiplied`; the string is not.
     pub const IMAGE_PRE_MULTIPLIED: &str = "OfxImageAlphaPremultiplied";
-    /// Macro `kOfxImageFieldNone`, string `OfxFieldNone` (K-595).
+    /// Macro `kOfxImageFieldNone`, string `OfxFieldNone`.
     pub const IMAGE_FIELD_NONE: &str = "OfxFieldNone";
-    /// Macro `kOfxImageFieldBoth`, string `OfxFieldBoth` (K-595).
+    /// Macro `kOfxImageFieldBoth`, string `OfxFieldBoth`.
     pub const IMAGE_FIELD_BOTH: &str = "OfxFieldBoth";
     pub const CHANGE_USER_EDITED: &str = "OfxChangeUserEdited";
     pub const CHANGE_PLUGIN_EDITED: &str = "OfxChangePluginEdited";

@@ -44,7 +44,7 @@ bool FlutterWindow::OnCreate() {
   }
   RegisterPlugins(flutter_controller_->engine());
 
-  // The zero-copy Viewer texture bridge (K-177): registers engine-created D3D
+  // The zero-copy Viewer texture bridge: registers engine-created D3D
   // shared textures with Flutter over the 'lumit/viewer_texture' channel. Built
   // here, once the engine exists; a null registrar leaves the Viewer on the
   // read-back path (the Dart side falls back automatically).

@@ -67,7 +67,7 @@ struct Pipelines {
     inverse_search: wgpu::ComputePipeline,
     densify: wgpu::ComputePipeline,
     smooth: wgpu::ComputePipeline,
-    // Variational refinement (K-332).
+    // Variational refinement.
     vr_warp: wgpu::ComputePipeline,
     vr_init_duv: wgpu::ComputePipeline,
     vr_deriv: wgpu::ComputePipeline,
@@ -98,7 +98,7 @@ struct LevelBinds {
     search: wgpu::BindGroup,
     densify: wgpu::BindGroup,
     smooth: wgpu::BindGroup,
-    /// The refinement passes (K-332), in dispatch order.
+    /// The refinement passes, in dispatch order.
     vr_warp: wgpu::BindGroup,
     vr_init_duv: wgpu::BindGroup,
     vr_deriv: wgpu::BindGroup,
@@ -364,7 +364,7 @@ impl GpuFlow {
     }
 
     /// Both flow directions between two **GPU pictures** — the texture entry
-    /// point (docs/08 §3.2, K-565).
+    /// point (docs/08 §3.2).
     ///
     /// The pair a composite consumer measures never exists on the CPU: an
     /// adjustment layer's picture is the composite of everything beneath it and
@@ -535,7 +535,7 @@ impl GpuFlow {
                 pass.set_pipeline(&self.pipelines.smooth);
                 pass.set_bind_group(0, &lb.smooth, &[]);
                 pass.dispatch_workgroups(wg(lb.w), wg(lb.h), 1);
-                // DIS part three (K-332). Each fixed-point iteration
+                // DIS part three. Each fixed-point iteration
                 // re-linearises about the current warp, then sweeps the
                 // increment red-then-black VR_SOR times — the two colours are
                 // what make a sequential solver a parallel one.
@@ -792,7 +792,7 @@ impl GpuFlow {
                         &[(1, luma_t), (2, luma_o), (4, &init), (5, &patch), (6, &tmp)],
                     ),
                     smooth: self.bind(&lv.params, &[(1, luma_t), (4, &tmp), (6, dense)]),
-                    // Refinement (K-332). `grad_o` is the *other* frame's
+                    // Refinement. `grad_o` is the *other* frame's
                     // Sobel, which is what vr_warp samples along the flow;
                     // every later pass wants the template's instead.
                     vr_warp: self.bind(

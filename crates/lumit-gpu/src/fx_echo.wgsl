@@ -16,13 +16,13 @@
 struct Params {
     // Accumulate: the tap's intensity. Mix: the host Mix amount.
     weight: f32,
-    // Accumulate combine (FX-17/K-149, T21), mirroring cpu::echo_blend
+    // Accumulate combine (FX-17, T21), mirroring cpu::echo_blend
     // op-for-op: 0 = Behind, 1 = In front, 2 = Add, 3 = Screen, 4 = Multiply,
     // 5 = Overlay, 6 = Soft light, 7 = Hard light, 8 = Lighten, 9 = Darken,
     // 10 = Difference, 11 = Exclusion, 12 = Subtract, 13 = Divide. Unused by
     // echo_mix.
     mode: u32,
-    // 1 = the matte scales Decay per pixel (K-429). Unused by echo_mix.
+    // 1 = the matte scales Decay per pixel. Unused by echo_mix.
     matte_on: f32,
     // Which tap this dispatch is folding in: 0 for the echo one frame back,
     // 1 for two frames back, and so on. It is the exponent the per-pixel
@@ -32,14 +32,14 @@ struct Params {
 }
 @group(0) @binding(3) var<uniform> params: Params;
 
-// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// The Matte (docs/08 §2.6), bound for every kernel on this layout and
 // read only under `matte_on` — bound to `src` when there is none, since a
 // texture binding cannot be left empty.
 @group(0) @binding(4) var matte: texture_2d<f32>;
 
 // This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
 // luma, clamped. The Channel pick and Invert already happened, once, at the
-// seam (fx_matte_prepare.wgsl, K-425).
+// seam (fx_matte_prepare.wgsl).
 fn matte_k(xy: vec2<i32>) -> f32 {
     let m = textureLoad(matte, xy, 0);
     return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
@@ -103,7 +103,7 @@ fn echo_accumulate(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let p = vec2<i32>(i32(gid.x), i32(gid.y));
     let a = textureLoad(src, p, 0);
-    // The matte scales Decay per pixel (K-429): scaling decay by k scales tap
+    // The matte scales Decay per pixel: scaling decay by k scales tap
     // i by k^(i+1), so the whole-frame weight is multiplied by k exactly
     // tap + 1 times — the same running product cpu::echo_matted spells, and
     // exactly the whole-frame weight at k = 1. A tap the matte has taken to

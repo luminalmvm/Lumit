@@ -32,22 +32,21 @@ pub const RADIO_WAVES_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     label = "Radio waves",
     version = 1,
     category = Generate,
-    // One `atan2` and up to 32 cheap rings a pixel — §3.71's admission again
-    // (K-399).
+    // One `atan2` and up to 32 cheap rings a pixel — §3.71's admission again.
     cost = Cheap,
     roi = Exact,
     premultiplied = true,
     enabled_when = RADIO_WAVES_ENABLED_WHEN,
-    // K-428: the matte scales the amount, inside the kernel (the owner's rule
-    // for mattes); the generic strength dissolve does not also run.
+    // The matte scales the amount, inside the kernel (the owner's rule for
+    // mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales Opacity per pixel: white draws the waves in full, grey faintly,          black nothing at all",
     ),
 )]
 pub struct RadioWaves {
-    /// Where the waves are emitted, px@comp (K-260: point parameters are
-    /// PIXELS). The schema default is nominal 1080p centre;
+    /// Where the waves are emitted, px@comp (point parameters are PIXELS). The
+    /// schema default is nominal 1080p centre;
     /// [`instantiate_for_raster`](crate::fx::instantiate_for_raster) centres a
     /// fresh instance on the actual comp.
     #[slider(label = "Producer x", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
@@ -178,7 +177,7 @@ impl RadioWaves {
     /// The unit shape's sector is solved here, once, exactly as §3.71 solves its
     /// polygon — and the newest wave's index is taken here too, because
     /// `floor(Time × Frequency)` decides *which* rings exist and one bit of
-    /// disagreement about it is a whole ring (K-399).
+    /// disagreement about it is a whole ring.
     #[must_use]
     pub fn packed(self) -> cpu::RadioWavesParams {
         use std::f32::consts::TAU;

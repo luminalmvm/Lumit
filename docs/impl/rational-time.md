@@ -19,7 +19,7 @@ pub struct Rational { num: i64, den: i64 }
   construction. Private fields; `Rational::new(num, den)` normalises (divide both by gcd,
   move sign to num, panic-free error on den == 0 at the typed-error boundary).
 - `PartialEq`/`Hash` derive correctly **only because** of the canonical-form invariant.
-  This is what makes rational times usable in cache keys (K-016): equal times hash equal.
+  This is what makes rational times usable in cache keys: equal times hash equal.
 
 ## 2. The overflow problem, and the rule that solves it
 

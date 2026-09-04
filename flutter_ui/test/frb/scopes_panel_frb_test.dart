@@ -53,7 +53,7 @@ void main() {
   });
 
   group('Scopes (frb)', () {
-    /// The toolbar names the trace and nothing else (K-203). It used to carry
+    /// The toolbar names the trace and nothing else. It used to carry
     /// a frame readout beside the picker, which is the Timeline's and the
     /// Viewer's to state — three places saying the same number, and one of
     /// them competing with the trace it sits above.

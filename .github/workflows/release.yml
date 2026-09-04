@@ -1,10 +1,10 @@
-# Release pipeline (K-252, K-304): push a tag like v0.1.0 and this builds all
+# Release pipeline: push a tag like v0.1.0 and this builds all
 # three platform artefacts on GitHub's own runners and attaches them to a
 # GitHub Release — no local cross-building, which Flutter cannot do anyway.
 #
-# Three things are *installed* (K-304): a Windows setup .exe, a macOS .dmg and a
+# Three things are *installed*: a Windows setup .exe, a macOS .dmg and a
 # Linux .flatpak — one per platform, and the Linux tarball is withdrawn. Beside
-# them ride the plain application archives the in-place updater fetches (K-297):
+# them ride the plain application archives the in-place updater fetches:
 # a Windows .zip and a macOS .zip, which are not installers and are not offered
 # as a way to install. Every job gates the release; nothing is
 # continue-on-error, so a partial release is never published quietly.
@@ -13,7 +13,7 @@
 # (same FFmpeg 8.1 shared build, same LLVM 18 pin, same Flutter 3.47.1); when
 # one changes, change the other.
 #
-# The macOS artefacts are Developer ID signed, notarised and stapled (K-310)
+# The macOS artefacts are Developer ID signed, notarised and stapled
 # when the six signing secrets are present; without them make-dmg.sh falls back
 # to the ad-hoc signature it always used, so forks and a secretless repository
 # still build. The Windows installer is unsigned either way — that waits on a
@@ -83,7 +83,7 @@ jobs:
         run: |
           $version = "$env:RELEASE_VERSION".TrimStart('v')
           & packaging/windows/build-installer.ps1 -Version $version
-      # The same files the installer lays down, as a plain archive (K-297).
+      # The same files the installer lays down, as a plain archive.
       # This is what a per-user installation fetches to update itself: no
       # installer to run, no elevation, no questions already answered once.
       - name: Package the app for in-place updates
@@ -171,7 +171,7 @@ jobs:
         # Repacks the staged bundle (FFmpeg libs included) via the manifest in
         # packaging/flatpak/ into a single-file .flatpak anyone can install
         # with `flatpak install lumit-*.flatpak`. This is the whole Linux
-        # release (K-304), so a failure here fails the release rather than
+        # release, so a failure here fails the release rather than
         # publishing a Linux-shaped hole.
         run: |
           version="${RELEASE_VERSION#v}"
@@ -214,7 +214,7 @@ jobs:
     env:
       # A step's `if` cannot read the `secrets` context, only `env`, so the
       # signing gate below tests these. Absent secrets leave them empty and
-      # make-dmg.sh signs ad hoc exactly as it did before K-310.
+      # make-dmg.sh signs ad hoc exactly as it did before signing arrived.
       MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
       APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
       APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
@@ -223,8 +223,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       # Mirrors ci.yml's macOS jobs: FFmpeg 8.1.2 from a formula extracted out
       # of homebrew-core's history, built once and cached, with the major
-      # asserted before anything links against it (K-736). The action exports
-      # FFMPEG_PKG_CONFIG_PATH (K-204) and creates the opt prefix make-dmg.sh
+      # asserted before anything links against it. The action exports
+      # FFMPEG_PKG_CONFIG_PATH and creates the opt prefix make-dmg.sh
       # probes for.
       - name: FFmpeg 8.1.2 (extracted formula, cached keg)
         uses: ./.github/actions/ffmpeg8-macos
@@ -236,7 +236,7 @@ jobs:
           flutter-version: 3.47.1
           channel: stable
           cache: true
-      # The app icon is an Icon Composer document (K-309): actool needs Xcode 26
+      # The app icon is an Icon Composer document: actool needs Xcode 26
       # or newer to compile it. Mirrors ci.yml's `flutter-macos` job.
       - name: Select the newest Xcode (26+ for the .icon)
         run: |
@@ -281,7 +281,7 @@ jobs:
         run: |
           version="${RELEASE_VERSION#v}"
           packaging/macos/make-dmg.sh "$version"
-      # The bundle on its own, for in-place updates (K-297). `ditto` rather than
+      # The bundle on its own, for in-place updates. `ditto` rather than
       # `zip`: an .app carries symbolic links, code signatures and executable
       # bits, and an archiver that drops those produces a bundle macOS refuses
       # to open.

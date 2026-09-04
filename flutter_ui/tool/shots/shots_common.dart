@@ -42,8 +42,8 @@ import 'package:lumit_flutter/widgets/controls.dart';
 /// report) and never committed.
 const fixtures = 'C:/tmp/lumit-shots';
 
-/// The shape every sweep stages in — `LUMIT_SHOTS_SHAPE=round` picks Round
-/// (K-394), which is what Settings ▸ Appearance ▸ Shape sets. The manual is
+/// The shape every sweep stages in — `LUMIT_SHOTS_SHAPE=round` picks Round,
+/// which is what Settings ▸ Appearance ▸ Shape sets. The manual is
 /// shot in the look it documents, so this is set once for a whole pass rather
 /// than sweep by sweep.
 final shotShape = ThemeShape.values

@@ -4,7 +4,7 @@
 // saved file does not contain: rotating autosaves, and a crash journal of edits
 // made since the last save.
 //
-// **The three buttons are the choice** (K-488). The dialogue used to ask twice:
+// **The three buttons are the choice**. The dialogue used to ask twice:
 // pick a source in the body, then press *Recover* in the footer. It asks once
 // now — one sentence, and three ways to answer it along the bottom, in the
 // order they lose the most first: *Don't restore changes* opens the saved file
@@ -19,7 +19,7 @@
 // *Restore all changes* is the default, and the tooltips carry the difference
 // for anyone who wants it in words.
 //
-// **The frame is the dialog pattern's** (K-444, K-469) at a narrow width: the
+// **The frame is the dialog pattern's** at a narrow width: the
 // title strip, the sentence, the footer. There are no label-left rows here at
 // all any more, so this dialogue has no row measurements of its own — only its
 // width, and the footer's actions **stack** rather than sit in a line, which is
@@ -41,7 +41,7 @@ enum RecoveryChoice { journal, autosave, discard }
 
 /// The frame this dialogue takes.
 ///
-/// **Measured, not chosen** (K-488). The row was tried first, as the owner
+/// **Measured, not chosen**. The row was tried first, as the owner
 /// asked. In Hanken Grotesk at 11 the three labels are 108.5, 116.5 and — the
 /// filled one being a 9px mono kicker tracked 0.12em (§12A.4) — 123.1, which
 /// with 12 either side of the two outlined buttons and 16 either side of the
@@ -117,7 +117,7 @@ class _RecoveryDialog extends StatelessWidget {
                 l10n.tipRecoverNone, RecoveryChoice.discard),
             _button(t, 'recover-autosave', l10n.recoveryRestoreAutosave,
                 l10n.tipRecoverAutosave, RecoveryChoice.autosave),
-            // The window's default action (K-319): focused on open, so Enter
+            // The window's default action: focused on open, so Enter
             // restores everything — the answer that loses nothing.
             _button(t, 'recover-journal', l10n.recoveryRestoreAll,
                 l10n.tipRecoverAll, RecoveryChoice.journal,

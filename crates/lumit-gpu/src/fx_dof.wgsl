@@ -17,7 +17,7 @@
 //     thing into its dark surroundings, and raising each tap to a power first is
 //     what lets it survive and bloom into a ball instead.
 //
-// **Neutral means bit-identical, and that is done by branching** (K-313).
+// **Neutral means bit-identical, and that is done by branching**.
 // Roundness 1 takes the plain `r² ≤ coc²` circle test, Concentration 0 and
 // Remove edge leak 0 take the unweighted accumulation, Exposure 0 takes the
 // unsplit one. None of these multiplies by one and hopes: `Σ(c·w)/Σw` is not an
@@ -131,7 +131,7 @@ fn coc_falloff(d: f32, focus: f32) -> f32 {
     return e * e * (3.0 - 2.0 * e); // smoothstep ramp
 }
 
-// The Depth-map view's grey (K-615): the depth axis as the ramp reads it — the
+// The Depth-map view's grey: the depth axis as the ramp reads it — the
 // distance from focus scaled by the same Gamma multiplier and put back on the
 // axis, so the two diagnostic views show the same axis. == cpu::dof_depth_view,
 // branch for branch: the neutral multiplier is exactly 1, but `(d - focus) +
@@ -231,7 +231,7 @@ fn dof(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (p.display == 1u) {
         // Depth map: the post-invert depth as opaque greyscale — after the
         // channel pick and after Gamma, so it is what the effect is actually
-        // reading (K-615). == cpu::dof_depth_view.
+        // reading. == cpu::dof_depth_view.
         let m = depth_view(d, focus);
         textureStore(dst, xy, vec4<f32>(m, m, m, 1.0));
         return;

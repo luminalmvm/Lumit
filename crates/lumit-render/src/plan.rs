@@ -133,7 +133,7 @@ impl Quality {
     }
 }
 
-/// The nested-frame question a plan asks (K-422, [`PlanContext::held`]):
+/// The nested-frame question a plan asks ([`PlanContext::held`]):
 /// "is this comp's frame at this layer time already a finished texture?"
 pub type HeldNested<'a> = &'a dyn Fn(&Composition, f64) -> bool;
 
@@ -145,7 +145,7 @@ pub struct PlanContext<'a> {
     pub quality: Quality,
     pub probes: &'a dyn SourceProbes,
     /// Answers "is this nested comp's frame, at this layer time, already held
-    /// as a finished texture?" (K-422). When it is, the planner asks for none
+    /// as a finished texture?". When it is, the planner asks for none
     /// of that comp's decodes: the realiser will serve the texture and never
     /// look at the pixels. This is the one place planning knows a cache exists
     /// — the module header's "pure and cheap" is kept by making it a question
@@ -158,8 +158,8 @@ pub struct PlanContext<'a> {
 }
 
 /// The decode source for one footage item: the file its pixels are read from
-/// (already resolved through the proxy rule, K-501) and — for a numbered run of
-/// stills — the rate to read the run at (K-539).
+/// (already resolved through the proxy rule) and — for a numbered run of
+/// stills — the rate to read the run at.
 ///
 /// The rate rides only when the file *is* the item's own media. A proxy is one
 /// file standing in for the whole run, so reading it as a sequence would be
@@ -189,7 +189,7 @@ fn media_source(
 /// contributes no job at all and is retried once its probe lands.
 ///
 /// `spliced` says this comp is being spliced into its parent by a collapsed
-/// Precomp layer, where the occlusion cull (K-423) does not apply — the same
+/// Precomp layer, where the occlusion cull does not apply — the same
 /// flag the draw builder takes, so the two skip exactly the same layers.
 pub fn collect_comp_jobs(
     ctx: &PlanContext<'_>,
@@ -207,14 +207,14 @@ pub fn collect_comp_jobs(
     } = *ctx;
     let in_span =
         |l: &lumit_core::model::Layer| t >= l.in_point.0.to_f64() && t < l.out_point.0.to_f64();
-    // Occlusion cull (K-423, docs/06 §1.1): the layers under a full-frame
+    // Occlusion cull (docs/06 §1.1): the layers under a full-frame
     // opaque layer are never seen, so their footage is never decoded. The
     // predicate refuses whenever anything above could reach a layer below,
     // so nothing a wanted layer references is ever culled.
     let occluder = (!spliced)
         .then(|| lumit_core::occlusion::occluder_index(doc, comp, t))
         .flatten();
-    // Solo / isolate (K-105, K-435): while a layer that *draws* is soloed, only
+    // Solo / isolate: while a layer that *draws* is soloed, only
     // soloed layers reach the picture — so only they are worth decoding. The
     // same question the draw builder, the frame key and the occlusion cull all
     // ask, asked here too, on the rule the occlusion comment above states: a
@@ -230,12 +230,12 @@ pub fn collect_comp_jobs(
         if occluder.is_some_and(|o| idx > o) {
             continue;
         }
-        // An Audio layer decodes for the mixer, never for the picture (K-435).
+        // An Audio layer decodes for the mixer, never for the picture.
         if l.audio_only {
             continue;
         }
         if l.switches.visible && in_span(l) && !(any_solo && !l.switches.solo) {
-            // A layer acting as an adjustment (K-537) draws the composite
+            // A layer acting as an adjustment draws the composite
             // beneath it, so its OWN frames are never asked for — decoding them
             // would be a video decode nobody looks at. Only its own frames,
             // though: it still gates by a matte and still feeds its effects'
@@ -252,7 +252,7 @@ pub fn collect_comp_jobs(
                     wanted.push(m.layer);
                 }
             }
-            // Layer-input references (K-123, e.g. a DoF depth pass) decode
+            // Layer-input references (e.g. a DoF depth pass) decode
             // exactly like matte sources: the referenced layer is usually
             // hidden (you don't want the depth map rendering), but its
             // pixels still feed the effect.
@@ -295,7 +295,7 @@ pub fn collect_comp_jobs(
                 if let Some((_id, lumit_core::sequence::ClipSource::Footage(item), st)) =
                     lumit_core::sequence::resolve(clips, lt)
                 {
-                    // The one proxy resolution point (K-501): which file this
+                    // The one proxy resolution point: which file this
                     // item's pixels come from, and the probe to believe about
                     // them (always the original's — see `effective_media`).
                     let Some((media, probe)) = crate::source::effective_media(doc, probes, item)
@@ -307,7 +307,7 @@ pub fn collect_comp_jobs(
                     };
                     use lumit_core::retime::Interpolation;
                     let clip = lumit_core::sequence::active_clip(clips, lt);
-                    // Same engagement gate as a Footage layer (K-331); the
+                    // Same engagement gate as a Footage layer; the
                     // clip's own retime supplies the speed.
                     let comp_fps = comp.frame_rate.fps();
                     let flow = match clip.map(|c| (&c.interpolation, c.retime.as_ref())) {
@@ -323,7 +323,7 @@ pub fn collect_comp_jobs(
                             || flow.is_some();
                     let sample_fps = flow.as_ref().and_then(|p| p.input_fps_at(lt));
                     let target_width = if flow.is_some() {
-                        None // flow decodes natively (K-331)
+                        None // flow decodes natively
                     } else {
                         quality.target_width(nat_w)
                     };
@@ -353,7 +353,7 @@ pub fn collect_comp_jobs(
                     continue; // cycle guard
                 }
                 if let Some(nested) = doc.comp(*nested_id) {
-                    // A held nested frame wants no decodes (K-422). Asked only
+                    // A held nested frame wants no decodes. Asked only
                     // where the builder will ask by the same name: at the live
                     // time (a Posterize-held layer is built at another time,
                     // by a walk with no keyer) and for a Precomp that is not
@@ -372,7 +372,7 @@ pub fn collect_comp_jobs(
                 }
             }
             LayerKind::Footage { item } => {
-                // The one proxy resolution point (K-501): which file this
+                // The one proxy resolution point: which file this
                 // item's pixels come from, and the probe to believe about them
                 // (always the original's — see `effective_media`).
                 let Some((media, probe)) = crate::source::effective_media(doc, probes, *item)
@@ -407,12 +407,12 @@ pub fn collect_comp_jobs(
                 };
                 // Retime maps local time → source time before frame pick; the
                 // Retime maps local time → source time before the frame pick
-                // (K-249: the layer's own property is the only map). Its
+                // (the layer's own property is the only map). Its
                 // interpolation policy, which sits beside that map rather than
                 // inside it, decides nearest vs blend.
                 let source_time = layer.source_time_at(lt);
                 use lumit_core::retime::Interpolation;
-                // Flow only engages where it can help (K-088, built in K-331):
+                // Flow only engages where it can help:
                 // at 100% or faster every comp frame lands on a source frame,
                 // so there is no in-between frame to invent and the policy
                 // degrades to Nearest. `always` overrides.
@@ -430,7 +430,7 @@ pub fn collect_comp_jobs(
                 let flow_neighbours =
                     lumit_core::fx::stack_flow_neighbours(&layer.effects, layer.switches.fx);
                 // A layer that needs flow decodes at its own width whatever the
-                // preview tier says (K-331): flow measured on a shrunk decode is
+                // preview tier says: flow measured on a shrunk decode is
                 // a different measurement, not the same one smaller. Must match
                 // `Stamper::stamp`'s `native` exactly, or the frame's name lies
                 // about the width of the pixels in it.
@@ -484,8 +484,8 @@ pub fn collect_comp_jobs(
                     temporal,
                     // Flow motion blur / Datamosh measure motion between
                     // this frame and their requested neighbour (already
-                    // in `temporal`) — one entry each when both are live
-                    // (K-544), since they want opposite directions.
+                    // in `temporal`) — one entry each when both are live,
+                    // since they want opposite directions.
                     flow_neighbours,
                     slate: false,
                 });
@@ -507,8 +507,7 @@ pub fn plan_comp_frame(
     plan_comp_frame_held(doc, comp, t, quality, probes, None)
 }
 
-/// [`plan_comp_frame`] with the nested-frame answerer (K-422,
-/// [`PlanContext::held`]).
+/// [`plan_comp_frame`] with the nested-frame answerer ([`PlanContext::held`]).
 #[must_use]
 pub fn plan_comp_frame_held(
     doc: &Document,
@@ -555,7 +554,7 @@ pub fn same_decode(a: &[CompJob], b: &[CompJob]) -> bool {
 }
 
 impl CompJob {
-    /// The content name of the pixels this job decodes (K-421): a hash of
+    /// The content name of the pixels this job decodes: a hash of
     /// exactly the fields [`same_decode`] compares, so two jobs that would
     /// decode the same pixels have the same name. The layer id is left out on
     /// purpose — a name is about content, never about which row asked — and
@@ -568,7 +567,7 @@ impl CompJob {
         h.update(self.item.as_bytes());
         h.update(self.source.path.to_string_lossy().as_bytes());
         // A run of stills read at a different rate is a different picture at
-        // the same frame number, so the rate is part of the name (K-539).
+        // the same frame number, so the rate is part of the name.
         let (num, den) = self.source.sequence_fps.unwrap_or((0, 0));
         h.update(&num.to_le_bytes());
         h.update(&den.to_le_bytes());
@@ -589,7 +588,7 @@ impl CompJob {
         }
         // `i32::MIN` is not a reachable offset, so "no flow consumer" cannot
         // collide with a real one — and a stack with a single consumer keeps
-        // exactly the name it had before K-544 made this a list.
+        // exactly the name it had before this became a list.
         if self.flow_neighbours.is_empty() {
             h.update(&i32::MIN.to_le_bytes());
         }
@@ -802,16 +801,16 @@ mod tests {
     }
 
     /// **Footage inside a precomp that is referenced only as a matte still gets
-    /// decoded** (K-268).
+    /// decoded**.
     ///
-    /// K-266 recorded this as an open boundary — "the decode planner never
-    /// visits a matte-only precomp" — and taught the draw builder to render the
-    /// nested comp anyway. The planner turned out to walk the reference
-    /// already: a matte source and a layer-input reference are both `wanted`
-    /// whether or not the layer is visible, and a Precomp among them recurses.
-    /// So the boundary was the *draw* side, which K-266 and K-268 have now
-    /// closed at both ends — and this test is what keeps the planner honest, so
-    /// nobody has to re-derive it from a black matte.
+    /// An earlier fix recorded this as an open boundary — "the decode planner
+    /// never visits a matte-only precomp" — and taught the draw builder to
+    /// render the nested comp anyway. The planner turned out to walk the
+    /// reference already: a matte source and a layer-input reference are both
+    /// `wanted` whether or not the layer is visible, and a Precomp among them
+    /// recurses. So the boundary was the *draw* side, which two fixes have
+    /// now closed at both ends — and this test is what keeps the planner
+    /// honest, so nobody has to re-derive it from a black matte.
     ///
     /// Both shapes of reference are checked: the track matte (`Layer::matte`)
     /// and the layer-input parameter a flare's Matte source or a DoF depth pass
@@ -1108,7 +1107,7 @@ mod tests {
         }
     }
 
-    /// **Footage under a full-frame opaque solid plans no decode** (K-423) —
+    /// **Footage under a full-frame opaque solid plans no decode** —
     /// unless something above the solid reaches it: a matte on the
     /// solid's upper neighbour keeps the footage wanted, so the matte still
     /// renders. Fails without the occluder gate on the wanted list.
@@ -1229,7 +1228,7 @@ mod tests {
         }
     }
 
-    /// **A held nested frame wants no decodes** (K-422). A Precomp whose frame
+    /// **A held nested frame wants no decodes**. A Precomp whose frame
     /// the store already holds contributes none of its footage jobs — that is
     /// what makes a parent edit free of the nested comp's decodes — while a
     /// collapsed Precomp (spliced in, never named) still decodes whatever the
@@ -1359,7 +1358,7 @@ mod tests {
         assert_eq!(asked.get(), 1, "and is never asked about");
     }
 
-    /// **A soloed row is the only row decoded** (K-105, K-435). The draw
+    /// **A soloed row is the only row decoded**. The draw
     /// builder, the frame key and the occlusion cull all stop at a layer that
     /// is not soloed while something that draws is; the decode planner did not,
     /// so a comp with one row soloed still fetched every other visible row's
@@ -1482,7 +1481,7 @@ mod tests {
         doc.comp_mut(comp_id).unwrap().layers[2].switches.solo = true;
         assert_eq!(plan(&doc), 2, "both soloed rows decode");
 
-        // An Audio row's solo says nothing about the picture (K-435), so every
+        // An Audio row's solo says nothing about the picture, so every
         // drawing row is decoded exactly as it was before the switch moved.
         for layer in &mut doc.comp_mut(comp_id).unwrap().layers {
             layer.switches.solo = false;

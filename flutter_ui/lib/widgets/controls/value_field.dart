@@ -108,24 +108,24 @@ class ScrubLadder extends StatelessWidget {
   }
 }
 
-/// A value well's height in a panel: **20** (K-451, docs/15 §12A.6). Fixed
+/// A value well's height in a panel: **20** (docs/15 §12A.6). Fixed
 /// rather than grown from the number inside it, because the mockups' heights
 /// are canonical and a well that measured its own font drifted with the face.
 /// Dialog wells are 22 and set their own; they do not come through here yet.
 const double wellHeight = 20;
 
 /// The number inside a well: **11px mono**, the size the approved mockups
-/// compute for every `.well` they draw (§7.1's mono row, K-454). It had been
+/// compute for every `.well` they draw (§7.1's mono row). It had been
 /// 13, which is a size the mockups use nowhere and which crowded the well's
 /// 20 from the inside.
 const double wellTextSize = 11;
 
 /// The number on a **bar**, where the drawing gives it no well: 10px mono, the
-/// Viewer bottom bar's own `+0.0` (K-466). A bar reading is an aside beside the
+/// Viewer bottom bar's own `+0.0`. A bar reading is an aside beside the
 /// picture, and it is set a size down from a panel's editable value.
 const double barValueTextSize = 10;
 
-/// The **value well** (docs/15-DESIGN.md §2.1/§3.1, K-439): drag horizontally
+/// The **value well** (docs/15-DESIGN.md §2.1/§3.1): drag horizontally
 /// to adjust, click to type, right-click for Reset / Copy / Paste.
 ///
 /// In plain terms, a number you can edit is drawn as a *recess* rather than as
@@ -150,7 +150,7 @@ class DragValueField extends StatefulWidget {
   /// Whether a positive value is shown with its `+`.
   ///
   /// For a field whose zero is a *middle* rather than a floor — the Viewer's
-  /// exposure in stops (K-314), which reads `+1.4` and `-2.3` — so the sign is
+  /// exposure in stops, which reads `+1.4` and `-2.3` — so the sign is
   /// part of the reading and the number does not appear to jump width when it
   /// crosses zero. Display only: what is typed, copied and pasted is the plain
   /// number, and `+1.4` parses as readily as `1.4`.
@@ -167,7 +167,7 @@ class DragValueField extends StatefulWidget {
   final Color? fill;
 
   /// Drawn **bare**: no inset, no hairline, the number alone at a bar's own
-  /// 10px in `text_secondary` (K-466).
+  /// 10px in `text_secondary`.
   ///
   /// One caller, and it is a measurement rather than a taste: the approved
   /// Viewer drawing sets the exposure as a plain `.mono` span on the bottom
@@ -324,8 +324,8 @@ class _DragValueFieldState extends State<DragValueField>
     _ladder = null;
   }
 
-  /// `Escape` in the open editor: shut it and keep the value the field had
-  /// (K-323). Every other way out commits — Enter, Tab, clicking away — so
+  /// `Escape` in the open editor: shut it and keep the value the field had.
+  /// Every other way out commits — Enter, Tab, clicking away — so
   /// without this a half-typed number had no way back.
   ///
   /// Clearing `_editing` first matters: the focus listener below commits on
@@ -341,7 +341,7 @@ class _DragValueFieldState extends State<DragValueField>
   }
 
   /// The idle box's focus — how Tab reaches the field, and what `Enter`
-  /// opens the editor from (K-319).
+  /// opens the editor from.
   final ControlFocusNode _idleFocus = ControlFocusNode(debugLabel: 'value');
 
   /// The open editor, for the selection gestures: pressing in it puts the
@@ -380,7 +380,7 @@ class _DragValueFieldState extends State<DragValueField>
 
   /// Open the text editor with the whole value selected — a value box is
   /// retyped far more often than it is amended, and a selected value means
-  /// the first keystroke replaces it (K-319).
+  /// the first keystroke replaces it.
   void _beginEdit() {
     setState(() {
       _editing = true;
@@ -514,7 +514,7 @@ class _DragValueFieldState extends State<DragValueField>
           ),
           // The selection gestures, so a press puts the caret down and a drag
           // highlights — without this the editor took keys but a drag over the
-          // text selected nothing (K-319).
+          // text selected nothing.
           child: TextSelectionGestureDetectorBuilder(delegate: this)
               .buildGestureDetector(
             child: Padding(
@@ -563,7 +563,7 @@ class _DragValueFieldState extends State<DragValueField>
     return FocusableActionDetector(
       focusNode: _idleFocus,
       // Enter only, no Space: this is a number box, and `Enter` opening the
-      // editor is what Tab-and-type needs (K-319).
+      // editor is what Tab-and-type needs.
       shortcuts: const {
         SingleActivator(LogicalKeyboardKey.enter, includeRepeats: false):
             ActivateIntent(),
@@ -578,7 +578,7 @@ class _DragValueFieldState extends State<DragValueField>
       },
       onFocusChange: (has) {
         setState(() => _focused = has);
-        // **Tab arrives ready to type** (§12A.3, K-529). The only way this box
+        // **Tab arrives ready to type** (§12A.3). The only way this box
         // takes focus is keyboard traversal — a click opens the editor
         // directly — and a value well reached by Tab is one about to be
         // retyped, so it opens its editor at once. `_beginEdit` is the call
@@ -626,7 +626,7 @@ class _DragValueFieldState extends State<DragValueField>
             // Never crossed one speed-increment: nothing was ticked, so the
             // press was a click that wobbled a few pixels, not a scrub. It
             // cancels as a drag — and then does what the click meant, which
-            // is open the editor (K-319). Before this, a click that moved
+            // is open the editor. Before this, a click that moved
             // at all did nothing, and value boxes felt like they swallowed
             // clicks.
             widget.onDragCancel?.call();

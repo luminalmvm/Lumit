@@ -136,7 +136,7 @@ pub(crate) fn pyramid_for(path: &Path) -> Option<Arc<PeakPyramid>> {
     Some(pyramid)
 }
 
-// --- The spectrogram cache (K-699): the same bargain, for the other picture.
+// --- The spectrogram cache: the same bargain, for the other picture.
 //
 // Kept beside the peaks rather than folded into them because the two are
 // asked for separately — a lane in spectral mode never wants peaks, and

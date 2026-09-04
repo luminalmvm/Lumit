@@ -27,8 +27,8 @@
 //!   waiting.
 //!
 //! The interval and the keep count are **application settings, not project
-//! data** — the same arrangement as the cache budgets and the audio device
-//! (K-586). The frontend owns the file they live in and hands them over at boot
+//! data** — the same arrangement as the cache budgets and the audio device.
+//! The frontend owns the file they live in and hands them over at boot
 //! and on every change ([`schedule`]); the engine holds the live values with no
 //! store behind them.
 
@@ -159,8 +159,8 @@ pub(crate) fn sweep(keep: u32) -> Vec<PathBuf> {
 /// write failed — a failed autosave is not an error anybody can act on, and the
 /// next round will try again.
 ///
-// ponytail: an autosave does not refresh the welcome screen's thumbnail
-// (K-667). The file it would write is named by a digest the *frontend* owns
+// ponytail: an autosave does not refresh the welcome screen's thumbnail.
+// The file it would write is named by a digest the *frontend* owns
 // (`Workspace.thumbnailKey`) in a folder the frontend owns, so writing it here
 // would make one filename two sources of truth. The trigger for changing that
 // is somebody minding that a picture can be an editing session stale; the
@@ -259,7 +259,7 @@ mod tests {
         project.close().expect("closed");
     }
 
-    /// **The rotation is the one the recovery dialogue reads** (K-488): slots
+    /// **The rotation is the one the recovery dialogue reads**: slots
     /// numbered from 1 in an `autosaves/` folder, 1 the newest, contiguous —
     /// which is what `list_autosaves` walks and what `latest_autosave` offers.
     /// The keep count is honoured, so the folder never grows without end.

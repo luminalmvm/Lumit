@@ -21,7 +21,7 @@ pub enum OpError {
     UnknownLayer,
     #[error("unknown layer group")]
     UnknownGroup,
-    /// [`Op::GroupLayers`] was handed something that cannot be a group (K-702):
+    /// [`Op::GroupLayers`] was handed something that cannot be a group:
     /// layers that are not a contiguous run of the stack, a layer already in a
     /// group, or a group id this comp already has. A refusal rather than a
     /// degradation, for [`Self::InvalidGraph`]'s reason: none of the three can
@@ -36,13 +36,13 @@ pub enum OpError {
     InvalidParent,
     #[error("the layer is locked")]
     LayerLocked,
-    /// The driver graph breaks one of §1.5's rules (K-471). Refusal rather than
+    /// The driver graph breaks one of §1.5's rules. Refusal rather than
     /// degradation: none of these states can be reached by deleting some other
     /// entity, so each one is an edit to decline.
     #[error("{0}")]
     InvalidGraph(#[from] crate::graph::GraphError),
     /// [`Op::SetLayerKind`] was pointed at a kind it does not convert. Only
-    /// Solid ⇄ Adjustment flips (K-484): those two differ by whether the layer
+    /// Solid ⇄ Adjustment flips: those two differ by whether the layer
     /// has a picture of its own, and nothing else.
     #[error("only solid and adjustment layers convert to one another")]
     KindNotConvertible,
@@ -96,7 +96,7 @@ pub enum Op {
         id: Uuid,
         name: String,
     },
-    /// Set a project item's colour tag (K-451): an index into the same label
+    /// Set a project item's colour tag: an index into the same label
     /// palette a layer's chip uses, 0 = untagged. Undoable like any other edit;
     /// it changes no pixel.
     SetItemLabel {
@@ -142,7 +142,7 @@ pub enum Op {
         layer: Uuid,
         masks: Vec<crate::mask::Mask>,
     },
-    /// Replace a layer's whole paint stroke list (docs/03 §7.1, K-227).
+    /// Replace a layer's whole paint stroke list (docs/03 §7.1).
     ///
     /// The whole list, exactly invertible, exactly as `SetLayerMasks` is: a
     /// stroke added, deleted, recoloured or renamed is one shape of edit and one
@@ -153,7 +153,7 @@ pub enum Op {
         strokes: Vec<crate::paint::PaintStroke>,
     },
     /// Replace a layer's whole puppet block, or take it away
-    /// (docs/impl/puppet.md §4, K-704).
+    /// (docs/impl/puppet.md §4).
     ///
     /// The whole block, exactly invertible, exactly as `SetLayerMasks` and
     /// `SetLayerPaint` are: a pin added, dragged, renamed or deleted is one
@@ -164,7 +164,7 @@ pub enum Op {
         layer: Uuid,
         puppet: Option<crate::puppet::PuppetBlock>,
     },
-    /// Replace a shape layer's whole contents (docs/03 §7.2, K-237).
+    /// Replace a shape layer's whole contents (docs/03 §7.2).
     ///
     /// The whole list, exactly invertible, like `SetLayerMasks` and
     /// `SetLayerPaint`: vector art arrives and changes as a whole.
@@ -181,8 +181,7 @@ pub enum Op {
         layer: Uuid,
         effects: Vec<crate::model::EffectInstance>,
     },
-    /// Replace a layer's whole **style list** (docs/impl/layer-styles.md §1,
-    /// K-706).
+    /// Replace a layer's whole **style list** (docs/impl/layer-styles.md §1).
     ///
     /// `SetLayerEffects`' twin for the second list, and coarse and exactly
     /// invertible for the same reason: adding a style, removing one, toggling
@@ -199,8 +198,8 @@ pub enum Op {
         layer: Uuid,
         styles: Vec<crate::model::EffectInstance>,
     },
-    /// Replace a layer's whole **driver graph** (K-471 §3): its drivers, its
-    /// wires and its canvas positions.
+    /// Replace a layer's whole **driver graph**: its drivers, its wires and
+    /// its canvas positions.
     ///
     /// The whole-graph commit, shaped exactly like `SetLayerEffects` is the
     /// whole-stack commit. Add a driver, remove one, connect, disconnect, drag a
@@ -237,7 +236,7 @@ pub enum Op {
         layer: Uuid,
         clips: Vec<crate::sequence::Clip>,
     },
-    /// Flip a layer between **Solid** and **Adjustment** (K-484) — the one
+    /// Flip a layer between **Solid** and **Adjustment** — the one
     /// kind change the document has, and the whole of the Modes column's
     /// adjustment toggle.
     ///
@@ -260,7 +259,7 @@ pub enum Op {
         layer: Uuid,
         kind: Box<crate::model::LayerKind>,
     },
-    /// The adjustment switch (K-537): the layer sets its own picture aside and
+    /// The adjustment switch: the layer sets its own picture aside and
     /// runs its effect stack on the composite beneath it instead.
     ///
     /// A switch like the ten beside it, not a kind flip: the layer keeps its
@@ -285,19 +284,19 @@ pub enum Op {
         layer: Uuid,
         visible: bool,
     },
-    /// Toggle a layer's solo / isolate switch (K-105).
+    /// Toggle a layer's solo / isolate switch.
     SetLayerSolo {
         comp: Uuid,
         layer: Uuid,
         solo: bool,
     },
-    /// Toggle a layer's per-layer motion-blur switch (K-120).
+    /// Toggle a layer's per-layer motion-blur switch.
     SetLayerMotionBlur {
         comp: Uuid,
         layer: Uuid,
         motion_blur: bool,
     },
-    /// Toggle a layer's Accepts lights switch (K-361): whether the comp's
+    /// Toggle a layer's Accepts lights switch: whether the comp's
     /// Light layers shade it.
     SetLayerAcceptsLights {
         comp: Uuid,
@@ -311,7 +310,7 @@ pub enum Op {
         layer: Uuid,
         shy: bool,
     },
-    /// Toggle a layer's guide switch (K-497): a guide layer draws in the
+    /// Toggle a layer's guide switch: a guide layer draws in the
     /// Viewer and is skipped by every walk that produces a file.
     SetLayerGuide {
         comp: Uuid,
@@ -332,8 +331,8 @@ pub enum Op {
         layer: Uuid,
         label: u8,
     },
-    /// Fold a run of layers into a named **layer group** (K-702,
-    /// [`crate::group`]): a band in the Timeline's outline, and nothing else.
+    /// Fold a run of layers into a named **layer group** ([`crate::group`]): a
+    /// band in the Timeline's outline, and nothing else.
     ///
     /// Carries the whole group — id, name, colour and members — and the slot it
     /// goes into, exactly as [`Op::AddItem`] carries an item and its index, so
@@ -369,34 +368,33 @@ pub enum Op {
         name: String,
     },
     /// Set a layer group's label colour — an index into the same palette a
-    /// layer's own label indexes (K-567).
+    /// layer's own label indexes.
     SetGroupLabel {
         comp: Uuid,
         group: Uuid,
         label: u8,
     },
-    /// Replace a group header's whole effect stack (docs/impl/group-effects.md,
-    /// K-731): [`Op::SetLayerEffects`]' shape for
+    /// Replace a group header's whole effect stack (docs/impl/group-effects.md):
+    /// [`Op::SetLayerEffects`]' shape for
     /// [`crate::group::LayerGroup::effects`], coarse and exactly invertible —
     /// add, remove, reorder, toggle and every param edit commit the new list.
-    /// No graph-pruning twin, because
-    /// a group carries no driver graph; and the lock has nothing to say about
-    /// it, matching the other group ops — a group is not lockable, and its
-    /// members' locks guard the members.
+    /// No graph-pruning twin, because a group carries no driver graph; and the
+    /// lock has nothing to say about it, matching the other group ops — a group
+    /// is not lockable, and its members' locks guard the members.
     SetGroupEffects {
         comp: Uuid,
         group: Uuid,
         effects: Vec<crate::model::EffectInstance>,
     },
-    /// Set a composition's motion-blur shutter (K-120): the master enable plus
+    /// Set a composition's motion-blur shutter: the master enable plus
     /// the shutter angle/phase and sample count.
     SetCompMotionBlur {
         comp: Uuid,
         motion_blur: crate::model::MotionBlur,
     },
-    /// Set a composition's background colour (docs/07 §2.2 item 10, K-357).
+    /// Set a composition's background colour (docs/07 §2.2 item 10).
     ///
-    /// A document edit, unlike the Viewer's transparency grid (K-352) which
+    /// A document edit, unlike the Viewer's transparency grid, which
     /// only decides whether the backdrop is *drawn*: this is what colour it is
     /// when it is, and it reaches the export. Scene-linear, exactly
     /// invertible.
@@ -462,7 +460,7 @@ pub enum Op {
         animation: Animation,
     },
     /// Set how one two-axis transform property is shown and edited — combined
-    /// on one row, linked, or separated onto a row per axis (K-571).
+    /// on one row, linked, or separated onto a row per axis.
     ///
     /// Only the mode: the keyframe union a recombine owes its axes rides along
     /// as ordinary `SetTransformProperty` ops in the same [`Op::Batch`], so
@@ -482,10 +480,10 @@ pub enum Op {
         animation: Animation,
     },
     /// Point a Camera layer's **solve link** at a tracked layer, or clear it
-    /// with `None` (K-417, docs/03 §5.6).
+    /// with `None` (docs/03 §5.6).
     ///
     /// Setting a link on a camera that had none also captures the **correction
-    /// base** (K-578) — the pose the camera's own properties hold at layer time
+    /// base** — the pose the camera's own properties hold at layer time
     /// nought — and clearing the link drops it. That is arithmetic inside
     /// `apply`, which is unusual and deliberate: the base is a pure function of
     /// the document at the moment the link is made, so it replays identically,
@@ -511,7 +509,7 @@ pub enum Op {
         animation: Animation,
     },
     /// Replace a layer's **Pan** animation — the constant-power stereo
-    /// balance (docs/09 §6, K-694). Same coarse-grained shape as
+    /// balance (docs/09 §6). Same coarse-grained shape as
     /// `SetLayerVolume`, and valid on any layer for the same reason: only
     /// heard where the source has an audio stream.
     SetLayerPan {
@@ -520,7 +518,7 @@ pub enum Op {
         animation: Animation,
     },
     /// Move a composition's **master fader** — one gain stage on the summed
-    /// mix, ahead of the safety limiter (docs/09 §3.1, K-691). dB; 0 is
+    /// mix, ahead of the safety limiter (docs/09 §3.1). dB; 0 is
     /// unity, −100 and below is exact silence.
     ///
     /// A comp setting rather than a layer one, so it names no layer to lock:
@@ -530,7 +528,7 @@ pub enum Op {
         db: f64,
     },
     /// Set — or clear, with `None` — a composition's **confirmed beat grid**
-    /// (docs/09 §5, K-698): the tempo and phase the Timeline's beat band
+    /// (docs/09 §5): the tempo and phase the Timeline's beat band
     /// numbers bars from. Committed by beat detection beside the markers it
     /// generates, and cleared with them; trivially invertible like the
     /// marker list itself.
@@ -539,7 +537,7 @@ pub enum Op {
         grid: Option<crate::model::BeatGrid>,
     },
     /// Replace a layer's Retime property — local time → source time, in
-    /// seconds (K-197). `None` removes it, which is "not retimed" rather than
+    /// seconds. `None` removes it, which is "not retimed" rather than
     /// "retimed to exactly 1×": only the first skips the map. Same
     /// coarse-grained shape as SetTransformProperty, for the same
     /// invertibility reason.
@@ -594,7 +592,7 @@ pub enum Op {
         location: Option<crate::model::CacheLocation>,
     },
     /// Set how hard the renderer works at the edges of transformed layers
-    /// (K-274, docs/impl/anti-aliasing.md).
+    /// (docs/impl/anti-aliasing.md).
     ///
     /// An op like any other — undoable, journalled and saved with the project —
     /// because it is a property of the project rather than a preference: it
@@ -604,7 +602,7 @@ pub enum Op {
     SetAntiAliasing {
         anti_aliasing: crate::model::AntiAliasing,
     },
-    /// Replace the project's colour shelf whole (K-448, [`crate::model::Swatch`]).
+    /// Replace the project's colour shelf whole ([`crate::model::Swatch`]).
     ///
     /// **The whole list, not an add and a remove pair.** Keeping a colour and
     /// forgetting one are the only two edits there are, and both are a
@@ -615,8 +613,8 @@ pub enum Op {
     SetProjectSwatches {
         swatches: Vec<crate::model::Swatch>,
     },
-    /// Point this project at an OCIO config, or clear it (K-490,
-    /// docs/impl/ocio.md §3.1).
+    /// Point this project at an OCIO config, or clear it
+    /// (docs/impl/ocio.md §3.1).
     ///
     /// An op like any other — undoable, journalled, saved with the project —
     /// for `SetAntiAliasing`'s reason: it changes what every comp looks like,
@@ -627,7 +625,7 @@ pub enum Op {
         config: Option<Box<crate::model::MediaRef>>,
     },
     /// Say what colour space a footage item arrives in, by the loaded config's
-    /// name, or clear it back to the built-in interpretation defaults (K-490).
+    /// name, or clear it back to the built-in interpretation defaults.
     SetFootageColourSpace {
         id: Uuid,
         space: Option<String>,
@@ -652,31 +650,31 @@ pub enum Op {
         width: u32,
         height: u32,
     },
-    /// **Trim comp to work area** (K-686): the composition becomes as long as
+    /// **Trim comp to work area**: the composition becomes as long as
     /// its work area, and everything on the timeline slides back so the work
     /// area's start is comp time zero.
     ///
     /// Carries only the comp: what it does is a pure function of the document
     /// (the work area is in it), so it replays identically on the recovery
     /// journal and cannot be committed with a span that has gone stale. A comp
-    /// with no work area — which *is* the whole comp (K-203) — has nothing to
+    /// with no work area — which *is* the whole comp — has nothing to
     /// trim to, and the op does nothing rather than refusing.
     ///
     /// **No layer is deleted, ever.** Layers keep their content and their
     /// timing relative to one another; one that ends up outside the shorter
-    /// window simply hangs off the end, exactly as §5.1's K-153 invariant
-    /// already allows, and sliding it back brings it into the window again.
+    /// window simply hangs off the end, exactly as §5.1's invariant already
+    /// allows, and sliding it back brings it into the window again.
     /// That is AE's behaviour and the only one that loses nothing.
     TrimCompToWorkArea {
         comp: Uuid,
     },
-    /// **Crop comp to the region of interest** (K-687): the composition's frame
+    /// **Crop comp to the region of interest**: the composition's frame
     /// becomes the rectangle, and every unparented layer moves back by the
     /// rectangle's origin so the picture stays where it was.
     ///
     /// The rectangle is in comp pixels from the top-left, and is carried rather
     /// than read from the document because the region of interest is session
-    /// state and never an edit (K-362) — the frontend hands over what the
+    /// state and never an edit — the frontend hands over what the
     /// viewer was showing.
     ///
     /// **No layer is deleted here either.** A layer whose picture now falls
@@ -692,7 +690,7 @@ pub enum Op {
 }
 
 impl Op {
-    /// What this op is called in the **History** list (K-688): a short English
+    /// What this op is called in the **History** list: a short English
     /// phrase naming the edit, in the same voice as the menu row that makes it.
     ///
     /// English, from the engine, translated on arrival like every other word
@@ -756,7 +754,7 @@ impl Op {
             Op::SetGroupLabel { .. } => "Set group colour",
             // The same undo label the layer's stack edit wears: what was
             // edited is an effect stack either way, and one string is one
-            // translation (K-005).
+            // translation.
             Op::SetGroupEffects { .. } => "Edit effects",
             Op::SetLayerCollapse { .. } => "Collapse switch",
             Op::SetCompMotionBlur { .. } => "Composition motion blur",
@@ -876,7 +874,7 @@ fn is_locked(doc: &Document, comp: Uuid, layer: Uuid) -> bool {
 }
 
 pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
-    // **The lock is enforced here, not in the interface** (K-291). The Timeline
+    // **The lock is enforced here, not in the interface**. The Timeline
     // already refused the *gestures* — the bar, the razor, rename, reorder,
     // delete — but a locked layer's transform, effect and volume rows went on
     // editing it, so the switch did not mean what it says. One guard covers
@@ -892,8 +890,8 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             return Err(OpError::LayerLocked);
         }
     }
-    // A linked camera's transform and zoom **used** to be refused here (K-417).
-    // They are not any more (K-578): writing them is how a solve is corrected,
+    // A linked camera's transform and zoom **used** to be refused here.
+    // They are not any more: writing them is how a solve is corrected,
     // and the write lands where every other transform write lands. What the
     // numbers *mean* changed, not who may write them.
     match op {
@@ -1155,7 +1153,7 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 layer: *layer,
                 effects: previous,
             };
-            // **The wires go with the box** (K-471 §1.5). Removing an effect is
+            // **The wires go with the box**. Removing an effect is
             // this op, and the graph's edges, positions and `E` badges may name
             // it; left behind they would name a box that is not there, and the
             // next `SetLayerGraph` would be refused for a dangling edge nobody
@@ -1807,8 +1805,7 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 .find(|l| l.id == *layer)
                 .ok_or(OpError::UnknownLayer)?;
             // The base is read off the layer *before* the link moves, because
-            // it is the pose the camera's own properties are holding right now
-            // (K-578).
+            // it is the pose the camera's own properties are holding right now.
             let pose = crate::model::stored_camera_pose_lt(l, 0.0);
             let crate::model::LayerKind::Camera {
                 solve_link: slot,
@@ -1881,7 +1878,7 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
         }
         Op::SetBeatGrid { comp, grid } => {
             // A grid with no tempo in it is no grid: refused rather than
-            // stored, so every held grid can be divided by (K-698).
+            // stored, so every held grid can be divided by.
             if let Some(g) = grid {
                 if g.bpm.is_nan() || g.bpm <= 0.0 || !g.bpm.is_finite() {
                     return Err(OpError::InvalidSpan);
@@ -2027,7 +2024,7 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             Ok(inverse)
         }
         // The two composition commands are *built* out of the ops that already
-        // exist and applied as one batch (K-686, K-687). Nothing here mutates a
+        // exist and applied as one batch. Nothing here mutates a
         // document: the batch's inverse is exact and its all-or-nothing
         // rollback is the one already written, so a command that reshapes a
         // whole comp adds no new way for the document to go wrong.
@@ -2082,7 +2079,7 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
     }
 }
 
-/// The batch [`Op::TrimCompToWorkArea`] applies (K-686).
+/// The batch [`Op::TrimCompToWorkArea`] applies.
 ///
 /// # In plain terms
 ///
@@ -2099,7 +2096,7 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
 /// without [`Op::SetWorkArea`]'s clamp cutting it down to the shortened comp.
 fn trim_comp_to_work_area(doc: &Document, comp: Uuid) -> Result<Op, OpError> {
     let c = doc.comp(comp).ok_or(OpError::UnknownComp)?;
-    // No work area is the whole comp (K-203), so there is nothing to trim to.
+    // No work area is the whole comp, so there is nothing to trim to.
     let Some((start, end)) = c.work_area else {
         return Ok(Op::Batch { ops: vec![] });
     };
@@ -2136,7 +2133,7 @@ fn trim_comp_to_work_area(doc: &Document, comp: Uuid) -> Result<Op, OpError> {
         ));
     }
     // Comp markers are on the comp's own clock, so they travel with the
-    // picture. A layer's markers are in layer time (§11, K-254) and move with
+    // picture. A layer's markers are in layer time (§11) and move with
     // their layer for free.
     if !c.markers.is_empty() {
         let mut markers = c.markers.clone();
@@ -2148,7 +2145,7 @@ fn trim_comp_to_work_area(doc: &Document, comp: Uuid) -> Result<Op, OpError> {
     Ok(Op::Batch { ops })
 }
 
-/// The batch [`Op::CropCompToRegion`] applies (K-687).
+/// The batch [`Op::CropCompToRegion`] applies.
 ///
 /// # In plain terms
 ///
@@ -2213,7 +2210,7 @@ fn crop_comp_to_region(
 /// it** — which is what After Effects does, and the only behaviour that keeps
 /// the picture together: a locked layer left where it was would sit at the
 /// wrong time, or in the wrong place, beside everything that moved. Without
-/// this the whole command would refuse, because the lock guard (K-291) reads
+/// this the whole command would refuse, because the lock guard reads
 /// each member of the batch on its own way through [`apply`] and a span or a
 /// position is exactly what a lock protects.
 ///
@@ -2257,7 +2254,7 @@ fn shifted(animation: &Animation, delta: f64) -> Option<Animation> {
 }
 
 /// The ops that make a folder — the Project panel's bottom-bar **Folder**
-/// button (K-451, docs/07 §3.1) — plus the new folder's id.
+/// button (docs/07 §3.1) — plus the new folder's id.
 ///
 /// # In plain terms
 ///
@@ -2304,7 +2301,7 @@ pub fn new_folder_ops(doc: &Document, name: &str, parent: Option<Uuid>) -> (Uuid
 }
 
 /// The ops that file `item` into `folder` — the Project panel's drag onto a
-/// folder row, and its **Move to folder** menu entry (K-451, docs/07 §3.1).
+/// folder row, and its **Move to folder** menu entry (docs/07 §3.1).
 ///
 /// # In plain terms
 ///
@@ -2445,7 +2442,7 @@ pub fn edit_layer_span(
     }
 }
 
-/// The span a layer takes when its Retime is switched off (K-212).
+/// The span a layer takes when its Retime is switched off.
 ///
 /// **In plain terms:** while a layer is retimed it can be any length, because
 /// it chooses which source moment each of its own frames shows. Switch that off

@@ -1,4 +1,4 @@
-// How the Viewer's picture texture is sampled (K-631).
+// How the Viewer's picture texture is sampled.
 //
 // Below 100 % the picture is minified, and the nearest sampling the Viewer used
 // everywhere kept one source pixel in every few and dropped the rest — not a

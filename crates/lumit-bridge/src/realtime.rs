@@ -1,5 +1,4 @@
-//! The realtime preview-tier controller, wired into the Viewer render path
-//! (K-030/K-171).
+//! The realtime preview-tier controller, wired into the Viewer render path.
 //!
 //! # In plain terms
 //!
@@ -10,7 +9,7 @@
 //! it earns the resolution back — quick to worsen, slow to improve, so the
 //! picture never flickers between qualities. That decision core is
 //! [`lumit_eval::schedule::RealtimeController`], already built and tested; it was
-//! historically unwired (K-171). This module runs one instance for the session
+//! historically unwired. This module runs one instance for the session
 //! and connects it to the bridge's pull-model rendering.
 //!
 //! The fit to the pull model: the Viewer render path measures the wall-clock
@@ -93,7 +92,7 @@ pub(crate) fn drag_tier(width: u32, height: u32, scale: f32) -> u32 {
 }
 
 /// Whether the user has asked for live drags to be rendered at the Viewer's own
-/// resolution — Settings → Performance, and off by default (K-744).
+/// resolution — Settings → Performance, and off by default.
 ///
 /// The switch exists because [`DRAG_PIXEL_BUDGET`] is a trade, not a truth: it
 /// buys a picture that keeps up with the pointer by giving up sharpness, and
@@ -173,7 +172,7 @@ mod tests {
 
     /// With the Settings switch on, the drag budget is off and a drag renders
     /// at exactly the scale the Viewer asked for — including the 1080p case
-    /// below, which is the one the cap was built for (K-744).
+    /// below, which is the one the cap was built for.
     #[test]
     fn full_resolution_drags_ignore_the_budget() {
         assert!((drag_scale_for(true, 1920, 1080, 1.0) - 1.0).abs() < 1e-6);

@@ -512,7 +512,7 @@ const double minTangentReach = 1e-3;
 }
 
 // ---------------------------------------------------------------------------
-// The keyframe clipboard text (docs/07 §5.3, K-196).
+// The keyframe clipboard text (docs/07 §5.3).
 // ---------------------------------------------------------------------------
 
 /// One property's worth of clipboard rows: the property line (tab-joined, e.g.
@@ -739,11 +739,10 @@ String _number(double v) {
 }
 
 // ---------------------------------------------------------------------------
-// The Vegas speed envelope (K-247).
+// The Vegas speed envelope.
 // ---------------------------------------------------------------------------
 
-/// The vertical range a Retime channel's envelope opens at, in per cent
-/// (K-247, K-250).
+/// The vertical range a Retime channel's envelope opens at, in per cent.
 ///
 /// Headroom over normal playback, and enough below zero to show that dragging
 /// a point down there runs the clip backwards. The room above 100% is the
@@ -754,7 +753,7 @@ String _number(double v) {
 const (double, double) envelopeDefaultRange = (-25.0, 125.0);
 
 /// The influence that makes a cubic side lie on its chord — the polynomial
-/// subclass (K-078). The envelope authors every side at this influence, which
+/// subclass. The envelope authors every side at this influence, which
 /// is what makes its straight lines exactly straight (see [envelopeToKeys]).
 const double _chordInfluence = 1 / 3;
 
@@ -776,9 +775,8 @@ List<double> envelopeSpeeds(List<BridgeKeyframe> keys) => [
 ///
 /// This is the Vegas edit: change a speed and the frames after it change,
 /// while every keyframe *time* and the layer's own box stay exactly where they
-/// are (K-022's covenant, K-070's start-pinning). The first key is what
-/// "pinned" means — a clip's first frame is its own trim-in whatever its
-/// speed, so re-speeding never moves where it starts.
+/// are. The first key is what "pinned" means — a clip's first frame is its own
+/// trim-in whatever its speed, so re-speeding never moves where it starts.
 ///
 /// **Why the trapezoid is exact rather than an approximation.** Between two
 /// points the envelope draws a straight line, so the source advanced across a

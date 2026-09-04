@@ -61,7 +61,7 @@ const double switchCellWidth = 22;
 /// end — one even space between the switches, the twirl, the number, the dot,
 /// the name, the three pickers and the render time, with nothing carrying more
 /// air than its neighbour. The outline had three different values instead: 8
-/// inside the identity cluster (K-461), 4 between the compose pickers, and 7
+/// inside the identity cluster, 4 between the compose pickers, and 7
 /// for the seam between two clusters. They are now the same number, which is
 /// this one.
 ///
@@ -77,14 +77,14 @@ const double outlineGap = 8;
 const double cellGap = outlineGap;
 
 /// The gap between the pieces of the **identity** cluster — the twirl, the
-/// layer number and the label dot (K-461). [outlineGap], like every other gap
+/// layer number and the label dot. [outlineGap], like every other gap
 /// in a row; the outline used to run the twirl hard against the dot and give
 /// the number 4, which packed the three smallest marks in the panel into the
 /// one place they most need air.
 const double identityGap = outlineGap;
 
-/// The A/V switch cells — **six** since K-497's guide switch took the cell
-/// beside shy (docs/07 §4.2 puts it there by name). Guide and shy are the two
+/// The A/V switch cells — **six** since the guide switch took the cell beside
+/// shy (docs/07 §4.2 puts it there by name). Guide and shy are the two
 /// housekeeping marks in the column: one hides the row from this list, the
 /// other keeps the layer out of every file Lumit writes, and neither is a
 /// Modes-column question about *how* the layer is rendered.
@@ -97,13 +97,12 @@ const double switchesGroupWidth = 6 * switchCellWidth;
 /// value cells to exactly this span (docs/07 §4.3); they are simply as wide as
 /// the column they sit under.
 ///
-/// **Six cells** — the L6 arrangement (owner's ruling; supersedes K-483/K-484's
-/// share of the ordering). Fx leads the column, collapse comes out of the cell
-/// it shared with flow and stands last on a column of its own, and
-/// flow sits immediately left of it: fx · 3D · motion blur · adjustment · flow
-/// · collapse ([ModeCell]). The span is the same on every row, including the
-/// kinds a given cell is not drawn on: a column that changed width by layer
-/// kind would take the pickers with it.
+/// **Six cells** — the L6 arrangement (owner's ruling). Fx leads the column,
+/// collapse comes out of the cell it shared with flow and stands last on a
+/// column of its own, and flow sits immediately left of it: fx · 3D · motion
+/// blur · adjustment · flow · collapse ([ModeCell]). The span is the same on
+/// every row, including the kinds a given cell is not drawn on: a column that
+/// changed width by layer kind would take the pickers with it.
 const double renderGroupWidth = 6 * switchCellWidth;
 
 /// The A/V switch cells, in the order they are drawn.
@@ -155,7 +154,7 @@ Set<SwitchCell> switchCellsFor(double width) =>
 Set<ModeCell> modeCellsFor(double width) =>
     cellsFor(ModeCell.values, modeHideOrder, width);
 
-/// The compose group's cells — **the mockup's own dropdown widths** (K-461):
+/// The compose group's cells — **the mockup's own dropdown widths**:
 /// 84 for the matte and blend faces, 64 for the parent's. They were 118 / 112 /
 /// 96, which left every picker sitting in slack it never used; a dropdown is
 /// as wide as the word it holds plus its inset, and the column is as wide as
@@ -163,12 +162,12 @@ Set<ModeCell> modeCellsFor(double width) =>
 /// project with long layer names widens it once and keeps it.
 ///
 /// **The matte column carries the toggles' room only while a matte is set**
-/// (owner, 2026-08-24; K-463). The column used to reserve the two mode
+/// (owner, 2026-08-24). The column used to reserve the two mode
 /// toggles' 28 whether or not they were drawn, so that the blend column never
 /// shifted as mattes came and went — but on a comp with no mattes at all, which
 /// is most of them, every row read as a 28px hole between the matte face and
 /// the blend. The gap between two pickers is [outlineGap], like every other gap
-/// in a row (K-462), and the toggles' room appears with the first matte in the
+/// in a row, and the toggles' room appears with the first matte in the
 /// comp: the blend column shifting once, when that matte is set, is the price
 /// and it is the cheaper one.
 ///
@@ -232,9 +231,9 @@ const Map<TimelineGroup, double> defaultGroupWidths = {
 /// **The render-time column alone is fixed** (owner's ruling): sized for
 /// "00.00 ms" exactly, so its dots stack whatever the window does.
 ///
-/// The two switch columns were fixed at their minimum too (§12A.1, K-448;
-/// Modes joined it 2026-08-24), on the reasoning that a wider column of icons
-/// buys blank space. **That pin is deliberately moved** (owner, T4): a switch
+/// The two switch columns were fixed at their minimum too (§12A.1; Modes
+/// joined it 2026-08-24), on the reasoning that a wider column of icons buys
+/// blank space. **That pin is deliberately moved** (owner, T4): a switch
 /// column now drags, and what a drag buys is not width but *cells* — narrowing
 /// it puts the housekeeping marks away in a named order ([switchHideOrder],
 /// [modeHideOrder]) and widening it brings them back, up to the whole set. It
@@ -295,9 +294,9 @@ double snapGroupWidth(TimelineGroup group, double width) {
 /// same columns as the layer rows above them — so what they reserve at the
 /// right must be what a layer row leaves there. The fold rows had kept a bare
 /// `4`, which was the layer rows' own padding before the redesign widened it
-/// to 8 (K-441) and before the header's inset added the 2 (K-454); neither
-/// change reached them, so every value cell and every effect's millisecond
-/// reading stood 6px right of the column it belongs to.
+/// to 8 and before the header's inset added the 2; neither change reached
+/// them, so every value cell and every effect's millisecond reading stood 6px
+/// right of the column it belongs to.
 const double outlineRowTrailing = 10;
 
 /// The outline's total width for a set of group widths: the groups, the seam
@@ -317,8 +316,8 @@ double outlineWidthOf(Map<TimelineGroup, double> widths) =>
 /// rather than leaving dead space beside them.
 ///
 /// [matteToggles] is whether the matte column is carrying its two mode
-/// toggles' room, which it does only while some visible row has a matte set
-/// (K-463). The header and the rows are handed the same answer, so they agree.
+/// toggles' room, which it does only while some visible row has a matte set.
+/// The header and the rows are handed the same answer, so they agree.
 (double, double) composeCellWidths(double width, {required bool matteToggles}) {
   final usable = (width - cellGap).clamp(40.0, 1e6);
   final matte = matteFaceWidth + (matteToggles ? matteToggleWidth : 0);

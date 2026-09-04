@@ -114,7 +114,7 @@ int64_t ViewerTextureBridge::Register(uint64_t handle, uint32_t width,
   entry->descriptor.visible_width = width;
   entry->descriptor.visible_height = height;
   // The engine's shared texture is DXGI_FORMAT_B8G8R8A8_UNORM holding the
-  // display-encoded bytes (K-177). BGRA, because ANGLE — which opens this
+  // display-encoded bytes. BGRA, because ANGLE — which opens this
   // handle inside the engine — matches share-handle surfaces against its own
   // B8G8R8A8 configs and silently declines RGBA: the texture registers, the
   // compositor asks for it every frame, and nothing appears.
@@ -175,7 +175,7 @@ void ViewerTextureBridge::Unregister(int64_t texture_id) {
 // Which is why it reads as "it crashes when I drag a value while the timeline
 // is playing". A texture is re-registered whenever the picture's SIZE changes
 // (`ViewerTextureController.ensureRegistered`), and a live drag renders at the
-// drag's own reduced scale (K-383) while playback renders at its adaptive tier
+// drag's own reduced scale while playback renders at its adaptive tier
 // — so a drag during playback alternates between two sizes and swaps the
 // texture on every frame, taking a fresh run at the race sixty times a second.
 // The same swap happens once at each end of any drag, which is the occasional

@@ -1,5 +1,5 @@
 //! The proxy resolution point, end to end through the two things that must
-//! never disagree about it (K-501): the **decode plan**, which says which file
+//! never disagree about it: the **decode plan**, which says which file
 //! to open, and the **frame key**, which names the finished picture.
 //!
 //! # In plain terms
@@ -186,8 +186,8 @@ fn the_plan_and_the_key_switch_together() {
     assert!(key.is_some(), "a probed proxy is perfectly nameable");
 
     // The layer is laid out in the ORIGINAL's pixels whichever file is read:
-    // px@comp (K-419) means the original's raster, so no transform, mask or
-    // effect parameter changes meaning when a proxy is switched on.
+    // px@comp means the original's raster, so no transform, mask or effect
+    // parameter changes meaning when a proxy is switched on.
     assert_eq!(size, base_size, "geometry stays the original's");
     assert_eq!((size.0, size.1), (1920, 1080));
     assert_eq!(width, base_w, "and so does the preview-resolution tier");
@@ -309,10 +309,11 @@ fn a_missing_original_slates_even_with_a_good_proxy() {
     assert_eq!(jobs[0].source.path.to_string_lossy(), ORIGINAL);
 }
 
-/// K-031 with proxies on: an export delivers what the export was asked for, not
-/// what the Viewer happens to be set to. The project is working through
-/// proxies; the export's own `use_proxies` is off by default, and the snapshot
-/// it renders from reads the originals at every depth.
+/// Preview and export are one path with proxies on too: an export delivers
+/// what the export was asked for, not what the Viewer happens to be set to.
+/// The project is working through proxies; the export's own `use_proxies` is
+/// off by default, and the snapshot it renders from reads the originals at
+/// every depth.
 #[test]
 fn an_export_delivers_full_resolution_however_the_viewer_is_working() {
     let (plain, comp, item) = scene();

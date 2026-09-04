@@ -89,14 +89,14 @@ cargo test --workspace
 
 ```sh
 brew install ffmpeg  # see docs/TODO.md: Homebrew has no ffmpeg@8 yet, and plain ffmpeg is 9.x
-# Point the build at it (K-204):
+# Point the build at it:
 export FFMPEG_PKG_CONFIG_PATH="$(brew --prefix ffmpeg)/lib/pkgconfig"
 cargo test --workspace
 ```
 </details>
 
 <details>
-<summary><b>Linux</b> (K-082)</summary>
+<summary><b>Linux</b></summary>
 
 FFmpeg needs no environment variable here — the development packages put their
 `.pc` files where the build already looks.
@@ -124,16 +124,15 @@ FFmpeg **7.x** is required; distributions still on FFmpeg 6 (including Ubuntu
 
 
 The interface is in [flutter_ui/](flutter_ui/) and requires the Flutter SDK —
-see [flutter_ui/README.md](flutter_ui/README.md). Step-by-step build notes in
-plain English are in [docs/GUIDE.md](docs/GUIDE.md) §8.
+see [flutter_ui/README.md](flutter_ui/README.md). Step-by-step build notes are
+in [docs/GUIDE.md](docs/GUIDE.md).
 
 ## How the repository works
 
 | | |
 |---|---|
-| [docs/README.md](docs/README.md) | The index — start here. Eighteen numbered specs, from the vision to the roadmap. |
-| [docs/GUIDE.md](docs/GUIDE.md) | Used to be Plain English, no Rust assumed. What each crate does, and how to change things safely. However has become a monster of a file and some sections are worth ignoring completely. If you are looking for info I'd now recommend [docs.lumitlab.com](docs.lumitlab.com) |
-| [docs/02-DECISIONS.md](docs/02-DECISIONS.md) | Every design decision with its reasoning, append-only. Search it, don't read it. |
+| [docs/README.md](docs/README.md) | The index — start here. Seventeen numbered specs, from the vision to the roadmap. |
+| [docs/GUIDE.md](docs/GUIDE.md) | The contributor guide. What each crate does, the rules code has to follow, and how to build and run it. |
 | [docs/impl/](docs/impl/) | The implementation notes for more difficult area's. |
 | [docs/TODO.md](docs/TODO.md) | What is next to work on now, next and later. |
 

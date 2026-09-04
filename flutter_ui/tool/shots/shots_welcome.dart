@@ -1,4 +1,4 @@
-// Manual screenshots, sweep: the welcome screen (K-464, K-468).
+// Manual screenshots, sweep: the welcome screen.
 //
 // welcome.png — the screen a plain launch opens on: the three cards, the
 // RECENT well with thumbnails, one row wearing the placeholder, and the

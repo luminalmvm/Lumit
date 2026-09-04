@@ -41,7 +41,7 @@ jobs:
       # mismatch, not a warning.
       #
       # The action exports FFMPEG_PKG_CONFIG_PATH itself. Setting it from a
-      # step rather than .cargo/config.toml stays deliberate (K-204): Cargo's
+      # step rather than .cargo/config.toml stays deliberate: Cargo's
       # [env] has no per-target form, and the macOS path injected on Linux made
       # rusty_ffmpeg's build script panic.
       - name: FFmpeg 8.1.2 (extracted formula, cached keg)
@@ -178,7 +178,7 @@ jobs:
           # pkg-config would emit -L/-I paths that do not exist here. Point
           # them at where we actually unpacked.
           sed -i "s|^prefix=.*|prefix=$root|" "$root"/lib/pkgconfig/*.pc
-          # PKG_CONFIG_PATH, *not* FFMPEG_PKG_CONFIG_PATH (K-204). Setting the
+          # PKG_CONFIG_PATH, *not* FFMPEG_PKG_CONFIG_PATH. Setting the
           # latter takes rusty_ffmpeg's explicit-override branch, which is the one
           # macOS and Windows need and which no Linux contributor uses: a distro
           # install puts the .pc files on pkg-config's ordinary search path and
@@ -202,7 +202,7 @@ jobs:
       # themselves here: a missing lavapipe adapter fails the job instead of
       # quietly proving nothing about the kernels.
       - run: cargo test --workspace
-      # The `media` feature turned off (K-273): the bridge's own decode paths
+      # The `media` feature turned off: the bridge's own decode paths
       # compile out and its tests still pass. Deliberately NOT advertised as a
       # build without FFmpeg — `lumit-render` and `lumit-audio` depend on
       # `lumit-media` unconditionally and the bridge depends on both, so FFmpeg
@@ -218,7 +218,7 @@ jobs:
       - name: Release-mode compile check
         run: cargo check --workspace --release
 
-  # The headless performance harness (crates/lumit-bench, K-389). It builds
+  # The headless performance harness (crates/lumit-bench). It builds
   # docs/13-PERFORMANCE-RULES.md §1's reference comp over ffmpeg-generated media
   # and times six budgets — B3, B4, B5, B6, B7, B11.
   #
@@ -344,7 +344,7 @@ jobs:
             clang cmake ninja-build libgtk-3-dev
           # libgles-dev provides GLES2/gl2*.h + glesv2.pc; libegl-dev provides
           # EGL/egl*.h + egl.pc. The Linux zero-copy Viewer plugin
-          # (linux/runner/viewer_texture_bridge.cc, K-177) imports engine DMA-BUF
+          # (linux/runner/viewer_texture_bridge.cc) imports engine DMA-BUF
           # frames into GL external textures, so it links EGL + GLESv2.
       # Same FFmpeg 8.1 install the `linux` job uses (its .pc prefix rewrite +
       # env exports), so the bridge's `media` feature links here identically.
@@ -358,8 +358,8 @@ jobs:
           # The tarball's .pc files carry the build machine's prefix; point them
           # at where we unpacked (mirrors the `linux` job).
           sed -i "s|^prefix=.*|prefix=$root|" "$root"/lib/pkgconfig/*.pc
-          # PKG_CONFIG_PATH, not FFMPEG_PKG_CONFIG_PATH — the contributor's path
-          # (K-204); see the `linux` job for why.
+          # PKG_CONFIG_PATH, not FFMPEG_PKG_CONFIG_PATH — the contributor's path;
+          # see the `linux` job for why.
           echo "PKG_CONFIG_PATH=$root/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> "$GITHUB_ENV"
           echo "LD_LIBRARY_PATH=$root/lib" >> "$GITHUB_ENV"
           echo "$root/bin" >> "$GITHUB_PATH"
@@ -368,7 +368,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       # Flutter stable pinned to the SAME version the desktop dev box runs
       # (3.47.1), so CI and the owner's machine agree. It has to be: the runner
-      # calls `DartProject::set_impeller_switch` (K-732), which 3.44.7's Windows
+      # calls `DartProject::set_impeller_switch`, which 3.44.7's Windows
       # embedder does not have, so a stale pin fails to compile main.cpp. `cache: true` caches the
       # SDK; the pub cache is cached separately below.
       - uses: subosito/flutter-action@v2
@@ -395,7 +395,7 @@ jobs:
       #
       # This runs BEFORE `flutter test`, not after: frb binds by content hash, so
       # the `test/frb/` suites load `target/debug/liblumit_bridge.so` and drive
-      # the real engine (K-179). With the build after them, every one of those
+      # the real engine. With the build after them, every one of those
       # suites failed on a library that had not been built yet.
       #
       # The package is `lumit_bridge` (underscore, so the cdylib is named for the
@@ -412,7 +412,7 @@ jobs:
       # no GPU: wgpu lands on Mesa's lavapipe, whose `vkAllocateMemory` refuses
       # the exportable allocation the DMA-BUF path needs, so every Viewer frame
       # is dropped at the publish step and none reaches Dart. Zero-copy is the
-      # only transport (K-183), so the six tests that wait for a frame skip
+      # only transport, so the six tests that wait for a frame skip
       # here — see `test/frb/frb_test_support.dart`.
       #
       # --concurrency=1 was the mitigation while every test process leaked one
@@ -425,7 +425,7 @@ jobs:
         env:
           LUMIT_NO_ZERO_COPY_VIEWER: "1"
         run: flutter test
-      # Lint the Linux DMA-BUF zero-copy Viewer path (K-177): the Vulkan/ash
+      # Lint the Linux DMA-BUF zero-copy Viewer path: the Vulkan/ash
       # export code in `lumit-gpu/src/shared_linux.rs` lives behind
       # `shared-texture-linux` and cfg(target_os = "linux"), so it is only ever
       # compiled here (the authoring box is Windows).
@@ -464,7 +464,7 @@ jobs:
       # the bridge crate, so rusty_ffmpeg needs the keg here, and the podspec's
       # -L flags name its opt prefix — which the action creates on both the
       # build and the cache-restore path. The exported pkg-config path stays for
-      # the same reason as the `check` and `coverage` jobs (K-204). Xcode's
+      # the same reason as the `check` and `coverage` jobs. Xcode's
       # build environment inherits it from $GITHUB_ENV; it is not supplied by
       # .cargo/config.toml, which deliberately sets no [env] block.
       - name: FFmpeg 8.1.2 (extracted formula, cached keg)
@@ -491,7 +491,7 @@ jobs:
       # The gate. `flutter build macos` runs CocoaPods for macos/Runner, so it
       # resolves rust_builder/macos/lumit_bridge.podspec by the plugin's pubspec
       # name — a podspec named anything else fails here — then compiles the Swift
-      # runner (MainFlutterWindow, the K-195 IOSurface ViewerTextureBridge) and
+      # runner (MainFlutterWindow, the IOSurface ViewerTextureBridge) and
       # links the bridge static library with the podspec's OTHER_LDFLAGS.
       #
       # analyze and test are not repeated: the Linux job already runs both, and
@@ -506,7 +506,7 @@ jobs:
       # link. A universal build needs both kegs present and is out of scope for
       # this gate, which exists to compile the Swift runner and resolve the
       # podspec — both of which the host slice does.
-      # The app icon is an Icon Composer document (K-309), and only actool from
+      # The app icon is an Icon Composer document, and only actool from
       # Xcode 26 or newer compiles one. Runner images carry several Xcodes and
       # the default is not always the newest, so pick the newest explicitly and
       # say so plainly if it is still too old — an unreadable actool error at
@@ -534,7 +534,7 @@ jobs:
   # moved. Without this job a reworded doc comment, a renamed method or a new API
   # function could sit in `api/**` with stale output checked in beside it, and the
   # frontend would be reading a description of an engine that no longer exists.
-  # That is not hypothetical: it is how the K-206 Null layer arrived.
+  # That is not hypothetical: it is how the Null layer arrived.
   #
   # Linux. Generating compiles lumit-bridge, so this job installs the same
   # native dependencies the `linux` job does.
@@ -573,8 +573,8 @@ jobs:
           tar -xJf "$RUNNER_TEMP/ffmpeg.tar.xz" -C "$RUNNER_TEMP/ffmpeg" --strip-components=1
           root="$RUNNER_TEMP/ffmpeg"
           sed -i "s|^prefix=.*|prefix=$root|" "$root"/lib/pkgconfig/*.pc
-          # PKG_CONFIG_PATH, not FFMPEG_PKG_CONFIG_PATH — the contributor's path
-          # (K-204); see the `linux` job for why.
+          # PKG_CONFIG_PATH, not FFMPEG_PKG_CONFIG_PATH — the contributor's path;
+          # see the `linux` job for why.
           echo "PKG_CONFIG_PATH=$root/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> "$GITHUB_ENV"
           echo "LD_LIBRARY_PATH=$root/lib" >> "$GITHUB_ENV"
           echo "$root/bin" >> "$GITHUB_PATH"
@@ -632,7 +632,7 @@ jobs:
       - uses: taiki-e/install-action@cargo-llvm-cov
       # As in the `check` job above, which explains the extracted formula: the
       # action exports the pkg-config path rather than .cargo/config.toml
-      # carrying it (K-204).
+      # carrying it.
       - name: FFmpeg 8.1.2 (extracted formula, cached keg)
         id: ffmpeg
         uses: ./.github/actions/ffmpeg8-macos
@@ -768,7 +768,7 @@ jobs:
             echo "$hits"
             exit 1
           fi
-      # The Rust grep above guarded a frontend that no longer exists (K-182):
+      # The Rust grep above guarded a frontend that no longer exists:
       # every widget now lives in Dart, so that is where a stray hex actually
       # gets written. flutter_ui/lib/theme/ is the one place colours may be
       # spelled out (its own header says so); everywhere else must read a token
@@ -799,7 +799,7 @@ jobs:
       # Two keys Icon Composer 26 writes into the .icon that actool then cannot
       # compile — the script says which and why. Run here, on Linux, in about a
       # second: without it the same mistake surfaces five minutes into the macOS
-      # build job and reads as a corrupt icon file (K-312).
+      # build job and reads as a corrupt icon file.
       - name: Icon Composer keys actool cannot compile
         run: python3 scripts/check-icon.py
 

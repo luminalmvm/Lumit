@@ -1,8 +1,8 @@
 // The Flow group: what a footage layer does when it has to invent a frame.
 //
-// K-088 made flow a layer *option* rather than an effect or a dropdown entry,
-// and K-331 built the parameters behind it. This is that group — it sits beside
-// Transform and Effects, and appears only while the layer's flow switch is on.
+// Flow is a layer *option* rather than an effect or a dropdown entry, and this
+// group holds the parameters behind it. It sits beside Transform and Effects,
+// and appears only while the layer's flow switch is on.
 //
 // Every control here changes the picture, which is why every one of them is
 // part of the frame's cache identity on the engine side. Nothing in this file
@@ -173,9 +173,9 @@ class FlowRowsFrb extends StatelessWidget {
         ),
       );
 
-  /// **Input rate** — the fps the clip is *interpreted* at for flow (K-095,
-  /// K-160). The only animatable control in the group, so the only one with a
-  /// stopwatch and a ◄ ◆ ► navigator.
+  /// **Input rate** — the fps the clip is *interpreted* at for flow. The only
+  /// animatable control in the group, so the only one with a stopwatch and a
+  /// ◄ ◆ ► navigator.
   ///
   /// `0` shows as **Auto**: adjacent source frames, the clip's own rate. Two
   /// opposite footage problems want something else. High-speed capture (a
@@ -225,7 +225,7 @@ class FlowRowsFrb extends StatelessWidget {
         onSeek: onSeek,
         rowKey: 'flow-input-rate',
         // This row only ever draws in the Effect controls panel, on its fixed
-        // columns (K-443).
+        // columns.
         fixedColumns: true,
       ),
       name: Text(l10n.flowInputRate,

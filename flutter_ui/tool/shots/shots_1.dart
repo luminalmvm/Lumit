@@ -38,7 +38,7 @@ BridgeCompSettings _settings(String name, int seconds) => BridgeCompSettings(
       fpsDen: 1,
       duration: BridgeRational(num: seconds, den: 1),
       // The dialog's own defaults: black ground, the 180-degree shutter at
-      // its 16 samples (K-470). Stated here because the constructor requires
+      // its 16 samples. Stated here because the constructor requires
       // every field, so the fixture cannot drift from what a new comp gets.
       background: F32Array4(Float32List.fromList([0, 0, 0, 1])),
       shutterAngle: 180,

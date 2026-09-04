@@ -2,7 +2,7 @@
 // becomes this layer's alpha. Mirrors lumit_core::fx::cpu::set_matte op-for-op
 // (§1.6: the CPU is the oracle).
 //
-// **The matte IS the effect** (K-395/K-400): this is the sixth kernel to claim
+// **The matte IS the effect**: this is the sixth kernel to claim
 // the universal Matte row inside its own maths rather than take the generic
 // strength dissolve, because what its matte supplies is the coverage, not an
 // amount of coverage. With none bound the kernel is a passthrough — the labelled

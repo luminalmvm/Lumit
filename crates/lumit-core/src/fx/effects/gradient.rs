@@ -15,7 +15,7 @@ use lumit_fx_macros::Effect;
 /// The two points are px@comp (§2.3), declared `Px` so the resolve step converts
 /// them to the raster in play and
 /// [`ResolvedStack::rescale_spatial`](crate::fx::ResolvedStack::rescale_spatial)
-/// moves them **together** if the stack is reused at another size (K-266) — a
+/// moves them **together** if the stack is reused at another size — a
 /// ramp that slid when the preview resolution changed would be a ramp nobody
 /// could grade against.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
@@ -123,8 +123,8 @@ impl Gradient {
             seed: self.seed,
             mix: (self.mix / 100.0).clamp(0.0, 1.0),
             // A generator floods the frame (§2.2's opaque write); clipping the
-            // ramp to the layer's coverage is the Gradient overlay *style*'s
-            // (K-706), and false here is the picture this effect always drew.
+            // ramp to the layer's coverage is the Gradient overlay *style*'s,
+            // and false here is the picture this effect always drew.
             clip_to_alpha: false,
         }
     }

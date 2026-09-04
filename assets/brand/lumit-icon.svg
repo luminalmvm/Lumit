@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
-  <!-- App icon, macOS tile form (docs/15-DESIGN.md, brand; K-251): the mark on
+  <!-- App icon, macOS tile form (docs/15-DESIGN.md, brand): the mark on
        the dark rounded tile. -->
   <defs>
     <linearGradient id="key-a" x1="0" y1="0" x2="1" y2="1">

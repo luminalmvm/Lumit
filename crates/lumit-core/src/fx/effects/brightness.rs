@@ -1,4 +1,4 @@
-//! Brightness (docs/08 §3.32, K-397): AE's Brightness & Contrast as one
+//! Brightness (docs/08 §3.32): AE's Brightness & Contrast as one
 //! effect — a sibling of the one-knob Contrast (§3.18), not a mode of it.
 
 use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
@@ -21,8 +21,8 @@ use lumit_fx_macros::Effect;
     // §2.2: an affine grade does not commute with premultiplied alpha,
     // exactly as Contrast's `− pivot` does not.
     premultiplied = false,
-    // K-395: the matte scales the amount, inside the kernel (the owner's
-    // rule for mattes); the generic strength dissolve does not also run.
+    // The matte scales the amount, inside the kernel (the owner's rule for
+    // mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "pulls Brightness toward 0 and Contrast toward 0 per pixel: white \

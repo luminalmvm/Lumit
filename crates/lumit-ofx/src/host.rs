@@ -206,7 +206,7 @@ unsafe extern "C" fn fetch_suite(
 /// `kOfxPropName` as Lumit gives it: who this host is.
 pub const HOST_NAME: &str = "com.lumitlab.Lumit";
 
-/// Present the host to the next bundle under another name (K-757).
+/// Present the host to the next bundle under another name.
 ///
 /// Some vendors' plugins read `kOfxPropName` and refuse any host they were
 /// not tested against — Red Giant Universe answers `kOfxStatErrMissingHostFeature`
@@ -268,11 +268,11 @@ fn host_property_set() -> PropertySet {
     // plugins draw into a viewer that never asks them to.
     set.seed(keys::SUPPORTS_OVERLAYS, PropValue::int(0));
     // What the OFX 1.3 to 1.5 additions ask a host, answered honestly: no GPU
-    // render of any flavour, pictures bottom-up (K-756), no window handle.
+    // render of any flavour, pictures bottom-up, no window handle.
     // Every one of these is read by the stock support library during
     // describe, and a host that answers "unknown property" to it is a host
     // "missing a feature" — which is how HitFilm and Red Giant Universe
-    // refused to describe at all (K-757).
+    // refused to describe at all.
     seed_string(
         &mut set,
         keys::HOST_NATIVE_ORIGIN,

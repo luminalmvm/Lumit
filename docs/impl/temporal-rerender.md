@@ -6,7 +6,7 @@ at the frame-orchestration layer, not in `run_ops`. Owner spec: [[accumulation-m
 [[posterize-time-design]].
 
 ## In plain terms
-Per-layer motion blur (K-120) smears one layer along its own transform. **Accumulation motion
+Per-layer motion blur smears one layer along its own transform. **Accumulation motion
 blur** is the expensive, correct one: it renders the *whole scene below it* several times at
 in-between moments and averages the finished frames — so footage motion, animated effects,
 depth passes and everything else are all correct per sample (no blurred-depth artefact).
@@ -32,7 +32,7 @@ Factor one helper both effects and both paths (preview + export) use:
 the *same* decoded `pixels_by_layer` — footage frames are held; only transforms/effects/camera
 re-resolve) → `realise`. Sub-frame footage *motion* is out of scope (that is the flow
 `motion_blur` effect); this blurs comp-driven animation. Preview and export MUST call the one
-helper so a preview frame equals an export frame (K-031), exactly as `render_layer_input` and
+helper so a preview frame equals an export frame, exactly as `render_layer_input` and
 `motion_blur_average` are shared.
 
 ## 3. Accumulation MB
@@ -42,7 +42,7 @@ helper so a preview frame equals an export frame (K-031), exactly as `render_lay
   pure-additive-at-`1/N` pass (colour AND alpha additive, so a static scene is unchanged).
   Composite the average in place of the plain below-composite.
 
-**Landed (K-134).** `lumit_core::fx::stack_accumulation_mb` resolves the effect to an
+**Landed.** `lumit_core::fx::stack_accumulation_mb` resolves the effect to an
 `AccumulationMbParams { samples, shutter_angle, shutter_phase, mix }`, whose `sample_offsets()`
 reuses `MotionBlur::sample_offsets` (empty for N < 2 — no blur). It is an **adjustment** effect,
 detected exactly as Posterize is: `accumulation_mb_below(...)` builds one `below_draws_at(τ_k)`
@@ -61,13 +61,12 @@ against Mesa's lavapipe, a CPU rasteriser, and there the sum-and-divide path lan
 differently from a GPU, and nothing in the spec forbids it. The test keeps the exact
 assertion on hardware adapters and checks "within one step" on software ones
 (`GpuContext::software`); a genuinely broken accumulation — wrong weights, dropped samples —
-fails both. `sample_temporally`
-(K-132) is honoured through the shared `below_draws_at`/`build_comp_draws_at` threading. It takes
-precedence over Posterize when an adjustment somehow carries both (one temporal re-render per
-adjustment in v1).
+fails both. `sample_temporally` is honoured through the shared
+`below_draws_at`/`build_comp_draws_at` threading. It takes precedence over Posterize when an
+adjustment somehow carries both (one temporal re-render per adjustment in v1).
 
 ## 4. Posterize Time
-- Params: **Input frame rate** (e.g. 12), optional **Phase**. No Scope parameter (K-166): the
+- Params: **Input frame rate** (e.g. 12), optional **Phase**. No Scope parameter: the
   reach is implied by the carrier layer's kind — an **adjustment layer** holds everything below
   (its effect input); any **other layer** holds its own source and stack. Category Temporal,
   cost cheap (one render at the held time — often the SAME held time across many frames, so the
@@ -76,12 +75,12 @@ adjustment in v1).
 - **Adjustment carrier**: `render_below_at(…, τ)` — the below re-render path.
 - **Any other carrier**: no re-render of others; the layer the effect sits on evaluates its
   own effect stack at `τ` instead of `t` (a per-layer time substitution feeding its own stack),
-  its transform staying live. Simpler; no orchestration re-entry. **Landed (K-133, reach rule
-  K-166):** `this_layer_effect_time(effects, fx_on, lt, start_offset)` returns the held layer
+  its transform staying live. Simpler; no orchestration re-entry. **Landed:**
+  `this_layer_effect_time(effects, fx_on, lt, start_offset)` returns the held layer
   time (the grid computed on comp time `lt + start_offset`, mapped back) whenever a live
   Posterize is present and `lt` unchanged otherwise; both `build_comp_draws_at` (preview) and
   export's `apply_fx` feed it to `resolve_stack_temporal` as the sample time (so
-  `sample_temporally == false` still holds at the live `lt`), so the two are identical (K-031).
+  `sample_temporally == false` still holds at the live `lt`), so the two are identical.
   The kind split lives at the orchestration sites: `posterize_below`/`posterize_sample_times`
   treat only `LayerKind::Adjustment` carriers as below-holds.
 - **Footage decode snap (FX-1).** The held re-render alone quantises *comp-driven* animation
@@ -89,11 +88,11 @@ adjustment in v1).
   because the decode planner still chose the frame-time source frame. `posterize_sample_times(
   layers, t) -> Vec<f64>` closes that: it walks the stack top-to-bottom composing each live
   Posterize's grid onto a running sample time (an adjustment carrier holds every layer
-  beneath it; any other carrier holds only its own layer's source sampling — K-166), and both the
+  beneath it; any other carrier holds only its own layer's source sampling), and both the
   preview decode planner (`collect_comp_jobs`) and export (`prepare` on the main pass,
   `collect_below_pixels` for the held re-render) read it to snap *which source frame each covered
   layer decodes* to `τ`. So the held re-render's footage frames now match the held grid, footage
-  playback steps, and preview equals export (K-031). Only the primary source frame is snapped —
+  playback steps, and preview equals export. Only the primary source frame is snapped —
   temporal effects' neighbour frames still degrade to stills — and footage is held everywhere
   below the adjustment (a masked reveal shows held footage outside the mask too, a documented
   boundary; the full-frame adjustment is the intended global pass).
@@ -104,14 +103,14 @@ sub-frame/held render, an effect with it **false** is evaluated at the *frame* t
 `τ_k` — for particle systems and other stochastic/costly effects the user does not want re-run
 per sample. Held effects render once at `t`; only sampled ones move.
 
-**Landed (K-132).** The split lives in `lumit_core::fx::resolve_stack_temporal(effects,
+**Landed.** The split lives in `lumit_core::fx::resolve_stack_temporal(effects,
 sample_lt, frame_lt, …)`: it shares `resolve_one` with `resolve_stack`, handing each effect
 `frame_lt` when its flag is false and `sample_lt` otherwise — so `sample_lt == frame_lt` is
 byte-identical to `resolve_stack` and the ordinary render is untouched. `build_comp_draws`
 becomes a thin wrapper over `build_comp_draws_at(doc, comp, t_comp, frame_t, …)`, which threads
 the true playhead `frame_t` (and `frame_lt = frame_t − start_offset`) through nested Precomps
 and into `posterize_below`/`below_draws_at`/`render_below_at`; every layer's own stack resolves
-through `resolve_stack_temporal`. The after-effects matte/depth sources keep their own K-125
+through `resolve_stack_temporal`. The after-effects matte/depth sources keep their own
 temporal boundary (they already hold their temporal inputs to stills), so the flag is honoured
 on each below-layer's *own* stack, at every depth.
 
@@ -126,14 +125,14 @@ share a key — the deduplication that makes it cheap). No new non-determinism.
    prove preview == export on a still scene first (a re-render at the same `t` must be
    bit-identical to no re-render).
 2. Posterize Time on an adjustment carrier (one render at `τ`) — the simplest consumer.
-3. `EffectInstance.sample_temporally` (landed, K-132) + Posterize Time per-layer reach
-   (landed, K-133; carrier-kind rule K-166).
-4. Accumulation MB (N samples + the additive average) on top of (1) (landed, K-134).
-Each step is a K-decision + docs/08 section + oracle/parity test where one applies (these have
+3. `EffectInstance.sample_temporally` (landed) + Posterize Time per-layer reach
+   (landed, with the carrier-kind rule).
+4. Accumulation MB (N samples + the additive average) on top of (1) (landed).
+Each step is a docs/08 section + oracle/parity test where one applies (these have
 no per-pixel oracle; the test is a still-scene identity + a moving-scene coverage check, as
 per-layer MB used).
 
-## 8. A third consumer: measuring the composite's motion (K-565)
+## 8. A third consumer: measuring the composite's motion
 `below_draws_at` turned out to have one more customer. Fast motion blur (docs/08 §3.2) and
 Datamosh (§3.12) want per-pixel motion, which the decode worker can only measure between
 decoded source frames — so on an **adjustment layer**, the placement §3.2 calls the commonest
@@ -142,8 +141,8 @@ second picture such a measurement needs, so `CompLayerDraw::flow_below` carries 
 `below_draws_at` per offset the stack asked for (a **Precomp** layer carries its nested comp
 rebuilt at the neighbour layer time instead — same shape, different source of the picture),
 and `Realiser::measure_below_flow` realises each beside the frame-time one and measures
-between the two on the card. One entry per offset, so K-544's rule that each consumer gets
-its own measurement survives.
+between the two on the card. One entry per offset, so the rule that each consumer gets its
+own measurement survives.
 
 Two things follow from reusing this machinery rather than inventing another. The neighbour
 render **strips temporal inputs like any other**, which is what bounds the cost: without it an

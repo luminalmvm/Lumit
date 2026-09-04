@@ -1,4 +1,4 @@
-// The shape tools' preview: what a drag shows before it commits (K-238).
+// The shape tools' preview: what a drag shows before it commits.
 //
 // The regression these guard is a plain one. The preview asked the *selected
 // layer* to place every point, so with nothing selected — which is exactly the

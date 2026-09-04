@@ -1,4 +1,4 @@
-// The toolbar: the strip of tools under the menu bar (docs/07 §1.7, K-216).
+// The toolbar: the strip of tools under the menu bar (docs/07 §1.7).
 //
 // **In plain terms.** This is the row every editor has under its menus — the
 // arrow, the hand, the pen — and picking one of them says what dragging in the
@@ -19,8 +19,8 @@
 // The right-hand end carries what the shell has nowhere else to put: the
 // workspace strip §1.4 asks for.
 //
-// **The magnet is back** (K-689). It sat here once, was taken off when nothing
-// in the application read it (K-230) — a toggle that changes nothing is worse
+// **The magnet is back**. It sat here once, was taken off when nothing
+// in the application read it — a toggle that changes nothing is worse
 // than a missing one — and returns now that the Viewer's layer drags reach for
 // the guides and the grid with it. Docs/07 §4.5 puts the switch that governs a
 // gesture on the toolbar; the Viewer's own guides menu shows the same switch
@@ -45,7 +45,7 @@ import '../widgets/controls.dart';
 /// 15-DESIGN §7.2 puts toolbar controls on the household's full ≥44px hit
 /// extent. A button keeps that **across** — 44 wide, which is what makes the
 /// row easy to hit along its length and is the spacing the strip is read by —
-/// and gives it up down the page (K-230): the strip runs the full width of the
+/// and gives it up down the page: the strip runs the full width of the
 /// window, so a 44px-tall band of mostly empty space is a stripe of chrome
 /// taken off the panels underneath for nothing. 28 keeps the 16px icon at its
 /// §5 floor with room to breathe.
@@ -106,8 +106,7 @@ class LumitToolBarFrb extends StatelessWidget {
                   // Scrolls rather than overflowing: a narrow window has less
                   // width than thirteen tools want, and an overflow stripe is
                   // not a design. Flexible so the options beside it get their
-                  // share of the room instead of being squeezed to nothing
-                  // (K-227).
+                  // share of the room instead of being squeezed to nothing.
                   Flexible(
                     child: SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
@@ -119,7 +118,7 @@ class LumitToolBarFrb extends StatelessWidget {
                       ),
                     ),
                   ),
-                  // The armed tool's own options, when it has any (K-225):
+                  // The armed tool's own options, when it has any:
                   // After Effects puts them here, and the strip is empty for
                   // the tools that draw nothing.
                   if (toolOptionsFor(ui.tools.tool) != ToolOptions.none) ...[
@@ -149,7 +148,7 @@ class LumitToolBarFrb extends StatelessWidget {
   }
 }
 
-/// **The magnet** (docs/07 §4.5, K-689): whether a drag on the picture reaches
+/// **The magnet** (docs/07 §4.5): whether a drag on the picture reaches
 /// for the guides and the grid.
 ///
 /// Dressed as the graph editor's and the Timeline's are — lit reads as the
@@ -183,23 +182,23 @@ class _SnapButton extends StatelessWidget {
 enum ToolOptions {
   none,
 
-  /// Fill and size: what the Type tool sets a new line in (K-225).
+  /// Fill and size: what the Type tool sets a new line in.
   type,
 
   /// Fill and stroke: what a shape tool draws with. Both live since shape
-  /// layers landed (K-237) — a shape layer's art carries a fill colour, a
+  /// layers landed — a shape layer's art carries a fill colour, a
   /// stroke colour and a stroke width, and a width of zero draws no outline.
   shape,
 
-  /// The brush: the colour it lays down, and its size, hardness and opacity
-  /// (K-227). All four live — painting is built.
+  /// The brush: the colour it lays down, and its size, hardness and opacity.
+  /// All four live — painting is built.
   paint,
 
-  /// The puppet mesh: **Density** and **Expansion** (K-225, K-704). No fill —
+  /// The puppet mesh: **Density** and **Expansion**. No fill —
   /// a pin lays no colour down, it takes hold of pixels that are already there.
   puppet,
 
-  /// The roto scribble: **Size**, and nothing else (K-717). No fill and no
+  /// The roto scribble: **Size**, and nothing else. No fill and no
   /// hardness — a roto stroke lays no colour down and has no edge to soften; it
   /// says "this is the subject" over the pixels it covers, and how wide it
   /// covers is the whole of what there is to set.
@@ -519,8 +518,8 @@ class _ToolButtonState extends State<_ToolButton> {
     final member = widget.tools.memberOf(widget.group);
     final active = widget.tools.tool.group == widget.group;
     final members = ToolMode.membersOf(widget.group);
-    // A group nothing in which is built is on the strip but cannot be pressed
-    // (K-228): the tool set is the specification, and a button that visibly
+    // A group nothing in which is built is on the strip but cannot be pressed:
+    // the tool set is the specification, and a button that visibly
     // cannot be pressed says "coming" where a missing one says nothing.
     final enabled = ToolMode.builtMembersOf(widget.group).isNotEmpty;
 
@@ -650,7 +649,7 @@ class _ToolFlyout extends StatelessWidget {
               key: ValueKey<String>('tool-flyout-${member.name}'),
               selected: member == armed,
               // A member that is not built is listed and does nothing when
-              // clicked (K-228) — the same rule the buttons follow.
+              // clicked — the same rule the buttons follow.
               onPressed: member.ready ? () => onPick(member) : () {},
               child: Row(
                 children: [
@@ -711,7 +710,7 @@ class _WorkspaceStrip extends StatelessWidget {
     final t = ThemeScope.of(context).theme;
     final ui = context.watch<LumitUiState>();
     final active = ui.workspace.activePreset;
-    // Round's filled pill (K-394, §12.1): five names, one in force, which is
+    // Round's filled pill (§12.1): five names, one in force, which is
     // exactly the segmented option the cue is about, and the fill replaces the
     // tick. Sharp keeps the underline: passing `active` there would give the
     // word a fill it has never had.
@@ -750,13 +749,13 @@ class _WorkspaceStrip extends StatelessWidget {
 /// §12A.1, §3.1 — the workspace tabs are what "the active tab tick" means).
 /// The word itself stays grey: the tick is the state, so the strip reads as
 /// names with one underlined rather than as one coloured word. Under Round the
-/// filled pill (K-394, §12.1) carries the state instead, and there is no tick
+/// filled pill (§12.1) carries the state instead, and there is no tick
 /// to draw under a fill.
 ///
 /// The padding is what fits the name into the strip, and the strip is 14px
-/// shorter than it was (K-230): at 12 above and below, 24px of padding in a
+/// shorter than it was: at 12 above and below, 24px of padding in a
 /// 30px band left the words with five and they were squeezed out of sight,
-/// leaving a button that could be pressed and not read (K-236).
+/// leaving a button that could be pressed and not read.
 class _StripEntry extends StatelessWidget {
   final String label;
   final bool active;
@@ -805,22 +804,22 @@ class _StripEntry extends StatelessWidget {
 /// on its own: a cursor is how a toolbar tells you it is listening, and it
 /// costs nothing to be honest about which tools are only a cursor so far.
 MouseCursor viewerCursorFor(ToolMode tool) => switch (tool) {
-      // The Hand and the Zoom draw their own over the picture (K-230): Windows
+      // The Hand and the Zoom draw their own over the picture: Windows
       // has no grab or magnifier pointer, and Flutter's names for them fall
       // back to the plain arrow there. Their own layers hide the system one and
       // paint it; this is what shows underneath.
       ToolMode.hand || ToolMode.zoom => SystemMouseCursors.none,
       // Nothing over the *picture*: the razor cuts in the Timeline, where it
       // draws its own blade. A crosshair here promised a precision the Viewer
-      // has no razor gesture to spend (K-230).
+      // has no razor gesture to spend.
       ToolMode.razor => SystemMouseCursors.basic,
       ToolMode.anchor => SystemMouseCursors.move,
       // Type points at where the words will start; horizontal takes the
       // system's I-beam, and vertical has one drawn for it over the picture
-      // (K-226) because no platform ships a sideways beam.
+      // because no platform ships a sideways beam.
       ToolMode.typeHorizontal => SystemMouseCursors.text,
       ToolMode.typeVertical => SystemMouseCursors.none,
-      // The tools that aim at a pixel keep the hardware crosshair (K-724): the
+      // The tools that aim at a pixel keep the hardware crosshair: the
       // OS moves it at input rate whatever the application's frame rate is
       // doing, and their overlays ask for the same pointer, adding only
       // decoration beside it — the badge, the brush ring.

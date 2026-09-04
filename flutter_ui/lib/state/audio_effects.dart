@@ -1,4 +1,4 @@
-// Which effect-stack entries are audio plugins (AP5, K-700/K-707).
+// Which effect-stack entries are audio plugins (AP5).
 //
 // The match name's own prefix carries the answer — the engine mints
 // `clap:<plugin id>` and `vst3:<class id>` and spells the prefixes once in

@@ -1,5 +1,5 @@
 // The keyboard: turning a real keypress into a chord, and asking the engine
-// what that chord means here (docs/07-UI-SPEC.md §15, K-199).
+// what that chord means here (docs/07-UI-SPEC.md §15).
 //
 // **What lives here and what does not.** This file knows how a Flutter
 // `KeyEvent` spells itself — that `LogicalKeyboardKey.pageUp` is the key the
@@ -120,7 +120,7 @@ final Map<String, LogicalKeyboardKey> _keysByName = {
 };
 
 /// A chord as macOS's own menu bar wants it: a [SingleActivator] for the native
-/// `PlatformMenuItem` to draw beside its row (K-244).
+/// `PlatformMenuItem` to draw beside its row.
 ///
 /// Only the native menu needs this — everywhere else the keyboard is the
 /// engine's business and a chord is text. `Mod` becomes Cmd, because macOS is
@@ -182,7 +182,7 @@ class KeymapState extends ChangeNotifier {
   /// the settings page warns when a rebind makes one.
   List<BridgeKeyConflict> get conflicts => _conflicts;
 
-  /// Chords a panel has taken over from an app-wide binding (K-281). Not
+  /// Chords a panel has taken over from an app-wide binding. Not
   /// clashes — the focused panel wins by a stated rule — but worth saying,
   /// because the app-wide meaning stops working in that one panel. The shipped
   /// keymap carries one on purpose (`L` in the Timeline).

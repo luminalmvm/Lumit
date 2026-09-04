@@ -4,7 +4,7 @@
 //! move pixels rather than recolour them.
 //!
 //! Each op mirrors its `lumit_core::fx::cpu` parameter struct field-for-field so
-//! the kernel and the CPU oracle consume the identical numbers (K-031). Nothing
+//! the kernel and the CPU oracle consume the identical numbers. Nothing
 //! here does arithmetic; every reciprocal, cosine and tangent that *could* be
 //! taken once was taken host-side, in the effect's own `packed`.
 
@@ -59,7 +59,7 @@ struct TurbulentDisplaceParams {
     cycle: i32,
     mix_amt: f32,
     matte_on: f32,
-    /// Was Invert; the seam applies it once since K-425. Always 0.
+    /// Was Invert; the seam applies it once instead. Always 0.
     _pad1: f32,
     _pad0: f32,
 }
@@ -79,7 +79,7 @@ pub struct TileOp {
     pub horizontal_phase_shift: bool,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
-    /// The raster to write, which may be larger than the one handed in (K-542):
+    /// The raster to write, which may be larger than the one handed in:
     /// Output width and height above 100 % stamp copies past the frame's edges.
     ///
     /// **The host fills this from `lumit_core::fx::cpu::tile_raster`**, which is
@@ -97,7 +97,7 @@ struct TileParams {
     mix_amt: f32,
     mirror_edges: u32,
     horizontal_phase_shift: u32,
-    /// The destination raster (K-542), which may be larger than the source —
+    /// The destination raster, which may be larger than the source —
     /// the two former padding words, put to work. The kernel cannot read it off
     /// the storage texture on every backend, so it is told.
     out_size: [u32; 2],
@@ -108,7 +108,7 @@ struct TileParams {
 struct OffsetParams {
     shift: [f32; 2],
     mix_amt: f32,
-    /// 1 = scale the shift by the matte (K-427).
+    /// 1 = scale the shift by the matte.
     matte_on: f32,
 }
 
@@ -155,7 +155,7 @@ struct LensDistortParams {
     /// spellable in the kernel.
     enabled: u32,
     reverse: u32,
-    /// 1 = scale the displacement by the matte (K-427).
+    /// 1 = scale the displacement by the matte.
     matte_on: f32,
     _pad: [f32; 3],
 }
@@ -188,7 +188,7 @@ struct CornerPinParams {
     /// `active` in the op and the CPU reference; **`enabled` here**, because
     /// `active` is a reserved keyword in WGSL (fx_lensdistort.wgsl's note).
     enabled: u32,
-    /// 1 = scale the pull from the corners by the matte (K-427).
+    /// 1 = scale the pull from the corners by the matte.
     matte_on: f32,
 }
 
@@ -204,7 +204,7 @@ pub struct DisplacementMapOp {
     pub edge: u32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
-    /// The Matte's Invert switch (K-395): with it on the map is read the other
+    /// The Matte's Invert switch: with it on the map is read the other
     /// way round, so every push reverses. Read only when a map is bound.
     pub matte_invert: bool,
 }
@@ -254,7 +254,7 @@ struct TwirlParams {
     inv_radius: f32,
     angle: f32,
     mix_amt: f32,
-    /// 1 = scale Angle by the matte (K-427).
+    /// 1 = scale Angle by the matte.
     matte_on: f32,
     _pad1: f32,
 }
@@ -283,7 +283,7 @@ struct SpherizeParams {
     inv_radius: f32,
     bulge: f32,
     mix_amt: f32,
-    /// 1 = scale Bulge by the matte (K-427).
+    /// 1 = scale Bulge by the matte.
     matte_on: f32,
     _pad1: f32,
 }
@@ -321,7 +321,7 @@ struct RippleParams {
     turns: f32,
     mix_amt: f32,
     asymmetric: u32,
-    /// 1 = scale Wave height by the matte (K-427).
+    /// 1 = scale Wave height by the matte.
     matte_on: f32,
     _pad1: u32,
     _pad2: u32,
@@ -362,7 +362,7 @@ struct WaveWarpParams {
     inv_pin_band: f32,
     mix_amt: f32,
     shape: u32,
-    /// 1 = scale Wave height by the matte (K-427).
+    /// 1 = scale Wave height by the matte.
     matte_on: f32,
     _pad1: u32,
 }
@@ -388,7 +388,7 @@ struct BezierWarpParams {
     q: [[f32; 4]; 6],
     mix_amt: f32,
     steps: u32,
-    /// 1 = scale the bend from the straight frame by the matte (K-427).
+    /// 1 = scale the bend from the straight frame by the matte.
     matte_on: f32,
     _pad1: u32,
 }
@@ -417,7 +417,7 @@ struct WarpParams {
     v_distort: f32,
     mix_amt: f32,
     style: u32,
-    /// 1 = scale Bend and both distortions by the matte (K-427).
+    /// 1 = scale Bend and both distortions by the matte.
     matte_on: f32,
     _pad1: u32,
     _pad2: u32,
@@ -620,7 +620,7 @@ impl FxEngine {
     /// returning a new texture of the same size. One map read and one bilinear
     /// tap a pixel.
     ///
-    /// **The matte IS the map** (K-395), so it goes into the kernel and no
+    /// **The matte IS the map**, so it goes into the kernel and no
     /// dissolve runs beside this op. With none bound the kernel is a
     /// passthrough — the labelled no-op every layer-input effect follows.
     pub fn displacement_map(
@@ -765,7 +765,7 @@ impl FxEngine {
     /// returning a new texture of the same size. One pass: two fractal sums and
     /// one bilinear tap a pixel.
     ///
-    /// **The matte scales the displacement** (K-395), so it goes into the kernel
+    /// **The matte scales the displacement**, so it goes into the kernel
     /// and no dissolve runs beside this op. With none bound the kernel takes the
     /// branch it always takes and the vector is used exactly as the field gave it.
     pub fn turbulent_displace(
@@ -810,7 +810,7 @@ impl FxEngine {
     /// Apply one Tile (docs/08 §3.39) to a linear working texture. One bilinear
     /// tap a pixel, or transparent outside the output window.
     ///
-    /// **The returned texture may be larger than the one handed in** (K-542):
+    /// **The returned texture may be larger than the one handed in**:
     /// Output width and height above 100 % stamp copies past the frame's edges,
     /// and `cpu::tile_raster` — the oracle's own sizing, so the two paths make
     /// the same raster — says how much larger. The frame sits in the middle of

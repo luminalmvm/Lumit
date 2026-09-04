@@ -6,20 +6,18 @@ process/thread architecture that hosts all of this is [05-ARCHITECTURE.md](05-AR
 the budgets it must meet are [13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md). Terminology is
 [01-GLOSSARY.md](01-GLOSSARY.md), binding. Key words MUST, SHOULD, MAY follow RFC 2119.
 
-Decisions implemented here: K-014, K-015, K-016, K-017, K-024, K-026.
-
 ---
 
 ## 1. Evaluation model
 
-### 1.1 Layers in front, DAG underneath (K-015)
+### 1.1 Layers in front, DAG underneath
 
 The document model (layers, keyframes, clips — [03-DATA-MODEL.md](03-DATA-MODEL.md)) is never
 evaluated directly. A compiler lowers each comp into an immutable **evaluation graph**: a DAG of
 typed nodes (source, retime, mask, effect, transform, blend, matte-apply, comp-output).
 Recompilation is incremental per comp, runs on every edit, and publishes a new immutable graph
 snapshot; renders in flight keep the old snapshot. Users never see this compiled graph — the
-Graph panel (K-471) draws the document's own stack and wiring, never these nodes.
+Graph panel draws the document's own stack and wiring, never these nodes.
 
 Evaluation is demand-driven pull in two strictly separated phases:
 
@@ -37,7 +35,7 @@ evaluates at whatever time the retime/nesting maths resolves to.
 Identical subgraphs (same footage, same leading effects) compile to a single shared node by
 content-hash deduplication; two layers sharing a source and grade evaluate it once.
 
-**Occlusion (K-423).** A layer that provably paints every pixel of the frame hides the layers
+**Occlusion.** A layer that provably paints every pixel of the frame hides the layers
 beneath it, and those are not decoded, uploaded, effected or composited. The draw builder and
 the decode planner ask one predicate (`lumit_core::occlusion::occluder_index`) so they skip
 exactly the same layers, and the cull must be invisible in the picture, so the predicate is
@@ -50,15 +48,15 @@ candidate, or any visible layer above it names a layer below as a matte or an ef
 input; and it is off inside a collapsed Precomp's splice (§1.4), whose layers are not clipped
 to their own comp. Footage that the probe reports as alpha-free is a later extension: the
 predicate lives in `lumit-core`, which knows no probe. The frame key keeps hashing culled
-layers (over-keying is safe); preview and export stay byte-identical (K-031).
+layers (over-keying is safe); preview and export stay byte-identical.
 
-**Solo culls decodes too (K-105, K-435).** The same rule reaches the other switch that
+**Solo culls decodes too.** The same rule reaches the other switch that
 decides whether a layer can be seen at all: while a layer that *draws* is soloed, the layers
 that are not soloed are not composited, so they are not decoded either. The draw builder, the
 frame key, the occlusion cull and the decode planner all ask
 `lumit_core::model::any_picture_solo`, so all four skip the same rows. Only the picture half
 counts — soloing an Audio layer leaves every drawing layer's decodes exactly as they were,
-which is what keeps the mixer's own `any_solo` (K-435, every soloed layer) a separate
+which is what keeps the mixer's own `any_solo` (every soloed layer) a separate
 question. A soloed row's matte sources and effect layer inputs are still decoded, by the same
 reference walk that keeps them alive under the occlusion cull.
 
@@ -68,18 +66,18 @@ For a visual layer at comp time `t`, the compiled subgraph is, in order:
 
 1. **Source** — fetch or rasterise the layer source at the resolved source time. For footage:
    decode, colour-interpret, linearise, premultiply (§3). For text/shape/solid: rasterise
-   vectors at the working raster size. A **shape layer** (K-237,
-   [03-DATA-MODEL.md](03-DATA-MODEL.md) §7.2) has no asset at all: its contents are rasterised
+   vectors at the working raster size. A **shape layer**
+   ([03-DATA-MODEL.md](03-DATA-MODEL.md) §7.2) has no asset at all: its contents are rasterised
    into their own bounding box, which is also the layer's natural size — the one kind whose size
    moves when it is edited. Each item is filled through the mask rasteriser and then outlined
    through the paint rasteriser, in list order, each after its **modifiers** have had its geometry
    ([03-DATA-MODEL.md](03-DATA-MODEL.md) §7.2.1) — read, like the layer's masks and paint, on the
-   **layer's** own clock (K-213), so a keyed trim travels with the layer.
+   **layer's** own clock, so a keyed trim travels with the layer.
 2. **Retime** — for a Footage layer, the retime map converts layer time to source time and the
    layer's frame-interpolation policy (nearest / blend / flow) synthesises non-integer source
    frames ([04-RETIMING.md](04-RETIMING.md)). Overrun holds the boundary frame. Retime affects
    only source fetch; keyframes on masks, effects, and transform remain in layer/comp time.
-2.5. **Paint** — the layer's paint strokes (K-227, [03-DATA-MODEL.md](03-DATA-MODEL.md) §7.1)
+2.5. **Paint** — the layer's paint strokes ([03-DATA-MODEL.md](03-DATA-MODEL.md) §7.1)
    are stamped into its raster in the order they were made: brush strokes lay colour down,
    eraser strokes take alpha away, clone strokes copy from the raster **as it was before any
    stroke in the pass** was stamped. Paint happens before masks, so a mask gates the painted
@@ -93,7 +91,7 @@ For a visual layer at comp time `t`, the compiled subgraph is, in order:
    2 073 536 of them are a copy nobody reads. The tile is only honest while nothing between
    the upload and the
    compositor cares *where* a pixel is, so three things cancel it and the layer is rasterised
-   at its real size instead — **a mask** (it gates pixels), **paint** (it marks them, K-227),
+   at its real size instead — **a mask** (it gates pixels), **paint** (it marks them),
    and **any enabled effect**. The last is the one that is easy to forget: a layer's whole
    effect stack runs at the texture's own raster, so on a tile it runs at 8×8 with a `px_scale`
    of 1/240 and is stretched back up afterwards. A low-frequency effect survives that as a soft
@@ -104,10 +102,10 @@ For a visual layer at comp time `t`, the compiled subgraph is, in order:
    about whether the output depends on the coordinate, and Gradient, Vignette, Lightning and
    Scribble are all `Roi::Exact` and all positional.
 3. **Masks** — bezier paths combined top-to-bottom by mode (none, add, subtract, intersect,
-   lighten, darken, difference — the last two being max and min against the running total,
-   K-545), each with feather, expansion, opacity, inversion — applied to a mask in that order,
+   lighten, darken, difference — the last two being max and min against the running total),
+   each with feather, expansion, opacity, inversion — applied to a mask in that order,
    before it folds into the stack. A mask's feather is one width, or a width per vertex
-   interpolated along the path (K-545)
+   interpolated along the path
    ([03-DATA-MODEL.md](03-DATA-MODEL.md) §7). Masks gate the layer's alpha before any effect
    runs, so effects see the masked image.
 4. **Effect stack** — top-to-bottom ([08-EFFECTS.md](08-EFFECTS.md)). Each effect sees the
@@ -117,7 +115,7 @@ For a visual layer at comp time `t`, the compiled subgraph is, in order:
    Light layers, the layer's picture is shaded by them (§1.8). After effects, because a light
    should fall on the finished layer rather than on an intermediate; before the transform,
    because the shading is computed on the layer's own plane.
-5. **Transform** — anchor point, position, scale, rotation, opacity as one 4×4 matrix (K-023),
+5. **Transform** — anchor point, position, scale, rotation, opacity as one 4×4 matrix,
    concatenated with the parent chain. Filtering is bilinear (draft) or bicubic (full quality),
    always on premultiplied pixels.
 6. **Motion blur** — shutter-window multi-sampling wraps steps 1–5 where enabled (§4).
@@ -151,8 +149,8 @@ the active quality), clipped to its own bounds, then behaves as footage in the p
 masked, effected, transformed like any raster layer. The nested comp is sampled at the parent's
 frame times; its own frame rate governs only its internal keyframe display.
 
-That intermediate is **transparent** where the nested comp's own layers do not cover it
-(K-241). A comp's background colour is the backdrop for looking at *that* comp, not a layer
+That intermediate is **transparent** where the nested comp's own layers do not cover it.
+A comp's background colour is the backdrop for looking at *that* comp, not a layer
 inside it, so it is painted only by the comp being viewed or exported — a Precomp layer carries
 the alpha its content has, and the parent's stack shows through the gaps.
 
@@ -172,7 +170,7 @@ to a buffer at that point, at concatenated-transform resolution where possible):
 the Precomp layer; any mask on it; a blend mode other than Normal or opacity below 100% on the
 Precomp layer itself; the Precomp layer being consumed as a matte; preserve-underlying-
 transparency; an inner layer consuming a matte (splicing a comp-space matte across comps is a
-later refinement); a live adjustment layer inside the nested comp (K-091 — its stack applies
+later refinement); a live adjustment layer inside the nested comp (its stack applies
 within its own comp, which splicing cannot honour; After Effects instead lets it bleed into
 the parent's stack, and Lumit deliberately does not). The Viewer MUST indicate when a
 collapsed layer has been forced to an intermediate (a dimmed collapse switch). Text and shape layers behave as permanently collapsed
@@ -187,7 +185,7 @@ coverage. Its transform moves the coverage map, not the picture. The adjustment 
 ROI is the effect stack's expanded ROI intersected with the coverage DoD — an adjustment layer
 masked to a small region costs a small region.
 
-A **layer group whose header carries effects** (K-731, docs/impl/group-effects.md) is *not*
+A **layer group whose header carries effects** (docs/impl/group-effects.md) is *not*
 a third staging point beside this one and the Precomp node: its drawn run renders as one
 comp-sized nested unit on the Precomp path (§1.3's node, built implicitly per frame), the
 header's stack runs on that unit's texture, and the slab composites at 100/Normal. Inside a
@@ -212,7 +210,7 @@ the AE 2023 model). Four combinations: alpha or luma, normal or inverted.
   that is itself matted; cycles are rejected at compile time.
 - A **Precomp** matte source has no pixels of its own: its nested comp is rendered (the same
   recursion §1.4 performs for a Precomp layer's picture, under the same cycle guard) and that
-  render is the matte signal (K-268). The matte **source mode** (§none/masks/effects, K-142)
+  render is the matte signal. The matte **source mode** (§none/masks/effects)
   does not apply to a comp reference — a comp already carries its own layers' masks and
   effects. Footage inside such a comp decodes with the rest of the frame: the decode plan
   follows matte and layer-input references whether or not the referenced layer is visible —
@@ -221,7 +219,7 @@ the AE 2023 model). Four combinations: alpha or luma, normal or inverted.
   from are planned like anyone else's; skipping the layer outright took its references with it,
   so a hidden source went undecoded and the matte quietly stopped working.
 
-### 1.7 Anti-aliasing the composite (K-274)
+### 1.7 Anti-aliasing the composite
 
 A layer is drawn as a rectangle placed by its transform. Where the transform turns that
 rectangle off-axis its edge crosses pixels diagonally, and a pixel is either drawn or not —
@@ -231,8 +229,8 @@ the shape actually covered.
 
 - **The count is a project property** (`Document::anti_aliasing`,
   [03-DATA-MODEL.md](03-DATA-MODEL.md) §2), default 4, and **one value serves preview and
-  export**. Both drive the same realise walk with the same count, which is what keeps the
-  K-031 identity true with anti-aliasing on.
+  export**. Both drive the same realise walk with the same count, which is what keeps
+  preview and export identical with anti-aliasing on.
 - **It is orthogonal to preview resolution.** A reduced-resolution preview is a smaller
   picture with the same edge treatment; the count does not change with the scale.
 - **The composite target is multisampled, the working texture is not.** One multisample
@@ -258,9 +256,9 @@ the layer's quad edge, and that is what this addresses.
 The *how* — the traps in the composite loop as it stands, and the test plan — is
 [impl/anti-aliasing.md](impl/anti-aliasing.md).
 
-### 1.8 Lighting (K-361)
+### 1.8 Lighting
 
-A composition's **Light layers** ([03-DATA-MODEL.md](03-DATA-MODEL.md) §5.5, K-360) shade
+A composition's **Light layers** ([03-DATA-MODEL.md](03-DATA-MODEL.md) §5.5) shade
 every layer whose **Accepts lights** switch is on. The pass is not an effect — it has no
 entry in [08-EFFECTS.md](08-EFFECTS.md), no `Resolved` variant and no place in a stack,
 because it is not something added to a layer but something the composition does to it.
@@ -279,8 +277,8 @@ closed-form: the cosine-weighted fraction of the surface's sky that the rectangl
 summed one term per edge. No sampling, no noise, four `acos` calls. The rectangle is clipped
 to the surface's horizon first — the half of a light that has sunk behind a surface cannot
 light it — which is why the sum runs over a polygon of up to five corners rather than a flat
-four. This integral is the identity-matrix case of Linearly Transformed Cosines; K-361
-records why the fitted matrix tables that would buy specular are deliberately not here.
+four. This integral is the identity-matrix case of Linearly Transformed Cosines; the
+fitted matrix tables that would buy specular are deliberately not here.
 
 **Point and spot lights** take the cosine law and nothing else, attenuated by the light's
 `falloff_px` and, for a spot, softened across the outer tenth of its cone. There is no inverse
@@ -324,18 +322,18 @@ When a requested allocation exceeds the VRAM budget (resource governor,
 **macro-tiles** and runs the subgraph per tile, using each effect's declared expansion for
 correct overlap. Macro-tiling is a fallback, not the model; it also caps single-dispatch
 duration as TDR insurance. Per-node CPU fallback (every effect ships a CPU reference
-implementation, K-019) bridges via readback/upload nodes inserted by the scheduler, batching
+implementation) bridges via readback/upload nodes inserted by the scheduler, batching
 adjacent CPU nodes to avoid ping-ponging.
 
 ## 3. Colour
 
-### 3.1 Working space (K-026)
+### 3.1 Working space
 
 The working space is **scene-linear, premultiplied alpha, fp16 RGBA** per pixel by
 default. All compositing, filtering, resampling, and motion-blur accumulation happen
 here.
 
-**Depth is one project-wide switch (K-069, supersedes K-026's per-comp clause).** The
+**Depth is one project-wide switch.** The
 project's working depth — 8 bpc integer, 16 bpc float (default), or 32 bpc float —
 applies to every comp, every effect buffer, and every inter-node texture in the
 project. **v1 status:** the engine currently renders **fp16 only**; the 8/32 bpc options
@@ -346,7 +344,7 @@ later), and Application Settings holds only the *default for newly created proje
 Kernels MAY use wider internal accumulators where the algorithm needs them (large
 iterative blurs, scopes), but everything a node reads or writes is project depth.
 
-Why fp16 stays the default (K-069): fp16 here is floating point, not AE's integer
+Why fp16 stays the default: fp16 here is floating point, not AE's integer
 16bpc — it already carries values above 1.0 (superwhites, glow overshoot, up to 65504)
 and negatives, in linear light. fp32 buys extra mantissa (deep shadow gradients under
 extreme pushes, very long chains) at 16 bytes/px: double the bandwidth on a
@@ -360,7 +358,7 @@ Every footage item carries a **colour-space tag** in its interpretation settings
 video streams are assumed Rec.709 (BT.1886 transfer), stills and screen/game captures sRGB,
 unless container metadata says otherwise; the user can override per item. Game captures — the
 primary v1 audience's material — therefore linearise through the sRGB/Rec.709 assumptions
-without configuration. When the project names an OCIO config (K-490, §3.3), the tag's list of
+without configuration. When the project names an OCIO config (§3.3), the tag's list of
 choices becomes the config's colour spaces beside the built-ins, and the item's baked input
 artefact replaces the fixed curves in the same decode pass.
 
@@ -378,21 +376,21 @@ inside this stage). Nothing upstream of this blit is display-referred.
 
 Both the per-footage input transform and the display transform are implementations of one
 internal `ColourTransform` interface (shader source + optional LUT textures). v1 ships built-in
-transforms (sRGB, Rec.709/BT.1886, linear). **OCIO fills the same slot** (K-489, K-490,
-[docs/impl/ocio.md](impl/ocio.md)): a project can name an OCIO config, whose colour spaces
+transforms (sRGB, Rec.709/BT.1886, linear). **OCIO fills the same slot**
+([docs/impl/ocio.md](impl/ocio.md)): a project can name an OCIO config, whose colour spaces
 become the per-footage input choices, whose displays and views fill the Viewer's picker, and
 whose names the export can be written in. The config format is hosted **natively in Rust**
 (`lumit-colour`), never via the C++ library: every resolved transform is baked once, on the
 CPU, to a small deterministic artefact (factorised curves + matrix, or a shaper + 65³ cube
 sampled tetrahedrally), and that one artefact is what the decode pass, the display pass and
-the export's identical blit all sample — one implementation, so K-031 holds by construction.
-The working space stays fixed with OCIO at the edges (K-490). A missing or refused config
+the export's identical blit all sample — one implementation, so parity holds by construction.
+The working space stays fixed with OCIO at the edges. A missing or refused config
 degrades calmly to the built-ins for preview and refuses for export; fidelity against the
 reference library is gated by vendored golden fixtures, and a config using an unimplemented
 transform is refused by name, never approximated. Nothing else in the pipeline may assume
 the transform set is fixed.
 
-**Perceptual operations (K-034).** Linear RGB is correct for combining *light*; it is the
+**Perceptual operations.** Linear RGB is correct for combining *light*; it is the
 wrong space for combining *colours as perceived*: a linear (or worse, gamma-space) lerp
 between saturated colours passes through muddy grey, and rotating hue in RGB changes
 brightness. Operations whose meaning is perceptual — gradient interpolation, keyframed
@@ -402,9 +400,9 @@ polar form OkLCh), operate, and convert back. The conversion pair lives in one m
 multiplies and three cube roots per direction — cheap enough to inline per pixel in effect
 kernels. Hue rotation in OkLCh preserves the L axis by construction; the tests assert it.
 Compositing, blend modes' linear subset, and everything in §render-order stay in linear
-RGB — K-034 changes where *interpolation* happens, never where light is added.
+RGB — perceptual operations change where *interpolation* happens, never where light is added.
 
-**The parity guarantee (K-031).** Preview and export MUST share one colour code path: the
+**The parity guarantee.** Preview and export MUST share one colour code path: the
 same input transforms, working space, and output transform implementations, in the same
 precision. At Full resolution and full quality, the frame presented in the Viewer is
 bit-identical to the frame handed to the encoder; export-only stages (encoder subsampling,
@@ -438,7 +436,7 @@ set exists because those formulas were designed on gamma-encoded 8-bit pixels an
 expect that look; running them in linear is mathematically tidy and visually wrong to the
 target audience. Out-of-range values pass through the extended (unclamped) transfer function.
 
-The full After Effects colour-blend set ships in v1 (K-162, T24): every mode below is
+The full After Effects colour-blend set ships in v1 (T24): every mode below is
 implemented, verified against a Rust reference of its formula
 (`composite::tests::perceptual_blend_modes_match_the_reference_formula`). The layer dropdown and
 the effect Mode param both list them from one source (`BlendMode::ALL`), in AE's grouped order.
@@ -447,7 +445,7 @@ the effect Mode param both list them from one source (`BlendMode::ALL`), in AE's
 |---|---|---|
 | Normal | linear | Premultiplied `over`: `A + B·(1−a_A)`. |
 | Add | linear | Physically additive; the montage staple for glows/flashes. |
-| Subtract | linear | `dst − src` per channel, clamped at black — Add's darkening twin (GEN-1, K-151). |
+| Subtract | linear | `dst − src` per channel, clamped at black — Add's darkening twin (GEN-1). |
 | Multiply | linear | Physical filter/shadow behaviour (fixed-function `Dst` blend). |
 | Darken, Lighten | either (invariant) | Per-channel min/max; monotonic transfer makes the domain irrelevant. Computed in linear. |
 | Screen | perceptual | |
@@ -476,7 +474,7 @@ breaks projects.
   the frame), and an adaptive sample limit (default 64, maximum 256).
 - **Per-layer switch** enables blur for that layer. Adaptive degradation MAY skip motion blur
   during interaction ([13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md)); export never skips it.
-- **An export MAY override the master** (K-502, `RenderOptions::motion_blur`,
+- **An export MAY override the master** (`RenderOptions::motion_blur`,
   [15-DESIGN.md](15-DESIGN.md) §12A.4): *on for checked layers* sets the master in every
   composition the export walks and leaves the per-layer switches alone; *off for all layers*
   clears both. The override is applied to the export's own throwaway snapshot, so every path
@@ -499,7 +497,7 @@ breaks projects.
   proportion to speed; fractional sample times use the clip's frame-interpolation policy.
   Overrun regions hold the boundary frame for all samples.
 
-Status (shipped v1, K-120): the transform-multi-sampling core is live in the shape above with
+Status (shipped v1): the transform-multi-sampling core is live in the shape above with
 these v1 trims, each a recorded follow-up rather than a reversal. N is a **fixed comp setting**
 (`samples`, default 16, control range 2–64, hard cap 256 — the same maximum the adaptive rule
 above will respect), not yet the adaptive displacement-derived count; the frame-time source is
@@ -507,10 +505,10 @@ rendered once and only the transform re-evaluated per sample (the source-static 
 sub-frame *source* re-render, and therefore the Retime interaction bullet, awaits the
 accumulation path); the accumulator is the working-format average (`motion_blur_average`'s
 additive-on-both-channels mean) rather than a dedicated fp32 target; parent motion within the
-shutter and blur on a collapsed Precomp's inner layers are deferred (K-120). Preview and export
-share one sample-time derivation and one averaging helper, so K-031 holds.
+shutter and blur on a collapsed Precomp's inner layers are deferred. Preview and export
+share one sample-time derivation and one averaging helper, so parity holds.
 
-## 5. Caching (K-016)
+## 5. Caching
 
 ### 5.1 Three tiers
 
@@ -524,7 +522,7 @@ Playback reads VRAM first, promotes RAM→VRAM, and promotes disk→RAM→VRAM a
 (never plays directly from disk). Writes are write-behind on background IO threads; a disk
 write never blocks a render.
 
-**A write-behind queue MUST be bounded and de-duplicated (K-277).** Its entries are whole
+**A write-behind queue MUST be bounded and de-duplicated.** Its entries are whole
 frames, so its depth is a memory budget: at most eight frames may be waiting to be written,
 and a frame already on its way down is never handed over a second time. A frame counts as
 parked only when its write has *finished*, so anything deciding what to copy down MUST ask
@@ -533,19 +531,19 @@ backup re-queued the same frames every few milliseconds until the application he
 gigabytes. A refused park costs that frame its place on disk and nothing else: it is still
 on the card and in memory, and it is offered again later.
 
-**Shipped (K-214).** All three tiers run. The VRAM tier holds finished display textures
-(K-187), the RAM tier holds their bytes, and the disk tier parks them in a folder that
+**Shipped.** All three tiers run. The VRAM tier holds finished display textures,
+the RAM tier holds their bytes, and the disk tier parks them in a folder that
 outlives the session. The rungs between them are built both ways: a frame evicted from VRAM
 is read back off the card and lands in RAM and on disk, and a frame held below is uploaded
 straight back into a texture rather than composited again. What the tiers hold is
 **final comp frames only**, plus one further store that is not a tier of the ladder: the
-**per-effect intermediate cache** (K-421). It lives in the realiser, VRAM only, and holds
+**per-effect intermediate cache**. It lives in the realiser, VRAM only, and holds
 every effect's output under a content name (§5.2). It never demotes and nothing is promoted
 into it; its purpose is the seconds between two edits of one stack, so that editing the last
 effect of a layer re-runs that effect and no other. It is bounded (256 MB by default, a
 setter beside the frame budget), empties with Clear cache, and is written only by committed,
 non-playback renders — a drag and a playback run read it and leave it alone. The same store
-holds **nested frames** (K-422): a non-collapsed Precomp's finished linear texture, filed
+holds **nested frames**: a non-collapsed Precomp's finished linear texture, filed
 under the nested comp's own frame key (§5.2) mixed with the exact render scale and sample
 count the texture was made at, and served wherever that comp is realised — as a layer, as a
 matte, as an effect's layer input. The decode planner asks the store before it plans a
@@ -553,7 +551,7 @@ nested comp's decodes, and plans none for a held frame; what it says is held it 
 the frame is realised, so its answer cannot be evicted out from under the realiser. A
 collapsed Precomp is never cached: its inner draws are spliced into the parent's list and
 composite against the parent's stack, so there is no one picture to keep. The general
-node-output cache the K-178 evaluator will own is still not built; these are the
+node-output cache the evaluator will own is still not built; these are the
 effect-stack and precomp slices of it, ahead of the evaluator, built where the work runs.
 
 **"Ahead of the playhead" applies to BOTH lower rungs, and neither used to.** The ring renders
@@ -609,7 +607,7 @@ key(node) = H(
 
 Normative details:
 
-- **No instance identity and no timeline position appear in any key.** "Node id" in K-016 means
+- **No instance identity and no timeline position appear in any key.** "Node id" here means
   the node's type identifier plus algorithm version — never which layer or comp instance it
   came from, and never where the playhead or layer sits on the timeline. This is the After
   Effects Global Performance Cache lesson taken whole: because keys are pure content, an undo
@@ -622,13 +620,13 @@ Normative details:
 - **Algorithm version** is bumped whenever an effect's output changes, invalidating stale
   entries by construction.
 - Seeded randomness (wiggle, noise) hashes its seed and time inputs; expressions are
-  deterministic (K-305), so their outputs are hashable values like any other.
+  deterministic, so their outputs are hashable values like any other.
 
 **Invalidation is pure hash mismatch.** There is no invalidation machinery, no dirty flags, no
 dependency walker: an edit changes evaluated values, values change hashes, old entries simply
 stop being addressed and age out via eviction.
 
-**As built (K-214).** Every tier is content-keyed, and the invalidation machinery is gone. It
+**As built.** Every tier is content-keyed, and the invalidation machinery is gone. It
 briefly existed: while the tiers were keyed by `(comp, frame, scale)` an edit did not rename any
 frame, so the only safe answer was for a committed change to drop every held frame of every
 composition — and the cost was paid on the edits that cannot change a pixel. A rename, a
@@ -636,7 +634,7 @@ work-area nudge, a solo toggle, sound added to a layer, an opacity keyframe on a
 each one emptied the cache and the bar went blank with it. None of them does now, and an undo
 finds its frames still filed under the names the restored document asks for.
 
-**A derived camera is in the name too** (K-417). A Camera layer carrying a *solve link* is
+**A derived camera is in the name too.** A Camera layer carrying a *solve link* is
 placed each frame from a camera solve that the document does not contain, so a key made from
 its stored transform would name two different pictures the same and hand back the frames
 banked before the solve landed. The frame key therefore asks for the camera the picture is
@@ -649,7 +647,7 @@ The one place the key was not honest has been fixed with it: a layer's inherited
 placement now feeds its contribution (`ALGO_VERSION` 2). A hidden layer contributes nothing —
 correctly, since it draws nothing — but its children still follow it, so moving a hidden parent
 moved the picture while leaving every name alone, and the children served frames from before the
-move. K-206 makes that the common case rather than a corner: a Null is the layer a user hides
+move. Nulls make that the common case rather than a corner: a Null is the layer a user hides
 most readily, having nothing to look at.
 
 **The quality axis is one number, and everything that reads it must round the same way.**
@@ -664,11 +662,11 @@ thus the width in the name is the width the pixels were decoded at.
 
 A frame is only nameable once its footage is probed. Until then it renders live and is banked
 nowhere, so an entry can never be a promise the renderer did not keep. A **file parameter**
-(a `.cube` LUT, a `.lens` prescription) joins the key by path, size and last-modified time
-(K-431) — the loaders identify a file by more than its path, so a name that mentioned only
+(a `.cube` LUT, a `.lens` prescription) joins the key by path, size and last-modified time —
+the loaders identify a file by more than its path, so a name that mentioned only
 the path could outlive an edit to the file itself.
 
-**A nested comp is named on its own (K-422).** The key used to fold a Precomp layer's comp
+**A nested comp is named on its own.** The key used to fold a Precomp layer's comp
 into the parent's hasher inline, so the nested frame had no name of its own. It is now made
 with a fresh hasher — `comp_frame_key` of the nested comp at the layer's time on the flick
 grid, at the same quality tier — and the parent folds in that 16-byte name. The parent's
@@ -678,18 +676,18 @@ is what "the same nested comp used in five places renders once" above rests on. 
 builder carries the name on the nested draw, the realiser files and serves the texture
 under it, and the decode planner skips a held comp's decodes by it. `ALGO_VERSION` 4.
 
-**The per-effect names (K-421).** An intermediate is named exactly as the formula above says
+**The per-effect names.** An intermediate is named exactly as the formula above says
 a node is, with the chain made explicit: `key_k = H(input, raster, flare substitutions,
 op_0 … op_k)`, where each op contributes its effect name and algorithm version, every
 resolved parameter value (post-expression, post-rescale — the numbers the kernel is handed),
 and the identity of whatever rides beside it: a LUT by path and mtime, a custom lens by its
 content hash, a mask path by its vertices. The flare term counts the frames a Lens flare
-drew other optics than its parameters name (K-431); it was the bake *generation*, which
+drew other optics than its parameters name; it was the bake *generation*, which
 moves the moment any bake is queued, so a keyframed aperture renamed every op in the
 project on every frame. The input is the layer's source *by identity*,
 not by its bytes — the decode job's fields for footage, the colour and size for a solid —
 plus the masks and paint baked into it and the raster size; a nested comp's input is its own
-frame key (K-422). A text or shape layer and an adjustment layer's composite have no name
+frame key. A text or shape layer and an adjustment layer's composite have no name
 yet and run their stacks uncached. And an op that binds a picture nobody named — another layer's
 texture as a plate or a matte, the neighbour frames, the flow field — **breaks the chain**:
 it and everything after it have no name, because a name that omitted an input would be a
@@ -715,7 +713,7 @@ playhead are pinned; final comp frames outlive intermediates at equal staleness 
 finals; intermediates rebuild from cached inputs); VRAM eviction demotes to RAM only when
 recompute cost exceeds a readback-cost threshold, otherwise drops.
 
-**As built (K-214), with one deviation, and why.** Every eviction demotes; there is no cost
+**As built, with one deviation, and why.** Every eviction demotes; there is no cost
 threshold on the decision. The threshold is the right idea and the number to compare against
 is not available: a composite is *submitted* to the graphics card and the call returns, so the
 wall-clock the renderer can measure around it is the submit rather than the work — a frame that
@@ -744,12 +742,12 @@ The disk cache lives in the project's sidecar folder (`<project>.lum-cache/`,
   missing or corrupt; a corrupt entry is discarded silently and re-rendered.
 - Default size cap 50 GB, user-set; evicted by the same cost-aware policy using the index.
 
-**As built (K-214).**
+**As built.**
 
 - **Where.** Three choices, in Settings → Performance (docs/07 §15): the application's own
   cache folder keyed by the document's id (the default), a `<project>.lum-cache/` folder beside
   the project file, or a folder the user picks. The choice is application-wide by default and
-  can be made **per project** instead (K-215), in which case it is stored in the `.lum` through
+  can be made **per project** instead, in which case it is stored in the `.lum` through
   an ordinary op — so it is undoable, and it travels with a copy of the project rather than
   staying behind in one machine's settings. A project's own answer overrides the application's. The sidecar cannot be the default because it
   only works once the project *has* a file, and a project should cache from the moment it is
@@ -759,12 +757,12 @@ The disk cache lives in the project's sidecar folder (`<project>.lum-cache/`,
   folder is simply no longer addressed, and may be deleted by hand at any time.
 - **Format.** `KFR1`: magic, pixel format, colourspace, width, height, then LZ4-compressed
   **RGBA8** — the display-encoded bytes the preview compositor actually produces, which are the
-  same pixels an export writes (K-031). fp16 planes join as a new format tag when the working
+  same pixels an export writes. fp16 planes join as a new format tag when the working
   format reaches the processor; the header carries a format field for exactly that. One
   canonical channel order on disk, so a cache is not silently unreadable on the next platform:
   the Windows and macOS zero-copy paths composite in BGRA, and the swizzle is paid on the IO
   thread in both directions, never on a render.
-- **The index** (K-215). `index.bin` — every entry's hash, size, recompute cost, last use and
+- **The index.** `index.bin` — every entry's hash, size, recompute cost, last use and
   quality — plus `index.log`, one fixed-size record appended per change since that snapshot.
   Opening reads the snapshot and replays the log; a record torn by a crash is a partial
   trailing record and is discarded by length. Either file missing or unreadable means the
@@ -789,7 +787,7 @@ disk). It yields to any interactive request via epoch cancellation and is the fi
 degradation ladder pauses. Concurrency adapts to measured per-frame cost and memory headroom
 (the MFR lesson) — never a fixed thread count.
 
-**As built (K-424).** The fill renders one frame per idle turn, forward-biased two frames
+**As built.** The fill renders one frame per idle turn, forward-biased two frames
 ahead for each one behind, after a ~200 ms lull — **into VRAM first**, the same tier a
 scrub renders into. Both walks **wrap at the ends of the work area**: playback loops it, so
 the frame after the last is the first, and the forward walk carries on there rather than
@@ -837,9 +835,9 @@ frames to make for as long as the budget lasts, so "when the fill is finished" w
 The timeline shows, per comp, a per-frame strip: **green** — final frame in RAM or VRAM at
 current quality, plays in real time now; **blue** — on disk only, promotable; **dimmed
 green/blue** — cached at a lower preview resolution than currently displayed. Redrawn from a
-lock-free bitmap snapshot; the UI thread never queries the cache itself (K-017).
+lock-free bitmap snapshot; the UI thread never queries the cache itself.
 
-**As built (K-214, K-441).** The strip is one byte per frame, in two nibbles: *where* the
+**As built.** The strip is one byte per frame, in two nibbles: *where* the
 picture is kept and *how big* it is.
 
 The **low nibble is the storage state** — `0` nothing, `1` held coarser, `2` held at this
@@ -876,7 +874,7 @@ nobody can see. The dimmed state probes the adaptive tiers' scales (Half, Third,
 which are the scales frames genuinely get cached at, rather than every scale a Viewer could
 be resized to.
 
-### 5.7 Proxies: one resolution point, folded into the key (K-501)
+### 5.7 Proxies: one resolution point, folded into the key
 
 A footage item can carry a **proxy** — a small stand-in file, usually half size, decoded in
 place of the original while you work ([03-DATA-MODEL.md](03-DATA-MODEL.md) §3a). Two things
@@ -896,7 +894,7 @@ What the resolution point believes:
 - **The probe it returns is always the original's** — size, rate and frame count. A proxy
   changes how many pixels come back from a decode, which is exactly what the preview
   resolution tier (§6.1) already does through the same `target_width`; it changes nothing
-  about the layer's geometry, which is px@comp against the original's raster (K-419).
+  about the layer's geometry, which is px@comp against the original's raster.
 - **A proxy whose frame count or rate disagrees with the original is not used.** It is a
   stand-in for different footage, and showing it would put the wrong picture on the
   timeline with nothing on screen to say so. Missing, unreadable and not-yet-probed
@@ -955,7 +953,7 @@ the work is kept. First (possibly degraded) frame within the scrub budget
   selection is a function of the audio clock; when video falls behind, frames are held/dropped
   and audio never glitches. Positions are tracked in samples, never frames.
 
-### 6.5 Preview modes (K-030)
+### 6.5 Preview modes
 
 Two independent controls, never merged: the **preview resolution picker** (§6.1 —
 Full/Half/Third/Quarter/Auto, in the Viewer bar, the default way to move through a
@@ -989,7 +987,7 @@ snapshot, the user keeps editing while the queue runs; export work executes at b
 priority and interactive work pre-empts it (the governor arbitrates). A queue toggle
 "prioritise export" reverses that preference.
 
-### 7.2 Baking (K-024)
+### 7.2 Baking
 
 Baking — flattening retimes to explicit frame mappings, pre-compositing static subtrees,
 rasterising vectors at output resolution, sampling expressions to curves — exists **only inside
@@ -1000,7 +998,7 @@ Nothing baked ever appears in the project document or is observable in the file 
 
 Same project, same Lumit version, same machine, same preset → identical output pixels, every
 run. Therefore, normatively: adaptive degradation never applies to export; motion-blur sample
-counts come from the deterministic formula (§4); expressions are deterministic (K-305); every
+counts come from the deterministic formula (§4); expressions are deterministic; every
 frame renders at full chosen quality regardless of load — under resource pressure export gets
 slower, never different. Bit-exactness across different GPUs/driver versions is not promised
 (floating-point variance); cross-machine consistency is visually lossless, same-machine
@@ -1048,7 +1046,7 @@ export is deterministic (§7.3). The keys are FFmpeg's own (`title`, `artist`, `
 `comment`, `creation_time`), so what is written is what a player reads; an emptied field is
 removed rather than written blank.
 
-**Image sequences (K-201).** Beside the video formats, an export can write one still per
+**Image sequences.** Beside the video formats, an export can write one still per
 frame: **PNG** or **TIFF**, lossless RGBA, through the same ffmpeg seam (the image2 muxer) and
 the same frame walk — choose `shot.png` and the frames land beside it as `shot.00001.png`,
 `shot.00002.png`, … A sequence carries no audio (a folder of stills has nowhere to put it) and
@@ -1085,7 +1083,7 @@ stretched. This conversion is a pure CPU pass and is where the channels and alph
 act.
 
 **Colour space.** The export's final transform is a setting, not an assumption. Five
-**built-in** spaces are offered (K-498): **sRGB / Rec.709** — the Viewer's own encode and the
+**built-in** spaces are offered: **sRGB / Rec.709** — the Viewer's own encode and the
 default, a pass-through that touches no pixel; **Linear** — Rec.709 primaries with no
 transfer function, for a file going back into a compositor; **Rec.709** — BT.709-6 primaries
 and its OETF (BT.1886 is the display half of that pair); **Rec.2020** — BT.2020-2's wide
@@ -1097,21 +1095,21 @@ transform runs at the **pack stage**, on straight (un-multiplied) colour, becaus
 curve is per-channel and non-linear; the coverage goes back on afterwards where the file is
 premultiplied.
 
-Beside them, a **named** output space from the project's OCIO config (§3.3, K-489/K-490) —
+Beside them, a **named** output space from the project's OCIO config (§3.3) —
 the export binds the named transform's baked artefact into the same display blit the Viewer
 runs, so preview equals export because they are the same dispatch. A name no loaded config
-answers is refused rather than approximated (K-479).
+answers is refused rather than approximated.
 
 **The file says what it is.** The capability table carries which spaces a format can *state*:
 an `.mp4` writes all five into its `colr`/`nclx` box (the ISO/IEC 23091-2 code points for
 primaries, transfer and matrix, at limited range), and a still sequence states none, so a
 still is offered only the space an untagged file is universally taken to be. A space the
 container could not name is **refused**, not written unlabelled — a wide-gamut file that says
-nothing is read as sRGB and comes back looking wrong, which is the same class of mistake
-K-479 exists to prevent.
+nothing is read as sRGB and comes back looking wrong, which is the same class of mistake as an
+OCIO name approximated rather than refused.
 
 **Resize.** Where the delivered frame is not the cropped composition's own size, the picture
-is contain-fitted and centred on black, and the filter is a choice (K-498): **Fast** is
+is contain-fitted and centred on black, and the filter is a choice: **Fast** is
 bilinear — four nearest source pixels, weighted by distance, what every Lumit export has
 always used and still the default so a file exported today matches the same export yesterday
 — and **High** is separable Lanczos-3 whose window is widened by the shrink factor, so every
@@ -1120,19 +1118,19 @@ difference: a fine check pattern shrunk 4:1 becomes an even grey under High (its
 answer) rather than a moiré. Both run in `f64` in a fixed order, so both are deterministic.
 
 **Crop and the region of interest.** An export can take pixels off each edge — `T · L · B · R`
-in **pixels at composition size** (K-419) — applied to the composited frame before any resize,
+in **pixels at composition size** — applied to the composited frame before any resize,
 so the crop decides the delivered frame's size whenever no other frame was named. *Use region
 of interest* takes those insets from the Viewer's own region instead, which crosses as
-fractions rather than pixels (K-362) and converts here. A degenerate region is no region, and
+fractions rather than pixels and converts here. A degenerate region is no region, and
 falls back to whatever was typed.
 
 **Render settings.** An export names how the composition is rendered on the way through: the
 **quality tier** (the preview's own Full/Half/Third/Quarter machinery — export takes Full and
 never drafts, §7.3), the **disk-cache policy** (off during export by default: a single pass
 through the timeline would evict the frames the user is actually working with), whether
-**effects** run, whether **solo switches** are honoured (K-105), and whether **guide layers**
-are delivered (K-497 — off by default, which is what a guide layer is), and whether the
-**proxies** are read (K-501 — off by default, so delivery takes the full-resolution files
+**effects** run, whether **solo switches** are honoured, and whether **guide layers**
+are delivered (off by default, which is what a guide layer is), and whether the
+**proxies** are read (off by default, so delivery takes the full-resolution files
 whatever the project is working at; §5.7). All of them act on the export's own document
 snapshot and never reach the project (§7.2): the snapshot's guide layers are left neither
 visible nor audible nor soloed and its proxy master switch is cleared, at every depth, so the
@@ -1140,18 +1138,18 @@ draw builder, the decode planner and the frame key all agree while the Viewer, w
 takes this path, keeps its guide layers and its proxies.
 
 Every one of them is a statement about a picture, so an **audio-only export ignores the lot
-and runs at their defaults** (K-654), and the dialogue dims the whole group rather than
+and runs at their defaults**, and the dialogue dims the whole group rather than
 offering settings that would be dropped. It is not cosmetic: solo ignored cleared the solo
-switches the *mixer* counts (K-435 counts every soloed layer, audio-only ones included), so a
+switches the *mixer* counts (every soloed layer, audio-only ones included), so a
 picture setting was deciding which layers a `.wav` contained. The defaults keep the two rules
-that are not picture settings — solos honoured as playback honours them (K-031), and a guide
-layer reference-only at every depth, sound included (K-497).
+that are not picture settings — solos honoured as playback honours them, and a guide
+layer reference-only at every depth, sound included.
 
 **When done.** An export finishing can do nothing, play a short sound, or show the file in the
 file browser. The sound is a bundled file; when there is none, the hook is silent rather than
 faulty — a missing ding must never make a finished export look failed.
 
-**The export dialogue's own fields (K-201).** Beyond the preset stamp, the dialogue carries a
+**The export dialogue's own fields.** Beyond the preset stamp, the dialogue carries a
 **frame rate** (defaulting to the comp's own; a different rate resamples by nearest comp frame
 over the same wall-clock span, and the file is stamped with the chosen rate as an exact
 rational — 29.97 never quietly becomes 30) and an explicit **range** in comp frames
@@ -1187,7 +1185,7 @@ rather than an error.
 rate out from the frame and the rate — a straight line through the table's own 1080p60 point
 (0.13 bits per pixel for H.264, 0.10 for HEVC), with the VBR peak at 1.5× the target. A typed
 number stands as typed. A blank field is a third answer and keeps its old meaning: no bitrate
-set at all, the encoder's own quality (K-119). Formats with nothing to choose — the lossless
+set at all, the encoder's own quality. Formats with nothing to choose — the lossless
 sequences, PCM audio — have no bitrate at all.
 
 ## 8. Scopes

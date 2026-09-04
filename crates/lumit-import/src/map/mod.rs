@@ -77,7 +77,7 @@ pub(crate) struct Items {
     by_ae_id: HashMap<i64, (Uuid, ItemKind)>,
     /// Each item's own raster, where it has one — a comp's dimensions, a
     /// solid's, a piece of footage's. **A layer's effects are measured against
-    /// this, not against the composition** (K-636): After Effects runs an
+    /// this, not against the composition**: After Effects runs an
     /// effect on the layer, so its per cents are per cents of the layer's own
     /// frame and its points are points in it. The two only coincide while the
     /// layer happens to be the comp's size.
@@ -107,7 +107,7 @@ pub struct Conv<'a> {
     /// layer that was dragged along the timeline from importing with its
     /// animation in the wrong decade.
     pub(crate) offset: Rational,
-    /// **The frame the current layer's effects run on** (K-636). After Effects
+    /// **The frame the current layer's effects run on**. After Effects
     /// measures a Twirl radius as a per cent of the layer and a blur centre as
     /// a point, where Lumit reads px@comp and a per cent of the frame (docs/08
     /// §2.3), so those conversions cannot be done without knowing the frame —
@@ -127,7 +127,7 @@ pub struct Conv<'a> {
     pub(crate) layer_ids: BTreeMap<u32, Uuid>,
     /// The current layer's masks in After Effects' own order, each with the
     /// perimeter of its path. An effect parameter naming a mask (Vegas' Path,
-    /// Scribble's Mask, Stroke's Path — K-408) resolves through the index; the
+    /// Scribble's Mask, Stroke's Path) resolves through the index; the
     /// perimeter is what turns AE's *count* of segments into Lumit's segment
     /// *length* (docs/11 §5's Vegas row).
     pub(crate) masks: Vec<(Uuid, f64)>,
@@ -373,8 +373,8 @@ fn footage(report: &mut ImportReport, item: &Item, id: Uuid, name: &str) -> Foot
             fingerprint: None,
             extra: serde_json::Map::new(),
         },
-        // A folder of numbered stills is one item, at the default rate
-        // (K-539): After Effects' own conform rate for a sequence is a
+        // A folder of numbered stills is one item, at the default rate:
+        // After Effects' own conform rate for a sequence is a
         // preference rather than something the project file carries, so
         // reading a number out of these bytes would be a guess. The path is
         // the *folder* the run lives in — which is what the alias names —
@@ -585,7 +585,7 @@ fn motion_blur(ae: &Comp) -> MotionBlur {
 }
 
 /// After Effects reports a colour as three or four 0–1 numbers in the
-/// project's display space; Lumit stores scene-linear light (K-026).
+/// project's display space; Lumit stores scene-linear light.
 pub(crate) fn linear_colour(c: Option<&[f64]>) -> LinearColour {
     let c = c.unwrap_or(&[]);
     let ch = |i: usize| c.get(i).copied().unwrap_or(0.0);

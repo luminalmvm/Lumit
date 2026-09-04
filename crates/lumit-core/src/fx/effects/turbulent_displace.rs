@@ -59,9 +59,9 @@ pub const TURBULENT_DISPLACE_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     seeded = true,
     groups = TURBULENT_DISPLACE_GROUPS,
     enabled_when = TURBULENT_DISPLACE_ENABLED_WHEN,
-    // K-395: the matte belongs inside the maths here — it scales the
-    // displacement vector, which is the owner's own example of why §2.6 has an
-    // override at all. The generic strength dissolve does not also run.
+    // The matte belongs inside the maths here — it scales the displacement
+    // vector, which is the owner's own example of why §2.6 has an override at
+    // all. The generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales the displacement per pixel: white warps at the full Amount, grey \

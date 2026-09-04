@@ -1,5 +1,5 @@
 // The Roto tools over the picture: the scribbles, the edge they produce, and
-// the gestures that lay them down (K-717, docs/impl/roto.md §6, docs/07 §2.3.7).
+// the gestures that lay them down (docs/impl/roto.md §6, docs/07 §2.3.7).
 //
 // **In plain terms.** Cutting a moving thing out of a shot means saying, for
 // every frame, which pixels are the subject. The Roto brush shortens that to a
@@ -11,27 +11,27 @@
 // right from that frame onward. **Refine edge** paints the band where the edge
 // is allowed to be soft: hair, motion blur, smoke.
 //
-// **A stroke is stored in the file's own pixels, not the composition's**
-// (K-248). That is the one piece of arithmetic here that matters: the pointer
-// arrives in panel coordinates, and it is carried back through the Viewer's
-// fit, the layer's position, anchor, scale and rotation — `LayerBox.map` — to
-// land on the picture as the file holds it. So a matte survives every transform,
-// every retime and every preview tier, and one shot's mattes serve every
-// composition that cuts it. **Which** frame of the file is on screen is the
-// engine's answer too ([rotoSourceFrame]), because the layer's start offset and
-// its Retime map both live in the document.
+// **A stroke is stored in the file's own pixels, not the composition's**. That
+// is the one piece of arithmetic here that matters: the pointer arrives in
+// panel coordinates, and it is carried back through the Viewer's fit, the
+// layer's position, anchor, scale and rotation — `LayerBox.map` — to land on
+// the picture as the file holds it. So a matte survives every transform, every
+// retime and every preview tier, and one shot's mattes serve every composition
+// that cuts it. **Which** frame of the file is on screen is the engine's answer
+// too ([rotoSourceFrame]), because the layer's start offset and its Retime map
+// both live in the document.
 //
-// **The overlay asks once per frame, never per rebuild** (K-681). Three things
-// move what is drawn — the frame, the document, and a propagation landing — and
-// the read is held against all three, so a pointer travelling across the picture
+// **The overlay asks once per frame, never per rebuild**. Three things move
+// what is drawn — the frame, the document, and a propagation landing — and the
+// read is held against all three, so a pointer travelling across the picture
 // crosses the bridge exactly zero times.
 //
 // **One drag is one stroke is one undo step.** The scribble is drawn on the
 // overlay while the pointer is down and committed once on release, through the
 // ordinary whole-stack effect commit. `Escape` abandons a scribble in flight.
-// A first scribble on a layer with no Roto brush **brings the brush with it**
-// (K-723, superseding K-717's refusal): the stroke rides inside the new
-// instance, so effect and stroke land as one op and one undo step.
+// A first scribble on a layer with no Roto brush **brings the brush with it**:
+// the stroke rides inside the new instance, so effect and stroke land as one op
+// and one undo step.
 //
 // **Release shows the frame it touched.** Committing a stroke asks the engine
 // to solve that one frame's matte now — the same job Propagate runs, stopped
@@ -100,7 +100,7 @@ Color rotoStrokeColour(BridgeRotoStrokeKind kind, LumitTheme t) =>
 
 /// The Roto brush the selected layer carries, as the overlay needs it.
 ///
-/// Built from the read model by the Viewer (K-184), so finding it costs no
+/// Built from the read model by the Viewer, so finding it costs no
 /// bridge call: which instance to write to, and which picture it is drawing.
 typedef RotoTarget = ({UuidValue effect, int view});
 
@@ -142,10 +142,10 @@ class ViewerRotoLayer extends StatefulWidget {
   final int Function(LayerReference layer, int frame)? sourceFrameOf;
   final Float32List Function(UuidValue effect, int frame)? boundaryOf;
 
-  /// Where the release-time solve of the scribbled frame is asked for
-  /// (K-723). Null is the engine; a test hands one in — solving a real frame
-  /// needs a real file and a minute of machinery, and what this side owes is
-  /// only that the ask is made, with the right frame, on release.
+  /// Where the release-time solve of the scribbled frame is asked for. Null is
+  /// the engine; a test hands one in — solving a real frame needs a real file
+  /// and a minute of machinery, and what this side owes is only that the ask is
+  /// made, with the right frame, on release.
   final bool Function(LayerReference layer, UuidValue effect, int frame)?
       solveFrameOf;
 
@@ -180,7 +180,7 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
 
   /// Where the press landed. The framework only reports a drag once it has
   /// travelled its slop, and a scribble that began 18 px along is the wrong
-  /// scribble (K-217's trap, and every tool since).
+  /// scribble.
   Offset? _downAt;
 
   /// Which frame of the **file** is on screen, or null when the engine cannot
@@ -238,7 +238,7 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
 
   /// The three engine answers the overlay draws from, asked for once per frame,
   /// per document revision and per propagation landing — never per rebuild
-  /// (K-681, and `bridge_call_budget_test` is the gate).
+  /// (`bridge_call_budget_test` is the gate).
   void _read() {
     if (!mounted) return;
     final box = widget.active ? _target : null;
@@ -267,7 +267,7 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
     var boundary = Float32List(0);
     try {
       // Asked whether or not the layer carries a brush yet: the first scribble
-      // on a bare layer is the one that *adds* it (K-723), and it needs the
+      // on a bare layer is the one that *adds* it, and it needs the
       // file's frame as much as any correction does.
       frame = (widget.sourceFrameOf ?? _sourceFrameFromEngine)(
           box.layer, widget.playheadFrame);
@@ -305,7 +305,7 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
     final box = _target;
     final alt = HardwareKeyboard.instance.isAltPressed;
     return Positioned.fill(
-      // The hardware crosshair leads (K-724): the OS moves it at input rate
+      // The hardware crosshair leads: the OS moves it at input rate
       // whatever the application's frame rate is doing, so it is the thing to
       // aim with. The ring below is decoration — the size of the claim, drawn
       // by the app and honestly a frame behind.
@@ -414,13 +414,13 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
     if (brush == null && widget.tool == ToolMode.refineEdge) {
       // A refine stroke widens the band around an answer, and a layer with no
       // Roto brush has no answer to widen — said plainly. The brush itself is
-      // different: its first scribble below brings the effect with it (K-723).
+      // different: its first scribble below brings the effect with it.
       widget.state.postNotice(l10n.rotoAddTheEffect);
       return;
     }
     // **The conversion.** Screen → the layer's own pixels through the whole
     // comp chain, which for a footage layer at natural size is the file's own
-    // raster (K-248). Nothing downstream re-reads the comp, which is what makes
+    // raster. Nothing downstream re-reads the comp, which is what makes
     // the matte survive every transform above it.
     final points = <double>[
       for (final p in thinStroke(screenPoints))
@@ -439,8 +439,8 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
       final UuidValue effect;
       if (brush == null) {
         // First scribble on a bare layer: the Roto brush and the stroke land
-        // in one commit — one op, one undo step — instead of K-717's refusal,
-        // which read as the tool doing nothing (K-723).
+        // in one commit — one op, one undo step — instead of a refusal that
+        // read as the tool doing nothing.
         effect = box.layer.rotoFirstStroke(
           points: Float32List.fromList(points),
           radius: radius,
@@ -471,7 +471,7 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
     }
   }
 
-  /// Ask for the scribbled frame's own matte, now (K-723, docs/impl/roto.md
+  /// Ask for the scribbled frame's own matte, now (docs/impl/roto.md
   /// §6 step 1) — the same job Propagate runs, stopped at this frame.
   ///
   /// Best-effort on the way out of a gesture that already succeeded: a quiet
@@ -491,7 +491,7 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
   /// Wait for the release-time solve to land, then tell the Viewer.
   ///
   /// The same twice-a-second sampling the status cards do ([statusPoll]), for
-  /// the same reason (K-430): a job landing moves neither the playhead nor the
+  /// the same reason: a job landing moves neither the playhead nor the
   /// document's revision, so the picture would stay the one banked before it
   /// unless somebody who knows says so. The effect card says so too when it is
   /// open — but a scribble must not need a panel open to show its result.

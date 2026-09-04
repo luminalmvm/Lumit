@@ -1,5 +1,5 @@
 //! The inner graph's compiler: a DAG of boxes into the WGSL a competent person
-//! would have written (docs/impl/custom-shader.md §4.4, K-642, CS4).
+//! would have written (docs/impl/custom-shader.md §4.4, CS4).
 //!
 //! # In plain terms
 //!
@@ -863,8 +863,8 @@ mod tests {
     }
 
     /// §8 item 23's compile half: one graph holding every box in the v1
-    /// vocabulary compiles. (The assembled module is validated through the
-    /// K-263 road in `lumit-gpu`'s tests, where naga lives.)
+    /// vocabulary compiles. (The assembled module is validated in
+    /// `lumit-gpu`'s tests, where naga lives.)
     #[test]
     fn every_node_in_the_v1_vocabulary_compiles() {
         let mut nodes = Vec::new();

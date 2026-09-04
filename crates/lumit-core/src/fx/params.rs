@@ -17,7 +17,7 @@
 //!   single [`ResolvedStack`] with one allocation for its parameters — one fewer
 //!   than the `Vec<Resolved>` it replaces. A [`ResolvedFx`] borrows a run of it
 //!   and is `Copy`, so it is passed around like the old plain-old-data enum was.
-//! - **Determinism.** The resolved stack feeds the frame key (K-143), so it is
+//! - **Determinism.** The resolved stack feeds the frame key, so it is
 //!   hashed field by field through [`ResolvedStack::feed_hash`] — never
 //!   byte-wise, because [`Value`] has padding and a padding byte in a cache key
 //!   is a wrong picture that reproduces on one machine only.
@@ -67,7 +67,7 @@ impl ParamId {
 /// match that has to know which field of which effect holds a pixel count. An
 /// effect cannot forget to be rescaled, which was possible when the knowledge
 /// lived in `rescale_px`.
-/// It is also **what the panel writes beside the number** (K-443's unit rider:
+/// It is also **what the panel writes beside the number** (the unit rider:
 /// "px", "%", "°", "s", "f"). That is the second reason every declaration has to
 /// carry one: the alternative was a table in the frontend saying which ids are
 /// pixels and which are percentages, which is the engine's knowledge kept in the
@@ -95,11 +95,11 @@ pub enum Unit {
     ///
     /// **Not a distance.** A per cent of the *frame* is a position that means
     /// the same thing at any raster, so it is not scaled by the preview factor;
-    /// a per cent of the *diagonal* is [`Unit::PctDiag`], which K-419 forbids
-    /// any parameter from declaring.
+    /// a per cent of the *diagonal* is [`Unit::PctDiag`], which no parameter
+    /// is allowed to declare.
     Percent,
     /// A percentage of the composition diagonal. **No parameter may declare
-    /// it** (K-419: every distance is px@comp); it stays for the ROI padding
+    /// it** (every distance is px@comp); it stays for the ROI padding
     /// declarations and the reference format, and
     /// `no_parameter_is_a_per_cent_of_the_diagonal` enforces the rule.
     PctDiag,
@@ -142,7 +142,7 @@ pub enum Value {
     Choice(u32),
     /// Scene-linear RGBA.
     Colour([f32; 4]),
-    /// Four plain floats under one id (K-388): a small fixed vector an effect
+    /// Four plain floats under one id: a small fixed vector an effect
     /// would otherwise have to spell as four `derived.*` entries. Shake's
     /// unit-free noise sample `(x, y, rotation, z)` is the first — nine of them
     /// when its own motion blur is on, which as forty flat ids would drown the
@@ -155,7 +155,7 @@ pub enum Value {
     /// The op's slot in the stack's file table, or `u32::MAX` for unset.
     File(u32),
     /// Whether the mask-path row names a mask, exactly as [`Value::Layer`]
-    /// carries whether the layer row names a layer (K-408).
+    /// carries whether the layer row names a layer.
     ///
     /// The *choice* is what the document stores (a mask id, or the "First
     /// mask" entry); the *geometry* rides beside the op as a flattened
@@ -167,7 +167,7 @@ pub enum Value {
     /// `AuxSlot`'s answer, not this one: an unset row on a masked layer still
     /// resolves to the first mask, and a named mask can have been deleted.
     MaskPath(bool),
-    /// A tone curve's own control points (K-412), inline.
+    /// A tone curve's own control points, inline.
     ///
     /// The one value that carries a *shape* rather than a scalar, and it is
     /// here rather than beside the op — the way a mask path is — for the
@@ -185,7 +185,7 @@ pub enum Value {
 }
 
 /// The most control points a [`ParamKind::Curve`](crate::fx::ParamKind::Curve)
-/// carries (K-412). Sixteen is well past what a grade needs and keeps the
+/// carries. Sixteen is well past what a grade needs and keeps the
 /// inline form small.
 pub const CURVE_MAX_POINTS: usize = 16;
 
@@ -193,7 +193,7 @@ pub const CURVE_MAX_POINTS: usize = 16;
 /// back to.
 pub const CURVE_IDENTITY: [[f32; 2]; 2] = [[0.0, 0.0], [1.0, 1.0]];
 
-/// One tone curve's control points, in the unit square, ordered by x (K-412).
+/// One tone curve's control points, in the unit square, ordered by x.
 ///
 /// Fixed-size and `Copy` so it can live in the arena. Only the first `len`
 /// entries mean anything; the rest are zero, which is what lets `PartialEq`
@@ -367,7 +367,7 @@ impl<'a> Params<'a> {
     /// The value of `id`, or `None` if this instance does not carry it — which
     /// is an ordinary state, not a fault: a project saved before a parameter was
     /// added simply has no entry, and the typed reader supplies the declared
-    /// default (K-258).
+    /// default.
     ///
     /// A short linear scan over adjacent memory. An effect has at most ~50
     /// parameters and almost always fewer than ten, so this beats hashing into a
@@ -420,9 +420,9 @@ impl<'a> Params<'a> {
         }
     }
 
-    /// `id` as four plain floats, or `default` when absent or of another kind
-    /// (K-388). A `Colour` is deliberately *not* accepted here: the two kinds
-    /// mean different things, and reading one as the other would be the silent
+    /// `id` as four plain floats, or `default` when absent or of another kind.
+    /// A `Colour` is deliberately *not* accepted here: the two kinds mean
+    /// different things, and reading one as the other would be the silent
     /// mistake the tag exists to prevent.
     pub fn vec4(&self, id: ParamId, default: [f32; 4]) -> [f32; 4] {
         match self.get(id) {
@@ -436,14 +436,14 @@ impl<'a> Params<'a> {
         matches!(self.get(id), Some(Value::Layer(true)))
     }
 
-    /// Whether the mask-path row `id` names a mask (K-408). Not whether a
+    /// Whether the mask-path row `id` names a mask. Not whether a
     /// path arrived — that is the op's slot's answer, and the honest one.
     pub fn mask_named(&self, id: ParamId) -> bool {
         matches!(self.get(id), Some(Value::MaskPath(true)))
     }
 
     /// The tone curve `id`, or the identity diagonal when absent or of
-    /// another kind (K-412) — a missing curve is a straight line, never a
+    /// another kind — a missing curve is a straight line, never a
     /// fault.
     pub fn curve(&self, id: ParamId) -> CurvePoints {
         match self.get(id) {
@@ -475,7 +475,7 @@ pub struct ResolvedFx<'a> {
     /// The instance this resolved from, so a diagnostic can name the row and the
     /// auxiliary inputs can be matched up one-for-one.
     pub instance: Uuid,
-    /// The layer time this op's parameters were evaluated at (K-593) — what a
+    /// The layer time this op's parameters were evaluated at — what a
     /// plugin's render is told the frame is. Nought for a hand-built stack.
     pub lt: f64,
     /// The resolved parameters, in schema order.
@@ -497,7 +497,7 @@ impl std::fmt::Debug for ResolvedFx<'_> {
 struct Op {
     def: &'static dyn EffectDef,
     instance: Uuid,
-    /// The layer time this op's parameters were evaluated at (K-593). Nought
+    /// The layer time this op's parameters were evaluated at. Nought
     /// for a stack a test built by hand, which is what [`ResolvedStack::begin`]
     /// keeps meaning.
     lt: f64,
@@ -533,7 +533,7 @@ impl ResolvedStack {
         self.begin_at(def, instance, 0.0);
     }
 
-    /// [`begin`](Self::begin), told the layer time the op resolved at (K-593).
+    /// [`begin`](Self::begin), told the layer time the op resolved at.
     ///
     /// Only one kind of effect reads it: a **plugin**, whose render is a
     /// conversation with somebody else's code and whose `kOfxPropTime` has to be
@@ -580,7 +580,7 @@ impl ResolvedStack {
         }
     }
 
-    /// Append another resolved stack's ops after this one's, in order (K-706).
+    /// Append another resolved stack's ops after this one's, in order.
     ///
     /// **In plain terms.** A layer's styles resolve in a second walk of their
     /// own, and their ops then run after the effect stack's on the same raster
@@ -631,7 +631,7 @@ impl ResolvedStack {
     }
 
     /// Rescale every spatial value by `factor` — a stack resolved against one
-    /// raster and run on another (K-266).
+    /// raster and run on another.
     ///
     /// This is the repair for the Adjust arm of the draw builder, which resolves
     /// with `px_scale` 1 because its stack runs on "the comp-sized
@@ -692,7 +692,7 @@ impl ResolvedFx<'_> {
     /// cache key is a wrong picture that reproduces on one machine only
     /// (docs/impl/effect-registry.md §5). The instance id is deliberately
     /// absent — a key names content, never which row it came from (docs/06
-    /// §5.2) — which is what lets the per-effect cache (K-421) serve a
+    /// §5.2) — which is what lets the per-effect cache serve a
     /// duplicated layer from its original's intermediates.
     pub fn feed_hash(&self, feed: &mut dyn FnMut(&[u8])) {
         feed(self.def.schema().match_name.as_bytes());

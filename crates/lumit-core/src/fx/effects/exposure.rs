@@ -12,7 +12,7 @@ use lumit_fx_macros::Effect;
     category = Colour,
     cost = Cheap,
     roi = Exact,
-    // K-395: the matte scales the amount, inside the kernel (the owner's
+    // The matte scales the amount, inside the kernel (the owner's
     // rule for mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",

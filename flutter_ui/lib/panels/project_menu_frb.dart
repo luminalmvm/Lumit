@@ -64,7 +64,7 @@ Future<void> showProjectMenuFrb({
   /// means here: *inherit* inside a tagged folder, *no colour* outside one.
   int inherited = 0,
 
-  /// This item's proxy (K-501), or null where it has none — which is what
+  /// This item's proxy, or null where it has none — which is what
   /// decides whether the menu offers *Use proxy* and *Clear proxy* at all.
   BridgeProxy? proxy,
 
@@ -81,7 +81,7 @@ Future<void> showProjectMenuFrb({
   /// folder.
   void Function(ItemReference folder)? onMoveToFolder,
 
-  /// **What the commands act on** (K-523): the whole selection when [item] is
+  /// **What the commands act on**: the whole selection when [item] is
   /// part of it, and [item] alone when it is not — the panel's `_targets`,
   /// which **Move to folder** already took while Delete, Move to root and the
   /// two proxy switches beside it read the clicked row alone.
@@ -94,12 +94,12 @@ Future<void> showProjectMenuFrb({
 }) async {
   final isFootage = item is ItemReference_Footage;
   final isComp = item is ItemReference_Composition;
-  // The comp the sound would land in (K-435). Read once, here, rather than in
+  // The comp the sound would land in. Read once, here, rather than in
   // the row's build: the menu is a gesture, not a rebuild path.
   final ui = Provider.of<LumitUiState>(context, listen: false);
   final openComp = ui.selectedComp;
   // The colour config's own space names, off the summary the shell holds, and
-  // what this item is set to now (K-490). Both read here — raising a menu is a
+  // what this item is set to now. Both read here — raising a menu is a
   // gesture, and `colour_space` is a document read.
   final colourSpaces =
       ui.colourSummary.loaded ? ui.colourSummary.spaces : const <String>[];
@@ -142,7 +142,7 @@ Future<void> showProjectMenuFrb({
               onPressed: () => close(_ProjectMenuAction.findMissing),
               child: Text(l10n.findMissingFootage),
             ),
-          // The sound of this clip, on its own row (K-435). Offered only with a
+          // The sound of this clip, on its own row. Offered only with a
           // comp open to put it in — placing a layer nowhere is not an action.
           if (isFootage && openComp != null)
             MenuRow(
@@ -150,7 +150,7 @@ Future<void> showProjectMenuFrb({
               onPressed: () => close(_ProjectMenuAction.addAudioOnly),
               child: Text(l10n.addAudioOnly),
             ),
-          // **Proxies, on the item's own menu** (K-501, docs/07 §3.3). Four
+          // **Proxies, on the item's own menu** (docs/07 §3.3). Four
           // commands and no dialogue: attach a file, make one, read from it or
           // not, forget it. Offered on footage alone — a comp and a folder
           // have no media reference for a stand-in to stand in for — and the
@@ -168,9 +168,8 @@ Future<void> showProjectMenuFrb({
               child: Text(l10n.makeProxy),
             ),
             if (proxy != null) ...[
-              // Ticked, in the shape the layer menu's Accepts lights uses
-              // (K-483): a word says what the tick means, where a glyph could
-              // not.
+              // Ticked, in the shape the layer menu's Accepts lights uses: a
+              // word says what the tick means, where a glyph could not.
               MenuRow(
                 key: const ValueKey('project-menu-use-proxy'),
                 onPressed: () => close(_ProjectMenuAction.useProxy),
@@ -188,14 +187,14 @@ Future<void> showProjectMenuFrb({
               ),
             ],
           ],
-          // **What colour space this footage arrived in** (K-490,
-          // docs/impl/ocio.md §6.5). A submenu rather than a row, because the
-          // answer is a name out of the project's colour config and there may
-          // be forty of them. This is the smallest honest surface until
-          // *Interpret footage…* exists as drawn (docs/07 §3.2), and it is
-          // replaced when that dialogue lands.
+          // **What colour space this footage arrived in** (docs/impl/ocio.md
+          // §6.5). A submenu rather than a row, because the answer is a name
+          // out of the project's colour config and there may be forty of them.
+          // This is the smallest honest surface until *Interpret footage…*
+          // exists as drawn (docs/07 §3.2), and it is replaced when that
+          // dialogue lands.
           //
-          // The names are the config's own and cross verbatim (K-303). A name
+          // The names are the config's own and cross verbatim. A name
           // assigned while a config that has since gone was loaded is still
           // listed, ticked, because it is the user's statement about the file
           // and the menu must not pretend it was never made.
@@ -348,7 +347,7 @@ Future<void> showProjectMenuFrb({
   if (action == null) return;
 
   if (!context.mounted) return;
-  // Everything the commands below act on (K-523), with a refusal per item so
+  // Everything the commands below act on, with a refusal per item so
   // that one that has gone, or cannot do it, leaves the rest standing.
   final acts = targets ?? [item];
   switch (action) {
@@ -382,7 +381,7 @@ Future<void> showProjectMenuFrb({
         onLocalEdit();
       }
     case _ProjectMenuAction.makeProxy:
-      // **The one command here that stays singular** (K-523): the engine runs
+      // **The one command here that stays singular**: the engine runs
       // one transcode at a time by design, so starting four would be three
       // refusals and a notice apiece. The clicked row's, and only that.
       if (item case ItemReference_Footage(:final field0)) {

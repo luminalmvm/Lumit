@@ -8,12 +8,12 @@
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIconFile</key>
 	<string></string>
-	<!-- .lum / .lumfx / .lumtheme document types (K-252, K-298). The .icns
-	     document icons live in packaging/macos/ and join the bundle's
-	     resources with the macOS pass
-	     (K-033) — until then the types associate with a generic icon. Opening a
-	     double-clicked document also lands with that pass (application:openFile:
-	     in the AppDelegate); docs/TODO.md carries both. -->
+	<!-- .lum / .lumfx / .lumtheme document types. The .icns document icons
+	     live in packaging/macos/ and join the bundle's resources with the
+	     macOS pass — until then the types associate with a generic icon.
+	     Opening a double-clicked document also lands with that pass
+	     (application:openFile: in the AppDelegate); docs/TODO.md carries
+	     both. -->
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -107,12 +107,12 @@
 			</dict>
 		</dict>
 	</array>
-	<!-- Lumit ships on Skia (K-754, superseding K-748's mechanism). Flutter's
-	     newer renderer, Impeller, is measurably slower for the way Lumit draws
-	     (docs/impl/ui-performance.md 2.4/4.1/7.2). This is the key the macOS
-	     embedder reads for the choice (FlutterDartProject.enableImpeller); the
-	     FLUTTER_ENGINE_SWITCHES route K-748 used is compiled out of release
-	     engines, so it pinned nothing in a shipped build. -->
+	<!-- Lumit ships on Skia. Flutter's newer renderer, Impeller, is measurably
+	     slower for the way Lumit draws (docs/impl/ui-performance.md
+	     2.4/4.1/7.2). This is the key the macOS embedder reads for the choice
+	     (FlutterDartProject.enableImpeller); the FLUTTER_ENGINE_SWITCHES route
+	     the earlier pin used is compiled out of release engines, so it pinned
+	     nothing in a shipped build. -->
 	<key>FLTEnableImpeller</key>
 	<false/>
 	<key>CFBundleIdentifier</key>

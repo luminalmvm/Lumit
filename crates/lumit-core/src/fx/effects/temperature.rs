@@ -12,8 +12,8 @@ use lumit_fx_macros::Effect;
     category = Colour,
     cost = Cheap,
     roi = Exact,
-    // K-395: the matte scales the amount, inside the kernel (the owner's
-    // rule for mattes); the generic strength dissolve does not also run.
+    // The matte scales the amount, inside the kernel (the owner's rule for
+    // mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales Temperature toward 0 per pixel: white applies the full \
@@ -23,7 +23,7 @@ use lumit_fx_macros::Effect;
 pub struct Temperature {
     /// A plain number: negative cools (blue up, red down), positive warms (red
     /// up, blue down). 0 is neutral. The slider reaches ±150 and the hard range
-    /// ±200 (K-135): with the stronger ±0.75·k gain, ±150 already pushes one
+    /// ±200: with the stronger ±0.75·k gain, ±150 already pushes one
     /// channel toward black, so a user rarely runs out of headroom wanting more.
     #[slider(
         min = -150.0,
@@ -52,7 +52,7 @@ impl Temperature {
     /// WGSL kernel multiply by byte-identical f32 factors (docs/08 §1.6).
     ///
     /// k = Temperature / 100, clamped to the ±2 hard range. The stronger ±0.75·k
-    /// gain (K-135) makes full deflection a decisive orange/blue; the gains floor
+    /// gain makes full deflection a decisive orange/blue; the gains floor
     /// at 0 so an extreme never drives a channel negative. Temperature 0 → k 0 →
     /// gains exactly (1.0, 1.0), the neutral point.
     pub fn gains(self) -> (f32, f32) {
@@ -61,7 +61,7 @@ impl Temperature {
 
     /// Temperature ÷ 100, clamped to the ±2 hard range: the one number the
     /// gains are made from, and what the matted kernel rebuilds them from per
-    /// pixel (K-395).
+    /// pixel.
     #[must_use]
     pub fn t(self) -> f32 {
         (self.temperature / 100.0).clamp(-2.0, 2.0)

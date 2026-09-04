@@ -1,5 +1,5 @@
-// Export defaults (K-588): the store, the dialog that opens on it, and the
-// Settings page that sets it — the last of K-465's drawn-but-unbuilt pages.
+// Export defaults: the store, the dialog that opens on it, and the
+// Settings page that sets it — the last of the drawn-but-unbuilt pages.
 //
 // The store is a real file in the application's data area, which is what makes
 // it a *default* rather than a session's memory. That also means these tests

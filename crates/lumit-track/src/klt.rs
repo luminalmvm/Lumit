@@ -9,7 +9,7 @@
 //! this file solves for. Six rather than two matters because a zoom or a rotate
 //! does not merely move a patch, it changes its shape — a tracker that can only
 //! shift its square loses the feature the moment the lens moves, which is
-//! exactly the failure K-415 exists to avoid.
+//! exactly the failure this file exists to avoid.
 //!
 //! The solve is *inverse compositional* (Baker & Matthews): the expensive part
 //! of the arithmetic — the template's gradients and the 6×6 matrix built from

@@ -2,7 +2,7 @@
 // the last static hint (6.12).
 //
 // **The bug this pins.** The Settings window is a movable window: dragging it
-// anywhere no control claims moves it (K-242). Its page is a list with a 6px
+// anywhere no control claims moves it. Its page is a list with a 6px
 // scrollbar, and with a mouse almost nothing on that scrollbar claims a drag —
 // a list is not drag-scrolled by a mouse, and `RawScrollbar` answers only a
 // tap on its track and a drag on its thumb. So reaching for the gutter and
@@ -96,9 +96,9 @@ void main() {
       expect(page(tester).pixels, greaterThan(0));
     });
 
-    /// 6.12: K-465 leaves a row's second line to a *live report* — what the
-    /// machine has, what a choice costs here and now. The Chrome labels row
-    /// was the last one carrying a paragraph explaining itself.
+    /// 6.12: The redesign leaves a row's second line to a *live report* — what
+    /// the machine has, what a choice costs here and now. The Chrome labels
+    /// row was the last one carrying a paragraph explaining itself.
     testWidgets('no static hint is left under a settings row', (tester) async {
       await open(tester);
       expect(

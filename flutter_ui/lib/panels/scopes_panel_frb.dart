@@ -233,7 +233,7 @@ class _ScopesPanelFrbState extends State<ScopesPanelFrb> {
 /// Background, trace, then the R, G and B tints — the five triples the engine
 /// takes.
 ///
-/// **Standard by default** (K-202). A waveform or vectorscope is a measuring
+/// **Standard by default**. A waveform or vectorscope is a measuring
 /// instrument, and it is read on a near-black graticule with a bright trace
 /// whatever the chrome around it is doing — the same grading-accuracy
 /// reasoning that keeps the Viewer's surround neutral (docs/15-DESIGN §8,

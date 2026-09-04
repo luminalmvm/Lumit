@@ -6,8 +6,7 @@
 //! (sRGB bytes → linear fp16 working texture) and display-side encode
 //! (linear → sRGB for the screen). Keeping both crossings in one module with
 //! a round-trip test is what prevents the classic "double gamma" washed-out /
-//! too-dark bugs — and it is why preview can be bit-identical to export
-//! (decision K-031).
+//! too-dark bugs — and it is why preview can be bit-identical to export.
 
 // Declared first, and with `#[macro_use]`, so `note!` is in scope for the whole
 // crate — see [`note`] for why nothing here may `eprintln!`.
@@ -102,7 +101,7 @@ pub struct GpuContext {
     /// It decides one thing, and that one thing matters: whether the frames
     /// held on the card are *inside* this process's total or beside it. Report
     /// them the wrong way round and a cache doing exactly its job reads as
-    /// gigabytes nobody can account for (K-294).
+    /// gigabytes nobody can account for.
     pub unified_memory: bool,
     /// Shared with every [`Self::clone_handle`] of this context, because they
     /// are handles on the *same* device and queue: the realiser keeps one of
@@ -221,7 +220,7 @@ pub fn adapter_sample_count(requested: u32) -> Option<u32> {
 static ADAPTER_VIDEO_MEMORY: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
 
 /// The graphics card's memory in bytes, or **0 where it cannot be asked** —
-/// the ceiling the VRAM cache budget is set against (K-194).
+/// the ceiling the VRAM cache budget is set against.
 ///
 /// Windows is not here: the bridge reads the first DXGI adapter's dedicated
 /// video memory directly, which works before any renderer exists. The other two
@@ -484,8 +483,7 @@ impl GpuContext {
     }
 
     /// What the graphics driver is holding for this device: bytes live in
-    /// allocations, and bytes reserved in the blocks they were carved from
-    /// (K-294's follow-up).
+    /// allocations, and bytes reserved in the blocks they were carved from.
     ///
     /// **Why the second number matters more than the first.** An allocator
     /// hands out blocks and sub-allocates within them; freeing every allocation
@@ -532,11 +530,11 @@ impl GpuContext {
     /// dropped frames sat un-freed until something asked the device a question
     /// for its own reasons.
     ///
-    /// Reported twice from a Mac at tens of gigabytes (K-277, K-294): the
-    /// second reading caught it in the act — 5 000-odd live buffers and 6 GB
-    /// held, then 8 buffers and 2.9 GB moments later, because opening a panel
-    /// happened to poll. Memory that comes back only when the user does
-    /// something unrelated is a leak in every sense that matters.
+    /// Reported twice from a Mac at tens of gigabytes: the second reading
+    /// caught it in the act — 5 000-odd live buffers and 6 GB held, then 8
+    /// buffers and 2.9 GB moments later, because opening a panel happened to
+    /// poll. Memory that comes back only when the user does something
+    /// unrelated is a leak in every sense that matters.
     ///
     /// Non-blocking: this drains what has already finished and returns. It is
     /// cheap enough to call on every turn of the worker's loop, which is
@@ -639,12 +637,11 @@ impl GpuContext {
 
     /// Headless context (tests, future CLI export).
     pub fn headless() -> Result<Self, GpuError> {
-        // The backend is pinned on all three platforms, in every build (K-205,
-        // superseding K-177 on this point). Two reasons: the zero-copy Viewer
-        // hand-off reaches through wgpu to a *specific* backend's device, and
-        // since K-183 deleted the CPU read-back transport there is no build left
-        // that wants a mixed-backend instance. Pinning also fixes the hybrid
-        // iGPU+dGPU case described below.
+        // The backend is pinned on all three platforms, in every build. Two
+        // reasons: the zero-copy Viewer hand-off reaches through wgpu to a
+        // *specific* backend's device, and with the CPU read-back transport
+        // gone there is no build left that wants a mixed-backend instance.
+        // Pinning also fixes the hybrid iGPU+dGPU case described below.
         //
         // `from_env_or_default` supplies the rest of the descriptor (flags, the
         // DX12 shader compiler, the GLES minor version) from `WGPU_*`, so those
@@ -694,9 +691,9 @@ impl GpuContext {
         );
         // The Linux DMA-BUF path needs the external-memory device extensions
         // enabled at device-creation time, which wgpu's default Vulkan device does
-        // not do (K-177). Open the device ourselves with them appended; if the
-        // adapter cannot enable them, fall back to a plain device so the read-back
-        // path still works (the DMA-BUF path then reports unavailable).
+        // not do. Open the device ourselves with them appended; if the adapter
+        // cannot enable them, fall back to a plain device so the read-back path
+        // still works (the DMA-BUF path then reports unavailable).
         //
         // The device also asks for the adapter's own format features where the
         // card has them, which is what makes 8× anti-aliasing legal rather than
@@ -746,7 +743,7 @@ impl GpuContext {
         // A lost device is survivable, but only if somebody hears about it. The
         // driver calls this on a thread and at a moment of its own choosing, so
         // all it may do is raise the flag; the render worker reads it between
-        // frames and rebuilds on the K-434 road (K-585, docs/13 §4).
+        // frames and rebuilds on the road docs/13 §4 sets out.
         let lost = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let raise = std::sync::Arc::clone(&lost);
         device.set_device_lost_callback(move |reason, msg| {
@@ -809,7 +806,7 @@ pub struct ColourEngine {
     linear_sampler: wgpu::Sampler,
     /// The view uniform, as **two buffers made once** rather than one made per
     /// pass. A pass-sized allocation looks harmless and is not: a frame batches
-    /// its passes into a single command buffer (K-290), so nothing frees until
+    /// its passes into a single command buffer, so nothing frees until
     /// that submission retires, and a long session's worth of them exhausts the
     /// device — which is how it showed up, as `request_device` failing with
     /// "not enough memory" partway through a test run on a software adapter.
@@ -825,12 +822,12 @@ pub struct ColourEngine {
 }
 
 /// The two viewer-only controls that live inside the display transform
-/// (docs/06-RENDER-PIPELINE.md §3.3, docs/07-UI-SPEC.md §2.2, K-314).
+/// (docs/06-RENDER-PIPELINE.md §3.3, docs/07-UI-SPEC.md §2.2).
 ///
 /// **Preview only.** Every export path passes [`DisplayParams::NEUTRAL`], which
 /// the shader short-circuits on, so an export is bit-identical to one taken
 /// before these existed — the promise preview resolution and the region of
-/// interest already make (K-031).
+/// interest already make.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DisplayParams {
     /// Scene-linear gain, `2^stops`. 1.0 is neutral.
@@ -849,7 +846,7 @@ impl DisplayParams {
     };
 
     /// Stops → gain, by the same arithmetic the Exposure effect resolves with
-    /// (`lumit_core::fx::resolved`, K-106), so the Viewer reading `+1.4` and
+    /// (`lumit_core::fx::resolved`), so the Viewer reading `+1.4` and
     /// the effect set to `+1.4` multiply by the identical float.
     #[must_use]
     pub fn from_stops(stops: f64, tone_map: bool) -> Self {
@@ -1669,7 +1666,7 @@ impl ColourEngine {
     ///
     /// `view` is the Viewer's own exposure and tone map — preview only, so
     /// export passes [`DisplayParams::NEUTRAL`] and gets the pixels it always
-    /// got (K-031, K-314).
+    /// got.
     pub fn display(
         &self,
         ctx: &GpuContext,
@@ -1683,7 +1680,7 @@ impl ColourEngine {
     /// the built-in one when there is none.
     ///
     /// **This is the dispatch the export runs too** - not a second
-    /// implementation that agrees with it, the same one (K-031, K-185).
+    /// implementation that agrees with it, the same one.
     pub fn display_through(
         &self,
         ctx: &GpuContext,
@@ -2114,7 +2111,7 @@ impl ColourEngine {
 mod counter_tests {
     use super::*;
 
-    /// The live-object count moves with what is actually alive (K-294).
+    /// The live-object count moves with what is actually alive.
     ///
     /// This is the figure the memory report leans on for Metal, where the
     /// allocator report answers nothing, so a build where the counters were
@@ -2157,7 +2154,7 @@ mod counter_tests {
         );
     }
 
-    /// A lost device is heard about (K-585).
+    /// A lost device is heard about.
     ///
     /// The whole recovery path hangs off one flag, and the flag is raised by a
     /// callback the driver owns — so the thing worth proving is that the wiring
@@ -2235,7 +2232,7 @@ mod tests {
 
     /// The gpu-foundation §7 golden: every 8-bit value survives
     /// sRGB → linear fp16 → sRGB within 1 LSB. This is the test that makes
-    /// double-gamma bugs impossible to reintroduce silently (K-031).
+    /// double-gamma bugs impossible to reintroduce silently.
     #[test]
     fn colour_round_trip_is_within_one_lsb() {
         let Some(ctx) = crate::test_support::lease() else {
@@ -2389,17 +2386,17 @@ pub mod composite;
 pub mod fx;
 pub mod oklab;
 pub mod scope;
-/// The Windows-only zero-copy Viewer target (K-177). Present only in the opt-in
+/// The Windows-only zero-copy Viewer target. Present only in the opt-in
 /// `shared-texture` build on Windows; every other build has no shared texture at
 /// all, exactly as it had no D3D interop before.
 #[cfg(all(windows, feature = "shared-texture"))]
 pub mod shared;
-/// The Linux-only zero-copy Viewer target via DMA-BUF (K-177). Present only in
+/// The Linux-only zero-copy Viewer target via DMA-BUF. Present only in
 /// the opt-in `shared-texture-linux` build on Linux; every other build has no
 /// DMA-BUF interop at all, exactly as it had no Vulkan external memory before.
 #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
 pub mod shared_linux;
-/// The macOS-only zero-copy Viewer target via IOSurface (K-195). Present only in
+/// The macOS-only zero-copy Viewer target via IOSurface. Present only in
 /// the opt-in `shared-texture-macos` build on macOS; every other build has no
 /// Metal interop at all.
 #[cfg(all(target_os = "macos", feature = "shared-texture-macos"))]

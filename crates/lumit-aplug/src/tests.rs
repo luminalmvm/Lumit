@@ -102,7 +102,7 @@ pub(crate) fn plugin_id(kind: Kind) -> String {
 ///
 /// The path matters: the loader keys a module by file, so the `.clap` copy and
 /// the `.vst3` copy of the same library are two modules with two sets of
-/// statics, and a test must read the one its host loaded (K-707).
+/// statics, and a test must read the one its host loaded.
 pub(crate) fn read_export(path: &Path, symbol: &[u8]) -> Vec<String> {
     // SAFETY: the same file the host loaded; the loader answers with the same
     // module, and the symbol is one this crate's own test plugin exports.
@@ -206,7 +206,7 @@ fn the_search_paths_are_the_standard_ones_plus_clap_path() {
     );
     assert_eq!(widened.last(), Some(&extra));
 
-    // And one scan looks in both standards' folders, in that order (K-707).
+    // And one scan looks in both standards' folders, in that order.
     let both = search_paths();
     assert!(
         both.len() > standard.len(),

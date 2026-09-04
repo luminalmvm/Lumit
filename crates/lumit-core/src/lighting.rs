@@ -1,6 +1,6 @@
-//! Shading layers with the comp's Light layers (K-361).
+//! Shading layers with the comp's Light layers.
 //!
-//! **In plain terms.** A Light layer (K-360) is a shape that emits: a point, a
+//! **In plain terms.** A Light layer is a shape that emits: a point, a
 //! cone, or — the one that matters — a rectangle, a softbox. This module works
 //! out how much of that light lands on each pixel of a layer, so a piece of
 //! footage can be lit by a softbox you placed and keyframed rather than by a
@@ -18,8 +18,8 @@
 //! (The term of art is the *diffuse form factor*, and the same integral is the
 //! identity-matrix case of Linearly Transformed Cosines — Heitz et al. 2016 —
 //! which is how one would later add roughness and specular highlights. The
-//! matrix tables that would need are deliberately not here; see the K-361
-//! entry in `docs/02-DECISIONS.md` for why the diffuse case ships alone.)
+//! matrix tables that would need are deliberately not here: the diffuse case
+//! ships alone.)
 //!
 //! Two decisions worth knowing before reading the code:
 //!
@@ -367,7 +367,7 @@ mod tests {
         );
     }
 
-    /// Light adds, it does not replace (the K-361 choice): no lights leaves
+    /// Light adds, it does not replace: no lights leaves
     /// the picture untouched to the bit, and a light can only brighten.
     #[test]
     fn shading_without_lights_changes_nothing_and_a_light_only_brightens() {

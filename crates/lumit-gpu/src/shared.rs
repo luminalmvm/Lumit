@@ -1,4 +1,4 @@
-//! The zero-copy Viewer target: a GPU texture Flutter samples directly (K-177).
+//! The zero-copy Viewer target: a GPU texture Flutter samples directly.
 //!
 //! # In plain terms
 //!
@@ -44,7 +44,7 @@
 //!
 //! We render into the *same* texture each frame, so there is still a theoretical
 //! race if Flutter is mid-sample when the *next* frame's copy begins. A keyed
-//! mutex is the robust fix for that half and stays the follow-up (K-177): it
+//! mutex is the robust fix for that half and stays the follow-up: it
 //! cannot land here alone, because a keyed-mutex texture must be acquired and
 //! released by the *consumer* too, and ANGLE's legacy share-handle path does not
 //! do that.

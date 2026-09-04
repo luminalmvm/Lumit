@@ -34,7 +34,7 @@ pub struct Vignette {
 
     /// Feather width beyond Radius, in the same normalised metric. The metric is
     /// not capped at 1 (a distance reaches ~√2 at a corner under circular
-    /// roundness), so Softness may exceed 1 for a wider feather (K-135): the
+    /// roundness), so Softness may exceed 1 for a wider feather: the
     /// hard ceiling is open, the slider reaches 2.
     #[slider(min = 0.0, max = 2.0, default = 0.5, hard_min = 0.0, unit = Raw)]
     pub softness: f32,
@@ -66,8 +66,8 @@ pub struct Vignette {
 impl Vignette {
     /// Amount, radius, softness, roundness, ramp and mix, clamped exactly as the
     /// old resolve arm clamped them (docs/impl/effect-registry.md §2.4): the
-    /// three 0..1 dials cap at both ends, Softness floors at 0 and is open above
-    /// (K-135), and Ramp floors at 0.05 so the falloff's exponent stays finite.
+    /// three 0..1 dials cap at both ends, Softness floors at 0 and is open above,
+    /// and Ramp floors at 0.05 so the falloff's exponent stays finite.
     /// Both render paths read this one method, so the CPU reference and the WGSL
     /// kernel cannot drift apart.
     pub fn packed(self) -> (f32, f32, f32, f32, f32, f32) {

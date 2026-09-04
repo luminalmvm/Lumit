@@ -5,7 +5,7 @@
 //! In plain terms: this is *what After Effects said*, written down in AE's own
 //! words. Times are the DOM's float seconds, ids are AE's own integers,
 //! property trees keep their match names, and nothing has been converted yet —
-//! the converting happens later, in Rust, where the tests can watch it (K-410).
+//! the converting happens later, in Rust, where the tests can watch it.
 //!
 //! Two shape rules run through every type here, and both come from how the
 //! walker works:
@@ -25,7 +25,7 @@
 //! names, verbatim** — `SCREEN`, `ALPHA_INVERTED`, `SUBTRACT`, `BEST`,
 //! `PIXEL_MOTION`, `BEZIER`, `HOLD`. The walker does not lower-case or re-spell
 //! them, because re-spelling is a conversion and conversions live on this side
-//! of the seam (K-410). Match on them exactly as the note's §2 vocabulary
+//! of the seam. Match on them exactly as the note's §2 vocabulary
 //! paragraph pins them.
 
 use serde::Deserialize;
@@ -119,7 +119,7 @@ pub struct Item {
     pub remove_pulldown: Option<String>,
     pub is_still: Option<bool>,
     /// The footage is a folder of numbered stills read as one item, not a
-    /// single file (K-539). After Effects says so in the file alias, which
+    /// single file. After Effects says so in the file alias, which
     /// targets a *folder* rather than a file — a field that names itself,
     /// not a byte offset. [`Item::path`] is then that folder.
     pub is_sequence: Option<bool>,
@@ -310,7 +310,7 @@ pub struct Property {
     /// are genuinely that varied, and converting is a later phase's job.
     pub value: Option<serde_json::Value>,
     /// The animation, when there is one. A value copy: no resampling, no
-    /// baking (K-025).
+    /// baking.
     pub keyframes: Option<Vec<Keyframe>>,
     /// The expression source text, verbatim; never evaluated by the Bridge.
     pub expression: Option<String>,
@@ -369,7 +369,7 @@ pub struct Shape {
 
 /// One keyframe, with everything docs/11 §2.2 item 5 lists.
 ///
-/// Because Lumit's keyframe maths is AE-compatible (K-025), this is a value
+/// Because Lumit's keyframe maths is AE-compatible, this is a value
 /// copy and not a conversion — which is exactly why every side of every handle
 /// has to survive the trip.
 #[derive(Debug, Clone, PartialEq, Default, Deserialize)]

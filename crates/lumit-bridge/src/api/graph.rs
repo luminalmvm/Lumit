@@ -1,5 +1,5 @@
-//! The layer driver graph as the Graph panel reads and writes it (K-471,
-//! K-472, docs/impl/node-graph.md §5).
+//! The layer driver graph as the Graph panel reads and writes it
+//! (docs/impl/node-graph.md §5).
 //!
 //! # In plain terms
 //!
@@ -24,11 +24,11 @@
 //! **One call, not one per node.** `LayerReference::get_graph` answers the
 //! whole structure at once. A panel fetches it when the selection or the
 //! document changes and holds it; asking per node per rebuild is the traffic
-//! the budget test forbids (K-183).
+//! the budget test forbids.
 //!
 //! **No colour crosses.** A port carries its *type*
-//! ([`BridgePortType`]) and the frontend maps that to a `port.*` theme token
-//! (K-472 §6.1). The engine has never known what a colour is.
+//! ([`BridgePortType`]) and the frontend maps that to a `port.*` theme token.
+//! The engine has never known what a colour is.
 
 use flutter_rust_bridge::frb;
 use uuid::Uuid;
@@ -36,9 +36,9 @@ use uuid::Uuid;
 use lumit_core::graph::{self, Edge, InputRef, LayerGraph, NodeRef, OutputRef};
 use lumit_core::model::Layer;
 
-/// What a socket carries, and so what colour the frontend draws it
-/// (K-472 §6.1). Seven types, five colours: image with matte, number, colour,
-/// shape with points, audio.
+/// What a socket carries, and so what colour the frontend draws it. Seven
+/// types, five colours: image with matte, number, colour, shape with points,
+/// audio.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BridgePortType {
@@ -105,7 +105,7 @@ impl BridgeNodeRef {
 }
 
 /// One socket on a box: the id the document writes down, the English word drawn
-/// beside it (K-303), what it carries, and whether a wire is on it.
+/// beside it, what it carries, and whether a wire is on it.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BridgePort {
@@ -143,9 +143,9 @@ pub struct BridgeGraphNode {
     /// The effect's schema key, empty for the two derived boxes. Not display
     /// text — `label` is.
     pub match_name: String,
-    /// What the box is called, in English (K-303).
+    /// What the box is called, in English.
     pub label: String,
-    /// The user's own name for this instance (K-321), shown in place of
+    /// The user's own name for this instance, shown in place of
     /// `label`. Always `None` for the derived boxes.
     pub custom_name: Option<String>,
     /// False draws the border dashed — the `B` badge. Always true for the
@@ -163,8 +163,8 @@ pub enum BridgeOutputRef {
     Driver { node: Uuid, port: String },
     /// The layer's own masked source alpha at that point in the chain (§1.4).
     SourceMatte,
-    /// A **stack effect's** declared data output — Particulate's Points stream
-    /// (K-492). The effect goes on making its picture for the chain; this taps
+    /// A **stack effect's** declared data output — Particulate's Points stream.
+    /// The effect goes on making its picture for the chain; this taps
     /// the data it declares beside it, and carries no picture itself.
     EffectData { effect: Uuid, port: String },
 }
@@ -247,7 +247,7 @@ pub struct BridgeNodePosition {
     pub y: f64,
 }
 
-/// A named region of the canvas: a tinted wash behind a set of boxes (K-651).
+/// A named region of the canvas: a tinted wash behind a set of boxes.
 ///
 /// **No rectangle crosses**, and no colour: the wash is worked out from where
 /// the members are sitting, and `colour` is an index into the frontend's own
@@ -276,10 +276,10 @@ pub struct BridgeGraphWiring {
     /// The boxes whose `E` badge is on. A wired socket is drawn whether its box
     /// is exposed or not.
     pub exposed: Vec<BridgeNodeRef>,
-    /// The named regions (K-651).
+    /// The named regions.
     pub groups: Vec<BridgeNodeGroup>,
     /// The Layer out box's image socket is unplugged, so the layer draws
-    /// nothing (K-738). It rides here rather than as a call of its own so
+    /// nothing. It rides here rather than as a call of its own so
     /// that unplugging it is the same one commit, and the same one undo step,
     /// as every other wiring gesture.
     pub out_unwired: bool,
@@ -368,14 +368,14 @@ pub(crate) fn read_layer_graph(layer: &Layer) -> BridgeLayerGraph {
     for effect in &layer.effects {
         let def = lumit_core::fx::BUILTIN_DEFS.get(&effect.effect.match_name);
         let schema = def.map(|d| d.schema());
-        // **Wired means "in the chain"** (K-738). A bypassed effect is not:
+        // **Wired means "in the chain"**. A bypassed effect is not:
         // the picture goes past it, and the panel draws that by leaving its
         // image sockets hollow and running the wire to the next box that is
         // still in. The Source's and the Layer out's own image sockets stay
         // wired through it - the wire genuinely still lands on them.
         let mut inputs = vec![BridgePort::of(graph::INPUT_PORT, effect.enabled)];
-        // The matte socket exists only where the effect declares a matte row
-        // (K-395) — the same question `LayerGraph::validate` asks before it
+        // The matte socket exists only where the effect declares a matte row —
+        // the same question `LayerGraph::validate` asks before it
         // accepts a wire onto one.
         if schema.is_some_and(|s| s.matte.param().is_some()) {
             inputs.push(BridgePort::of(
@@ -388,12 +388,12 @@ pub(crate) fn read_layer_graph(layer: &Layer) -> BridgeLayerGraph {
             NodeRef::Effect(effect.id),
             &input_wired,
         ));
-        // The signature's **data inputs** last (K-492, K-600): wire-only, with
+        // The signature's **data inputs** last: wire-only, with
         // no stored value and no panel row, of which Clone to points' Points is
         // the first on a stack effect. Read from the same method a driver box
         // reads, so the socket that lets a consumer be wired and the one the
         // validator accepts a wire onto cannot disagree — and so an unwired one
-        // reaches the canvas as the "no stream" mark (K-509) with no
+        // reaches the canvas as the "no stream" mark with no
         // effect-specific code at the seam.
         inputs.extend(
             def.map(|d| d.signature().inputs())
@@ -419,7 +419,7 @@ pub(crate) fn read_layer_graph(layer: &Layer) -> BridgeLayerGraph {
             enabled: effect.enabled,
             inputs,
             // The picture, always — plus whatever **data** outputs the effect's
-            // signature declares beside it (K-492). That second half is how
+            // signature declares beside it. That second half is how
             // Particulate's teal Points socket reaches the canvas with no
             // Particulate-specific code at the seam: it declares the port, and
             // every effect that declares none is untouched.
@@ -443,12 +443,12 @@ pub(crate) fn read_layer_graph(layer: &Layer) -> BridgeLayerGraph {
         custom_name: None,
         enabled: true,
         inputs: vec![
-            // Unplugged, the layer draws nothing (K-738) - the one
+            // Unplugged, the layer draws nothing - the one
             // disconnection with no flag of its own to lower to, so the graph
             // carries it.
             BridgePort::of(graph::IMAGE_PORT, !g.out_unwired),
             // Drawn, unfilled, honest: audio comes only from a footage layer's
-            // own stream (K-435), so nothing may be wired here in this phase.
+            // own stream, so nothing may be wired here in this phase.
             BridgePort::of(graph::AUDIO_PORT, false),
             // The layer's Volume — the one property socket a wire may land on
             // (the Audio panel's *Duck under* writes it). Driven, it overrides
@@ -475,7 +475,7 @@ pub(crate) fn read_layer_graph(layer: &Layer) -> BridgeLayerGraph {
             custom_name: driver.custom_name.clone(),
             enabled: driver.enabled,
             // The parameter sockets, then the signature's **data inputs** — the
-            // wire-only ones with no stored value and no panel row (K-492), of
+            // wire-only ones with no stored value and no panel row, of
             // which Points sample's Points is the first.
             inputs: param_ports(schema, NodeRef::Driver(driver.id), &input_wired)
                 .chain(

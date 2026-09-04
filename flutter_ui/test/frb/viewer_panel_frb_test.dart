@@ -7,8 +7,8 @@
 // are the parts a user actually operates.
 //
 // Seven of them do still need a frame to *arrive*, because that arrival is what
-// moves the playhead and bumps `frameArrived` — the engine drives playback
-// (K-181), so a Viewer that is told nothing shows nothing and counts nothing.
+// moves the playhead and bumps `frameArrived` — the engine drives playback,
+// so a Viewer that is told nothing shows nothing and counts nothing.
 // Those carry `skip: zeroCopyViewerUnavailable`, which is true only on a machine
 // with no working zero-copy transport (see `frb_test_support.dart`). Today that
 // means the Linux CI runner and its software Vulkan, so on CI these seven do not
@@ -118,8 +118,8 @@ void main() {
     ///
     /// **The bar scrolls when the panel is narrower than it wants** (docs/07
     /// §2.2), and this Viewer is 700 px — narrower than the bar has wanted
-    /// since K-411 put the clock in front of the transport, and narrower again
-    /// since K-416 added the guides menu and the snapshot pair. A tap on a
+    /// since the clock went in front of the transport, and narrower again
+    /// since the guides menu and the snapshot pair arrived. A tap on a
     /// control that has scrolled off the end lands on nothing and reads as a
     /// transport that does not work, which is exactly how it read the first
     /// time. Anyone on a narrow dock scrolls first too.
@@ -148,8 +148,8 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    /// Turn the tone map on or off, which since K-466 is a row in the
-    /// header's colour-pipeline menu rather than a button on the bar.
+    /// Turn the tone map on or off, which is a row in the header's
+    /// colour-pipeline menu rather than a button on the bar.
     Future<void> flipToneMap(WidgetTester tester) =>
         pickHeaderRow(tester, 'viewer-colour', 'viewer-tone-map');
 
@@ -377,7 +377,7 @@ void main() {
       await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
     });
 
-    /// **A pick is a drag** (K-532, docs/07 §6.1). The press writes nothing; it
+    /// **A pick is a drag** (docs/07 §6.1). The press writes nothing; it
     /// starts a gesture that stages the sample under the pointer and previews
     /// it, and the release commits **once** — the value where the pointer let
     /// go, not the value where it went down. That is the finding: arming a
@@ -437,7 +437,7 @@ void main() {
       await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
     });
 
-    /// **An armed pick takes the drag off the pan** (K-532, docs/07 §6.1).
+    /// **An armed pick takes the drag off the pan** (docs/07 §6.1).
     ///
     /// The finding: picking a colour dragged the preview about with it. The
     /// dropper reads raw pointer events, and a `Listener` never joins the
@@ -543,7 +543,7 @@ void main() {
 
     testWidgets('without a composition the empty stage offers the ways in',
         (tester) async {
-      // K-481: a project with no comps at all shows the welcome's three
+      // A project with no comps at all shows the welcome's three
       // start cards in the stage; the "select a composition" sentence is
       // for a project that has comps with none fronted (EmptyStageFrb
       // decides between the two).
@@ -587,7 +587,7 @@ void main() {
       expect(p.uiState.playheadFrame.value, 0);
     });
 
-    /// **Playback runs in the engine (K-181).** Note what this test does *not*
+    /// **Playback runs in the engine.** Note what this test does *not*
     /// do: elapse any fake time. `settleFrb` gives real event-loop turns and
     /// deliberately advances no `FakeAsync` clock, so a Flutter `Ticker` would
     /// never fire during it. The playhead moves here purely because the engine
@@ -612,7 +612,7 @@ void main() {
       await tester.pump();
       expect(p.uiState.playing.value, isFalse);
       await settleFrb(tester, minRounds: 12, maxRounds: 12);
-      // K-254: the playhead goes back to where play was asked for. Playback is
+      // The playhead goes back to where play was asked for. Playback is
       // a preview of the moment being worked on, so stopping returns you to it
       // rather than leaving you wherever the picture happened to stop. In-flight
       // frames are included — a late arrival must not drag it off again.
@@ -620,7 +620,7 @@ void main() {
           reason: 'stopping puts the playhead back where play started');
 
       // Degradation is stated by the reading rather than by a badge that
-      // comes and goes (K-466): the tier a frame was made at is the pixel
+      // comes and goes: the tier a frame was made at is the pixel
       // count in "1920×1080 → 960×540", so the bar never changes shape
       // mid-playback. The while-playing half is not asserted — it races a
       // live controller.
@@ -628,9 +628,9 @@ void main() {
           reason: 'the reading is always there, whatever the tier');
     }, skip: zeroCopyViewerUnavailable);
 
-    /// The other half of K-254: Settings ▸ Interface ▸ Editing puts the old
-    /// After Effects behaviour back, and then stopping leaves the playhead on
-    /// the frame that was on screen.
+    /// The other half of the returning playhead: Settings ▸ Interface ▸
+    /// Editing puts the old After Effects behaviour back, and then stopping
+    /// leaves the playhead on the frame that was on screen.
     testWidgets('the playhead stays put when the setting asks it to',
         (tester) async {
       final p = withLayer();
@@ -757,9 +757,9 @@ void main() {
     });
 
     /// **The Viewer's two strips carry the drawing's own controls, in its own
-    /// order** (K-466, superseding K-411's single-bar arrangement). The
-    /// arrangement is the decision, so this is what asserts it: the keys left
-    /// to right, and nothing about pixels.
+    /// order**, in place of the single bar. The arrangement is the decision,
+    /// so this is what asserts it: the keys left to right, and nothing about
+    /// pixels.
     testWidgets("the Viewer's strips are in the drawing's order",
         (tester) async {
       final p = withLayer();
@@ -774,7 +774,7 @@ void main() {
         // The ways of looking, then the seam and the snapshot.
         'viewer-grid', 'viewer-guides-menu', 'viewer-channel',
         'viewer-exposure-reset', 'viewer-exposure',
-        // The snapshot pair (K-532): take, then show.
+        // The snapshot pair: take, then show.
         'viewer-snapshot', 'viewer-snapshot-show',
         // The transport and its clock.
         'viewer-home', 'viewer-step-back', 'viewer-play',
@@ -787,7 +787,7 @@ void main() {
     });
 
     /// **The grid-and-guides menu draws over the picture and nowhere else**
-    /// (K-416, docs/07 §2.2 items 5–6). Both entries are checkable, both marks
+    /// (docs/07 §2.2 items 5–6). Both entries are checkable, both marks
     /// are painted by the display, and turning the last one off takes the
     /// painter out of the tree rather than leaving it drawing nothing.
     testWidgets('the guides menu turns the grid and the safe areas on',
@@ -830,7 +830,7 @@ void main() {
       expect(overlay, findsNothing);
     });
 
-    /// **The rulers stand on the panel, not on the picture** (K-689, docs/07
+    /// **The rulers stand on the panel, not on the picture** (docs/07
     /// §2.2 item 6): turning them on moves the picture out from under them,
     /// which is what makes a guide dragged out of a strip land on the shot
     /// rather than on a band covering it. And a guide is a mark over one comp,
@@ -876,14 +876,14 @@ void main() {
     });
 
     /// **A snapshot is a second picture, and releasing the button is its whole
-    /// lifecycle** (K-416, docs/07 §2.2 item 14). Nothing here crosses the
+    /// lifecycle** (docs/07 §2.2 item 14). Nothing here crosses the
     /// bridge: the stage photographs its own [RepaintBoundary], and Show puts
     /// the photograph back over the live picture while it is held.
-    /// **Two marks** (K-532, superseding K-466's merged one): Take
-    /// photographs the picture on a plain click, and Show beside it puts the
-    /// photograph back over the live one while it is held. Show is muted until
-    /// a photograph exists, which is what makes a taken snapshot findable at
-    /// all — the merged mark said nothing about either.
+    /// **Two marks**, not the merged one: Take photographs the picture on a
+    /// plain click, and Show beside it puts the photograph back over the live
+    /// one while it is held. Show is muted until a photograph exists, which is
+    /// what makes a taken snapshot findable at all — the merged mark said
+    /// nothing about either.
     testWidgets('Take photographs the picture and Show compares against it',
         (tester) async {
       final p = withLayer();
@@ -939,10 +939,10 @@ void main() {
     /// own ratio asks for a few hundred million pixels — on a button with no
     /// warning on it. Uncapped this assertion misses by an order of magnitude
     /// (and the run before it allocates a gigabyte), so the cap is the
-    /// regression, not the advice. Since K-612 the bound is the *region*
-    /// photographed rather than the resolution it is photographed at, and the
-    /// photograph goes back over the part of the picture it came from — which
-    /// is the second pair of assertions here. What it keeps of the detail is
+    /// regression, not the advice. The bound is the *region* photographed
+    /// rather than the resolution it is photographed at, and the photograph
+    /// goes back over the part of the picture it came from — which is the
+    /// second pair of assertions here. What it keeps of the detail is
     /// pinned in viewer_snapshot_crop_test.dart, where the pixels are readable.
     testWidgets('a snapshot taken at 400 % stays the size of the panel',
         (tester) async {
@@ -990,7 +990,7 @@ void main() {
       await tester.pump();
     });
 
-    /// **How good the preview is, asked once** (K-466, docs/07 §2.2 item 2).
+    /// **How good the preview is, asked once** (docs/07 §2.2 item 2).
     /// The header's middle picker names the preview resolution, and its menu
     /// carries both answers: the resolutions, and the two playback behaviours
     /// whose button the drawing takes off the bar.
@@ -1001,7 +1001,7 @@ void main() {
 
       expect(find.byKey(const ValueKey('viewer-resolution')), findsOneWidget);
 
-      // **Opened once** (K-671): every row in this menu is an option row, so
+      // **Opened once**: every row in this menu is an option row, so
       // the menu stays up and the next answer is one tap away.
       await pressBar(tester, 'viewer-resolution');
       await tester.pumpAndSettle();
@@ -1018,7 +1018,7 @@ void main() {
               'menu_bar_frb_test.dart');
 
       expect(p.uiState.workspace.performance.playback, PlaybackMode.everyFrame,
-          reason: 'every frame is the shipped default (K-670)');
+          reason: 'every frame is the shipped default');
       await pick('viewer-playback-adaptive');
       expect(p.uiState.workspace.performance.playback, PlaybackMode.adaptive,
           reason: 'and the choice is remembered, not just drawn');
@@ -1032,7 +1032,7 @@ void main() {
     });
 
     /// **An option row leaves the menu open, and the pointer leaving takes it
-    /// down** (K-671). The stay-open half is what the picker test above walks;
+    /// down**. The stay-open half is what the picker test above walks;
     /// this pins the way out, because a menu that stays and cannot be got rid
     /// of by moving away is worse than one that shuts too eagerly.
     testWidgets('the quality menu goes when the pointer leaves it',
@@ -1069,7 +1069,7 @@ void main() {
           reason: 'and the pointer leaving is the way out');
     });
 
-    /// **Auto and Full are not the same tier** (K-357). Auto renders what the
+    /// **Auto and Full are not the same tier**. Auto renders what the
     /// panel can show — which is what the Viewer has always in fact done, and
     /// why it is the default — while Full means composition resolution
     /// whatever the panel is showing. Before this there was no way to ask for
@@ -1082,7 +1082,7 @@ void main() {
       // The panel is smaller than the comp, so the two must differ.
       p.uiState.reportViewerScale(0.25);
       expect(p.uiState.previewResolution, PreviewResolution.full,
-          reason: 'Full is the default (K-670)');
+          reason: 'Full is the default');
       expect(p.uiState.viewerScale, closeTo(1.0, 1e-9),
           reason: 'Full is comp resolution whatever the panel shows');
 
@@ -1095,7 +1095,7 @@ void main() {
           reason: 'a fixed tier is the tier you asked for');
     });
 
-    /// **The resolution is remembered per composition** (K-357, docs/07 §2.2):
+    /// **The resolution is remembered per composition** (docs/07 §2.2):
     /// a heavy shot can preview at Quarter while the title card beside it does
     /// not, and fronting one back shows its own tier rather than the other's.
     testWidgets('the preview resolution is per composition', (tester) async {
@@ -1108,7 +1108,7 @@ void main() {
 
       p.uiState.setSelectedComp(other);
       expect(p.uiState.previewResolution, PreviewResolution.full,
-          reason: 'a comp never set is at the default (K-670)');
+          reason: 'a comp never set is at the default');
 
       // And Auto is a choice like any other now that it is not the default:
       // stored, remembered per comp, and not mistaken for "never chosen".
@@ -1121,14 +1121,14 @@ void main() {
       expect(p.uiState.previewResolution, PreviewResolution.quarter,
           reason: 'and the first comp kept its own');
 
-      // It rides the session blob, so it survives into the project's ui_state
-      // (K-245) — not the document, so no op and no undo step.
+      // It rides the session blob, so it survives into the project's ui_state,
+      // not the document, so no op and no undo step.
       expect(
           p.uiState.session().previewResolutions[p.comp.internalid.toString()],
           'quarter');
     });
 
-    /// **The background swatch is a document edit** (K-357, docs/07 §2.2 item
+    /// **The background swatch is a document edit** (docs/07 §2.2 item
     /// 10) — unlike everything else on that half of the bar, which are ways of
     /// looking. So it goes through an op, reaches the export, and undoes.
     testWidgets('the background swatch writes the comp and undoes',
@@ -1163,7 +1163,7 @@ void main() {
     Future<void> scrub(WidgetTester tester, Finder box, double pixels) =>
         tester.drag(box, Offset(pixels.sign * kDragSlopDefault + pixels, 0));
 
-    /// **The exposure box reads signed stops to one decimal** (K-314, docs/07
+    /// **The exposure box reads signed stops to one decimal** (docs/07
     /// §2.2 item 12). The sign is not decoration: zero is the middle of this
     /// control's range, not its floor, so `+1.4` and `-2.3` are different
     /// readings and a bare `1.4` would be ambiguous about which.
@@ -1193,7 +1193,7 @@ void main() {
       await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
     });
 
-    /// The tone map is a row in the colour-pipeline menu (item 13, K-466) —
+    /// The tone map is a row in the colour-pipeline menu (item 13) —
     /// inside the display transform it is part of. One pick on, one pick off.
     testWidgets('the tone-map row is in the colour menu and flips',
         (tester) async {
@@ -1213,13 +1213,13 @@ void main() {
     });
 
     /// **The colour pipeline says what you are looking at** (docs/07 §2.2
-    /// item 8, K-466). Always in the header, naming the display transform, and
+    /// item 8). Always in the header, naming the display transform, and
     /// while either preview-only control is engaged it is where the Viewer
     /// says the picture on screen is not the export.
     testWidgets('the colour picker says when a view is engaged',
         (tester) async {
       final p = withLayer();
-      // The tone map is asked for (K-314); this test drives it, so it asks.
+      // The tone map is asked for; this test drives it, so it asks.
       p.uiState.workspace.interface.showToneMap = true;
       await mount(tester, p);
       final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.sharp);
@@ -1308,7 +1308,7 @@ void main() {
       await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
     });
 
-    /// **Both controls are per composition** (K-314): they are a way of looking
+    /// **Both controls are per composition**: they are a way of looking
     /// at one comp, so fronting another must show that one's own view rather
     /// than carrying the first one's exposure across.
     testWidgets('the exposure and tone map are remembered per composition',
@@ -1334,7 +1334,7 @@ void main() {
       expect(find.text('+2.0'), findsOneWidget);
 
       // And it is written into the session, which is what carries it into the
-      // project's `ui_state` blob (K-245) — not into the document, so no op
+      // project's `ui_state` blob — not into the document, so no op
       // and no undo step.
       expect(p.uiState.session().viewerLooks[p.comp.internalid.toString()],
           (stops: 2.0, toneMap: true));
@@ -1352,7 +1352,7 @@ void main() {
       final beforeX = (before.positionX as BridgeScalar_Static).field0;
 
       // The layer fills the comp, so the middle of the picture is inside it —
-      // there is no handle to find any more: the body is the handle (K-217).
+      // there is no handle to find any more: the body is the handle.
       final stage = find.byType(ViewerPanelFrb);
       final gesture = await tester.startGesture(tester.getCenter(stage));
       await tester.pump();
@@ -1369,7 +1369,7 @@ void main() {
           reason: 'the drag reached the document');
     });
 
-    /// **One gesture, one undo step (K-230).** x and y are separate properties
+    /// **One gesture, one undo step.** x and y are separate properties
     /// in the model, and writing them separately made a single drag two steps:
     /// the first Ctrl+Z put the layer back along one axis only, which reads as
     /// the undo being broken rather than as two honest edits. The batch op the
@@ -1513,7 +1513,7 @@ void main() {
     /// comp-sized layer, which is what lets a test grab one.
     Rect fittedRect(WidgetTester tester, CompositionReference comp) {
       // Measured rather than worked out from the panel less a bar height: the
-      // Viewer wears a header strip as well as a bottom bar (K-466), and a
+      // Viewer wears a header strip as well as a bottom bar, and a
       // hard-coded number here silently moves every picture coordinate the
       // moment either strip changes.
       final stage = tester.getRect(find.byKey(const ValueKey('viewer-stage')));
@@ -1533,7 +1533,7 @@ void main() {
     /// null while it says "Fit".
     ///
     /// The observable for a zoom *out*, now that the scale reported to the
-    /// engine deliberately does not follow one down (K-230).
+    /// engine deliberately does not follow one down.
     double? shownZoom(WidgetTester tester) {
       for (final text in tester.widgetList<Text>(find.descendant(
         of: find.byKey(const ValueKey('viewer-zoom')),
@@ -1546,7 +1546,7 @@ void main() {
       return null;
     }
 
-    /// **A layer switched off is not on the picture at all (K-230).** Its eye
+    /// **A layer switched off is not on the picture at all.** Its eye
     /// being off is how you get it out of the way; a box round something
     /// invisible, and a click that selected it, put it right back in the way.
     testWidgets(
@@ -1573,7 +1573,7 @@ void main() {
           reason: 'and the hidden layer was never a target');
     });
 
-    /// **A drag takes what is selected, whatever is on top of it (K-230).**
+    /// **A drag takes what is selected, whatever is on top of it.**
     /// A layer chosen in the Timeline could not be dragged wherever anything
     /// covered it: the press swapped the selection for the topmost layer and
     /// moved that instead.
@@ -1672,8 +1672,8 @@ void main() {
       expect(p.uiState.selectedLayers.value, isNotEmpty);
 
       // The very corner of the *stage* is outside the fitted picture, so it is
-      // outside every layer's box. The panel's own corner is the header strip
-      // (K-466), which is chrome and takes no click for the picture.
+      // outside every layer's box. The panel's own corner is the header strip,
+      // which is chrome and takes no click for the picture.
       final panel = tester.getRect(find.byKey(const ValueKey('viewer-stage')));
       await tester.tapAt(panel.topLeft + const Offset(2, 2));
       await tester.pumpAndSettle();
@@ -1757,7 +1757,7 @@ void main() {
     });
 
     /// The layer controls are a mark over the picture like the grid and the
-    /// safe areas, so since K-466 they are a row in the same view menu.
+    /// safe areas, so they are a row in the same view menu.
     testWidgets('the layer-controls row is in the view menu and toggles',
         (tester) async {
       final p = withLayer();
@@ -1785,7 +1785,7 @@ void main() {
       p.uiState.tools.select(ToolMode.zoom);
       // These read the magnification through `viewerScale`, which only tracks
       // it on Auto — a fixed tier is the tier you asked for whatever the panel
-      // is showing (K-357), and Full is now the default (K-670).
+      // is showing, and Full is now the default.
       p.uiState.setPreviewResolution(PreviewResolution.auto);
       await tester.pumpWidget(hostPanel(
         child: const ViewerPanelFrb(),
@@ -1846,8 +1846,7 @@ void main() {
       final p = await withZoomTool(tester);
       final fitted = fittedRect(tester, p.comp);
       // The magnification it starts at, off the picture rather than off the
-      // scale reported to the engine — that one no longer follows a zoom out
-      // (K-230).
+      // scale reported to the engine — that one no longer follows a zoom out.
       final before = fitted.width / p.comp.getSize().width;
 
       await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
@@ -1953,7 +1952,7 @@ void main() {
           reason: 'a layer that was not selected does not turn');
     });
 
-    /// **The wireframe turns with the picture, not after it (K-230).** The
+    /// **The wireframe turns with the picture, not after it.** The
     /// picture is previewed at the new angle while the drag is in flight; the
     /// boxes are drawn from the document, which still holds the old one, so
     /// they sat still until the button came up. The angle in flight is
@@ -2146,7 +2145,7 @@ void main() {
           reason: 'a sideways drag does not move the pivot vertically');
     });
 
-    /// **The pivot goes where you point (K-232).** It used to be a *nudge*:
+    /// **The pivot goes where you point.** It used to be a *nudge*:
     /// the drag was measured from the press and added to the anchor the layer
     /// already had, so you could push a pivot towards somewhere but never put
     /// it anywhere. A click now places it, and a drag keeps it under the
@@ -2176,9 +2175,9 @@ void main() {
     });
 
     /// **And the edit reaches the panels that show it.** The Timeline's
-    /// Anchor Point rows and the Effect controls both draw from the read model
-    /// (K-184), so an edit the Viewer commits has to refresh it — the tool's
-    /// own picture updating is not the same thing as the numbers updating.
+    /// Anchor Point rows and the Effect controls both draw from the read model,
+    /// so an edit the Viewer commits has to refresh it — the tool's own
+    /// picture updating is not the same thing as the numbers updating.
     testWidgets('an anchor edit reaches the read model the panels draw from',
         (tester) async {
       final p = withLayer();
@@ -2307,7 +2306,7 @@ void main() {
       expect(at(moved.positionX), greaterThan(positionNow));
     });
 
-    /// The shape tools (K-222). With a layer selected a drag draws a **mask** on
+    /// The shape tools. With a layer selected a drag draws a **mask** on
     /// it; with nothing selected there is nothing to mask, and the status line
     /// says so rather than the drag vanishing into silence.
     testWidgets('a shape drag adds a mask to the selected layer',
@@ -2341,7 +2340,7 @@ void main() {
       expect(xs.reduce((a, b) => a > b ? a : b), lessThan(1920));
     });
 
-    /// The Pen with nothing selected makes a shape layer too (K-237): the same
+    /// The Pen with nothing selected makes a shape layer too: the same
     /// path, and the only difference is what it will belong to.
     testWidgets('the Pen with nothing selected closes onto a shape layer',
         (tester) async {
@@ -2396,7 +2395,7 @@ void main() {
       final masks = p.layer.getMasks();
       expect(masks, hasLength(1));
       // Numbered, not named for the tool: every path the Pen draws is a path,
-      // so the number is the only thing that tells two of them apart (K-340).
+      // so the number is the only thing that tells two of them apart.
       expect(masks.single.name, 'Mask 1');
       expect(masks.single.vertices, hasLength(3));
       expect(masks.single.closed, isTrue);
@@ -2422,11 +2421,10 @@ void main() {
       expect(masks, hasLength(1));
       expect(masks.single.name, 'Polygon');
       expect(masks.single.vertices, hasLength(5),
-          reason: 'a polygon is a shape you drag out, not a path you build '
-              '(K-223)');
+          reason: 'a polygon is a shape you drag out, not a path you build');
     });
 
-    /// Mask points are editable on the picture (K-224): they draw as squares on
+    /// Mask points are editable on the picture: they draw as squares on
     /// the path, a marquee gathers them, and dragging moves them.
     testWidgets('a mask\'s points can be swept up and dragged', (tester) async {
       final p = withLayer();
@@ -2470,7 +2468,7 @@ void main() {
 
       // Sweep the top two points only, starting from empty space *outside* the
       // picture: a press inside a selected layer moves that layer, which is
-      // what the Selection tool has always done (K-217) and what After Effects
+      // what the Selection tool has always done and what After Effects
       // does. The surround is the empty part a marquee starts from.
       final panel = tester.getRect(find.byKey(const ValueKey('viewer-stage')));
       final gesture =
@@ -2506,9 +2504,8 @@ void main() {
     });
 
     /// **A shape layer's own art is correctable on the picture**, by the same
-    /// gesture a mask's points take (K-224, and K-237's "the same gesture over
-    /// shape contents is the next piece"). Before this, art could be drawn and
-    /// then only redrawn.
+    /// gesture a mask's points take. Before this, art could be drawn and then
+    /// only redrawn.
     testWidgets("a shape layer's points can be swept up and dragged",
         (tester) async {
       final p = withLayer();
@@ -2576,7 +2573,7 @@ void main() {
 
       // Sweep the top two points, starting from empty space outside the
       // picture — exactly as the mask case does. Art coordinates are where the
-      // art is drawn (K-308): this layer's box starts at the art's own corner,
+      // art is drawn: this layer's box starts at the art's own corner,
       // so a point at art (400, 200) is at composition (400, 200).
       final panel = tester.getRect(find.byKey(const ValueKey('viewer-stage')));
       final gesture =
@@ -2699,7 +2696,7 @@ void main() {
           );
 
       // Drag one of the ART's points, at the composition coordinates it is
-      // drawn at (K-308). The mask must not follow.
+      // drawn at. The mask must not follow.
       final drag = await tester.startGesture(onScreen(400, 200));
       await tester.pump();
       for (var i = 0; i < 10; i++) {
@@ -2720,7 +2717,7 @@ void main() {
       }
     });
 
-    /// The Type tool (K-225): a click on empty picture makes a text layer where
+    /// The Type tool: a click on empty picture makes a text layer where
     /// it landed, typing previews rather than writing, and ending the edit
     /// writes the document once.
     testWidgets('the Type tool makes a text layer where you click',
@@ -2771,7 +2768,7 @@ void main() {
           reason: 'putting the tool down ends the edit and writes it');
     });
 
-    /// **Two undo steps for a whole typing session, and no more (K-230).**
+    /// **Two undo steps for a whole typing session, and no more.**
     ///
     /// Making the layer used to be three ops and finishing the edit two more,
     /// so `Ctrl+Z` walked back through states nobody had ever seen: an empty
@@ -2874,7 +2871,7 @@ void main() {
       expect(layer.getText()!.text, 'Retitled');
     });
 
-    /// Painting (K-227): a drag on the selected layer leaves a stroke, and one
+    /// Painting: a drag on the selected layer leaves a stroke, and one
     /// drag is one stroke and one undo step.
     testWidgets('a brush drag paints a stroke on the selected layer',
         (tester) async {
@@ -2883,7 +2880,7 @@ void main() {
       await mount(tester, p);
 
       expect(find.byType(ViewerPaintLayer), findsOneWidget);
-      // K-724: the hardware crosshair leads — the overlay asks the platform
+      // The hardware crosshair leads — the overlay asks the platform
       // for the precise pointer instead of hiding it, so aiming happens at
       // input rate however slowly the application is repainting. The ring is
       // decoration.
@@ -2927,7 +2924,7 @@ void main() {
     });
 
     /// The brush shape chosen in the tool options is the shape the stroke is
-    /// committed with (K-548). Round unless somebody picks otherwise, so a
+    /// committed with. Round unless somebody picks otherwise, so a
     /// project painted before there was a choice reads back the way it was.
     testWidgets('the brush commits the shape chosen in the tool options',
         (tester) async {
@@ -2951,9 +2948,9 @@ void main() {
               'and the one already painted keeps the shape it was made with');
     });
 
-    /// A stylus's pressure rides in with the points and widens the mark
-    /// (K-583) — and the brush's own toggle turns that off, which stores a
-    /// full press throughout and so the stroke a mouse would have made.
+    /// A stylus's pressure rides in with the points and widens the mark, and
+    /// the brush's own toggle turns that off, which stores a full press
+    /// throughout and so the stroke a mouse would have made.
     testWidgets('a stylus drag commits the pressure it was drawn with',
         (tester) async {
       final p = withLayer();
@@ -3074,7 +3071,7 @@ void main() {
           p.state.notice.value?.message, contains('Select a layer to paint'));
     });
 
-    /// The other half of the shape tools' gesture (K-237): with nothing
+    /// The other half of the shape tools' gesture: with nothing
     /// selected they make a **shape layer** rather than saying they cannot.
     testWidgets('a shape drag with nothing selected makes a shape layer',
         (tester) async {
@@ -3201,7 +3198,7 @@ void main() {
       expect(p.comp.getLayers().first.getShapeContents().single.stroke, isNull);
     });
 
-    /// The camera tools (K-229): a drag moves the composition's active camera,
+    /// The camera tools: a drag moves the composition's active camera,
     /// and with no camera the tool says so rather than swallowing the gesture.
     testWidgets('the camera tools orbit, track and dolly the active camera',
         (tester) async {
@@ -3359,7 +3356,7 @@ void main() {
 
       // The first render of a session also builds the renderer, so allow for
       // that before asserting anything about the picture. Frames arrive as
-      // shared-texture handles (K-183); in a widget test the platform channel
+      // shared-texture handles; in a widget test the platform channel
       // has no handler so no texture registers, but every arrival still bumps
       // `frameArrived` — which is the fact being asserted.
       await settleFrb(
@@ -3382,7 +3379,7 @@ void main() {
     testWidgets('the wheel zooms the picture about the cursor', (tester) async {
       final p = withLayer();
       // Auto, because this reads the magnification through the preview scale
-      // and only Auto follows the panel (K-357); Full is the default (K-670).
+      // and only Auto follows the panel; Full is the default.
       p.uiState.setPreviewResolution(PreviewResolution.auto);
       await mount(tester, p);
 
@@ -3402,9 +3399,9 @@ void main() {
       expect(find.textContaining('%'), findsWidgets);
 
       // And back out well past fit. The picture really does get smaller — and
-      // the resolution the engine is asked for does **not** follow it down
-      // (K-230): zooming out means "let me see more of it", not "make it
-      // coarser", and lowering it threw away every cached frame to do so.
+      // the resolution the engine is asked for does **not** follow it down:
+      // zooming out means "let me see more of it", not "make it coarser", and
+      // lowering it threw away every cached frame to do so.
       for (var i = 0; i < 8; i++) {
         await tester.sendEventToBinding(pointer.scroll(const Offset(0, 120)));
         await tester.pump();
@@ -3421,14 +3418,14 @@ void main() {
       var frames = 0;
       final sub = p.state.onWorkerResponse.listen((msg) {
         // **A published picture, and nothing else.** The idle cache fill is
-        // SUPPOSED to work while the playhead is still (K-187) and announces
+        // SUPPOSED to work while the playhead is still and announces
         // each banked frame; what must go quiet is the PICTURE being
         // re-rendered and re-published.
         //
         // This used to count every message that was not a `CacheFilled`, which
         // has not meant "a render" for some time: one render also reports its
-        // progress (docs/13 §7.1) and, since K-420, is measured an idle turn
-        // AFTER it was served. Those arrive around the picture rather than with
+        // progress (docs/13 §7.1) and is measured an idle turn AFTER it
+        // was served. Those arrive around the picture rather than with
         // it, so whether a trailing one landed before or after the count was
         // taken decided the test — and the count it was compared against was
         // taken the moment `frameArrived` bumped, which is the middle of that
@@ -3507,9 +3504,9 @@ void main() {
           reason: 'it rewound rather than sitting at the end doing nothing');
     }, skip: zeroCopyViewerUnavailable);
 
-    /// Every-frame plays WITH sound now — K-171's actual wording: audio plays
-    /// while rendering holds the comp's rate, and the worker pauses it if the
-    /// picture falls genuinely behind (it used to be silenced outright).
+    /// Every-frame plays WITH sound now: audio plays while rendering holds the
+    /// comp's rate, and the worker pauses it if the picture falls genuinely
+    /// behind (it used to be silenced outright).
     /// Headless there is no output device or mix, so what is asserted is the
     /// seam: play in every-frame starts cleanly, the clock stays readable,
     /// and stopping silences whatever there was.

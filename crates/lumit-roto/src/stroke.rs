@@ -38,7 +38,7 @@ pub enum StrokeKind {
 /// A **polyline** rather than a bezier, for the reason paint strokes are one:
 /// it is a record of a gesture, sampled as it happened, not a shape anyone
 /// will edit vertex by vertex. Points are **source raster pixels** on the
-/// full, unaltered footage (K-248), so the matte describes the file's frames
+/// full, unaltered footage, so the matte describes the file's frames
 /// and survives every comp-side transform, retime and preview tier.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RotoStroke {

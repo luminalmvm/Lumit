@@ -2,7 +2,7 @@
 // over it — the layer controls, the tool layers, the guides, the region, a held
 // snapshot, and the chips in the corner.
 //
-// Split out of viewer_panel_frb.dart (K-007): the panel above it holds the
+// Split out of viewer_panel_frb.dart: the panel above it holds the
 // magnification, the pan and the transport, and hands this one a rectangle to
 // draw in. Nothing here changed in the move.
 
@@ -49,7 +49,7 @@ import 'viewer_zoom.dart';
 /// Which channel the picture shows.
 enum ViewerChannel { rgb, red, green, blue, alpha }
 
-/// What is painted around the picture (K-203).
+/// What is painted around the picture.
 ///
 /// Neutral by default, and deliberately so: a grade cannot be judged against a
 /// tinted surround, which is why the theme carries `viewerSurround` as a grey
@@ -67,8 +67,8 @@ class ViewerStage extends StatelessWidget {
   final Rect fitted;
   final bool grid;
 
-  /// Which of the guides menu's marks are drawn over the picture (K-416,
-  /// K-689): the grid, the safe rectangles and the rulers.
+  /// Which of the guides menu's marks are drawn over the picture: the grid, the
+  /// safe rectangles and the rulers.
   final ViewerOverlays overlays;
 
   /// The boundary the panel photographs for a snapshot — round the picture
@@ -80,7 +80,7 @@ class ViewerStage extends StatelessWidget {
   final dartui.Image? snapshot;
 
   /// Which slice of the picture that snapshot is, in fractions of the picture's
-  /// rectangle (K-612): the whole of it unless it was taken while zoomed in,
+  /// rectangle: the whole of it unless it was taken while zoomed in,
   /// where it is the part that was on screen. Null when nothing is stored.
   final Rect? snapshotArea;
 
@@ -97,7 +97,7 @@ class ViewerStage extends StatelessWidget {
   final ValueChanged<Offset> onPan;
   final VoidCallback onChanged;
 
-  /// The Zoom tool's two gestures (K-218), applied by the panel because only it
+  /// The Zoom tool's two gestures, applied by the panel because only it
   /// holds the magnification.
   final void Function(Offset at, {required bool out}) onZoomAt;
   final void Function(Rect box, {required bool out}) onZoomBox;
@@ -123,9 +123,9 @@ class ViewerStage extends StatelessWidget {
   });
 
   /// The tracked layer whose solved point cloud is drawn, and whether it is
-  /// also the one taking clicks (K-417, docs/07 §2.3.6).
+  /// also the one taking clicks (docs/07 §2.3.6).
   ///
-  /// Found in the read model the panel already holds (K-184): the first layer
+  /// Found in the read model the panel already holds: the first layer
   /// carrying an **enabled** Camera track whose Show points is on. No bridge
   /// call, and no per-paint walk of anything the engine owns.
   ({LayerReference layer, bool selecting})? _cloud() {
@@ -148,11 +148,11 @@ class ViewerStage extends StatelessWidget {
     return null;
   }
 
-  /// The Roto brush on the **selected** layer, and which picture it is drawing
-  /// (K-717). Null when the selection carries none, which is what makes the
-  /// Roto tools say so rather than swallowing a scribble.
+  /// The Roto brush on the **selected** layer, and which picture it is drawing.
+  /// Null when the selection carries none, which is what makes the Roto tools
+  /// say so rather than swallowing a scribble.
   ///
-  /// From the read model (K-184), which already carries every layer's every
+  /// From the read model, which already carries every layer's every
   /// effect with its values — so the overlay's target costs no bridge call, and
   /// the first enabled instance wins because a second Roto brush on one layer is
   /// two mattes and the scribble has to belong to one of them.
@@ -176,25 +176,25 @@ class ViewerStage extends StatelessWidget {
   }
 
   /// Every layer of the comp with its box, top of the stack first — what the
-  /// gizmo hit-tests, outlines and drags (K-217).
+  /// gizmo hit-tests, outlines and drags.
   ///
-  /// Built from the read model (K-184), so this costs no bridge calls per
+  /// Built from the read model, so this costs no bridge calls per
   /// paint. Three kinds are left out on purpose: a Camera has no picture to put
   /// a box round; a layer whose position is a curve has no single point a drag
   /// could add to — it would be a box drawn in the wrong place, which is worse
-  /// than none; and **a layer switched off is not on the picture at all**
-  /// (K-230), so it gets no wireframe and takes no click. Switching a layer's
-  /// eye off is how you get it out of the way; a box round something invisible,
-  /// and a click that selected it, put it right back in the way.
+  /// than none; and **a layer switched off is not on the picture at all**, so
+  /// it gets no wireframe and takes no click. Switching a layer's eye off is
+  /// how you get it out of the way; a box round something invisible, and a
+  /// click that selected it, put it right back in the way.
   List<LayerBox> _boxes() {
     if (fitted.isEmpty) return const [];
     final model = uiState.model;
-    // The held copy, not a checked one (K-230): this runs on every rebuild, and
+    // The held copy, not a checked one: this runs on every rebuild, and
     // a pan rebuilds on every movement of the pointer. A change to the document
     // refreshes the model and repaints this from the new one, so checking here
     // only asked the engine a question the answer to which was always no.
     final revision = model.heldRevision;
-    // Where the keyed masks actually are at the frame on screen (K-342). Held
+    // Where the keyed masks actually are at the frame on screen. Held
     // against the document and the playhead, so this costs nothing on a hover
     // and re-asks only when one of the two has moved — and only when a mask
     // whose shape is **drawn** is actually path-animated. Both halves of that
@@ -219,7 +219,7 @@ class ViewerStage extends StatelessWidget {
     final viewScale = compSize.width == 0 ? 1.0 : fitted.width / compSize.width;
     // Where the playhead is in seconds, which is the clock a shape item's keys
     // cross the bridge on: a keyed repeater's copies are part of the layer's
-    // box, so the wireframe has to be measured at the frame on screen (K-553).
+    // box, so the wireframe has to be measured at the frame on screen.
     final playheadSeconds = uiState.playheadFrame.value / model.heldFps;
     double? still(BridgeScalar s) => s is BridgeScalar_Static ? s.field0 : null;
 
@@ -256,7 +256,7 @@ class ViewerStage extends StatelessWidget {
           origin: fitted.topLeft,
           viewScale: viewScale,
         ),
-        // A line being typed measures what is being typed (K-232): the
+        // A line being typed measures what is being typed: the
         // document holds the old one until the edit ends, so a box measured
         // from it would not grow with the words.
         bounds: live == null
@@ -267,7 +267,7 @@ class ViewerStage extends StatelessWidget {
         scalable: sx != null && sy != null && rotation != null,
         rotationDegrees: rotation ?? 0,
         // An animated mask draws where the picture has it, not where its
-        // still path was last written (K-342).
+        // still path was last written.
         masks: [
           for (final mask in entry.info.masks)
             switch (uiState.animatedMaskPaths
@@ -277,13 +277,13 @@ class ViewerStage extends StatelessWidget {
             }
         ],
         shapeContents: entry.info.shapeContents,
-        // Where the art's box starts, which is where the layer's pixels do
-        // (K-308) — without it every drawn point sat a box away from its art.
+        // Where the art's box starts, which is where the layer's pixels do.
+        // Without it every drawn point sat a box away from its art.
         artOrigin:
             shapeContentsRect(entry.info.shapeContents, t: playheadSeconds)
                     ?.topLeft ??
                 Offset.zero,
-        // The pins the puppet tools draw and aim at (K-704), from the same read
+        // The pins the puppet tools draw and aim at, from the same read
         // as everything else on the box.
         puppet: entry.info.puppet,
       ));
@@ -300,7 +300,7 @@ class ViewerStage extends StatelessWidget {
     // Viewer. The whole stage is inside the builder for that reason — handing
     // it in as a cached `child` kept the *pointer* current while every tool
     // layer under it stayed armed for whichever tool was in hand when the panel
-    // last rebuilt (K-225).
+    // last rebuilt.
     //
     // The dropper is listened to beside the tools, and for the same reason: it
     // is armed from a parameter row in another panel, and arming it takes the
@@ -316,7 +316,7 @@ class ViewerStage extends StatelessWidget {
   }
 
   /// Where a held snapshot goes: the slice of the picture it was taken from,
-  /// measured against the picture as it stands now (K-612). A snapshot taken
+  /// measured against the picture as it stands now. A snapshot taken
   /// while the whole picture was on screen covers the whole of it, as it always
   /// did; one taken zoomed in covers the part it photographed, wherever that
   /// part has since moved to.
@@ -332,7 +332,7 @@ class ViewerStage extends StatelessWidget {
   }
 
   Widget _stage(BuildContext context, LumitTheme t) {
-    // **While a pick is armed, the drag is the dropper's** (K-532, docs/07
+    // **While a pick is armed, the drag is the dropper's** (docs/07
     // §6.1). Every tool layer in the stack below settles this by sitting above
     // the pan and taking the hit; the dropper cannot, because it reads raw
     // pointer events rather than recognising a gesture — a [Listener] never
@@ -368,19 +368,18 @@ class ViewerStage extends StatelessWidget {
         child: Stack(
           children: [
             // The checkerboard covers the panel and is clipped to the
-            // picture, rather than being a widget the size of the picture
-            // (K-230): at 800 % on an HD composition that widget was 15360
-            // pixels across, and painting an 8-pixel grid over it meant half
-            // a million rectangles for the few thousand actually on screen.
-            // That, and not the rendering, is what made zooming in seize the
-            // whole window.
+            // picture, rather than being a widget the size of the picture: at
+            // 800 % on an HD composition that widget was 15360 pixels across,
+            // and painting an 8-pixel grid over it meant half a million
+            // rectangles for the few thousand actually on screen. That, and not
+            // the rendering, is what made zooming in seize the whole window.
             if (grid)
               Positioned.fill(
                 child: CustomPaint(painter: _CheckerPainter(t, fitted)),
               ),
-            // The picture, inside the boundary a snapshot is taken of
-            // (K-416). Everything below in this stack is a sibling of it, so
-            // the photograph is the picture and not the marks over it.
+            // The picture, inside the boundary a snapshot is taken of.
+            // Everything below in this stack is a sibling of it, so the
+            // photograph is the picture and not the marks over it.
             Positioned.fromRect(
               rect: fitted,
               child: RepaintBoundary(
@@ -393,7 +392,7 @@ class ViewerStage extends StatelessWidget {
                 ),
               ),
             ),
-            // The grid and the safe areas (K-416): over the picture, under the
+            // The grid and the safe areas: over the picture, under the
             // layer controls, and worked out from the picture's own rectangle
             // so they zoom and pan with the shot.
             if (overlays.grid || overlays.safeAreas)
@@ -421,11 +420,11 @@ class ViewerStage extends StatelessWidget {
                 // Four things move the boxes without the panel being rebuilt:
                 // the selection (a Timeline click), a probe landing with a
                 // clip's real size, an edit changing a transform, and a turn
-                // in flight from the Rotation tool (K-230).
+                // in flight from the Rotation tool.
                 listenable: Listenable.merge([
                   uiState.selectedLayers,
                   // Picking a mask's **Path** row outlines its layer without
-                  // the layer ever being clicked (K-341), so it is half of
+                  // the layer ever being clicked, so it is half of
                   // `outlinedLayerIds` — and therefore half of whether the
                   // masks below are asked for at the frame on screen. Without
                   // it the outline would appear and draw the stored shape.
@@ -455,7 +454,7 @@ class ViewerStage extends StatelessWidget {
                         // hand.
                         showAnchors:
                             uiState.tools.tool.group == ToolGroup.rotate,
-                        // What a dragged layer reaches for (K-689): a guide is
+                        // What a dragged layer reaches for: a guide is
                         // kept in comp pixels, and these two put it on screen.
                         picture: fitted,
                         compSize: Size(
@@ -466,7 +465,7 @@ class ViewerStage extends StatelessWidget {
                       ),
                       // The shape tools and the Pen: a drag draws a mask on
                       // the selected layer, and the Pen builds one point by
-                      // point (K-222, K-223).
+                      // point.
                       ViewerShapeLayer(
                         active: uiState.tools.tool.group == ToolGroup.shape ||
                             uiState.tools.tool == ToolMode.pen,
@@ -484,8 +483,7 @@ class ViewerStage extends StatelessWidget {
                         onChanged: onChanged,
                       ),
                       // The Type tool: a click makes or edits a text layer,
-                      // and what is typed is previewed until the edit ends
-                      // (K-225).
+                      // and what is typed is previewed until the edit ends.
                       ViewerTypeLayer(
                         active: uiState.tools.tool.group == ToolGroup.type,
                         tool: uiState.tools.tool,
@@ -502,8 +500,7 @@ class ViewerStage extends StatelessWidget {
                         onChanged: onChanged,
                       ),
                       // The painting tools: a drag paints a stroke on the
-                      // selected layer (K-227), under the brush ring K-226
-                      // gave them.
+                      // selected layer, under their brush ring.
                       ViewerPaintLayer(
                         active: uiState.tools.tool.group == ToolGroup.paint,
                         tool: uiState.tools.tool,
@@ -518,7 +515,7 @@ class ViewerStage extends StatelessWidget {
                       // The Roto tools: a scribble that claims what the
                       // subject is (and, with `Alt`, what it is not), the
                       // strokes already made, and — in the Boundary view — the
-                      // propagated matte's edge (K-717).
+                      // propagated matte's edge.
                       //
                       // Under the same builder as the rest, and following the
                       // playhead through its own listenable: the scribbles are
@@ -546,7 +543,7 @@ class ViewerStage extends StatelessWidget {
                       ),
                       // The Puppet tools: the mesh ghost over the selected
                       // layer, a click that drives a pin into it and a drag
-                      // that takes that spot of the picture with it (K-704).
+                      // that takes that spot of the picture with it.
                       ViewerPuppetLayer(
                         active: uiState.tools.tool.group == ToolGroup.puppet,
                         tool: uiState.tools.tool,
@@ -557,8 +554,7 @@ class ViewerStage extends StatelessWidget {
                         onChanged: onChanged,
                       ),
                       // The Anchor point tool: its own pointer, and a drag
-                      // that slides the pivot while the picture stays still
-                      // (K-220).
+                      // that slides the pivot while the picture stays still.
                       ViewerAnchorLayer(
                         active: uiState.tools.tool.group == ToolGroup.anchor,
                         comp: comp,
@@ -570,7 +566,7 @@ class ViewerStage extends StatelessWidget {
                         onChanged: onChanged,
                       ),
                       // The Rotation tool: its own pointer, and a drag that
-                      // turns the selection about each layer's anchor (K-219).
+                      // turns the selection about each layer's anchor.
                       ViewerRotateLayer(
                         active: uiState.tools.tool.group == ToolGroup.rotate,
                         comp: comp,
@@ -586,7 +582,7 @@ class ViewerStage extends StatelessWidget {
               ),
             ),
             // The camera tools: a drag orbits, tracks or dollies the comp's
-            // active camera (K-229).
+            // active camera.
             ViewerCameraLayer(
               active: uiState.tools.tool.group == ToolGroup.camera,
               tool: uiState.tools.tool,
@@ -603,12 +599,12 @@ class ViewerStage extends StatelessWidget {
               accent: t.accent,
               onChanged: onChanged,
             ),
-            // The solved point cloud on the tracked layer (K-417): drawn
+            // The solved point cloud on the tracked layer: drawn
             // whenever Show points is on and a solve exists, and taking the
             // pointer only while that layer is the selected one — a cloud that
             // always took clicks would make the whole shot unselectable.
             //
-            // **Under a listener of its own** (K-430). Two things decide
+            // **Under a listener of its own**. Two things decide
             // whether there is a cloud at all, and neither of them rebuilds
             // this panel: switching the effect off, which is a change to the
             // model, and an analysis landing, which is a change to nothing the
@@ -652,7 +648,7 @@ class ViewerStage extends StatelessWidget {
                 },
               ),
             ),
-            // The region of interest (K-362): the outline whenever one is set,
+            // The region of interest: the outline whenever one is set,
             // and — only while armed — the drag that sweeps a new one. Above
             // the layer controls for the same reason the Zoom tool is: while a
             // region is being swept, the whole picture is the target.
@@ -674,7 +670,7 @@ class ViewerStage extends StatelessWidget {
               mark: t.textPrimary,
               outline: t.surface0,
             ),
-            // The Hand tool: the drawn hand, and the drag that pans (K-230).
+            // The Hand tool: the drawn hand, and the drag that pans.
             // It takes the drag rather than leaving it to the stage beneath,
             // so the hand keeps following the pointer while the button is
             // down — which is when it matters most.
@@ -689,7 +685,7 @@ class ViewerStage extends StatelessWidget {
             // take the click that was meant to pick a pixel.
             DropperLayer(comp: comp, uiState: uiState, fitted: fitted),
             // The rulers along the top and left edges, and the guides dragged
-            // out of them (K-689). Over the tool layers, because a guide is
+            // out of them. Over the tool layers, because a guide is
             // grabbed by its own thin strip and a handle underneath must not
             // take a press aimed at one; under the snapshot, because a guide
             // belonging to the live picture drawn over a held one would be a
@@ -712,7 +708,7 @@ class ViewerStage extends StatelessWidget {
                 // picture: §3.2 names guides in its own exemption.
                 guideColour: t.accent,
               ),
-            // The held snapshot (K-416), over everything: while it is up the
+            // The held snapshot, over everything: while it is up the
             // Viewer is showing a second picture, and a wireframe belonging to
             // the live one drawn on top of it would be a lie about both. Fitted
             // to the picture's rectangle as it is *now*, so a zoom taken since
@@ -728,12 +724,12 @@ class ViewerStage extends StatelessWidget {
                   ),
                 ),
               ),
-            // The selection's name, over the stage's own corner (K-466). Last
+            // The selection's name, over the stage's own corner. Last
             // in the stack because it is chrome: it names what is selected
             // whatever is being drawn underneath, including a held snapshot.
             ViewerTag(uiState: uiState),
             // And what is being *looked at*, when that is not the finished
-            // composition (K-528). Its own file, so this is one line: the chip
+            // composition. Its own file, so this is one line: the chip
             // is the Viewer's, but it follows the effect selection rather than
             // anything this panel knows.
             ViewerPrefixChip(uiState: uiState),
@@ -823,7 +819,7 @@ class _MissingBadgeState extends State<_MissingBadge> {
 }
 
 /// How the picture's texture is sampled, given how much of it lands on how
-/// many screen pixels (K-631).
+/// many screen pixels.
 ///
 /// Three sizes decide this, and only their product matters. [shownScale] is the
 /// picture's width on screen as a share of the comp's — the percentage the bar
@@ -838,8 +834,8 @@ class _MissingBadgeState extends State<_MissingBadge> {
 /// is not a smaller picture but a different one — edges break up, fine detail
 /// crawls, and the whole frame reads as soft and faintly busy. That is what a
 /// Viewer below 100 % was doing. [FilterQuality.medium] mipmaps instead, which
-/// is the cheap, clean equivalent of the Lanczos the exporter resizes with
-/// (K-498) — one prefiltered sample rather than a pile of taps.
+/// is the cheap, clean equivalent of the Lanczos the exporter resizes with:
+/// one prefiltered sample rather than a pile of taps.
 ///
 /// At or past 1:1 the picture is *magnified*, and nearest is the honest answer:
 /// a zoomed pixel should be a square, because the reason to zoom in is to look
@@ -861,7 +857,7 @@ FilterQuality viewerPictureFilter({
 }
 
 /// Whatever the worker last published, in the chosen channel — always a
-/// platform texture (K-183): frames only ever arrive as GPU handles.
+/// platform texture: frames only ever arrive as GPU handles.
 class _Picture extends StatelessWidget {
   final LumitUiState uiState;
   final ViewerChannel channel;
@@ -951,7 +947,7 @@ ColorFilter? channelFilterFor(ViewerChannel channel) => switch (channel) {
     };
 
 /// The part of the transparency board worth painting: what is both picture and
-/// panel (K-230).
+/// panel.
 ///
 /// The board used to be a widget the size of the *picture*, which at 800 % on an
 /// HD composition is 15360 pixels across — an 8-pixel grid over that is half a
@@ -1024,7 +1020,7 @@ class _CheckerPainter extends CustomPainter {
 const double viewerTagLeft = 16;
 const double viewerTagTop = 8;
 
-/// The selection's name over the picture's corner (K-466, the mockup's TITLE
+/// The selection's name over the picture's corner (the mockup's TITLE
 /// chip).
 ///
 /// **Why it is worth a mark on the picture.** Selection is agreed in four
@@ -1044,7 +1040,7 @@ class ViewerTag extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     // Off the read model and the selection, both of which move without this
-    // panel being rebuilt (K-230).
+    // panel being rebuilt.
     return ListenableBuilder(
       listenable: Listenable.merge([uiState.model, uiState.selectedLayers]),
       builder: (context, _) {

@@ -66,9 +66,9 @@ void main() {
       expect(cacheBarRuns([]), isEmpty);
     });
 
-    /// K-441: a run breaks on the WHOLE byte, so a stretch held at half and a
-    /// stretch held at quarter are two runs even though both are "held" — they
-    /// are drawn at different strengths, and merging them would say the whole
+    /// A run breaks on the WHOLE byte, so a stretch held at half and a stretch
+    /// held at quarter are two runs even though both are "held" — they are
+    /// drawn at different strengths, and merging them would say the whole
     /// stretch was the finer of the two.
     test('a change of resolution tier breaks the run too', () {
       const heldFull = 0x12;
@@ -137,7 +137,7 @@ void main() {
   group('Cache bar against the engine', () {
     setUpAll(initEngineForTests);
 
-    // Viewer frames only ever cross as GPU handles now (K-183), so nothing the
+    // Viewer frames only ever cross as GPU handles now, so nothing the
     // Viewer shows leaves bytes behind — the rendered-frame cache is filled by
     // the scope path, which needs CPU pixels and files what it renders.
 
@@ -202,7 +202,7 @@ void main() {
       // about timing rather than about the bar.
     });
 
-    /// **An edit that cannot change a pixel must not empty the bar (K-178).**
+    /// **An edit that cannot change a pixel must not empty the bar.**
     ///
     /// A rename is the case that used to show what positional keying cost:
     /// renaming a layer changes no pixel, and every held frame of the
@@ -302,10 +302,10 @@ void main() {
           reason: '4000 frames across 1000 px must not throw in paint');
     });
 
-    /// A scope trace needs CPU pixels, and the zero-copy Viewer keeps none
-    /// (K-183) — so the first trace of a frame renders and files it, and a
-    /// second trace of the same frame is served from the cache rather than
-    /// compositing the composition again.
+    /// A scope trace needs CPU pixels, and the zero-copy Viewer keeps none —
+    /// so the first trace of a frame renders and files it, and a second trace
+    /// of the same frame is served from the cache rather than compositing the
+    /// composition again.
     testWidgets('a second trace of the same frame is served from the cache',
         (tester) async {
       final p = freshProject();
@@ -421,7 +421,7 @@ void main() {
       });
     });
 
-    /// **An undo comes back to a warm cache (K-178).** This is the other half of
+    /// **An undo comes back to a warm cache.** This is the other half of
     /// content keying, and the one a user feels most: make a change, dislike it,
     /// undo — and the frames from before the change are still filed under the
     /// names the restored document asks for, so nothing has to be rendered again.
@@ -548,8 +548,8 @@ void main() {
       await tester.pump();
 
       // The storage half of each strip byte: these tests ask whether a frame
-      // is held, which is the low nibble's question (K-441 put the resolution
-      // tier in the high one).
+      // is held, which is the low nibble's question (the resolution tier is
+      // in the high one).
       List<int> tiers() => comp
           .cachedFrames(frames: BigInt.from(40), scale: 1.0)
           .map(cacheStorageOf)
@@ -652,16 +652,16 @@ void main() {
       // recently.
     });
 
-    /// The idle fill (K-187): show a frame, leave the engine alone for a
-    /// moment, and it banks the frames around the playhead on its own —
-    /// forward-biased, so the ones ahead come first. Real wall-clock waits,
-    /// because the worker is a real thread with a real 200 ms lull gate;
-    /// without the fill this times out with nothing held but the shown frame.
+    /// The idle fill: show a frame, leave the engine alone for a moment, and it
+    /// banks the frames around the playhead on its own — forward-biased, so the
+    /// ones ahead come first. Real wall-clock waits, because the worker is a
+    /// real thread with a real 200 ms lull gate; without the fill this times
+    /// out with nothing held but the shown frame.
     testWidgets('the idle fill warms frames around the playhead',
         (tester) async {
       final p = freshProject();
       // Nothing measured here: a measured frame is deliberately composited
-      // rather than served from a tier (K-276), which is the opposite of what
+      // rather than served from a tier, which is the opposite of what
       // this test is about and enough extra work under a loaded runner to eat
       // the fill's window.
       p.uiState.renderTimings.setMeasuring(false);

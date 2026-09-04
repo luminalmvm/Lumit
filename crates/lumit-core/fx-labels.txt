@@ -1,4 +1,4 @@
-# Every user-facing label the effects schema can send (K-303).
+# Every user-facing label the effects schema can send.
 # Generated - do not edit. To refresh after a schema change:
 #   cargo test -p lumit-core regenerate_fx_label_fixture -- --ignored
 A

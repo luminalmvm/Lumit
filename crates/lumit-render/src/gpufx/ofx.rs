@@ -1,4 +1,4 @@
-//! The GPU half of an effect whose maths is somebody else's (K-593).
+//! The GPU half of an effect whose maths is somebody else's.
 //!
 //! **In plain terms.** Every built-in effect in this table names a WGSL kernel.
 //! A plugin has no kernel Lumit could name — its maths is compiled into a
@@ -21,7 +21,7 @@
 //! **It takes no side table** — `aux()` is [`AuxKind::None`] — and it consumes
 //! no matte of its own, so the generic dissolve beside the dispatch spends it
 //! exactly as it does for any other effect on
-//! [`MatteRole::Strength`](lumit_core::fx::MatteRole) (K-395). A plugin's rows
+//! [`MatteRole::Strength`](lumit_core::fx::MatteRole). A plugin's rows
 //! are its own; a Matte the plugin never heard of would be a control nothing
 //! consumes.
 
@@ -158,7 +158,7 @@ impl GpuEffect for CpuPass {
 }
 
 /// Register one run-time effect: its GPU pass here, and the definition itself
-/// in `lumit-core`'s catalogue (K-593).
+/// in `lumit-core`'s catalogue.
 ///
 /// **One call, both tables, in that order.** They are joined by a `match_name`
 /// string and nothing checks the join at compile time

@@ -1,4 +1,4 @@
-// One garbage mask against the screen matte (docs/08-EFFECTS.md §3.21, K-546).
+// One garbage mask against the screen matte (docs/08-EFFECTS.md §3.21).
 // Mirrors lumit_core::fx::cpu::mask_fill_at op-for-op (§1.6: the CPU is the
 // oracle).
 //
@@ -77,7 +77,7 @@ fn cov(px: f32, py: f32) -> f32 {
     return clamp(0.5 + (d + p.expansion) / p.ramp, 0.0, 1.0);
 }
 
-// STAGE 6 (K-546). Pixel centres, the same coordinate the mask rasteriser
+// STAGE 6. Pixel centres, the same coordinate the mask rasteriser
 // samples on, so a hold-out lands where its mask is drawn.
 @compute @workgroup_size(8, 8)
 fn matte_mask(@builtin(global_invocation_id) gid: vec3<u32>) {

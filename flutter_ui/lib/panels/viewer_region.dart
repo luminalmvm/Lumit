@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lumit_flutter/panels/viewer_tool_cursor.dart' show paintMarquee;
 
-/// The Viewer's **region of interest** (K-362, docs/07 §2.2 item 7): the
+/// The Viewer's **region of interest** (docs/07 §2.2 item 7): the
 /// sub-rectangle of the composition the engine composites, so working on one
 /// corner of a heavy shot does not cost the whole frame.
 ///

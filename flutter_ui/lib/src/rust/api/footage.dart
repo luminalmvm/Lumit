@@ -48,7 +48,7 @@ class BridgeMediaInfo {
 
   /// The picture stream's codec as the container names it (`h264`, `png`),
   /// or `None` when there is no picture. The *user's* word for the file, not
-  /// a display string of ours, so it crosses untranslated (K-303).
+  /// a display string of ours, so it crosses untranslated.
   final String? videoCodec;
 
   /// The sound stream's codec, or `None` when the file is silent.
@@ -59,8 +59,8 @@ class BridgeMediaInfo {
   final int channels;
   final int sampleRate;
 
-  /// Whether the picture is a **still** rather than something that runs
-  /// (K-246). A still probes with a video stream too — one frame of it — so
+  /// Whether the picture is a **still** rather than something that runs.
+  /// A still probes with a video stream too — one frame of it — so
   /// the question is whether the stream lasts, and the engine
   /// ([`lumit_media::MediaProbe::runs_as_video`]) is the one place it is
   /// asked, so the panel cannot call a file a still while the Timeline cuts
@@ -115,7 +115,7 @@ class BridgeMediaInfo {
 }
 
 /// The stand-in file attached to one footage item, as the Project panel's row
-/// reads it (K-501).
+/// reads it.
 ///
 /// Three row states, all readable from here: no proxy at all (`None` from
 /// [`FootageReference::get_proxy`]), one attached and being read (`in_use`), and
@@ -130,7 +130,7 @@ class BridgeMediaInfo {
 class BridgeProxy {
   /// Where the stand-in is, in the same form the Path column shows for the
   /// original: the relative path a saved project carries, else the absolute
-  /// one (K-173).
+  /// one.
   final String path;
 
   /// This item's own *use proxy* tick.
@@ -212,7 +212,7 @@ class FootageReference {
       );
 
   /// Where this item's file is, as the *project* records it: the relative
-  /// path a saved project actually carries (K-173), falling back to the
+  /// path a saved project actually carries, falling back to the
   /// absolute one only when the project has never been saved and there is
   /// nothing to be relative to.
   ///

@@ -1,5 +1,5 @@
 //! The remappable keymap: the table Settings → Keymap draws, and the lookup
-//! every keypress goes through (docs/07-UI-SPEC.md §15, K-199).
+//! every keypress goes through (docs/07-UI-SPEC.md §15).
 //!
 //! # In plain terms
 //!
@@ -12,7 +12,7 @@
 //! **Why the model lives here and not in Dart.** Everything that has to be
 //! *decided* — what a chord means, whether the focused panel outranks the
 //! app-wide binding, whether two bindings clash, what the shareable file says —
-//! is a rule, and rules live in the engine (K-181). The frontend turns a real
+//! is a rule, and rules live in the engine. The frontend turns a real
 //! key event into chord text, draws the table, and forwards the edits. It holds
 //! no opinion about any of it. `lumit-keymap` is the crate that knows; this
 //! module is its window.
@@ -86,9 +86,8 @@ pub struct BridgeKeyBinding {
     pub description: String,
     /// The chord in its canonical text form, e.g. `"Mod+Shift+P"`. Empty when
     /// the action is currently unbound, which is a state the table shows
-    /// rather than hides. One chord per row — K-200 settled that no shipped
-    /// action carries two, so a list here would be structure with nothing to
-    /// hold.
+    /// rather than hides. One chord per row — no shipped action carries two,
+    /// so a list here would be structure with nothing to hold.
     pub chord: String,
 }
 
@@ -113,7 +112,7 @@ pub struct BridgeKeyConflict {
     pub actions: Vec<String>,
 }
 
-/// One chord a panel takes over from an app-wide binding (K-281).
+/// One chord a panel takes over from an app-wide binding.
 ///
 /// **Not a clash.** The focused panel gets first refusal and the app-wide
 /// binding is the fallback, so the chord runs exactly one action and which one
@@ -238,7 +237,7 @@ pub fn keymap_conflicts() -> Vec<BridgeKeyConflict> {
 }
 
 /// Every chord a panel takes over from an app-wide binding, described for
-/// display (K-281). Said out loud beside the table rather than flagged as
+/// display. Said out loud beside the table rather than flagged as
 /// something to fix — the shipped default carries one on purpose (`L`).
 #[frb(sync)]
 #[must_use]
@@ -278,7 +277,7 @@ pub fn keymap_lookup(context: BridgeKeyContext, chord: String) -> Option<String>
 /// actions' keys impossible. Within one context the previous owner is left
 /// unbound and its row goes blank; a panel-scoped binding taking an app-wide
 /// chord leaves both alive, the panel's winning where it is focused, and
-/// [`keymap_shadows`] says so (K-281).
+/// [`keymap_shadows`] says so.
 pub fn keymap_rebind(
     context: BridgeKeyContext,
     action: String,
@@ -348,7 +347,7 @@ pub fn keymap_to_json() -> String {
 /// Rejects anything that is not a keymap rather than half-applying it, so a
 /// corrupt stored blob or somebody else's JSON leaves the current map alone.
 ///
-/// **Laid over the shipped defaults, not swapped for them** (K-302). A file
+/// **Laid over the shipped defaults, not swapped for them**. A file
 /// only knows the actions that existed when it was written, and it used to
 /// replace the map whole — so every action added since was left with no chord
 /// at all for anyone who had ever saved a keymap. That is how `Ctrl+C` came to

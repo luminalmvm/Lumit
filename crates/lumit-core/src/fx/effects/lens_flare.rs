@@ -1,4 +1,4 @@
-//! Lens flare (docs/08 §3.27, docs/impl/lens-flare.md, K-256): ghosts traced
+//! Lens flare (docs/08 §3.27, docs/impl/lens-flare.md): ghosts traced
 //! through a real lens prescription, and the starburst from the aperture's
 //! Fourier diffraction.
 //!
@@ -11,27 +11,27 @@
 //! the one short step that turns the panel's rows into
 //! [`LensFlareParams`](crate::fx::lens_flare::LensFlareParams) — the flat bundle
 //! the bake, the CPU reference and the WGSL kernels all read, so the picture is
-//! decided in one place (K-031).
+//! decided in one place.
 //!
 //! Three things arrive from outside the bag, and each has its own reason:
 //!
 //! - **The Matte source and the `.lens` file** are a picture and a file, so only
 //!   the render knows whether either turned up, and each comes beside the op on
-//!   its own list (K-387). The prescription is this effect's `AuxKind::LensFile`.
-//!   The Matte is no longer the flare's private business: since K-395 it is the
-//!   Matte row every effect has, arriving on the one matte carriage, and the
-//!   flare is simply one of the four that claim it inside their own maths —
-//!   here it decides *where the light sources are*, not how strong the flare is.
-//! - **Lights mode's sources** (K-360) are the comp's own Light layers at this
+//!   its own list. The prescription is this effect's `AuxKind::LensFile`.
+//!   The Matte is no longer the flare's private business: it is the Matte row
+//!   every effect has, arriving on the one matte carriage, and the flare is
+//!   simply one of the four that claim it inside their own maths — here it
+//!   decides *where the light sources are*, not how strong the flare is.
+//! - **Lights mode's sources** are the comp's own Light layers at this
 //!   frame, which is not a parameter anyone could slide: they are read at resolve
 //!   time through the expression context — which already carries the document,
 //!   the comp and the time — and pushed into the bag as derived values
-//!   ([`LensFlareDef::resolve_derived`], K-385).
+//!   ([`LensFlareDef::resolve_derived`]).
 //!
 //! There is no CPU reference through the single-buffer dispatcher: the flare owns
 //! a render pass and its baked tables, and neither reaches a single `&mut [f32]`.
 //! So `apply_cpu` keeps its identity default — the passthrough the old
-//! `Resolved::LensFlare` arm of `cpu::apply` was (the K-114 LUT precedent). The
+//! `Resolved::LensFlare` arm of `cpu::apply` was (the LUT precedent). The
 //! §1.6 oracle is [`crate::fx::lens_flare::cpu_flare`]/`cpu_combine`, exercised
 //! directly from the lumit-gpu tests.
 
@@ -42,7 +42,7 @@ use crate::fx::{
 use crate::model::EffectValue;
 use lumit_fx_macros::Effect;
 
-/// The panel's twirls and conditional runs (K-145, K-257, K-371), in the owner's
+/// The panel's twirls and conditional runs, in the owner's
 /// panel order: the lens's own shaping, then one headerless row per glass
 /// element (drawn only when the lens in play *has* that element), then the flare
 /// detail, then the rows that answer to the Source mode.
@@ -62,7 +62,7 @@ pub const LENS_FLARE_GROUPS: &[ParamGroup] = &[
         visible_when: None,
         visible_when_lens_elements: None,
     },
-    // One coating row per glass element (K-371), each headerless and
+    // One coating row per glass element, each headerless and
     // drawn only when the lens in play has that element: four rows on
     // the Tessar, eighteen on the Canon 70-200.
     ParamGroup {
@@ -222,7 +222,7 @@ pub const LENS_FLARE_GROUPS: &[ParamGroup] = &[
     },
     // The source-colour toggle: headerless, and shown for BOTH the
     // source modes that HAVE a source colour to take (Matte, and
-    // Lights when it lands) — K-259.
+    // Lights when it lands).
     ParamGroup {
         label: "",
         params: &["use_source_colour"],
@@ -251,17 +251,17 @@ pub const LENS_FLARE_GROUPS: &[ParamGroup] = &[
 #[effect(
     match_name = "lens_flare",
     label = "Lens flare",
-    // 11 since K-370: the ghost-edge diffraction is the knife-edge
-    // asymptotic at each ghost's own (derived, and far higher) Fresnel
-    // number, so the rim ringing hugs the rim and the broad interference
-    // pattern K-369's mask ladder painted across the frame is gone.
+    // 11: the ghost-edge diffraction is the knife-edge asymptotic at each
+    // ghost's own (derived, and far higher) Fresnel number, so the rim ringing
+    // hugs the rim and the broad interference pattern the old mask ladder
+    // painted across the frame is gone.
     // 12: Ghost softness crossed from a per cent of the frame diagonal to
-    // px@comp (K-558). `migrate_percent_to_px` converts an older instance on
+    // px@comp. `migrate_percent_to_px` converts an older instance on
     // load, against the comp's own diagonal.
-    // 13: the Matte row grew its Invert, the one every other matte row has
-    // (K-395). It defaults off, which is what every flare saved before it
-    // rendered, so `backfill_builtin_params` alone reads an old save forward
-    // and nothing moves (K-258).
+    // 13: the Matte row grew its Invert, the one every other matte row has. It
+    // defaults off, which is what every flare saved before it rendered, so
+    // `backfill_builtin_params` alone reads an old save forward and nothing
+    // moves.
     version = 13,
     category = Stylise,
     // The one effect that owns a render pass.
@@ -270,7 +270,7 @@ pub const LENS_FLARE_GROUPS: &[ParamGroup] = &[
     // An additive light overlay, the Glow shape.
     premultiplied = true,
     groups = LENS_FLARE_GROUPS,
-    // K-395: the flare already declares a parameter called `matte`, and it means
+    // The flare already declares a parameter called `matte`, and it means
     // something deeper than strength — it is where the flare *detects its
     // sources*. Naming the id claims it inside the flare's own maths and puts it
     // on the one matte carriage; because the row is declared below, none is
@@ -281,12 +281,11 @@ pub const LENS_FLARE_GROUPS: &[ParamGroup] = &[
          parts of the matte brighter than Detect threshold are the lights, and \
          everything else contributes nothing",
     ),
-    // K-425: the flare detects its sources from the matte as it is; no
-    // Channel choice.
+    // The flare detects its sources from the matte as it is; no Channel choice.
     matte_channel = false,
 )]
 pub struct LensFlare {
-    /// Where the light is, px@comp (K-260: point parameters are PIXELS, the
+    /// Where the light is, px@comp (point parameters are PIXELS, the
     /// Transform-anchor convention — never % of frame). Open both sides: an
     /// off-frame light keeps flaring. Pairs with `light_y` into one point row
     /// with a crosshair pick (docs/07 §6.1). The schema default is nominal 1080p;
@@ -311,12 +310,11 @@ pub struct LensFlare {
     )]
     pub light_y: f32,
 
-    /// The **half**-width of the emitting area, px@comp like the position
-    /// (K-260). 0 — the default — is the point source the effect has always had;
-    /// anything larger makes it an AREA light whose ghosts take the shape of the
-    /// source rather than of a point (K-355), because every ray integrates a
-    /// different point of the rectangle (K-367). Pairs with `source_height` into
-    /// one row.
+    /// The **half**-width of the emitting area, px@comp like the position. 0 —
+    /// the default — is the point source the effect has always had; anything
+    /// larger makes it an AREA light whose ghosts take the shape of the source
+    /// rather than of a point, because every ray integrates a different point
+    /// of the rectangle. Pairs with `source_height` into one row.
     #[slider(
         min = 0.0,
         max = 400.0,
@@ -345,7 +343,7 @@ pub struct LensFlare {
     /// Wider (a smaller number) grows the ghost discs and softens the starburst
     /// ringing. The default is the default lens's native stop (the Master
     /// Prime is a T1.3), so a dropped-on flare starts wide open and at its
-    /// brightest - stopping down dims it honestly (K-432).
+    /// brightest - stopping down dims it honestly.
     #[slider(
         label = "F-stop",
         min = 1.0,
@@ -357,14 +355,14 @@ pub struct LensFlare {
     )]
     pub fstop: f32,
 
-    /// The embedded prescription library (K-261, curated to twenty at K-264):
+    /// The embedded prescription library (curated to twenty):
     /// real lenses, transcribed patent data, chosen for maximally different flare
     /// characters. Sorted by name; the default is the Master Prime 50, the
     /// reference cine prime the effect was tuned against. A `.lens` file on
     /// [`lens_file`](Self::lens_file) overrides this pick entirely.
     ///
     /// Not clamped here: an out-of-range index is clamped inside `lens_entry`, so
-    /// a pre-K-264 save whose index pointed into the old 1299-lens table simply
+    /// an older save whose index pointed into the old 1299-lens table simply
     /// lands on a valid curated lens.
     #[choice(
         label = "Lens",
@@ -373,7 +371,7 @@ pub struct LensFlare {
     )]
     pub lens_model: u32,
 
-    /// A user's own `.lens` prescription (K-264, the LUT File pattern): set, it
+    /// A user's own `.lens` prescription (the LUT File pattern): set, it
     /// overrides the Lens pick entirely — the twenty bundled lenses are a curated
     /// palette, and this is the door to everything else (the FlareSim /
     /// PhotonsToPhotos Optical Bench format the parser already reads). Unset,
@@ -383,13 +381,13 @@ pub struct LensFlare {
     /// **Always `None` here, by design.** A file slot is decided by the caller —
     /// only the render knows which prescription actually loaded and what its text
     /// hashes to — so `resolve_into_arena` carries no `Value::File`, and the file
-    /// arrives at the GPU pass as half of this effect's aux pair (K-387). The row
+    /// arrives at the GPU pass as half of this effect's aux pair. The row
     /// exists because the panel needs it.
     #[file(filter = ["lens"], filter_name = "Lens prescription")]
     pub lens_file: Option<u32>,
 
     // ---- The Lens options twirl ----
-    /// Focus distance in metres (K-260): shifts the sensor from its calibrated
+    /// Focus distance in metres: shifts the sensor from its calibrated
     /// infinity position by the thin-lens image shift, changing the whole flare's
     /// shape — real flares breathe with focus. Large values are infinity.
     #[slider(
@@ -419,7 +417,7 @@ pub struct LensFlare {
     ///
     /// **Rounded, not floored** — which is what the arena's generic Int
     /// conversion does, so unlike Depth of field's blade count this row needs no
-    /// derivation of its own (K-385): the old resolve arm rounded here too, and
+    /// derivation of its own: the old resolve arm rounded here too, and
     /// moving the step would change what a keyframed sweep renders mid-way.
     #[counter(min = 3, max = 16, default = 8, hard_min = 3, hard_max = 16, unit = Raw)]
     pub blades: i32,
@@ -451,7 +449,7 @@ pub struct LensFlare {
     )]
     pub aperture_softness: f32,
 
-    // ---- One row per glass element (K-371) ----
+    // ---- One row per glass element ----
     // Each chooses a real AR design for one piece of glass. Twenty is the
     // schema's ceiling; each row's own group says how many elements a lens must
     // have for it to be drawn, so the panel offers exactly as many as the lens
@@ -465,7 +463,7 @@ pub struct LensFlare {
     )]
     pub coating_el1: u32,
 
-    /// The coating on glass element 2 (K-371).
+    /// The coating on glass element 2.
     #[choice(
         label = "Element 2",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -474,7 +472,7 @@ pub struct LensFlare {
     )]
     pub coating_el2: u32,
 
-    /// The coating on glass element 3 (K-371).
+    /// The coating on glass element 3.
     #[choice(
         label = "Element 3",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -483,7 +481,7 @@ pub struct LensFlare {
     )]
     pub coating_el3: u32,
 
-    /// The coating on glass element 4 (K-371).
+    /// The coating on glass element 4.
     #[choice(
         label = "Element 4",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -492,7 +490,7 @@ pub struct LensFlare {
     )]
     pub coating_el4: u32,
 
-    /// The coating on glass element 5 (K-371).
+    /// The coating on glass element 5.
     #[choice(
         label = "Element 5",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -501,7 +499,7 @@ pub struct LensFlare {
     )]
     pub coating_el5: u32,
 
-    /// The coating on glass element 6 (K-371).
+    /// The coating on glass element 6.
     #[choice(
         label = "Element 6",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -510,7 +508,7 @@ pub struct LensFlare {
     )]
     pub coating_el6: u32,
 
-    /// The coating on glass element 7 (K-371).
+    /// The coating on glass element 7.
     #[choice(
         label = "Element 7",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -519,7 +517,7 @@ pub struct LensFlare {
     )]
     pub coating_el7: u32,
 
-    /// The coating on glass element 8 (K-371).
+    /// The coating on glass element 8.
     #[choice(
         label = "Element 8",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -528,7 +526,7 @@ pub struct LensFlare {
     )]
     pub coating_el8: u32,
 
-    /// The coating on glass element 9 (K-371).
+    /// The coating on glass element 9.
     #[choice(
         label = "Element 9",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -537,7 +535,7 @@ pub struct LensFlare {
     )]
     pub coating_el9: u32,
 
-    /// The coating on glass element 10 (K-371).
+    /// The coating on glass element 10.
     #[choice(
         label = "Element 10",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -546,7 +544,7 @@ pub struct LensFlare {
     )]
     pub coating_el10: u32,
 
-    /// The coating on glass element 11 (K-371).
+    /// The coating on glass element 11.
     #[choice(
         label = "Element 11",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -555,7 +553,7 @@ pub struct LensFlare {
     )]
     pub coating_el11: u32,
 
-    /// The coating on glass element 12 (K-371).
+    /// The coating on glass element 12.
     #[choice(
         label = "Element 12",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -564,7 +562,7 @@ pub struct LensFlare {
     )]
     pub coating_el12: u32,
 
-    /// The coating on glass element 13 (K-371).
+    /// The coating on glass element 13.
     #[choice(
         label = "Element 13",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -573,7 +571,7 @@ pub struct LensFlare {
     )]
     pub coating_el13: u32,
 
-    /// The coating on glass element 14 (K-371).
+    /// The coating on glass element 14.
     #[choice(
         label = "Element 14",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -582,7 +580,7 @@ pub struct LensFlare {
     )]
     pub coating_el14: u32,
 
-    /// The coating on glass element 15 (K-371).
+    /// The coating on glass element 15.
     #[choice(
         label = "Element 15",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -591,7 +589,7 @@ pub struct LensFlare {
     )]
     pub coating_el15: u32,
 
-    /// The coating on glass element 16 (K-371).
+    /// The coating on glass element 16.
     #[choice(
         label = "Element 16",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -600,7 +598,7 @@ pub struct LensFlare {
     )]
     pub coating_el16: u32,
 
-    /// The coating on glass element 17 (K-371).
+    /// The coating on glass element 17.
     #[choice(
         label = "Element 17",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -609,7 +607,7 @@ pub struct LensFlare {
     )]
     pub coating_el17: u32,
 
-    /// The coating on glass element 18 (K-371).
+    /// The coating on glass element 18.
     #[choice(
         label = "Element 18",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -618,7 +616,7 @@ pub struct LensFlare {
     )]
     pub coating_el18: u32,
 
-    /// The coating on glass element 19 (K-371).
+    /// The coating on glass element 19.
     #[choice(
         label = "Element 19",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -627,7 +625,7 @@ pub struct LensFlare {
     )]
     pub coating_el19: u32,
 
-    /// The coating on glass element 20 (K-371).
+    /// The coating on glass element 20.
     #[choice(
         label = "Element 20",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -641,16 +639,16 @@ pub struct LensFlare {
     #[slider(min = 0.0, max = 4.0, default = 1.0, hard_min = 0.0, unit = Raw)]
     pub ghost_intensity: f32,
 
-    /// Box-blur radius in px@comp (K-261, FlareSim's Ghost Blur): a touch of
+    /// Box-blur radius in px@comp (FlareSim's Ghost Blur): a touch of
     /// out-of-focus softness. A blur radius is a distance, so it is pixels and
-    /// not a share of the frame diagonal (K-558, which closes K-419's one
-    /// remaining exception).
+    /// not a share of the frame diagonal. This row was the last exception to
+    /// that rule.
     ///
     /// The declared default and the two range ends are the old per cents at the
     /// schema's nominal 1080p frame — 0.02 %, 1 % and a hard 2 % of a 2202.9 px
     /// diagonal — so the shipped picture is the shipped picture and the dial
-    /// still runs the same distance. 0.44 px rounds to no blur at all, which is
-    /// what K-264 chose: with the vertex-smoothed density and the multisampled
+    /// still runs the same distance. 0.44 px rounds to no blur at all, and that
+    /// is deliberate: with the vertex-smoothed density and the multisampled
     /// raster the geometry no longer needs hiding, so the default is taste, not
     /// cover, and 0 stays a usable, clean setting.
     #[slider(min = 0.0, max = 22.0, default = 0.44, hard_min = 0.0, hard_max = 44.0, unit = Px)]
@@ -661,8 +659,8 @@ pub struct LensFlare {
     #[counter(min = 0, max = 150, default = 60, hard_min = 0, hard_max = 200, unit = Raw)]
     pub max_ghosts: i32,
 
-    /// Ray-budget multiplier on the Quality tier's pupil grid (K-265,
-    /// owner-asked): the tiers pick a sensible base and this dial hands the trade
+    /// Ray-budget multiplier on the Quality tier's pupil grid (owner-asked):
+    /// the tiers pick a sensible base and this dial hands the trade
     /// to the user — a lens whose ghost rims still show their cells buys more rays
     /// without jumping a whole tier, a preview buys fewer. Frame-time, never
     /// rebakes; 1 is the tier as shipped.
@@ -686,7 +684,7 @@ pub struct LensFlare {
     // ---- Source ----
     /// Where the light comes from: Manual (the light point above), Matte (bright
     /// sources detected in a referenced layer), or **Lights** — the comp's own
-    /// Light layers (K-360), which reach the maths through
+    /// Light layers, which reach the maths through
     /// [`LensFlareDef::resolve_derived`] rather than through a row.
     #[choice(
         label = "Source",
@@ -695,7 +693,7 @@ pub struct LensFlare {
     )]
     pub source_type: u32,
 
-    /// Multiplies every light's colour, in every source mode (K-259): in Manual
+    /// Multiplies every light's colour, in every source mode: in Manual
     /// it IS the flare's colour; in Matte it tints whatever the sources
     /// contribute. Scene-linear, and open above 1 so an HDR tint can push a flare
     /// hotter. Alpha unused.
@@ -704,12 +702,12 @@ pub struct LensFlare {
 
     /// On: a detected source's own colour tints its flare (a warm practical
     /// flares warm). Off: every source flares white through Light tint alone,
-    /// which is what a matte used purely as a *position* mask wants (K-259).
+    /// which is what a matte used purely as a *position* mask wants.
     #[toggle(default = true)]
     pub use_source_colour: bool,
 
     /// The layer whose brightest sources spawn the flares (impl note §6); unset is
-    /// a labelled no-flare, never a fault. `self_default` (K-288): a fresh flare
+    /// a labelled no-flare, never a fault. `self_default`: a fresh flare
     /// points at its OWN layer, because "flare the lights in this picture" is what
     /// asking for a matte source nearly always means — and on an adjustment layer
     /// that reads the composite of everything below, so the effect works there
@@ -718,17 +716,17 @@ pub struct LensFlare {
     /// **Always `false` here, by design.** A Layer binding is decided by the
     /// caller — only the render knows which layer was actually rendered — so
     /// `resolve_into_arena` carries no `Value::Layer`, and the matte arrives at
-    /// the GPU pass as half of this effect's aux pair (K-387). The row exists
+    /// the GPU pass as half of this effect's aux pair. The row exists
     /// because the panel needs it; the trace never asks the bag whether it is
     /// bound, because a missing matte simply detects no sources.
     ///
-    /// **Labelled "Matte", not "Matte layer"** (K-395): the uniform row's word,
+    /// **Labelled "Matte", not "Matte layer"**: the uniform row's word,
     /// shared with every other effect's matte. The stored id was already `matte`,
     /// so nothing but the label moves.
     #[layer(label = "Matte", self_default = true)]
     pub matte: bool,
 
-    /// The uniform matte row's **Invert** (K-395), which this row was the last
+    /// The uniform matte row's **Invert**, which this row was the last
     /// one missing. On, detection reads `1 − rgb` of the matte, so the DARK
     /// parts of it are the lights: a black-on-white shape flares its shape
     /// without anyone having to add an Invert effect to the matte layer.
@@ -738,15 +736,15 @@ pub struct LensFlare {
     /// flare's matte is a *picture* it takes colour from, not a strength ramp:
     /// the seam's pass would flatten it to grey and clamp its over-range
     /// highlights away, and Threshold is an absolute scene-linear luma. One
-    /// line, both twins, per K-425's rule that an effect owning its matte reads
-    /// the raw RGBA and does its own Invert (Displacement map does the same).
+    /// line, both twins, by the rule that an effect owning its matte reads the
+    /// raw RGBA and does its own Invert (Displacement map does the same).
     ///
     /// Off by default: what every flare saved before v13 detected, it still
-    /// detects (K-258).
+    /// detects.
     #[toggle(label = "Invert", default = false)]
     pub matte_invert: bool,
 
-    /// The absolute scene-linear luma a pixel must EXCEED to flare (K-363): at 1.0
+    /// The absolute scene-linear luma a pixel must EXCEED to flare: at 1.0
     /// only over-range highlights, at 0.0 anything brighter than black — black
     /// itself never. The slider is normalised 0–1; typing goes above.
     #[slider(min = 0.0, max = 1.0, default = 1.0, hard_min = 0.0, unit = Raw)]
@@ -761,8 +759,8 @@ pub struct LensFlare {
     #[choice(options = ["Draft", "Normal", "High", "Ultra"], default = 1)]
     pub quality: u32,
 
-    /// How the flare element combines with the layer under it (K-289, replacing
-    /// K-258's Transparent/Black Background pair). The curated light-combine set
+    /// How the flare element combines with the layer under it (replacing the
+    /// old Transparent/Black Background pair). The curated light-combine set
     /// Echo offers, for the same reason (T21): the HSL / burn / dodge modes are
     /// ill-defined on a premultiplied light overlay. Normal heads the list, then a
     /// divider, because it is the one mode that REPLACES the layer — the flare on
@@ -789,7 +787,7 @@ pub struct LensFlare {
 }
 
 impl LensFlare {
-    /// How many Lights-mode sources this frame resolved (K-360) — never a panel
+    /// How many Lights-mode sources this frame resolved — never a panel
     /// row, and 0 in every other mode.
     pub const DERIVED_LIGHT_COUNT: ParamId = ParamId::new("derived.light_count");
 
@@ -873,7 +871,7 @@ impl LensFlare {
         ),
     ];
 
-    /// The Lights-mode sources out of a resolved bag (K-360) — [`Self::packed`]'s
+    /// The Lights-mode sources out of a resolved bag — [`Self::packed`]'s
     /// missing argument, so no caller has to know the ids. Empty in Manual and
     /// Matte modes, which is exactly what the old resolve arm left there.
     pub fn lights_of(p: Params<'_>) -> ([lf::FlareLight; lf::MAX_SOURCES], u32) {
@@ -894,7 +892,7 @@ impl LensFlare {
         (lights, count)
     }
 
-    /// Every element's coating choice as the trace's array (K-371), each clamped
+    /// Every element's coating choice as the trace's array, each clamped
     /// to the palette. A row the panel never showed (this lens has fewer elements)
     /// reads its default and leaves the prescription's own column alone, so an
     /// unset row and a missing row are the same thing.
@@ -953,7 +951,7 @@ impl LensFlare {
             aperture_softness: self.aperture_softness.clamp(0.0, 1.0),
             coating_elements: self.coating_elements(),
             ghost_intensity: self.ghost_intensity.max(0.0),
-            // px@comp since K-558: raster pixels by the time it is here, the
+            // px@comp: raster pixels by the time it is here, the
             // §2.3 preview factor included, and capped where the blur is.
             ghost_softness: self
                 .ghost_softness
@@ -999,7 +997,7 @@ impl EffectDef for LensFlareDef {
         &<LensFlare as EffectMetadata>::SCHEMA
     }
 
-    /// **Lights mode's sources** (K-360, K-385): the comp's own Light layers,
+    /// **Lights mode's sources**: the comp's own Light layers,
     /// resolved here because the expression context already carries the document,
     /// the comp and the time — everything needed, and nothing new to thread.
     ///

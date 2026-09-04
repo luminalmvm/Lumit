@@ -1,4 +1,4 @@
-// Sprite flare (docs/08 §3.29, K-359) — the art-directed sibling of the
+// Sprite flare (docs/08 §3.29) — the art-directed sibling of the
 // physically simulated §3.27, and the twin of
 // `lumit_core::fx::cpu::sprite_flare_at`, op for op.
 //

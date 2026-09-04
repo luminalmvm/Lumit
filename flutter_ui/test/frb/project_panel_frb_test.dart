@@ -41,8 +41,7 @@ void main() {
     Finder rowText(String name) =>
         find.descendant(of: find.byType(ListView), matching: find.text(name));
 
-    /// A genuine double-click on a row — the gesture that **opens** it
-    /// (K-534).
+    /// A genuine double-click on a row — the gesture that **opens** it.
     ///
     /// [kDoubleTapMinTime] between the two, which is Flutter's own floor for
     /// calling a pair of taps a double tap, and nothing more: the open must
@@ -56,8 +55,8 @@ void main() {
       await tester.pump();
     }
 
-    /// Hold [colour] in the swatch filter, the way the pointer does it
-    /// (K-726): the well's one square opens the eight-colour picker, and the
+    /// Hold [colour] in the swatch filter, the way the pointer does it:
+    /// the well's one square opens the eight-colour picker, and the
     /// picked chip is the filter. `null` picks the neutral chip, which shows
     /// everything again.
     Future<void> pickFilterColour(WidgetTester tester, int? colour) async {
@@ -149,7 +148,7 @@ void main() {
       );
     });
 
-    /// **Double-clicking** footage opens New composition on it (K-243):
+    /// **Double-clicking** footage opens New composition on it:
     /// footage has no window of its own, and the thing wanted from a clip just
     /// double-clicked is a comp to put it in, already its size, rate and
     /// length. Renaming footage moved to the row menu with this.
@@ -188,7 +187,7 @@ void main() {
           reason: 'the clip it was made from is in it');
     });
 
-    /// **Clicking a row that is already selected does nothing** (K-534, owner
+    /// **Clicking a row that is already selected does nothing** (owner
     /// desk test: "if I click a selected item it brings up the new composition
     /// menu").
     ///
@@ -248,7 +247,7 @@ void main() {
       await tester.tap(rowText('shot.mov'));
       await tester.pump(const Duration(milliseconds: 500));
       expect(p.uiState.selectedProjectItem.value, isA<ItemReference_Footage>(),
-          reason: 'the anchor item is mirrored to the shell (K-327)');
+          reason: 'the anchor item is mirrored to the shell');
       await tester.tap(rowText('Scene'));
       await tester.pump(const Duration(milliseconds: 500));
       expect(
@@ -257,7 +256,7 @@ void main() {
     });
 
     /// Opening a folder is showing what is in it, so a double-click shuts it
-    /// and another opens it again (K-243). The Compositions auto-folder is one.
+    /// and another opens it again. The Compositions auto-folder is one.
     testWidgets('a double-click on a folder opens and shuts it',
         (tester) async {
       final p = freshProject();
@@ -337,7 +336,7 @@ void main() {
           reason: 'the rename reached the document, not just the field');
     });
 
-    /// **Add audio only (K-435):** the sound of a clip, as its own layer in the
+    /// **Add audio only:** the sound of a clip, as its own layer in the
     /// open composition. Offered only where there is a composition to put it
     /// in — a layer placed nowhere is not an action.
     testWidgets('Add audio only puts a clip\'s sound in the open comp',
@@ -400,7 +399,7 @@ void main() {
       ));
       await tester.pump();
 
-      // From the row menu, which is where renaming footage lives (K-243).
+      // From the row menu, which is where renaming footage lives.
       await tester.tapAt(
         tester.getCenter(rowText('shot.mov')),
         buttons: kSecondaryButton,
@@ -491,7 +490,7 @@ void main() {
 
     /// The same, starting from an already-selected row: the **double-click**
     /// still opens it. Being selected already is not what makes a click mean
-    /// something (K-534) — the double-click is.
+    /// something — the double-click is.
     testWidgets('double-clicking an already-selected row opens it',
         (tester) async {
       final p = freshProject();
@@ -686,7 +685,7 @@ void main() {
       expect(rowText('Scene'), findsOneWidget, reason: 'moved, not deleted');
     });
 
-    /// The other direction, and the panel's own filing gesture (K-451): a row
+    /// The other direction, and the panel's own filing gesture: a row
     /// dropped on a folder row lands in that folder, and the folder's Items
     /// count says so at once.
     testWidgets('a folder row takes a dropped item and files it',
@@ -779,7 +778,7 @@ void main() {
           reason: 'the folder and both clips, back at the root');
     });
 
-    /// **Delete takes the whole selection** (K-523). It read the clicked row
+    /// **Delete takes the whole selection**. It read the clicked row
     /// alone while Move to folder, two entries away in the same menu, already
     /// took `_targets` — the shape this ruling exists to stamp out.
     testWidgets('the context menu deletes the whole selection', (tester) async {
@@ -1028,7 +1027,7 @@ void main() {
       expect(find.byType(RawImage), findsOneWidget,
           reason: 'the header drew the decoded picture');
       // The card's second line names what the file is MADE OF now the codec
-      // crosses (K-451). "footage" was what it could say before that, and is
+      // crosses. "footage" was what it could say before that, and is
       // still the fallback for an item with no container to name.
       expect(find.text('footage'), findsNothing);
       final codec =
@@ -1239,7 +1238,7 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('project-new-comp')));
       await tester.pump();
-      // The button asks before it commits (K-180): nothing exists until Create.
+      // The button asks before it commits: nothing exists until Create.
       expect(find.text('NEW COMPOSITION'), findsWidgets);
       expect(p.state.project!.getItems(), isEmpty);
 
@@ -1308,7 +1307,7 @@ void main() {
           reason: 'the blank space below the rows takes the gesture too');
     });
 
-    /// Enter renames the lone selected item (K-321) — the keyboard path that
+    /// Enter renames the lone selected item — the keyboard path that
     /// replaced the old second-click rename, live for every item kind.
     testWidgets('Enter renames the selected item', (tester) async {
       final p = freshProject();
@@ -1338,7 +1337,7 @@ void main() {
       expect(rowText('Hero shot'), findsOneWidget,
           reason: 'the rename reached the document');
 
-      // Escape throws the edit away (K-323): the editor closes and the item
+      // Escape throws the edit away: the editor closes and the item
       // keeps the name it had. Every other way out of an inline rename
       // commits, so without this there is no way to change your mind.
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
@@ -1364,7 +1363,7 @@ void main() {
 
     // -----------------------------------------------------------------------
     // The five the mockup drew and the engine could not answer until now
-    // (K-451, docs/07 §3.1, docs/15 §12A.3a).
+    // (docs/07 §3.1, docs/15 §12A.3a).
     // -----------------------------------------------------------------------
 
     testWidgets('the bottom bar makes a folder, filed into the picked one',
@@ -1488,10 +1487,10 @@ void main() {
     });
 
     /// **A fresh item is found by the colour it visibly wears.** An untagged
-    /// clip's glyph is azure — the kind's default chip (K-188) — but the
+    /// clip's glyph is azure — the kind's default chip — but the
     /// filter used to compare stored tags only, so picking the very blue the
-    /// panel was showing found nothing. The filter matches the worn colour
-    /// (K-634): own tag, then the folder's handed down, then the kind's own
+    /// panel was showing found nothing. The filter matches the worn colour:
+    /// own tag, then the folder's handed down, then the kind's own
     /// default.
     testWidgets('a fresh item is found by the colour it visibly wears',
         (tester) async {
@@ -1520,7 +1519,7 @@ void main() {
           reason: 'the neutral chip shows everything again');
     });
 
-    /// **The row's own hue square** (K-727): every row carries a small
+    /// **The row's own hue square**: every row carries a small
     /// hue-quartered square at its right that opens the eight-colour picker,
     /// and the picked chip tags the item — the mouse path that used to live
     /// only behind the right-click menu.
@@ -1568,9 +1567,9 @@ void main() {
           reason: 'an explicit tag wins over the inherited one');
     });
 
-    /// **The swatch filter narrows on the colour a row is wearing** (K-634),
-    /// which for an untagged item inside a tagged folder is the folder's
-    /// (K-567). It used to read the row's own `u8` alone, so filing a clip
+    /// **The swatch filter narrows on the colour a row is wearing**,
+    /// which for an untagged item inside a tagged folder is the folder's.
+    /// It used to read the row's own `u8` alone, so filing a clip
     /// into a coloured folder coloured it on screen and then hid it from the
     /// filter for that very colour.
     testWidgets('the swatch filter finds an inherited colour, and clears',
@@ -1743,7 +1742,7 @@ void main() {
           reason: 'the codec line replaced the kind-of-item fallback');
     });
 
-    /// **Proxies on the row menu (K-501).** Four commands and one badge, all
+    /// **Proxies on the row menu.** Four commands and one badge, all
     /// over the seam: attach a file, read from it or not, forget it.
     testWidgets('the proxy commands round-trip from the row menu',
         (tester) async {
@@ -1839,7 +1838,7 @@ void main() {
           find.byKey(const ValueKey('project-menu-make-proxy')), findsNothing);
     });
 
-    /// **The project-wide switch (K-501)** lives on the bottom bar, after the
+    /// **The project-wide switch** lives on the bottom bar, after the
     /// new-item controls: it lights at `text_primary` while it is on, rests at
     /// `text_muted`, and writes the document both ways.
     testWidgets('the bottom bar carries the project-wide proxies switch',
@@ -1879,7 +1878,7 @@ void main() {
       expect(p.state.project!.useProxies(), isTrue);
     });
 
-    /// **Files dragged in from the OS file manager (K-581).** Flutter 3.47
+    /// **Files dragged in from the OS file manager.** Flutter 3.47
     /// has no drop API of its own, so the event arrives on the `desktop_drop`
     /// plugin's method channel; these drive that channel directly, which is
     /// the whole mechanism minus the operating system.
@@ -2010,7 +2009,7 @@ void main() {
 
         final items = p.state.project!.getItems();
         expect(items.length, 1,
-            reason: 'three frames of one run are one image sequence (K-539)');
+            reason: 'three frames of one run are one image sequence');
         expect(items.single, isA<ItemReference_Footage>());
       });
 

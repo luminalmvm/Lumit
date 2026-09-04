@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import Base from "../layouts/Base.astro";
 
-// The translation page (K-653). Crowdin hosted a box a translator typed into; this is
+// The translation page. Crowdin hosted a box a translator typed into; this is
 // that box, built from the application's own string file at build time. Nothing here
 // runs on a server: the whole list of what each language is missing is worked out
 // during `astro build`, and what a translator types lives in their browser until they
@@ -74,7 +74,7 @@ const totals = Object.fromEntries(
 const DISCORD = "https://discord.gg/dc3p3XC7mM";
 const REPO = "https://github.com/luminalmvm/Lumit";
 
-// The gate (K-653). A translator signs in with Discord and the page asks Discord whether
+// The gate. A translator signs in with Discord and the page asks Discord whether
 // they hold the translator role in the Lumit server; only then do the boxes accept
 // typing, and what they send back carries their name.
 //

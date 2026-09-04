@@ -1,5 +1,5 @@
-// The Type tool: making and editing text layers on the picture (K-225,
-// docs/07 §1.7, §2.3.2).
+// The Type tool: making and editing text layers on the picture (docs/07 §1.7,
+// §2.3.2).
 //
 // **In plain terms.** With the Type tool in hand, clicking empty picture makes a
 // **new text layer** where you clicked and puts a caret there; clicking an
@@ -13,7 +13,7 @@
 // undo step, so writing the layer on each keystroke would make `Ctrl+Z` walk
 // back through a sentence one letter at a time. Instead the picture is kept in
 // step with `render_frame_with_text_preview` — the same live-preview path a
-// dragged transform uses (K-183), which shows a provisional value without the
+// dragged transform uses, which shows a provisional value without the
 // document ever holding it — and the layer is written once, when the edit ends.
 // One typing session, one undo step.
 //
@@ -109,7 +109,7 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
   double _size = 72;
   BridgeColourRgba _fill = const BridgeColourRgba(r: 1, g: 1, b: 1, a: 1);
 
-  /// Where the pointer is, for the drawn beam vertical type wears (K-226).
+  /// Where the pointer is, for the drawn beam vertical type wears.
   Offset? _pointer;
 
   final TextEditingController _controller = TextEditingController();
@@ -137,7 +137,7 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
   }
 
   /// The other key a typing session has to answer while the text field has the
-  /// keyboard (K-230); Escape is [_escape] on the ladder.
+  /// keyboard; Escape is [_escape] on the ladder.
   ///
   /// **Ctrl+Z** ends the edit as well and then lets go: an undo pressed mid-sentence
   /// used to be swallowed by the text field, so the document did not move and
@@ -196,7 +196,7 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
     if (!widget.active) return const SizedBox.shrink();
     final viewScale = widget.fitted.width / widget.compSize.width;
     // Horizontal type wears the system's own I-beam; vertical type has one
-    // drawn for it, because no platform ships a sideways beam (K-226).
+    // drawn for it, because no platform ships a sideways beam.
     final vertical = widget.tool == ToolMode.typeVertical;
     final t = ThemeScope.of(context).theme;
     return Positioned.fill(
@@ -290,7 +290,7 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
 
   /// The topmost text layer whose box contains [at], or null.
   ///
-  /// Which layers are text comes off the read model (K-184), so a click costs
+  /// Which layers are text comes off the read model, so a click costs
   /// no bridge calls however deep the stack — it used to ask `getText()` of
   /// every layer under the pointer. The one read the edit needs is asked of
   /// the layer chosen, in [_begin].
@@ -312,12 +312,12 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
   void _create(Offset at) {
     final options = widget.uiState.tools;
     // The composition's own placement — the same conversion the shape tools
-    // build a new layer's art with (K-237).
+    // build a new layer's art with.
     final (cx, cy) =
         ShapeSpace.ofComp(fitted: widget.fitted, compSize: widget.compSize)
             .ofScreen(at);
     try {
-      // One op, so one undo step, and undoing it takes the layer away (K-230).
+      // One op, so one undo step, and undoing it takes the layer away.
       // This used to be three — a layer saying "Text" in the middle of the
       // composition, then an empty line written into it, then a move to the
       // click — so `Ctrl+Z` walked back through two states nobody had ever
@@ -333,8 +333,7 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
           size: options.textSize,
           fill: options.fillRgba,
           // A layer being made has no mask to run along yet, so it lays
-          // straight (K-607), and has no letters to animate separately
-          // (K-609).
+          // straight, and has no letters to animate separately.
           pathOffset: const BridgeScalar.static_(0),
           animators: const [],
         ),
@@ -393,7 +392,7 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
     setState(() {});
     final layer = _editing!;
     // What the box round the words should be measured from while they are
-    // being typed (K-232). The document still holds the old line — it is
+    // being typed. The document still holds the old line — it is
     // written once, when the edit ends — so a box measured from the document
     // does not grow as the words do.
     _publishLive(layer);
@@ -443,7 +442,7 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
     }
   }
 
-  /// Write what was typed, as **one** undo step (K-230).
+  /// Write what was typed, as **one** undo step.
   ///
   /// For a layer this tool made that means the document and the recentred
   /// anchor together: they are one action to the user — "I typed a line" — and
@@ -467,7 +466,7 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
   }
 
   /// The document to write for `layer` saying `text`, carrying its **path**
-  /// along (K-607): typing into a line that runs round a curve must not
+  /// along: typing into a line that runs round a curve must not
   /// straighten it, and the document is written whole.
   BridgeTextDocument _document(LayerReference layer, String text) {
     final current = layer.getText();
@@ -478,7 +477,7 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
       path: current?.path,
       pathOffset: current?.pathOffset ?? const BridgeScalar.static_(0),
       // Carried along for the same reason the path is: typing into a line
-      // whose letters are animated must not throw the animators away (K-609).
+      // whose letters are animated must not throw the animators away.
       animators: current?.animators ?? const [],
     );
   }
@@ -486,7 +485,7 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
   /// Where a new layer's anchor and position want to be once the line is known:
   /// the pivot in the middle of the text, **without the line moving** — the
   /// pivot slides and Position compensates, the same pan-behind sum the Anchor
-  /// point tool commits (K-220).
+  /// point tool commits.
   ({Offset anchor, Offset position}) _recentredAnchor(
       LayerReference layer, String text) {
     final transform = layer.getTransform();

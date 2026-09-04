@@ -129,7 +129,7 @@ endif()
 
 # === The plugin brokers ===
 # The second processes plugins live in (docs/12 §2.3): OFX ones per bundle, CLAP
-# ones per module (K-696). They go beside the runner, which is where each host
+# ones per module. They go beside the runner, which is where each host
 # looks for its own and what `install.sh` copies wholesale.
 set(LUMIT_WORKSPACE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 if(CMAKE_BUILD_TYPE MATCHES "Debug")

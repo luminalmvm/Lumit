@@ -600,7 +600,7 @@ const roadmap = [
   // because changing them after this module loads would move the layout.
   //
   // No platform is "coming": release.yml builds a Windows .exe, a macOS .dmg
-  // and a Linux .flatpak on every tag and every job gates the release (K-304),
+  // and a Linux .flatpak on every tag and every job gates the release,
   // so all three exist whenever any of them does.
   const ASSET: Record<string, RegExp> = {
     Windows: /windows.*\.exe$/i,

@@ -1,4 +1,4 @@
-// The Styles group on frb (K-706, docs/impl/layer-styles.md §5 and §6).
+// The Styles group on frb (docs/impl/layer-styles.md §5 and §6).
 //
 // Two things are pinned here, and they are the two the package exists for.
 // That a layer wearing styles grows a **Styles** group in the Timeline's

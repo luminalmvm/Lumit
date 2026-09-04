@@ -1,4 +1,4 @@
-//! The roto brush's **document** half (docs/impl/roto.md §1, K-710): the
+//! The roto brush's **document** half (docs/impl/roto.md §1): the
 //! strokes the user draws, the base frame they start from, and the two hashes
 //! that decide which cached mattes an edit throws away.
 //!
@@ -87,7 +87,7 @@ impl RotoStrokeKind {
 
 /// One roto stroke: the path the pointer took, and what it claims.
 ///
-/// Points are **source raster pixels** on the full, unaltered footage (K-248),
+/// Points are **source raster pixels** on the full, unaltered footage,
 /// so the matte describes the file's frames and survives every comp-side
 /// transform, retime and preview tier — and one shot's mattes serve every comp
 /// that cuts it.
@@ -108,7 +108,7 @@ pub struct RotoStroke {
 ///
 /// Absent on an instance nobody has stroked, and left out of the saved file
 /// then, so a project written before roto existed reads and saves back byte for
-/// byte (K-258).
+/// byte.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct RotoBlock {
     /// The frame propagation runs outward from — the first frame the user

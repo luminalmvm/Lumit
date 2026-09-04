@@ -10,11 +10,11 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 /// asked — the number the operating system's own monitor shows.
 ///
 /// **Why this exists.** Lumit has now twice been reported holding tens of
-/// gigabytes (K-277, and again after it), and each time the first question took
-/// days to answer: is a cache doing exactly what it was told, or is something
-/// holding memory nobody is counting? Every tier already reports its own bytes;
-/// what was missing was the total to weigh them against. The difference between
-/// the two is the whole diagnosis, so it is worth one syscall.
+/// gigabytes, and each time the first question took days to answer: is a cache
+/// doing exactly what it was told, or is something holding memory nobody is
+/// counting? Every tier already reports its own bytes; what was missing was the
+/// total to weigh them against. The difference between the two is the whole
+/// diagnosis, so it is worth one syscall.
 ///
 /// Each platform's nearest equivalent of "what the task manager says":
 /// `PROCESS_MEMORY_COUNTERS.WorkingSetSize` on Windows, `VmRSS` from

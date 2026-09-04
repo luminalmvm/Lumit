@@ -4,7 +4,7 @@
 // σ = radius/2, same tap count ceil(radius), weights normalised over the FULL
 // kernel regardless of edge policy, fixed tap order.
 //
-// **The Matte scales the radius, per pixel** (K-395, docs/08 §2.6). The
+// **The Matte scales the radius, per pixel** (docs/08 §2.6). The
 // Gaussian blur is one of the effects that claim the matte inside their own
 // maths rather than taking the generic strength dissolve, and this is where:
 // each destination pixel's own matte luma multiplies the radius before the
@@ -16,8 +16,8 @@
 // separable halves agree about how wide this pixel's kernel is.
 //
 // With `matte_on == 0` the radius and σ are used exactly as the host computed
-// them, untouched — the byte-for-byte path every project saved before K-395
-// takes (K-258).
+// them, untouched — the byte-for-byte path every project saved before the
+// Matte takes.
 
 struct Params {
     dir: vec2<f32>,     // (1,0) horizontal pass, (0,1) vertical pass
@@ -26,14 +26,14 @@ struct Params {
     edge: u32,          // 0 transparent, 1 repeat, 2 mirror
     mix_amt: f32,       // 0..1, blended against `orig` (1 on the h-pass)
     matte_on: f32,      // 1 = scale the radius by the matte's luma
-    _pad0: f32,         // was Invert; applied once at the seam since K-425
+    _pad0: f32,         // was Invert; applied once at the seam
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
 @group(0) @binding(1) var orig: texture_2d<f32>;
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
-// The generic Matte (K-395), bound for every kernel on this layout and read
+// The generic Matte, bound for every kernel on this layout and read
 // only by the ones that claim it. Bound to `src` when there is none, and gated
 // by `matte_on` — a texture binding cannot be left empty.
 @group(0) @binding(4) var matte: texture_2d<f32>;
@@ -41,7 +41,7 @@ struct Params {
 // This pixel's matte strength: premultiplied Rec. 709 luma, clamped — the
 // same reading `fx_matte_mix.wgsl` and cpu::matte_mix use, so "how much matte
 // is here" means one thing across the whole campaign. The Channel pick and
-// Invert have already happened, once, in fx_matte_prepare.wgsl (K-425).
+// Invert have already happened, once, in fx_matte_prepare.wgsl.
 fn matte_k(xy: vec2<i32>) -> f32 {
     let m = textureLoad(matte, xy, 0);
     return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);

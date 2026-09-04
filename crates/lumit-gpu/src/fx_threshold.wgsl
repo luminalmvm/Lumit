@@ -7,14 +7,14 @@
 // floored host-side, so the cut is antialiased and the two paths cannot
 // disagree about a pixel sitting exactly on the line.
 //
-// The Matte scales the level per pixel (K-559), which is the one thing the
+// The Matte scales the level per pixel, which is the one thing the
 // generic strength dissolve cannot do: a cut that varies across the frame.
 
 struct Params {
     level: f32,    // Level / 100
     hw: f32,       // half the crossing width, floored at 1/1000
     mix_amt: f32,  // 0..1, blended against the unprocessed input
-    matte_on: f32, // 1 = the matte scales the level below (K-559)
+    matte_on: f32, // 1 = the matte scales the level below
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -22,7 +22,7 @@ struct Params {
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
 
-// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// The Matte (docs/08 §2.6), bound for every kernel on this layout and
 // read only under `matte_on` — bound to `src` when there is none, since a
 // texture binding cannot be left empty.
 @group(0) @binding(4) var matte: texture_2d<f32>;
@@ -31,7 +31,7 @@ const LUMA = vec3<f32>(0.2126, 0.7152, 0.0722);
 
 // This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
 // luma, clamped. The Channel pick and Invert already happened, once, at the
-// seam (fx_matte_prepare.wgsl, K-425).
+// seam (fx_matte_prepare.wgsl).
 fn matte_k(xy: vec2<i32>) -> f32 {
     let m = textureLoad(matte, xy, 0);
     return clamp(dot(m.rgb, LUMA), 0.0, 1.0);
@@ -61,7 +61,7 @@ fn threshold(@builtin(global_invocation_id) gid: vec3<u32>) {
     let o = textureLoad(src, xy, 0);
     let u = unpremult(o);
     let t = sqrt(max(dot(u, LUMA), 0.0));
-    // The matte scales the level per pixel (K-559, == cpu::threshold_matted),
+    // The matte scales the level per pixel (== cpu::threshold_matted),
     // so the cut moves across the frame instead of fading.
     var level = p.level;
     if (p.matte_on != 0.0) {

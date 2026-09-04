@@ -1,4 +1,4 @@
-// The Animators section: a Text layer's letters moved one at a time (K-609).
+// The Animators section: a Text layer's letters moved one at a time.
 //
 // An animator names a set of per-letter offsets — a push, a turn, a size, a
 // fade, a tint — and a **range selector** saying which letters they reach. The
@@ -9,7 +9,7 @@
 // are all the engine's (the thin-view rule).
 //
 // Every animator carries all five property groups, defaulted to values that
-// change nothing — K-609 argues why there is no menu of properties to add them
+// change nothing, which is why there is no menu of properties to add them
 // from one at a time. So Add animator gives the rows, and four of them are
 // usually left alone.
 
@@ -66,7 +66,7 @@ class TextAnimatorRowsFrb extends StatelessWidget {
     // One write path: read the document, change the animator list, write it
     // whole. The engine takes the whole document as one op — and when the list
     // crosses empty ↔ not-empty it moves the layer's anchor by the margin the
-    // animated raster adds, in the same op, so the words do not jump (K-609).
+    // animated raster adds, in the same op, so the words do not jump.
     void write(List<BridgeTextAnimator> animators) {
       layer.setText(
         document: BridgeTextDocument(
@@ -273,7 +273,7 @@ class TextAnimatorRowsFrb extends StatelessWidget {
         onSeek: onSeek,
         rowKey: keyName,
         // These rows only ever draw in the Effect controls panel, on its fixed
-        // columns (K-443).
+        // columns.
         fixedColumns: true,
       ),
       name: Text(label, style: t.body, overflow: TextOverflow.ellipsis),
@@ -311,7 +311,7 @@ class TextAnimatorRowsFrb extends StatelessWidget {
   }
 }
 
-/// Give a Text layer one more animator (K-609): the card's *Add animator*
+/// Give a Text layer one more animator: the card's *Add animator*
 /// button, and Animation ▸ Animate text, which must mean the same thing.
 ///
 /// The whole document is rewritten because that is the only shape the engine
@@ -392,7 +392,7 @@ BridgeTextAnimator animatorWith(
       fillB: fillB ?? a.fillB,
     );
 
-/// Which of an animator's animatable numbers a row carries (K-609).
+/// Which of an animator's animatable numbers a row carries.
 ///
 /// The three range numbers first, because they decide *which letters* the rest
 /// reach, then the five property groups in the order they read: where the
@@ -473,7 +473,7 @@ BridgeTextAnimator animatorWithScalar(
 ///
 /// The whole document goes, because that is the op: reading it here rather
 /// than carrying it on the row is deliberate, since this only ever runs on a
-/// commit and never while anything is being drawn (K-184).
+/// commit and never while anything is being drawn.
 void writeTextAnimatorScalar({
   required LayerReference layer,
   required int index,

@@ -24,7 +24,7 @@ add_definitions(-DAPPLICATION_ID="${APPLICATION_ID}")
 target_link_libraries(${BINARY_NAME} PRIVATE flutter)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GTK)
 
-# The zero-copy Viewer bridge (K-177, viewer_texture_bridge.cc) imports engine
+# The zero-copy Viewer bridge (viewer_texture_bridge.cc) imports engine
 # DMA-BUF frames into GL external textures via EGLImage, so it links EGL + GLESv2.
 # Resolved through pkg-config (Mesa ships egl.pc / glesv2.pc); the GTK stack
 # already pulls EGL transitively, but linking explicitly keeps the dependency

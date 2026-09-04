@@ -2,10 +2,10 @@
 //
 // **In plain terms.** Changing magnification is a *place* changing, not a value
 // being nudged: jump straight from one zoom to another and the reader loses
-// where they were. The Viewer has flown since K-218; the Timeline's time zoom,
-// the graph editor's and the Project panel's thumbnails all still cut. This is
-// the Viewer's shape lifted out so the other three read it rather than writing
-// it three more times.
+// where they were. The Viewer already flies; the Timeline's time zoom, the
+// graph editor's and the Project panel's thumbnails all still cut. This is the
+// Viewer's shape lifted out so the other three read it rather than writing it
+// three more times.
 //
 // **Two things it adds over a plain animation.**
 //
@@ -26,9 +26,9 @@ import 'package:flutter/widgets.dart';
 
 /// How long a zoom flight lasts when nothing interrupts it.
 ///
-/// Matched to the Viewer's own (K-218): long enough to read as motion, short
-/// enough that a second notch lands inside it, which is what makes a rolled
-/// wheel feel continuous rather than stepped.
+/// Matched to the Viewer's own: long enough to read as motion, short enough
+/// that a second notch lands inside it, which is what makes a rolled wheel feel
+/// continuous rather than stepped.
 const Duration smoothZoomFlight = Duration(milliseconds: 140);
 
 /// Below this gap between notches the wheel counts as *rolled* rather than
@@ -90,7 +90,7 @@ class SmoothZoom extends ChangeNotifier {
 
   /// The far end of the range. Settable, because the Timeline's is a property
   /// of the *composition* — full zoom-in is a fixed number of frames across the
-  /// panel, so a longer comp zooms further (K-293).
+  /// panel, so a longer comp zooms further.
   double max;
   final Duration Function() _clock;
 
@@ -177,10 +177,10 @@ class SmoothZoom extends ChangeNotifier {
 /// Where a zoom sits on a slider whose left end is 1 (the whole composition)
 /// and whose right end is [maxZoom].
 ///
-/// **Logarithmic, for the same reason the flight is** (K-293): the slider
-/// should buy equal *ratio* for equal travel. On a ten-minute comp the linear
-/// mapping spends nine tenths of the slider's length inside the last handful of
-/// frames, so every useful zoom is crushed into the first centimetre.
+/// **Logarithmic, for the same reason the flight is**: the slider should buy
+/// equal *ratio* for equal travel. On a ten-minute comp the linear mapping
+/// spends nine tenths of the slider's length inside the last handful of frames,
+/// so every useful zoom is crushed into the first centimetre.
 ///
 /// A [maxZoom] of 1 or less — a composition already shorter than full zoom-in
 /// shows — has nowhere to travel, so the handle sits at the left.

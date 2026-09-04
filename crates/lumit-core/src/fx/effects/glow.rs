@@ -13,15 +13,15 @@ use lumit_fx_macros::Effect;
     version = 1,
     category = Stylise,
     cost = Moderate,
-    // Radius is raw px@comp (K-135), unbounded above, so a tight %-diag padding
+    // Radius is raw px@comp, unbounded above, so a tight %-diag padding
     // cannot be declared statically across every comp resolution — full-frame is
     // the safe static bound (mirroring Chromatic aberration's own px@comp
     // parameter).
     roi = FullFrame,
-    // K-395: the glow claims the injected Matte row inside its own maths — the
-    // matte gates the bright pass, so it decides which pixels are *allowed to
-    // glow*, not how much of a finished glow survives. The generic strength
-    // dissolve does not also run.
+    // The glow claims the injected Matte row inside its own maths — the matte
+    // gates the bright pass, so it decides which pixels are *allowed to glow*,
+    // not how much of a finished glow survives. The generic strength dissolve
+    // does not also run.
     matte = (
         "matte",
         "gates which pixels may seed the halo, before the bright pass: light \
@@ -30,8 +30,8 @@ use lumit_fx_macros::Effect;
     ),
 )]
 pub struct Glow {
-    /// Linear-light value above which pixels bloom. The K-090 one-sided hard
-    /// range made concrete: clamped at zero below, unbounded above — HDR values
+    /// Linear-light value above which pixels bloom. The one-sided hard range
+    /// made concrete: clamped at zero below, unbounded above — HDR values
     /// beyond the slider are legal and glow harder (§2.1). Default 0.8 so
     /// highlights just shy of white already bloom on a fresh instance.
     #[slider(min = 0.0, max = 4.0, default = 0.8, hard_min = 0.0, unit = Raw)]
@@ -52,7 +52,7 @@ pub struct Glow {
     )]
     pub knee: f32,
 
-    /// px@comp (§2.3, K-135): the halo gaussian's half-width in real pixels,
+    /// px@comp (§2.3): the halo gaussian's half-width in real pixels,
     /// clamped at zero below and unbounded above, so a wide bloom is a matter of
     /// typing a larger number rather than hitting a cap. Declared `Px`, so the
     /// resolve step scales it by the preview factor and the generic rescale moves
@@ -117,9 +117,9 @@ impl EffectDef for GlowDef {
     fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
         let (radius_px, threshold, knee, intensity, tint, mix) = Glow::read(p).packed();
         // No matte through the single-buffer dispatcher: it carries one
-        // picture, and this effect's matte is a second one (the K-387 rule the
-        // depth pass and the LUT already follow). The §1.6 oracle for the matted
-        // path is `cpu::glow` called directly from the lumit-gpu test, which can
+        // picture, and this effect's matte is a second one (the rule the depth
+        // pass and the LUT already follow). The §1.6 oracle for the matted path
+        // is `cpu::glow` called directly from the lumit-gpu test, which can
         // upload it.
         cpu::glow(
             rgba,

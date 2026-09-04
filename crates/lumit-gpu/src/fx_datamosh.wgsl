@@ -1,5 +1,5 @@
 // Datamosh (docs/08-EFFECTS.md §3.12; reworked to a flow-driven melt by
-// K-164/T19): simulate I-frame removal — the previous picture keeps being
+// T19): simulate I-frame removal — the previous picture keeps being
 // dragged along the current frame's motion, so moving regions smear and bloom
 // while static ones stay. Mirrors lumit_core::fx::cpu::datamosh op-for-op
 // (§1.6: the CPU is the oracle) — the same streamline walk, the same tap count

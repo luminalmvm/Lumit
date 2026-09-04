@@ -1,4 +1,4 @@
-//! Clone to points (K-600): a layer's picture stamped at every point of a
+//! Clone to points: a layer's picture stamped at every point of a
 //! stream.
 //!
 //! **In plain terms.** Wire a producer's teal Points socket into this effect,
@@ -11,20 +11,20 @@
 //! **It is Particulate's Sprite mode, pointed at somebody else's particles.**
 //! Not a second implementation of it — literally the same instanced quad, the
 //! same bilinear tap, the same premultiplied tint, reached through the shared
-//! points draw (K-598). What changes is only where the points came from.
+//! points draw. What changes is only where the points came from.
 //!
 //! **Painter's order is `id` order** and nothing else. The stream arrives
 //! ordered by birth index ascending, which is a fact of the evaluation rather
 //! than an artefact of how it was scheduled (particulate.md §5), and the stamps
 //! are laid down in that order so a later point covers an earlier one. Two
 //! renders of one frame therefore lay the same picture down in the same order,
-//! on any machine (K-031).
+//! on any machine.
 //!
 //! **Nothing wired draws nothing** — the picture passes through unchanged, and
-//! the box wears the "no stream" mark K-509 gave the family. So does an unset
-//! Clone layer row: this effect exists to stamp a layer, and with none to stamp the
-//! honest answer is the identity, not a fallback shape somebody has to notice
-//! and undo.
+//! the box wears the family's "no stream" mark. So does an unset Clone layer
+//! row: this effect exists to stamp a layer, and with none to stamp the honest
+//! answer is the identity, not a fallback shape somebody has to notice and
+//! undo.
 
 use crate::fx::points::{self, PointsStream};
 use crate::fx::{
@@ -41,7 +41,7 @@ pub const POINTS_PORT: &str = "points";
 /// What this effect consumes. Not `three_d`: a stamp is a picture laid on the
 /// layer's own flat rectangle, turned by one angle, so what it needs of a point
 /// is where the camera puts it and how much it foreshortens — which is exactly
-/// what a 2D reading answers (K-561).
+/// what a 2D reading answers.
 const POINTS_IN: &[Port] = &[Port::new(POINTS_PORT, "Points", PortType::Points)];
 
 /// Clone to points' controls.
@@ -58,11 +58,11 @@ const POINTS_IN: &[Port] = &[Port::new(POINTS_PORT, "Points", PortType::Points)]
     // Not seeded: nothing here is a function of time under constant parameters.
     // The *stream* may well be, and that is the producer's own declaration —
     // its clock folds into its own carriage, and this op's key is chained
-    // behind it because a producer sits strictly upstream (K-492).
+    // behind it because a producer sits strictly upstream.
     seeded = false,
 )]
 pub struct CloneToPoints {
-    /// The layer stamped at every point (K-123, K-142). **Unset draws
+    /// The layer stamped at every point. **Unset draws
     /// nothing**, the ordinary unset-is-identity reading — deliberately unlike
     /// Particulate's Sprite mode, which falls back to discs because a *render
     /// mode* must always draw something. Here there is no mode, only a source.
@@ -88,7 +88,7 @@ pub struct CloneToPoints {
     #[slider(min = 0.0, max = 100.0, default = 100.0, hard_min = 0.0, hard_max = 100.0, unit = Percent)]
     pub tint: f32,
 
-    /// **The budget dial** (K-475), the family's row: the most stamps that may
+    /// **The budget dial**, the family's row: the most stamps that may
     /// be drawn at once. A stream longer than this is trimmed to its **newest**
     /// by birth index — the producer's own cap rule applied a second time, so
     /// what vanishes is what a smaller cap would have taken. Not animatable: it
@@ -117,9 +117,9 @@ pub struct CloneToPoints {
 }
 
 impl CloneToPoints {
-    /// The raster factor, for the one input the declaration cannot scale
-    /// (K-385): a stream read off a wire is in px@comp, like a mask path, and
-    /// has to be rearranged into the pixels the frame is drawn at.
+    /// The raster factor, for the one input the declaration cannot scale: a
+    /// stream read off a wire is in px@comp, like a mask path, and has to be
+    /// rearranged into the pixels the frame is drawn at.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
     /// This instance's raster factor, read back out of a resolved bag.
@@ -139,8 +139,7 @@ impl CloneToPoints {
     pub fn stamps(self, in_stream: &PointsStream) -> PointsStream {
         let mut out = in_stream.clone();
         // The newest by birth index, which is the cap rule the whole family
-        // applies (K-475) — deterministic, and the same from any scrub
-        // direction.
+        // applies — deterministic, and the same from any scrub direction.
         out.keep_newest(self.max_clones.clamp(0, points::CAP_HARD as i32) as usize);
         let scale = (self.scale / 100.0).max(0.0);
         let turn = self.rotation.to_radians();
@@ -162,7 +161,7 @@ impl CloneToPoints {
         out
     }
 
-    /// How the stamps are drawn — Sprite mode, and the host Mix (K-425).
+    /// How the stamps are drawn — Sprite mode, and the host Mix.
     #[must_use]
     pub fn draw_style(self) -> points::DrawStyle {
         points::DrawStyle {
@@ -189,8 +188,8 @@ impl EffectDef for CloneToPointsDef {
         &<CloneToPoints as EffectMetadata>::SCHEMA
     }
 
-    /// A picture in, a picture out, and a **stream in** beside it (K-492,
-    /// K-600) — the first stack effect to declare a data input.
+    /// A picture in, a picture out, and a **stream in** beside it — the first
+    /// stack effect to declare a data input.
     fn signature(&self) -> Signature {
         Signature::Image {
             inputs: POINTS_IN,
@@ -199,7 +198,7 @@ impl EffectDef for CloneToPointsDef {
     }
 
     /// The raster factor, so a px@comp stream reaches the pixels this frame is
-    /// drawn at (K-385).
+    /// drawn at.
     fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
         push(CloneToPoints::DERIVED_PX_SCALE, Value::Float(cx.px_scale));
     }

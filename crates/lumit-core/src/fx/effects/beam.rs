@@ -20,7 +20,7 @@ use lumit_fx_macros::Effect;
 #[effect(
     match_name = "beam",
     label = "Beam",
-    // 2: Length crossed from a per cent of the run to px@comp (K-558).
+    // 2: Length crossed from a per cent of the run to px@comp.
     // `migrate_percent_to_px` converts a v1 instance on load.
     version = 2,
     category = Generate,
@@ -31,7 +31,7 @@ use lumit_fx_macros::Effect;
     premultiplied = true,
 )]
 pub struct Beam {
-    /// px@comp (K-260: point parameters are PIXELS). The schema defaults draw a
+    /// px@comp (point parameters are PIXELS). The schema defaults draw a
     /// diagonal across a nominal 1080p frame.
     #[slider(label = "Start x", min = 0.0, max = 3840.0, default = 240.0, unit = Px)]
     pub start_x: f32,
@@ -48,7 +48,7 @@ pub struct Beam {
     #[slider(label = "End y", min = 0.0, max = 2160.0, default = 240.0, unit = Px)]
     pub end_y: f32,
 
-    /// How long the drawn shaft is, px@comp (K-558: a distance is pixels).
+    /// How long the drawn shaft is, px@comp (a distance is pixels).
     /// Measured back along the run from wherever Time has put the head; longer
     /// than the run itself simply means the tail is at the start point. The
     /// default is the length of the run the default Start and End describe on a
@@ -150,7 +150,7 @@ impl Beam {
         let axis = [self.end_x - self.start_x, self.end_y - self.start_y];
         let len2 = (axis[0] * axis[0] + axis[1] * axis[1]).max(1e-6);
         let u1 = (self.time / 100.0).clamp(0.0, 1.0);
-        // Length is px@comp (K-558) and the run is raster pixels, so the share
+        // Length is px@comp and the run is raster pixels, so the share
         // of the run it covers is the one division — and both numbers arrive
         // scaled by the same preview factor, which is why a Half preview draws
         // the same beam the export does. `len2` is floored, so the divisor

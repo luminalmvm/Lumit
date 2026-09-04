@@ -89,7 +89,7 @@ const double snapSlopPixels = 8;
 /// With it on, the nearest target within [snapSlopPixels] of the pointer wins
 /// and the frame lands exactly on it. Failing that the drag falls back to the
 /// whole frame, which is the magnet's original and much narrower behaviour
-/// (K-190) and stays the answer when there is nothing else nearby.
+/// and stays the answer when there is nothing else nearby.
 ///
 /// [perFrame] is the axis's pixels-per-frame, and is what turns the pixel slop
 /// into a frame distance. A zero or negative one (a collapsed axis) snaps to
@@ -137,7 +137,7 @@ bool snapSuspended({required bool controlPressed}) => controlPressed;
 typedef SnapKeyRow = ({String rowId, Iterable<double> frames});
 
 /// Everything on the Timeline a drag could land on, gathered from the read
-/// model (K-184) — so building the list costs no bridge calls.
+/// model — so building the list costs no bridge calls.
 ///
 /// The spec's list (docs/07 §4.5): **edit points** (the cuts inside a Sequence
 /// layer), **layer in/out points**, **keyframes**, **markers** (composition and

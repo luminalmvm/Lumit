@@ -1,9 +1,9 @@
 # After Effects import — implementation note
 
-**Spec:** [11-AE-IMPORT.md](../11-AE-IMPORT.md). **Decisions:** K-060 (strategy), K-410
-(the Bridge captures, Rust converts), K-025 (AE-compatible keyframe maths), K-021/K-249
-(Retime). This note owns the capture schema, the ExtendScript traps, the fixture
-strategy, and the phase plan. Specs say *what*; this is the *how*.
+**Spec:** [11-AE-IMPORT.md](../11-AE-IMPORT.md). **Decisions:** the import strategy, the
+Bridge captures and Rust converts, AE-compatible keyframe maths, and Retime. This note
+owns the capture schema, the ExtendScript traps, the fixture strategy, and the phase
+plan. Specs say *what*; this is the *how*.
 
 ## In plain terms
 
@@ -43,7 +43,7 @@ beyond reading the bundle it is handed, no panics, budgeted allocations.
 ```
 
 `capture.json`, shapes in outline (all times are the DOM's float seconds, verbatim;
-all ids are AE's own integers; nothing is converted — K-410):
+all ids are AE's own integers; nothing is converted):
 
 - **`project`** — the project-wide settings no item carries: `{ bits_per_channel,
   working_space, linear_blending, linearize_working_space, expression_engine }`. The
@@ -92,7 +92,7 @@ all ids are AE's own integers; nothing is converted — K-410):
 is the **name of the ExtendScript constant**, spelled exactly as the DOM spells it:
 `SCREEN`, `ALPHA_INVERTED`, `SUBTRACT`, `BEST`, `PIXEL_MOTION`, `BEZIER`, `HOLD`.
 The walker never lower-cases, re-spells or normalises one, because that would be a
-conversion in the half CI cannot run (K-410); an enum member the walker's own name
+conversion in the half CI cannot run; an enum member the walker's own name
 list does not know falls through as the raw number stringified, which is honest
 rather than wrong. The one exception is **`value_type`**, a closed vocabulary shared
 with `tools/ae-audit/audit.jsx` so the two kits describe a property the same way:
@@ -117,7 +117,8 @@ docs/10 §1.1's rule) and refuses only a newer *major* version.
   `ADBE HUE SATURATION-0003`). Record `unreadable`, keep walking. Levels and
   Hue/Saturation still map fine from their plain sibling properties; Curves does not,
   which is why a Bridge bundle's Curves is still a placeholder while the direct route's
-  maps (K-410's honesty note, answered for the direct route by K-639 and §7.2 below).
+  maps (the Bridge route's honesty note, answered for the direct route by the Curves
+  blob decode in §7.2 below).
 - **ExtendScript has no `JSON`** — reuse `tools/ae-audit/audit.jsx`'s escaper/writer.
   ES3 only: no `Array.prototype.map`, no `const`, no getters.
 - **`addSolid` needs all six arguments** including duration — the audit hit this too.
@@ -148,7 +149,7 @@ docs/10 §1.1's rule) and refuses only a newer *major* version.
   [rational-time.md](rational-time.md): `round(t × fps)` frames when within 1e-6 of a
   frame, else the exact rational nearest at denominator `fps × 1000`. Keyframes may
   legitimately sit between frames; never frame-snap a key that is not on one.
-- **Keyframes are a value copy** (K-025): interpolation types, per-side
+- **Keyframes are a value copy**: interpolation types, per-side
   speed/influence, spatial tangents, roving. No resampling — Lumit's evaluator is the
   same cubic.
 - **Ids**: AE integer ids → fresh UUIDv7s, with the AE id recorded in the `ae`
@@ -273,7 +274,7 @@ footage item, so both exemptions fail loudly the day a sitting supplies one.
    bundle… (`flutter_ui/lib/shell/menu_bar_frb.dart`) opens a **folder** chooser
    and shows `shell/ae_report_frb.dart` — docs/11 §9's summary line, filter by
    outcome, and a row per reason. A reason crosses as a stable id plus its facts
-   and the sentence is written in `l10n/engine_labels.dart` (K-303), gated by
+   and the sentence is written in `l10n/engine_labels.dart`, gated by
    `test/l10n/engine_labels_test.dart` reading the `Reason` enum. **Still owed**:
    the picker cannot reach a *zipped* bundle the reader can open, §9's row
    navigation, and §9's persistence of the report in the project — all three in
@@ -289,7 +290,7 @@ footage item, so both exemptions fail loudly the day a sitting supplies one.
 - Shape-layer and text-animator mapping depth is decided by their engine features,
   not by the importer — capture is complete either way (docs/11 §2.2 items 10–11).
 
-## 7. The direct `.aep` parser (K-418)
+## 7. The direct `.aep` parser
 
 **In plain terms.** An `.aep` is a RIFX container: RIFF with big-endian sizes, form
 type `Egg!`, a tree of `LIST` chunks. The parser walks that tree and fills the same
@@ -332,9 +333,9 @@ non-property field of the golden capture; **B** property trees, keyframes, effec
 masks, expressions → differential per-category recovery numbers; **C** the surface —
 the picker takes the `.aep` file (docs/11 §1's seamless front door), parse → the one
 mapping, plus the stretch goals (the Curves `CUSTOM_VALUE` blob is IN the file, so
-the K-412 sixteen-point target may finally be reachable — measured, not promised).
+Curves' sixteen-point target may finally be reachable — measured, not promised).
 A and B are built (§7.1, §7.2); C is built too (§7.3); and the Curves blob decode
-that was the stretch goal is measured and built as well (K-639, §7.2).
+that was the stretch goal is measured and built as well (§7.2).
 
 ### 7.1 Phase A: the layouts that are proved
 
@@ -369,8 +370,8 @@ comp, none of them a layer.
 | | 16 (u32) | item id — the id `Comp.id` and `Layer.source_id` point at |
 | | 0x3B (u8) | label colour |
 | `sspc` (222+) | 32 (u16), 36 (u16) | width, height |
-| | 115 (u8) | **missing at save** — a placeholder sets it too, so it is only read as *missing* for an item that is not one (K-536) |
-| `LIST Als2` ▸ `alas` | JSON body | **the file's path**, as `fullpath`. The only place it is written; without it a footage item has nothing to point at and nothing for a relink to match a sibling by (K-536) |
+| | 115 (u8) | **missing at save** — a placeholder sets it too, so it is only read as *missing* for an item that is not one |
+| `LIST Als2` ▸ `alas` | JSON body | **the file's path**, as `fullpath`. The only place it is written; without it a footage item has nothing to point at and nothing for a relink to match a sibling by |
 | `opti` | 0..4 | asset type; `Soli` marks a solid, four NUL bytes with a type number of 2 at offset 4 mark a **placeholder** |
 | | 14/18/22 (f32) | solid colour R/G/B |
 | | 26 (strz, 256) | **the solid's name** — a solid's own `Utf8` chunk is empty |
@@ -449,14 +450,14 @@ read them), and the golden project is solids and comps with no file footage in
 it, so not one of those offsets could be checked against AE. A fixture with real
 footage is owed for them. What an item cannot do without — its **name**, its
 **path**, whether it is a **placeholder** and whether it was **missing at save** —
-is read (K-536), measured against a real production project and the layouts
+is read, measured against a real production project and the layouts
 `forticheprod/py-aep` documents; an item whose name the user never changed has an
 empty name chunk, so its file's name is its name.
 
 An **image sequence** points at its folder rather than at a file: its alias record
 sets `target_is_folder`, and the two `Utf8` chunks either side of the frame number
 name the run. Both are read, so the item imports as a Lumit image sequence and the
-folder resolves to the run's first numbered frame on open (K-539, docs/11 §2.5).
+folder resolves to the run's first numbered frame on open (docs/11 §2.5).
 (2) A **reflected layer's** ends land 1/3000 s further out in AE's arithmetic
 than in the file's (`−0.000333` / `−10.000333` rather than `−0` / `−10`), as if
 AE reflects inclusive indices on an internal grid — one sample is not enough to
@@ -571,7 +572,7 @@ golden capture and each producing a plausible-looking wrong project if missed:
   the DOM. A layer at "1" is a layer nobody notices is wrong until it is.
 - **A colour is A,R,G,B in 0–255** on disk and R,G,B,A in 0–1 in the DOM. Read
   it in the file's own order and the alpha lands in the red channel.
-- **An effect's two-dimensional point is a fraction of the layer** (K-636), not
+- **An effect's two-dimensional point is a fraction of the layer**, not
   of the composition: After Effects runs an effect on the layer, so the point is
   a point in the layer's own raster and the file normalises it against that
   raster — the same rule the anchor point and the mask path below follow, they
@@ -617,8 +618,8 @@ golden capture and each producing a plausible-looking wrong project if missed:
   match name directly.
 - **The `CUSTOM_VALUE` blob is a `LIST aRbs` beside the parameter's `tdbs`**,
   holding one `aRbp` of raw bytes (the default is the identically-shaped `aRbp`
-  in `parT`). Curves' is 1,644 bytes, and its layout is now decoded (K-639,
-  `crates/lumit-import/src/map/curves.rs`):
+  in `parT`). Curves' is 1,644 bytes, and its layout is now
+  decoded (`crates/lumit-import/src/map/curves.rs`):
 
   | offset | length | what |
   | --- | --- | --- |
@@ -644,7 +645,7 @@ golden capture and each producing a plausible-looking wrong project if missed:
 
   Recorded but not used: the line AE draws between the points is a **natural** cubic
   spline (zero second derivative at both ends), which reproduced all 95 tables byte
-  for byte. Lumit's Curves draws a **clamped** one (K-412), and the two part by up to
+  for byte. Lumit's Curves draws a **clamped** one, and the two part by up to
   15/255 between the outer points of a steep bend on that project — a report row on
   the import, and an open question for the effect rather than for the importer.
 - **`ADBE Layer Styles` has no switch of its own.** Scripting reports it as on
@@ -676,8 +677,8 @@ effect, and none of the fixture's needed it. (4) **A mask path's linear speed**
 is reported by the DOM as exactly 1.0 per segment; one sample cannot say
 whether that is a constant or a duration-derived number, so it is recorded
 rather than curve-fitted. Nothing downstream reads a linear side's speed.
-(5) **Decoding** the arbitrary-data blobs — Curves' is decoded and reaches K-412's
-sixteen-point target (K-639, the layout in §7.2); Levels' histogram and
+(5) **Decoding** the arbitrary-data blobs — Curves' is decoded and reaches its
+sixteen-point target (the layout in §7.2); Levels' histogram and
 Hue/Saturation's channel ranges are still carried undecoded, and neither is needed,
 because both effects map from their plain sibling properties.
 
@@ -694,7 +695,7 @@ bridge kept its signature and both menu rows are the same call (docs/17).
 
 The menu is two rows under File ▸ Import: **After Effects project…**, the file picker,
 which is the front door; and **Bridge bundle folder…**, the folder picker, quieter and
-first-class forever (K-418). The notice a failure posts follows the same split — an
+first-class forever. The notice a failure posts follows the same split — an
 `.aep` this build could not read says so calmly and names the Bridge route as the way
 through, and the older mistake of pointing the folder picker at a folder holding an
 `.aep` still teaches both routes.
@@ -717,7 +718,7 @@ with the project still standing.
 gradient (`GCst`) encodings, and shape-layer contents, which arrive named and marked
 rather than decoded; a fixture with real file footage, without which the remaining
 footage *interpretation* offsets (rate, alpha, fields, pulldown, loop) stay unread by
-choice — the name, path, placeholder and missing flags are read and measured (K-536); and corpus testing against real projects
+choice — the name, path, placeholder and missing flags are read and measured; and corpus testing against real projects
 from more than one After Effects version — one fixture proves the offsets it contains
 and nothing about the ones it does not. Also still owed from §7's policy: the
 whole-file fallback to "footage references only", which today is the calm refusal

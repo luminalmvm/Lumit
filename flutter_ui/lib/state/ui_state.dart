@@ -54,7 +54,7 @@ import 'package:uuid/uuid.dart';
 
 /// What [LumitUiState.colourSummary] reads before anything has been asked, and
 /// whenever the project names no OCIO config: the built-in colour family, which
-/// is what every project written before K-490 uses.
+/// is what every project written before OCIO support uses.
 const BridgeColourSummary noColourConfig = BridgeColourSummary(
   path: '',
   loaded: false,
@@ -65,7 +65,7 @@ const BridgeColourSummary noColourConfig = BridgeColourSummary(
   displays: [],
 );
 
-/// One entered inner shader graph (K-642, custom-shader.md §4.2): the handle
+/// One entered inner shader graph (custom-shader.md §4.2): the handle
 /// the canvas edits through, and the words the breadcrumb reads — captured on
 /// the double-click so drawing them costs no call.
 typedef ShaderGraphEntry = ({
@@ -86,10 +86,10 @@ class LumitUiState extends ChangeNotifier {
   /// surviving a restart and the Settings window's scale slider moved nothing.
   final Workspace workspace;
 
-  /// The keyboard map every shortcut is looked up in (docs/07 §15, K-199).
+  /// The keyboard map every shortcut is looked up in (docs/07 §15).
   late final KeymapState keymap;
 
-  /// Whether there is a newer Lumit, and fetching it (K-296).
+  /// Whether there is a newer Lumit, and fetching it.
   ///
   /// One for the session, here, because the Help menu and Settings ▸ General
   /// are two views of the same check and neither owns it. The version is passed
@@ -98,19 +98,19 @@ class LumitUiState extends ChangeNotifier {
   late final UpdateService updates =
       UpdateService(currentVersion: () => versionFromBootLine(lumitVersion()));
 
-  /// How big each layer's content is, for the Viewer's boxes and hit-testing
-  /// (K-217). Held here because the answer is the document's, not a panel's,
-  /// and probing a clip is disk work that must happen once rather than per
-  /// Viewer rebuild.
+  /// How big each layer's content is, for the Viewer's boxes and hit-testing.
+  /// Held here because the answer is the document's, not a panel's, and
+  /// probing a clip is disk work that must happen once rather than per Viewer
+  /// rebuild.
   final LayerBoundsCache layerBounds = LayerBoundsCache();
 
-  /// Where a keyed mask's shape actually is at the frame on screen (K-342), so
+  /// Where a keyed mask's shape actually is at the frame on screen, so
   /// the Viewer's wireframe follows an animated path instead of the still one
   /// the mask still carries. Held against the document and the playhead, so a
   /// hover asks the engine nothing.
   final AnimatedMaskPaths animatedMaskPaths = AnimatedMaskPaths();
 
-  /// Which tool the toolbar has armed (docs/07 §1.7, K-216).
+  /// Which tool the toolbar has armed (docs/07 §1.7).
   ///
   /// Session state at the shell level, like the dropper below it and for the
   /// same reason: the tool is picked in one place and read in another, and no
@@ -193,8 +193,7 @@ class LumitUiState extends ChangeNotifier {
   /// Whether [panel] is the one a [panelSearchRequest] is meant for.
   bool searchRequestIsFor(Panel panel) => activePanel.value == panel;
 
-  /// Bumped when `Ctrl+A` asks the focused panel to select everything it holds
-  /// (K-522).
+  /// Bumped when `Ctrl+A` asks the focused panel to select everything it holds.
   ///
   /// **Select all is per panel.** `edit.select.all` used to mean one thing
   /// wherever it was pressed — every layer in the composition — so `Ctrl+A` in
@@ -214,7 +213,7 @@ class LumitUiState extends ChangeNotifier {
   ///
   /// The Timeline is deliberately absent: its selection *is* the composition's
   /// layers, which the shell already holds, so the shell answers for it.
-  /// The Node graph joined once its pick became a set (K-523): before that it
+  /// The Node graph joined once its pick became a set: before that it
   /// had a single node and nothing to select *all* of, and listing it would
   /// only have made Ctrl+A a dead key there.
   static const Set<Panel> _selectAllPanels = {
@@ -234,7 +233,7 @@ class LumitUiState extends ChangeNotifier {
   /// Whether [panel] is the one a [selectAllRequest] is meant for.
   bool selectAllRequestIsFor(Panel panel) => activePanel.value == panel;
 
-  /// A finer selection's claim on Delete (K-234), set by the Timeline while it
+  /// A finer selection's claim on Delete, set by the Timeline while it
   /// is mounted and cleared when it goes.
   ///
   /// The shell's Delete removes the selected *layers*, which is only the right
@@ -246,7 +245,7 @@ class LumitUiState extends ChangeNotifier {
   /// chord simply by handling it.
   bool Function()? deleteClaim;
 
-  /// The graph's claim on `Ctrl+Space` (K-673), set by the Graph panel while
+  /// The graph's claim on `Ctrl+Space`, set by the Graph panel while
   /// it is mounted and — when a Custom shader's inner graph is the panel's
   /// face — by that graph over it, chained exactly as [deleteClaim] is.
   ///
@@ -257,21 +256,21 @@ class LumitUiState extends ChangeNotifier {
   /// surface contributes.
   bool Function()? consoleClaim;
 
-  /// The same claim, for Copy and Paste (K-300). The Timeline sets these while
+  /// The same claim, for Copy and Paste. The Timeline sets these while
   /// it is mounted: with keyframes selected, `Mod+C` means those keyframes, and
   /// `Mod+V` puts them back — the layer clipboard is what the chord falls
   /// through to. Each returns whether it took the chord.
   bool Function()? copyClaim;
   bool Function()? pasteClaim;
 
-  /// Where the Easing panel sends a shape (K-349), published by the Timeline
+  /// Where the Easing panel sends a shape, published by the Timeline
   /// while it can take one and null when it cannot.
   ///
   /// The same claim idea as the three above, but a notifier rather than a bare
   /// field, because this one is *read to draw with*: the panel is persistent, so
   /// it must grey its Apply the moment there is nowhere to send a shape —
   /// no Timeline on screen, or a graph showing the speed lens, where a curve
-  /// drawn against value travel does not belong (K-348). A bare field would
+  /// drawn against value travel does not belong. A bare field would
   /// leave the panel showing a live button until something else happened to
   /// rebuild it.
   ///
@@ -302,7 +301,7 @@ class LumitUiState extends ChangeNotifier {
   void requestTogglePlay() => togglePlayRequest.value++;
 
   /// Look for a newer Lumit on launch, if that is switched on and it has been
-  /// a day since the last look (K-296).
+  /// a day since the last look.
   ///
   /// Only ever a *look*: what it finds ends up as the wording of the Help menu
   /// row, and downloading anything still waits for a click. Failure is silent —
@@ -329,7 +328,7 @@ class LumitUiState extends ChangeNotifier {
 
   void requestPalette() => paletteRequest.value++;
 
-  /// Bumped when `Ctrl+Space` asks for the FX console (K-324). Its effects,
+  /// Bumped when `Ctrl+Space` asks for the FX console. Its effects,
   /// comps and radial entries are the menu bar's, for the same reason the
   /// palette's commands are.
   final ValueNotifier<int> consoleRequest = ValueNotifier(0);
@@ -338,7 +337,7 @@ class LumitUiState extends ChangeNotifier {
 
   /// A property row the Timeline has been asked to show — the layer and one of
   /// the `reveal.*` actions (docs/07 §4.3's P/S/R/T/A family). Set by the FX
-  /// console's Keyframe ring (K-326) after it plants a key, so the key just
+  /// console's Keyframe ring after it plants a key, so the key just
   /// made is on screen. The Timeline listens and *ensures* the row is open —
   /// no toggle, unlike the reveal keys, because asking to see a row twice
   /// should never hide it.
@@ -349,7 +348,7 @@ class LumitUiState extends ChangeNotifier {
       revealPropertyRequest.value = (layer, action);
 
   /// A reveal the Timeline has been asked to run over the selection — the
-  /// Animation ▸ Reveal rows (K-684), which are the `U` machinery under the
+  /// Animation ▸ Reveal rows, which are the `U` machinery under the
   /// menu's own words.
   ///
   /// A **counter** beside the filter rather than the filter alone: asking for
@@ -367,7 +366,7 @@ class LumitUiState extends ChangeNotifier {
   }
 
   /// **Which property rows the Timeline has picked**, as their paths, published
-  /// so the Viewer can answer the same question (K-341).
+  /// so the Viewer can answer the same question.
   ///
   /// A property belongs to a layer, so picking one is saying which layer is
   /// being worked on — and the Viewer should outline that layer and its masks
@@ -385,7 +384,7 @@ class LumitUiState extends ChangeNotifier {
   void requestSelectProperty(String path) => selectPropertyRequest.value = path;
 
   /// The Project panel's picked item — its selection anchor, published by the
-  /// panel on every click (K-327). The full selection stays the panel's own;
+  /// panel on every click. The full selection stays the panel's own;
   /// this is the one item the FX console acts on, so a Ctrl+Space over the
   /// Project panel offers "add this to the comp" rather than the new-layer
   /// ring it used to fall through to. Null with nothing picked there.
@@ -402,7 +401,7 @@ class LumitUiState extends ChangeNotifier {
   /// only the cache bar, which listens to both.
   final ValueNotifier<int> cacheChanged = ValueNotifier(0);
 
-  /// Bumped when a Camera track analysis lands a solve (K-430). Its own
+  /// Bumped when a Camera track analysis lands a solve. Its own
   /// notifier because a solve moves neither the document's revision nor the
   /// playhead — and those two are exactly what the Viewer's point cloud is
   /// keyed by, so without this it had no reason to ask again and the dots did
@@ -410,7 +409,7 @@ class LumitUiState extends ChangeNotifier {
   final ValueNotifier<int> solveLanded = ValueNotifier(0);
 
   /// The preview tier the last frame was made at: 1 Full, 2 Half, 3 Third,
-  /// 4 Quarter (K-030/K-171).
+  /// 4 Quarter.
   ///
   /// Carried on the frame rather than asked for. The Viewer shows the tier in
   /// two places, and each of them asked the engine in its `build()` — two calls
@@ -451,15 +450,15 @@ class LumitUiState extends ChangeNotifier {
   /// Start playing the fronted composition from the playhead.
   ///
   /// Everything about *how* playback runs — which frame is next, whether the
-  /// clock has moved on, when to give up a tier — belongs to the engine
-  /// (K-181). This says go, and [_arrived] follows the frames back.
+  /// clock has moved on, when to give up a tier — belongs to the engine.
+  /// This says go, and [_arrived] follows the frames back.
   void play() {
     final comp = selectedComp;
     if (comp == null) return;
     // The work area is the span being worked on, so it is the span playback
     // runs round: reaching its end goes back to its start and carries on,
     // and a comp nobody has narrowed runs round the whole of itself, because
-    // that is what its work area is (K-203) — unless the playhead is parked
+    // that is what its work area is — unless the playhead is parked
     // past that end, where looping would mean never showing the frame the user
     // is standing on ([playbackLoop]). Read once here rather than per frame —
     // it cannot change while the transport is running, and
@@ -482,7 +481,7 @@ class LumitUiState extends ChangeNotifier {
   }
 
   /// Where the playhead stood when [play] was called, so stopping can put it
-  /// back (K-254). Null when nothing is playing.
+  /// back. Null when nothing is playing.
   ///
   /// Held here rather than read off the comp because it is a fact about *this
   /// run of the transport*, not about the document: it must survive the frames
@@ -505,7 +504,7 @@ class LumitUiState extends ChangeNotifier {
       );
 
   /// Stop the transport, and — unless the user is taking hold of the playhead
-  /// themselves — put the playhead back where play started (K-254).
+  /// themselves — put the playhead back where play started.
   ///
   /// Returning is the default because playback is a *preview*: you park the
   /// playhead where you are working, watch it run, and expect to still be where
@@ -553,7 +552,7 @@ class LumitUiState extends ChangeNotifier {
         mode: workspace.performance.playback == PlaybackMode.adaptive
             ? BridgePlaybackMode.adaptive
             : BridgePlaybackMode.everyFrame,
-        // The "at effect" chip (K-528). The engine latches it, so the drags,
+        // The "at effect" chip. The engine latches it, so the drags,
         // the playback and the idle fill that follow show the same picture.
         prefix: viewerPrefix,
       );
@@ -584,7 +583,7 @@ class LumitUiState extends ChangeNotifier {
   }
 
   /// Move the playhead because the user is taking hold of it — a drag on the
-  /// time ruler, a click in the lane area (K-254).
+  /// time ruler, a click in the lane area.
   ///
   /// Different from setting [playheadFrame] directly in one way that matters:
   /// it **stops the transport first**. Scrubbing against running playback was
@@ -629,7 +628,7 @@ class LumitUiState extends ChangeNotifier {
 
   /// Remember a layout the user changed by dragging a panel — app-wide, and
   /// against the open project, which is what makes two projects able to be
-  /// arranged differently (K-245).
+  /// arranged differently.
   void saveLayout() {
     // A workspace of the user's own keeps the arrangement they drag it into
     // (docs/07 §1.4); a preset's factory layout is not theirs to overwrite.
@@ -645,13 +644,13 @@ class LumitUiState extends ChangeNotifier {
   CompositionReference? _selectedComp;
   CompositionReference? get selectedComp => _selectedComp;
 
-  /// The fronted comp as the panels draw it (K-184) — refreshed by one bridge
+  /// The fronted comp as the panels draw it — refreshed by one bridge
   /// call when the engine reports a change, read by everything else for free.
   final CompModel model = CompModel();
 
   ViewerTextureController controller = ViewerTextureController();
 
-  /// The platform texture the Viewer draws — the only frame transport (K-183):
+  /// The platform texture the Viewer draws — the only frame transport:
   /// every frame arrives as a GPU handle, never as pixels. Null before the
   /// first registration.
   ValueNotifier<int?> viewerFrameid = ValueNotifier(null);
@@ -660,23 +659,23 @@ class LumitUiState extends ChangeNotifier {
   /// commands, the Timeline's fold-out. The *primary* of the selection below.
   ValueNotifier<LayerReference?> selectedLayer = ValueNotifier(null);
 
-  /// Which box the Graph panel has picked (K-471), or null for none.
+  /// Which box the Graph panel has picked, or null for none.
   ///
   /// Session state at the shell level for the same reason the armed tool is:
   /// it is set in one panel and read in another — the Node panel draws the
   /// picked box's parameter rows — and neither should have to be mounted for
   /// the other to work. An *effect* box also fronts itself in the ordinary
-  /// effect selection (K-300); this notifier is what carries the boxes that
+  /// effect selection; this notifier is what carries the boxes that
   /// selection cannot name, the drivers among them.
   final ValueNotifier<BridgeNodeRef?> graphNode = ValueNotifier(null);
 
   /// The Custom shader whose **inner graph** the Graph panel is showing
-  /// (K-642, docs/impl/custom-shader.md §4.2), or null when it shows the
+  /// (docs/impl/custom-shader.md §4.2), or null when it shows the
   /// layer's own graph.
   ///
   /// Shell-level for the reason [graphNode] is: it is set by a double-click in
   /// one panel (the Graph panel's box, or the Effect controls heading — one
-  /// selection, K-300) and read by the Graph panel, and neither should have to
+  /// selection) and read by the Graph panel, and neither should have to
   /// be mounted for the other to work. The names ride along so the breadcrumb
   /// costs no call in a rebuild.
   final ValueNotifier<ShaderGraphEntry?> shaderGraphEntry = ValueNotifier(null);
@@ -691,10 +690,9 @@ class LumitUiState extends ChangeNotifier {
   /// a restart.
   final Map<String, ({Offset pan, double zoom})> shaderGraphViews = {};
 
-  /// Enter one Custom shader's inner graph (K-642 — "entering a shader node
-  /// works like entering a precomp"). The one funnel both surfaces call, so
-  /// the names in the breadcrumb are captured the same way whichever
-  /// double-click it was.
+  /// Enter one Custom shader's inner graph: entering a shader node works like
+  /// entering a precomp. The one funnel both surfaces call, so the names in
+  /// the breadcrumb are captured the same way whichever double-click it was.
   void enterShaderGraph(LayerReference layer, UuidValue effect,
       {required String effectName}) {
     var compName = '';
@@ -718,7 +716,7 @@ class LumitUiState extends ChangeNotifier {
   /// The breadcrumb's way back, and Escape's.
   void exitShaderGraph() => shaderGraphEntry.value = null;
 
-  /// What Copy put down, for Paste to pick up (K-275). One tray for the
+  /// What Copy put down, for Paste to pick up. One tray for the
   /// session, shared by the Edit menu and the panels.
   ///
   /// Read directly; **written through the two methods below**, because Paste is
@@ -729,7 +727,7 @@ class LumitUiState extends ChangeNotifier {
 
   /// Copy a layer, and tell the interface so Paste ungreys.
   ///
-  /// **Mirrored to the system clipboard** (K-302): a copy that leaves no trace
+  /// **Mirrored to the system clipboard**: a copy that leaves no trace
   /// anywhere the machine can see reads exactly like a copy that did nothing —
   /// paste into a text editor and nothing arrives. The document is the text.
   void copyLayerToClipboard(String text) {
@@ -746,7 +744,7 @@ class LumitUiState extends ChangeNotifier {
   }
 
   /// Take a Lumit document off the **system** clipboard into the tray, if
-  /// there is one there and the tray has nothing of its own (K-302).
+  /// there is one there and the tray has nothing of its own.
   ///
   /// This is how a copy made in another Lumit window arrives, and how a paste
   /// still works after something else on the machine has been copied in
@@ -768,7 +766,7 @@ class LumitUiState extends ChangeNotifier {
     return true;
   }
 
-  /// The whole selection, primary first (K-217).
+  /// The whole selection, primary first.
   ///
   /// Kept beside [selectedLayer] rather than replacing it, because almost
   /// everything in the application acts on one layer and reads it directly —
@@ -787,15 +785,15 @@ class LumitUiState extends ChangeNotifier {
 
   /// **Every layer the Viewer may draw an outline or an editable point on** —
   /// the selection, plus any layer a *property* of which is picked in the
-  /// Timeline (K-341: picking a mask's Path row offers that mask's points
-  /// without the layer itself ever being clicked).
+  /// Timeline (picking a mask's Path row offers that mask's points without the
+  /// layer itself ever being clicked).
   ///
   /// One definition rather than two, because two things now depend on it and
   /// they must not drift: the gizmo draws these layers' mask outlines, and the
-  /// stage asks the engine for those masks' *interpolated* shapes (K-342). A
+  /// stage asks the engine for those masks' *interpolated* shapes. A
   /// layer that fell out of this set while its outline was still drawn would
   /// silently go back to drawing the shape the drawing tools last wrote rather
-  /// than the one the picture shows, which is the bug K-342 exists to fix.
+  /// than the one the picture shows, which is the old bug back again.
   ///
   /// Ids as strings, because half of it arrives as the head of a property path
   /// and parsing it back would be a throw waiting for a path shape nobody
@@ -812,23 +810,23 @@ class LumitUiState extends ChangeNotifier {
     selectedLayers.value = List.unmodifiable(layers);
     selectedLayer.value = layers.isEmpty ? null : layers.first;
     // An effect belongs to a layer, so picking a different layer cannot leave
-    // the old layer's effects picked (K-300) — Copy would then act on something
+    // the old layer's effects picked — Copy would then act on something
     // no longer on screen.
     clearEffectSelection();
     // And choosing layers is choosing a layer subject: the group header the
-    // panel was showing stands down (K-731). The Timeline's group click sets
+    // panel was showing stands down. The Timeline's group click sets
     // it back after routing through here, which is what keeps the order
     // honest — see its onSelect.
     selectedGroupHeader.value = null;
   }
 
   /// The **layer group** whose header the Effect controls panel is showing
-  /// (K-731, docs/impl/group-effects.md §6), or null while the subject is a
+  /// (docs/impl/group-effects.md §6), or null while the subject is a
   /// layer. Set by the Timeline's header click after it selects the members;
   /// cleared by any layer selection.
   final ValueNotifier<UuidValue?> selectedGroupHeader = ValueNotifier(null);
 
-  /// The effects picked out of one layer's stack (K-300), as instance ids in
+  /// The effects picked out of one layer's stack, as instance ids in
   /// **stack order** — what Copy and Cut act on when it is not empty.
   ///
   /// Held here rather than in either panel because an effect is picked in two
@@ -841,8 +839,8 @@ class LumitUiState extends ChangeNotifier {
   LayerReference? selectedEffectsLayer;
 
   /// Whether the Viewer is showing the picture **at** the selected effect —
-  /// that layer's stack stopping there — rather than the finished composition
-  /// (K-528). The "at effect" chip over the picture is what turns it on.
+  /// that layer's stack stopping there — rather than the finished composition.
+  /// The "at effect" chip over the picture is what turns it on.
   ///
   /// Session state at the shell level, like the armed tool and the picked
   /// graph box: it is set on the Viewer and read where the render is asked
@@ -855,9 +853,9 @@ class LumitUiState extends ChangeNotifier {
   /// **The chip is per box, and it stays as it was left.** Walking back onto a
   /// box you were looking *at* shows it at that box again, without asking
   /// twice; walking back onto one you turned off shows the finished picture.
-  /// A box that has never been answered takes the answer the walk arrived with
-  /// — which is what makes stepping down a stack with the chip on keep working
-  /// (K-528) — and keeps it from then on.
+  /// A box that has never been answered takes the answer the walk arrived
+  /// with — which is what makes stepping down a stack with the chip on keep
+  /// working — and keeps it from then on.
   ///
   /// Session state, not document state: this is a way of *looking*, so it has
   /// no business in the file, on the undo stack, or in what "unsaved changes"
@@ -985,7 +983,7 @@ class LumitUiState extends ChangeNotifier {
   }
 
   /// What **Copy effect** on [id]'s heading takes: the whole picked run when
-  /// this effect is part of it, else just this one (K-300). Right-clicking a
+  /// this effect is part of it, else just this one. Right-clicking a
   /// heading outside the selection copies what was right-clicked, which is what
   /// every list in the application does.
   List<UuidValue> effectsToCopy(LayerReference layer, UuidValue id) =>
@@ -1016,7 +1014,7 @@ class LumitUiState extends ChangeNotifier {
 
   void clearSelection() => setSelection(const []);
 
-  /// The turn a Rotation-tool drag is part way through, by layer id (K-230).
+  /// The turn a Rotation-tool drag is part way through, by layer id.
   ///
   /// The picture is previewed at the new angle while the drag is in flight, but
   /// the document still holds the old one — so the wireframe drawn from the
@@ -1027,7 +1025,7 @@ class LumitUiState extends ChangeNotifier {
   final ValueNotifier<Map<UuidValue, double>> liveRotations =
       ValueNotifier(const {});
 
-  /// The line a Type edit is part way through, by layer id (K-232).
+  /// The line a Type edit is part way through, by layer id.
   ///
   /// Published for the same reason as [liveRotations]: what is being typed is
   /// previewed on the picture while the document still holds the old document,
@@ -1052,7 +1050,7 @@ class LumitUiState extends ChangeNotifier {
   final ValueNotifier<Map<UuidValue, BridgeTransform>> liveTransforms =
       ValueNotifier(const {});
 
-  /// Forget layers that are no longer in the composition (K-238).
+  /// Forget layers that are no longer in the composition.
   ///
   /// **Why this is not merely tidy.** A selection is not only a highlight — it
   /// is the answer to "which layer does this tool act on?". Undo a shape layer
@@ -1120,7 +1118,7 @@ class LumitUiState extends ChangeNotifier {
   /// This is why a Viewer in a small panel is cheap: the engine decodes and
   /// composites at the size being displayed rather than always at comp
   /// resolution. It is the frb counterpart of v0's `effectivePreviewScale`, minus
-  /// the adaptive quality tier (K-171), which is not ported yet — so this tracks
+  /// the adaptive quality tier, which is not ported yet — so this tracks
   /// the panel size only, not measured render cost.
   ///
   /// A getter, not a field, because two separate things decide it: the panel
@@ -1137,7 +1135,7 @@ class LumitUiState extends ChangeNotifier {
   /// comp resolution would cost more for no visible gain, and a zero or negative
   /// scale is meaningless.
   ///
-  /// **A panel that has changed size asks for the frame again** (K-430). On
+  /// **A panel that has changed size asks for the frame again**. On
   /// Auto the scale is whatever the panel could show at the moment it laid
   /// itself out, and the first layout of a session happens at whatever size the
   /// window opened at — so the first frame stayed at that scale until something
@@ -1163,7 +1161,7 @@ class LumitUiState extends ChangeNotifier {
     WidgetsBinding.instance.addPostFrameCallback((_) => requestFrame());
   }
 
-  /// The preview resolution of each composition, by id (K-357, docs/07 §2.2
+  /// The preview resolution of each composition, by id (docs/07 §2.2
   /// item 2). Per comp because it is a way of *working on* one — a heavy shot
   /// wants Quarter while the title card beside it does not — and it rides the
   /// session blob beside [viewerLooks] rather than the document, because
@@ -1172,7 +1170,7 @@ class LumitUiState extends ChangeNotifier {
 
   /// How many pixels the engine is asked for, for the fronted comp.
   ///
-  /// **Full until something says otherwise** (K-670). Auto renders only what
+  /// **Full until something says otherwise**. Auto renders only what
   /// the panel can show, which is cheap and was the old default — but it means
   /// a picture whose sharpness depends on how wide the panel happens to be,
   /// and a first look at a shot that is soft for a reason nobody can see. A
@@ -1275,7 +1273,7 @@ class LumitUiState extends ChangeNotifier {
   StreamSubscription? _changes;
 
   /// The session's engine-facing state. Held because the comp list it caches
-  /// is what says which comps still exist (K-184).
+  /// is what says which comps still exist.
   final LumitState _app;
 
   LumitUiState(LumitState state, {Workspace? workspace})
@@ -1291,11 +1289,11 @@ class LumitUiState extends ChangeNotifier {
     // Appearance and layout live in the workspace, so a change there is a
     // change here as far as any listening widget is concerned.
     this.workspace.addListener(notifyListeners);
-    // Floating windows read and write where they were left through this
-    // (K-242); the controls file has no other way to reach the store.
+    // Floating windows read and write where they were left through this;
+    // the controls file has no other way to reach the store.
     modalPlacementStore = this.workspace;
     selectedLayer.addListener(_syncSelection);
-    // A layer that has gone must leave the selection with it (K-238). The
+    // A layer that has gone must leave the selection with it. The
     // model is the one place that knows which layers exist, so the pruning
     // hangs off its refresh rather than off each of the several ways a layer
     // can disappear.
@@ -1316,7 +1314,7 @@ class LumitUiState extends ChangeNotifier {
     _app.addListener(_adoptProjectSession);
     // The colour config is a document property, so it can only change when the
     // document does — which is exactly when this fires. Held from here on, so
-    // no rebuild path ever asks (K-490, docs/impl/ocio.md §6.1).
+    // no rebuild path ever asks (docs/impl/ocio.md §6.1).
     _app.addListener(refreshColourSummary);
     refreshColourSummary();
     // Where the playhead was left is worth keeping, and it moves far too often
@@ -1330,15 +1328,15 @@ class LumitUiState extends ChangeNotifier {
       },
     );
     // The keymap: restored from the workspace if the user has changed one,
-    // otherwise the engine's shipped defaults (K-199). Held here because
+    // otherwise the engine's shipped defaults. Held here because
     // every keypress goes through it and the settings page edits it, so it
     // wants the same lifetime as the rest of the session's UI state.
     keymap = KeymapState(workspace: this.workspace);
     // The cache budgets: live engine state with no store behind it, so the
-    // settings file carries the user's choice and hands it back here (K-194's
-    // sizing only picks the *default*). Null means untouched — leave the
-    // engine on its own default rather than writing today's default into the
-    // file forever.
+    // settings file carries the user's choice and hands it back here (the
+    // engine's own sizing only picks the *default*). Null means untouched —
+    // leave the engine on its own default rather than writing today's default
+    // into the file forever.
     final perf = this.workspace.performance;
     final ramBudget = perf.cacheBudgetBytes;
     if (ramBudget != null) setCacheBudget(bytes: BigInt.from(ramBudget));
@@ -1346,7 +1344,7 @@ class LumitUiState extends ChangeNotifier {
     if (vramBudget != null) setVramCacheBudget(bytes: BigInt.from(vramBudget));
     final diskBudget = perf.diskBudgetBytes;
     if (diskBudget != null) setDiskCacheBudget(bytes: BigInt.from(diskBudget));
-    // Whether a drag renders at full resolution (K-744). Handed over
+    // Whether a drag renders at full resolution. Handed over
     // unconditionally rather than only when on: it is the engine's live state
     // with no store behind it, so "off" has to be said as plainly as "on".
     setFullResDragPreviews(fullRes: perf.fullResDragPreviews);
@@ -1375,8 +1373,8 @@ class LumitUiState extends ChangeNotifier {
       );
     }
     // The read model re-reads on every committed change — one bridge call —
-    // and every panel that draws layers repaints from it (K-184). **Once per
-    // revision** (K-680): the panel that committed the op has usually
+    // and every panel that draws layers repaints from it. **Once per
+    // revision**: the panel that committed the op has usually
     // refreshed already, and a second wave for the same document is a rebuild
     // of every panel that finds nothing new to draw.
     _changes = state.onChange.listen((event) {
@@ -1403,7 +1401,7 @@ class LumitUiState extends ChangeNotifier {
         // needs no message — `stopPlayback` already set the flag.
         case WorkerResponse_PlaybackEnded():
           playing.value = false;
-          // Running off the end returns the playhead too (K-254): where you are
+          // Running off the end returns the playhead too: where you are
           // when the transport stops should not depend on whether you stopped
           // it or the composition ran out.
           _returnPlayhead();
@@ -1423,8 +1421,8 @@ class LumitUiState extends ChangeNotifier {
         // the numbers (`RenderTimings.setMeasuring`).
         case WorkerResponse_FrameProfile(:final field0):
           renderTimings.report(field0);
-        // The graphics device went and the engine has already built another
-        // (K-585). Everything that had to happen has happened by the time this
+        // The graphics device went and the engine has already built another.
+        // Everything that had to happen has happened by the time this
         // arrives — the frame behind it is being made on the new device — so
         // the only thing left is to say why the picture blinked.
         case WorkerResponse_DeviceReset():
@@ -1459,7 +1457,7 @@ class LumitUiState extends ChangeNotifier {
 
   /// Windows and macOS zero-copy: register the surface by the one integer that
   /// names it — an NT handle for the shared D3D12 texture there, an `IOSurfaceID`
-  /// here (K-195). One case for both, because the payload is the same shape.
+  /// here. One case for both, because the payload is the same shape.
   /// Leaving `fd` null is what selects the handle argument set.
   void _showSharedTexture(BridgeSharedFrameInfo f) {
     controller
@@ -1522,7 +1520,7 @@ class LumitUiState extends ChangeNotifier {
   /// can put them back where they came from rather than somewhere arbitrary.
   UuidValue? _previousComp;
 
-  /// Where the user was in each composition, by id (K-624): the playhead, and
+  /// Where the user was in each composition, by id: the playhead, and
   /// the Timeline's magnification and scroll. Not in the document — standing
   /// somewhere in a comp is not an edit to it — so this rides in the session
   /// blob (see [session]) beside the looks, and never in an op.
@@ -1543,7 +1541,7 @@ class LumitUiState extends ChangeNotifier {
     );
   }
 
-  /// Front a composition, landing the playhead where the user left it (K-624).
+  /// Front a composition, landing the playhead where the user left it.
   ///
   /// [atFrame] overrides that: opening a **Precomp layer** enters the nested
   /// comp at the moment that layer is showing, which the engine works out
@@ -1574,7 +1572,7 @@ class LumitUiState extends ChangeNotifier {
       final last = model.durationFrames - 1;
       playheadFrame.value = last <= 0 ? 0 : want.clamp(0, last);
     }
-    // Each comp is looked at its own way (K-314), so fronting one is what puts
+    // Each comp is looked at its own way, so fronting one is what puts
     // its exposure and tone map back on the engine's renderer — which holds
     // exactly one view, for whatever the Viewer is showing.
     pushViewerLook();
@@ -1583,7 +1581,7 @@ class LumitUiState extends ChangeNotifier {
   }
 
   /// Open the composition a Precomp layer draws, landing on the frame that
-  /// layer is showing (K-624).
+  /// layer is showing.
   ///
   /// The mapping is the engine's (`LayerReference.nestedEntryFrame`): it runs
   /// the playhead through the layer's start offset and Retime map, so a
@@ -1607,7 +1605,7 @@ class LumitUiState extends ChangeNotifier {
     setSelectedComp(comp, atFrame: at);
   }
 
-  // --- How the Viewer is looking (K-314) -----------------------------------
+  // --- How the Viewer is looking -------------------------------------------
 
   /// Exposure and tone map per composition id. Not in the document: a way of
   /// looking is not an edit, so this rides in the session blob (see
@@ -1645,7 +1643,7 @@ class LumitUiState extends ChangeNotifier {
     String view
   })? _pushedView;
 
-  // --- The project's colour config (K-490) ----------------------------------
+  // --- The project's colour config ------------------------------------------
 
   /// The project's OCIO config as the interface reads it: its path, whether it
   /// is in force, why not when it is not, and every name it puts in a picker
@@ -1655,7 +1653,7 @@ class LumitUiState extends ChangeNotifier {
   /// file to see whether it has changed on disk, so a widget that asked for it
   /// while rebuilding would stat a file per frame. It is fetched when the
   /// document changes — which is when it can differ — and every surface reads
-  /// this field (K-183, and the bridge-call budget test).
+  /// this field (the bridge-call budget test is the gate).
   BridgeColourSummary colourSummary = noColourConfig;
 
   /// The `[display, view]` the Viewer is showing through, or null for the
@@ -1707,15 +1705,15 @@ class LumitUiState extends ChangeNotifier {
     return false;
   }
 
-  /// The Viewer's **region of interest** per comp (K-362): the sub-rectangle
+  /// The Viewer's **region of interest** per comp: the sub-rectangle
   /// the engine composites, as comp fractions `[u0, v0, u1, v1]`. Rides the
   /// session beside [previewResolutions] rather than the document, for the
   /// same reason — choosing where to look is not an edit, and must never reach
   /// an export.
   final Map<String, List<double>> regionsOfInterest = {};
 
-  /// Whether the next drag on the picture sweeps out a region of interest
-  /// (K-362). View state rather than panel state only because two widgets need
+  /// Whether the next drag on the picture sweeps out a region of interest.
+  /// View state rather than panel state only because two widgets need
   /// it — the bar that arms it and the layer that takes the drag — and
   /// threading a transient flag between them through the stage is more
   /// machinery than the flag is worth. Never saved: arming is a thing you are
@@ -1763,7 +1761,7 @@ class LumitUiState extends ChangeNotifier {
     pushViewerLook();
   }
 
-  /// The Viewer's **overlays** per comp (K-416, docs/07 §2.2 items 5–6): the
+  /// The Viewer's **overlays** per comp (docs/07 §2.2 items 5–6): the
   /// proportional grid and the title/action safe rectangles, drawn over the
   /// picture by the display and by nothing else.
   ///
@@ -1772,10 +1770,9 @@ class LumitUiState extends ChangeNotifier {
   /// the bridge: the engine's picture is untouched, so unlike the region there
   /// is no push and no re-render, only a repaint.
   ///
-  /// **They ride the per-project session** (K-689, doing what K-416's own note
-  /// said was owed): a comp opened tomorrow comes back with the scaffolding it
-  /// was left with, and none of it is in the document, so no tick makes a
-  /// project dirty and Ctrl+Z never undoes one.
+  /// **They ride the per-project session**: a comp opened tomorrow comes back
+  /// with the scaffolding it was left with, and none of it is in the document,
+  /// so no tick makes a project dirty and Ctrl+Z never undoes one.
   final Map<String, ViewerOverlays> viewerOverlaysByComp = {};
 
   /// The fronted comp's overlays — nothing drawn, until something is asked for.
@@ -1805,7 +1802,7 @@ class LumitUiState extends ChangeNotifier {
     rememberSession();
   }
 
-  /// The **guides** of each comp (K-689, docs/07 §2.2 item 6), in comp pixels:
+  /// The **guides** of each comp (docs/07 §2.2 item 6), in comp pixels:
   /// the lines dragged out of the Viewer's rulers, which layers snap to while
   /// the magnet is on. Beside the overlays in the session, and for the same
   /// reason — a guide is a mark over the picture, not an edit to the work.
@@ -1830,12 +1827,12 @@ class LumitUiState extends ChangeNotifier {
     rememberSession();
   }
 
-  /// Whether the Viewer draws its **layer controls** (K-217, K-466): the
+  /// Whether the Viewer draws its **layer controls**: the
   /// wireframe round every layer, the transform handles and the hover
   /// highlight, on and off as one.
   ///
   /// Here rather than in the Viewer panel because two things reach it — the
-  /// bar's own view menu and View ▸ Show wireframe (K-244) — and a switch
+  /// bar's own view menu and View ▸ Show wireframe — and a switch
   /// with one route is a switch that disappears the day something intercepts
   /// that route. Display only: no engine copy, no cache entry, and nothing an
   /// export can see.
@@ -1851,7 +1848,7 @@ class LumitUiState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Whether the Viewer's transparency grid is up (K-352). While it is, the
+  /// Whether the Viewer's transparency grid is up. While it is, the
   /// engine leaves the comp's background colour out of the composite, so
   /// pixels nothing covers arrive transparent and the grid shows through.
   ///
@@ -2008,7 +2005,7 @@ class LumitUiState extends ChangeNotifier {
   }
 
   /// The same thing as JSON, for the copy that goes inside the `.lum` so it
-  /// travels with a project shared with someone else (K-245).
+  /// travels with a project shared with someone else.
   String sessionJson() => jsonEncode(session().toJson());
 
   /// Put the saved session back after a project is opened, and start from
@@ -2091,7 +2088,7 @@ class LumitUiState extends ChangeNotifier {
       // This machine's own record of the project comes first: it is the more
       // recent account of what *this* user was doing, and it is kept up to date
       // between saves. The one in the file is what a project arriving from
-      // somebody else brings with it (K-245), so it answers exactly when there
+      // somebody else brings with it, so it answers exactly when there
       // is no local record — the first time this project is opened here.
       final session = workspace.sessionFor(path) ?? _embeddedSession(project!);
       if (session == null) return;
@@ -2116,13 +2113,13 @@ class LumitUiState extends ChangeNotifier {
         }
       }
       // The regions, checked against the comps that actually loaded — the
-      // same rule every other id in a session gets (K-362).
+      // same rule every other id in a session gets.
       for (final e in session.regionsOfInterest.entries) {
         if (known.containsKey(e.key)) {
           regionsOfInterest[e.key] = List.of(e.value);
         }
       }
-      // The marks over each comp and the guides on it (K-689), same rule
+      // The marks over each comp and the guides on it, same rule
       // again: an overlay or a guide kept against a comp id that has gone
       // would be written back out for ever.
       viewerOverlaysByComp.addEntries(
@@ -2131,7 +2128,7 @@ class LumitUiState extends ChangeNotifier {
       for (final e in session.guides.entries) {
         if (known.containsKey(e.key)) guidesByComp[e.key] = List.of(e.value);
       }
-      // Where the user was in each comp (K-624), same rule again.
+      // Where the user was in each comp, same rule again.
       compViews.addEntries(
         session.compViews.entries.where((e) => known.containsKey(e.key)),
       );
@@ -2190,7 +2187,7 @@ class LumitUiState extends ChangeNotifier {
   /// comp the engine has never heard of, which is what put a bridge error on
   /// screen where the timeline should be.
   ///
-  /// So the same rule the layer selection follows (K-238) applies to the
+  /// So the same rule the layer selection follows applies to the
   /// fronted comp: what has gone cannot stay fronted. Where to go instead, in
   /// order — the comp the user was in before this one, if it is still there;
   /// else the nearest open tab, left first and then right; else nothing

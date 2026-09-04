@@ -109,7 +109,7 @@ class TimeReadout extends StatefulWidget {
   final String? tooltip;
 
   /// Draw the readout as a **value well** — the inset `surface_0` face inside
-  /// a hairline that [DragValueField] wears at rest (§2.1/§3.1, K-460).
+  /// a hairline that [DragValueField] wears at rest (§2.1/§3.1).
   ///
   /// The well is what says *editable*. Without it a readout is bare text that
   /// happens to answer a click, which is a thing nobody clicks: the recess is
@@ -117,7 +117,7 @@ class TimeReadout extends StatefulWidget {
   final bool well;
 
   /// What the **editor** is seeded with, when that is not what the readout
-  /// shows. The frame count rests as `f48` and edits as `48` (K-460): the `f`
+  /// shows. The frame count rests as `f48` and edits as `48`: the `f`
   /// is a label saying which clock this is, not a digit, and leaving it in the
   /// field made every edit start by stepping over it. It goes back on at
   /// commit, because [format] is what draws the resting face.
@@ -155,7 +155,7 @@ class _TimeReadoutState extends State<TimeReadout>
   bool _hovered = false;
 
   /// The open editor, for the selection gestures — pressing places the caret
-  /// and dragging highlights, like any text box (K-319).
+  /// and dragging highlights, like any text box.
   final GlobalKey<EditableTextState> textFieldKey = GlobalKey();
 
   @override
@@ -244,8 +244,7 @@ class _TimeReadoutState extends State<TimeReadout>
                 textAlign: TextAlign.right,
                 onSubmitted: (_) => _commitTyped(),
                 // Clicking away finishes the edit rather than throwing it
-                // away: people leave a field by looking at the next thing
-                // (K-243).
+                // away: people leave a field by looking at the next thing.
                 onTapOutside: (_) => _commitTyped(),
               ),
             ),
@@ -257,7 +256,7 @@ class _TimeReadoutState extends State<TimeReadout>
             // here it is load-bearing rather than a convention. A readout's
             // slot is cut for the longest reading it can carry, so a shorter
             // one leaves slack; and the editor's text is not always the
-            // resting text (`F48` rests, `48` edits, K-460). Anchored left,
+            // resting text (`F48` rests, `48` edits). Anchored left,
             // clicking the frame count threw its digits one glyph to the left
             // the moment the letter went. Anchored right, the digits that
             // survive the change stay exactly where they were.
@@ -305,7 +304,7 @@ class _TimeReadoutState extends State<TimeReadout>
                 } else if (!_editing) {
                   // Never crossed a whole frame: the press was a click that
                   // wobbled, not a scrub — cancel the drag, then do what the
-                  // click meant and open the editor (K-319).
+                  // click meant and open the editor.
                   widget.onDragCancel?.call();
                   _beginEdit();
                 }

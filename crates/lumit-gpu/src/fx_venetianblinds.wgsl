@@ -22,7 +22,7 @@ struct Params {
     completion: f32,     // 0..1
     band: f32,           // the feather's width, raster px, floored above zero
     mix_amt: f32,        // 0..1, blended against the unprocessed input
-    matte_on: f32,       // 1 = the matte scales Completion per pixel (K-429)
+    matte_on: f32,       // 1 = the matte scales Completion per pixel
     _pad1: f32,
 };
 
@@ -31,14 +31,14 @@ struct Params {
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
 
-// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// The Matte (docs/08 §2.6), bound for every kernel on this layout and
 // read only under `matte_on` — bound to `src` when there is none, since a
 // texture binding cannot be left empty.
 @group(0) @binding(4) var matte: texture_2d<f32>;
 
 // This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
 // luma, clamped. The Channel pick and Invert already happened, once, at the
-// seam (fx_matte_prepare.wgsl, K-425).
+// seam (fx_matte_prepare.wgsl).
 fn matte_k(xy: vec2<i32>) -> f32 {
     let m = textureLoad(matte, xy, 0);
     return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
@@ -64,7 +64,7 @@ fn venetian_blinds(@builtin(global_invocation_id) gid: vec3<u32>) {
     let u = d - p.period * floor(d / p.period + 0.5);
     // The removed half-slat, with a half-band lead-in at each end.
     // The matte pulls Completion toward 0 per pixel, before the edge is
-    // placed (K-429): a gradient wipe, which a strength dissolve cannot make.
+    // placed: a gradient wipe, which a strength dissolve cannot make.
     var completion = p.completion;
     if (p.matte_on != 0.0) {
         completion = matte_toward(p.completion, 0.0, matte_k(xy));

@@ -1,6 +1,6 @@
 # Shape layers — the plan before the code
 
-**Status: built (K-237), first cut.** The durable parts now live in
+**Status: built, first cut.** The durable parts now live in
 [../03-DATA-MODEL.md](../03-DATA-MODEL.md) §7.2, [../06-RENDER-PIPELINE.md](../06-RENDER-PIPELINE.md)
 §1.2 and [../07-UI-SPEC.md](../07-UI-SPEC.md) §2.3.1; what is left here is the reasoning behind
 the choices and the record of how the plan turned out. Two things went differently
@@ -17,7 +17,7 @@ from the plan and are worth knowing:
   points, not by the curve. That is now written down in both places and tested on
   both sides.
 
-**The modifiers arrived as fields, not as a tree (K-551).** After Effects keeps
+**The modifiers arrived as fields, not as a tree.** After Effects keeps
 Trim Paths, the Repeater and the rest as entries in a nested group, and their
 *position* in that group is what decides what they act on. Lumit's list is flat
 and has no positions to read, so each modifier is a property of the item it
@@ -29,14 +29,14 @@ machinery at all. Every modifier is left out of the file until it is used, so th
 tree §9.2 still plans re-homes these fields rather than replacing them.
 
 Not built: nested groups, wiggle paths, and joins and caps other than round.
-Animated paths **are** built (K-606) — the mask's own keyed path, item by item.
+Animated paths **are** built — the mask's own keyed path, item by item.
 Dragging a shape's points on
-the picture **is** built (K-307): the gesture K-224 gave mask points serves shape
+the picture **is** built: the gesture that mask points already have serves shape
 contents too, since both hold the same `BezierPath`. Mind the coordinates: a shape
 item's vertices are in the *art's* space, and the layer's pixels start at the art's
 bounding-box corner, so anything drawing or hit-testing a shape point subtracts that
 corner (`LayerBox.shapePoint`), and anything writing points back leaves position to
-follow the corner — `set_shape_contents` does it, as one `Op::Batch` (K-308).
+follow the corner — `set_shape_contents` does it, as one `Op::Batch`.
 
 ## In plain terms
 
@@ -47,7 +47,7 @@ whenever you drag a shape tool with nothing selected. Lumit could not, when this
 plan was written: `LayerKind` had footage, solid, precomp, text, camera, sequence,
 adjustment and null in it, and no shape. That was the gap this plan closed.
 
-A mask (K-222, shipped) is a *path on another layer* that decides which pixels
+A mask (shipped) is a *path on another layer* that decides which pixels
 show. A shape layer is a path that **is** the picture. The geometry is the same
 `BezierPath`; everything else differs.
 
@@ -64,7 +64,7 @@ show. A shape layer is a path that **is** the picture. The geometry is the same
 2. **The renderer** (`lumit-render`, `lumit-gpu`). A shape layer has no source
    pixels, so `build.rs` needs a draw kind that rasterises a path at the size the
    frame is being rendered at: fill by non-zero winding, stroke as a widened
-   path. The natural size (K-217's wireframe reads it) is the path's bounding box.
+   path. The natural size (the wireframe reads it) is the path's bounding box.
    Decide early whether rasterising happens on the CPU into a texture (simple,
    costs an upload per change) or on the GPU by tessellating (fast, and the only
    honest answer for a shape being animated). The second is right; the first is
@@ -80,18 +80,18 @@ show. A shape layer is a path that **is** the picture. The geometry is the same
 ## Decisions taken already, so they are not re-taken
 
 - **The path type is shared with masks.** One `BezierPath` in the document, one
-  set of maths, one bridge vertex type (`BridgeVertex`, K-222). A shape layer's
+  set of maths, one bridge vertex type (`BridgeVertex`). A shape layer's
   path and a mask's path differ in what they *do*, not in what they are.
 - **Layer space, as everything else.** A shape's coordinates are the layer's own,
   so the layer's transform moves the shape exactly as it moves a mask.
 - **Nothing is dressed up as a shape layer until there is one.** Until the kind
-  exists the tools say so (K-222). A solid with a mask would be a lie in the
+  exists the tools say so. A solid with a mask would be a lie in the
   layer list.
 
 ## The modifiers, one at a time
 
 **Trim paths.** The hard part was already written: a paint stroke's write-on
-(K-549) cuts a polyline by arc length, and that is exactly what a trim is. The
+cuts a polyline by arc length, and that is exactly what a trim is. The
 shape side flattens the bezier, cuts with the same function, and hands the piece
 back. Three things were decided rather than derived:
 
@@ -136,8 +136,8 @@ is not, and that is the whole of its difficulty. Three things fell out of it:
   so the box has to hold the copies, and a keyed repeater moves them every
   frame. `bounds` and `contents_bounds` take a time now, and the frontend
   measures a shape layer fresh rather than from the revision-keyed cache. The
-  price is named in [../02-DECISIONS.md](../02-DECISIONS.md) K-553 and is real:
-  a repeater keyed to grow up or left slides the art, because a shape layer's
+  price is real: a
+  repeater keyed to grow up or left slides the art, because a shape layer's
   position is pinned to the box's corner.
 * **The transform is six numbers here, not a matrix type.** This is the only
   place in `lumit-core` that composes transforms in the art's own space; a
@@ -166,7 +166,7 @@ the *copy's* transform, which is what makes a repeated copy carry its ramp
 rather than sample the original's.
 
 **Path morphing.** The one item on the "not built" list above that turned out to be already
-written (K-606). A mask's shape has keyed since K-224, and `path_at`, `lerp_paths` and `resample`
+written. A mask's shape already keys, and `path_at`, `lerp_paths` and `resample`
 between them are the *whole* of morphing — the resampling rule included, which is the part that
 looks like it needs an algorithm and does not: the sparser path is cut into as many pieces as the
 denser one has by de Casteljau, so the path that comes back is geometrically the path that went
@@ -189,13 +189,13 @@ Three things worth knowing:
   their keys — a drag on a morphing shape would have shown nothing moving until the release,
   which is the very bug the `at` exists to prevent.
 * **The graph draws nothing for a shape yet.** A mask's path row reaches the graph editor as a
-  channel whose value is the counted-up interpolation parameter (K-344); a shape item's rows —
+  channel whose value is the counted-up interpolation parameter; a shape item's rows —
   path, trim, offset, the repeater's nine — reach it as nothing at all, because
   `graphChannelsFor` knows about transforms, effects, retime and masks and has never known about
   shape contents. That gap is older than morphing and is not closed here; the lane diamonds are,
   which is what a keyed row most needs.
 
-**Boolean combines.** The first modifier that could not be written here (K-605). Every one
+**Boolean combines.** The first modifier that could not be written here. Every one
 before it is arithmetic on a polyline this crate already walks — cut it by length, push it
 sideways, place a copy of it — and a boolean is not: it needs the points where two outlines
 cross, and then a decision about which of the fragments those cuts make are inside the answer.
@@ -211,13 +211,13 @@ Four things fell out of it:
 * **The surface is one `u32` on the item, and it points backwards.** `BezierPath` is one ring
   with no subpaths, so there was nothing inside an item to combine; the honest unit is two items
   in the same layer. `combine` says how *this* item joins the one *before* it, which makes a run
-  out of a flat list with no new op, no new read model and no tree — the same trick K-551 played
-  to get modifiers without groups. Folding left to right means three items read `(A ∪ B) − C`,
-  in the order they are written.
+  out of a flat list with no new op, no new read model and no tree — the same trick the
+  modifiers used to arrive without groups. Folding left to right means three items read
+  `(A ∪ B) − C`, in the order they are written.
 * **A run wears the first item's paint.** It has to wear somebody's, and the first item is the
   shape you started with; the ones after it are cutters. The cost is that a member's own rows
-  describe nothing, so the panel leaves them out — the rule K-552 set for a dash on a fill-only
-  shape, applied again.
+  describe nothing, so the panel leaves them out — the rule for a dash on a fill-only shape,
+  applied again.
 * **Even-odd, not non-zero.** `i_overlay` will read the input either way. The rasteriser reads
   it one way, and matching it is what makes joining a shape to something leave the shape looking
   the same. After Effects would fill a self-crossing star's middle; Lumit's does not, before or
@@ -245,7 +245,7 @@ and it removes the only way the feature could be silently backwards.
 
 ## The trap to expect
 
-The wireframe and hit-testing (K-217) read a layer's *content size* to draw its
+The wireframe and hit-testing read a layer's *content size* to draw its
 box. A shape layer's size is its path's bounding box, which **changes as the path
 is edited** — unlike every kind built so far, whose size is fixed by its source.
 `LayerBoundsCache` caches by document revision, so it will follow, but the cache

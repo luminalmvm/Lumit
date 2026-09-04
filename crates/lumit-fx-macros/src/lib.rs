@@ -13,9 +13,9 @@
 //! attribute table.
 //!
 //! Four parameters are **injected** rather than declared: the Matte layer row,
-//! its Invert switch (K-395) and its Channel choice (K-425), which every effect
+//! its Invert switch and its Channel choice, which every effect
 //! gets so the row means something on all of them from day one, and the Blend
-//! choice beside every Mix slider (K-425). `matte_channel = false` keeps the
+//! choice beside every Mix slider. `matte_channel = false` keeps the
 //! Channel off an effect that picks its matte's channels itself. `matte = "<id>"` says the effect
 //! reads the matte out of the named parameter *itself*, inside its own maths,
 //! instead of the generic dissolve — `matte = "matte"` for an effect that takes
@@ -81,9 +81,9 @@ struct EffectAttr {
     beat_input: TokenStream2,
     groups: TokenStream2,
     enabled_when: TokenStream2,
-    /// What this effect's Matte row means (K-395). Default [`MatteAttr::Strength`].
+    /// What this effect's Matte row means. Default [`MatteAttr::Strength`].
     matte: MatteAttr,
-    /// Whether the injected Matte row also gets the Channel choice (K-425).
+    /// Whether the injected Matte row also gets the Channel choice.
     /// `matte_channel = false` for an effect that owns a channel choice for
     /// its matte already (Set matte, Displacement map, Depth of field, the
     /// Lens flare). Default true.
@@ -99,14 +99,14 @@ struct EffectAttr {
 /// walks.
 const MATTE_PARAM: &str = "matte";
 
-/// The Mix slider's id, the Blend row's (K-425) and the Channel row's — the
+/// The Mix slider's id, the Blend row's and the Channel row's — the
 /// same copies-for-the-same-reason as [`MATTE_PARAM`]: the emitted schema uses
 /// the `lumit_core::fx` consts for the ids, and these only decide whether to
 /// emit.
 const MIX_PARAM: &str = "mix";
 const BLEND_PARAM: &str = "blend";
 
-/// The `matte = ...` attribute's three spellings (K-395), which become
+/// The `matte = ...` attribute's three spellings, which become
 /// `lumit_core::fx::MatteRole` in the emitted schema.
 enum MatteAttr {
     /// `matte = false` — no row, no slot, no dissolve.
@@ -117,9 +117,9 @@ enum MatteAttr {
     /// matte inside its own maths, out of the named parameter. `"matte"` is the
     /// injected row read by the kernel instead of the dissolve (Gaussian blur,
     /// Glow); any other id is a row the effect already declares itself (Depth of
-    /// field's `depth`). The sentence rides in the same attribute because K-395
-    /// requires an override to document its meaning, and a separate optional
-    /// attribute is one an override can forget.
+    /// field's `depth`). The sentence rides in the same attribute because an
+    /// override must document its meaning, and a separate optional attribute is
+    /// one an override can forget.
     Own(String, String),
 }
 
@@ -219,7 +219,7 @@ fn expand(input: DeriveInput) -> syn::Result<TokenStream2> {
         matte_channel,
     } = effect;
 
-    // The Blend row (K-425), injected right after the Mix slider on every
+    // The Blend row, injected right after the Mix slider on every
     // effect that has one and does not declare a `blend` of its own (the Lens
     // flare). An effect with no Mix touches no pixel (the Controls, the Camera
     // track, Posterize time) and has nothing to blend. It sits beside `mix` in
@@ -244,13 +244,13 @@ fn expand(input: DeriveInput) -> syn::Result<TokenStream2> {
         }
     }
 
-    // The Matte pair (K-395), appended to every effect's parameters unless the
+    // The Matte pair, appended to every effect's parameters unless the
     // declaration opted out. It is injected here rather than written down 33
     // times for the reason the unit table is: a declaration that has to repeat
     // something is a declaration that will one day forget it, and an effect
     // whose Matte row is missing looks exactly like an effect whose matte does
     // not work. There is no field to read back, so `read()` is untouched — the
-    // layer binding rides beside the op (K-387) and the switch is read out of
+    // layer binding rides beside the op and the switch is read out of
     // the bag by whoever consumes the matte, not by `read()`.
     //
     // **Injected only where it is wanted and missing.** An effect that claims
@@ -278,7 +278,7 @@ fn expand(input: DeriveInput) -> syn::Result<TokenStream2> {
                 unit: ::lumit_core::fx::Unit::Raw,
             }
         });
-        // The Channel choice (K-425), unless the effect picks its matte's
+        // The Channel choice, unless the effect picks its matte's
         // channels itself.
         if matte_channel {
             schemas.push(quote! {
@@ -387,12 +387,12 @@ fn parse_effect_attr(input: &DeriveInput) -> syn::Result<EffectAttr> {
             "beat_input" => beat_input = quote! { #value },
             "groups" => groups = quote! { #value },
             "enabled_when" => enabled_when = quote! { #value },
-            // What the Matte row means (K-395). `false` opts out entirely; a
+            // What the Matte row means. `false` opts out entirely; a
             // string names the parameter the effect reads the matte out of
             // *itself*, which is how an effect declares a deeper meaning than
             // strength — and how the two that owned the idea first keep their
-            // stored ids (K-065).
-            // Whether the injected matte row gets its Channel choice (K-425).
+            // stored ids.
+            // Whether the injected matte row gets its Channel choice.
             "matte_channel" => {
                 matte_channel = match value {
                     Expr::Lit(ExprLit {
@@ -401,7 +401,7 @@ fn parse_effect_attr(input: &DeriveInput) -> syn::Result<EffectAttr> {
                     other => {
                         return Err(syn::Error::new(
                             other.span(),
-                            "expected `matte_channel = false` for an effect that picks its                              matte's channel itself (K-425)",
+                            "expected `matte_channel = false` for an effect that picks its                              matte's channel itself",
                         ))
                     }
                 }
@@ -431,7 +431,7 @@ fn parse_effect_attr(input: &DeriveInput) -> syn::Result<EffectAttr> {
                             other.span(),
                             "expected `false` (no matte), `true` (the generic strength \
                              dissolve), or `(\"<param id>\", \"<what this effect's matte \
-                             means>\")` — an override must say what it means (K-395)",
+                             means>\")` — an override must say what it means",
                         ))
                     }
                 }
@@ -544,7 +544,7 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
         .unwrap_or_else(|| sentence_case(&id));
 
     let idc = quote! { ::lumit_core::fx::ParamId::new(#id) };
-    // What the number means (K-443's unit rider, and the resolve step's spatial
+    // What the number means (the unit rider, and the resolve step's spatial
     // rescale). A `#[dial]` is degrees by definition and a control that carries
     // no number carries no unit, so those two answer themselves; a slider, a
     // bounded slider or a counter has a genuine choice to make, and saying
@@ -578,7 +578,7 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
                 quote! { p.float(#idc, (#default) as f32) },
             )
         }
-        // A closed range, drawn as a track and thumb (K-414). The one
+        // A closed range, drawn as a track and thumb. The one
         // difference from `#[slider]` is that there is no soft/hard pair to
         // declare: the range *is* both, because a parameter whose whole
         // meaning lives inside it has nothing to mean outside it.
@@ -691,7 +691,7 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
                 quote! { p.layer_bound(#idc) },
             )
         }
-        // One of this layer's masks, handed to the effect as geometry (K-408).
+        // One of this layer's masks, handed to the effect as geometry.
         // `self_default` mirrors `#[layer]`'s and defaults the other way round:
         // an unset row means the layer's **first mask**, because an effect that
         // wants a path wants the one path most layers have, and an effect is
@@ -703,7 +703,7 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
                 quote! { p.mask_named(#idc) },
             )
         }
-        // A tone curve, as its own control points (K-412). There is no range to
+        // A tone curve, as its own control points. There is no range to
         // declare — the points live in the unit square by definition — and the
         // default is the identity diagonal unless the declaration gives a shape
         // of its own, which only an over-life curve does (particulate.md §2).
@@ -715,7 +715,7 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
                 quote! { p.curve(#idc) },
             )
         }
-        // A button (K-417). It carries no value, so the field it declares is
+        // A button. It carries no value, so the field it declares is
         // the unit type and `read` fills it with `()`: there is nothing in the
         // bag to read back, and there never will be — an Action crosses the
         // bridge as an event. The generated `ParamId` const is still emitted,
@@ -743,7 +743,7 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
     })
 }
 
-/// `Some(x)` / `None`, for the one-sided hard bounds of K-090.
+/// `Some(x)` / `None`, for the one-sided hard bounds.
 fn opt(v: Option<TokenStream2>) -> TokenStream2 {
     match v {
         Some(v) => quote! { Some(#v) },

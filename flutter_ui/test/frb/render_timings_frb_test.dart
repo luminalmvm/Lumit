@@ -1,4 +1,4 @@
-// The render-time indicators against the real engine (docs/13 §7.1, K-276).
+// The render-time indicators against the real engine (docs/13 §7.1).
 //
 // **The bug this exists for.** The column shipped drawing nothing at all, on
 // every platform, and the reason was invisible from either side alone: numbers
@@ -8,7 +8,7 @@
 // the idle fill makes frames while you think — answered every render from the
 // cache and reported nothing. Measuring now steps over the tiers, which is the
 // cost of asking and the whole point of asking. (Measuring is on by default
-// since K-276's revision; the clock in the bottom strip turns it off.)
+// now, and the clock in the bottom strip turns it off.)
 //
 // Two things are pinned here, and each fails without its half of the fix: that
 // a measured render reports at all, and that the ids it reports are the ones
@@ -67,7 +67,7 @@ void main() {
       });
       addTearDown(sub.cancel);
 
-      expect(timings.measuring, isTrue, reason: 'on by default (K-276)');
+      expect(timings.measuring, isTrue, reason: 'on by default');
 
       // Ask for the frame twice. The second would be a cache hit — the state
       // the column used to die in — and must be measured all the same.

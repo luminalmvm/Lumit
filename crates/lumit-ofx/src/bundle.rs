@@ -91,8 +91,8 @@ pub struct PluginRef {
 // Dispatching an action through it from two threads at once is exactly what the
 // OFX thread-safety declaration governs, and `crate::instance::render_lock` is
 // where that governing happens — a plugin that said it may not be entered twice
-// is not entered twice (K-066). Without these the definition a plugin becomes
-// (K-593) could not be `Sync`, and every effect in the catalogue is.
+// is not entered twice. Without these the definition a plugin becomes
+// could not be `Sync`, and every effect in the catalogue is.
 unsafe impl Send for PluginRef {}
 // SAFETY: see above.
 unsafe impl Sync for PluginRef {}
@@ -278,7 +278,7 @@ impl Bundle {
             return;
         }
         self.loaded = true;
-        // Who the host says it is, for this bundle (K-757). The name is on
+        // Who the host says it is, for this bundle. The name is on
         // one property set the whole process shares, so it is set before the
         // bundle's first `setHost` and left for the bundle's lifetime.
         // ponytail: a process-wide name, so two bundles hosted in one process

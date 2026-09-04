@@ -40,10 +40,10 @@ void main() {
   group('Effect controls (frb)', () {
     /// A section or parameter-group heading, by the words in it.
     ///
-    /// Since K-443 every container label in the panel is a kicker (docs/15
-    /// §7.1) and a kicker capitalises **on the way to the screen**, so the
-    /// schema label and the arb string both stay sentence case and only the
-    /// finder knows about the capitals.
+    /// Every container label in the panel is a kicker (docs/15 §7.1) and a
+    /// kicker capitalises **on the way to the screen**, so the schema label
+    /// and the arb string both stay sentence case and only the finder knows
+    /// about the capitals.
     Finder heading(String label) => find.text(label.toUpperCase());
 
     /// A chord as the hardware keyboard delivers it, modifier held across the
@@ -76,7 +76,7 @@ void main() {
     Future<void> mount(
       WidgetTester tester,
       ({LumitState state, LumitUiState uiState, LayerReference layer}) p, {
-      // The Transform card is off by default (K-193); the rows it holds are
+      // The Transform card is off by default; the rows it holds are
       // still this panel's to test, so the tests that want them ask for it
       // exactly as a user would.
       bool transform = true,
@@ -134,7 +134,7 @@ void main() {
       await tester.pumpAndSettle();
       // The menu lists categories, each opening onto its effects by their
       // sentence-case label — the raw match_name never reaches the user
-      // (K-194: Add effect → Blur & sharpen → Gaussian blur).
+      // (Add effect → Blur & sharpen → Gaussian blur).
       expect(find.text('Gaussian blur'), findsNothing,
           reason: 'the effects wait behind their category');
       await tester.tap(find.byKey(const ValueKey('fx-category-blur_sharpen')));
@@ -151,7 +151,7 @@ void main() {
           reason: 'a row per declared parameter, labelled from the schema');
     });
 
-    /// **Add lands on every selected layer** (K-523), the way the Effect menu
+    /// **Add lands on every selected layer**, the way the Effect menu
     /// and the effects console already do. This button reached for the layer
     /// the panel was showing alone, so the same effect on the same selection
     /// landed on three layers from the menu and on one from here.
@@ -205,9 +205,9 @@ void main() {
     testWidgets(
         'a null layer says its effects change no picture, and keeps their values',
         (tester) async {
-      // K-274: effects on a null are ACCEPTED and labelled inert rather than
-      // refused. A null draws nothing, so nothing here changes a picture — but
-      // the parameters are real, animatable values, which is the whole point
+      // Effects on a null are ACCEPTED and labelled inert rather than refused.
+      // A null draws nothing, so nothing here changes a picture — but the
+      // parameters are real, animatable values, which is the whole point
       // of putting a control on a null.
       final p = freshProject();
       final comp = p.state.project!.newComposition(name: 'Scene');
@@ -240,16 +240,16 @@ void main() {
           reason: 'the stack draws as it does on any other layer');
     });
 
-    /// **Copying one effect** (K-275). The engine has taken one or a whole
+    /// **Copying one effect**. The engine has taken one or a whole
     /// stack since copy/paste landed — `copy_effects(Some(id))` — and the Edit
     /// menu's Copy takes the *layer*, so until this row existed there was no
     /// way to pick a single effect and no way to reach the call.
     testWidgets('an effect heading copies that one effect', (tester) async {
       final p = withLayer();
       p.layer.addEffect(name: 'blur');
-      // Not the Invert effect: since K-395 every effect draws an "Invert"
-      // beside its Matte picker, so an effect NAMED Invert makes the heading
-      // ambiguous to find by text. Nothing here is about which effect it is.
+      // Not the Invert effect: every effect draws an "Invert" beside its
+      // Matte picker, so an effect NAMED Invert makes the heading ambiguous
+      // to find by text. Nothing here is about which effect it is.
       p.layer.addEffect(name: 'vignette');
       await mount(tester, p);
 
@@ -280,7 +280,7 @@ void main() {
       expect(bare.getEffects().single.name(), second.name());
     });
 
-    /// **An effect's name picks it** (K-300). Clicking a heading only twirled
+    /// **An effect's name picks it**. Clicking a heading only twirled
     /// it before, so an effect could not be selected here at all — and Copy,
     /// which acts on the selection, had nothing to take but the whole layer.
     /// Shift takes the run between, the way it does in every other list here.
@@ -340,12 +340,12 @@ void main() {
         (tester) async {
       // The Viewer picks a layer by calling `setSelection` on the shell — it
       // never goes through the Timeline — so this panel must follow the shell,
-      // not the panel that happens to be next to it (K-275).
+      // not the panel that happens to be next to it.
       final p = withLayer();
       p.layer.addEffect(name: 'blur');
       final other = p.uiState.selectedComp!.addSolidLayer();
-      // Vignette, not Invert: every matte row draws the word "Invert" since
-      // K-395, so the effect of that name is no longer a unique bit of text.
+      // Vignette, not Invert: every matte row draws the word "Invert", so the
+      // effect of that name is no longer a unique bit of text.
       other.addEffect(name: 'vignette');
       await mount(tester, p);
       expect(heading('Gaussian blur'), findsOneWidget);
@@ -449,9 +449,9 @@ void main() {
         reason: 'the 40% dim is gone — the outline carries the state',
       );
 
-      // Reorder: right-click the second card's heading and move it up (K-276
-      // put the two arrows' rare job in a menu and gave their space to the
-      // render time, which is read constantly).
+      // Reorder: right-click the second card's heading and move it up. The
+      // two arrows' rare job moved into a menu, and their space went to the
+      // render time, which is read constantly.
       final before = p.layer.getEffects().map((e) => e.name()).toList();
       final second = p.layer.getEffects()[1];
       await tester.tapAt(
@@ -554,7 +554,7 @@ void main() {
     });
 
     /// **The enable switch is a target you can hit** (owner, desk test). The
-    /// mark keeps K-450's small box; the area that answers to a click is the
+    /// mark keeps its small box; the area that answers to a click is the
     /// whole stopwatch column for the whole height of the heading, because
     /// this is the control the panel is poked at most and it was being missed.
     testWidgets('the enable switch takes clicks across the whole column',
@@ -623,7 +623,7 @@ void main() {
       expect(find.text('Radius'), findsOneWidget,
           reason: 'a newly applied effect arrives open');
 
-      // **Only the twirl folds it** (K-300). The name picks the effect, and a
+      // **Only the twirl folds it**. The name picks the effect, and a
       // click that also collapsed the card took the parameters away at the
       // moment you said which effect you meant.
       await tester.tap(heading('Gaussian blur'));
@@ -710,7 +710,7 @@ void main() {
     /// behind, and the same property edited in the Timeline's fold-out never
     /// reached this panel — one miss, two symptoms: nothing here listened to
     /// the engine. Fails without the read model's change subscription and its
-    /// revision check (K-184).
+    /// revision check.
     testWidgets('an edit made elsewhere, and an undo, both reach the rows',
         (tester) async {
       final p = withLayer();
@@ -746,7 +746,7 @@ void main() {
       expect(find.byKey(const ValueKey('tf-positionY')), findsOneWidget);
     });
 
-    /// A camera is 3D by construction whatever its switch says (K-023): it
+    /// A camera is 3D by construction whatever its switch says: it
     /// positions in z and looks somewhere, so hiding its z and rotation rows
     /// would gate away the only controls that mean anything on it. The rule
     /// used to live in an engine reader nothing called; now the panel decides
@@ -846,8 +846,8 @@ void main() {
       expect(find.text('Blades'), findsOneWidget);
 
       // The matte rows are hidden while Source is Manual...
-      // ("Matte" is this row's label since K-395 — the uniform word. In Manual
-      // the Source dropdown reads "Manual light", so nothing says it at all.)
+      // ("Matte" is this row's label — the uniform word. In Manual the Source
+      // dropdown reads "Manual light", so nothing says it at all.)
       expect(find.text('Matte'), findsNothing);
       expect(find.text('Threshold'), findsNothing);
 
@@ -863,7 +863,7 @@ void main() {
       expect(find.text('Threshold'), findsOneWidget);
       expect(find.text('Threshold softness'), findsOneWidget);
 
-      // The Matte row carries its Invert, like every other one (K-395): drawn
+      // The Matte row carries its Invert, like every other one: drawn
       // inside the picker's row and never given one of its own, folded by the
       // same id convention the injected rows use — and it belongs to the
       // Matte-only group, so the rows under it stay conditional.
@@ -881,14 +881,14 @@ void main() {
           findsNothing,
           reason: 'and so has no row of its own to sit on');
 
-      // The Matte starts pointed at the layer the effect is ON
-      // (K-288), and the picker says so. Before this it defaulted to None
-      // and the effect sat there detecting nothing until you went hunting
-      // for another layer — which on an adjustment layer, whose only
-      // picture is the composite below, was always the wrong one.
+      // The Matte starts pointed at the layer the effect is ON, and the
+      // picker says so. Before this it defaulted to None and the effect sat
+      // there detecting nothing until you went hunting for another layer —
+      // which on an adjustment layer, whose only picture is the composite
+      // below, was always the wrong one.
       expect(find.textContaining('(this layer)'), findsOneWidget);
 
-      // Light tint is a source-mode-independent row (K-259); Use source
+      // Light tint is a source-mode-independent row; Use source
       // colour appears with Matte and would with Lights.
       expect(find.text('Light tint'), findsOneWidget);
       expect(find.text('Use source colour'), findsOneWidget);
@@ -909,7 +909,7 @@ void main() {
               'the Invert is part of the Matte-only group, not a stray row');
     });
 
-    // Blend (K-289): the Transparent/Black Background pair became a blend
+    // Blend: the Transparent/Black Background pair became a blend
     // menu, defaulting to Add — the behaviour every flare already had.
     // --- Particulate's surface (particulate.md §2, points-stream.md §4.3) ---
     //
@@ -932,7 +932,7 @@ void main() {
         expect(heading(label), findsOneWidget, reason: label);
       }
       final id = p.layer.getEffects().single.id();
-      // The two over-life curves fold into one editor with a tab each (K-412),
+      // The two over-life curves fold into one editor with a tab each,
       // never one plot per row.
       expect(find.byKey(ValueKey<String>('fx-curves-$id')), findsOneWidget);
       expect(find.text('Size over life'), findsOneWidget);
@@ -943,7 +943,7 @@ void main() {
           findsOneWidget);
       expect(find.byKey(ValueKey<String>('fx-layer-$id-sprite_layer')),
           findsOneWidget);
-      // K-507's dial-turned-slider: the jitter the note left silent about.
+      // The dial that became a slider: the jitter the note left silent about.
       expect(find.text('Rotation jitter'), findsOneWidget);
       expect(find.byKey(ValueKey<String>('fx-float-$id-rotation_jitter')),
           findsOneWidget);
@@ -1041,12 +1041,12 @@ void main() {
           reason: 'a fresh flare adds its light, as it always did');
     });
 
-    // The Lens picker (K-262, curated K-264). Twenty entries sit well
+    // The Lens picker is curated. Twenty entries sit well
     // under the searchable threshold, so the row is the PLAIN dropdown —
     // the searchable picker's laziness is pinned in
     // test/search_dropdown_test.dart against synthetic options. What the
     // panel owes here: the curated default shows, and the custom Lens file
-    // row (K-264) is present for the prescriptions the palette leaves out.
+    // row is present for the prescriptions the palette leaves out.
     testWidgets('the lens picker shows the curated default and the file row',
         (tester) async {
       final p = withLayer();
@@ -1062,7 +1062,7 @@ void main() {
           reason: 'a user .lens file covers everything the palette leaves out');
     });
 
-    /// **The uniform Matte row** (K-395). Every effect can be driven by a
+    /// **The uniform Matte row**. Every effect can be driven by a
     /// matte, and the way you say so is the same row everywhere: a layer
     /// picker with an **Invert** beside it, on ONE row. The effect under test
     /// is deliberately an arbitrary one — a plain Gaussian blur, which has no
@@ -1122,7 +1122,7 @@ void main() {
       );
     });
 
-    /// **The Matte row picks a channel and the Mix row a blend** (K-425). The
+    /// **The Matte row picks a channel and the Mix row a blend**. The
     /// engine injects `matte_channel` beside the matte pair and `blend` beside
     /// `mix`; the panel draws each on its parent's row, never on one of its own.
     testWidgets(
@@ -1184,8 +1184,8 @@ void main() {
           findsNothing);
     });
 
-    /// Depth of field owned the idea first, under its own ids (K-065 keeps
-    /// them). K-395 gives it the shared row and the shared words: `depth` is
+    /// Depth of field owned the idea first, under its own ids, and it keeps
+    /// them. It now takes the shared row and the shared words: `depth` is
     /// labelled **Matte**, `depth_invert` is labelled **Invert**, and the two
     /// draw as one row rather than one at the top and one three twirls down.
     testWidgets('depth of field wears the same Matte row, ids unchanged',
@@ -1337,7 +1337,7 @@ void main() {
 
     testWidgets('Enter renames the selected effect, and the name persists',
         (tester) async {
-      // K-321: an effect instance can carry the user's own name. Enter on the
+      // An effect instance can carry the user's own name. Enter on the
       // selected effect opens the heading's inline editor; the committed name
       // shows in place of the label and reaches the document.
       final p = withLayer();
@@ -1375,7 +1375,7 @@ void main() {
       expect(heading(effectLabelOf('blur')), findsOneWidget,
           reason: 'a cleared name falls back to the effect label');
 
-      // Escape throws the edit away (K-323). Enter, clicking away and an
+      // Escape throws the edit away. Enter, clicking away and an
       // empty commit all *write*; without this there is no way out that does
       // not, and Escape fell through to a modal dismissal with no modal.
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
@@ -1393,9 +1393,9 @@ void main() {
     /// **Rename is on the heading's menu** (owner, desk test). `Enter` on the
     /// selected effect was the only way in, and a keyboard-only act is one
     /// nobody finds. It is the menu rather than a double-click on the name
-    /// because that is the pattern the application already settled on: K-191
-    /// took renaming off a list row's second click, and K-321 put it on the
-    /// row menu instead. An effect heading is a list row.
+    /// because that is the pattern the application already settled on:
+    /// renaming came off a list row's second click and went on the row menu
+    /// instead. An effect heading is a list row.
     testWidgets('the heading menu renames the effect, in one undo step',
         (tester) async {
       final p = withLayer();
@@ -1446,7 +1446,7 @@ void main() {
       expect(heading(effectLabelOf('blur')), findsOneWidget);
     });
 
-    // Depth of field's folded aperture (K-313): the twirls, the greyed rows and
+    // Depth of field's folded aperture: the twirls, the greyed rows and
     // the angle dial all arrive on the panel. This is the front half of the
     // fold — the back half (that the shipped defaults render the historical
     // disc bit for bit) is pinned in the engine tests.
@@ -1492,18 +1492,18 @@ void main() {
       expect(greyed, isNot(contains('roundness')));
     });
 
-    /// **The mask-path row** (K-408): one of *this layer's* masks, by name,
+    /// **The mask-path row**: one of *this layer's* masks, by name,
     /// with **First mask** as the unset entry.
     ///
     /// The row is mounted directly with a synthetic parameter rather than
     /// through one of the three built-ins that now declare one (Scribble,
-    /// Stroke and Vegas's Mask/Path source, K-409), because what is under test
+    /// Stroke and Vegas's Mask/Path source), because what is under test
     /// is the **control**, not any effect: the entries it offers, the words it
     /// uses, and that picking one reaches the document as a `MaskPath` value
     /// rather than something else — against a real layer with real masks in a
     /// real document. Which built-ins declare the row is asserted engine-side,
     /// in `a_mask_path_row_declares_itself_and_defaults_to_the_first_mask`.
-    /// **The fixed columns** (K-443, docs/15 §12A.3). Every row lays out on the
+    /// **The fixed columns** (docs/15 §12A.3). Every row lays out on the
     /// same x positions, and the keyframe-navigation slot is reserved whether or
     /// not the property is animated — so a stopwatch being switched on adds
     /// three buttons without shifting the label under them.
@@ -1511,7 +1511,7 @@ void main() {
     /// This is the shape the panel did NOT have: the navigator used to appear
     /// inside the name column and shove the label sideways, so twirling a
     /// stack open and keying one property re-ragged the whole list.
-    group('the fixed columns (K-443)', () {
+    group('the fixed columns', () {
       /// The panel with Gaussian blur applied, Radius optionally keyed, and
       /// the effect's id in hand.
       Future<UuidValue> mountBlur(
@@ -1595,12 +1595,12 @@ void main() {
         }
       });
 
-      /// **The mockups' heights are canonical** (K-451, docs/15 §12A.6). A
+      /// **The mockups' heights are canonical** (docs/15 §12A.6). A
       /// parameter row occupies 26 whatever control it carries, a section
       /// heading 24, and a value well 20 — measured rather than trusted,
       /// because a stack whose rows step in and out is exactly the fault the
       /// fixed content box was introduced to settle.
-      testWidgets('rows, headings and wells are built to K-451 heights',
+      testWidgets('rows, headings and wells are built to the mockup heights',
           (tester) async {
         await mountBlur(tester, withLayer(), animated: false);
 
@@ -1616,7 +1616,7 @@ void main() {
             tester.getRect(find.byType(EffectParamRowFrb).at(i)).top,
         ]..sort();
         expect(tops[1] - tops[0], closeTo(27, 0.5),
-            reason: 'a parameter row occupies 27 under Regular (K-454)');
+            reason: 'a parameter row occupies 27 under Regular');
 
         // The heading's own box: the nearest Container above its kicker.
         expect(
@@ -1637,7 +1637,7 @@ void main() {
             reason: 'a value well in a panel is 20');
       });
 
-      /// K-454's other column. Compact takes a pixel off the row pitch and
+      /// The other density column. Compact takes a pixel off the row pitch and
       /// nothing else: the heading and the well measure the same, because
       /// §12A.6's two columns agree about both.
       testWidgets('Compact takes a pixel off the row and leaves the rest',
@@ -1796,12 +1796,12 @@ void main() {
     });
 
     // -----------------------------------------------------------------------
-    // A pick is a typed value, not a reset (K-621).
+    // A pick is a typed value, not a reset.
     // -----------------------------------------------------------------------
 
     /// **Lifting a number off the picture must not throw the curve away.**
     ///
-    /// The colour swatch had this right from K-535: a picked channel goes
+    /// The colour swatch already had this right: a picked channel goes
     /// through `scalarWithValueAt`, so a keyed colour takes a key at the
     /// playhead. The two *number* pickers beside it did not — the focal-point
     /// dropper and the x/y crosshair both stated a bare static — so picking a
@@ -1960,7 +1960,7 @@ void main() {
     });
 
     // -----------------------------------------------------------------------
-    // The unit rider and the vector-pair chain (K-443, docs/15 §12A.3).
+    // The unit rider and the vector-pair chain (docs/15 §12A.3).
     // -----------------------------------------------------------------------
 
     /// Every numeric row says what its number *is*, in the mockup's own plain
@@ -1993,8 +1993,8 @@ void main() {
     });
 
     /// The same parameter id, two units, two effects — the case the deleted
-    /// map got wrong. Radial blur's Centre carried this test until K-558 made
-    /// every centre px@comp; Amplitude is the case that remains (Shake's is a
+    /// map got wrong. Radial blur's Centre carried this test until every
+    /// centre became px@comp; Amplitude is the case that remains (Shake's is a
     /// distance, Lightning's a share of its own bolt).
     testWidgets('amplitude reads px on one effect and % on another',
         (tester) async {
@@ -2117,7 +2117,7 @@ void main() {
           reason: 'x doubled, so y doubled — the ratio is what is kept');
     });
 
-    /// A **keyed** other half scales whole (K-610): every key's value times the
+    /// A **keyed** other half scales whole: every key's value times the
     /// factor, every key's time, interpolation and eased shape held. Scaling
     /// only the number under the playhead would plant keys nobody made.
     testWidgets('a chained pair scales a keyed half key by key',
@@ -2222,11 +2222,11 @@ void main() {
           reason: 'every number is nought times something');
     });
 
-    /// **A driven parameter says so in the stopwatch's column** (K-471,
-    /// K-627): a driver wired to it wins over its keyframes, so the hollow ring
-    /// and the word *driven* stand where the stopwatch and the key navigator
-    /// were — neither means anything on a row with no keys of its own — and the
-    /// value field keeps drawing the number while refusing every gesture on it.
+    /// **A driven parameter says so in the stopwatch's column**: a driver
+    /// wired to it wins over its keyframes, so the hollow ring and the word
+    /// *driven* stand where the stopwatch and the key navigator were — neither
+    /// means anything on a row with no keys of its own — and the value field
+    /// keeps drawing the number while refusing every gesture on it.
     testWidgets('a driven parameter marks the left of the row and goes deaf',
         (tester) async {
       final p = withLayer();
@@ -2286,7 +2286,7 @@ void main() {
     });
 
     // -------------------------------------------------------------------
-    // A command on a picked run acts on the whole run (K-523).
+    // A command on a picked run acts on the whole run.
     //
     // `_withHandle` matched one effect id and returned after the first hit, so
     // the enable switch, the × and the menu's Remove and Move commands were
@@ -2314,7 +2314,7 @@ void main() {
       ], [
         false,
         false
-      ], reason: 'both took the clicked card\'s new state (K-523)');
+      ], reason: 'both took the clicked card\'s new state');
     });
 
     testWidgets('the × removes every picked effect', (tester) async {
@@ -2357,7 +2357,7 @@ void main() {
           [for (final e in p.layer.getEffects()) e.name()], [stack[0].name()]);
     });
 
-    /// **Where a picked run lands when it is moved** (K-523). Each effect is
+    /// **Where a picked run lands when it is moved**. Each effect is
     /// taken out and put back at the target index, so the run has to be walked
     /// from the far end - otherwise it arrives inside out.
     testWidgets('Move to top takes the picked run, in its own order',
@@ -2562,7 +2562,7 @@ void main() {
       final names = [for (final e in p.uiState.model.layers) e.info.name];
       expect(names, hasLength(2));
       // Entry one is the top layer of the comp, entry two the next — the
-      // layer the effect sits on says so as well (K-288), which is why this
+      // layer the effect sits on says so as well, which is why this
       // reads the prefix rather than the whole entry.
       expect(find.textContaining('1. ${names[0]}'), findsOneWidget);
       expect(find.textContaining('2. ${names[1]}'), findsOneWidget);
@@ -2593,10 +2593,10 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
       await mount(tester, p, transform: false);
 
       // A fresh instance draws its declared rows and nothing else: an effect
-      // the user has not filled in yet is a passthrough, not a failure (K-111).
+      // the user has not filled in yet is a passthrough, not a failure.
       expect(heading('Custom shader'), findsOneWidget);
       expect(find.text('Edit shader…'), findsOneWidget,
-          reason: 'the two Action rows are declared (K-417), so they draw');
+          reason: 'the two Action rows are declared, so they draw');
       expect(find.text('Load from file…'), findsOneWidget);
       expect(find.text('Ripple radius'), findsNothing);
 

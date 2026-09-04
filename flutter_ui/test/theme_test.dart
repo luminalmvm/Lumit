@@ -12,7 +12,7 @@ int g(Color c) => (c.g * 255).round();
 int b(Color c) => (c.b * 255).round();
 
 void main() {
-  test('shape tokens sharp matches the drawings (K-476)', () {
+  test('shape tokens sharp matches the drawings', () {
     const t = ShapeTokens.sharp;
     expect(t.controlRadius, 2);
     expect(t.floatRadius, 6);
@@ -23,7 +23,7 @@ void main() {
     expect(t.cardShadow, isEmpty);
   });
 
-  /// Round v2, the bubble commit (K-394, docs/15-DESIGN.md §12.1).
+  /// Round v2, the bubble commit (docs/15-DESIGN.md §12.1).
   test('shape tokens round carry the v2 geometry', () {
     const t = ShapeTokens.round;
     expect(t.controlRadius, ShapeTokens.stadium,
@@ -31,7 +31,7 @@ void main() {
     expect(t.floatRadius, 16);
     expect(t.cardRadius, 18,
         reason: 'a menu must not be squarer than the card that spawned it');
-    // The gap/inset system stands as K-092 built it.
+    // The gap and inset system stands as it was built.
     expect(t.cardPadding, 10);
     expect(t.tileGap, 12.0);
     expect(t.windowInset, 12.0);
@@ -103,7 +103,7 @@ void main() {
     expect(b(light.accentHover), 0x4e);
   });
 
-  /// K-538: BOTH stock pairs are now *derived* from `defaultAccent` — spruce —
+  /// BOTH stock pairs are *derived* from `defaultAccent` — spruce —
   /// so re-tuning is one edit and neither hover can drift off the ±0x12 step a
   /// user-picked accent gets. Light's hand-darkened exception is gone with
   /// clay: spruce clears the contrast floor on white unaided.
@@ -118,12 +118,12 @@ void main() {
 
     final light = LumitTheme.light();
     expect(light.accent, LumitTheme.defaultAccent,
-        reason: 'no exception any more, K-538 - spruce clears the floor');
+        reason: 'no exception any more - spruce clears the floor');
     expect(light.accentHover, const Color(0xff23664c));
     expect(light.accentHover,
         LumitTheme.light().withAccent(LumitTheme.defaultAccent).accentHover);
 
-    // Clay stands second in the Settings swatch row (K-538).
+    // Clay stands second in the Settings swatch row.
     expect(LumitTheme.accentPresets.first, LumitTheme.defaultAccent);
     expect(LumitTheme.accentPresets[1], const Color(0xFFE05A72));
   });
@@ -146,7 +146,7 @@ void main() {
     expect(r(dark.surface0), 0x0b);
     expect(g(dark.surface0), 0x0c);
     expect(b(dark.surface0), 0x0e);
-    // Spruce (K-538), the default accent both schemes build from.
+    // Spruce, the default accent both schemes build from.
     expect(r(dark.accent), 0x35);
     expect(g(dark.accent), 0x78);
     expect(b(dark.accent), 0x5e);
@@ -166,9 +166,9 @@ void main() {
 
   test('label colours cycle over one distinct chip per layer kind', () {
     final t = LumitTheme.dark();
-    // A dedicated bright palette (K-189), not the theme's role colours: the
+    // A dedicated bright palette, not the theme's role colours: the
     // chips colour the lane bars, so they must be tellable apart. Nine since
-    // K-206 gave the Null layer its own.
+    // the Null layer got one of its own.
     expect(LumitTheme.labelCount, 9);
     final chips = {
       for (var i = 0; i < LumitTheme.labelCount; i++) t.labelColour(i)
@@ -199,7 +199,7 @@ void main() {
     expect(t.bodyStrong.fontWeight, FontWeight.w500);
   });
 
-  test('the type scale sits at the K-317 sizes', () {
+  test('the type scale sits at the design sizes', () {
     // docs/15-DESIGN §7.1: 11px body, 10px small, 9px caption — one step
     // tighter than the original scale, by owner request.
     final t = LumitTheme.dark();
@@ -210,7 +210,7 @@ void main() {
     expect(t.heading.fontSize, 16);
   });
 
-  test('both K-438 faces are named by the theme and bundled by pubspec', () {
+  test('both faces are named by the theme and bundled by pubspec', () {
     // A family the theme asks for but pubspec never declares renders as the
     // platform default and nothing complains, so pin the pair together.
     expect(LumitTheme.fontFamily, 'Hanken Grotesk');

@@ -1,5 +1,5 @@
 //! One graphics device and one set of compiled shader engines, shared by
-//! every test in a process (docs/GUIDE.md §6).
+//! every test in a process (docs/GUIDE.md).
 //!
 //! # In plain terms
 //!

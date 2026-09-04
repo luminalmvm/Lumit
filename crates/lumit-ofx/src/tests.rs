@@ -402,8 +402,8 @@ OfxPropVersionLabel = \"{version}\"
 /// seeds the macro's own name puts the property where no plugin will ever look
 /// for it — silently, because a property nobody finds is a property nobody
 /// complains about. ntsc-rs refuses to load without the first of them; the
-/// conformance bench is what found that, and this is the list it came back with
-/// (K-595). Each line is `ofxImageEffect.h`'s `#define`, verbatim.
+/// conformance bench is what found that, and this is the list it came back
+/// with. Each line is `ofxImageEffect.h`'s `#define`, verbatim.
 #[test]
 fn the_properties_whose_names_are_not_their_macros_are_spelled_the_headers_way() {
     for (macro_name, string, ours) in [
@@ -474,7 +474,7 @@ fn fetch_suite_answers_for_what_exists_and_null_for_what_does_not() {
     assert!(!ask(c"OfxMultiThreadSuite", 1).is_null());
 
     // Served so the stock support library will describe at all; there is
-    // never an interact for it to act on (K-757). And the message suite's
+    // never an interact for it to act on. And the message suite's
     // second version, which HitFilm will not load without.
     assert!(!ask(c"OfxInteractSuite", 1).is_null());
     assert!(!ask(c"OfxMessageSuite", 2).is_null());
@@ -590,7 +590,7 @@ fn the_shipped_quirks_file_parses_and_promises_nothing() {
 }
 
 /// A family of plugins under one prefix is one entry, and the host name it is
-/// shown is that entry's `present_as` (K-757).
+/// shown is that entry's `present_as`.
 #[test]
 fn a_quirks_entry_may_name_a_family_and_who_the_host_says_it_is() {
     let table = QuirksTable::parse(
@@ -621,7 +621,7 @@ fn a_quirks_entry_may_name_a_family_and_who_the_host_says_it_is() {
 
 /// The shipped table presents Lumit to Red Giant Universe as DaVinci Resolve,
 /// because Universe reads `kOfxPropName` in `describeInContext` and answers
-/// `kOfxStatErrMissingHostFeature` to every host but a handful (K-757).
+/// `kOfxStatErrMissingHostFeature` to every host but a handful.
 #[test]
 fn the_shipped_quirks_file_presents_the_host_to_universe_as_resolve() {
     let table = QuirksTable::shipped();
@@ -654,7 +654,7 @@ fn host_name_and_label() -> (String, String) {
 }
 
 /// Presenting the host under another name changes `kOfxPropName` and nothing
-/// else, and `None` puts Lumit's own name back (K-757).
+/// else, and `None` puts Lumit's own name back.
 #[test]
 fn the_host_presents_itself_under_a_quirks_name_and_takes_it_back() {
     let _name = host_name_lock();
@@ -669,7 +669,7 @@ fn the_host_presents_itself_under_a_quirks_name_and_takes_it_back() {
 }
 
 /// Loading a bundle applies its quirks entry: the name the plugin reads from
-/// the host during load is the entry's (K-757).
+/// the host during load is the entry's.
 #[test]
 fn a_bundle_loads_under_the_name_its_quirks_entry_says() {
     let _name = host_name_lock();
@@ -1090,7 +1090,7 @@ group Files | [\"lutPath\", \"trigger\"] | collapsed false
     assert_eq!(render(&full.schema), expected);
 
     // A point is two adjacent number rows, which is what makes the panel fold
-    // it into one (K-443), and the convention applies to a plugin's rows
+    // it into one, and the convention applies to a plugin's rows
     // unchanged. The 3-D Offset folds its x and y and leaves z beside them,
     // which is what the rule says and what a built-in with those three ids
     // would get.
@@ -1641,7 +1641,7 @@ fn a_probe(bundle: &Bundle) -> Option<libloading::Library> {
 /// plugin takes this first. It is the only lock in the suite, it is held for
 /// the length of one test, and a test that fails while holding it poisons
 /// nothing worth keeping.
-/// The host's name is one process-wide property (K-757): a test that changes
+/// The host's name is one process-wide property: a test that changes
 /// it, and the golden that reads it, take this so neither sees the other's.
 fn host_name_lock() -> std::sync::MutexGuard<'static, ()> {
     static NAME: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -1734,7 +1734,7 @@ fn a_frame_goes_through_a_plugin_and_comes_out_scaled() {
 /// its clips in time for `kOfxImageEffectActionRender` and no earlier answers
 /// "there is no image" to all of that. The plugin then fails the action, and the
 /// whole render fails for a reason that has nothing to do with pixels. The
-/// conformance bench is what found it (K-595); this is the small version.
+/// conformance bench is what found it; this is the small version.
 #[test]
 fn a_clip_can_be_measured_before_the_render_action() {
     let _ledger = image_ledger();
@@ -1778,7 +1778,7 @@ fn a_clip_can_be_measured_before_the_render_action() {
 /// it while it is being constructed: the project's size and extent, how long the
 /// effect runs, whether tiles are on. A plugin that cannot find one of them
 /// throws before it exists — six of the conformance bench's plugins died on
-/// `ProjectExtent` alone, and none of them had done anything wrong (K-595).
+/// `ProjectExtent` alone, and none of them had done anything wrong.
 ///
 /// The size is the frame being rendered, not a standing default, because a
 /// generator places itself by it.
@@ -1823,8 +1823,8 @@ fn an_instance_knows_how_big_the_project_is_and_the_render_keeps_it_true() {
 /// running; a host that answers `kOfxStatErrUnsupported` there has the library
 /// throw, the action fail, and the instance never exist. From a layer that is
 /// every plugin refusing to apply, each with a different status — whichever one
-/// the vendor's own handler turned the exception into (K-595,
-/// docs/impl/ofx-host.md §5).
+/// the vendor's own handler turned the exception into (docs/impl/ofx-host.md
+/// §5).
 ///
 /// So the write is accepted, into the instance's snapshot, and reads back.
 /// **Every call here is a real C-variadic call** through the suite's own
@@ -1944,8 +1944,7 @@ fn a_plugin_writes_its_own_control_while_it_is_being_built() {
 
 /// `clipGetHandle`'s property set is **optional** — the header says "if not
 /// null" — and answering `kOfxStatErrValue` to a plugin that passed null for it
-/// failed an action the plugin had done nothing wrong in. ntsc-rs passes null
-/// (K-595).
+/// failed an action the plugin had done nothing wrong in. ntsc-rs passes null.
 #[test]
 fn a_clip_handle_can_be_asked_for_without_its_property_set() {
     let _ledger = image_ledger();
@@ -2054,7 +2053,7 @@ fn a_negative_row_bytes_image_comes_back_the_right_way_up() {
 /// units and applies it in bytes, so a top-down fp32 frame has it write three
 /// quarters of a frame past the end of the block: a heap corruption in the
 /// broker, and a mostly transparent picture in the viewer with no error to
-/// show for it (K-756).
+/// show for it.
 #[test]
 fn a_filter_request_hands_the_plugin_positive_row_bytes() {
     let source = a_test_frame(6, 7);
@@ -2522,7 +2521,7 @@ fn the_thread_suite_table_is_laid_out_as_c_lays_it_out() {
     );
 }
 
-// ------------------------------------------ a plugin as an effect (K-593) --
+// -------------------------------------------------- a plugin as an effect --
 
 use crate::def::{LocalHost, OfxEffectDef, PluginHost, Rendering};
 use crate::describe::PluginDescriptor;
@@ -2568,7 +2567,7 @@ fn a_leaked_schema(report: &ScanReport, identifier: &str, major: u32) -> &'stati
 ///
 /// The bundle is handed to the host, and the definition is leaked into the
 /// catalogue, so both live as long as the process — which is what registration
-/// means (K-593).
+/// means.
 fn a_registered_plugin(test: &str, identifier: &str, major: u32) -> Option<&'static EffectSchema> {
     let (root, bundle, report) = a_described_bundle(test)?;
     let schema = a_leaked_schema(&report, identifier, major);
@@ -2616,7 +2615,7 @@ fn a_plugin_registers_and_is_found_by_the_catalogue() {
     assert_eq!(inst.effect.match_name, "ofx:com.lumitlab.testplug");
     assert!(inst.params.iter().any(|p| p.id == "gain"));
 
-    // The built-in menu order is untouched by its arrival (K-137).
+    // The built-in menu order is untouched by its arrival.
     let order: Vec<&str> = lumit_core::fx::BUILTIN_DEFS
         .iter()
         .map(|d| d.schema().match_name)
@@ -2676,9 +2675,9 @@ fn a_plugin_definition_renders_from_the_resolved_bag() {
     }
 }
 
-/// **A disabled plugin renders identity, byte for byte** (K-258's shape,
-/// docs/12 §2.3): the layer keeps compositing and wears a badge, and the
-/// picture is not so much as rounded on its way past.
+/// **A disabled plugin renders identity, byte for byte** (docs/12 §2.3): the
+/// layer keeps compositing and wears a badge, and the picture is not so much
+/// as rounded on its way past.
 #[test]
 fn a_disabled_plugin_renders_identity_byte_for_byte() {
     // A declaration of its own, so this test needs no bundle at all: what is

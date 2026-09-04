@@ -73,7 +73,7 @@ void main() {
     throw StateError('a Precomp layer draws from a composition');
   }
 
-  /// Pre-compose is the dialogue's default action (K-243): it takes focus when
+  /// Pre-compose is the dialogue's default action: it takes focus when
   /// the window opens, so `Enter` presses it without the pointer having to find
   /// it. It must also not reach the Timeline behind the window, which is where
   /// `Enter` renames the selected layer.

@@ -1,4 +1,4 @@
-//! Roto brush (docs/08 §3.88, K-710): the handle for a propagated matte.
+//! Roto brush (docs/08 §3.88): the handle for a propagated matte.
 //!
 //! **In plain terms.** Scribble through the subject on one clear frame and
 //! through the background beside it, and this effect cuts the subject out of
@@ -74,7 +74,7 @@ pub const MODE_ID: crate::fx::params::ParamId = crate::fx::params::ParamId::new(
     // arithmetic (a premultiplied colour multiplied by a new alpha would be
     // scaled twice).
     premultiplied = false,
-    // The effect that IS a matte carries no Matte row (K-429, the owner's rule
+    // The effect that IS a matte carries no Matte row (the owner's rule
     // for mattes, as Set matte and Matte key already read it). What gates this
     // effect is the propagated matte, and a second picture saying "how much of
     // me happens here" would be a coverage laid over a coverage.
@@ -82,12 +82,12 @@ pub const MODE_ID: crate::fx::params::ParamId = crate::fx::params::ParamId::new(
 )]
 pub struct RotoBrush {
     /// Carry the base frame's matte outward through the shot. A button, not a
-    /// value (the machinery K-417 built).
+    /// value.
     #[action(label = "Propagate")]
     pub propagate: (),
-    /// Stop a running propagation. **Cancel finalises rather than discards**
-    /// (the K-540 pattern): the frames already solved are correct and correctly
-    /// named, so they are kept and the span says how far it got.
+    /// Stop a running propagation. **Cancel finalises rather than discards**:
+    /// the frames already solved are correct and correctly named, so they are
+    /// kept and the span says how far it got.
     #[action(label = "Cancel")]
     pub cancel: (),
     /// Whether the matte keeps the subject or drops it.
@@ -104,7 +104,7 @@ pub struct RotoBrush {
     /// **`Raw` and not `Px`, deliberately.** px@comp means "converted to the
     /// raster in play by the resolve step" (docs/08 §2.3), and this number is
     /// never read at a comp raster: the matte is solved on the propagation
-    /// thread at the **source's own** raster (K-248), where a preview tier does
+    /// thread at the **source's own** raster, where a preview tier does
     /// not reach and the resolve step never runs. Declaring it px@comp would
     /// hand the panel a rider that scaled with a quality switch the propagation
     /// cannot see.

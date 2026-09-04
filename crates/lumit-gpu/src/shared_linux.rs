@@ -1,5 +1,5 @@
 //! The Linux zero-copy Viewer target: a GPU texture Flutter samples directly
-//! via DMA-BUF (K-177, the Linux sibling of [`crate::shared`]).
+//! via DMA-BUF (the Linux sibling of [`crate::shared`]).
 //!
 //! # In plain terms
 //!
@@ -65,7 +65,7 @@
 //! Same as the Windows path: after the copy we `poll(Wait)` so the GPU has
 //! finished writing before Flutter is told the frame is ready. We render into the
 //! *same* texture each frame; a fence handshake is the robust follow-up if
-//! tearing ever shows (recorded with K-177).
+//! tearing ever shows.
 //!
 //! The reference for the plumbing (the Vulkan export chain, the fd/stride/offset
 //! metadata, the EGL import attributes) is the MIT-licensed `flutter_wgpu_texture`

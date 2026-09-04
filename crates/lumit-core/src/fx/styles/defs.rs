@@ -24,7 +24,7 @@
 //! - **Distances and sizes are px@comp** (docs/08 §2.3), never a per cent of the
 //!   frame: a shadow eight pixels from a title is eight pixels from it in a 4K
 //!   comp too.
-//! - **No Matte row** (`matte = false`). K-395 gives every *effect* a Matte, but
+//! - **No Matte row** (`matte = false`). Every *effect* gets a Matte, but
 //!   a style dresses the layer's own alpha; gating a shadow by another layer is
 //!   an effect's job, and the injected row would put a slot on the render's
 //!   parallel matte list that nothing fills.
@@ -32,7 +32,7 @@
 //! A word on **Opacity**. The two overlay styles have no separate Opacity row:
 //! their Mix row is labelled "Opacity" and *is* it. That is not a saving, it is
 //! the only place the number can go and still mean what Photoshop means — the
-//! seam applies Mix **after** the style's Blend mode (K-425), which is exactly
+//! seam applies Mix **after** the style's Blend mode, which is exactly
 //! "blend the overlay in, then take this much of the result", whereas a second
 //! opacity inside the kernel would fade the overlay *before* it was blended and
 //! give a different picture on every mode but Normal. The styles that draw new

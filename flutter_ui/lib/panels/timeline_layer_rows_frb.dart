@@ -124,7 +124,7 @@ class FoldRow extends StatelessWidget {
   final ValueChanged<String> onToggle;
   final VoidCallback onChanged;
 
-  /// Whether the layer this row belongs to is locked (K-291). A locked layer's
+  /// Whether the layer this row belongs to is locked. A locked layer's
   /// rows are still *read* — the numbers are what the document holds and the
   /// curves still draw — but nothing on them can be touched.
   final bool locked;
@@ -156,21 +156,21 @@ class FoldRow extends StatelessWidget {
     final indent = baseIndent + 8.0 + (row.depth - 1) * 12.0;
 
     // No per-row change listener: the whole panel repaints from the read model
-    // when anything commits (K-184), so the numbers shown are the document's.
+    // when anything commits, so the numbers shown are the document's.
     final t = ThemeScope.of(context).theme;
     final selected = selectedProperties.contains(path);
     final contains =
         !selected && selectedProperties.any((p) => isUnderPath(path, p));
     // Selection rides on the property's *name* (docs/07 §4.3) — and on any
-    // press that *acts* on the row (K-334): the stopwatch, the ◄ ◆ ►
+    // press that *acts* on the row: the stopwatch, the ◄ ◆ ►
     // navigator, a value drag. Touching a row's controls IS choosing it, and
     // before this a value drag on an unselected row moved a curve the graph
     // was not even showing. Pointer-down rather than tap, so the selection —
     // and with it the graph channel — exists before the first drag tick. A
     // modified press is left to the label's own Ctrl/Shift semantics, and a
-    // group heading keeps its pick-and-twirl click (K-300).
+    // group heading keeps its pick-and-twirl click.
     final picks = row is! FoldGroupRow && row is! FoldWaveformRow;
-    // **And the row must WIN that press, not merely see it** (K-343). The
+    // **And the row must WIN that press, not merely see it**. The
     // ground under the outline clears the selection on tap, and its comment
     // has always said "a switch or a property still wins its own tap in the
     // arena" — which was true only of rows carrying a gesture recogniser. A
@@ -184,12 +184,12 @@ class FoldRow extends StatelessWidget {
     // inside and win their taps ahead of it.
     final row_ = Listener(
       // **The whole row takes the press, not just the parts with a widget in
-      // them** (K-343). A `Listener` defers to its children by default, and a
+      // them**. A `Listener` defers to its children by default, and a
       // property row is mostly empty space — so a click beside the label never
       // reached this at all, fell through to the outline behind, and *cleared*
       // the selection instead of making one. Worst on a mask's Path row, which
       // has no value field and so is almost all empty. A heading keeps
-      // defer-to-child: its own detector owns the click (K-300).
+      // defer-to-child: its own detector owns the click.
       behavior: picks ? HitTestBehavior.opaque : HitTestBehavior.deferToChild,
       onPointerDown: !picks
           ? null
@@ -223,7 +223,7 @@ class FoldRow extends StatelessWidget {
         // header's inset added the 2 on top; the effect headings' milliseconds
         // stood 6px right of the layer totals they add up to.
         padding: EdgeInsets.only(left: indent, right: outlineRowTrailing),
-        // A locked layer's rows are read-only, not hidden (K-291): the numbers
+        // A locked layer's rows are read-only, not hidden: the numbers
         // are still the document's and the curves still draw, but nothing on the
         // row can be touched. The engine refuses the edit anyway — this is what
         // stops the interface offering a gesture that would only be refused.
@@ -247,8 +247,8 @@ class FoldRow extends StatelessWidget {
         : row_;
   }
 
-  /// Copy the effect this heading names (K-275) — or, when it is one of
-  /// several picked, all of them (K-300). The Timeline's half of the pair, the
+  /// Copy the effect this heading names — or, when it is one of
+  /// several picked, all of them. The Timeline's half of the pair, the
   /// Effect controls panel's heading carrying the other.
   void _effectMenu(BuildContext context, Offset at, String effectId) {
     showMenuAt<void>(
@@ -280,7 +280,7 @@ class FoldRow extends StatelessWidget {
   Widget _control(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     return switch (row) {
-      // The lane-mode chip (K-699, the board's per-layer Wave / Spectral
+      // The lane-mode chip (the board's per-layer Wave / Spectral
       // chips): which of the three pictures this layer's lane draws. On the
       // lane's own outline row, listening to the session store itself, so a
       // tap repaints this chip and its lane and rebuilds nothing else.
@@ -322,7 +322,7 @@ class FoldRow extends StatelessWidget {
       FoldGroupRow(:final path, :final label, :final open) => GestureDetector(
           key: ValueKey<String>('tl-group-$path'),
           behavior: HitTestBehavior.opaque,
-          // **A heading is picked as well as twirled** (K-300). Until this, a
+          // **A heading is picked as well as twirled**. Until this, a
           // click on one only twirled, so an effect could not be selected here
           // at all and Copy had nothing to take. A plain click still opens the
           // heading, because that is what it has always done and the fold is
@@ -333,11 +333,10 @@ class FoldRow extends StatelessWidget {
             onSelectProperty(path);
             if (!isModifiedClick) onToggle(path);
           },
-          // An *effect's* heading offers to copy the picked effects (K-275,
-          // K-300). The other headings — Transform, Effects, Masks, Audio — are
-          // groupings rather than things that can be copied, and
-          // `effectIdOfPath` is what tells them apart: only an effect's path
-          // carries an id.
+          // An *effect's* heading offers to copy the picked effects. The other
+          // headings — Transform, Effects, Masks, Audio — are groupings rather
+          // than things that can be copied, and `effectIdOfPath` is what tells
+          // them apart: only an effect's path carries an id.
           onSecondaryTapUp: effectIdOfPath(path) == null
               ? null
               : (details) => _effectMenu(
@@ -566,7 +565,7 @@ class FoldRow extends StatelessWidget {
 
 /// One effect parameter in the Timeline. It owns the staging for its own drag,
 /// which is all the state a single row needs — no stack is read to *display*:
-/// the value rides in on the fold row from the read model (K-184), and a drag
+/// the value rides in on the fold row from the read model, and a drag
 /// in flight overlays its staged value on top.
 class _TimelineParamRow extends StatefulWidget {
   final CompositionReference comp;
@@ -610,7 +609,7 @@ class _TimelineParamRowState extends State<_TimelineParamRow> {
   Widget build(BuildContext context) {
     final row = widget.row;
     final ui = Provider.of<LumitUiState>(context, listen: false);
-    // A group header's row (K-731): the editor's third place to read a stack
+    // A group header's row: the editor's third place to read a stack
     // from — the commit still goes through the carrier layer, where the
     // engine's shared instance lookup routes it to the group's own op.
     _editor.groupStack = switch (row.group) {
@@ -628,9 +627,9 @@ class _TimelineParamRowState extends State<_TimelineParamRow> {
       // The staged value while a drag is in flight, the document's otherwise.
       value: _editor.stagedValue(row.info.id, row.param.id) ?? row.value,
       siblings: {for (final v in row.info.values) v.id: v.value},
-      // The wire deciding this parameter, read once per revision by the panel
-      // (K-471, K-627): the mark replaces the row's stopwatch and the field
-      // stops taking a drag.
+      // The wire deciding this parameter, read once per revision by the panel:
+      // the mark replaces the row's stopwatch and the field stops taking a
+      // drag.
       driven: row.driven,
       comp: widget.comp,
       ownerLayerId: widget.layer.internallayerId,
@@ -653,7 +652,7 @@ class _TimelineParamRowState extends State<_TimelineParamRow> {
 }
 
 /// The Audio group's one row: the layer's Volume, in dB.
-/// One control of the Flow group in the Timeline fold-out (K-088, K-331).
+/// One control of the Flow group in the Timeline fold-out.
 ///
 /// Every kind but the Input rate writes the whole group in one op, so the row
 /// needs no state of its own: read, change one field, write it back. The Input
@@ -668,8 +667,8 @@ class _FlowRow extends StatelessWidget {
   final ValueChanged<int> onSeek;
   final VoidCallback onChanged;
 
-  /// Clicking the name selects the property and its keys (K-500 §2.1) — the
-  /// handle every other property row has and this one did not.
+  /// Clicking the name selects the property and its keys — the handle every
+  /// other property row has and this one did not.
   final VoidCallback? onLabelTap;
 
   const _FlowRow({
@@ -686,7 +685,7 @@ class _FlowRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    // Read once per document revision by the panel, never here (K-184). The
+    // Read once per document revision by the panel, never here. The
     // fallback covers a caller that supplied none, which the panel never is.
     final p = row.params ?? layer.getFlowParams();
 
@@ -814,7 +813,7 @@ class _VolumeRow extends StatefulWidget {
   final LayerReference layer;
 
   /// The Volume scalar, read once per document revision by the panel and
-  /// riding in on the fold row (K-184).
+  /// riding in on the fold row.
   final BridgeScalar? scalar;
   final ValueColumn valueColumn;
   final int playheadFrame;
@@ -844,7 +843,7 @@ class _VolumeRowState extends State<_VolumeRow> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    // From the fold row, never a bridge call here (K-184); the fallback
+    // From the fold row, never a bridge call here; the fallback
     // covers a caller that supplied none, which the panel never is.
     final scalar = widget.scalar ?? widget.layer.getVolumeDb();
     final animated = scalar is BridgeScalar_Keyframed;

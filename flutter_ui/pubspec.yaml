@@ -1,5 +1,5 @@
 name: lumit_flutter
-description: "Lumit's Flutter frontend (K-174); see docs/archive/flutter-port/."
+description: "Lumit's Flutter frontend; see docs/archive/flutter-port/."
 publish_to: 'none'
 version: 0.3.1+1
 
@@ -17,7 +17,7 @@ dependencies:
   # Draws Lumit's own glyphs, which are inline SVG (docs/15-DESIGN.md §5).
   flutter_svg: ^2.3.0
   file_selector: ^1.1.0
-  # Files dropped on the window from the OS file manager (K-581). Flutter 3.47
+  # Files dropped on the window from the OS file manager. Flutter 3.47
   # has no drop API of its own — neither the framework nor the Windows
   # embedder — so this is the smallest maintained way to hear the event: one
   # method channel per platform, no native drag *sources*, no Rust toolchain.
@@ -44,11 +44,11 @@ flutter:
   # Turns lib/l10n/*.arb into Dart at `flutter pub get` time (see l10n.yaml).
   generate: true
   assets:
-    # The brand's own drawings — the wordmark on the welcome screen (K-480).
+    # The brand's own drawings — the wordmark on the welcome screen.
     # The site's file, copied rather than redrawn (shell/wordmark.dart).
     - assets/brand/
   fonts:
-    # The two redesign faces (docs/15-DESIGN.md §7.1, K-438): Hanken Grotesk
+    # The two redesign faces (docs/15-DESIGN.md §7.1): Hanken Grotesk
     # for UI text, Geist Mono for every number, timecode and container label.
     - family: Hanken Grotesk
       fonts:

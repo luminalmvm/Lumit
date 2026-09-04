@@ -10,7 +10,7 @@
 //!
 //! The messages are the calm voice of docs/15-DESIGN.md: British English,
 //! sentence case, one sentence, no blame. Engine-sent sentences that reach the
-//! frontend need their `app_en.arb` keys (K-005) — that is WP4's job, not this
+//! frontend need their `app_en.arb` keys — that is WP4's job, not this
 //! crate's.
 
 use std::path::PathBuf;
@@ -108,8 +108,8 @@ pub enum ColourError {
 }
 
 impl ColourError {
-    /// The stable id this refusal crosses the bridge under (K-005, K-303,
-    /// docs/17 "Display text crosses the bridge in English").
+    /// The stable id this refusal crosses the bridge under (docs/17 "Display
+    /// text crosses the bridge in English").
     ///
     /// In plain terms: the sentences above are English, and every one of them
     /// has a name or a file path in the middle of it — so a whole-text lookup
@@ -205,7 +205,7 @@ mod tests {
 
     /// Two refusals must never share an id, and every fact a sentence prints
     /// has to arrive by name as well — otherwise the frontend's own wording
-    /// would have a hole where the config's name should be (K-005).
+    /// would have a hole where the config's name should be.
     #[test]
     fn every_refusal_has_its_own_id_and_names_its_facts() {
         let all = [

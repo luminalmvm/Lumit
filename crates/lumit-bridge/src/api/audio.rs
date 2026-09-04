@@ -124,7 +124,7 @@ pub fn audio_clock() -> BridgeAudioClock {
     }
 }
 
-/// One mixer strip's bars, or the master's (docs/09 §3.1, K-690).
+/// One mixer strip's bars, or the master's (docs/09 §3.1).
 ///
 /// **Linear sample amplitudes, not decibels.** The mix works in amplitudes;
 /// a bar that wants dB converts where it is drawn, once, rather than the

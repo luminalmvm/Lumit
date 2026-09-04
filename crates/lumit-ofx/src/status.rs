@@ -135,7 +135,7 @@ pub(crate) fn record(code: OfxStatus) {
 /// Universe reads `kOfxPropTime` off `createInstance`'s `inArgs`, which the
 /// spec says is null). The plugin is told `kOfxStatErrBadHandle`, as it must
 /// be, and carries on; counting that against the host would have the
-/// conformance bench call a plugin's slip a host bug (K-757).
+/// conformance bench call a plugin's slip a host bug.
 pub(crate) fn uncount(code: OfxStatus) {
     // Its own counter, subtracted on read: this runs inside the call, before
     // the guard records the answer, so taking one off the tally here would

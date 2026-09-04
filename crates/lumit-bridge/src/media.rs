@@ -34,7 +34,7 @@ use uuid::Uuid;
 pub(crate) struct MediaCache {
     #[cfg(feature = "media")]
     /// Keyed by item, size **and source frame**: a Sequence layer's clips
-    /// each want the frame they start on, not the file's first (K-248).
+    /// each want the frame they start on, not the file's first.
     thumbs: HashMap<ThumbKey, Thumb>,
 }
 

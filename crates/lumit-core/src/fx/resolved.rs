@@ -45,7 +45,7 @@ impl MbView {
 }
 
 /// The Fast motion blur reconstruction tier (docs/impl/optical-flow.md §4.5
-/// "Tiers", K-390). **The only choice a user sees** — there is no method
+/// "Tiers"). **The only choice a user sees** — there is no method
 /// picker; one method adapts internally, and this buys it more work per pixel.
 ///
 /// # In plain terms
@@ -89,7 +89,7 @@ impl MbQuality {
     }
 }
 
-/// The Matte key output view (docs/08 §3.21, K-154): the finished keyed picture,
+/// The Matte key output view (docs/08 §3.21): the finished keyed picture,
 /// or a diagnostic look at the screen matte the key derives. A per-op choice the
 /// kernel and CPU reference branch on (identically) at the end. The integer codes
 /// are the wire form the WGSL uniform reads: 0 Final, 1 Screen matte, 2 Status.
@@ -128,7 +128,7 @@ impl MatteKeyView {
 }
 
 /// How the Matte key recolours pixels where despill removed screen tint (docs/08
-/// §3.21, K-154, Keylight's Replace method). Codes are the WGSL wire form: 0
+/// §3.21, Keylight's Replace method). Codes are the WGSL wire form: 0
 /// Source, 1 Hard colour, 2 Soft colour, 3 None.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReplaceMethod {
@@ -166,10 +166,10 @@ impl ReplaceMethod {
     }
 }
 
-/// The Matte key's full resolved parameter bundle (docs/08 §3.21, K-154): the
+/// The Matte key's full resolved parameter bundle (docs/08 §3.21): the
 /// Keylight-style colour-difference keyer, flattened to plain numbers that the CPU
 /// reference ([`cpu::matte_key`](crate::fx::cpu::matte_key)) and the WGSL kernel
-/// both read, so preview and export match op-for-op (K-031). Every field is
+/// both read, so preview and export match op-for-op. Every field is
 /// already unit-normalised by the resolve step; the maths derive the screen's
 /// primary channel and reference from `key` identically on both paths.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -206,21 +206,21 @@ pub struct MatteKeyParams {
     pub replace_method: u32,
     /// Scene-linear RGBA replace colour used by the Hard/Soft replace methods.
     pub replace_colour: [f32; 4],
-    /// Screen pre-blur radius in **raster** pixels (K-546): how far the picture
+    /// Screen pre-blur radius in **raster** pixels: how far the picture
     /// the key is *judged from* is softened. The colour that comes out is still
     /// the sharp original. 0 is the neutral, and the whole stage is skipped.
     pub pre_blur: f32,
-    /// Screen matte shrink (−) / grow (+) in **raster** pixels (K-546): a
+    /// Screen matte shrink (−) / grow (+) in **raster** pixels: a
     /// morphological march of the matte's edge, inward or outward. 0 is the
     /// neutral.
     pub shrink_grow: f32,
-    /// Screen matte softness in **raster** pixels (K-546): a Gaussian blur of
+    /// Screen matte softness in **raster** pixels: a Gaussian blur of
     /// the matte, and only the matte. 0 is the neutral.
     pub softness: f32,
-    /// Despot black, 0..1 (K-546): how far an isolated dark speck is lifted to
+    /// Despot black, 0..1: how far an isolated dark speck is lifted to
     /// its neighbours. 0 is the neutral.
     pub despot_black: f32,
-    /// Despot white, 0..1 (K-546): how far an isolated bright speck is dropped
+    /// Despot white, 0..1: how far an isolated bright speck is dropped
     /// to its neighbours. 0 is the neutral.
     pub despot_white: f32,
     /// 0..1, blended against the untouched premultiplied input; 0 is the identity.
@@ -228,7 +228,7 @@ pub struct MatteKeyParams {
 }
 
 impl MatteKeyParams {
-    /// Whether any **spatial** stage is asked for (K-546) — the one predicate
+    /// Whether any **spatial** stage is asked for — the one predicate
     /// both render paths branch on, so the fast pointwise kernel and the staged
     /// pipeline are chosen identically. The garbage masks are asked separately,
     /// because they come from the mask carriage rather than from these numbers.
@@ -317,7 +317,7 @@ pub fn resolve_stack_temporal(
 /// `drivers` is the layer's driver graph, already evaluated at this frame
 /// ([`resolve_drivers`](crate::fx::resolve_drivers)): a parameter a wire feeds
 /// takes the wire's value instead of its own keyframes, substituted here, before
-/// anything packs into a uniform (K-471 §2.1). [`ResolvedDrivers::NONE`] is
+/// anything packs into a uniform. [`ResolvedDrivers::NONE`] is
 /// every layer that has never opened the Graph panel.
 #[allow(clippy::too_many_arguments)]
 pub fn resolve_stack_temporal_named(
@@ -332,7 +332,7 @@ pub fn resolve_stack_temporal_named(
 ) -> (Vec<Uuid>, ResolvedStack) {
     let mut ids = Vec::new();
     let mut out = ResolvedStack::new();
-    // Built-ins and the plugins that registered at run time (K-593) — the
+    // Built-ins and the plugins that registered at run time — the
     // catalogue answers for both, and a lookup that misses resolves to nothing
     // either way. A Placeholder is excluded by name: it is a name this build
     // does not know, and asking the catalogue for it would be asking whether
@@ -352,9 +352,9 @@ pub fn resolve_stack_temporal_named(
         // Every built-in is looked up in the catalogue and resolved by the one
         // generic loop below (docs/impl/effect-registry.md §6); a name this
         // build does not know resolves to nothing, which is how an unknown
-        // effect stays an inert placeholder (K-065). The arena's own op order
+        // effect stays an inert placeholder. The arena's own op order
         // *is* the stack order, so there is no second list to keep in step.
-        // The catalogue, then the layer styles (K-706): a style resolves through
+        // The catalogue, then the layer styles: a style resolves through
         // this very walk, so the lookup asks for "the definition of this name"
         // rather than picking a list (`fx::def`).
         if let Some(def) = super::def(&e.effect.match_name) {
@@ -387,10 +387,10 @@ pub fn resolve_stack_temporal_named(
 
 /// A parameter's **hard** range in schema space — the bounds docs/08 §1.2 says
 /// typing may not exceed, either side `None` where the parameter is one-sided
-/// or unbounded (K-090).
+/// or unbounded.
 ///
 /// The three numeric kinds are the whole of it. A Slider's `range` *is* its
-/// hard range (K-414: there is no picture past a wipe's ends), an Angle is
+/// hard range (there is no picture past a wipe's ends), an Angle is
 /// deliberately unbounded so it can turn, and a Colour declares a per-channel
 /// **edit** range rather than a bound, so none of them is clamped here.
 #[must_use]
@@ -423,7 +423,7 @@ pub fn hard_range(kind: &ParamKind) -> (Option<f64>, Option<f64>) {
 ///
 /// - `Px` is px@comp on the way in (docs/08 §2.3 forbids anything else), so it
 ///   is multiplied by `px_scale` to reach the raster in play. Every distance
-///   a built-in declares is this (K-419).
+///   a built-in declares is this.
 /// - `PctDiag` would become `v / 100 × diag_px` (the caller has already scaled
 ///   `diag_px` by the preview factor). No built-in parameter declares it any
 ///   more; the arm stays so the enum resolves completely.
@@ -434,25 +434,25 @@ pub fn hard_range(kind: &ParamKind) -> (Option<f64>, Option<f64>) {
 ///
 /// After the declared parameters comes the one thing the declaration cannot
 /// carry: values derived from layer time, the marker context or a whole
-/// keyframed track ([`EffectDef::resolve_derived`], K-385). Almost every effect
+/// keyframed track ([`EffectDef::resolve_derived`]). Almost every effect
 /// pushes nothing there.
 ///
 /// **A driven parameter never reads its keyframes.** A wire from a driver into
 /// a socket substitutes here — after the property would have been evaluated,
 /// before the raster conversion and before anything packs — so a driven number
 /// travels through the identical `Unit` arm a typed one does, and the kernels
-/// cannot tell the two apart (K-471 §2.1). This is also the one walk drivers
+/// cannot tell the two apart. This is also the one walk drivers
 /// themselves resolve through, `node` naming which of the two they are.
 ///
-/// **And a driven number is held to the same hard range a typed one is**
-/// (K-090, K-510): the substitution below is clamped by [`hard_range`] before
-/// anything else touches it. A driver is arithmetic with no idea what it is
-/// wired to — an unwired Points sample answers `1e9` on purpose (K-509) — so
+/// **And a driven number is held to the same hard range a typed one is**: the
+/// substitution below is clamped by [`hard_range`] before anything else
+/// touches it. A driver is arithmetic with no idea what it is
+/// wired to — an unwired Points sample answers `1e9` on purpose — so
 /// without this a wire could put a parameter somewhere no typed value can go
 /// and no kernel was written for. It is clamped *here* rather than in each
 /// driver because there is one substitution point and seven drivers, and
 /// because this is the walk **both** the preview and the export take, so the
-/// two clamp identically by construction (K-031). On an **effect's** sockets
+/// two clamp identically by construction. On an **effect's** sockets
 /// only — see the comment at the substitution for why a driver's own row is
 /// left alone.
 #[allow(clippy::too_many_arguments)]
@@ -483,7 +483,7 @@ pub(super) fn resolve_into_arena(
         } else {
             drivers.param(node, ParamId::new(p.id))
         };
-        // The driven *number*, held to the declared hard range (K-510). The
+        // The driven *number*, held to the declared hard range. The
         // `Value` above stays unclamped for the Colour arm, whose range is a
         // per-channel edit range rather than a hard bound.
         //
@@ -507,7 +507,7 @@ pub(super) fn resolve_into_arena(
                 .min(hi.unwrap_or(f64::INFINITY))
         });
         // A number the instance does not carry reads its declared default: a
-        // project saved before the parameter existed simply renders (K-258).
+        // project saved before the parameter existed simply renders.
         let spatial = |v: f64| -> f32 {
             let v = v as f32;
             match p.unit {
@@ -526,7 +526,7 @@ pub(super) fn resolve_into_arena(
             }
         };
         let value = match p.kind {
-            // A Slider is a Float with a closed range (K-414): the kind is the
+            // A Slider is a Float with a closed range: the kind is the
             // control, so it resolves through exactly the Float path and an
             // adopting parameter's output cannot move.
             ParamKind::Float { default, .. }
@@ -547,7 +547,7 @@ pub(super) fn resolve_into_arena(
                 _ => default,
             }),
             ParamKind::Colour { default, .. } => match driven {
-                // A colour socket takes a colour and nothing else (K-472 §6.1);
+                // A colour socket takes a colour and nothing else;
                 // a wire of any other type was refused at commit, and a stale
                 // one falls through to the stored keyframes rather than
                 // painting a number.
@@ -562,14 +562,14 @@ pub(super) fn resolve_into_arena(
             // the *caller*, which is the only thing that knows which cube
             // loaded, which layer was rendered or which masks the layer carries
             // (docs/impl/layer-input.md); they are threaded beside the op as an
-            // aux slot instead (K-387, K-408, docs/impl/effect-registry.md
+            // aux slot instead (docs/impl/effect-registry.md
             // §2.5a), so the bag deliberately carries nothing for them. An
             // effect declaring one must declare the list it consumes:
             // `a_side_table_effect_declares_the_list_it_consumes` in
             // lumit-render fails the moment one does not, and a silent default
             // here would be a picture quietly rendering without its LUT.
             //
-            // An **Action** skips for a stronger reason still (K-417): those
+            // An **Action** skips for a stronger reason still: those
             // three carry their payload beside the op, and a button carries
             // nothing anywhere. It is not a value, so it is not in the bag,
             // and so it is not in the frame key either — pressing Analyse
@@ -578,14 +578,14 @@ pub(super) fn resolve_into_arena(
             | ParamKind::Layer { .. }
             | ParamKind::MaskPath { .. }
             | ParamKind::Action => continue,
-            // A curve is small enough to ride in the bag itself (K-412), so
+            // A curve is small enough to ride in the bag itself, so
             // unlike the three above it needs no slot beside the op. It does
             // not animate, so there is nothing to evaluate at `lt` — only the
             // straightening every read applies.
             ParamKind::Curve { default } => Value::Curve(match e.param(p.id) {
                 Some(EffectValue::Curve(points)) => CurvePoints::sanitised(points),
                 // A project saved before the row existed has no entry, and the
-                // declared shape is what it would have been given (K-258) —
+                // declared shape is what it would have been given —
                 // never the diagonal, which for an over-life curve is a
                 // different picture.
                 _ => CurvePoints::sanitised(default),

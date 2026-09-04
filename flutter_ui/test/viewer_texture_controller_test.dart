@@ -1,13 +1,13 @@
-// The Viewer's zero-copy texture controller against a fake runner (K-177).
+// The Viewer's zero-copy texture controller against a fake runner.
 //
 // The failure being guarded is the silent one: a runner that registers the
 // texture, accepts every frameReady, and never actually draws it. The
 // controller detects that by counting the draws the runner reports back — so a
-// runner whose frameReady answers null (as the Linux one did before K-204's
-// branch) can never be told apart from one that is drawing.
+// runner whose frameReady answers null (as the Linux one did before it grew
+// its own branch) can never be told apart from one that is drawing.
 //
-// **What it does about it changed at K-755.** It used to latch the texture path
-// off, which only made sense while there was a read-back transport to fall back
+// **What it does about it changed.** It used to latch the texture path off,
+// which only made sense while there was a read-back transport to fall back
 // to; there is not, and the owner's ruling is that there will not be. So the
 // detector's whole job is now to make the failure *loud* — a line in the
 // diagnostics file — while the path keeps announcing, because switching off the
@@ -60,7 +60,7 @@ void main() {
     expect(controller.debugDrawn, 0);
     expect(controller.neverDrawn, isTrue);
     expect(controller.available, isTrue,
-        reason: 'K-755: the only transport is not switched off for being '
+        reason: 'the only transport is not switched off for being '
             'broken — the failure is recorded and then fixed at its cause');
     // The record itself goes to the shared diagnostics file, so this test
     // appends one line to it. That is what the file is for, and giving the

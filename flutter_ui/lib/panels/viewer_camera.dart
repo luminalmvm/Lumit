@@ -1,5 +1,5 @@
 // The camera tools: orbit, track and dolly the composition's camera
-// (K-229, docs/07 §2.3.5).
+// (docs/07 §2.3.5).
 //
 // **In plain terms.** A 3D composition is looked at through a **camera layer**,
 // and these three tools are how you move it by dragging on the picture instead
@@ -288,7 +288,7 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   Offset _delta = Offset.zero;
 
   /// Where the pointer is being held for the length of the drag, and whether
-  /// this platform could hold it there at all (K-230). Off the lock, the drag
+  /// this platform could hold it there at all. Off the lock, the drag
   /// falls back to reading the movement between events, exactly as it did.
   Offset? _anchor;
   bool _locked = false;
@@ -300,7 +300,7 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   /// the layer's focal distance and the composition's rate are both reads
   /// across the bridge. Moving the mouse over the picture with a camera tool in
   /// hand was making both of them, dozens of times a second, to re-answer a
-  /// question only an edit or the playhead can change (K-230).
+  /// question only an edit or the playhead can change.
   ({LayerReference layer, CameraPose pose})? _held;
   BigInt? _heldRevision;
   int? _heldFrame;
@@ -315,7 +315,7 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   /// The active camera layer: the topmost visible Camera whose span covers the
   /// playhead, which is the one the renderer looks through.
   ({LayerReference layer, CameraPose pose})? get _camera {
-    // The **held** revision, not a checked one (K-232). Reading the checking
+    // The **held** revision, not a checked one. Reading the checking
     // getter asks the engine whether the document has moved — and this runs on
     // every rebuild, which for a tool that draws its own pointer means every
     // movement of the mouse. That was the whole of the camera tools' chatter.
@@ -334,7 +334,7 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   }
 
   /// The walk itself. Everything but the two reads noted above comes off the
-  /// read model (K-184).
+  /// read model.
   ({LayerReference layer, CameraPose pose})? _findCamera(int frame) {
     for (final entry in widget.uiState.model.heldLayers) {
       final info = entry.info;
@@ -419,7 +419,7 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   Widget build(BuildContext context) {
     if (!widget.active) return const SizedBox.shrink();
     return Positioned.fill(
-      // The hardware crosshair leads (K-724); the badge beside it, drawn by
+      // The hardware crosshair leads; the badge beside it, drawn by
       // the app, only says which camera move.
       child: DrawnPointerRegion(
         cursor: SystemMouseCursors.precise,
@@ -471,12 +471,12 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
       _sayNoCamera();
       return;
     }
-    // The pointer is pinned where it was pressed for as long as the drag lasts
-    // (K-230). Moving a camera is a gesture with no *place* — nothing on the
-    // picture is being aimed at — so a pointer that wanders out of the Viewer,
-    // and finally into the corner of the screen where it stops moving at all,
-    // is a drag that ends before the user does. It reappears where it started
-    // when the button comes up, which is what every 3D application does.
+    // The pointer is pinned where it was pressed for as long as the drag lasts.
+    // Moving a camera is a gesture with no *place* — nothing on the picture is
+    // being aimed at — so a pointer that wanders out of the Viewer, and finally
+    // into the corner of the screen where it stops moving at all, is a drag
+    // that ends before the user does. It reappears where it started when the
+    // button comes up, which is what every 3D application does.
     _anchor = details.localPosition;
     _locked = freezeCursor();
     setState(() {
@@ -540,9 +540,9 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   /// is no batched op for a camera move (docs/TODO.md).
   ///
   /// [preview] is a live update while the drag is in flight; the values are the
-  /// same either way, because a camera has no preview path of its own (K-183's
-  /// preview patches *one layer's* transform, and moving the camera changes what
-  /// every layer looks like).
+  /// same either way, because a camera has no preview path of its own (a
+  /// preview patches *one layer's* transform, and moving the camera changes
+  /// what every layer looks like).
   void _write({required bool preview}) {
     final layer = _acting;
     final pose = _moved();

@@ -1,4 +1,4 @@
-// The GPU scope pass (docs/07-UI-SPEC.md §8, K-096 v1): waveform, vectorscope
+// The GPU scope pass (docs/07-UI-SPEC.md §8, v1): waveform, vectorscope
 // and histogram traces computed on the graphics card instead of the CPU.
 //
 // In plain terms: the Scopes panel plots the picture's brightness and colour.

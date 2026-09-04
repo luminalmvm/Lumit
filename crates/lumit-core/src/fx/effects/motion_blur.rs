@@ -5,7 +5,7 @@
 //! **In plain terms.** The motion itself is not a control: the decode worker
 //! computes a dense per-pixel `(u, v)` field with a confidence channel from the
 //! current and next source frames, and hands the whole field to the GPU pass
-//! beside the resolved op (K-387). So what this effect resolves to is only how
+//! beside the resolved op. So what this effect resolves to is only how
 //! *much* of that motion to draw — the shutter fraction, the tap count along the
 //! streak, the diagnostic view, and Mix. With no field (a plain layer, or a
 //! decode that dropped the neighbour) the pass is a passthrough, never a fault.
@@ -21,7 +21,7 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Vector scale means nothing until a Motion vectors layer is picked (K-429):
+/// Vector scale means nothing until a Motion vectors layer is picked:
 /// with none, the field is the measured flow, which is already in pixels.
 pub const MOTION_BLUR_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     param: "vector_scale",
@@ -43,8 +43,8 @@ pub const MOTION_BLUR_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     // negative offsets use.
     temporal = &[0, 1],
     enabled_when = MOTION_BLUR_ENABLED_WHEN,
-    // K-429: the matte scales the amount, inside the kernel (the owner's rule
-    // for mattes); the generic strength dissolve does not also run.
+    // The matte scales the amount, inside the kernel (the owner's rule for
+    // mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales Shutter angle per pixel: the streak is genuinely shorter where \
@@ -68,13 +68,13 @@ pub struct MotionBlur {
 
     /// The *cap* on taps along the streak (§3.2). The spec's integer, carried as
     /// a Float row (Echo's Echoes does the same); [`MotionBlur::packed`] rounds
-    /// and clamps. The kernel spends fewer than this on a short streak (K-390's
+    /// and clamps. The kernel spends fewer than this on a short streak (the
     /// adaptive taps), so this is the ceiling on quality and cost, not the count.
     #[slider(min = 8.0, max = 32.0, default = 16.0, hard_min = 2.0, hard_max = 64.0, unit = Raw)]
     pub samples: f32,
 
-    /// The reconstruction tier (K-390). Normal draws straight streaks; High
-    /// bends each streak along the motion field and halves the sample spacing.
+    /// The reconstruction tier. Normal draws straight streaks; High bends each
+    /// streak along the motion field and halves the sample spacing.
     /// **The only method choice there is** — one method adapts internally.
     #[choice(
         options = ["Normal", "High"],
@@ -82,7 +82,7 @@ pub struct MotionBlur {
     )]
     pub quality: u32,
 
-    /// **A motion field somebody else already knew** (K-429, docs/08 §3.2).
+    /// **A motion field somebody else already knew** (docs/08 §3.2).
     /// Point this at a layer whose red and green channels carry the per-pixel
     /// motion — a game engine's velocity pass, a 3D renderer's vector pass, a
     /// plugin's output — and the streak follows *that* instead of the flow the
@@ -95,7 +95,7 @@ pub struct MotionBlur {
     ///
     /// Unset is the default and the labelled no-op: the measured flow is used,
     /// exactly as before this row existed. It is the ordinary auxiliary-layer
-    /// input (K-387), which is why a layer can be given here *and* a Matte
+    /// input, which is why a layer can be given here *and* a Matte
     /// above.
     ///
     /// **Always `false` here, by design**, as every Layer row is: the binding
@@ -108,7 +108,7 @@ pub struct MotionBlur {
     /// what `r = 1` (or `r = 0`) stands for in pixels of movement. Different
     /// engines normalise their vector passes differently, so this is the dial
     /// that makes one agree with the frame it came from. Declared `Px`, so it
-    /// scales with the preview raster like every other distance (§2.3, K-419).
+    /// scales with the preview raster like every other distance (§2.3).
     /// Greyed until a layer is picked, since the measured flow is already in
     /// pixels.
     #[slider(

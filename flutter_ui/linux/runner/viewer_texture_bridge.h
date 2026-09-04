@@ -1,4 +1,4 @@
-// The in-runner zero-copy Viewer bridge for Linux (K-177).
+// The in-runner zero-copy Viewer bridge for Linux.
 //
 // In plain terms: the Rust engine draws the Viewer's picture into a Vulkan image
 // and exports it as a DMA-BUF (a file descriptor naming GPU memory). Dart calls

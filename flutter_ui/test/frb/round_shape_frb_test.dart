@@ -1,4 +1,4 @@
-// Round v2's shape-conditional geometry (K-394, 15-DESIGN §12.1), on the two
+// Round v2's shape-conditional geometry (15-DESIGN §12.1), on the two
 // surfaces where it is a branch in a panel rather than a token read.
 //
 // The stadium controls, the bigger cards and the filled-pill active state are
@@ -22,7 +22,7 @@ import 'frb_test_support.dart';
 void main() {
   setUpAll(initEngineForTests);
 
-  group('Round v2 geometry (K-394)', () {
+  group('Round v2 geometry', () {
     /// A comp with one solid on it — the Timeline needs a layer before it has
     /// a bar to draw, and the Viewer does not mind either way.
     ({LumitState state, LumitUiState uiState}) withComp() {
@@ -76,7 +76,7 @@ void main() {
       expect(play, findsOneWidget, reason: 'the same buttons, unwrapped');
     });
 
-    /// **Both shapes follow the drawing's arrangement** (K-466). Round's pill
+    /// **Both shapes follow the drawing's arrangement**. Round's pill
     /// is a container around the transport, not a re-ordering of the bar: the
     /// same controls come in the same order, with the pill's own key falling
     /// where the transport starts. The Sharp order is asserted in full in
@@ -140,7 +140,7 @@ void main() {
     /// A layer bar draws stadium ends under Round: the control radius is the
     /// sentinel that clamps to half the bar's own height, so the same read
     /// gives a capsule whatever the row height turns out to be. Sharp draws
-    /// square ends — the mockup's own bar (K-451); the 2 px it had before
+    /// square ends — the mockup's own bar; the 2 px it had before
     /// rounded nothing visibly and softened every bar end by a pixel.
     BorderRadius barRadius(WidgetTester tester) {
       final fill = find.byWidgetPredicate((w) =>

@@ -203,7 +203,7 @@ fn quantile(mut v: Vec<f64>, q: f64) -> f64 {
     v[(((v.len() - 1) as f64) * q).round() as usize]
 }
 
-/// A closed rectangular mask path in px@comp — the K-408 carriage the tracker
+/// A closed rectangular mask path in px@comp — the mask carriage the tracker
 /// reads its exclusion regions through.
 fn rect_mask(x0: f64, y0: f64, x1: f64, y1: f64, inverted: bool) -> ExclusionMask {
     let mut mask = Mask::rectangle(x0, y0, x1 - x0, y1 - y0);
@@ -1413,7 +1413,7 @@ fn a_track_that_stops_agreeing_is_split_at_the_change() {
 
 /// The carried count is the survivor count, and it says what the live count
 /// cannot: a frame nothing crossed into reads zero even though the tracker is
-/// following as many specks as ever a moment later (K-540).
+/// following as many specks as ever a moment later.
 #[test]
 fn the_carried_count_falls_where_the_live_count_recovers() {
     let mut tracker = Tracker::new(TrackSettings::default());
@@ -1473,7 +1473,7 @@ fn the_carried_count_falls_where_the_live_count_recovers() {
 /// A truncated set describes exactly the span it was cut to, and stays a
 /// well-formed one: the invariant every later phase reads (a step per gap
 /// between points) survives the cut, and nothing is left holding a frame past
-/// it (K-540).
+/// it.
 #[test]
 fn truncating_leaves_only_the_span_that_was_kept() {
     let mut set = synthetic_shot(12, 40, usize::MAX, [0.0; 3], 0);
@@ -2134,11 +2134,11 @@ fn a_dolly_through_a_zoom_cut_recovers_both_focals() {
 
 // --- The train POV: forward travel and the lens ---------------------------------
 //
-// The failure K-540 recorded and left open: a shot moving forward makes every
-// patch in the frame grow on every pair, so a detector that judges each pair
-// against zero swallows the whole clip into one run — and a genuine lens change
-// inside it disappears into a median of thousands. These fixtures pin the
-// repaired detector: travel is a *baseline* read from the pairs the radial-flow
+// The failure left open until now: a shot moving forward makes every patch in
+// the frame grow on every pair, so a detector that judges each pair against
+// zero swallows the whole clip into one run — and a genuine lens change inside
+// it disappears into a median of thousands. These fixtures pin the repaired
+// detector: travel is a *baseline* read from the pairs the radial-flow
 // signature says are camera motion, and a lens event is an excess above it.
 
 /// A camera travelling forward — the train POV — with a gentle sideways sway so
@@ -2797,7 +2797,7 @@ fn run_planar(
     extra: Vec<ExclusionMask>,
 ) -> Result<PlanarTrack, PlanarError> {
     // An **inverted** region over the quad is what "the tracker works only
-    // inside this shape" already means (K-408, `ExclusionMask::from_polyline`),
+    // inside this shape" already means (`ExclusionMask::from_polyline`),
     // so restricting detection to the plane needs no new mechanism.
     let mut masks = vec![ExclusionMask::from_points(quad_outline(quad), true)];
     masks.extend(extra);
@@ -3011,7 +3011,7 @@ fn a_planar_track_stops_between_frames_when_cancelled() {
 }
 
 // ---------------------------------------------------------------------------
-// Point tracking (K-735)
+// Point tracking
 // ---------------------------------------------------------------------------
 
 /// Two textured patches on a flat background, each moved by its **own**

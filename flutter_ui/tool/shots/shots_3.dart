@@ -169,7 +169,7 @@ Future<void> main() async {
   }
 
   // ---- Shot: a Sequence layer, clips cut back-to-back ---------------------
-  // Double-clicking the row is what opens a Sequence layer's view (K-248), so
+  // Double-clicking the row is what opens a Sequence layer's view, so
   // the clips are shown the way the program shows them.
   await timelineShare(0.45);
   await doubleTapKey('tl-name-$cutId', settle: 2);

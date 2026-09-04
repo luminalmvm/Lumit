@@ -59,7 +59,7 @@ fn broadcast_safe(@builtin(global_invocation_id) gid: vec3<u32>) {
     // Written out rather than `dot`, unlike every other kernel in the family:
     // two of the four modes turn this number into a *threshold on the alpha*, so
     // a fused multiply-add that only one path takes is a pixel keyed out on one
-    // path and kept on the other (K-399). Three multiplies and two adds, in the
+    // path and kept on the other. Three multiplies and two adds, in the
     // CPU reference's own order.
     let y = v.r * LUMA.r + v.g * LUMA.g + v.b * LUMA.b;
     let c = chroma(v, y);

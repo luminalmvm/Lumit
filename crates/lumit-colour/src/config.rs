@@ -419,7 +419,7 @@ pub struct ViewTransform {
 pub struct Config {
     pub version: u32,
     /// The directory the config file lives in; every relative path is relative
-    /// to it (K-173's spirit: nothing absolute is ever written back).
+    /// to it (nothing absolute is ever written back).
     pub dir: PathBuf,
     pub search_paths: Vec<String>,
     pub roles: BTreeMap<String, String>,
@@ -460,7 +460,7 @@ const REFUSED_TRANSFORMS: [&str; 9] = [
 /// for the wrong one finds nothing and silently applies the default. That is
 /// how a `pass_thru` gamma space read as a clamping one for as long as this
 /// parser existed — visible only below zero, which is precisely where nobody
-/// looks (K-517).
+/// looks.
 fn negative_style(
     value: &Tagged,
     tag: &str,

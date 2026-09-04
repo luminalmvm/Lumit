@@ -1,5 +1,5 @@
 //! **The Node preview renders the chain up to a node, and nothing past it**
-//! (K-486, docs/impl/node-graph.md §8 WP5).
+//! (docs/impl/node-graph.md §8 WP5).
 //!
 //! # In plain terms
 //!
@@ -17,9 +17,9 @@
 //!   effects and no others renders — same bytes, not nearly;
 //! - the cut renders **differ** from the full frame, so the panel is not quietly
 //!   showing the Viewer's picture;
-//! - the same cut renders the same bytes twice (K-031's determinism, held at
-//!   this seam because a preview that flickers between two answers is a bug the
-//!   eye finds before any test does);
+//! - the same cut renders the same bytes twice (determinism, held at this seam
+//!   because a preview that flickers between two answers is a bug the eye finds
+//!   before any test does);
 //! - the frame key **already** separates them. The prefix point needs no field
 //!   of its own in the key: the key hashes each layer's effects, so a shorter
 //!   stack is a different name by construction, and a preview can never be
@@ -206,7 +206,7 @@ fn the_picture_at_a_node_is_the_stack_cut_off_at_that_node() {
         "the Source node is the layer before its stack"
     );
 
-    // Determinism (K-031 at this seam): the same cut, twice, byte-identical.
+    // Determinism at this seam: the same cut, twice, byte-identical.
     let (again, ..) = r
         .render_rgba(&cut_first, comp_id, 0, 1.0)
         .expect("the same preview again");

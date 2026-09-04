@@ -1,4 +1,4 @@
-//! Gaussian blur (docs/08 §3.8, K-137): the separable two-pass blur, one job
+//! Gaussian blur (docs/08 §3.8): the separable two-pass blur, one job
 //! per effect since the mode-driven Blur was split.
 
 use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
@@ -17,12 +17,12 @@ use lumit_fx_macros::Effect;
     version = 1,
     category = BlurSharpen,
     cost = Moderate,
-    // The Radius slider's own hard maximum, in px@comp (K-433): 2 000 px is
+    // The Radius slider's own hard maximum, in px@comp: 2 000 px is
     // the farthest a typed radius can reach, so the tile is never short of it.
     roi = PaddedPx(2000.0),
-    // K-395: the blur claims the injected Matte row inside its own maths — see
-    // the `matte` doc below for what it means. The generic strength dissolve
-    // does not also run.
+    // The blur claims the injected Matte row inside its own maths — see the
+    // `matte` doc below for what it means. The generic strength dissolve does
+    // not also run.
     matte = (
         "matte",
         "scales the blur radius per pixel: white blurs at the full Radius, grey \
@@ -31,7 +31,7 @@ use lumit_fx_macros::Effect;
     ),
 )]
 pub struct Blur {
-    /// Kernel half-width, px@comp (§2.3, K-419). Default per §1.2's "drop it
+    /// Kernel half-width, px@comp (§2.3). Default per §1.2's "drop it
     /// on and it already looks right".
     ///
     /// Declared `Px`, so the resolve step scales it to the raster in play (a
@@ -65,7 +65,7 @@ impl Blur {
     /// (docs/impl/effect-registry.md §2.4). `radius` arrives already converted
     /// from % diagonal by the resolve step, so this only floors it — the same
     /// `.max(0.0)` the old arm applied to the same product. Edge is the fixed
-    /// Repeat (K-137 dropped the Gaussian Edges control; 1 was its default).
+    /// Repeat (the Gaussian Edges control was dropped; 1 was its default).
     /// Both render paths read this one method, so the CPU reference and the
     /// WGSL kernel cannot drift apart.
     pub fn packed(self) -> (f32, u32, f32) {

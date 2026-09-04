@@ -1,4 +1,4 @@
-// The Project settings window (K-286).
+// The Project settings window.
 //
 // **Why it is not a page in Settings.** Everything in the Settings window is
 // this machine's: the theme, the interface, the cache budgets, the keymap. None
@@ -70,7 +70,7 @@ class _ProjectSettingsWindowState extends State<_ProjectSettingsWindow> {
   /// The colour config as the engine reads it. Held, and re-read only when
   /// this window has just changed it: `colourSummary` opens the config file to
   /// see whether it has changed on disk, which is not work for a `build`
-  /// (K-490, docs/impl/ocio.md §6.1).
+  /// (docs/impl/ocio.md §6.1).
   late BridgeColourSummary _colour = _readColour();
 
   BridgeColourSummary _readColour() {
@@ -90,7 +90,7 @@ class _ProjectSettingsWindowState extends State<_ProjectSettingsWindow> {
   }
 
   /// Point the project at a config, or at none. An ordinary op, so it is one
-  /// undo step and it travels in the `.lum` (K-490).
+  /// undo step and it travels in the `.lum`.
   void _setConfig(String? path) {
     widget.project.setColourConfig(path: path);
     setState(() => _colour = _readColour());
@@ -113,7 +113,7 @@ class _ProjectSettingsWindowState extends State<_ProjectSettingsWindow> {
                   HouseButton(
                     key: const ValueKey('project-settings-close'),
                     small: true,
-                    // The window's only action (K-319): Enter closes it.
+                    // The window's only action: Enter closes it.
                     primary: true,
                     autofocus: true,
                     onPressed: widget.onClose,
@@ -176,10 +176,10 @@ class _ProjectSettingsWindowState extends State<_ProjectSettingsWindow> {
     ];
   }
 
-  /// **Colour management** (K-489, K-490, docs/impl/ocio.md §6.4). The project
-  /// points at one OCIO config file; its names then fill the Viewer's picker,
-  /// the export's colour space and each footage item's interpretation. It is
-  /// the project's property rather than the machine's for the same reason
+  /// **Colour management** (docs/impl/ocio.md §6.4). The project points at
+  /// one OCIO config file; its names then fill the Viewer's picker, the
+  /// export's colour space and each footage item's interpretation. It is the
+  /// project's property rather than the machine's for the same reason
   /// anti-aliasing is: it changes what the comp looks like, so it travels.
   ///
   /// The state line is where a config that is not in force says why, in one
@@ -221,8 +221,8 @@ class _ProjectSettingsWindowState extends State<_ProjectSettingsWindow> {
               ),
             ]),
           ),
-          // Which primaries the compositing maths is done in — fixed in v1
-          // (K-490 §2.1), and stated rather than left to be assumed.
+          // Which primaries the compositing maths is done in — fixed in v1,
+          // and stated rather than left to be assumed.
           settingsRow(
             t,
             l10n.projectColourWorkingSpace,

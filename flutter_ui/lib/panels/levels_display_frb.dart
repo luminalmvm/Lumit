@@ -1,4 +1,4 @@
-// Levels' own display (K-413, docs/08 §3.31): the frame's histogram with the
+// Levels' own display (docs/08 §3.31): the frame's histogram with the
 // input black, gamma and white handles over it, and the output range as a bar
 // beneath.
 //
@@ -18,7 +18,7 @@
 //
 // **Where the picture comes from.** The same trace the Scopes panel reads
 // (`renderScope`, kind 3), asked for once per displayed frame and only while
-// this row is mounted — the K-413 rule, and the bridge-call budget is the gate.
+// this row is mounted. The bridge-call budget is the gate.
 // The reply carries the kind it answers, so a Scopes panel open on a waveform
 // at the same time cannot leave its trace behind these handles.
 
@@ -147,8 +147,8 @@ class _LevelsDisplayFrbState extends State<LevelsDisplayFrb> {
     super.dispose();
   }
 
-  /// One trace of the frame showing, and only when it has moved — the K-413
-  /// rule. Never called from `build`.
+  /// One trace of the frame showing, and only when it has moved. Never called
+  /// from `build`.
   void _request() {
     if (!mounted || _asked == widget.playheadFrame) return;
     _asked = widget.playheadFrame;

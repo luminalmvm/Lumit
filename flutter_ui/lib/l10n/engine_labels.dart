@@ -961,8 +961,8 @@ Map<String, String> get _table => {
       "Copy the selection": l10n.keyCopyTheSelection,
       "Cut the selection": l10n.keyCutTheSelection,
       "Paste": l10n.keyPaste,
-      // Edit > History: what each edit calls itself (K-688,
-      // crates/lumit-core/src/ops.rs `Op::name`). One phrase per operation
+      // Edit > History: what each edit calls itself
+      // (crates/lumit-core/src/ops.rs `Op::name`). One phrase per operation
       // the engine has, in the voice of the menu row that makes it.
       "Add item": l10n.histAddItem,
       "Delete item": l10n.histDeleteItem,
@@ -1034,7 +1034,7 @@ Map<String, String> get _table => {
       "Several changes": l10n.histSeveralChanges,
     };
 
-// --- The import report's reasons (K-303, docs/11 §9) ----------------------
+// --- The import report's reasons (docs/11 §9) -----------------------------
 //
 // The other way engine text is translated, and the one docs/17 prescribes for
 // a sentence with a fact in it: "blend mode Dissolve has no equivalent —
@@ -1169,7 +1169,7 @@ String? importReason(String key, Map<String, String> args) {
     case 'effect_param_rebased':
       return l10n.aeEffectParamRebased(a('effect'), a('param'));
 
-    // Third-party effects, the two roads (K-655).
+    // Third-party effects, the two roads.
     case 'effect_as_plugin':
       return l10n.aeEffectAsPlugin(
           a('match_name'), a('plugin'), a('carried'), a('controls'));
@@ -1184,7 +1184,7 @@ String? importReason(String key, Map<String, String> args) {
 /// Whether this build has a sentence for [key] — what the sync test asserts.
 bool hasImportReason(String key) => importReason(key, const {}) != null;
 
-// --- The colour config's refusals (K-005, K-490, docs/impl/ocio.md §6.1) ---
+// --- The colour config's refusals (docs/impl/ocio.md §6.1) ----------------
 //
 // The same shape as the import reasons above, for the same reason: "this config
 // needs FixedFunctionTransform" is a different whole text for every transform,
@@ -1196,7 +1196,7 @@ bool hasImportReason(String key) => importReason(key, const {}) != null;
 // else's config file — a colour space, a display, a look-up table — and putting
 // those through the label table would rename a config's own "Alpha" space into
 // whatever this application happens to call an effect's Alpha parameter. A
-// config's words are the user's words, and they cross verbatim (K-303).
+// config's words are the user's words, and they cross verbatim.
 
 /// The one-line reason the project's colour config is not in force, or null
 /// when this build has no sentence for [key] — the caller shows the engine's

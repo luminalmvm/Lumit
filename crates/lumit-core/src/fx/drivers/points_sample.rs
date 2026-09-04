@@ -1,4 +1,4 @@
-//! Points sample (K-492, K-494, points-stream.md §2.2): the first thing
+//! Points sample (points-stream.md §2.2): the first thing
 //! besides Particulate's own drawing that consumes a points stream.
 //!
 //! **In plain terms.** Wire Particulate's teal Points socket into this driver
@@ -62,7 +62,7 @@ const OUTPUTS: &[Port] = &[
     matte = false,
 )]
 pub struct PointsSample {
-    /// The query point, px@comp (K-260 — point parameters are pixels). The
+    /// The query point, px@comp — point parameters are pixels. The
     /// schema default is the nominal 1080p centre; `instantiate_for_raster`
     /// centres a fresh node on the actual comp, because a query point in the
     /// top-left corner of a 4K frame is one somebody has to go and find.
@@ -109,10 +109,10 @@ impl EffectDef for PointsSampleDef {
 /// The two numbers, from a stream and a query point.
 ///
 /// The search is a linear scan over the live set, bounded by the producer's
-/// own Max particles (K-475) and deterministic because the stream is ordered by
+/// own Max particles and deterministic because the stream is ordered by
 /// birth index rather than by anything a scheduler decided.
 ///
-/// **Nearest distance is measured where the particle is drawn** (K-561): the
+/// **Nearest distance is measured where the particle is drawn**: the
 /// projected position, not the three axes. The reason is the row's own units —
 /// Position is a px@comp *point on the frame*, the place a user picked with the
 /// dropper by looking at the picture — so the honest answer to "how far is the

@@ -1,4 +1,4 @@
-// The first-run screen (K-246): asked once, on a machine with no settings
+// The first-run screen: asked once, on a machine with no settings
 // file, and its answer sets the two editing preferences.
 //
 // The screen is worth its own tests because everything about it is a
@@ -91,7 +91,7 @@ void main() {
     await tester.pumpWidget(host());
     await tester.pumpAndSettle();
 
-    // Ticked before anything is touched (K-296): the default is that Lumit
+    // Ticked before anything is touched: the default is that Lumit
     // looks for new versions.
     await tester.tap(find.byKey(const ValueKey('first-run-ae')));
     await tester.pumpAndSettle();

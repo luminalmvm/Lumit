@@ -1,4 +1,4 @@
-// The toolbar's state machine (K-216): which tool is armed, what a group button
+// The toolbar's state machine: which tool is armed, what a group button
 // stands for, and what pressing a tool's key twice does.
 //
 // Pure state, so this needs no engine and no widgets — the parts of a toolbar
@@ -39,7 +39,7 @@ void main() {
     });
 
     test('the memory survives arming another group and coming back', () {
-      // A built member, because an unbuilt one cannot be armed at all (K-228).
+      // A built member, because an unbuilt one cannot be armed at all.
       final tools = ToolsState()..select(ToolMode.shapeStar);
       tools.select(ToolMode.hand);
 
@@ -114,15 +114,14 @@ void main() {
     test('the tools that claim to be built are the ones that are', () {
       // A guard on honesty rather than on behaviour: `ready` is what the
       // tooltip promises, so it may only be true where something reads the
-      // armed tool and does the work. Selection selects and drags (K-217),
-      // Hand pans, Zoom magnifies (K-218), Rotation turns (K-219), Anchor
-      // point pans behind and the Razor cuts (K-220), the five shape tools
-      // draw masks and the Pen builds one (K-222, K-223), horizontal type makes
-      // and edits text layers (K-225), the three painting tools paint, erase and
-      // clone (K-227), the Roto pair scribbles what a subject is and where its
-      // edge may be soft (K-717), the four puppet pins place and drag pins on
-      // the layer's mesh (K-704), and the three camera tools move the active
-      // camera (K-229); everything else is on the strip and disabled (K-228).
+      // armed tool and does the work. Selection selects and drags, Hand pans,
+      // Zoom magnifies, Rotation turns, Anchor point pans behind and the Razor
+      // cuts, the five shape tools draw masks and the Pen builds one,
+      // horizontal type makes and edits text layers, the three painting tools
+      // paint, erase and clone, the Roto pair scribbles what a subject is and
+      // where its edge may be soft, the four puppet pins place and drag pins on
+      // the layer's mesh, and the three camera tools move the active camera;
+      // everything else is on the strip and disabled.
       expect(ToolMode.values.where((t) => t.ready).toSet(), {
         ToolMode.select,
         ToolMode.hand,
@@ -153,7 +152,7 @@ void main() {
     });
   });
 
-  /// The toolbar's tool options (K-225): the fill and size the drawing tools
+  /// The toolbar's tool options: the fill and size the drawing tools
   /// set things in, held here because they belong to the tool and not to any
   /// one panel.
   group('Tool options', () {
@@ -190,7 +189,7 @@ void main() {
       expect(tools.strokeWidth, 0);
     });
 
-    /// The brush's own three settings (K-227) — separate from the shape tools'
+    /// The brush's own three settings — separate from the shape tools'
     /// stroke, because a brush is a different thing that happens to have a
     /// width, and because these are live while that pair is not.
     test('the brush has its own size, hardness and opacity', () {
@@ -214,7 +213,7 @@ void main() {
     });
   });
 
-  /// A tool that is not built cannot be armed (K-228) — by click, by flyout or
+  /// A tool that is not built cannot be armed — by click, by flyout or
   /// by chord. The refusal lives here rather than in the button because there
   /// are three ways in and only one of them is a button.
   group('What cannot be armed', () {
@@ -233,7 +232,7 @@ void main() {
 
     /// Every group on the strip now has something built in it, so the guard
     /// against arming a group that has nothing is asserted where it lives
-    /// rather than through a group standing in for the case (K-228). The rule
+    /// rather than through a group standing in for the case. The rule
     /// is the same one: an empty built set arms nothing.
     test('a chord on a group with nothing built does nothing', () {
       for (final group in ToolGroup.values) {
@@ -246,7 +245,7 @@ void main() {
           reason: 'and a group that does have members arms the first');
     });
 
-    /// The Roto pair arms together (K-717): the strip button, the flyout row
+    /// The Roto pair arms together: the strip button, the flyout row
     /// and the `Alt+W` chord all wake off one flag, and the chord walks the two
     /// built members and round.
     test('the Roto chord cycles its two built members', () {
@@ -259,7 +258,7 @@ void main() {
       expect(tools.tool, ToolMode.rotoBrush, reason: 'and round');
 
       // The same flag the chord reads is the one the button and the flyout
-      // read, which is why there is one of it (K-228).
+      // read, which is why there is one of it.
       expect(tools.handleAction('tool.roto'), isTrue);
       tools.select(ToolMode.refineEdge);
       expect(tools.tool, ToolMode.refineEdge);

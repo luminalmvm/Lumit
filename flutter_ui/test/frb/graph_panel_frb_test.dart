@@ -111,7 +111,7 @@ void main() {
       expect(
           find.byKey(const ValueKey<String>('graph-node-out')), findsOneWidget);
       // The Layer out box's Audio socket is drawn, unfilled and honest: audio
-      // comes only from a footage layer's own stream in this phase (K-435).
+      // comes only from a footage layer's own stream in this phase.
       expect(socket('out', 'audio'), findsOneWidget);
     });
 
@@ -298,8 +298,8 @@ void main() {
     /// test). The canvas answered the key through the focus tree, but the
     /// shell answers Delete on the hardware keyboard, which runs *before* the
     /// focus tree and swallows the key: the picked box was never asked about,
-    /// and the layer under it went instead. The panel claims Delete now
-    /// (K-234's mechanism) and the shell stands down when the claim says yes.
+    /// and the layer under it went instead. The panel claims Delete now, and
+    /// the shell stands down when the claim says yes.
     testWidgets(
         'a picked box claims Delete rather than leaving it to the shell',
         (tester) async {
@@ -507,7 +507,7 @@ void main() {
       expect(find.byKey(const ValueKey<String>('fx-console-item-Wiggle')),
           findsNothing);
 
-      // Without a wire — Ctrl+Space, answered through the claim (K-673) —
+      // Without a wire — Ctrl+Space, answered through the claim —
       // the whole family is back.
       await tester.tapAt(const Offset(860, 560));
       await tester.pump();
@@ -519,7 +519,7 @@ void main() {
           findsOneWidget);
     });
 
-    /// **Ctrl+Space is the graph's one add surface** (K-673): with the panel
+    /// **Ctrl+Space is the graph's one add surface**: with the panel
     /// focused, the shell's console stands down and this one offers the
     /// effects beside the drivers — a chosen effect joins the stack, so its
     /// box lands on the chain.
@@ -560,7 +560,7 @@ void main() {
       expect(find.byKey(const ValueKey<String>('fx-console-bar')), findsNothing);
     });
 
-    /// **Removing a wired effect is one op** (K-471 §1.5). The stack's own
+    /// **Removing a wired effect is one op**. The stack's own
     /// removal prunes the graph inside the same commit, so the panel neither
     /// unplugs first nor leaves a dangling edge behind — and one undo brings
     /// the effect and its wiring back together.
@@ -633,7 +633,7 @@ void main() {
       expect(p.layer.getGraph().wiring.edges, isEmpty);
     });
 
-    /// **The stack view can never lie** (K-471 §1.1). The graph's image chain
+    /// **The stack view can never lie**. The graph's image chain
     /// is derived from the effect list, so reordering the stack — in the
     /// Effect controls panel, in the Timeline, anywhere — moves the boxes.
     testWidgets('a reorder in the stack view moves the boxes', (tester) async {
@@ -692,7 +692,7 @@ void main() {
           findsNothing);
     });
 
-    // --- The points wire (K-492, K-494, points-stream.md §4.3) -------------
+    // --- The points wire (points-stream.md §4.3) ---------------------------
     //
     // The first wire whose *source* is a stack effect. Everything else on this
     // canvas was already true of it — teal came from `PortColours` in WP1, the
@@ -759,7 +759,7 @@ void main() {
         edges.single.from,
         isA<BridgeOutputRef_EffectData>()
             .having((e) => e.port, 'port', 'points'),
-        reason: 'the source is the stack effect itself (K-492)',
+        reason: 'the source is the stack effect itself',
       );
       expect(edges.single.to,
           isA<BridgeInputRef_Param>().having((e) => e.port, 'port', 'points'));
@@ -823,7 +823,7 @@ void main() {
           reason: 'the stream would depend on the parameter it feeds');
     });
 
-    /// **The hazard, made visible** (K-509). A Points sample with nothing
+    /// **The hazard, made visible**. A Points sample with nothing
     /// wired in answers its documented no-op — a distance so large it pins
     /// whatever it drives at the far end of the range — so the box says so
     /// until a stream reaches it.
@@ -847,7 +847,7 @@ void main() {
     });
 
     /// A box's position is document data: it persists, it travels, and a drag
-    /// stages it and commits once (K-344). The magnet is on by default
+    /// stages it and commits once. The magnet is on by default
     /// (2026-08-30 board), so what commits is the dot grid's nearest pitch.
     testWidgets('dragging a box commits its position once, on the grid',
         (tester) async {
@@ -865,7 +865,7 @@ void main() {
           .layout
           .firstWhere((l) => l.node == BridgeNodeRef.driver(wiggle));
       // Raw would be (70, 320); the magnet lands it on the 20px pitch.
-      expect(placed().x, 80, reason: 'snapped to the dot grid (K-626)');
+      expect(placed().x, 80, reason: 'snapped to the dot grid');
       expect(placed().y, 320);
 
       // Magnet off: the same drag commits exactly where the hand left it.
@@ -1064,13 +1064,13 @@ void main() {
     });
 
     // -------------------------------------------------------------------
-    // **The pick is a set** (K-533, and with it K-523 and K-522). Delete, Bypass and Expose were
-    // singular because the selection was, not because any of them is singular
-    // by nature — and `Ctrl+A` had nothing here to mean.
+    // **The pick is a set**. Delete, Bypass and Expose were singular because
+    // the selection was, not because any of them is singular by nature — and
+    // `Ctrl+A` had nothing here to mean.
     //
     // The pick is read through `selectedEffects`, which is where the graph
-    // publishes it: the box and the Effect controls heading are one selection
-    // (K-300), so what the canvas has picked is exactly what that list says.
+    // publishes it: the box and the Effect controls heading are one
+    // selection, so what the canvas has picked is exactly what that list says.
     // -------------------------------------------------------------------
 
     /// A layer with two effect boxes between Source and Layer out, in a comp
@@ -1216,7 +1216,7 @@ void main() {
           reason: 'one `setGraph`, so one undo step however many were picked');
     });
 
-    /// `Ctrl+A` here means this canvas, not the composition's layers (K-522).
+    /// `Ctrl+A` here means this canvas, not the composition's layers.
     testWidgets('Ctrl+A picks every box on the canvas', (tester) async {
       final p = withTwoEffects();
       await mount(tester, p);
@@ -1231,7 +1231,7 @@ void main() {
               'and carry no effect id to publish');
     });
 
-    /// **The Viewer chip wants exactly one** (K-528). Its name is derived, so
+    /// **The Viewer chip wants exactly one**. Its name is derived, so
     /// a pick of several must make it go away by itself rather than by anyone
     /// remembering to turn it off.
     testWidgets('the prefix chip names one picked box and no more',
@@ -1248,11 +1248,11 @@ void main() {
           reason: 'two picked is no single point to stop at');
     });
 
-    // --- The image chain's own wires (K-674, K-738) ------------------------
+    // --- The image chain's own wires ---------------------------------------
     //
     // The chain is the effect list (§1.1), so every gesture on its wires
     // lowers to something the stack already had: re-route = reorder, and
-    // **disconnect = bypass** (K-738) - the effect keeps its slot and stops
+    // **disconnect = bypass** - the effect keeps its slot and stops
     // drawing, which is the state its own enable tick sets. The Layer out is
     // the one box with no effect to bypass: unplugging it is the layer
     // drawing nothing.
@@ -1278,7 +1278,7 @@ void main() {
       await tester.pump();
 
       expect(chainNames(p.layer), ['blur', 'exposure'],
-          reason: 'the effect keeps its slot in the stack (K-738)');
+          reason: 'the effect keeps its slot in the stack');
       expect(chainEnabled(p.layer), [true, false],
           reason: 'and stops drawing - the state its own tick sets');
       expect(find.byKey(const ValueKey<String>('fx-console-bar')), findsNothing,
@@ -1348,7 +1348,7 @@ void main() {
       await tester.pump();
 
       expect(p.layer.getGraph().wiring.outUnwired, isTrue,
-          reason: 'the layer itself is what came unplugged (K-738)');
+          reason: 'the layer itself is what came unplugged');
       expect(chainNames(p.layer), ['blur', 'exposure'],
           reason: 'and it cost the stack nothing');
       expect(chainEnabled(p.layer), [true, true],
@@ -1476,7 +1476,7 @@ void main() {
               'crossed the bridge');
     });
 
-    // --- Named groups (K-651) ---------------------------------------------
+    // --- Named groups -----------------------------------------------------
 
     /// A temporary library folder, cleaned up with the test.
     Directory library() {
@@ -1492,7 +1492,7 @@ void main() {
     Finder driverBox(UuidValue id) =>
         find.byKey(ValueKey<String>('graph-node-driver:$id'));
 
-    /// **Naming a set is one act with two halves** (K-651): the wash appears on
+    /// **Naming a set is one act with two halves**: the wash appears on
     /// the canvas and the same name goes into the library, so a rig that took
     /// five minutes to wire is one row in the search from then on.
     testWidgets(

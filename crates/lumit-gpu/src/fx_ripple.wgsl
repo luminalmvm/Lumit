@@ -5,7 +5,7 @@
 // rim, which removes the direction singularity at r = 0 exactly, and its
 // constant makes Wave height literally the farthest a pixel moves.
 //
-// One sine and cosine a pixel — §3.42's fourth note and K-399's rule.
+// One sine and cosine a pixel — §3.42's fourth note.
 //
 // Mix 0, Radius 0 and Wave height 0 are all the bit-exact identity.
 
@@ -18,7 +18,7 @@ struct Params {
     turns: f32,          // Evolution / 360, in whole waves
     mix_amt: f32,        // 0..1, blended against the unprocessed input
     asymmetric: u32,     // 1 = add the tangential half of the wave
-    matte_on: f32,       // 1 = the matte scales Wave height (K-427)
+    matte_on: f32,       // 1 = the matte scales Wave height
     _pad1: u32,
     _pad2: u32,
 };
@@ -28,14 +28,14 @@ struct Params {
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
 
-// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// The Matte (docs/08 §2.6), bound for every kernel on this layout and
 // read only under `matte_on` — bound to `src` when there is none, since a
 // texture binding cannot be left empty.
 @group(0) @binding(4) var matte: texture_2d<f32>;
 
 // This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
 // luma, clamped. The Channel pick and Invert already happened, once, at the
-// seam (fx_matte_prepare.wgsl, K-425).
+// seam (fx_matte_prepare.wgsl).
 fn matte_k(xy: vec2<i32>) -> f32 {
     let m = textureLoad(matte, xy, 0);
     return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
@@ -83,7 +83,7 @@ fn ripple(@builtin(global_invocation_id) gid: vec3<u32>) {
     let r = sqrt(dx * dx + dy * dy);
     var sx = px;
     var sy = py;
-    // The matte scales Wave height per pixel (K-427, == cpu::ripple_matted).
+    // The matte scales Wave height per pixel (== cpu::ripple_matted).
     var amount = p.amount;
     if (p.matte_on != 0.0) {
         amount = amount * matte_k(xy);

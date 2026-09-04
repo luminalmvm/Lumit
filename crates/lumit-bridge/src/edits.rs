@@ -20,7 +20,7 @@ use uuid::Uuid;
 
 /// A transform anchored on the content's own centre and placed at the comp
 /// centre — `lumit-ui`'s `centred_transform`, the seeding every add-layer path
-/// uses so a fresh layer appears centred and pivots about its middle (K-150).
+/// uses so a fresh layer appears centred and pivots about its middle.
 ///
 /// Shared with the frb API rather than copied: a second set of layer-seeding
 /// defaults would drift, and a footage layer added through the new bridge would
@@ -52,7 +52,7 @@ pub(crate) fn base_layer(
     out: Rational,
     transform: TransformGroup,
 ) -> Layer {
-    // Each kind starts on its own label colour (K-188): the label drives both
+    // Each kind starts on its own label colour: the label drives both
     // the outline's swatch and the bar's fill, so a fresh stack is tellable
     // apart at a glance. The user's own pick simply overwrites it.
     let label = match &kind {
@@ -98,14 +98,13 @@ pub(crate) fn base_layer(
     }
 }
 
-/// A layer born into a composition that already has a solo up wears solo too
-/// (K-719).
+/// A layer born into a composition that already has a solo up wears solo too.
 ///
 /// **In plain terms.** While something is soloed the comp shows only that
 /// layer, so anything added lands invisible and inaudible — you add a solid and
 /// nothing happens. Adding it soloed puts it where it was just asked for.
 ///
-/// Counted the way the two halves of solo are counted (K-435): a layer with a
+/// Counted the way the two halves of solo are counted: a layer with a
 /// picture asks whether any layer that *draws* is soloed, an Audio layer asks
 /// the mixer's question — every soloed layer. A Camera, a Light and a Null are
 /// left out of it in both directions ([`Layer::can_adjust`] is the same "shows
@@ -188,8 +187,8 @@ pub(crate) fn file_into_folder_op(
 /// auto-folder, plus its id and the name it was given ("White solid N").
 ///
 /// Two callers ask for exactly this: **New solid**, which then adds a layer
-/// pointing at it, and the Modes column's adjustment toggle turned back off
-/// (K-484), which has to hand an adjustment layer a picture of its own again.
+/// pointing at it, and the Modes column's adjustment toggle turned back off,
+/// which has to hand an adjustment layer a picture of its own again.
 pub(crate) fn white_solid_ops(
     doc: &lumit_core::model::Document,
     width: u32,

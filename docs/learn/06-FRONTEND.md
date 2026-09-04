@@ -58,7 +58,7 @@ selection, playing, dropper, viewer look, plus sub-notifiers (`CompModel`,
 "bump an int" counters (`paletteRequest`, `togglePlayRequest`) — a way to ask a
 possibly-unmounted panel to do something.
 
-**The performance keystone is `CompModel`** (K-184): one `getModel()` bridge call per
+**The performance keystone is `CompModel`**: one `getModel()` bridge call per
 committed change gives a read model that panels draw from. **Zero bridge calls per
 rebuild or repaint.** Anything not in the model (FFmpeg probes, waveform peaks, layer
 bounds) is fetched async off the build. The app caches it in State maps keyed by
@@ -98,7 +98,7 @@ through.
 
 Time mapping is one object: `TimelineAxis { frames, width }` with `xOf`/`frameAt`,
 shared by lanes, ruler, graph and cache bar. Zoom is a flight where **only the lane
-half rebuilds** per tick (K-293). Layout applies the anchored offset, so offset and
+half rebuilds** per tick. Layout applies the anchored offset, so offset and
 content width never disagree.
 
 **The Viewer** shows the engine's frame through a platform `Texture` widget.
@@ -106,7 +106,7 @@ content width never disagree.
 `lumit/viewer_texture` channel, receives a texture id, and announces `frameReady` per
 frame. It latches itself unavailable and uses pixel readback instead, if frames are
 announced but never drawn. The transport runs no clock. The engine paces playback,
-and each published frame says which frame it is (K-181).
+and each published frame says which frame it is.
 
 Tools and gizmos are overlay layers, inert unless armed. Geometry is pure:
 `ViewerLayerMap` converts layer ↔ screen both ways. In-flight gestures preview by
@@ -120,8 +120,8 @@ as fractions of the picture, never pixels, because the engine's raster changes w
 resolution. A drag too small to mean anything reports `null`, which reads as "clear", so one
 control both sets and clears.
 
-Two Viewer settings are **per composition** and live in the session, not the document
-(K-357): the preview resolution tier and the region. `SavedSession.previewResolutions`
+Two Viewer settings are **per composition** and live in the session, not the document:
+the preview resolution tier and the region. `SavedSession.previewResolutions`
 (`state/workspace.dart`) is a map keyed by comp. A heavy shot wants Quarter while the title card beside it does not, and
 choosing how coarsely to preview is a way of working on a comp rather than an edit to it — no
 op, no undo step, and it can never reach an export. An unrecognised tier name reads as Auto
@@ -140,7 +140,7 @@ so zoom is the precision control. Ctrl suspends snapping.
 
 ## Theme and strings
 
-Dark-first Aizome (K-004). `lib/theme/theme.dart` is the only Dart file allowed a hex
+Dark-first Aizome. `lib/theme/theme.dart` is the only Dart file allowed a hex
 literal. Widgets read `ThemeScope.of(context).theme` and use semantic tokens
 (`surface0..4`, `textPrimary..Disabled`, `hairline`, one `accent`). Add a new theme
 field to `theme_tokens.dart` — a test enforces it.

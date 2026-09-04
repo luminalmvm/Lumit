@@ -1,4 +1,4 @@
-//! The lighting pass (docs/06, K-361) — shading a layer with the comp's Light
+//! The lighting pass (docs/06) — shading a layer with the comp's Light
 //! layers. Not an effect: it has no entry in docs/08 and no `Resolved`
 //! variant, and the realiser calls it directly between a layer's effect stack
 //! and its composite.

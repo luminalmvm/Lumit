@@ -18,7 +18,7 @@ XTypeGroup _projectGroup() =>
 ///
 /// Two lists in one: the containers FFmpeg reads, and every still-image format
 /// `lumit_media::sequence::STILL_EXTENSIONS` names - a numbered run of any of
-/// those imports as one sequence (K-539), so offering fewer here than the
+/// those imports as one sequence, so offering fewer here than the
 /// engine reads is the dialogue hiding files that would have worked.
 ///
 /// It is a convenience, not a gate. The dialogue also offers All files, the
@@ -27,7 +27,7 @@ XTypeGroup _projectGroup() =>
 /// still opens.
 ///
 /// Public because the file picker is no longer the only road in: a folder
-/// dropped on the Project panel (K-581) is read with this same list, so what a
+/// dropped on the Project panel is read with this same list, so what a
 /// folder yields and what the dialogue offers cannot drift apart.
 const List<String> footageExtensions = [
   // Video containers
@@ -75,7 +75,7 @@ Future<List<String>> pickFootage() async {
 /// Choose where to save an exported video, defaulting the name to the
 /// resolver's [suggestedName] (the egui exporter's `set_file_name`), or null
 /// when cancelled. The generic save seam the export dialogue and the share
-/// exports both drive. `extension`/`label` follow the chosen format (K-201):
+/// exports both drive. `extension`/`label` follow the chosen format:
 /// `.mp4` for video, the image extension for a sequence — where the picked
 /// name is the sequence's stem, and the frames land numbered beside it.
 Future<String?> pickExportSaveLocation(
@@ -129,7 +129,7 @@ Future<String?> pickPresetSaveLocation(String suggestedName,
   return location?.path;
 }
 
-/// The `.lumgrp` node-group type group (K-651) — a saved set of graph boxes,
+/// The `.lumgrp` node-group type group — a saved set of graph boxes,
 /// living in the same library folder as the effect presets.
 XTypeGroup _nodeGroupGroup() =>
     XTypeGroup(label: l10n.fileTypeNodeGroup, extensions: const ['lumgrp']);
@@ -146,7 +146,7 @@ Future<String?> pickNodeGroupSaveLocation(String suggestedName,
   return location?.path;
 }
 
-/// The OCIO configuration type group (K-490): the config file itself, which is
+/// The OCIO configuration type group: the config file itself, which is
 /// `config.ocio` by convention but need not be named that.
 XTypeGroup _ocioGroup() =>
     XTypeGroup(label: l10n.fileTypeOcioConfig, extensions: const ['ocio']);
@@ -157,7 +157,7 @@ Future<String?> pickOcioConfig() async {
   return file?.path;
 }
 
-/// The keymap type group (docs/07 §15's shareable file, K-199). Plain JSON, so
+/// The keymap type group (docs/07 §15's shareable file). Plain JSON, so
 /// a `.json` a user has renamed still opens.
 XTypeGroup _keymapGroup() =>
     XTypeGroup(label: l10n.fileTypeKeymap, extensions: const ['json']);
@@ -168,7 +168,7 @@ Future<String?> pickKeymapToOpen() async {
   return file?.path;
 }
 
-/// The shared-theme type group (K-298), the theme's counterpart of the
+/// The shared-theme type group, the theme's counterpart of the
 /// keymap's. Lumit's own extension rather than a plain `.json`, so the picker
 /// can offer just themes.
 XTypeGroup _themeGroup() => XTypeGroup(
@@ -211,14 +211,14 @@ Future<String?> pickWorkspaceSaveLocation(String suggestedName) async {
   return location?.path;
 }
 
-/// The After Effects import's own type group (K-418): the project file itself,
+/// The After Effects import's own type group: the project file itself,
 /// and the zip a Bridge bundle travels in.
 XTypeGroup _aeGroup() => XTypeGroup(
       label: l10n.fileTypeAeProject,
       extensions: const ['aep', 'zip'],
     );
 
-/// Pick an After Effects project to import (K-418) — the `.aep` itself, or a
+/// Pick an After Effects project to import — the `.aep` itself, or a
 /// zipped Lumit Bridge bundle. Which one it is is the engine's to decide from
 /// the bytes; this dialogue only has to offer both. Null when cancelled.
 Future<String?> pickAeProject() async {
@@ -228,8 +228,8 @@ Future<String?> pickAeProject() async {
 
 /// Pick a Lumit Bridge bundle **folder** (docs/11 §2.1), because a folder is
 /// what the Bridge's script writes: ExtendScript has no zip. The quieter of the
-/// two import routes since K-418 — a zipped bundle goes through
-/// [pickAeProject]. Null when cancelled.
+/// two import routes — a zipped bundle goes through [pickAeProject]. Null when
+/// cancelled.
 Future<String?> pickAeBundle() =>
     getDirectoryPath(confirmButtonText: l10n.chooseConfirm);
 
@@ -247,10 +247,10 @@ Future<String?> pickKeymapSaveLocation() async {
   return location?.path;
 }
 
-/// Pick one file for an effect's File parameter (docs/08 §1.2's File kind,
-/// K-265) — the LUT's `.cube`, the Lens flare's `.lens`. The schema's own
-/// lower-case extensions and label drive the dialogue's filter, so a new
-/// File parameter needs no new function here. Null when cancelled.
+/// Pick one file for an effect's File parameter (docs/08 §1.2's File kind) —
+/// the LUT's `.cube`, the Lens flare's `.lens`. The schema's own lower-case
+/// extensions and label drive the dialogue's filter, so a new File parameter
+/// needs no new function here. Null when cancelled.
 Future<String?> pickEffectInputFile(
   List<String> extensions,
   String label,

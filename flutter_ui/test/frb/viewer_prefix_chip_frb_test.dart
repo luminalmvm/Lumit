@@ -1,11 +1,11 @@
-// The Viewer's "at effect" chip (K-528), against the real engine.
+// The Viewer's "at effect" chip, against the real engine.
 //
 // The chip replaced a whole panel, so what it has to prove is what the panel
 // proved and one thing more:
 //
 //  * it appears from **both** selection surfaces — an effect picked in the
-//    Effect controls stack and a box picked on the graph are one selection
-//    (K-300), so they must be one chip and not two behaviours;
+//    Effect controls stack and a box picked on the graph are one selection,
+//    so they must be one chip and not two behaviours;
 //  * it names the effect it would stop at, the user's own name included;
 //  * it clears when the selection can no longer name a single point, and the
 //    picture goes back with it — a chip outliving its selection would leave
@@ -149,8 +149,8 @@ void main() {
       expect(find.text('at ${effectLabelOf('exposure')}'), findsOneWidget);
     });
 
-    /// And the box on the graph canvas is the other. The two are one selection
-    /// (K-300), which is the whole reason the chip is one chip.
+    /// And the box on the graph canvas is the other. The two are one selection,
+    /// which is the whole reason the chip is one chip.
     testWidgets('appears from a pick on the graph canvas', (tester) async {
       final p = withTwo();
       const size = Size(900, 600);
@@ -181,7 +181,7 @@ void main() {
       expect(find.text('at ${effectLabelOf('blur')}'), findsOneWidget);
     });
 
-    /// The user's own name for an instance (K-321) is what the stack shows, so
+    /// The user's own name for an instance is what the stack shows, so
     /// it is what the chip shows: two Exposures called "Key" and "Fill" must
     /// not both read "at Exposure".
     testWidgets('names a renamed effect by its own name', (tester) async {

@@ -20,11 +20,11 @@ use serde::Deserialize;
 
 /// Watchdog defaults, from docs/12 §2.3: ten seconds for a render, two for a
 /// control action. docs/impl/ofx-host.md §4 sketches thirty for a render; the
-/// spec's number is the one that ships and K-592 records why. Nothing else in
-/// the code knows either number — the broker reads them from here — so changing
-/// the shipped answer is this line and a superseding decision entry, and a
-/// single plugin that needs longer needs no code change at all: its
-/// `render_timeout_ms` in `quirks.json` is the exception mechanism.
+/// spec's number is the one that ships. Nothing else in the code knows either
+/// number — the broker reads them from here — so changing the shipped answer is
+/// this line and a superseding decision entry, and a single plugin that needs
+/// longer needs no code change at all: its `render_timeout_ms` in `quirks.json`
+/// is the exception mechanism.
 const DEFAULT_RENDER_TIMEOUT: Duration = Duration::from_secs(10);
 /// See [`DEFAULT_RENDER_TIMEOUT`].
 const DEFAULT_CONTROL_TIMEOUT: Duration = Duration::from_secs(2);
@@ -62,7 +62,7 @@ pub struct PluginQuirks {
     /// so a diagnostic can say why a plugin is being treated specially.
     #[serde(default)]
     note: Option<String>,
-    /// The `kOfxPropName` this plugin is shown instead of Lumit's own (K-757).
+    /// The `kOfxPropName` this plugin is shown instead of Lumit's own.
     #[serde(default)]
     present_as: Option<String>,
 }
@@ -79,8 +79,8 @@ pub struct Quirks {
     /// Why this plugin has an entry, for the diagnostics panel and for the
     /// next person to read the table.
     pub note: Option<String>,
-    /// The host name this plugin is shown, when it is not Lumit's own
-    /// (K-757). Applied by [`crate::bundle::Bundle::load`].
+    /// The host name this plugin is shown, when it is not Lumit's own.
+    /// Applied by [`crate::bundle::Bundle::load`].
     pub present_as: Option<String>,
 }
 

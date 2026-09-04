@@ -1,4 +1,4 @@
-// The probe's fps arithmetic, pinned (K-733, docs/impl/ui-performance.md §6).
+// The probe's fps arithmetic, pinned (docs/impl/ui-performance.md §6).
 //
 // The probe once counted whatever FrameTimings landed in its bucket over a
 // window that closed 300 ms after the gesture, and divided by a wall clock

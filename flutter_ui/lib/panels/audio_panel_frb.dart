@@ -1,18 +1,18 @@
 // The Audio panel (docs/09, the approved AudioWorkspace board): three
 // sections down a column.
 //
-// **Levels** — the output's stereo bars off the engine's tap (K-690), with the
+// **Levels** — the output's stereo bars off the engine's tap, with the
 // sticky clip lamp and the peak-hold caption. **Beats** — the full face of the
 // beat engine (docs/09 §5): source, sensitivity, range, minimum spacing, the
 // BPM well with Tap and the phase chips, and the Generate/Clear pair.
 // **Selected layer** — the fronted selection's sound: Volume and Pan rows with
-// their stopwatches, the fade wells with their curve chips (K-695), and the
-// two graph-template buttons, whose staged chains are ordinary K-471 wires the
+// their stopwatches, the fade wells with their curve chips, and the two
+// graph-template buttons, whose staged chains are ordinary graph wires the
 // Graph panel draws and the user can retune or delete.
 //
 // The bars animate at UI rate inside their own RepaintBoundary off the shared
 // meter feed; everything else rebuilds only when the document or the
-// selection moves (the K-681 gates).
+// selection moves (the rebuild gates).
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/widgets.dart';
@@ -77,7 +77,7 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
   /// Tap tempo: the last few tap moments; the median gap is the tempo.
   final List<DateTime> _taps = [];
 
-  /// Which layers can make a sound, probed once and remembered (K-435).
+  /// Which layers can make a sound, probed once and remembered.
   final Map<String, bool> _hasAudio = {};
 
   @override
@@ -249,7 +249,7 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
           ]),
           const SizedBox(height: 6),
           // Wraps rather than rows from here down: a docked-narrow panel
-          // folds a line rather than painting outside its box (K-451).
+          // folds a line rather than painting outside its box.
           Wrap(
             spacing: 6,
             runSpacing: 4,
@@ -365,8 +365,8 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
     // command that did not land.
     //
     // **A refusal says why.** This used to be `onError: (_) {}`, so a comp
-    // whose mix is silenced — a soloed picture row (K-435) is the everyday way
-    // — placed no markers, cleared the grid and explained nothing. It is one
+    // whose mix is silenced — a soloed picture row is the everyday way —
+    // placed no markers, cleared the grid and explained nothing. It is one
     // sentence per *source* rather than one per reason because a `BridgeError`
     // reaches Dart as an opaque handle with nothing readable on it: `NoAudio`
     // is what the engine answers here in every case a person can cause
@@ -374,7 +374,7 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
     //
     // Which sentence is the source's, not the error's, and the panel is the
     // one that knows it: a mute or a solo cannot silence a layer picked by
-    // name (K-718), so blaming them would send the reader to the wrong switch.
+    // name, so blaming them would send the reader to the wrong switch.
     // ponytail: two sentences for the whole refusal; split further the day
     // BridgeError carries a reason id across the bridge.
     final app = context.read<LumitState>();
@@ -600,7 +600,7 @@ class _SelectedLayerBlock extends StatefulWidget {
   final CompositionReference comp;
   final BridgeLayerEntry entry;
 
-  /// Whether the layer can make a sound (K-435). Off, the Volume, Pan and
+  /// Whether the layer can make a sound. Off, the Volume, Pan and
   /// fade rows are not drawn — controls on a silent layer would be switches
   /// that switch nothing — and the template buttons stay.
   final bool canSound;
@@ -716,7 +716,7 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
                       style: t.body.copyWith(color: t.textMuted)),
                 ),
                 // The board's own dial beside the value well — the Mixer
-                // strip's pot, turning the same way (K-694).
+                // strip's pot, turning the same way.
                 PanPot(
                   key: const ValueKey('audio-pan-pot'),
                   value: panValue,
@@ -791,7 +791,7 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
     );
   }
 
-  /// A fade well and its three curve chips (K-695): the well holds the
+  /// A fade well and its three curve chips: the well holds the
   /// length, a chip picks the shape, and either commits the keyframe pair
   /// there and then — running it again reshapes the same fade.
   Widget _fadeRow(
@@ -874,7 +874,7 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
     widget.onChanged();
   }
 
-  // --- The two graph templates (K-471 roads, K-697) -----------------------
+  // --- The two graph templates -------------------------------------------
 
   /// *Drive with audio…*: pick an unwired Number parameter of this layer's
   /// stack, then stage Audio level → Remap → Smooth wired onto it — visible
@@ -909,11 +909,10 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
     );
   }
 
-  /// *Lower behind…* (the ducking template, in plain words — K-730): pick the
-  /// layer whose sound pushes this one down, then
-  /// stage the inverted chain onto this layer's own Volume socket (K-697) —
-  /// Audio level listening to the picked layer, Remap upside down, Smooth,
-  /// into the Layer out's Volume.
+  /// *Lower behind…* (the ducking template, in plain words): pick the layer
+  /// whose sound pushes this one down, then stage the inverted chain onto
+  /// this layer's own Volume socket — Audio level listening to the picked
+  /// layer, Remap upside down, Smooth, into the Layer out's Volume.
   void _pickDuckSource(BuildContext context) {
     final ui = Provider.of<LumitUiState>(context, listen: false);
     final self = widget.entry.layer.internallayerId;
@@ -1053,7 +1052,7 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
           exposed: graph.wiring.exposed,
           groups: graph.wiring.groups,
           // Ducking wires a driver in; it does not touch whether the
-          // layer's own output is plugged in (K-738).
+          // layer's own output is plugged in.
           outUnwired: graph.wiring.outUnwired,
         ),
       );

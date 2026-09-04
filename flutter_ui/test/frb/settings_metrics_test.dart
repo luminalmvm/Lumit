@@ -3,7 +3,7 @@
 // **Why this file exists.** `shell_frb_test` is about what the window *does* —
 // what a button reaches, what a drag sets, which page a control lives on. This
 // one is about what it *looks like*, and specifically about the numbers the
-// drawing's own computed styles resolved to (K-465): the frame, the title
+// drawing's own computed styles resolved to: the frame, the title
 // strip, the sidebar, a section, a row, the controls in it, the footer. Nothing
 // here names a private widget class, because none of these claims is about how
 // the window is built — each is something a person could point at on screen and
@@ -88,7 +88,7 @@ void main() {
     });
 
     /// 2. **The title strip.** A kicker, the search well at the drawing's
-    /// 174×20, and the close mark at the size the drawing renders it (K-456).
+    /// 174×20, and the close mark at the size the drawing renders it.
     testWidgets('the title strip carries a kicker, a search and a close',
         (tester) async {
       await open(tester);
@@ -203,8 +203,8 @@ void main() {
     });
 
     /// 6. **The accent row.** Six swatches of 14, the one in force ringed,
-    /// and the hex of whatever the accent actually is beside them. Six since
-    /// K-511: spruce leads and the clay it replaced stayed, one click back.
+    /// and the hex of whatever the accent actually is beside them. Six now
+    /// that spruce leads and the clay it replaced has stayed, one click back.
     testWidgets('the accent row is six swatches and a hex', (tester) async {
       final p = await open(tester);
       await showAppearance(tester);
@@ -266,7 +266,7 @@ void main() {
       }
     });
 
-    /// 9. **Tooltips are a switch, not a picker** (K-476), and the switch
+    /// 9. **Tooltips are a switch, not a picker**, and the switch
     /// survives the trip out to the settings file and back.
     testWidgets('the tooltip setting is a switch that round-trips',
         (tester) async {

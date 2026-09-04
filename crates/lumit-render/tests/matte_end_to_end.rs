@@ -1,5 +1,5 @@
 //! **A matte bound in a document drives a real effect, in a real render**
-//! (K-395, the end-to-end half of the campaign).
+//! (the end-to-end half of the campaign).
 //!
 //! # In plain terms
 //!
@@ -12,16 +12,16 @@
 //! This one does: it builds a project the way a user would — two layers, one of
 //! them named as another's Matte — and pushes it through the same public entry
 //! the Viewer and the exporter use (`HeadlessRenderer::render_rgba`, the one
-//! comp walk of K-031). So it crosses every seam at once: the document, the
-//! draw builder's `mattes` list, the Realiser rendering that layer *alone* at
-//! this raster, and the kernel reading its luma.
+//! comp walk preview and export share). So it crosses every seam at once: the
+//! document, the draw builder's `mattes` list, the Realiser rendering that
+//! layer *alone* at this raster, and the kernel reading its luma.
 //!
 //! The picture is arranged so the answer is unmissable. The bottom layer is a
 //! flat mid grey carrying an Exposure of +1 stop, which unmatted lifts the whole
 //! frame from 137 to 188. Its Matte is a **precomp** holding a white solid that
 //! covers the left half of the frame, so one render contains both cases: lit
-//! matte on the left, black matte on the right. The assertion is the K-395
-//! sentence itself — **where the matte is lit the exposure applies in full, and
+//! matte on the left, black matte on the right. The assertion is the override's
+//! own sentence — **where the matte is lit the exposure applies in full, and
 //! where it is black the pixels are the untouched source**, not close to it, the
 //! same bytes.
 //!
@@ -31,8 +31,8 @@
 //!    solid pointed at *directly* is stretched to fill the frame and arrives as
 //!    a uniformly white matte — the test would pass its "inside" check and
 //!    silently be testing nothing. Wrapping the band in a full-size comp gives
-//!    it real geometry first, which is the authoring route K-266 describes ("a
-//!    white circle in a precomp is the natural way to author a flare source").
+//!    it real geometry first, which is how this is authored anyway: a white
+//!    circle in a precomp is the natural way to author a flare source.
 //! 2. **The band is left-aligned, and its edge is soft.** A solid at the default
 //!    transform starts at the origin rather than centred, and its edge
 //!    anti-aliases across a few pixels. So the assertions read the two *flat*
@@ -490,8 +490,8 @@ fn the_matte_dropdown_on_an_adjustment_layer_gates_its_stack() {
 
 /// The bound document again, with the Matte row's Invert and Channel and the
 /// Mix row's Blend set as asked — `None` for a parameter leaves it at its
-/// default, and `strip` removes the two K-425 rows altogether, which is what
-/// every project saved before they existed looks like.
+/// default, and `strip` removes the Channel and Blend rows altogether, which is
+/// what every project saved before they existed looks like.
 fn project_with(
     invert: bool,
     channel: Option<u32>,
@@ -530,11 +530,11 @@ fn project_with(
     (Arc::new(doc), comp_id)
 }
 
-/// **Luminance and Normal are yesterday's picture, byte for byte** (K-258,
-/// K-425). A matted render with the Channel and Blend rows at their defaults
-/// is the same bytes as the same document with the two rows stripped — which
-/// is every project saved before they existed — because neither default runs
-/// a pass: the kernels already read luma, and Normal is the kernel's own Mix.
+/// **Luminance and Normal are yesterday's picture, byte for byte.** A matted
+/// render with the Channel and Blend rows at their defaults is the same bytes
+/// as the same document with the two rows stripped — which is every project
+/// saved before they existed — because neither default runs a pass: the
+/// kernels already read luma, and Normal is the kernel's own Mix.
 #[test]
 fn the_default_channel_and_blend_render_the_same_bytes_as_before_they_existed() {
     let Ok(mut r) = HeadlessRenderer::shared() else {
@@ -554,9 +554,9 @@ fn the_default_channel_and_blend_render_the_same_bytes_as_before_they_existed() 
     assert_eq!(px(&a, w, DARK.end - 1), source);
 }
 
-/// **Invert is applied once, end to end** (K-425). With Invert on, the lit
-/// half of the band is where the Exposure is held off and the dark half where
-/// it applies in full — the two flat regions swap exactly. Applied twice, the
+/// **Invert is applied once, end to end.** With Invert on, the lit half of
+/// the band is where the Exposure is held off and the dark half where it
+/// applies in full — the two flat regions swap exactly. Applied twice, the
 /// two inverts would cancel and the picture would be the un-inverted one;
 /// applied nowhere, likewise. Either failure is this assertion.
 #[test]
@@ -585,12 +585,12 @@ fn invert_swaps_the_two_halves_once() {
     }
 }
 
-/// **The Channel row reads the channel it names** (K-425). The band precomp is
-/// white on transparent: its Blue channel is the same picture as its luma, and
-/// its Alpha the same again — but read by Red on the *grey* base, the matte
-/// is a different picture. Here the Alpha pick must reproduce the Luminance
-/// render byte for byte (both are 1 inside the band and 0 outside), which
-/// proves the pick is wired through the seam and the kernel reads it.
+/// **The Channel row reads the channel it names.** The band precomp is white
+/// on transparent: its Blue channel is the same picture as its luma, and its
+/// Alpha the same again — but read by Red on the *grey* base, the matte is a
+/// different picture. Here the Alpha pick must reproduce the Luminance render
+/// byte for byte (both are 1 inside the band and 0 outside), which proves the
+/// pick is wired through the seam and the kernel reads it.
 #[test]
 fn the_alpha_channel_of_a_white_band_drives_like_its_luma() {
     let Ok(mut r) = HeadlessRenderer::shared() else {
@@ -623,11 +623,11 @@ fn the_alpha_channel_of_a_white_band_drives_like_its_luma() {
     }
 }
 
-/// **The Blend row combines the effect with its input, end to end** (K-425).
-/// An Exposure of +1 stop on mid grey, blended Multiply: the lifted grey
+/// **The Blend row combines the effect with its input, end to end.** An
+/// Exposure of +1 stop on mid grey, blended Multiply: the lifted grey
 /// multiplied by the source grey, 0.5 x 0.25 = 0.125 in linear, darker than
-/// the source — where Normal lifts it. Exposure claims its matte (K-426): under
-/// the dark half its Stops are scaled to 0, so the kernel hands the blend the
+/// the source — where Normal lifts it. Exposure claims its matte: under the
+/// dark half its Stops are scaled to 0, so the kernel hands the blend the
 /// untouched grey and Multiply squares it, 0.25 x 0.25 = 0.0625 — the same
 /// answer an Exposure at 0 stops under Multiply gives with no matte at all,
 /// which is what "the matte scales the amount" means beside a blend.

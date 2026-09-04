@@ -122,7 +122,7 @@ fn wgsl_blur_matches_the_cpu_oracle() {
 }
 
 /// **The Matte-driven blur agrees op-for-op, and genuinely varies in width**
-/// (K-395, docs/08 §2.6, §1.6).
+/// (docs/08 §2.6, §1.6).
 ///
 /// Two claims, and both need making. The first is the ordinary parity one: the
 /// matted path has its own arithmetic — a per-pixel radius, weights built in the
@@ -166,7 +166,7 @@ fn wgsl_matted_blur_matches_the_cpu_oracle_and_varies_in_width() {
     let spike = ((8 * w + 24) * 4) as usize;
     img[spike..spike + 4].copy_from_slice(&[6.0, 3.0, 1.5, 1.0]);
 
-    // Invert is the seam's business since K-425: the matte is prepared once
+    // Invert is the seam's business now: the matte is prepared once
     // (`matte_prepare`, both paths) and the kernel reads it as it is. Running
     // the pair through here is what proves the kernel applies no invert of its
     // own any more.
@@ -249,7 +249,7 @@ fn wgsl_matted_blur_matches_the_cpu_oracle_and_varies_in_width() {
     assert!(narrow > 0, "a quarter matte blurred nothing at all");
 }
 
-/// **An unbound matte leaves the blur exactly what it was** (K-258).
+/// **An unbound matte leaves the blur exactly what it was**.
 ///
 /// The override added a branch to the hot kernel, so the campaign's hardest
 /// invariant now has a half that lives *inside* a kernel rather than beside it.
@@ -293,7 +293,7 @@ fn an_unmatted_blur_is_the_pre_matte_blur() {
     );
 }
 
-/// **The Matte gates which pixels SEED the glow** (K-395, docs/08 §2.6, §1.6).
+/// **The Matte gates which pixels SEED the glow** (docs/08 §2.6, §1.6).
 ///
 /// Parity first, at both Invert settings. Then the claim that makes the override
 /// worth its branch: a glow gated by a matte covering only the left half must
@@ -342,7 +342,7 @@ fn wgsl_matted_glow_seeds_only_inside_the_matte_and_spills_past_it() {
         tint: [1.0; 4],
         mix: 1.0,
     };
-    // Invert arrives through the seam's prepare pass (K-425), both paths.
+    // Invert arrives through the seam's prepare pass, both paths.
     for invert in [false, true] {
         let quantised: Vec<f32> = img.iter().map(|v| f16_to_f32(f16_bits(*v))).collect();
         let mut qmatte: Vec<f32> = matte.iter().map(|v| f16_to_f32(f16_bits(*v))).collect();
@@ -434,7 +434,7 @@ fn wgsl_sharpen_matches_the_cpu_oracle() {
     }
 }
 
-/// The §1.6 oracle for the plain 3×3 sharpen (docs/08 §3.9, K-138): a cheap
+/// The §1.6 oracle for the plain 3×3 sharpen (docs/08 §3.9): a cheap
 /// kernel reading only the pixel and its four integer neighbours directly
 /// (no intermediate fp16 texture, unlike the Unsharp mask's internal
 /// gaussian), so the CPU and GPU must agree to ≤ 2 fp16 ULP and the GPU is
@@ -536,12 +536,12 @@ fn wgsl_rgb_split_matches_the_cpu_oracle() {
     }
 }
 
-/// The §1.6 oracle for the RGB split's Wavelength mode (docs/08 §3.6,
-/// K-090): both sides accumulate the same nine host-supplied basis
-/// weights over the same fp16-quantised taps in f32, in the same order,
-/// so the cheap-class ≤ 2 fp16 ULP bound holds despite the longer sum;
-/// the GPU is bit-stable (§2.4). The classic mode's oracle above is
-/// untouched — separate kernel, separate maths.
+/// The §1.6 oracle for the RGB split's Wavelength mode (docs/08 §3.6):
+/// both sides accumulate the same nine host-supplied basis weights over
+/// the same fp16-quantised taps in f32, in the same order, so the
+/// cheap-class ≤ 2 fp16 ULP bound holds despite the longer sum; the GPU
+/// is bit-stable (§2.4). The classic mode's oracle above is untouched —
+/// separate kernel, separate maths.
 #[test]
 fn wgsl_spectral_split_matches_the_cpu_oracle() {
     let Some(ctx) = crate::test_support::lease() else {
@@ -551,9 +551,9 @@ fn wgsl_spectral_split_matches_the_cpu_oracle() {
     let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
-    // Sweeps the sample count too (FX-9/K-144): 9 (the historical density), a
+    // Sweeps the sample count too (FX-9): 9 (the historical density), a
     // denser 24, and both range ends, so the variable-count kernel matches.
-    // The picker gradient (A1/K-163) is exercised with the default red/green/blue
+    // The picker gradient (A1) is exercised with the default red/green/blue
     // and one custom yellow→magenta→cyan set.
     let rgb = [[1.0f32, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
     let custom = [[1.0f32, 1.0, 0.0], [1.0, 0.0, 1.0], [0.0, 1.0, 1.0]];
@@ -617,7 +617,7 @@ fn wgsl_chromatic_aberration_matches_the_cpu_oracle() {
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     // Default red / green / blue tints (the classic split), plus a custom set
-    // where the middle tap leaks colour (P2/K-143) to exercise the tinted sum.
+    // where the middle tap leaks colour (P2) to exercise the tinted sum.
     let rgb: [[f32; 3]; 3] = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
     let mixed: [[f32; 3]; 3] = [[1.0, 0.2, 0.0], [0.1, 1.0, 0.1], [0.0, 0.3, 0.9]];
     for (amount, tints, mix) in [
@@ -704,7 +704,7 @@ fn wgsl_flash_matches_the_cpu_oracle() {
 
 /// The §1.6 oracle for colour balance: a cheap pointwise effect, so the
 /// CPU and GPU must agree to ≤ 2 fp16 ULP, the GPU is bit-stable (§2.4),
-/// and — the K-090 split's promise — a fully neutral balance is the
+/// and — the Grade split's promise — a fully neutral balance is the
 /// bit-exact identity on both paths.
 #[test]
 fn wgsl_colour_balance_matches_the_cpu_oracle() {
@@ -793,8 +793,8 @@ fn wgsl_saturation_matches_the_cpu_oracle() {
             },
         ),
         (
-            // K-135: above the old 200 % cap — the kernel does not clamp, it
-            // keeps extrapolating, so CPU/GPU parity must still hold here.
+            // Above the old 200 % cap — the kernel does not clamp, it keeps
+            // extrapolating, so CPU/GPU parity must still hold here.
             "heavy",
             SaturationOp {
                 saturation: 3.5,
@@ -832,7 +832,7 @@ fn wgsl_saturation_matches_the_cpu_oracle() {
     }
 }
 
-/// The §1.6 oracle for vibrancy (K-152): a cheap pointwise effect, so the CPU
+/// The §1.6 oracle for vibrancy: a cheap pointwise effect, so the CPU
 /// and GPU must agree to ≤ 2 fp16 ULP, the GPU is bit-stable (§2.4), and
 /// amount 0 is the bit-exact identity on both paths.
 #[test]
@@ -860,8 +860,8 @@ fn wgsl_vibrancy_matches_the_cpu_oracle() {
             },
         ),
         (
-            // K-135: above 100 % — the per-pixel factor keeps extrapolating,
-            // so CPU/GPU parity must still hold here.
+            // Above 100 % — the per-pixel factor keeps extrapolating, so
+            // CPU/GPU parity must still hold here.
             "heavy",
             VibrancyOp {
                 amount: 2.0,
@@ -1050,7 +1050,7 @@ fn wgsl_matte_key_matches_the_cpu_oracle() {
     }
 }
 
-/// **The §1.6 oracle for the Matte key's spatial controls** (K-546): Screen
+/// **The §1.6 oracle for the Matte key's spatial controls**: Screen
 /// pre-blur, shrink/grow, softness, despot black/white and the two garbage
 /// masks agree with the CPU reference, one control at a time and then all at
 /// once, and the GPU is bit-stable (§2.4).
@@ -1148,7 +1148,7 @@ fn wgsl_matte_key_spatial_matches_the_cpu_oracle() {
     };
 
     // Two real masks off the mask model, flattened exactly as the carriage
-    // flattens them (K-408): a rectangle over the left half to hold in, and one
+    // flattens them: a rectangle over the left half to hold in, and one
     // over the top-right corner to cut out. The feather and expansion are set on
     // the polyline directly, which is where `mask_path_at` puts a mask's own.
     let rect = |x: f64, y: f64, rw: f64, rh: f64, feather: f32, expansion: f32| {
@@ -1356,8 +1356,8 @@ fn wgsl_vignette_matches_the_cpu_oracle() {
             },
         ),
         (
-            // K-135: Softness > 1 is a legal, wider feather — the kernel does
-            // not clamp it to 1, so CPU/GPU parity must hold for it too.
+            // Softness > 1 is a legal, wider feather — the kernel does not
+            // clamp it to 1, so CPU/GPU parity must hold for it too.
             "wide-feather",
             VignetteOp {
                 amount: 0.9,
@@ -1500,7 +1500,7 @@ fn wgsl_exposure_matches_the_cpu_oracle() {
 /// so CPU and GPU must agree to ≤ 2 fp16 ULP, the GPU is bit-stable, and
 /// temperature 0 (gains `(1.0, 1.0)`) or Mix 0 is the bit-exact identity on
 /// both paths. The gains are the host-computed `max(0, 1 ± 0.75·k)` for `k =
-/// temperature / 100` (K-135), so the CPU and kernel multiply by identical
+/// temperature / 100`, so the CPU and kernel multiply by identical
 /// numbers.
 /// The corpus is seeded with partial-alpha pixels too — unlike Contrast the
 /// multiply commutes with premultiplied alpha (no unpremultiply wrap), and
@@ -1532,9 +1532,9 @@ fn wgsl_temperature_matches_the_cpu_oracle() {
         img[i + 2] = q(rgb[2] * a);
         img[i + 3] = q(*a);
     }
-    // Host-compute the gains exactly as the resolve step does (K-135: the
-    // stronger ±0.75·k gain, k clamped to ±2, gains floored at 0), over a
-    // spread that reaches the new ±150/±200 extremes and the blue-gain floor.
+    // Host-compute the gains exactly as the resolve step does (the stronger
+    // ±0.75·k gain, k clamped to ±2, gains floored at 0), over a spread that
+    // reaches the new ±150/±200 extremes and the blue-gain floor.
     let gains = |temperature: f32| {
         let k = (temperature / 100.0).clamp(-2.0, 2.0);
         ((1.0 + 0.75 * k).max(0.0), (1.0 - 0.75 * k).max(0.0))
@@ -1873,7 +1873,7 @@ fn wgsl_hue_shift_matches_the_cpu_oracle() {
     let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
-    // K-136: both matrix branches — the constant-luminance rotation
+    // Both matrix branches — the constant-luminance rotation
     // (`preserve = true`, `hue_matrix`) and the plain-RGB spin
     // (`preserve = false`, `hue_matrix_rgb`) — feed the one matrix-general
     // kernel, so parity must hold for each.
@@ -1933,10 +1933,10 @@ fn wgsl_transform_matches_the_cpu_oracle() {
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     let centre = [w as f32 * 0.5, h as f32 * 0.5];
-    // The last column is the Edges policy (P3, K-145): the Transform effect
+    // The last column is the Edges policy (P3): the Transform effect
     // itself always passes 0, but Shake dispatches this same kernel with 1
     // (Repeat) and 2 (Mirror), so the oracle exercises all three here.
-    // The skew column is `[amount, axis]` (K-666); `NO_SKEW` is the pre-skew
+    // The skew column is `[amount, axis]`; `NO_SKEW` is the pre-skew
     // road, and the last two rows are the ones that lean.
     for (name, anchor, position, scale, rotation, skew, opacity, mix, edge) in [
         (
@@ -2074,7 +2074,7 @@ fn wgsl_transform_matches_the_cpu_oracle() {
 }
 
 /// One shake's resolved parameters, hand-built so the wobble is exactly what a
-/// test asks for (K-388).
+/// test asks for.
 ///
 /// A *resolved* wobble is whatever the seeded noise says, which is no way to
 /// sweep the kernel's border cases. `Shake::packed` builds each offset as
@@ -2118,7 +2118,7 @@ fn shake_bag(
 /// dispatches it, and the CPU reference walks the same affine. One-tap
 /// resample, so the cheap-class ≤ 2 fp16 ULP bound holds; the GPU is
 /// bit-stable (§2.4); the neutral wobble (zero offset, rotation and z
-/// shake) is the bit-exact passthrough. The Edges control (P3, K-145) is
+/// shake) is the bit-exact passthrough. The Edges control (P3) is
 /// swept across Transparent / Repeat / Mirror so the kernel's border
 /// handling is covered on both paths.
 #[test]
@@ -2155,7 +2155,7 @@ fn wgsl_shake_matches_the_cpu_oracle_through_the_transform_kernel() {
         // The exact `gpufx` mapping: the bag → `packed` → the shared affine →
         // transform op → the Transform kernel, carrying the Edges policy. The
         // wobble is read back out of the bag rather than reused from the case
-        // above, so the reassembly K-388 pins is under test too.
+        // above, so the reassembly is under test too.
         let Shaken::Plain {
             wobble,
             edge: packed_edge,
@@ -2207,7 +2207,7 @@ fn wgsl_shake_matches_the_cpu_oracle_through_the_transform_kernel() {
     }
 }
 
-/// The §1.6 oracle for the shake's own motion blur (docs/08 §3.4, T18/K-165):
+/// The §1.6 oracle for the shake's own motion blur (docs/08 §3.4, T18):
 /// the `fx_shake_mb` kernel averages the wobble resampled at its motion-blur
 /// sub-frames, and must agree with `cpu::transform_average` (reached through
 /// `cpu::apply` on a `Resolved::Shake` carrying the sub-frames). The sub-frames
@@ -2392,7 +2392,7 @@ fn wgsl_glow_matches_the_cpu_oracle() {
     let img = corpus(w, h);
     for (name, radius, threshold, knee, intensity, tint, mix) in [
         (
-            // The schema default threshold is now 0.8 (K-135/FX-16); radius
+            // The schema default threshold is now 0.8 (FX-16); radius
             // here is already raster px (GlowOp is post-resolve), so the
             // %-diag → px@comp change lives in the resolve step, not here.
             "default",
@@ -2457,11 +2457,11 @@ fn wgsl_glow_matches_the_cpu_oracle() {
     }
 }
 
-/// The §1.6 oracle for Block glitch (docs/08 §3.12, split out by K-107):
-/// WGSL agrees with the CPU reference across intensity, seed, tick and
-/// the full parameter set, and is bit-stable (§2.4). Mirrors the old
-/// combined Glitch oracle's structure — same maths, just without the
-/// scanline section and its toggle. The per-block hash is exact integer
+/// The §1.6 oracle for Block glitch (docs/08 §3.12, split out of the old
+/// combined Glitch): WGSL agrees with the CPU reference across intensity,
+/// seed, tick and the full parameter set, and is bit-stable (§2.4). Mirrors
+/// that old oracle's structure — same maths, just without the scanline
+/// section and its toggle. The per-block hash is exact integer
 /// maths on both sides (`splitmix32`), so the bound stays as tight as
 /// the other hash/tap-based kernels; intensity 0 is asserted bit-exact
 /// against the untouched corpus regardless of Mix, matching the CPU
@@ -2572,12 +2572,12 @@ fn wgsl_block_glitch_matches_the_cpu_oracle() {
     }
 }
 
-/// The §1.6 oracle for Scanlines (docs/08 §3.12, split out by K-107; single
-/// Intensity since FX-13/K-147): WGSL agrees with the CPU reference across
-/// intensity, period, roll and interlace, and is bit-stable (§2.4). Intensity
-/// is now the sole darken dial (dark lines reach black at 1). Intensity 0 is
-/// asserted bit-exact against the untouched corpus regardless of Mix,
-/// matching the CPU reference's early return.
+/// The §1.6 oracle for Scanlines (docs/08 §3.12, split out of the old
+/// Glitch; single Intensity since FX-13): WGSL agrees with the CPU reference
+/// across intensity, period, roll and interlace, and is bit-stable (§2.4).
+/// Intensity is now the sole darken dial (dark lines reach black at 1).
+/// Intensity 0 is asserted bit-exact against the untouched corpus regardless
+/// of Mix, matching the CPU reference's early return.
 #[test]
 fn wgsl_scanlines_matches_the_cpu_oracle() {
     let Some(ctx) = crate::test_support::lease() else {
@@ -2727,9 +2727,9 @@ fn wgsl_radial_blur_matches_the_cpu_oracle() {
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     for edge in [0u32, 1, 2] {
-        // Centres are raster pixels since K-558 (px@comp, resolved to this
-        // raster): the middle of the 32x24 corpus, and a point three tenths
-        // across and seven tenths down it.
+        // Centres are raster pixels (px@comp, resolved to this raster): the
+        // middle of the 32x24 corpus, and a point three tenths across and
+        // seven tenths down it.
         for (centre, amount, spin, mix) in [
             ([16.0f32, 12.0f32], 6.0f32, true, 1.0f32),
             ([16.0, 12.0], 6.0, false, 1.0),
@@ -2854,7 +2854,7 @@ fn adjust_blend_lerps_by_coverage_times_opacity() {
     );
 }
 
-/// The §1.6 oracle for the generic Matte dissolve (K-395, docs/08 §2.6):
+/// The §1.6 oracle for the generic Matte dissolve (docs/08 §2.6):
 /// `fx_matte_mix.wgsl` against `lumit_core::fx::cpu::matte_mix`, on the corpus,
 /// both ways round the Invert switch.
 ///
@@ -2948,7 +2948,7 @@ fn wgsl_matte_mix_matches_the_cpu_oracle() {
     }
 }
 
-/// The §1.6 oracle for the seam's matte preparation (K-425, docs/08 §2.6):
+/// The §1.6 oracle for the seam's matte preparation (docs/08 §2.6):
 /// `fx_matte_prepare.wgsl` against `lumit_core::fx::cpu::matte_prepare`, on
 /// every channel, both ways round Invert. The pass is pointwise arithmetic —
 /// a channel pick, a clamp, a subtraction — so the bound is the fp16 store
@@ -3008,7 +3008,7 @@ fn wgsl_matte_prepare_matches_the_cpu_oracle() {
     }
 }
 
-/// **Invert is applied exactly once** (K-425). The three kernels that used to
+/// **Invert is applied exactly once**. The three kernels that used to
 /// invert their own matte — Gaussian blur, Glow, Turbulent displace — now read
 /// it as it arrives, so a matte the seam has inverted drives them the other
 /// way round, and a matte it has not is read straight. The proof is the
@@ -3063,7 +3063,7 @@ fn the_seam_inverts_the_matte_once_and_the_kernel_not_again() {
     );
 }
 
-/// The §1.6 oracle for the seam's Blend and Mix (K-425, docs/08 §1.5):
+/// The §1.6 oracle for the seam's Blend and Mix (docs/08 §1.5):
 /// `fx_blend_mix.wgsl` against `lumit_core::fx::cpu::blend_mix`, across every
 /// layer blend mode on a small picture, at full and partial Mix.
 ///
@@ -3143,7 +3143,7 @@ fn wgsl_blend_mix_matches_the_cpu_oracle_on_every_mode() {
 }
 
 /// The §1.6 oracle for Echo (docs/08 §3.13; blend modes + 16-echo cap since
-/// FX-17/K-149): the GPU chain (an `echo_accumulate` per tap plus a final
+/// FX-17): the GPU chain (an `echo_accumulate` per tap plus a final
 /// `echo_mix`) matches `lumit_core::fx::cpu::echo` across every combine mode.
 /// Each accumulate stores an fp16 intermediate where the CPU keeps f32, so a
 /// two-tap sum can drift a little past the pointwise ≤2 ULP — the historical
@@ -3202,7 +3202,7 @@ fn wgsl_echo_matches_the_cpu_oracle() {
         (two_tap(0.6, 0.3), 0u32, 1.0f32, 4i32),
         (two_tap(0.7, 0.4), 1, 0.8, 4),
         (two_tap(0.9, 0.5), 2, 1.0, 4),
-        // The blend modes (FX-17/K-149, T21), single-tap, ≤8 ULP: Screen,
+        // The blend modes (FX-17, T21), single-tap, ≤8 ULP: Screen,
         // Multiply, Overlay, Soft light, Hard light, Lighten, Darken,
         // Difference, Exclusion, Subtract. (Divide is checked separately below,
         // with a neighbour floored away from zero.)
@@ -3501,8 +3501,8 @@ fn wgsl_motion_blur_matches_the_cpu_oracle() {
     );
 }
 
-/// The §1.6 oracle for Datamosh (docs/08 §3.12, K-104; its own effect
-/// since K-107; reworked to a flow-driven melt by K-164/T19): the GPU
+/// The §1.6 oracle for Datamosh (docs/08 §3.12, its own effect since the
+/// old Glitch split, reworked to a flow-driven melt by T19): the GPU
 /// streamline melt matches `lumit_core::fx::cpu::datamosh` given the same
 /// -1 neighbour and flow field, on a constant field and a varying one — the
 /// same two shapes [`wgsl_motion_blur_matches_the_cpu_oracle`] exercises,
@@ -3550,7 +3550,7 @@ fn wgsl_datamosh_matches_the_cpu_oracle() {
     let varying = (vary_u, vary_v);
 
     // Displacement sets the reach, steps the tap count, bloom the accumulation;
-    // the > 1 intensity case exercises the open ceiling (K-135), which mix()
+    // the > 1 intensity case exercises the open ceiling, which mix()
     // extrapolates past the moshed frame in both the CPU and GPU paths.
     for (field, intensity, displacement, bloom, steps, name) in [
         (
@@ -3630,7 +3630,7 @@ fn build_lut(size: usize, f: impl Fn([f32; 3]) -> [f32; 3]) -> lumit_core::lut::
     build_lut_over(size, [0.0; 3], [1.0; 3], f)
 }
 
-/// The same, over an explicit `DOMAIN_MIN`/`DOMAIN_MAX` (K-271): the grid
+/// The same, over an explicit `DOMAIN_MIN`/`DOMAIN_MAX`: the grid
 /// points are the domain's own even spacing, so a cube built here says the
 /// same thing as one exported by a grading tool that declares a domain.
 fn build_lut_over(
@@ -3666,8 +3666,8 @@ fn build_lut_over(
 /// several cubes (identity, a per-channel gamma, an R/B swap). A cheap
 /// pointwise effect, so CPU and GPU agree to ≤ 2 fp16 ULP; the GPU is
 /// bit-stable (§2.4); Mix 0 is the bit-exact input; every **Input space**
-/// (K-543) is covered, and Linear is the case list's own default so a
-/// transfer leaking into it would fail the same comparison; and the identity cube
+/// is covered, and Linear is the case list's own default so a transfer
+/// leaking into it would fail the same comparison; and the identity cube
 /// round-trips every in-domain pixel to itself (a strong end-to-end check
 /// that the red-fastest indexing, the domain scale and the premult handling
 /// are all right — if it did not, one of those three is wrong).
@@ -3730,7 +3730,7 @@ fn wgsl_lut_matches_the_cpu_oracle() {
     // A non-separable swap of red and blue: out = [b, g, r].
     let swap = build_lut(2, |c| [c[2], c[1], c[0]]);
 
-    // A cube over a NON-DEFAULT domain (K-271): the shipped shader assumed
+    // A cube over a NON-DEFAULT domain: the shipped shader assumed
     // 0..1 and skipped the `(c - lo) / (hi - lo)` remap the CPU applies, so a
     // cube like this rendered silently wrong on the GPU while the oracle was
     // right. Asymmetric per channel, and one axis deliberately narrower than
@@ -3754,7 +3754,7 @@ fn wgsl_lut_matches_the_cpu_oracle() {
         ("domained-full", &domained, 1.0, LutSpace::Linear),
         ("domained-mixed", &domained, 0.5, LutSpace::Linear),
         ("zero-span-domain", &zero_span, 1.0, LutSpace::Linear),
-        // Input space (K-543): the picture converts into the space the cube was
+        // Input space: the picture converts into the space the cube was
         // authored for, the table applies, the result converts back. Every case
         // runs against the same pixels as its Linear sibling, so a shader that
         // dropped or mis-ordered a transfer misses the oracle rather than
@@ -3963,7 +3963,7 @@ fn dof_defaults() -> lumit_core::fx::cpu::DofParams {
 /// focus, aperture, aperture *shape*, tonal and Display settings.
 ///
 /// The oracle is the shipping CPU reference itself, not a second copy of the
-/// maths written for the test (K-019): one function, two callers, so a change
+/// maths written for the test: one function, two callers, so a change
 /// to the kernel that the reference does not follow shows up here rather than in
 /// a render. A tap-summing gather like Motion blur, reading exact (r32float)
 /// depth and the same fp16 source, so it holds to the cheap-class ≤ 2 fp16 ULP
@@ -4077,9 +4077,8 @@ fn wgsl_dof_matches_the_cpu_oracle() {
             },
         ),
         (
-            // Both views answer to Gamma, and answer to it the same way
-            // (K-615) — so the twin has to rescale the depth axis where the
-            // oracle does.
+            // Both views answer to Gamma, and answer to it the same way, so
+            // the twin has to rescale the depth axis where the oracle does.
             "depth map squeezed",
             lumit_core::fx::cpu::DofParams {
                 display: 1,
@@ -4278,17 +4277,17 @@ fn max_blades_matches_the_core_constant() {
 }
 
 // ---------------------------------------------------------------------------
-// Lens flare (docs/08 §3.27, docs/impl/lens-flare.md §8, K-256): the staged
+// Lens flare (docs/08 §3.27, docs/impl/lens-flare.md §8): the staged
 // oracle's GPU half.
 // ---------------------------------------------------------------------------
 
 /// The documented drop-on defaults (docs/08 §3.27) as a resolved bundle.
 fn flare_params() -> lumit_core::fx::lens_flare::LensFlareParams {
     lumit_core::fx::lens_flare::LensFlareParams {
-        // Every element left as the lens file describes it (K-371).
+        // Every element left as the lens file describes it.
         coating_elements: [lumit_core::fx::lens_flare::COATING_AS_FILE;
             lumit_core::fx::lens_flare::MAX_COATING_ELEMENTS],
-        // Raster pixels of a 192×108 probe framing (K-260).
+        // Raster pixels of a 192×108 probe framing.
         light: [63.4, 32.4],
         // A point source, as the effect has always defaulted to, and no
         // comp lights — Manual mode never reads them.
@@ -4304,8 +4303,8 @@ fn flare_params() -> lumit_core::fx::lens_flare::LensFlareParams {
         roundness: 0.15,
         aperture_softness: 0.05,
         ghost_intensity: 1.0,
-        // px@comp since K-558, and half a pixel rounds to the no-blur this
-        // fixture has always rendered.
+        // px@comp, and half a pixel rounds to the no-blur this fixture has
+        // always rendered.
         ghost_softness: 0.5,
         max_ghosts: 10,
         dispersion: 1.0,
@@ -4348,7 +4347,7 @@ fn flare_op(p: &lumit_core::fx::lens_flare::LensFlareParams, w: u32, h: u32) -> 
     LensFlareOp {
         light_frac: [p.light[0] / w.max(1) as f32, p.light[1] / h as f32],
         // One entry per light, extent and all, exactly as `fxops` builds it
-        // for the production path (K-367).
+        // for the production path.
         manual_lights: lf::manual_light(p, w, h)
             .iter()
             .map(|l| {
@@ -4392,7 +4391,7 @@ fn flare_op(p: &lumit_core::fx::lens_flare::LensFlareParams, w: u32, h: u32) -> 
     }
 }
 
-/// The fxops frame-probe closure (K-267), mirrored for the tests: the GPU
+/// The fxops frame-probe closure, mirrored for the tests: the GPU
 /// hands back its cached bake's tables and this runs the one lumit-core
 /// probe both twins share, at the op's light direction.
 fn flare_probe(
@@ -4460,11 +4459,11 @@ fn flare_bake_data(p: &lumit_core::fx::lens_flare::LensFlareParams) -> FlareBake
 }
 
 /// **The fixed-point accumulator's scale is spelled twice, and its ceiling is
-/// far above any frame** (K-375).
+/// far above any frame**.
 ///
 /// The deposit sums in fixed point because integer addition is associative and
-/// a float scatter is not — the same document has to render the same bytes
-/// (K-353). That buys determinism at the cost of a ceiling: above
+/// a float scatter is not — the same document has to render the same bytes.
+/// That buys determinism at the cost of a ceiling: above
 /// `ACCUM_CEILING` a channel's u32 wraps, and it wraps rather than saturates,
 /// because detecting the overflow would need the compare-and-swap whose order
 /// dependence this design exists to avoid. So the margin is the safety, and
@@ -4481,7 +4480,7 @@ fn lens_flare_accumulator_scale_matches_the_shader_and_clears_any_real_frame() {
         ((u32::MAX as f32 / ACCUM_SCALE) - ACCUM_CEILING).abs() < 0.01,
         "the ceiling is the scale's own consequence"
     );
-    // The K-380 pyramid's two spellings: the level-changeover span and the
+    // The deposit pyramid's two spellings: the level-changeover span and the
     // uniform's level-table capacity.
     assert!(
         src.contains(&format!(
@@ -4521,7 +4520,7 @@ fn lens_flare_accumulator_scale_matches_the_shader_and_clears_any_real_frame() {
 }
 
 /// The reflectance table's grid is spelled out twice — once in lumit-core,
-/// which bakes it, once in the WGSL that reads it (K-364) — because the
+/// which bakes it, once in the WGSL that reads it — because the
 /// shader cannot import a Rust constant. A drift would silently index the
 /// wrong wavelength for every ray, so the shader source is checked against
 /// the constants it mirrors.
@@ -4540,7 +4539,7 @@ fn lens_flare_wgsl_spectral_constants_match_lumit_core() {
             "the trace shader must declare `{want}`"
         );
     }
-    // The two splat constants (K-366) are spelled twice for the same reason:
+    // The two splat constants are spelled twice for the same reason:
     // a drift in the anti-alias floor or the density cap changes what every
     // ray deposits, so the GPU would stop being the CPU reference's twin in
     // a way only the fold tolerances would show.
@@ -4554,7 +4553,7 @@ fn lens_flare_wgsl_spectral_constants_match_lumit_core() {
             "the trace shader must declare `{want}`"
         );
     }
-    // The source-integration irrationals (K-367). These decide WHERE in a
+    // The source-integration irrationals. These decide WHERE in a
     // source each ray takes its light from, so a drift of one bit would give
     // the GPU a different source integral from the CPU reference on every
     // area light — parsed and compared as bits rather than as text, because
@@ -4582,7 +4581,7 @@ fn lens_flare_wgsl_spectral_constants_match_lumit_core() {
     }
 }
 
-/// The starburst atlas's slice count is spelled twice as well (K-365) —
+/// The starburst atlas's slice count is spelled twice as well —
 /// lumit-core bakes the slices and stacks them, the combine shader divides
 /// the atlas height by its own constant to find a slice's rows. A drift
 /// would read every light's starburst from the wrong part of the atlas, in
@@ -4596,7 +4595,7 @@ fn lens_flare_wgsl_starburst_fields_match_lumit_core() {
         src.contains(&want),
         "the combine shader must declare `{want}`"
     );
-    // The starburst stamp grid (K-367): a drift would smear an area source's
+    // The starburst stamp grid: a drift would smear an area source's
     // spike over a different span on the GPU than on the CPU reference, which
     // only the combine oracle's mean would notice and only faintly.
     for want in [
@@ -4612,7 +4611,7 @@ fn lens_flare_wgsl_starburst_fields_match_lumit_core() {
 
 // The adaptive grid formula is mirrored in this crate (lumit-gpu stays
 // lumit-core-free in production), so the two copies are pinned together —
-// a drift would make the GPU trace different rays from the oracle (K-262).
+// a drift would make the GPU trace different rays from the oracle.
 #[test]
 fn lens_flare_pair_grid_mirrors_lumit_core() {
     for base in [8u32, 24, 48, 64, 96, 144, 320] {
@@ -4626,7 +4625,7 @@ fn lens_flare_pair_grid_mirrors_lumit_core() {
             );
         }
     }
-    // The K-380 deposit pyramid's level table is mirrored the same way: a
+    // The deposit pyramid's level table is mirrored the same way: a
     // drift would put the two twins' levels at different offsets and every
     // coarse splat in the wrong place.
     for (w, h) in [
@@ -4644,7 +4643,7 @@ fn lens_flare_pair_grid_mirrors_lumit_core() {
             "w {w} h {h}"
         );
     }
-    // The K-267 padded-buffer dims are mirrored the same way.
+    // The padded-buffer dims are mirrored the same way.
     for (fw, fh) in [(960u32, 540u32), (480, 270), (1, 1), (1920, 1080)] {
         for (sq, sc) in [
             (1.0f32, 1.0f32),
@@ -4665,7 +4664,7 @@ fn lens_flare_pair_grid_mirrors_lumit_core() {
 }
 
 /// The frame's dispatch plan covers every combo exactly once, for every
-/// light, and no batch's scratch passes the budget (K-263).
+/// light, and no batch's scratch passes the budget.
 ///
 /// The budget is the whole point: a batch that overran it is the
 /// hundred-megabyte allocation a frame used to make at Ultra across eight
@@ -4694,7 +4693,7 @@ fn lens_flare_batches_cover_every_combo_within_the_scratch_budget() {
     for lights in [1u32, 8] {
         for table in &tables {
             // A mix of compact and frame-filling ghosts on a padded 1080p
-            // buffer, so the K-379 deposit cap is exercised alongside the
+            // buffer, so the deposit cap is exercised alongside the
             // scratch budget; the coverage invariants must hold under both.
             let costs: Vec<u64> = (0..table.len())
                 .map(|i| combo_deposit_cost(if i % 3 == 0 { 1.5 } else { 0.1 }, 2203.0))
@@ -4710,7 +4709,7 @@ fn lens_flare_batches_cover_every_combo_within_the_scratch_budget() {
                 let rays = u64::from(b.grid) * u64::from(b.grid);
                 let slots = u64::from(b.lights) * u64::from(b.combos);
                 assert_eq!(b.ray_bytes, slots * rays * RAY_BYTES);
-                // One splat per RAY since K-366, not one per quad.
+                // One splat per RAY, not one per quad.
                 assert_eq!(b.splat_bytes, slots * rays * SPLAT_BYTES);
                 assert!(
                     b.ray_bytes + b.splat_bytes <= SCRATCH_BYTE_BUDGET,
@@ -4720,7 +4719,7 @@ fn lens_flare_batches_cover_every_combo_within_the_scratch_budget() {
                     b.lights,
                     b.ray_bytes + b.splat_bytes
                 );
-                // The K-379 bound: no batch asks for more than about one
+                // The deposit bound: no batch asks for more than about one
                 // submission of deposit work, down to the one-slot floor.
                 assert!(
                     b.deposit_px(&costs) <= STEPS_PER_SUBMIT || (b.combos == 1 && b.lights == 1),
@@ -4750,7 +4749,7 @@ fn lens_flare_batches_cover_every_combo_within_the_scratch_budget() {
 }
 
 /// Render one flare frame through the REAL GPU pipeline and write it as a
-/// tone-mapped PPM for eyeballing — the harness behind the K-264 artefact
+/// tone-mapped PPM for eyeballing — the harness behind the artefact
 /// work, kept because "does it look right" is the one question no numeric
 /// bound in this file answers. `#[ignore]`d; run by hand:
 ///
@@ -4896,7 +4895,7 @@ fn lens_flare_frame_cost() {
 }
 
 /// The Ghost blur agrees with the CPU reference at a radius wide enough to
-/// span several of the line cache's tiles (K-263).
+/// span several of the line cache's tiles.
 ///
 /// The frame oracle cannot cover this: its small test frame puts the default
 /// Ghost softness at a radius of zero, so the blur is skipped entirely. This
@@ -4916,7 +4915,7 @@ fn wgsl_lens_flare_ghost_blur_matches_the_cpu_reference() {
     let (w, h) = (768u32, 432u32);
     let p = lf::LensFlareParams {
         light: [380.0, 130.0],
-        // px@comp since K-558: the old 2 % of this frame's diagonal, which is
+        // px@comp: the old 2 % of this frame's diagonal, which is
         // the radius in the tens of pixels the tile cache is here to prove.
         ghost_softness: 18.0,
         max_ghosts: 3,
@@ -4984,7 +4983,7 @@ fn wgsl_lens_flare_ghost_blur_matches_the_cpu_reference() {
 }
 
 /// A heavy frame is handed to the card in several submissions, and a light
-/// one in exactly one (K-263).
+/// one in exactly one.
 ///
 /// This is the guard against the failure the owner hit: a submission long
 /// enough for the operating system's watchdog to kill does not cost a frame,
@@ -5032,7 +5031,7 @@ fn lens_flare_splits_a_heavy_frame_into_several_submissions() {
         "a light frame should submit once"
     );
 
-    // The K-379 case the trace steps cannot see: a few combos of coarse
+    // The deposit case the trace steps cannot see: a few combos of coarse
     // grid whose ghosts FILL a 1080p flare buffer. The trace is a rounding
     // error — 24 combos × 32² rays — but the deposit is nine times the
     // frame per combo, seconds of atomic scatter, and it was exactly this
@@ -5049,7 +5048,7 @@ fn lens_flare_splits_a_heavy_frame_into_several_submissions() {
 
 /// A deferred bake really is made beside the frame: the frame that asked for
 /// a lens it does not hold draws the lens before it, the bake lands on the
-/// bake thread, and the frame after it draws the new one (K-350).
+/// bake thread, and the frame after it draws the new one.
 ///
 /// The picture is not what this checks — a card is needed for that, and the
 /// oracle tests above do it. What it checks is the part that is pure
@@ -5121,7 +5120,7 @@ fn lens_flare_deferred_bakes_answer_with_the_previous_lens_then_the_new_one() {
         after_exact,
         "asking for a lens that is not held queues its bake, and says so"
     );
-    // And says which frame it was (K-431): this one drew the first lens under
+    // And says which frame it was: this one drew the first lens under
     // the second one's name, so it is the one frame nobody may bank.
     assert_eq!(
         fx.flare_substitutions(),
@@ -5183,13 +5182,13 @@ fn lens_flare_deferred_bakes_answer_with_the_previous_lens_then_the_new_one() {
     assert_eq!(
         fx.flare_substitutions(),
         stood_in,
-        "and stands nothing in, so the frame is one to keep (K-431)"
+        "and stands nothing in, so the frame is one to keep"
     );
 }
 
 /// Deferring changes when a bake is made, never what it is: the same key
 /// gives the same bake either way (docs/impl/lens-flare.md §5 — the bake is
-/// pure, and K-350 must not make it less so).
+/// pure, and deferring must not make it less so).
 #[test]
 fn lens_flare_a_deferred_bake_is_the_same_bake() {
     use lumit_core::fx::lens_flare as lf;
@@ -5215,7 +5214,7 @@ fn lens_flare_a_deferred_bake_is_the_same_bake() {
 }
 
 /// The bake cache keeps its most recent entries and drops the oldest — it
-/// does not empty itself (K-263). Emptying is what made trying lenses
+/// does not empty itself. Emptying is what made trying lenses
 /// quadratic: every overflow threw away a full cap's worth of bakes, and a
 /// bake is the effect's one slow, blocking step.
 #[test]
@@ -5239,7 +5238,7 @@ fn lens_flare_bake_cache_evicts_the_oldest_not_everything() {
 }
 
 /// Impl note §8.5: the WGSL trace agrees with the CPU trace corner-for-
-/// corner (K-261 splat model): landing positions at a mean/percentile pixel
+/// corner (the splat model): landing positions at a mean/percentile pixel
 /// bound, weights at a relative bound, with ≥ 99% live/dead agreement,
 /// across two lenses and two light positions. Not ULP-exact — GPU
 /// transcendentals are not correctly rounded (the note's stated reason).
@@ -5252,7 +5251,7 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
     let fx = ctx.fx();
     use lumit_core::fx::lens_flare as lf;
     let (w, h) = (192u32, 108u32);
-    // Lens 17 (the Zeiss Biotar) carries the FOUR-BOUNCE phases (K-368):
+    // Lens 17 (the Zeiss Biotar) carries the FOUR-BOUNCE phases:
     // its two-bounce family runs out at rank 45, so a deep enough combo
     // window reaches paths the extra two phases actually walk. The other
     // two lenses rank no four-bounce path anywhere near the top and check
@@ -5283,7 +5282,7 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
             let (grid, lambda_count, _) = lf::quality_ladder(p.quality);
             let bands = lf::spectral_bands(lambda_count, p.dispersion);
             let mut combos = Vec::new();
-            // Which ranked path each combo came from — the K-369 ring slice
+            // Which ranked path each combo came from — the ring slice
             // is a property of the path, not of the band.
             let mut pair_of = Vec::new();
             'outer: for (pi, &pair) in baked.pairs.iter().take(p.max_ghosts as usize).enumerate() {
@@ -5308,10 +5307,10 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
             let mut mismatched_liveness = 0u32;
             let mut total = 0u32;
             let mut live = 0u32;
-            // Rays compared on a four-bounce path (K-368): the phases the
+            // Rays compared on a four-bounce path: the phases the
             // other two lenses never reach.
             let mut four_live = 0u32;
-            // Rays compared on a path whose iris mask is a K-369 ring slice.
+            // Rays compared on a path whose iris mask is a ring slice.
             let mut ringed_live = 0u32;
             let mut sum_pos = 0.0f32;
             let mut pos_errs: Vec<f32> = Vec::new();
@@ -5327,14 +5326,14 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
                         let g1 = (grid.max(2) - 1) as f32;
                         let u = (rx as f32 / g1) * 2.0 - 1.0;
                         let v = (ry as f32 / g1) * 2.0 - 1.0;
-                        // A masked-out corner traces with weight 0 since
-                        // K-264 (geometry survives the iris; see cpu_flare)
-                        // — except far outside the iris, where no cell can
-                        // hold light and both twins skip the trace.
+                        // A masked-out corner traces with weight 0 (geometry
+                        // survives the iris; see cpu_flare) — except far
+                        // outside the iris, where no cell can hold light and
+                        // both twins skip the trace.
                         let g1f = (grid.max(2) - 1) as f32;
                         let lim = 1.0 + 1.5 * (2.0 / g1f);
                         // The iris mask with this ghost's own edge
-                        // diffraction on it (K-370) — the same call the
+                        // diffraction on it — the same call the
                         // shader makes, with the same Fresnel number and the
                         // same ray-grid step.
                         let fresnel = lf::ghost_fresnel_number(
@@ -5364,7 +5363,7 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
                             )
                             .map(|(pos, wt, rgb)| {
                                 // The op's bands carry Ghost intensity, the
-                                // reference's do not (K-364).
+                                // reference's do not.
                                 let e = p.ghost_intensity;
                                 (
                                     [pos[0] * st + w as f32 / 2.0, h as f32 / 2.0 - pos[1] * st],
@@ -5386,7 +5385,7 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
                                     mismatched_liveness += 1;
                                     continue;
                                 }
-                                // The spectral half (K-364): the ray's
+                                // The spectral half: the ray's
                                 // band-integrated energy, relative to its
                                 // own magnitude. This is what the eight
                                 // per-sub throughputs and the baked
@@ -5404,10 +5403,10 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
                                     worst_rgb = worst_rgb.max(rerr);
                                 }
                                 // Position agreement is claimed only for rays
-                                // CARRYING light. A K-264 virtual
-                                // continuation (a mount-absorbed miss) has
-                                // weight ~0 and its path may branch-flip on
-                                // a few-ULP difference at the miss boundary
+                                // CARRYING light. A virtual continuation
+                                // (a mount-absorbed miss) has weight ~0 and
+                                // its path may branch-flip on a few-ULP
+                                // difference at the miss boundary
                                 // — real geometry for the raster, no light,
                                 // and no meaningful "true" position to pin.
                                 let werr = (g[2] - wt).abs() / wt.max(2e-4);
@@ -5473,10 +5472,10 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
             assert!(live > 100, "too few live rays ({live}) to mean anything");
             // Without this the ring branch could be wrong in the shader and
             // every bound above would still pass, because nothing would have
-            // taken it (K-369).
+            // taken it.
             assert!(
                 ringed_live > 0,
-                "no ringed-mask ray was compared — the K-369 branch went unchecked"
+                "no ringed-mask ray was compared — the ring branch went unchecked"
             );
             if lens == 17 {
                 // Without this the extra phases could be wrong in the
@@ -5484,14 +5483,14 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
                 // nothing would have walked them.
                 assert!(
                     four_live > 0,
-                    "no four-bounce ray was compared — the K-368 phases went unchecked"
+                    "no four-bounce ray was compared — the extra phases went unchecked"
                 );
             }
         }
     }
 }
 
-/// **Sprite flare** (docs/08 §3.29, K-359): the WGSL agrees with the CPU
+/// **Sprite flare** (docs/08 §3.29): the WGSL agrees with the CPU
 /// reference, the neutral points pass through bit-exactly, and — the property
 /// the whole effect exists for — moving the light moves the flare *smoothly*,
 /// with no threshold to pop across.
@@ -5595,7 +5594,7 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
     }
 }
 
-/// **Light wrap** (docs/08 §3.28, K-358): the WGSL agrees with the CPU
+/// **Light wrap** (docs/08 §3.28): the WGSL agrees with the CPU
 /// reference, the neutral points pass the input through bit-exactly, and the
 /// wrap lands where it should — inside the foreground's edge, nowhere else.
 #[test]
@@ -5705,16 +5704,16 @@ fn wgsl_light_wrap_matches_the_cpu_oracle_and_stays_inside_the_edge() {
     }
 }
 
-/// **An area light flares like an area, not like a point** (K-355, K-367).
+/// **An area light flares like an area, not like a point**.
 ///
 /// Source size gives the light a real emitting area, and the flare of one is
-/// the integral of the point flares across it — which since K-367 every ray
-/// evaluates for itself rather than the pipeline running once per sample. So
-/// the picture must genuinely change — a wider source spreads its ghosts —
-/// while the total light it adds stays put, because the pupil grid averages
-/// over the source instead of adding lights to it. A source that grew brighter
-/// as it grew wider would be the obvious way to get this wrong, and is what
-/// the energy bound below catches.
+/// the integral of the point flares across it — which every ray evaluates for
+/// itself rather than the pipeline running once per sample. So the picture
+/// must genuinely change — a wider source spreads its ghosts — while the
+/// total light it adds stays put, because the pupil grid averages over the
+/// source instead of adding lights to it. A source that grew brighter as it
+/// grew wider would be the obvious way to get this wrong, and is what the
+/// energy bound below catches.
 #[test]
 fn an_area_source_spreads_its_flare_without_gaining_energy() {
     let Some(ctx) = crate::test_support::lease() else {
@@ -5774,7 +5773,7 @@ fn an_area_source_spreads_its_flare_without_gaining_energy() {
 }
 
 /// **The flare is bit-stable across repeated renders, in every shape of
-/// frame** (K-353, docs/14 determinism, impl/lens-flare.md §2.4).
+/// frame** (docs/14 determinism, impl/lens-flare.md §2.4).
 ///
 /// The shipped bit-stability check renders twice with one set of parameters.
 /// That was not enough to catch what was actually wrong: the flare's raster
@@ -6010,7 +6009,7 @@ fn wgsl_lens_flare_matches_the_cpu_frame_reference_and_neutrals() {
         assert_eq!(ngpu, img, "neutral point must be bit-exact");
     }
 
-    // The same bound with a real Source size (K-367). An area source is no
+    // The same bound with a real Source size. An area source is no
     // longer a list of point lights both twins can be handed: each ray works
     // out its own point of the emitting rectangle, on the CPU in
     // `source_jitter` and in the shader's own copy of it. If those two ever
@@ -6057,9 +6056,9 @@ fn wgsl_lens_flare_matches_the_cpu_frame_reference_and_neutrals() {
     );
 }
 
-/// K-267: an anamorphic squeeze below 1 renders into a PADDED flare buffer,
-/// so the widened field carries real flare where K-266's zero-outside tap
-/// showed black — and the padded pipeline still matches the CPU reference.
+/// An anamorphic squeeze below 1 renders into a PADDED flare buffer, so the
+/// widened field carries real flare where the old zero-outside tap showed
+/// black — and the padded pipeline still matches the CPU reference.
 /// Fails without the padding: the region past the base buffer's edge is
 /// exactly zero on the GPU, and the edge-energy floor below trips.
 #[test]
@@ -6203,7 +6202,7 @@ fn wgsl_lens_flare_padded_anamorphic_matches_and_fills_the_edge() {
     );
 }
 
-/// Matte mode (docs/08 §3.27, K-257): the GPU detection + per-light flare
+/// Matte mode (docs/08 §3.27): the GPU detection + per-light flare
 /// agrees with the CPU reference (detect_lights → cpu_flare → cpu_combine)
 /// at the frame bound, the detected flares actually render, and the shared
 /// constants the two crates must agree on are pinned.
@@ -6214,7 +6213,7 @@ fn wgsl_lens_flare_matte_mode_matches_the_cpu_reference() {
         lumit_core::fx::lens_flare::MAX_SOURCES
     );
     // The combine kernel's `flare_blend` implements exactly the menu
-    // lumit-core declares (K-289) — a mode added to one and not the other
+    // lumit-core declares — a mode added to one and not the other
     // would silently clamp to Divide.
     assert_eq!(
         crate::fx::lens_flare::BLEND_COUNT as usize,
@@ -6327,7 +6326,7 @@ fn wgsl_lens_flare_matte_mode_matches_the_cpu_reference() {
     let ngpu = readback_linear_f32(&ctx, &nout, w, h).unwrap();
     assert_eq!(ngpu, img, "matte mode without a matte must pass through");
 
-    // Source colour OFF with a warm Light tint (K-259): the GPU detection
+    // Source colour OFF with a warm Light tint: the GPU detection
     // must build the same lights the CPU does, and the frame must still
     // agree — this is the path where the matte says only *where*.
     let tinted = lf::LensFlareParams {
@@ -6376,7 +6375,7 @@ fn wgsl_lens_flare_matte_mode_matches_the_cpu_reference() {
         / t_cpu.len() as f32;
     assert!(t_mean < 2e-3, "tinted matte mean |Δ| {t_mean}");
 
-    // The Matte row's Invert (K-395), in the detect kernel: reading a matte
+    // The Matte row's Invert, in the detect kernel: reading a matte
     // inverted must be reading its complement straight, which is the WGSL
     // twin of the lumit-core assertion — and here it is checked on the
     // rendered frame, so a `1 − rgb` applied at one of the two loads and not
@@ -6408,7 +6407,7 @@ fn wgsl_lens_flare_matte_mode_matches_the_cpu_reference() {
     );
 }
 /// Render every bundled lens through the real GPU pipeline into one tiled
-/// montage (K-264) — the harness the curation was chosen with, kept because
+/// montage — the harness the curation was chosen with, kept because
 /// "do the twenty look different" is a question only eyes answer.
 /// `LUMIT_FLARE_DUMP` names the output PPM.
 #[test]
@@ -6467,7 +6466,7 @@ fn lens_flare_montage() {
     std::fs::write(std::env::var("LUMIT_FLARE_DUMP").unwrap(), ppm).unwrap();
 }
 
-/// The §1.6 oracle rule applied to the lighting pass (docs/06, K-361), which
+/// The §1.6 oracle rule applied to the lighting pass (docs/06), which
 /// is not an effect but is held to the same standard: the kernel must agree
 /// with `lumit_core::lighting::shade`, be bit-stable, and leave the picture
 /// untouched to the byte when nothing lights it.
@@ -6614,7 +6613,7 @@ fn alpha_corpus(w: u32, h: u32) -> Vec<f32> {
     img
 }
 
-/// The §1.6 oracle for Curves (docs/08 §3.30, K-412): a pointwise table
+/// The §1.6 oracle for Curves (docs/08 §3.30): a pointwise table
 /// lookup, so CPU and GPU must agree to ≤ 2 fp16 ULP, the GPU is bit-stable,
 /// and the identity curve set or Mix 0 is the bit-exact identity on both
 /// paths.
@@ -6623,7 +6622,7 @@ fn alpha_corpus(w: u32, h: u32) -> Vec<f32> {
 /// which is the point: the spline fit is host maths, and a test that fitted
 /// its own would prove the kernel agrees with the test rather than with the
 /// effect. What is left for the oracle to check is the lookup itself, which is
-/// exactly what K-412 wanted of the baking.
+/// exactly what the baking is for.
 #[test]
 fn wgsl_curves_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::curves::Curves;
@@ -6649,7 +6648,7 @@ fn wgsl_curves_matches_the_cpu_oracle() {
     let mut warm = neutral;
     warm.red = CurvePoints::sanitised(&[[0.0, 0.0], [0.5, 0.62], [1.0, 1.0]]);
     warm.blue = CurvePoints::sanitised(&[[0.0, 0.0], [0.5, 0.38], [1.0, 1.0]]);
-    // Alpha is its own channel now (K-412): a curve on it must move coverage
+    // Alpha is its own channel now: a curve on it must move coverage
     // and take the premultiplied colour with it, identically on both paths.
     let mut alpha = neutral;
     alpha.alpha = CurvePoints::sanitised(&[[0.0, 0.0], [0.5, 0.25], [1.0, 1.0]]);
@@ -7555,7 +7554,7 @@ fn wgsl_turbulent_displace_matches_the_cpu_oracle() {
     assert!(row_moved(unpinned), "an unpinned top edge must move");
 }
 
-/// **The matte scales the displacement** (K-395, docs/08 §3.38): the override
+/// **The matte scales the displacement** (docs/08 §3.38): the override
 /// half of Turbulent displace, and the claim that it is worth having.
 ///
 /// Parity first, at both Invert settings, because the matted path multiplies a
@@ -7622,7 +7621,7 @@ fn wgsl_matted_turbulent_displace_scales_the_displacement() {
     }
     let qramp: Vec<f32> = ramp.iter().map(|v| f16_to_f32(f16_bits(*v))).collect();
     let ramp_tex = upload_linear_f32(&ctx, &ramp, w, h);
-    // Invert arrives through the seam's prepare pass (K-425), both paths.
+    // Invert arrives through the seam's prepare pass, both paths.
     for invert in [false, true] {
         let p = base.packed();
         let mut qm = qramp.clone();
@@ -7710,10 +7709,10 @@ fn wgsl_tile_matches_the_cpu_oracle() {
     let tex = upload_linear_f32(&ctx, &img, w, h);
 
     // The shipped defaults, centred on this raster the way
-    // `instantiate_for_raster` centres them on a real comp (K-542). This is the
+    // `instantiate_for_raster` centres them on a real comp. This is the
     // identity, and the cases below build on it.
-    // The four sizes are px@comp since K-558, and the identity is one whole
-    // frame of *this* raster, which is what `instantiate_for_raster` writes.
+    // The four sizes are px@comp, and the identity is one whole frame of
+    // *this* raster, which is what `instantiate_for_raster` writes.
     let base = {
         let mut t = Tile::read(Params::EMPTY);
         t.tile_centre_x = 16.0;
@@ -7743,13 +7742,13 @@ fn wgsl_tile_matches_the_cpu_oracle() {
     let mut wide = tiled;
     wide.tile_width = w as f32 * 0.25;
     wide.tile_height = h as f32 * 2.0;
-    // The growing case (K-542): an output window wider than the frame writes a
+    // The growing case: an output window wider than the frame writes a
     // wider raster.
     let mut grown = tiled;
     grown.output_width = w as f32 * 2.0;
     grown.output_height = h as f32 * 1.5;
     // A tile cut from a quarter in, with a window wider than it: the window is
-    // centred on the tile centre (K-613), so the kernels have to agree about
+    // centred on the tile centre, so the kernels have to agree about
     // where it reaches on both sides.
     let mut off_centre = tiled;
     off_centre.tile_centre_x = w as f32 * 0.25;
@@ -7808,7 +7807,7 @@ fn wgsl_tile_matches_the_cpu_oracle() {
         eprintln!("tile {name}: {ow}x{oh}, worst {worst}");
         assert!(worst < 2e-3, "{name}: worst diff {worst}");
         match name {
-            // **The default is the identity, to the bit** (§1.2, K-542): a fresh
+            // **The default is the identity, to the bit** (§1.2): a fresh
             // Tile dropped on a layer must change nothing, and "nothing" here is
             // not "nothing you can see" — the short-circuit both kernels take
             // means the pixels are the same pixels.
@@ -7839,7 +7838,7 @@ fn wgsl_tile_matches_the_cpu_oracle() {
         "outside the output window must be transparent"
     );
 
-    // **Above 100 % the picture grows, and the margin is picture** (K-542).
+    // **Above 100 % the picture grows, and the margin is picture**.
     // The raster is Output width and height of the frame, the frame's own
     // window inside it is what the ungrown tiling produced — the growth adds,
     // it does not move anything — and the margin holds copies rather than the
@@ -8339,7 +8338,7 @@ fn wgsl_drop_shadow_matches_the_cpu_oracle() {
 /// Three claims beyond parity, because this effect's matte *is* its output.
 /// **The alpha becomes the matte's chosen channel**, exactly. **Invert reads it
 /// the other way round.** And **an unbound matte is the bit-exact identity** —
-/// the labelled no-op every layer-input effect follows (K-258).
+/// the labelled no-op every layer-input effect follows.
 #[test]
 fn wgsl_set_matte_matches_the_cpu_oracle() {
     let Some(ctx) = crate::test_support::lease() else {
@@ -8568,11 +8567,11 @@ fn wgsl_set_channels_matches_the_cpu_oracle() {
 /// The §1.6 oracle for Linear wipe (docs/08 §3.46), on the smooth corpus and by
 /// absolute difference.
 ///
-/// The metric is K-399's, extended one step. That entry's rule is about a kernel
-/// whose real output is a *sample position*; this kernel's real output is a
-/// *threshold on a position*, and it magnifies a last-bit disagreement the same
-/// way — the signed distance is a dot product, exactly the expression one path
-/// fuses into a multiply-add and the other does not, and dividing it by a
+/// The metric is the distort batch's, extended one step. That rule is about a
+/// kernel whose real output is a *sample position*; this kernel's real output
+/// is a *threshold on a position*, and it magnifies a last-bit disagreement the
+/// same way — the signed distance is a dot product, exactly the expression one
+/// path fuses into a multiply-add and the other does not, and dividing it by a
 /// feather narrower than a pixel turns a difference of 10⁻⁶ into a visible one
 /// at the edge. So the corpus has no step in it and the tolerance is stated in
 /// the picture.
@@ -8686,7 +8685,7 @@ fn wgsl_linear_wipe_matches_the_cpu_oracle() {
 
 /// The §1.6 oracle for Radial wipe (docs/08 §3.47), on the smooth corpus and by
 /// absolute difference — [`wgsl_linear_wipe_matches_the_cpu_oracle`]'s reasoning
-/// with an `atan2` in front of it (§3.42's admission, K-399).
+/// with an `atan2` in front of it (§3.42's admission).
 ///
 /// Four claims beyond parity: Completion 0 and 100 are the exact identity and
 /// the exactly empty frame; **Clockwise and Anticlockwise remove opposite sides**
@@ -9040,7 +9039,7 @@ fn wgsl_iris_wipe_matches_the_cpu_oracle() {
 /// The §1.6 oracle for Card wipe (docs/08 §3.72), on the smooth corpus and by
 /// absolute difference: this kernel's real output is a **sample position** taken
 /// through a projective divide, which is exactly the expression one path fuses
-/// into a multiply-add and the other does not (K-399, the distort batch's
+/// into a multiply-add and the other does not (the distort batch's
 /// metric).
 ///
 /// Five claims beyond parity, none of which a parity check could reach.
@@ -9068,7 +9067,7 @@ fn wgsl_card_wipe_matches_the_cpu_oracle() {
     let base = {
         let mut c = CardWipe::read(Params::EMPTY);
         c.seed = 12_345;
-        // Transition width is px@comp (K-558) and the declared default is half
+        // Transition width is px@comp and the declared default is half
         // a nominal 1080p frame, which on a 32-pixel corpus would clamp to the
         // whole frame and flatten the ramp this oracle exists to check. Half
         // of *this* raster is what the default means, so that is what it gets.
@@ -9076,7 +9075,7 @@ fn wgsl_card_wipe_matches_the_cpu_oracle() {
         c
     };
     let op_of = |c: CardWipe| {
-        // Transition width is px@comp (K-558), so `packed` takes the raster it
+        // Transition width is px@comp, so `packed` takes the raster it
         // is being drawn on to turn the band into a share of the frame.
         let p = c.packed(w as f32, h as f32);
         CardWipeOp {
@@ -9326,7 +9325,7 @@ fn wgsl_corner_pin_matches_the_cpu_oracle() {
 }
 
 /// The §1.6 oracle for Displacement map (docs/08 §3.49), and with it the claim
-/// that the K-395 override was worth taking: **the matte is the map**.
+/// that the matte override was worth taking: **the matte is the map**.
 ///
 /// Parity first, over every channel picker, both signs, all three edge policies
 /// and both Invert settings. Then three claims a passing parity check would not
@@ -9503,8 +9502,8 @@ fn wgsl_displacement_map_matches_the_cpu_oracle() {
 }
 
 /// The §1.6 oracle for Polar coordinates (docs/08 §3.50), on the smooth corpus
-/// and by absolute difference — §3.42's fourth note and K-399's rule: three
-/// transcendentals a pixel, none of them liftable host-side.
+/// and by absolute difference — §3.42's fourth note and the distort batch's
+/// rule: three transcendentals a pixel, none of them liftable host-side.
 ///
 /// Two claims beyond parity. **Interpolation 0 is the exact identity**, which is
 /// what makes it a morph rather than a dissolve. And **the two directions invert
@@ -9605,7 +9604,7 @@ fn wgsl_polar_coordinates_matches_the_cpu_oracle() {
 }
 
 /// The §1.6 oracle for Twirl (docs/08 §3.51), on the smooth corpus and by
-/// absolute difference — one sine and cosine a pixel, K-399's rule.
+/// absolute difference — one sine and cosine a pixel, the distort batch's rule.
 ///
 /// Three claims beyond parity. **Angle 0 and Radius 0 are the exact identity.**
 /// **The twirl stays inside its circle**: the frame's corners are bit-identical
@@ -9733,7 +9732,7 @@ fn wgsl_twirl_matches_the_cpu_oracle() {
 }
 
 /// The §1.6 oracle for Spherize (docs/08 §3.52), on the smooth corpus and by
-/// absolute difference — one arc sine or sine a pixel, K-399's rule.
+/// absolute difference — one arc sine or sine a pixel, the distort batch's rule.
 ///
 /// Three claims beyond parity. **Bulge 0 and Radius 0 are the exact identity.**
 /// **The ball stays inside its circle**, so the corners are untouched. And **the
@@ -9853,7 +9852,7 @@ fn wgsl_spherize_matches_the_cpu_oracle() {
 }
 
 /// The §1.6 oracle for Ripple (docs/08 §3.53), on the smooth corpus and by
-/// absolute difference — one sine and cosine a pixel, K-399's rule.
+/// absolute difference — one sine and cosine a pixel, the distort batch's rule.
 ///
 /// Three claims beyond parity. **Wave height 0 and Radius 0 are the exact
 /// identity.** **The rings stay inside their circle**, so the frame's corners
@@ -9969,7 +9968,7 @@ fn wgsl_ripple_matches_the_cpu_oracle() {
 }
 
 /// The §1.6 oracle for Wave warp (docs/08 §3.54), on the smooth corpus and by
-/// absolute difference — K-399's rule.
+/// absolute difference — the distort batch's rule.
 ///
 /// Three claims beyond parity. **Wave height 0 is the exact identity.** **Every
 /// wave type moves the picture**, so a shape that fell through to a constant
@@ -10084,8 +10083,8 @@ fn wgsl_wave_warp_matches_the_cpu_oracle() {
 }
 
 /// The §1.6 oracle for Bezier warp (docs/08 §3.55), on the smooth corpus and by
-/// absolute difference — K-399's rule, and a solver rather than a formula, so
-/// the two paths agree only if they take the same steps.
+/// absolute difference — the distort batch's rule, and a solver rather than a
+/// formula, so the two paths agree only if they take the same steps.
 ///
 /// Three claims beyond parity. **The default patch is the bit-exact identity**,
 /// which is what §3.55 decision 4's snap is for. **A bent patch actually
@@ -10177,11 +10176,11 @@ fn wgsl_bezier_warp_matches_the_cpu_oracle() {
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
         let worst = worst_diff(&cpu, &gpu);
         eprintln!("bezier_warp {name}: worst {worst}");
-        // K-399's metric with the wipes' step added: the patch's own boundary is
-        // a THRESHOLD on a solved position, so the handful of pixels sitting on
-        // it come out opaque on one path and transparent on the other. Away from
-        // it the two agree to a thousandth; the tolerance is the drop shadow's
-        // for the drop shadow's reason.
+        // The distort batch's metric with the wipes' step added: the patch's
+        // own boundary is a THRESHOLD on a solved position, so the handful of
+        // pixels sitting on it come out opaque on one path and transparent on
+        // the other. Away from it the two agree to a thousandth; the tolerance
+        // is the drop shadow's for the drop shadow's reason.
         assert!(worst < 2e-2, "{name}: worst diff {worst}");
         match name {
             "identity" | "mix-zero" => {
@@ -10219,7 +10218,7 @@ fn wgsl_bezier_warp_matches_the_cpu_oracle() {
 }
 
 /// The §1.6 oracle for Warp (docs/08 §3.56): all thirteen styles, on the smooth
-/// corpus and by absolute difference — K-399's rule.
+/// corpus and by absolute difference — the distort batch's rule.
 ///
 /// Two claims beyond parity. **Bend 0 with both distortions 0 is the bit-exact
 /// identity, for every style**, which is what building the sample from the
@@ -10339,13 +10338,13 @@ fn disc_corpus(w: u32, h: u32) -> Vec<f32> {
 /// The §1.6 oracle for Roughen edges (docs/08 §3.57), on a disc and by absolute
 /// difference.
 ///
-/// **K-399's metric, one step further again.** The wipes are a threshold on a
-/// position; this is a threshold on a *coverage* — the blurred alpha, which both
-/// paths compute with the shipped §3.8 gaussian and which the GPU stores as
-/// fp16. A last-bit difference there is multiplied by one over twice the cut's
-/// half-width, so the tolerance is the drop shadow's rather than the distort
-/// batch's, for the same reason: the two paths agree about the picture, and the
-/// picture is a cliff.
+/// **The distort batch's metric, one step further again.** The wipes are a
+/// threshold on a position; this is a threshold on a *coverage* — the blurred
+/// alpha, which both paths compute with the shipped §3.8 gaussian and which the
+/// GPU stores as fp16. A last-bit difference there is multiplied by one over
+/// twice the cut's half-width, so the tolerance is the drop shadow's rather
+/// than the distort batch's, for the same reason: the two paths agree about the
+/// picture, and the picture is a cliff.
 ///
 /// Three claims beyond parity. **Border 0 is the exact identity** (the host
 /// short-circuits, so this is checked on the CPU reference). **The chewing stays
@@ -10544,10 +10543,10 @@ fn wgsl_posterize_matches_the_cpu_oracle() {
 }
 
 /// The §1.6 oracle for Threshold (docs/08 §3.59). A threshold is exactly the
-/// shape K-399 warns about, and the floored half-width is the answer: the
-/// crossing is a smoothstep a thousandth of the range wide, so a last-bit
-/// disagreement about the luma moves the answer by a ten-thousandth rather
-/// than flipping a pixel from black to white.
+/// shape the distort batch warns about, and the floored half-width is the
+/// answer: the crossing is a smoothstep a thousandth of the range wide, so a
+/// last-bit disagreement about the luma moves the answer by a ten-thousandth
+/// rather than flipping a pixel from black to white.
 #[test]
 fn wgsl_threshold_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::threshold::Threshold;
@@ -10867,7 +10866,7 @@ fn wgsl_black_and_white_matches_the_cpu_oracle() {
 }
 
 /// The §1.6 oracle for Shadow highlight (docs/08 §3.63). Judged on **absolute
-/// difference, not fp16 ULP**, for the reason K-399 records: the answer is a
+/// difference, not fp16 ULP**, for the distort batch's reason: the answer is a
 /// gaussian's output read through a mask, and the shipped blur's two paths
 /// already agree only to a tolerance — which the mask then carries into the
 /// gain. The claims that matter are checked separately below.
@@ -11630,11 +11629,11 @@ fn wgsl_texturize_matches_the_cpu_oracle() {
 
 /// The §1.6 oracle for Broadcast safe (docs/08 §3.69).
 ///
-/// **K-399's rule, and the reason the kernel writes its luma out longhand.** Two
-/// of the four modes turn the amplitude into a *threshold on the alpha*, so a
-/// fused multiply-add taken by one path and not the other is a pixel keyed out
-/// on one and kept on the other — which is why this kernel is the only one in
-/// the family not to use `dot`.
+/// **The distort batch's rule, and the reason the kernel writes its luma out
+/// longhand.** Two of the four modes turn the amplitude into a *threshold on
+/// the alpha*, so a fused multiply-add taken by one path and not the other is a
+/// pixel keyed out on one and kept on the other — which is why this kernel is
+/// the only one in the family not to use `dot`.
 ///
 /// Four claims beyond parity: **a legal pixel is untouched** by both repair
 /// modes, **both repairs make an illegal frame legal**, **the two key modes are
@@ -11775,7 +11774,7 @@ fn the_lightning_segment_cap_matches_the_core() {
 
 /// The §1.6 oracle for Beam (docs/08 §3.73), on the smooth corpus and by
 /// absolute difference — the coverage is a *threshold on a distance*, which
-/// magnifies a fused multiply-add exactly as a sample position does (K-399).
+/// magnifies a fused multiply-add exactly as a sample position does.
 ///
 /// Three claims beyond parity: Time 0 is the exact identity; **the beam tapers**,
 /// so the lit width at the tail exceeds the lit width at the head; and **both
@@ -12043,7 +12042,7 @@ fn wgsl_lightning_matches_the_cpu_oracle() {
 }
 
 /// The §1.6 oracle for Radio waves (docs/08 §3.75), on the smooth corpus and by
-/// absolute difference — §3.71's `atan2` admission again (K-399).
+/// absolute difference — §3.71's `atan2` admission again.
 ///
 /// Four claims beyond parity: Time 0 is the exact identity; **there are several
 /// rings, not one**, which a single expanding shape could not produce; **a later
@@ -12459,7 +12458,7 @@ fn wgsl_add_grain_matches_the_cpu_oracle() {
     }
 }
 
-/// The uniform's piece array and the builder's agree (K-408, docs/08 §3.78).
+/// The uniform's piece array and the builder's agree (docs/08 §3.78).
 #[test]
 fn the_path_piece_cap_matches_the_core() {
     assert_eq!(
@@ -12470,7 +12469,7 @@ fn the_path_piece_cap_matches_the_core() {
 }
 
 /// A mask an effect can be pointed at: an ellipse, at the size the oracle
-/// corpus is (K-408). Closed, so it has an inside to fill.
+/// corpus is. Closed, so it has an inside to fill.
 fn oracle_ellipse(w: u32, h: u32) -> lumit_core::mask::MaskPolyline {
     let m = lumit_core::mask::Mask::ellipse(
         f64::from(w) * 0.5,
@@ -12507,7 +12506,7 @@ fn oracle_squiggle(w: u32, h: u32) -> lumit_core::mask::MaskPolyline {
 /// Stroke, §3.76's Mask/Path source) — one kernel, so one parity test, run over
 /// every shape the three consumers produce.
 ///
-/// By absolute difference on the smooth corpus, for Beam's reason (K-399): the
+/// By absolute difference on the smooth corpus, for Beam's reason: the
 /// coverage is a *threshold on a distance*, which magnifies a fused
 /// multiply-add exactly as a sample position does.
 ///
@@ -12604,7 +12603,7 @@ fn wgsl_path_draw_matches_the_cpu_oracle() {
     let mut revealed = brush;
     revealed.paint_style = 2;
 
-    // ---- Vegas on a path: the dashes it could not march before K-408.
+    // ---- Vegas on a path: the dashes it could not march before.
     let mut dashes = Vegas::read(Params::EMPTY);
     dashes.source = Vegas::SOURCE_MASK_PATH;
     dashes.segment_length = 14.0;
@@ -12743,7 +12742,7 @@ fn wgsl_path_draw_matches_the_cpu_oracle() {
 }
 
 // ---------------------------------------------------------------------------
-// The matte scales the amount (K-426, docs/08 §2.6): the blur, sharpen and
+// The matte scales the amount (docs/08 §2.6): the blur, sharpen and
 // colour claims.
 // ---------------------------------------------------------------------------
 
@@ -12757,7 +12756,7 @@ struct MatteClaim<'a> {
     /// The §1.6 oracle with a matte; an empty one is the unmatted path.
     cpu: &'a dyn Fn(&mut [f32], &[f32]),
     /// The unmatted oracle as it was before the claim — what an empty matte
-    /// must reproduce to the byte (K-258).
+    /// must reproduce to the byte.
     plain: &'a dyn Fn(&mut [f32]),
     /// The GPU pass, the matte bound or not.
     gpu: &'a dyn Fn(&wgpu::Texture, Option<&wgpu::Texture>) -> wgpu::Texture,
@@ -12766,7 +12765,7 @@ struct MatteClaim<'a> {
     tol: f32,
 }
 
-/// **Every claim is held to the same four facts** (K-426, K-258, §1.6).
+/// **Every claim is held to the same four facts** (§1.6).
 ///
 /// 1. Under a left-to-right ramp matte the WGSL kernel agrees with the CPU
 ///    oracle op-for-op, and is bit-stable run to run.
@@ -12923,8 +12922,7 @@ fn the_matte_scales_the_radial_blur_amount() {
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     for spin in [false, true] {
-        // Raster px since K-558: four tenths across the 32x24 corpus and six
-        // tenths down it.
+        // Raster px: four tenths across the 32x24 corpus and six tenths down it.
         let (centre, amount, edge, mix) = ([12.8f32, 14.4f32], 12.0f32, 1u32, 1.0f32);
         let op = RadialBlurOp {
             centre_px: centre,
@@ -13577,7 +13575,7 @@ fn the_matte_scales_the_threshold_level() {
     );
     // A black matte cuts at level 0: every lit pixel is above it, so the
     // picture goes white where it has any light at all — the far end of a cut
-    // that moves, and nothing a strength dissolve could produce (K-559).
+    // that moves, and nothing a strength dissolve could produce.
     let mut px = img.clone();
     let black: Vec<f32> = (0..(w * h) as usize)
         .flat_map(|_| [0.0, 0.0, 0.0, 1.0])
@@ -13595,7 +13593,7 @@ fn the_matte_scales_the_threshold_level() {
 }
 
 // ---------------------------------------------------------------------------
-// The matte scales the displacement (K-427, docs/08 §2.6): the distortion
+// The matte scales the displacement (docs/08 §2.6): the distortion
 // claims. Every one runs through `check_matte_claim`, so each is held to the
 // same four facts as the blur and colour claims — parity under a ramp matte,
 // the empty matte equal to the old function to the byte, a half matte that is
@@ -14456,7 +14454,7 @@ fn the_matte_scales_the_warp_bend() {
 }
 
 // ---------------------------------------------------------------------------
-// The matte scales the amount (K-428, docs/08 §2.6): the Generate and Stylise
+// The matte scales the amount (docs/08 §2.6): the Generate and Stylise
 // claims. Every one runs through `check_matte_claim`, so each is held to the
 // same four facts — parity under a ramp, bit-stability, an empty matte that IS
 // the pre-claim function, and a half matte that is NOT the generic dissolve.
@@ -15004,7 +15002,7 @@ fn the_matte_scales_the_texturize_relief() {
 }
 
 // ---------------------------------------------------------------------------
-// The matte scales the amount (K-429, docs/08 §2.6): the temporal and
+// The matte scales the amount (docs/08 §2.6): the temporal and
 // transition claims — Echo's Decay, both motion blurs' Shutter angle, and
 // every wipe's Completion.
 // ---------------------------------------------------------------------------
@@ -15140,7 +15138,7 @@ fn the_matte_scales_the_venetian_blinds_completion() {
 
 /// The Iris wipe has no Completion — **the radius is the transition** (§3.71) —
 /// so its matte scales that instead, which is the same sentence about the same
-/// thing (K-429). Beyond the four facts every claim is held to, one equality no
+/// thing. Beyond the four facts every claim is held to, one equality no
 /// dissolve can reach: a flat half matte on a radius-8 iris draws *exactly* the
 /// radius-4 picture, a genuinely smaller hole.
 #[test]
@@ -15266,7 +15264,7 @@ fn the_matte_scales_the_card_wipe_completion() {
     );
 }
 
-/// Echo's Decay, per pixel (K-429). Beyond the four facts, one equality a
+/// Echo's Decay, per pixel. Beyond the four facts, one equality a
 /// dissolve cannot reach: a flat half matte on decay 0.6 draws *exactly* the
 /// decay-0.3 trail — genuinely shorter ghosts, not a long trail faded back.
 #[test]
@@ -15350,7 +15348,7 @@ fn the_matte_scales_the_echo_decay() {
     );
 }
 
-/// Fast motion blur's Shutter angle, per pixel (K-429).
+/// Fast motion blur's Shutter angle, per pixel.
 #[test]
 fn the_matte_scales_the_fast_motion_blur_shutter() {
     use lumit_core::fx::{MbQuality, MbView};
@@ -15459,7 +15457,7 @@ fn the_matte_scales_the_fast_motion_blur_shutter() {
     );
 }
 
-/// **A Motion vectors layer stands in for the measured flow** (K-429, 7.48).
+/// **A Motion vectors layer stands in for the measured flow** (docs/08 §3.2).
 /// The layer's red and green are the per-pixel motion, centred at ½ and scaled
 /// by Vector scale; the GPU conversion is the op-for-op twin of
 /// `cpu::motion_vectors_field`, and the blur that follows is the same blur.
@@ -15537,7 +15535,7 @@ fn a_motion_vectors_layer_stands_in_for_the_measured_flow() {
     );
 }
 
-/// Accumulation motion blur's Shutter angle, per pixel (docs/08 §3.26, K-429).
+/// Accumulation motion blur's Shutter angle, per pixel (docs/08 §3.26).
 ///
 /// This one has no kernel of its own — it orchestrates a re-render — so the
 /// claim is checked on the combine that averages the sub-frame pictures. Three

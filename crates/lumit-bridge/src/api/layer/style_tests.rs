@@ -1,4 +1,4 @@
-//! Layer styles across the seam (K-706, docs/impl/layer-styles.md §5).
+//! Layer styles across the seam (docs/impl/layer-styles.md §5).
 //!
 //! **In plain terms.** A style is an effect instance in a second, order-locked
 //! list on the layer. The point of the bridge half is that saying so is enough:

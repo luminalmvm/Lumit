@@ -9,7 +9,7 @@ follows [01-GLOSSARY.md](01-GLOSSARY.md); architecture context is
 [13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md).
 
 A rule here beats convenience, beats performance micro-wins, and beats "it works on my
-machine". Exceptions require a decision entry in [02-DECISIONS.md](02-DECISIONS.md).
+machine".
 
 ---
 
@@ -30,7 +30,7 @@ machine". Exceptions require a decision entry in [02-DECISIONS.md](02-DECISIONS.
 | cpal callback body | Lock-free ring-buffer reads only; no allocation, no locks, no logging |
 
 - The UI thread MUST NOT evaluate any node, decode any frame, run any expression, perform
-  blocking IO, or wait on any render result (K-017). It reads latest-wins mailboxes.
+  blocking IO, or wait on any render result. It reads latest-wins mailboxes.
 - Workers MUST NOT touch the live document. They read the immutable snapshot their job was
   created with.
 
@@ -94,7 +94,7 @@ machine". Exceptions require a decision entry in [02-DECISIONS.md](02-DECISIONS.
   reaches pixels) anywhere in evaluation.
 - All randomness in effects and expressions is seeded from
   `(node_uuid, property, local_time, user_seed)`. `wiggle`/`seed_random` reproduce exactly
-  across runs on a given machine (K-305). No wall clock, no IO, no locale access in the
+  across runs on a given machine. No wall clock, no IO, no locale access in the
   expression runtime. Across platforms the target is as close as the hardware allows, not
   bit-identity: libm and the GPU both differ in the last bit, so promising it in the
   evaluator alone would be a promise the picture does not keep.
@@ -147,7 +147,7 @@ machine". Exceptions require a decision entry in [02-DECISIONS.md](02-DECISIONS.
 
 ## 6. Testing
 
-- **CPU oracle per effect (K-019):** every WGSL effect ships a CPU reference implementation;
+- **CPU oracle per effect:** every WGSL effect ships a CPU reference implementation;
   CI renders both against a corpus of inputs and asserts agreement within the effect's
   declared tolerance. Every effect declares one and [08-EFFECTS.md](08-EFFECTS.md) §1.6 owns
   the numbers; this document does not restate them. The CPU path is also the runtime fallback, so the
@@ -159,7 +159,7 @@ machine". Exceptions require a decision entry in [02-DECISIONS.md](02-DECISIONS.
   Dart graph-maths goldens).
 - **Property tests** (proptest) for retime maths per [04-RETIMING.md](04-RETIMING.md):
   integrate(speed) ↔ differentiate(map) round-trips, monotone-segment invariants, overrun
-  boundary behaviour (K-022: retime never moves edit points); for rational time (associativity,
+  boundary behaviour (retime never moves edit points); for rational time (associativity,
   no drift over hour-long sums); for the command journal (apply → invert → apply = identity).
 - **Fuzzing** (cargo-fuzz, in CI on a schedule): the `.lum` deserialiser and journal
   replayer (arbitrary bytes MUST produce a typed error, never a panic or hang) and the OFX
@@ -188,10 +188,10 @@ machine". Exceptions require a decision entry in [02-DECISIONS.md](02-DECISIONS.
   `#[repr(C)]` and layout tests.
 - **Public API docs:** every public item in engine crates has a doc comment; modules state
   their thread-role contract (§1.1) at the top. Doc examples compile (`cargo test --doc`).
-- **User-facing strings** go through the i18n table from day one (K-005); en-GB, sentence
+- **User-facing strings** go through the i18n table from day one; en-GB, sentence
   case, calm, no exclamation marks. No string literal shown to a user lives in code. The
   table is `flutter_ui/lib/l10n/app_en.arb`, reached as `l10n.<key>`, and translation
-  happens on the site's translation page (K-303, K-653) — every other `app_*.arb` is
+  happens on the site's translation page — every other `app_*.arb` is
   written by the ingest tool from what that page sends back, and is never hand-edited. A new string lands with an `@key` description saying where it appears; a
   label the *engine* sends gets an entry in `lib/l10n/engine_labels.dart` at the same time,
   which `test/l10n/engine_labels_test.dart` enforces against the Rust sources.
@@ -229,7 +229,7 @@ machine". Exceptions require a decision entry in [02-DECISIONS.md](02-DECISIONS.
 
 - New workspace dependencies require justification in the PR description: what it does, why
   not std/an existing dep, licence (GPLv3-compatible), maintenance signal. `cargo deny`
-  runs in CI over licences, advisories, wildcards and sources (K-272); `deny.toml` carries
+  runs in CI over licences, advisories, wildcards and sources; `deny.toml` carries
   the allowed-licence list and the reasoning, including every deliberately ignored
   unmaintained-crate advisory and what it would take to leave it. Duplicate versions warn
   rather than fail — wgpu and rsmpeg each bring their own stack — so the count stays
@@ -239,7 +239,7 @@ machine". Exceptions require a decision entry in [02-DECISIONS.md](02-DECISIONS.
   builds of app-level crates stay in seconds.
 - The workspace is edition 2021 today; the edition-2024 move is still owed
   ([TODO.md](TODO.md)). The toolchain **is** pinned: `rust-toolchain.toml` names the one
-  version every machine and every CI job builds with (K-272), so a compiler released
+  version every machine and every CI job builds with, so a compiler released
   mid-week cannot turn a new warning into a red build on a commit that changed nothing.
   Raising it is deliberate — bump the file, run the full suite, log it in the changelog.
 
@@ -261,13 +261,12 @@ A feature is done when all of the following hold; PRs state each explicitly:
    banned-term check; new concepts are named in [01-GLOSSARY.md](01-GLOSSARY.md) first.
 7. **Determinism** — if it touches evaluation: no clocks, seeded randomness only, and the
    golden frames still match across two consecutive CI runs.
-8. **Regression coverage (K-007)** — a bug fix MUST include a regression test that fails
+8. **Regression coverage** — a bug fix MUST include a regression test that fails
    without the fix; the engine-crate line-coverage gate in CI MUST still pass, and its
    threshold may be raised but never lowered. The suite is the museum of every bug ever
    fixed; none may return unnoticed.
-9. **Owner readability (K-007)** — if the change introduces a new concept, crate, or
-   mechanism, [GUIDE.md](GUIDE.md) gains its plain-English section in the same commit, and
-   any new impl note opens with an "in plain terms" framing.
+9. **Readability** — a new crate or mechanism gets its line in [GUIDE.md](GUIDE.md) in the
+   same commit, and a new impl note opens with a short framing of what it is for.
 
 ---
 

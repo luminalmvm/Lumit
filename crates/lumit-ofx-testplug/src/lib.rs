@@ -96,7 +96,7 @@ static RENDER_FAILS: AtomicUsize = AtomicUsize::new(0);
 ///
 /// A real plugin asks that question there — most of openfx-misc does — and a
 /// host that has not bound its clips until the render action answers "there is
-/// no image", which is why this is worth a probe of its own (K-595).
+/// no image", which is why this is worth a probe of its own.
 static ROD_SAW_SOURCE: AtomicU32 = AtomicU32::new(0);
 
 /// How long a render waits at the rendezvous before giving up. A host that

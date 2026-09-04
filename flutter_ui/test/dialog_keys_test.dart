@@ -1,6 +1,6 @@
-// The keyboard model of confirmation windows (K-319): the default button is
-// focused on open so Enter presses it, Tab walks the window in reading order,
-// and the house controls answer the keyboard at all.
+// The keyboard model of confirmation windows: the default button is focused
+// on open so Enter presses it, Tab walks the window in reading order, and the
+// house controls answer the keyboard at all.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -66,9 +66,9 @@ void main() {
   testWidgets('Escape closes a modal, the same as clicking the scrim',
       (tester) async {
     // Flutter's own DismissIntent, which `WidgetsApp` binds Escape to — so the
-    // host here is a MaterialApp, as the application is. Before K-319 nothing
-    // in the window claimed that intent and Escape did nothing in every
-    // dialogue, despite a comment claiming it worked "via the route".
+    // host here is a MaterialApp, as the application is. Before this landed
+    // nothing in the window claimed that intent and Escape did nothing in
+    // every dialogue, despite a comment claiming it worked "via the route".
     late BuildContext ctx;
     await tester.pumpWidget(MaterialApp(
       home: ThemeScope(
@@ -183,10 +183,10 @@ void main() {
     await tester.pump();
     expect(value, 55);
 
-    // Escape is the way back out (K-323): the editor shuts and the typed
-    // number is thrown away. Every other exit — Enter, clicking away, losing
-    // focus — commits, so without this a half-typed value could not be undone
-    // without retyping the old one.
+    // Escape is the way back out: the editor shuts and the typed number is
+    // thrown away. Every other exit — Enter, clicking away, losing focus —
+    // commits, so without this a half-typed value could not be undone without
+    // retyping the old one.
     await tester.tap(find.byType(DragValueField));
     await tester.pump();
     await tester.enterText(find.byType(EditableText), '99');

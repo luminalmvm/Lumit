@@ -1,5 +1,5 @@
 //! One `#[ignore]`d test per budget, so a single number can be measured on its
-//! own (docs/13-PERFORMANCE-RULES.md §2, K-389).
+//! own (docs/13-PERFORMANCE-RULES.md §2).
 //!
 //! # In plain terms
 //!
@@ -96,7 +96,7 @@ fn b11_idle_fill() {
     measure(Harness::b11_idle_fill);
 }
 
-/// **B12-B14 in one run** (K-475): the three per-effect numbers, which share a
+/// **B12-B14 in one run**: the three per-effect numbers, which share a
 /// floor measurement and so are measured together rather than one at a time.
 /// No reference media, so no ffmpeg — only a graphics adapter.
 #[test]
@@ -111,7 +111,7 @@ fn b12_b14_particulate() {
     }
 }
 
-/// **B15-B17 in one run** (K-704, docs/impl/puppet.md §3 test 14): the puppet's
+/// **B15-B17 in one run** (docs/impl/puppet.md §3 test 14): the puppet's
 /// warp, mesh build and per-frame solve. Pure CPU — no media and no adapter —
 /// so this one runs anywhere, and the gate is the same one every other row
 /// gets: [`lumit_bench::baseline`] against the runner's own numbers, and the

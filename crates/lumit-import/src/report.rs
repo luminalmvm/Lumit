@@ -189,11 +189,11 @@ pub enum Reason {
     LightKindApproximated { ae_kind: String },
     /// A 3D layer that turns by Orientation *and* by X/Y/Z Rotation. Lumit has
     /// the one trio, and two Euler triples do not add, so the rotations are
-    /// what arrives and the orientation is named here (K-625).
+    /// what arrives and the orientation is named here.
     OrientationNotCarried,
     /// A two-node camera, which After Effects aims at its point of interest.
     /// Lumit's camera is aimed by its own rotation, so the point of interest
-    /// is named rather than approximated (K-625).
+    /// is named rather than approximated.
     PointOfInterestNotCarried,
 
     // --- properties and keyframes ---
@@ -208,13 +208,13 @@ pub enum Reason {
     /// An enabled expression written in After Effects' language, which Lumit's
     /// (docs/12 §4) cannot run. The text is kept in the `ae` namespace and the
     /// keyframes underneath drive the property, so the motion survives and the
-    /// expression is there to re-author (K-625).
+    /// expression is there to re-author.
     ExpressionNotRunnable { source: String },
     /// A property After Effects itself could not read (a `CUSTOM_VALUE`
-    /// blob — K-410).
+    /// blob).
     PropertyUnreadable { match_name: String },
     /// A record in the `.aep` itself that this build could not read, named by
-    /// its chunk id. Only the direct route raises it (K-418, docs/11 §7: a
+    /// its chunk id. Only the direct route raises it (docs/11 §7: a
     /// parse failure on one chunk skips that chunk and continues, and the
     /// report lists what was skipped).
     ChunkUnreadable { chunk: String },
@@ -269,8 +269,8 @@ pub enum Reason {
     /// spelled differently.
     EffectParamRebased { effect: String, param: String },
     /// A third-party effect the user also has as an OFX plug-in: it imported
-    /// **as that plug-in**, which is the same effect rather than a likeness
-    /// (K-655). `carried` of `controls` dials came across by name.
+    /// **as that plug-in**, which is the same effect rather than a likeness.
+    /// `carried` of `controls` dials came across by name.
     EffectAsPlugin {
         match_name: String,
         plugin: String,
@@ -278,7 +278,7 @@ pub enum Reason {
         controls: usize,
     },
     /// A third-party effect with no OFX build installed: the closest Lumit
-    /// effect stands in for it, at its own defaults (K-655). Nobody outside the
+    /// effect stands in for it, at its own defaults. Nobody outside the
     /// vendor can carry the dials across, so the effect is in the right place
     /// in the stack and is dialled once.
     EffectNearest { match_name: String, instead: String },
@@ -710,7 +710,7 @@ mod tests {
 
     /// **A reason crosses as an id plus its facts, not as a sentence.**
     ///
-    /// The whole of K-303 for the import report in one assertion: what goes
+    /// The translation rule for the import report in one assertion: what goes
     /// over the bridge is `blend_mode_unavailable` + `{ae_mode: "Dissolve"}`,
     /// and the English sentence stays behind as the fallback. A frontend that
     /// got only the sentence could not translate it, because its lookup is by

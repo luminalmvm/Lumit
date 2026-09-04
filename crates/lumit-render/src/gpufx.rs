@@ -33,7 +33,7 @@ pub mod ofx;
 type Tex = wgpu::Texture;
 
 /// Which parallel input list an effect consumes a slot of
-/// (docs/impl/effect-registry.md §2.5a, K-387).
+/// (docs/impl/effect-registry.md §2.5a).
 ///
 /// **In plain terms.** A few effects need something the *render* prepared, not
 /// something the user typed: a parsed `.cube`, another layer's picture, the
@@ -48,9 +48,9 @@ pub enum AuxKind {
     None,
     /// The parallel LUT list (docs/08 §3.11): one parsed cube per `lut` op.
     Lut,
-    /// The Lens flare's custom prescription (K-264): one `.lens` file per flare
-    /// op. Its Matte source used to be counted off this same index; since K-395
-    /// it is the generic matte, and rides on [`AuxSlot::matte`].
+    /// The Lens flare's custom prescription: one `.lens` file per flare
+    /// op. Its Matte source used to be counted off this same index; it is now
+    /// the generic matte, and rides on [`AuxSlot::matte`].
     LensFile,
     /// The layer's decoded neighbour frames — the whole list, never per-op.
     Neighbours,
@@ -61,7 +61,7 @@ pub enum AuxKind {
 
 /// Everything the render prepared beside one op: the [`AuxData`] its
 /// [`AuxKind`] asked for, and — independently of that — the generic **Matte**
-/// this op is driven by, when the effect claims it inside its own maths (K-395).
+/// this op is driven by, when the effect claims it inside its own maths.
 ///
 /// **Why the matte is a field rather than a seventh [`AuxKind`].** Every effect
 /// can take a matte, including the ones that already consume a different aux
@@ -77,7 +77,7 @@ pub struct AuxSlot<'a> {
     matte: Option<&'a Tex>,
     /// This op's matte **whatever its role** — including the generic strength
     /// one, whose texture is spent in the dissolve beside the dispatch and so
-    /// never reaches a kernel (K-395). One effect wants it anyway: the Custom
+    /// never reaches a kernel. One effect wants it anyway: the Custom
     /// shader binds it, because a shader that wants to read its matte should be
     /// able to. It does not get to switch the dissolve off; a shader that reads
     /// the matte *and* is dissolved by it applies it twice, which is the user's
@@ -86,7 +86,7 @@ pub struct AuxSlot<'a> {
     layer: Option<&'a Tex>,
     paths: &'a [lumit_core::mask::MaskPolyline],
     schedule: Option<&'a lumit_core::fx::points::PointsSchedule>,
-    /// Which effect instance this op is (K-593), and the layer time its
+    /// Which effect instance this op is, and the layer time its
     /// parameters were evaluated at.
     op: (uuid::Uuid, f64),
 }
@@ -106,8 +106,8 @@ pub enum AuxData<'a> {
     Lut(Option<&'a LoadedLut>),
     /// The flare's custom prescription (content hash and text), absent when the
     /// `.lens` row is unset or the file would not parse. Its Matte source is
-    /// **not** here: since K-395 that is the generic matte every effect can
-    /// take, and it arrives on [`AuxSlot::matte`] like everyone else's.
+    /// **not** here: it is the generic matte every effect can take, and it
+    /// arrives on [`AuxSlot::matte`] like everyone else's.
     LensFile(Option<&'a (u64, String)>),
     /// Every decoded neighbour frame, keyed by offset; empty unless the stack
     /// asked for a temporal window.
@@ -148,7 +148,7 @@ impl<'a> AuxSlot<'a> {
         }
     }
 
-    /// **Which effect instance this op is** (K-593), and the layer time its
+    /// **Which effect instance this op is**, and the layer time its
     /// parameters were evaluated at.
     ///
     /// Every built-in ignores it: a built-in's picture is a function of its bag,
@@ -176,7 +176,7 @@ impl<'a> AuxSlot<'a> {
         self.schedule
     }
 
-    /// **This op's mask path** (K-408): the layer's chosen mask, flattened at
+    /// **This op's mask path**: the layer's chosen mask, flattened at
     /// this frame's time to an arc-length-parameterised polyline in px@comp.
     ///
     /// A field beside the matte rather than an [`AuxKind`] variant, for the
@@ -199,7 +199,7 @@ impl<'a> AuxSlot<'a> {
         self.paths.first()
     }
 
-    /// This op's **n-th** mask path (K-546), in the order the effect declares
+    /// This op's **n-th** mask path, in the order the effect declares
     /// its [`ParamKind::MaskPath`](lumit_core::fx::ParamKind::MaskPath) rows.
     ///
     /// Three effects walk one line and answer with [`Self::mask_path`]; the
@@ -210,17 +210,17 @@ impl<'a> AuxSlot<'a> {
         self.paths.get(i)
     }
 
-    /// **This op's Matte** (K-395), already resolved against the picture the
-    /// chain is carrying — so a matte pointed at the effect's own layer (K-288)
+    /// **This op's Matte**, already resolved against the picture the
+    /// chain is carrying — so a matte pointed at the effect's own layer
     /// is a real texture by the time it arrives here.
     ///
     /// `None` unless the effect's [`MatteRole`](lumit_core::fx::MatteRole) says
     /// it consumes the matte itself *and* a layer is bound: an effect on the
     /// generic strength semantic never sees one, because its matte is spent in
     /// the dissolve beside the dispatch instead. An override with an unset row
-    /// gets `None` and must render exactly what it rendered before K-395
-    /// (K-258) — which for all four of them is the same branch an unset row
-    /// always took.
+    /// gets `None` and must render exactly what it rendered before the matte
+    /// list existed — which for all four of them is the same branch an unset
+    /// row always took.
     pub fn matte(self) -> Option<&'a Tex> {
         self.matte
     }
@@ -241,10 +241,10 @@ impl<'a> AuxSlot<'a> {
         }
     }
 
-    /// **This op's auxiliary layer** (K-123, K-429) — Light wrap's background
+    /// **This op's auxiliary layer** — Light wrap's background
     /// plate, Texturize's Texture, Fast motion blur's Motion vectors, Set
     /// matte's source — already resolved against the picture the chain is
-    /// carrying, so a reference to the effect's own layer (K-288) is a real
+    /// carrying, so a reference to the effect's own layer is a real
     /// texture by the time it arrives here.
     ///
     /// A field beside the matte rather than an [`AuxKind`] variant, for the
@@ -299,7 +299,7 @@ pub trait GpuEffect: Sync + 'static {
     /// Which parallel input list this effect consumes a slot of.
     /// [`crate::fxops::run_ops`] advances the matching counter exactly as the
     /// old match arms did, so the enumeration in `build.rs` and the consumption
-    /// here stay in step (K-387).
+    /// here stay in step.
     fn aux(&self) -> AuxKind {
         AuxKind::None
     }
@@ -415,7 +415,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &Trail,
     &ConnectPoints,
     &EmitFromImage,
-    // The seven layer styles that render (K-706, docs/impl/layer-styles.md §8).
+    // The seven layer styles that render (docs/impl/layer-styles.md §8).
     // Satin and Bevel and emboss are declared in `lumit_core::fx::styles` but
     // have no pass here, so an instance of one resolves to an op this table
     // misses and the picture passes through untouched — the same calm degrade a
@@ -429,14 +429,14 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &StyleStroke,
 ];
 
-/// The passes registered while the program runs (K-593) — an OFX plugin's,
+/// The passes registered while the program runs — an OFX plugin's,
 /// today, and the user's own in time. The built-in table above is searched
 /// first, so nothing here can shadow a shipped effect.
 static REGISTERED: std::sync::RwLock<Vec<&'static dyn GpuEffect>> =
     std::sync::RwLock::new(Vec::new());
 
 /// Add a pass discovered at run time, beside the effect definition that
-/// registered into `lumit-core`'s catalogue (K-593).
+/// registered into `lumit-core`'s catalogue.
 ///
 /// `false` — and nothing added — for a name the table already answers to, which
 /// is what makes a rescan idempotent. Additive and never removes, so no frame in
@@ -508,7 +508,7 @@ impl GpuEffect for Blur {
         aux: AuxSlot<'_>,
     ) -> Tex {
         let (radius_px, edge, mix) = effects::blur::Blur::read(p).packed();
-        // **The blur claims its matte** (K-395): it scales the radius per pixel
+        // **The blur claims its matte**: it scales the radius per pixel
         // rather than dissolving a finished blur, so the texture goes into the
         // kernel and no dissolve runs beside this op. With no matte bound the
         // kernel takes the branch it always took, byte for byte.
@@ -706,7 +706,7 @@ impl GpuEffect for SpriteFlare {
     }
 }
 
-/// Custom shader (docs/08 §3.95, docs/impl/custom-shader.md, K-650): the one
+/// Custom shader (docs/08 §3.95, docs/impl/custom-shader.md): the one
 /// effect whose kernel arrives with the document rather than with the build.
 ///
 /// Everything unusual about it has already happened by the time this wrapper
@@ -842,11 +842,11 @@ impl GpuEffect for LightWrap {
         "light_wrap"
     }
     /// The Background plate is another layer, rendered alone at this raster —
-    /// the layer-input carriage (K-358, K-387), which since K-429 is a field on
-    /// the slot rather than a kind, read straight off `aux.layer_input()`. It is
-    /// a *plate*, not a matte: the light in it spills round the foreground's
-    /// edge, so it is not the same input as the Matte row this effect also
-    /// carries, which dissolves the wrap's strength generically.
+    /// the layer-input carriage, which is a field on the slot rather than a
+    /// kind, read straight off `aux.layer_input()`. It is a *plate*, not a
+    /// matte: the light in it spills round the foreground's edge, so it is not
+    /// the same input as the Matte row this effect also carries, which
+    /// dissolves the wrap's strength generically.
     fn run(
         &self,
         fx: &FxEngine,
@@ -985,7 +985,7 @@ impl GpuEffect for ChromaticAberration {
                     mix,
                 },
             ),
-            // The radial spectral split (K-144): the old arm passed angle 0.0,
+            // The radial spectral split: the old arm passed angle 0.0,
             // so the offset vector is the same `(amount_px, 0)` it always was.
             effects::chromatic_aberration::Fringe::Spectral {
                 amount_px,
@@ -1117,7 +1117,7 @@ impl GpuEffect for Flash {
         p: Params<'_>,
         _aux: AuxSlot<'_>,
     ) -> Tex {
-        // Strength is the resolve-time envelope (K-385), already in the bag; the
+        // Strength is the resolve-time envelope, already in the bag; the
         // wrapper does no time maths of its own, exactly as it does no arithmetic
         // of its own.
         let f = effects::flash::Flash::read(p);
@@ -1433,7 +1433,7 @@ impl GpuEffect for TurbulentDisplace {
         aux: AuxSlot<'_>,
     ) -> Tex {
         let t = effects::turbulent_displace::TurbulentDisplace::read(p).packed();
-        // **Turbulent displace claims its matte** (K-395): it scales the
+        // **Turbulent displace claims its matte**: it scales the
         // displacement vector rather than dissolving a finished warp, so the
         // texture goes into the kernel and no dissolve runs beside this op.
         fx.turbulent_displace(
@@ -1477,7 +1477,7 @@ impl GpuEffect for Tile {
         p: Params<'_>,
         _aux: AuxSlot<'_>,
     ) -> Tex {
-        // The four sizes are px@comp (K-558), so `packed` takes the raster they
+        // The four sizes are px@comp, so `packed` takes the raster they
         // are being drawn on and turns them into the fractions both kernels read.
         let t = effects::tile::Tile::read(p).packed(w as f32, h as f32);
         fx.tile(
@@ -1493,7 +1493,7 @@ impl GpuEffect for Tile {
                 mirror_edges: t.mirror_edges,
                 horizontal_phase_shift: t.horizontal_phase_shift,
                 mix: t.mix,
-                // The oracle sizes the raster (K-542): lumit-gpu has no
+                // The oracle sizes the raster: lumit-gpu has no
                 // lumit-core to ask, and one rule in one place is what keeps the
                 // two paths making the same picture.
                 out_raster: lumit_core::fx::cpu::tile_raster(w, h, &t),
@@ -1614,7 +1614,7 @@ impl GpuEffect for DisplacementMap {
     fn match_name(&self) -> &'static str {
         "displacement_map"
     }
-    /// **Displacement map's matte IS its map** (K-395, docs/08 §3.49): the
+    /// **Displacement map's matte IS its map** (docs/08 §3.49): the
     /// referenced layer rendered alone at this raster, arriving on the one matte
     /// carriage every effect's matte uses. It declares no other aux, so this
     /// stays [`AuxKind::None`].
@@ -1934,7 +1934,7 @@ impl GpuEffect for Curves {
         _aux: AuxSlot<'_>,
     ) -> Tex {
         // The five clamped-cubic tables are baked host-side, once, and the
-        // CPU reference reads the identical ones (K-412).
+        // CPU reference reads the identical ones.
         let c = effects::curves::Curves::read(p).packed();
         fx.curves(
             ctx,
@@ -2297,7 +2297,7 @@ impl GpuEffect for Dof {
     fn match_name(&self) -> &'static str {
         "dof"
     }
-    /// **Depth of field's matte is its depth pass** (K-395): the referenced
+    /// **Depth of field's matte is its depth pass**: the referenced
     /// layer rendered alone at this raster, arriving on the one matte carriage
     /// every effect's matte uses. It declares no other aux, so this stays
     /// [`AuxKind::None`] — the matte is not an aux kind, it rides beside
@@ -2422,7 +2422,7 @@ impl GpuEffect for DropShadow {
     }
 }
 
-/// Drop shadow (**style**, K-706) — the same kernel, with Spread and the
+/// Drop shadow (**style**) — the same kernel, with Spread and the
 /// knockout on top of it.
 ///
 /// A separate entry rather than a second name on the one above, because the
@@ -2467,8 +2467,8 @@ impl GpuEffect for StyleDropShadow {
     }
 }
 
-/// The four styles that ride the generalised drop-shadow core (K-706,
-/// docs/impl/layer-styles.md §4) share one body: read the style's own typed
+/// The four styles that ride the generalised drop-shadow core
+/// (docs/impl/layer-styles.md §4) share one body: read the style's own typed
 /// struct, hand the bundle it packs to the one kernel.
 ///
 /// A macro rather than four transcriptions of the same twenty lines, and a
@@ -2527,7 +2527,7 @@ drop_shadow_core_style!(StyleOuterGlow, "style_outer_glow", OuterGlow);
 drop_shadow_core_style!(StyleInnerShadow, "style_inner_shadow", InnerShadow);
 drop_shadow_core_style!(StyleInnerGlow, "style_inner_glow", InnerGlow);
 
-/// Gradient overlay (**style**, K-706) — the Gradient kernel with its ramp
+/// Gradient overlay (**style**) — the Gradient kernel with its ramp
 /// clipped to the layer's coverage.
 ///
 /// The style names an angle and a scale where the effect names two points, and
@@ -2571,7 +2571,7 @@ impl GpuEffect for StyleGradientOverlay {
     }
 }
 
-/// Stroke (**style**, K-706) — the one kernel this package brings that nothing
+/// Stroke (**style**) — the one kernel this package brings that nothing
 /// else in the tree already had: a separable dilate and erode of the layer's
 /// alpha, with the band between them painted and laid over the layer.
 struct StyleStroke;
@@ -2606,10 +2606,10 @@ impl GpuEffect for StyleStroke {
     }
 }
 
-/// Colour overlay (**style**, K-706) — the Fill kernel, unchanged.
+/// Colour overlay (**style**) — the Fill kernel, unchanged.
 ///
 /// The style's blend mode is not read here: it rides the per-op Mix blend stage
-/// every effect instance already carries (K-425, `fx_blend_mix.wgsl`), which
+/// every effect instance already carries (`fx_blend_mix.wgsl`), which
 /// `run_ops` applies after this returns. That is what makes "Multiply at 40 %"
 /// mean on a style exactly what it means on an effect, with no second seam.
 struct StyleColourOverlay;
@@ -2637,7 +2637,7 @@ impl GpuEffect for SetMatte {
     fn match_name(&self) -> &'static str {
         "set_matte"
     }
-    /// **Set matte's source is not a matte** (K-429): it is this effect's own
+    /// **Set matte's source is not a matte**: it is this effect's own
     /// Layer row, rendered alone at this raster and arriving on the ordinary
     /// auxiliary-layer carriage beside Light wrap's Background. The effect
     /// carries no universal Matte row at all, so no dissolve stands beside this
@@ -2674,7 +2674,7 @@ impl GpuEffect for SetChannels {
     fn match_name(&self) -> &'static str {
         "set_channels"
     }
-    /// **The Source row is not a matte** (K-429): it is this effect's own Layer
+    /// **The Source row is not a matte**: it is this effect's own Layer
     /// row, rendered alone at this raster and arriving on the ordinary
     /// auxiliary-layer carriage beside Light wrap's Background. The universal
     /// Matte row stays, so the generic strength dissolve runs beside this kernel
@@ -2895,12 +2895,12 @@ impl GpuEffect for Transform {
         let (anchor, position, scale, rotation_deg, skew, opacity, mix) =
             effects::transform::Transform::read(p).packed();
         // The affine is the one lumit-core helper both paths build through, so
-        // the CPU reference and the kernel consume identical numbers (K-031).
+        // the CPU reference and the kernel consume identical numbers.
         let (m, off, opacity) =
             lumit_core::fx::transform_op(anchor, position, scale, rotation_deg, skew, opacity);
         // No matte: the Transform keeps the strength dissolve (scaling a
         // whole-frame move is not a picture a per-pixel matte should draw;
-        // the Shake is the one that claims this kernel's matte, K-427).
+        // the Shake is the one that claims this kernel's matte).
         fx.transform(
             ctx,
             tex,
@@ -2940,7 +2940,7 @@ impl GpuEffect for Shake {
         // transform-domain effect — perturb a virtual camera, resample once):
         // the shared affine turns the resolved wobble into the same op the CPU
         // reference builds, so both paths consume bit-identical numbers. With
-        // its own motion blur on (T18/K-165) it builds one affine per sub-frame
+        // its own motion blur on (T18) it builds one affine per sub-frame
         // and dispatches the averaging kernel instead, over the same sub-frames
         // `cpu::transform_average` averages. Shake's own Edges control governs
         // the border the wobble reveals, either way.
@@ -2962,7 +2962,7 @@ impl GpuEffect for Shake {
                     lumit_core::fx::NO_SKEW,
                     1.0,
                 );
-                // **The shake claims its matte** (K-427): it scales the
+                // **The shake claims its matte**: it scales the
                 // displacement the wobble gives each pixel, read where the
                 // pixel lands, so a soft matte turns the shove into a warp.
                 fx.transform(
@@ -3033,7 +3033,7 @@ impl GpuEffect for Glow {
     ) -> Tex {
         let (radius_px, threshold, knee, intensity, tint, mix) =
             effects::glow::Glow::read(p).packed();
-        // **The glow claims its matte** (K-395): it gates the bright pass, so
+        // **The glow claims its matte**: it gates the bright pass, so
         // the matte decides which pixels are allowed to seed the halo — light
         // still spills out of them across dark matte, which is the difference
         // from dissolving the finished glow.
@@ -3070,7 +3070,7 @@ impl GpuEffect for BlockGlitch {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Tex {
-        // The tick is the resolve-time discretised layer time (K-385), already
+        // The tick is the resolve-time discretised layer time, already
         // in the bag; the wrapper does no time maths of its own, exactly as it
         // does no arithmetic of its own.
         let b = effects::block_glitch::BlockGlitch::read(p);
@@ -3122,7 +3122,7 @@ impl GpuEffect for Scanlines {
         aux: AuxSlot<'_>,
     ) -> Tex {
         // Intensity carries an old project's folded Darkness and the roll is
-        // this frame's offset — both resolve-time derivations (K-385), already
+        // this frame's offset — both resolve-time derivations, already
         // in the bag.
         let (i, r) = effects::scanlines::Scanlines::derived_of(p);
         let (intensity, period_px, roll_px, interlace, mix) =
@@ -3260,10 +3260,10 @@ impl GpuEffect for MotionBlur {
     ) -> Tex {
         let (shutter_frac, samples, mix, view, quality, vector_scale) =
             effects::motion_blur::MotionBlur::read(p).packed();
-        // A supplied Motion vectors layer stands in for the measured flow
-        // (K-429): it is turned into the same field here, so everything below
-        // reads one kind of field. It is also the one way this effect works on
-        // a layer that has no measured flow at all.
+        // A supplied Motion vectors layer stands in for the measured flow: it
+        // is turned into the same field here, so everything below reads one
+        // kind of field. It is also the one way this effect works on a layer
+        // that has no measured flow at all.
         let supplied = aux
             .layer_input()
             .map(|v| fx.motion_vectors_field(ctx, v, w, h, vector_scale));
@@ -3291,7 +3291,7 @@ impl GpuEffect for MotionBlur {
     }
 }
 
-/// One garbage mask's outline, as the kernel takes it (K-546): the CPU builds
+/// One garbage mask's outline, as the kernel takes it: the CPU builds
 /// the geometry — the same function the oracle calls — and this only re-labels
 /// the fields for the GPU crate, exactly as `path_draw_op` does for the three
 /// line-drawing effects.
@@ -3323,7 +3323,7 @@ impl GpuEffect for MatteKey {
         // The two garbage masks, in declaration order: inside then outside.
         // Built here, host-side, exactly once a frame and by the very function
         // the §1.6 oracle calls — neither path generates geometry, so neither
-        // can generate it differently (K-408's rule, K-546's second row).
+        // can generate it differently.
         let px_scale = effects::matte_key::MatteKey::px_scale_of(p);
         let unset = lumit_core::mask::MaskPolyline::default();
         let fill = |i: usize| {
@@ -3405,10 +3405,9 @@ impl GpuEffect for LensFlare {
     fn match_name(&self) -> &'static str {
         "lens_flare"
     }
-    /// The custom `.lens` prescription: the k-th flare op binds the k-th entry
-    /// (K-264, K-387).
+    /// The custom `.lens` prescription: the k-th flare op binds the k-th entry.
     ///
-    /// **The Matte source is no longer counted here** (K-395). It used to ride
+    /// **The Matte source is no longer counted here**. It used to ride
     /// beside the prescription off one index, because both were the flare's
     /// private business; it is now the generic matte every effect can take, and
     /// the flare is simply one of the four that claim it inside their own maths
@@ -3422,11 +3421,11 @@ impl GpuEffect for LensFlare {
     /// the starburst transformed — which is far too heavy to redo per frame, so it
     /// is handed over as a closure the GPU side runs only when its parameter-hash
     /// cache misses, and may run beside the frame rather than inside it
-    /// (`FxEngine::set_deferred_flare_bakes`, K-350).
+    /// (`FxEngine::set_deferred_flare_bakes`).
     ///
     /// Everything below the bake is still the registry's rule: no arithmetic of
     /// its own. Every frame-time number comes out of the one `lumit-core` module
-    /// that owns the formulas (K-031: the CPU reference and the kernels read
+    /// that owns the formulas (the CPU reference and the kernels read
     /// identical values), through the effect's `packed`.
     fn run(
         &self,
@@ -3445,12 +3444,12 @@ impl GpuEffect for LensFlare {
         let p = &params;
 
         let (tier_base, tier_lambda, flare_div) = lf::quality_ladder(p.quality);
-        // The Detail dial scales the tier's base and wavelength count (K-265) —
+        // The Detail dial scales the tier's base and wavelength count —
         // through the shared helpers, so this equals the CPU reference.
         let grid = lf::detail_base(tier_base, p.detail);
         let lambda_count = lf::detail_lambda(tier_lambda, p.detail);
         let energy = p.ghost_intensity;
-        // The traced bands with their eight radiometric sub-samples (K-364),
+        // The traced bands with their eight radiometric sub-samples,
         // Ghost intensity folded into every sub-weight — the bake's
         // auto-exposure gain joins it GPU-side.
         let bands: Vec<lumit_gpu::fx::FlareBand> = lf::spectral_bands(lambda_count, p.dispersion)
@@ -3464,10 +3463,10 @@ impl GpuEffect for LensFlare {
             })
             .collect();
         let op = lumit_gpu::fx::LensFlareOp {
-            // Raster pixels → fraction here, where the raster is known (K-260:
-            // the parameter is px@comp).
+            // Raster pixels → fraction here, where the raster is known (the
+            // parameter is px@comp).
             light_frac: [p.light[0] / w.max(1) as f32, p.light[1] / h.max(1) as f32],
-            // Manual mode's lights: ONE entry per light, size and all (K-367). An
+            // Manual mode's lights: ONE entry per light, size and all. An
             // area source is no longer replicated into point samples — every ray
             // integrates the extent itself, so the extent travels with the light.
             manual_lights: lf::manual_light(p, w, h)
@@ -3512,7 +3511,7 @@ impl GpuEffect for LensFlare {
             bake_key: lf::bake_key_with(p, custom.map(|(h, _)| *h)),
         };
         let custom_text = custom.map(|(_, text)| text.clone());
-        // Manual mode's frame-time grid probe (K-267): the GPU hands back its
+        // Manual mode's frame-time grid probe: the GPU hands back its
         // cached bake's tables and this closure runs the one lumit-core probe
         // both twins share, at the frame's actual light direction.
         let light_frac = op.light_frac;
@@ -3540,7 +3539,7 @@ impl GpuEffect for LensFlare {
             h,
             &op,
             matte,
-            // The bake as something the bake thread can own and run (K-350): one
+            // The bake as something the bake thread can own and run: one
             // small `Arc` a flare a frame, beside a pass that traces hundreds of
             // thousands of rays. Whether it is actually run beside the frame or
             // inside it is the engine's policy, not this call's — see
@@ -3706,7 +3705,7 @@ impl GpuEffect for Texturize {
         "texturize"
     }
     /// The Texture is another layer, rendered alone at this raster — the
-    /// layer-input carriage (K-387, K-429), as Light wrap's Background is. It is
+    /// layer-input carriage, as Light wrap's Background is. It is
     /// **not** the Matte row this effect also carries: §3.49's map is its matte
     /// because a map has nothing else it could be, and a texture is not, because
     /// "press this canvas in" and "only over the sky" are two statements
@@ -3916,7 +3915,7 @@ impl GpuEffect for Vegas {
         let vegas = effects::vegas::Vegas::read(p);
         // The Mask/Path half is the shared path drawing, not the level set: the
         // line is a mask's own, so there is no picture to take a gradient of
-        // (K-408, docs/08 §3.76).
+        // (docs/08 §3.76).
         if vegas.on_a_path() {
             let built = vegas.path_packed(&path_of(aux), effects::vegas::Vegas::px_scale_of(p));
             return fx.path_draw(ctx, tex, w, h, aux.matte(), &path_draw_op(&built));
@@ -3946,7 +3945,7 @@ impl GpuEffect for Vegas {
 }
 
 /// The three effects that draw a mask's own line share one pass, so they share
-/// one way of filling its op (K-408). `p` is the resolved bag and `aux` the slot
+/// one way of filling its op. `p` is the resolved bag and `aux` the slot
 /// the render prepared; an absent path is an empty polyline, which packs to a
 /// count of zero and draws nothing.
 fn path_draw_op(built: &lumit_core::fx::cpu::PathDrawParams) -> lumit_gpu::fx::PathDrawOp {
@@ -4112,14 +4111,14 @@ fn particulate_frames(sched: &lumit_core::fx::points::PointsSchedule) -> Vec<[u3
     out
 }
 
-/// Particulate (docs/08 §3.86, K-446, K-474, K-475): evaluate, compact, draw.
+/// Particulate (docs/08 §3.86): evaluate, compact, draw.
 ///
 /// **The Sprite fallback is decided here** rather than in the kernel: an unset
 /// Sprite layer means the mode arrives as Disc, because a render mode must
 /// always draw something (particulate.md §2) and one branch resolved host-side
 /// cannot come to mean two things in two places.
 ///
-/// **The degradation rung is [`lumit_gpu::fx::ParticulateOp::cap`]** (K-475):
+/// **The degradation rung is [`lumit_gpu::fx::ParticulateOp::cap`]**:
 /// halve it and the newest half is what draws, by the same rule the cap itself
 /// applies. This pass always hands over the *declared* cap, which is why the
 /// rung is never on the export path — there is nothing on this path that could
@@ -4159,17 +4158,17 @@ impl GpuEffect for Particulate {
         let mut curves = Vec::with_capacity(packed.particle.size_curve.len() * 2);
         curves.extend_from_slice(&packed.particle.size_curve);
         curves.extend_from_slice(&packed.particle.opacity_curve);
-        // The camera, in the raster this frame is drawn at (K-561): the
+        // The camera, in the raster this frame is drawn at: the
         // projection was built in px@comp, like the mask path beside it, and
-        // takes the same factor for the same reason (K-266, K-385).
+        // takes the same factor for the same reason.
         let projection = sched
             .projection
             .map(|proj| proj.rescaled(P::px_scale_of(p)).m);
         // The polyline the emitter walks. A Mask path's arrives in px@comp and
-        // takes the raster factor like every other distance (K-385); an
+        // takes the raster factor like every other distance; an
         // outline's is built **from the packed emitter**, whose extents the
         // resolve step already rescaled, so scaling it again would draw the
-        // ring at twice the size on a half-resolution preview (K-597).
+        // ring at twice the size on a half-resolution preview.
         let poly = if packed.emitter.shape.is_outline() {
             lumit_core::fx::points::outline_polyline(&packed.emitter)
         } else {
@@ -4196,15 +4195,14 @@ impl GpuEffect for Particulate {
     }
 }
 
-/// Every point of a host-built stream, as the generic draw reads them
-/// (K-598): one conversion, called by Grid and by Scatter, so a generator
-/// cannot come to describe its own points differently from the CPU reference
-/// that made them.
+/// Every point of a host-built stream, as the generic draw reads them: one
+/// conversion, called by Grid and by Scatter, so a generator cannot come to
+/// describe its own points differently from the CPU reference that made them.
 fn draw_points_of(s: &lumit_core::fx::points::PointsStream) -> Vec<lumit_gpu::fx::DrawPoint> {
     draw_points_tailed(s, &[])
 }
 
-/// [`draw_points_of`], with each point's tail beside it (K-601) — where its
+/// [`draw_points_of`], with each point's tail beside it — where its
 /// capsule runs back to, in the same three axes and the same order. A shorter
 /// list than the stream, or an empty one, leaves the tail at the head, which is
 /// the plain dot.
@@ -4230,11 +4228,11 @@ fn draw_points_tailed(
         .collect()
 }
 
-/// The stream a points **consumer** is drawing this frame (K-600): the wire's
+/// The stream a points **consumer** is drawing this frame: the wire's
 /// own, sample `k` back, rearranged into the raster the frame is being drawn at.
 ///
 /// Empty for a consumer with nothing wired — which every consumer renders as a
-/// passthrough, the documented calm (K-509).
+/// passthrough, the documented calm.
 fn points_input_at(
     aux: AuxSlot<'_>,
     k: usize,
@@ -4245,7 +4243,7 @@ fn points_input_at(
         .map(|s| s.rescaled(px_scale))
 }
 
-/// Grid (docs/08 §3.88, K-598): a lattice worked out on the host and drawn
+/// Grid (docs/08 §3.88): a lattice worked out on the host and drawn
 /// through Particulate's own instanced quad.
 ///
 /// Nothing here decides anything — `Grid::stream` and `Grid::draw_style` did
@@ -4271,7 +4269,7 @@ impl GpuEffect for Grid {
         use lumit_core::fx::effects::grid::Grid as G;
         let inst = G::read(p);
         let style = inst.draw_style();
-        // The camera, in the raster this frame is drawn at (K-561, K-266).
+        // The camera, in the raster this frame is drawn at.
         let projection = aux
             .schedule()
             .and_then(|s| s.projection)
@@ -4298,7 +4296,7 @@ impl GpuEffect for Grid {
     }
 }
 
-/// Scatter (docs/08 §3.89, K-599): candidates thrown on the host, kept on the
+/// Scatter (docs/08 §3.89): candidates thrown on the host, kept on the
 /// card where the alpha under them beats their own die.
 ///
 /// **The rejection is the draw's** rather than a pass of its own: the field is
@@ -4329,7 +4327,7 @@ impl GpuEffect for Scatter {
             .schedule()
             .and_then(|sched| sched.projection)
             .map(|proj| proj.rescaled(px_scale));
-        // The K-395 override: the matte is *where the points go*, so it arrives
+        // The override: the matte is *where the points go*, so it arrives
         // as the kernel's own input rather than as a dissolve afterwards. Unset
         // reads this effect's own picture, which is the documented default.
         let matte = aux.matte().cloned();
@@ -4356,11 +4354,11 @@ impl GpuEffect for Scatter {
     }
 }
 
-/// Emit from image (docs/08 §3.93, K-603): candidates thrown on the host, kept
+/// Emit from image (docs/08 §3.93): candidates thrown on the host, kept
 /// on the card where the picture under them is bright enough to outvote their
 /// own die.
 ///
-/// The rejection is the draw's, for Scatter's reason exactly (K-599): the field
+/// The rejection is the draw's, for Scatter's reason exactly: the field
 /// is a picture that exists only on the card, and the candidates are a set that
 /// exists only on the host, so the vertex stage is where the two meet. What
 /// changes is only *which* field — the Source layer's, arriving on the carriage
@@ -4416,7 +4414,7 @@ impl GpuEffect for EmitFromImage {
     }
 }
 
-/// Clone to points (docs/08 §3.90, K-600): a layer's picture stamped at every
+/// Clone to points (docs/08 §3.90): a layer's picture stamped at every
 /// point of a wired stream.
 ///
 /// Nothing here decides anything — `CloneToPoints::stamps` did the reducing, in
@@ -4455,9 +4453,9 @@ impl GpuEffect for CloneToPoints {
         };
         let stamps = inst.stamps(&stream);
         let points = draw_points_of(&stamps);
-        // The camera, in the raster this frame is drawn at (K-561, K-266) —
+        // The camera, in the raster this frame is drawn at —
         // `None` on a 2D layer, where it is not the identity matrix but no
-        // matrix at all, so the positions' bits are left alone (K-258).
+        // matrix at all, so the positions' bits are left alone.
         let projection = aux
             .schedule()
             .and_then(|c| c.projection)
@@ -4482,7 +4480,7 @@ impl GpuEffect for CloneToPoints {
     }
 }
 
-/// Trail (docs/08 §3.91, K-601): where every point of a wired stream has been,
+/// Trail (docs/08 §3.91): where every point of a wired stream has been,
 /// drawn from the producer evaluated again rather than from a history.
 ///
 /// Nothing here decides anything — `Trail::tail` did the reducing, in the one
@@ -4518,8 +4516,8 @@ impl GpuEffect for Trail {
         }
         let (stream, tails) = inst.tail(&samples);
         let points = draw_points_tailed(&stream, &tails);
-        // The camera, in the raster this frame is drawn at (K-561, K-266) —
-        // `None` on a 2D layer, where it is no matrix at all (K-258).
+        // The camera, in the raster this frame is drawn at —
+        // `None` on a 2D layer, where it is no matrix at all.
         let projection = aux
             .schedule()
             .and_then(|c| c.projection)
@@ -4544,7 +4542,7 @@ impl GpuEffect for Trail {
     }
 }
 
-/// Connect points (docs/08 §3.92, K-602): the lines between the points of a
+/// Connect points (docs/08 §3.92): the lines between the points of a
 /// wired stream that are near enough to each other.
 ///
 /// Nothing here decides anything — `ConnectPoints::links` did the pairing and
@@ -4576,8 +4574,8 @@ impl GpuEffect for ConnectPoints {
         };
         let (segments, tails) = inst.links(&stream);
         let points = draw_points_tailed(&segments, &tails);
-        // The camera, in the raster this frame is drawn at (K-561, K-266) —
-        // `None` on a 2D layer, where it is no matrix at all (K-258).
+        // The camera, in the raster this frame is drawn at —
+        // `None` on a 2D layer, where it is no matrix at all.
         let projection = aux
             .schedule()
             .and_then(|c| c.projection)
@@ -4665,10 +4663,11 @@ mod tests {
         particulate_fixture_3d(mode, cap, None)
     }
 
-    /// The same fixture, with the third axis alive (K-561): every new row set
+    /// The same fixture, with the third axis alive: every new row set
     /// to something that matters, and the camera the stream is seen through.
-    /// `None` is the flat fixture above, which is the one every pre-K-561 test
-    /// reads and the one whose picture must not have moved.
+    /// `None` is the flat fixture above, which is the one every test written
+    /// before the third axis existed reads, and the one whose picture must
+    /// not have moved.
     fn particulate_fixture_3d(
         mode: u32,
         cap: i32,
@@ -4770,7 +4769,7 @@ mod tests {
     /// **The centre of PS2** (points-stream.md §3.2, particulate.md §9 item 8):
     /// the compacted GPU stream and the CPU reference describe the same
     /// particles, attribute by attribute, to **one part in 10⁵ of each
-    /// attribute's own range** (K-508).
+    /// attribute's own range**.
     ///
     /// Pixels get a perceptual tolerance; these numbers get a numerical one,
     /// because a consumer reads them as *data*. The measure is relative to the
@@ -4800,7 +4799,7 @@ mod tests {
         stream_agrees_with_the_cpu_reference(None);
     }
 
-    /// **Border emission, in both paths** (K-597): the kernel walks the very
+    /// **Border emission, in both paths**: the kernel walks the very
     /// polyline the CPU reference walks, because the host flattens it once and
     /// hands the same numbers to both. A twin test rather than a second
     /// picture: an outline the two paths disagreed about would be a ring drawn
@@ -4811,7 +4810,7 @@ mod tests {
         stream_agrees_with_the_cpu_reference_of(6, None);
     }
 
-    /// **The same agreement, in three axes** (K-561): the four passes carry the
+    /// **The same agreement, in three axes**: the four passes carry the
     /// third component, and the depth attributes are held to the same one part
     /// in 10⁵ of their range as the two that were always there.
     ///
@@ -4855,7 +4854,7 @@ mod tests {
         }
         let (packed, style, frames, curves) = particulate_pieces(inst, &carriage);
         // The outline the emitter walks, flattened by the one function both
-        // paths call — the shipping pass does exactly this (K-597).
+        // paths call — the shipping pass does exactly this.
         let outline = lumit_core::fx::points::outline_polyline(&packed.emitter);
         let path: Vec<[f32; 4]> = outline
             .points
@@ -4961,7 +4960,7 @@ mod tests {
         draw_matches_the_cpu_reference(None);
     }
 
-    /// **The camera draws the same picture on both paths** (K-561): the CPU
+    /// **The camera draws the same picture on both paths**: the CPU
     /// reference projects each particle before it stamps it, the vertex stage
     /// projects each instance before it places its quad, and the two agree
     /// inside the `moderate` class's epsilon in every render mode — streaks
@@ -5062,7 +5061,7 @@ mod tests {
         }
     }
 
-    // ------------------------------------------------- Grid (K-598)
+    // ------------------------------------------------- Grid
 
     /// A Grid over the little raster, off-centre and jittered, so nothing in
     /// the comparison below can pass by symmetry.
@@ -5089,7 +5088,7 @@ mod tests {
         }
     }
 
-    /// **The generic draw draws the CPU reference's lattice** (K-598): the
+    /// **The generic draw draws the CPU reference's lattice**: the
     /// instanced quads land where the software dabs land, inside the
     /// `moderate` class's perceptual epsilon — and they are drawing the *same*
     /// stream, uploaded, so a disagreement here is the rasteriser's and
@@ -5099,7 +5098,7 @@ mod tests {
         grid_draw_matches(None);
     }
 
-    /// The same, through a camera (K-561): a lattice of planes seen in
+    /// The same, through a camera: a lattice of planes seen in
     /// perspective, projected in the vertex stage on one path and before the
     /// dab on the other.
     #[test]
@@ -5165,7 +5164,7 @@ mod tests {
         assert_eq!(gpu, twice, "the generic draw is not bit-stable");
     }
 
-    /// **Mix at nought is the emit-only mode** (K-598): the stream is still
+    /// **Mix at nought is the emit-only mode**: the stream is still
     /// made, and the picture is the input untouched.
     #[test]
     fn a_grid_at_no_mix_leaves_the_picture_alone() {
@@ -5206,9 +5205,9 @@ mod tests {
         assert_eq!(gpu, before, "Mix at nought drew something");
     }
 
-    // ---------------------------------------------- Scatter (K-599)
+    // ---------------------------------------------- Scatter
 
-    /// **The rejection agrees, path for path** (K-599): the vertex stage keeps
+    /// **The rejection agrees, path for path**: the vertex stage keeps
     /// the candidates the CPU reference keeps, and refuses the ones it refuses.
     ///
     /// The field is a hard-edged half-opaque picture on purpose. A soft edge
@@ -5283,9 +5282,9 @@ mod tests {
         }
     }
 
-    // ---------------------------------------- Emit from image (K-603)
+    // ---------------------------------------- Emit from image
 
-    /// **The brightness rejection agrees, path for path** (K-603): the vertex
+    /// **The brightness rejection agrees, path for path**: the vertex
     /// stage keeps the candidates the CPU reference keeps, and refuses the ones
     /// it refuses — including the unpremultiply, which is the half of the rule
     /// a plain `.rgb` read would silently get wrong.
@@ -5375,9 +5374,9 @@ mod tests {
         assert!(worst < 2e-2, "worst |Δ| {worst}");
     }
 
-    // ---------------------------------------- Clone to points (K-600)
+    // ---------------------------------------- Clone to points
 
-    /// **A stamp laid by a consumer is a stamp Particulate lays** (K-600): the
+    /// **A stamp laid by a consumer is a stamp Particulate lays**: the
     /// instanced draw and the CPU reference put the same layer in the same
     /// squares, inside the `moderate` class's perceptual epsilon — and they are
     /// handed the *same* stream, so a disagreement here is the rasteriser's and
@@ -5387,7 +5386,7 @@ mod tests {
         clone_draw_matches(None);
     }
 
-    /// The same, through a camera (K-561): the stamps foreshorten with depth,
+    /// The same, through a camera: the stamps foreshorten with depth,
     /// projected in the vertex stage on one path and before the stamp on the
     /// other.
     #[test]
@@ -5488,9 +5487,9 @@ mod tests {
         assert_eq!(gpu, twice, "the stamped draw is not bit-stable");
     }
 
-    // ---------------------------------------------------- Trail (K-601)
+    // ---------------------------------------------------- Trail
 
-    /// **The tail the card draws is the tail the reference drew** (K-601): the
+    /// **The tail the card draws is the tail the reference drew**: the
     /// instanced quads land where the software dabs land, inside the `moderate`
     /// class's perceptual epsilon — and both are handed the *same* dabs and the
     /// *same* capsules, so a disagreement here is the rasteriser's alone.
@@ -5595,9 +5594,9 @@ mod tests {
         assert_eq!(gpu, twice, "the tail draw is not bit-stable");
     }
 
-    // ------------------------------------------- Connect points (K-602)
+    // ------------------------------------------- Connect points
 
-    /// **The web the card draws is the web the reference drew** (K-602): the
+    /// **The web the card draws is the web the reference drew**: the
     /// instanced capsules land where the software dabs land, inside the
     /// `moderate` class's perceptual epsilon — and both are handed the *same*
     /// segments, so a disagreement here is the rasteriser's alone.
@@ -5772,7 +5771,7 @@ mod tests {
     const STREAM_ATTRS: usize = 10;
 
     /// Particle `i`'s ten attributes, in the golden's order — three axes of
-    /// position and speed since K-561.
+    /// position and speed.
     fn stream_attrs(s: &lumit_core::fx::points::PointsStream, i: usize) -> [f32; STREAM_ATTRS] {
         [
             s.position[i][0],
@@ -5833,8 +5832,8 @@ mod tests {
         let mut out = String::from(
             "# Particulate goldens (PS7, points-stream.md §5). Regenerate:\n\
              #   cargo test -p lumit-render --lib regenerate_particulate_goldens -- --ignored\n\
-             # The stream is the CPU reference (K-019); the card's read-back and the\n\
-             # three pictures are held to it within 10^-5 of range (K-508).\n",
+             # The stream is the CPU reference; the card's read-back and the\n\
+             # three pictures are held to it within 10^-5 of range.\n",
         );
         let stream = golden_stream();
         let _ = writeln!(out, "ids {}", stream.len());
@@ -5892,7 +5891,7 @@ mod tests {
             .map_or_else(Vec::new, |(_, v)| v)
     }
 
-    /// K-508's measure over a whole block: every value agrees with its
+    /// The measure over a whole block: every value agrees with its
     /// expectation to within 10⁻⁵ of the block's own range.
     fn assert_within_range(what: &str, got: &[f32], want: &[f64]) {
         assert_eq!(
@@ -5920,7 +5919,7 @@ mod tests {
         assert!(
             rel < 1e-5,
             "{what}: worst |Δ| {:.3e} at {} over a range of {range:.3e} — {rel:.2e} of range, \
-             past K-508's 10⁻⁵. Either the closed forms moved or the golden is stale.",
+             past the 10⁻⁵ bound. Either the closed forms moved or the golden is stale.",
             worst.0,
             worst.1
         );
@@ -5931,7 +5930,7 @@ mod tests {
     /// the repository.
     ///
     /// The two tests above hold the card to the CPU. Nothing held the CPU to
-    /// anything — it *is* the oracle (K-019) — so a change that moved both
+    /// anything — it *is* the oracle — so a change that moved both
     /// together (a different noise lattice, a rearranged closed form, a drift
     /// in the birth schedule) would have passed every test in this file while
     /// drawing a different picture. This is what notices.
@@ -5980,7 +5979,7 @@ mod tests {
     }
 
     /// The **card's** half of the goldens: the compacted stream read back off
-    /// the GPU, held to the same checked-in numbers at K-508's bound — the
+    /// the GPU, held to the same checked-in numbers at the same bound — the
     /// read-back hook `particulate_stream` was built for.
     ///
     /// The twin test says the two paths agree with each other; this says which
@@ -6056,7 +6055,7 @@ mod tests {
             .expect("write particulate-golden.txt");
     }
 
-    /// **The K-475 numbers** (docs/13 §2, rows B12–B14), measured rather than
+    /// **The budget numbers** (docs/13 §2, rows B12–B14), measured rather than
     /// asserted.
     ///
     /// Ignored by default and printed with `--nocapture`, because a timing
@@ -6153,7 +6152,7 @@ mod tests {
 
     /// The whole seam, end to end: an instance in a stack, a schedule threaded
     /// beside its op, and a picture that moved — plus the claim that the
-    /// **degradation rung is never on the export path** (K-475).
+    /// **degradation rung is never on the export path**.
     ///
     /// The rung is `ParticulateOp::cap`, and there is exactly one place that
     /// fills it. This asserts that place hands over the *declared* Max
@@ -6254,7 +6253,7 @@ mod tests {
         );
     }
 
-    /// **The cap rule and its degradation rung** (K-475, particulate.md §9
+    /// **The cap rule and its degradation rung** (particulate.md §9
     /// item 7): over budget, what survives is the newest `cap` by birth index —
     /// and halving the cap keeps the newest half of *that*, which is the same
     /// rule applied twice rather than a second rule.
@@ -6310,7 +6309,7 @@ mod tests {
     /// operation needs exactly one GPU pass, and every GPU pass must name an
     /// effect that exists (docs/impl/effect-registry.md §7, test 3).
     ///
-    /// **The compile-time halves only** (K-593). The run-time pair is registered
+    /// **The compile-time halves only**. The run-time pair is registered
     /// by one call — [`ofx::register`] — which does both tables or neither, so
     /// there is no typo left for a test to catch; walking them here would only
     /// mean this test could see a registration another test was halfway through.
@@ -6318,7 +6317,7 @@ mod tests {
     fn every_migrated_effect_has_a_gpu_entry() {
         for def in BUILTIN_DEFS.builtins() {
             let name = def.schema().match_name;
-            // **The Roto brush is the one argued exception** (K-713). It draws
+            // **The Roto brush is the one argued exception**. It draws
             // pixels, so it is an image op; it has no entry here because its
             // pass is Set matte's, run inline in `run_ops` over a matte nobody
             // picked. A `GpuEffect` of its own would be a kernel wrapper round
@@ -6339,9 +6338,9 @@ mod tests {
         }
         for pass in GPU_EFFECTS {
             let name = pass.match_name();
-            // `fx::def`, not `BUILTIN_DEFS`: since K-706 the table also carries
-            // the layer styles, which declare themselves on their own list
-            // rather than in the catalogue.
+            // `fx::def`, not `BUILTIN_DEFS`: the table also carries the layer
+            // styles, which declare themselves on their own list rather than
+            // in the catalogue.
             assert!(
                 lumit_core::fx::def(name).is_some(),
                 "the GPU table names {name}, which no effect or style declares"
@@ -6377,7 +6376,7 @@ mod tests {
     }
 
     /// An effect whose real input is a file or another layer must say which
-    /// list that input arrives on (K-387), because `resolve_into_arena`
+    /// list that input arrives on, because `resolve_into_arena`
     /// deliberately drops those parameter kinds: only the render knows which
     /// cube loaded or which layer was rendered, so nothing reaches the bag.
     ///
@@ -6391,12 +6390,12 @@ mod tests {
         use lumit_core::fx::ParamKind;
         for def in BUILTIN_DEFS.builtins() {
             let name = def.schema().match_name;
-            // The Matte row (K-395) is deliberately not counted: it is carried
+            // The Matte row is deliberately not counted: it is carried
             // by the one matte list beside `run_ops`'s dispatch, whoever
             // consumes it, and never by the effect's own `aux()`. Every effect
             // has one, so counting it would require all thirty-odd to declare a
             // list none of them reads. Its Invert goes with it — including the
-            // older `depth_invert`, which is the same switch under K-065's
+            // older `depth_invert`, which is the same switch under its earlier
             // stored id.
             let matte_row = def.schema().matte.param();
             let has_file = def
@@ -6405,7 +6404,7 @@ mod tests {
                 .iter()
                 .any(|p| matches!(p.kind, ParamKind::File { .. }));
             // A Layer row that is not the matte is the **auxiliary-layer**
-            // carriage, and since K-429 the schema is its own predicate: both
+            // carriage, and the schema is its own predicate: both
             // `build.rs` and `run_ops` walk `EffectSchema::layer_input`, so
             // what has to hold is that the schema finds the row — not that the
             // effect names a kind. That is what lets Fast motion blur take a
@@ -6420,7 +6419,7 @@ mod tests {
                 continue;
             }
             // A **driver** reads its layer reference on the CPU, at resolve
-            // time (K-471): Audio level measures the referenced layer's sound
+            // time: Audio level measures the referenced layer's sound
             // and hands out a number, so there is no pass to receive a picture
             // and no side table to fill. Anything that draws nothing is excused
             // for the same reason `every_migrated_effect_has_a_gpu_entry`
@@ -6542,7 +6541,7 @@ mod tests {
         }
     }
 
-    /// A definition that arrived at run time, as a plugin's does (K-593).
+    /// A definition that arrived at run time, as a plugin's does.
     ///
     /// Declared here rather than driven by a real OFX bundle because what is
     /// under test is the *seam*: `lumit-render` depends on no plugin host
@@ -6608,7 +6607,7 @@ mod tests {
         lumit_core::fx::instantiate(match_name).expect("the catalogue knows it")
     }
 
-    /// **Built-in, plugin, built-in** (K-593): a stack with a run-time effect in
+    /// **Built-in, plugin, built-in**: a stack with a run-time effect in
     /// the middle of it renders the picture the whole stack describes, through
     /// the same `run_ops` walk every built-in goes through.
     ///
@@ -6697,9 +6696,9 @@ mod tests {
     }
 
     /// **A failed plugin renders identity and badges its own row** (docs/12
-    /// §2.3, K-258's shape): the comp keeps compositing, the picture the middle
-    /// op was given comes out of it unchanged, and the instance is named so the
-    /// frontend can mark exactly that row.
+    /// §2.3): the comp keeps compositing, the picture the middle op was given
+    /// comes out of it unchanged, and the instance is named so the frontend can
+    /// mark exactly that row.
     #[test]
     fn a_failed_run_time_effect_renders_identity_and_reports_it() {
         let Some(ctx) = lumit_gpu::test_support::lease() else {
@@ -6767,7 +6766,7 @@ mod tests {
             .any(|(id, _)| *id == inst.id));
     }
 
-    /// **Shake picks its own kernel** (docs/08 §3.4, T18/K-165, K-388).
+    /// **Shake picks its own kernel** (docs/08 §3.4, T18).
     ///
     /// Shake is the one migrated effect whose dispatch forks: plain, it is the
     /// Transform kernel; with its own motion blur on, it is the averaging one,
@@ -6868,7 +6867,7 @@ mod tests {
         );
     }
 
-    /// **The k-th LUT op binds the k-th cube** (docs/08 §3.11, K-387).
+    /// **The k-th LUT op binds the k-th cube** (docs/08 §3.11).
     ///
     /// The whole threading contract in one picture. `build.rs` enumerates a
     /// layer's enabled `lut` effects in stack order, and `run_ops` walks a
@@ -6953,10 +6952,10 @@ mod tests {
     }
 
     /// **A plate and a matte are two lists, and neither eats the other's slot**
-    /// (docs/impl/layer-input.md §2, K-358, K-387, K-395).
+    /// (docs/impl/layer-input.md §2).
     ///
     /// Depth of field and Light wrap used to share the layer-input list, off one
-    /// predicate and one counter. K-395 split them — not arbitrarily: Light
+    /// predicate and one counter. They were split — not arbitrarily: Light
     /// wrap's Background is a *plate* whose light spills round an edge, while
     /// Depth of field's depth pass is that effect's **matte**, and belongs on the
     /// one carriage every effect's matte uses. So the two now count along
@@ -6995,8 +6994,8 @@ mod tests {
             .collect();
 
         // Stack order: Depth of field (its Matte row unset — a passthrough, and
-        // no layer-input slot of its own since K-395), then Light wrap with a
-        // real Width so it has something to draw.
+        // no layer-input slot of its own), then Light wrap with a real Width
+        // so it has something to draw.
         let dof = lumit_core::fx::instantiate("dof").expect("dof is a built-in");
         let mut wrap = lumit_core::fx::instantiate("light_wrap").expect("light_wrap is a built-in");
         for p in &mut wrap.params {
@@ -7066,11 +7065,11 @@ mod tests {
         }
     }
 
-    /// **Echo is handed the neighbour frames themselves** (docs/08 §3.13,
-    /// K-387). The whole-list kinds take no counter, which makes them look like
-    /// the easy case — but an effect that receives an empty list where the
-    /// render decoded four frames renders a perfectly ordinary picture with no
-    /// trail on it, and nothing else in the pipeline notices. So the trail is
+    /// **Echo is handed the neighbour frames themselves** (docs/08 §3.13). The
+    /// whole-list kinds take no counter, which makes them look like the easy
+    /// case — but an effect that receives an empty list where the render
+    /// decoded four frames renders a perfectly ordinary picture with no trail
+    /// on it, and nothing else in the pipeline notices. So the trail is
     /// asserted, not the plumbing: a dark frame with a bright neighbour behind
     /// it must come out brighter than it went in.
     #[test]
@@ -7123,8 +7122,8 @@ mod tests {
         );
     }
 
-    /// **An unbound Matte renders byte-for-byte what it rendered before K-395**
-    /// (K-258, the campaign's hardest invariant).
+    /// **An unbound Matte renders byte-for-byte what it rendered before the
+    /// matte list existed** (the campaign's hardest invariant).
     ///
     /// Every effect gained two parameters. A project saved yesterday carries
     /// neither, and must draw exactly the same pixels today — not "within a
@@ -7235,7 +7234,7 @@ mod tests {
         );
     }
 
-    /// **Set matte's source arrives on the layer-input carriage** (K-429).
+    /// **Set matte's source arrives on the layer-input carriage**.
     ///
     /// This one has a real way to fail silently. The effect used to take its
     /// picture off the Matte list and now takes it off the layer-input list;
@@ -7278,7 +7277,7 @@ mod tests {
         assert_eq!(
             schema.matte,
             lumit_core::fx::MatteRole::None,
-            "Set matte carries no Matte row (K-429)"
+            "Set matte carries no Matte row"
         );
         assert_eq!(
             schema.layer_input(),
@@ -7444,7 +7443,7 @@ mod tests {
     }
 
     /// **Fast motion blur reads a flow field, a Motion vectors layer and a
-    /// matte, all three** (K-429). The reason the auxiliary layer became a field
+    /// matte, all three**. The reason the auxiliary layer became a field
     /// on the slot rather than a sixth `AuxKind`: this effect already names the
     /// flow field, so a kind could not also carry its layer.
     ///
@@ -7538,7 +7537,7 @@ mod tests {
         );
     }
 
-    /// **Both flow consumers on one layer are served** (K-544).
+    /// **Both flow consumers on one layer are served**.
     ///
     /// Fast motion blur measures forward to the next frame, Datamosh measures
     /// back to the previous one. The layer used to carry a single field and the
@@ -7652,7 +7651,7 @@ mod tests {
         assert_ne!(mosh_only, source, "the -1 field alone must still melt");
     }
 
-    /// **An override's matte is spent ONCE** (K-395).
+    /// **An override's matte is spent ONCE**.
     ///
     /// The hook's whole risk in one test. An effect that claims the matte inside
     /// its maths must not *also* be dissolved by it beside the dispatch — the
@@ -7753,8 +7752,8 @@ mod tests {
         );
     }
 
-    /// **The k-th matte-carrying op binds the k-th matte slot** (K-395, the
-    /// K-387 contract with its second predicate).
+    /// **The k-th matte-carrying op binds the k-th matte slot** (the
+    /// parallel-list contract with its second predicate).
     ///
     /// The mirror of `the_kth_lut_op_binds_the_kth_slot`, and it exists for the
     /// same reason: nothing but the counting joins `build.rs`'s enumeration to

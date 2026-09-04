@@ -3,7 +3,7 @@ use crate::model::{EffectInstance, EffectNamespace, Layer};
 
 /// A Posterize Time effect resolved at a layer time (docs/08 §3.25,
 /// docs/impl/temporal-rerender.md): the coarse grid it snaps time to. Its
-/// reach is implied by the carrier (K-166, superseding the old Scope choice):
+/// reach is implied by the carrier (superseding the old Scope choice):
 /// a plain layer holds its own source and effect stack; an adjustment layer
 /// holds everything below it — that composite IS its effect input.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -29,7 +29,7 @@ pub fn posterize_held_time(t: f64, rate: f64, phase: f64) -> f64 {
 }
 
 /// The layer time a Posterize Time holds this layer's own effect stack at
-/// (docs/08 §3.25, K-166): the coarse-grid held time in the layer's own time
+/// (docs/08 §3.25): the coarse-grid held time in the layer's own time
 /// base, whenever the stack carries a live Posterize. `lt` is the layer time
 /// the stack would otherwise resolve at and `start_offset` the layer's own
 /// offset, so the hold is computed on the comp time `lt + start_offset`
@@ -38,8 +38,7 @@ pub fn posterize_held_time(t: f64, rate: f64, phase: f64) -> f64 {
 /// caller keeps the layer's transform and source live, so the effects step on
 /// the grid while the layer itself moves smoothly. On an adjustment layer the
 /// below-render seam holds the input on the same grid, so this snap is
-/// consistent with it. Pure and deterministic, shared by preview and export
-/// (K-031).
+/// consistent with it. Pure and deterministic, shared by preview and export.
 pub fn this_layer_effect_time(
     effects: &[EffectInstance],
     fx_on: bool,
@@ -74,7 +73,7 @@ pub fn stack_posterize(
         .map(|e| {
             let rate = e.float_at("rate", lt).unwrap_or(12.0);
             let phase = e.float_at("phase", lt).unwrap_or(0.0);
-            // A stored `scope` from a pre-K-166 project is simply unread: the
+            // A stored `scope` from an older project is simply unread: the
             // reach is implied by the carrier now.
             PosterizeParams { rate, phase }
         })
@@ -87,8 +86,8 @@ pub fn stack_posterize(
 /// in the same top-to-bottom document order (index 0 is the topmost layer, so a
 /// layer at a higher index is *below*).
 ///
-/// Two holds compose onto a running sample time as the walk descends (K-166 —
-/// the reach is implied by the carrier, no Scope choice):
+/// Two holds compose onto a running sample time as the walk descends (the
+/// reach is implied by the carrier, no Scope choice):
 /// * a Posterize on a plain layer holds that layer's own sample time (so its
 ///   footage playback and transform step — the owner's per-layer stop-motion),
 ///   affecting only itself;
@@ -102,7 +101,7 @@ pub fn stack_posterize(
 /// re-render the draw builder already performs. Nested/stacked Posterize
 /// adjustments compose by snapping the already-held time again, so a coarser
 /// grid above dominates. Pure and deterministic, and shared by the preview
-/// decode planner and export so the two hold the identical frame (K-031).
+/// decode planner and export so the two hold the identical frame.
 pub fn posterize_sample_times(layers: &[Layer], t_comp: f64) -> Vec<f64> {
     // The time imposed on the current layer by every Everything-below Posterize
     // adjustment seen above it, composed. Starts at the true playhead.
@@ -122,7 +121,7 @@ pub fn posterize_sample_times(layers: &[Layer], t_comp: f64) -> Vec<f64> {
         }
         out.push(sample_t);
         // A Posterize carried by an ADJUSTMENT layer holds every layer beneath
-        // it too (K-166: the composite below is its effect input) — compose its
+        // it too (the composite below is its effect input) — compose its
         // grid onto the running below-hold so nested holds snap the
         // already-held time again.
         if let Some(p) = &here {
@@ -148,26 +147,26 @@ pub struct AccumulationMbParams {
     pub shutter_phase: f64,
     /// Averaged-over-original blend, 0..1 (1 = full accumulation blur).
     pub mix: f64,
-    /// Force per-layer motion blur (K-120) on every layer during the sub-frame
+    /// Force per-layer motion blur on every layer during the sub-frame
     /// sample renders (docs/08 §3.26): the effect's shutter stands in for the
     /// comp master and every layer's own switch, so one effect blurs every
     /// moving layer without toggling each one and each sample is itself
     /// transform-smeared. The comp is never mutated — the forced shutter rides
     /// on the sample-render's cloned comp only.
     pub force_all: bool,
-    /// Which channel of the Matte layer drives the per-pixel shutter (K-425,
-    /// `CHANNEL_OPTIONS` index: 0 luminance, 1 alpha, 2 R, 3 G, 4 B), and
+    /// Which channel of the Matte layer drives the per-pixel shutter
+    /// (`CHANNEL_OPTIONS` index: 0 luminance, 1 alpha, 2 R, 3 G, 4 B), and
     /// whether it is read the other way round. This effect draws no pass of
     /// its own, so nothing prepares its matte at the dispatch seam — the
-    /// combine does it itself, once, before reading (K-429).
+    /// combine does it itself, once, before reading.
     pub matte_channel: u32,
     /// See [`matte_channel`](Self::matte_channel).
     pub matte_invert: bool,
 }
 
 impl AccumulationMbParams {
-    /// Where the **frame's own time** sits across the open shutter, 0..1
-    /// (K-429): the point the matte shrinks the shutter toward.
+    /// Where the **frame's own time** sits across the open shutter, 0..1: the
+    /// point the matte shrinks the shutter toward.
     ///
     /// **In plain terms.** The samples are spread across the time the shutter
     /// is open, and one moment in that span is the frame the viewer asked for
@@ -203,7 +202,7 @@ impl AccumulationMbParams {
     }
 
     /// The shutter as a [`crate::model::MotionBlur`] — the shared centred-shutter
-    /// maths the per-layer switch (K-120) uses, always enabled with this effect's
+    /// maths the per-layer switch uses, always enabled with this effect's
     /// angle/phase/samples.
     fn shutter(&self) -> crate::model::MotionBlur {
         crate::model::MotionBlur {
@@ -261,7 +260,7 @@ pub fn stack_accumulation_mb(
                 shutter_phase,
                 mix,
                 force_all,
-                // The Matte's Channel and Invert (K-425). Read here rather than
+                // The Matte's Channel and Invert. Read here rather than
                 // at the dispatch seam because this effect has no dispatch: it
                 // orchestrates a re-render, and the combine prepares its own
                 // matte.
@@ -277,7 +276,7 @@ pub fn stack_accumulation_mb(
 }
 
 /// Whether an instance is one the catalogue can answer for — a built-in, or a
-/// plugin that registered at run time (K-593). A placeholder is not: it is a
+/// plugin that registered at run time. A placeholder is not: it is a
 /// name this build does not understand, kept so the project round-trips, and it
 /// renders as identity.
 fn is_catalogued(e: &EffectInstance) -> bool {
@@ -295,7 +294,7 @@ fn is_catalogued(e: &EffectInstance) -> bool {
 /// of these offsets so a temporal effect (echo, flow motion blur, datamosh)
 /// can read its neighbours.
 ///
-/// **Per instance, not only per effect** (K-593). A built-in's window is a fact
+/// **Per instance, not only per effect**. A built-in's window is a fact
 /// about the effect and comes off its declaration, exactly as it always did. A
 /// plugin's is a fact about *this copy of it at this frame*: a retimer answers
 /// `getFramesNeeded` per instance and per time (docs/12 §2.1), so the definition
@@ -348,9 +347,9 @@ pub fn stack_is_temporal(effects: &[EffectInstance], fx_on: bool) -> bool {
 /// cannot disagree about which field belongs to whom.
 ///
 /// Flow motion blur (docs/08 §3.2) wants `1` (the +1 neighbour); Datamosh
-/// (§3.12, K-107) wants `-1`. Both are purely static reads of the schema's own
-/// match name (K-107 dropped the dynamic per-instance check a combined Glitch
-/// effect used to need), and both are also temporal — their windows reach that
+/// (§3.12) wants `-1`. Both are purely static reads of the schema's own
+/// match name (the dynamic per-instance check a combined Glitch effect used
+/// to need is gone), and both are also temporal — their windows reach that
 /// same offset — so the neighbour machinery already fetches the source frame the
 /// flow is measured against.
 pub fn effect_flow_neighbour(match_name: &str) -> Option<i32> {
@@ -368,7 +367,7 @@ pub fn effect_flow_neighbour(match_name: &str) -> Option<i32> {
 /// the render/decode paths check before doing any flow work. Sorted and
 /// deduplicated; empty when the stack wants none, so a plain layer pays nothing.
 ///
-/// **One offset per consumer, not one per layer (K-544).** Until this, the
+/// **One offset per consumer, not one per layer.** Until this, the
 /// layer carried a single field and the first flow-consuming effect in stack
 /// order took it, leaving the other silently doing nothing. The two want
 /// *different measurements* — forward to the next frame versus back to the

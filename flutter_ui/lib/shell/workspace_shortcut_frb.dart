@@ -1,10 +1,10 @@
-// Window ▸ Assign shortcut to this workspace (K-244, on the K-444 pattern).
+// Window ▸ Assign shortcut to this workspace.
 //
 // In plain terms: press the keys you want, and from then on they bring this
 // arrangement of panels back.
 //
 // **What the chord is actually bound to** is the workspace's *place on the
-// strip*, not its name (K-574): the engine's keymap has nine actions,
+// strip*, not its name: the engine's keymap has nine actions,
 // `workspace.switch.1` … `9`, and the strip counts the shipped presets first
 // and the user's own after them, in name order. So a workspace renamed past
 // one of its neighbours swaps chords with it. That is deliberate — it is what
@@ -125,8 +125,8 @@ class _ShortcutBodyState extends State<_ShortcutBody> {
   /// Take the next chord, and keep taking them until the dialogue is closed —
   /// pressing a second one is how you change your mind before applying.
   ///
-  /// Escape and Enter are left alone: they are the dialogue's own two ways out
-  /// (K-243), and a shortcut nobody can leave the dialogue to use would not be
+  /// Escape and Enter are left alone: they are the dialogue's own two ways
+  /// out, and a shortcut nobody can leave the dialogue to use would not be
   /// much of one.
   bool _handler(KeyEvent event) {
     if (event is! KeyDownEvent) return false;

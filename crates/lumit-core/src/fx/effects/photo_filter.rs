@@ -34,8 +34,8 @@ pub const PHOTO_FILTER_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     // premultiplied alpha.
     premultiplied = false,
     enabled_when = PHOTO_FILTER_ENABLED_WHEN,
-    // K-395: the matte scales the amount, inside the kernel (the owner's
-    // rule for mattes); the generic strength dissolve does not also run.
+    // The matte scales the amount, inside the kernel (the owner's rule for
+    // mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales Density per pixel: white holds the full Density of glass in \
@@ -110,7 +110,7 @@ pub struct PhotoFilter {
 
 impl PhotoFilter {
     /// The Custom option's index — the last, so adding a filter above it does
-    /// not renumber a saved project (K-065).
+    /// not renumber a saved project.
     pub const CUSTOM: u32 = 20;
 
     /// The twenty named filters, as sRGB bytes. Stored in the form they are

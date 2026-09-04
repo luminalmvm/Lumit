@@ -1,5 +1,5 @@
 //! The solve link: a Camera layer driven by a tracked layer's camera solve
-//! (K-417, docs/03-DATA-MODEL.md §5.6, docs/impl/tracking.md phase 4).
+//! (docs/03-DATA-MODEL.md §5.6, docs/impl/tracking.md phase 4).
 //!
 //! # In plain terms
 //!
@@ -16,10 +16,9 @@
 //! decide which frame of the file to decode: composition time, less the
 //! layer's offset, through the layer's or the clip's Retime, to a moment of the
 //! source. That is why a reordered Sequence layer and a speed ramp both come
-//! out right for free — the tracker ran on the file, once, exactly as K-248
-//! says it must.
+//! out right for free — the tracker ran on the file, once.
 //!
-//! **Track once, then nudge** (K-578). A solve is a measurement, and a
+//! **Track once, then nudge**. A solve is a measurement, and a
 //! measurement can be a little wrong — the ground plane tilts, the shot drifts,
 //! the whole move wants to sit half a metre to the left. So a linked camera's
 //! own transform rows are not read-only: they are a **correction lane**. What
@@ -28,7 +27,7 @@
 //! correction; re-analyse the shot and the correction rides on top of the new
 //! solve, because it was never part of it.
 //!
-//! Two honest failures, and neither is silent (K-417):
+//! Two honest failures, and neither is silent:
 //!
 //! - The link asks for a moment **outside** what was solved (the layer runs on
 //!   past the solved range, or a retime reaches before its start). The camera
@@ -55,7 +54,7 @@ use crate::sequence::ClipSource;
 use crate::time::Rational;
 
 /// The match name of the Camera track effect — what marks a layer as *the*
-/// tracked layer inside a precomp (K-417's parent-comp ruling).
+/// tracked layer inside a precomp (the parent-comp rule).
 ///
 /// One spelling, here, because two places compare against it: the walk below
 /// and the effect's own declaration
@@ -104,8 +103,8 @@ pub trait CameraSolveStore {
     fn solved_pose(&self, media: Uuid, frame: i64) -> Option<CameraPose>;
 }
 
-/// How a Camera layer's placement was arrived at — the flag K-417 requires the
-/// interface to be able to read, so a link that stopped working says so.
+/// How a Camera layer's placement was arrived at — the flag the interface must
+/// be able to read, so a link that stopped working says so.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LinkState {
     /// No solve link: an ordinary camera, driven by its own properties.
@@ -195,7 +194,7 @@ pub fn camera_pose_of(
     }
 }
 
-/// The solved pose with the layer's own correction on it (K-578).
+/// The solved pose with the layer's own correction on it.
 ///
 /// **Channel-wise addition**, and that is the whole composition: each of the
 /// seven numbers is `solved + (stored − base)`. Order does not arise, because
@@ -233,8 +232,8 @@ fn correct(solved: CameraPose, stored: CameraPose, base: Option<&CameraPose>) ->
     }
 }
 
-/// Whether `layer`'s correction lane holds anything — **edited since track**
-/// (K-578), which is what the dot beside the link says.
+/// Whether `layer`'s correction lane holds anything — **edited since track**,
+/// which is what the dot beside the link says.
 ///
 /// A property answers yes the moment it stops being exactly the static value it
 /// was linked at: a different number, a keyframe, or an expression. A lane keyed
@@ -264,7 +263,7 @@ pub fn has_correction(layer: &Layer) -> bool {
     .any(|(animation, nought)| *animation != Animation::Static(nought))
 }
 
-/// **Clear corrections** (K-578): put every property of the correction lane back
+/// **Clear corrections**: put every property of the correction lane back
 /// to the pose the link was made at, as one undoable step.
 ///
 /// The link is untouched — this is the *nudge* being taken back, not the track.
@@ -316,9 +315,8 @@ pub fn clear_corrections(doc: &Document, comp: Uuid, camera: Uuid) -> Option<Op>
 /// bit, which is what [`LinkState::Held`] means.
 ///
 /// The one walk everything downstream shares: the camera link asks it for a
-/// pose, and the interface asks it which frame of the point cloud to draw
-/// (K-417's overlay). Two readings of the same moment cannot disagree if there
-/// is only one walk.
+/// pose, and the interface asks it which frame of the point cloud to draw. Two
+/// readings of the same moment cannot disagree if there is only one walk.
 #[must_use]
 pub fn tracked_solved_frame(
     doc: &Document,
@@ -377,15 +375,15 @@ fn derived_pose(
 ///
 /// Through a **Precomp** layer (or a comp-sourced clip) the walk continues
 /// inside: the nested comp's own tracked layer is found by the Camera track
-/// effect on it, which is what makes K-417's parent-comp workflow resolve — a
+/// effect on it, which is what makes the parent-comp workflow resolve — a
 /// linked camera in the parent comp names the precomp layer, and the chain
 /// finds the footage inside.
 ///
 /// **Unless the Precomp layer wears the effect itself**, in which case the walk
-/// stops there and the nested comp *is* the tracked source. K-417 allows a
-/// Camera track on a Precomp layer, and what that asks to track is the picture
-/// the nested comp makes — a comp of stills panned by a camera move has no
-/// footage inside it to follow, and there is nothing further down to descend to.
+/// stops there and the nested comp *is* the tracked source. A Camera track is
+/// allowed on a Precomp layer, and what that asks to track is the picture the
+/// nested comp makes — a comp of stills panned by a camera move has no footage
+/// inside it to follow, and there is nothing further down to descend to.
 /// The solve is filed under the comp's own id, the store being asked about a
 /// source rather than about a file.
 ///
@@ -437,8 +435,8 @@ fn descend(doc: &Document, nested: Uuid, t: f64, depth: u32) -> Option<(Uuid, f6
     tracked_source_at(doc, nc, inner, t, depth + 1)
 }
 
-/// Whether `layer` carries an enabled Camera track — K-417's definition that
-/// the effect *is* the handle, spelled once because three questions ask it.
+/// Whether `layer` carries an enabled Camera track — the effect *is* the
+/// handle, spelled once because three questions ask it.
 #[must_use]
 pub fn wears_camera_track(layer: &Layer) -> bool {
     layer
@@ -467,9 +465,8 @@ pub fn tracked_source_id(layer: &Layer) -> Option<Uuid> {
 }
 
 /// The layer in `comp` carrying an enabled Camera track effect — the tracked
-/// layer, by K-417's definition that the effect *is* the handle. The first one,
-/// in stack order, so the answer never depends on the playhead; `None` when the
-/// comp has none.
+/// layer, the effect being the handle. The first one, in stack order, so the
+/// answer never depends on the playhead; `None` when the comp has none.
 #[must_use]
 pub fn tracked_layer(comp: &Composition) -> Option<Uuid> {
     comp.layers
@@ -478,7 +475,7 @@ pub fn tracked_layer(comp: &Composition) -> Option<Uuid> {
         .map(|l| l.id)
 }
 
-/// **Convert to keyframes** (K-417): bake the derived motion into ordinary
+/// **Convert to keyframes**: bake the derived motion into ordinary
 /// keyframes and sever the link, as one undoable step.
 ///
 /// One key per composition frame across the camera layer's own span, linear on
@@ -487,7 +484,7 @@ pub fn tracked_layer(comp: &Composition) -> Option<Uuid> {
 /// bargain the ruling makes for being honest that there are a lot of them.
 ///
 /// **The link is cleared first**, inside the batch, and it still is now that a
-/// linked camera's transform takes edits (K-578): the numbers written after it
+/// linked camera's transform takes edits: the numbers written after it
 /// are the *corrected* pose, absolute, and they would be read as a correction if
 /// the link were still on. Clearing first also drops the correction base, so
 /// nothing is left over to be added twice. Undo reverses the members — the
@@ -588,10 +585,10 @@ fn key(time: Rational, value: f64) -> Keyframe {
 }
 
 // ---------------------------------------------------------------------------
-// The planar track, and the Corner pin it writes (K-579)
+// The planar track, and the Corner pin it writes
 // ---------------------------------------------------------------------------
 
-/// The match name of the Planar track effect (docs/08 §3.87, K-579). One
+/// The match name of the Planar track effect (docs/08 §3.87). One
 /// spelling, here, for [`CAMERA_TRACK`]'s reason.
 pub const PLANAR_TRACK: &str = "planar_track";
 
@@ -675,7 +672,7 @@ pub fn tracked_source_time(
     tracked_source_at(doc, comp, tracked, t, 0)
 }
 
-/// **Create corner pin** (K-579): a Corner pin on `target`, its four points
+/// **Create corner pin**: a Corner pin on `target`, its four points
 /// keyframed to the surface `tracked` followed.
 ///
 /// One key per composition frame of the target layer's own extent, at the
@@ -687,7 +684,7 @@ pub fn tracked_source_time(
 ///
 /// The moment each key reads is found by [`tracked_source_time`], so a trimmed
 /// clip, a speed ramp, a reordered Sequence layer and a precomp all come out
-/// right for free — the track was of the *source*, once (K-248). A comp frame
+/// right for free — the track was of the *source*, once. A comp frame
 /// the track does not reach clamps into its range, which is the same hold a
 /// linked camera performs.
 ///
@@ -838,7 +835,7 @@ fn quad_pose(q: Quad) -> ([f64; 2], f64, f64) {
     (centre, angle, span)
 }
 
-/// **Create transform keys** (K-734): the movement `tracked` measured, written
+/// **Create transform keys**: the movement `tracked` measured, written
 /// onto `target`'s own Position — and, when `scale_and_rotation`, its Rotation
 /// and Scale as well.
 ///
@@ -1067,7 +1064,7 @@ mod tests {
     }
 
     /// A tracked layer is one carrying the Camera track effect — that is the
-    /// whole of what marks it (K-417).
+    /// whole of what marks it.
     fn tracked(mut l: Layer) -> Layer {
         l.effects
             .push(crate::fx::instantiate(CAMERA_TRACK).expect("the effect is registered"));
@@ -1159,9 +1156,9 @@ mod tests {
         }
     }
 
-    /// K-248 made testable: the tracker ran on the file, so reordering the cuts
-    /// changes which solved frame is on screen and nothing else. The same source
-    /// moment gives the same pose whichever order the clips sit in.
+    /// The tracker ran on the file, so reordering the cuts changes which solved
+    /// frame is on screen and nothing else. The same source moment gives the
+    /// same pose whichever order the clips sit in.
     #[test]
     fn reordering_a_sequence_layer_moves_the_pose_with_the_source_frame() {
         let media = Uuid::now_v7();
@@ -1197,7 +1194,7 @@ mod tests {
         }
     }
 
-    /// K-417's parent-comp ruling: a linked camera in the parent comp names the
+    /// The parent-comp rule: a linked camera in the parent comp names the
     /// **precomp layer**, and the chain resolves through it to the tracked layer
     /// inside — the precomp layer's own Retime included.
     #[test]
@@ -1340,7 +1337,7 @@ mod tests {
         );
     }
 
-    /// **Track once, then nudge** (K-578): a linked camera takes a transform
+    /// **Track once, then nudge**: a linked camera takes a transform
     /// edit, and what it takes is a *correction* — added to the solved pose,
     /// channel by channel, wherever the link resolves.
     #[test]
@@ -1715,7 +1712,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // The planar track's corner pin (K-579)
+    // The planar track's corner pin
     // -----------------------------------------------------------------------
 
     /// A written-down planar track: sixty frames at 30 fps, the quad a plain
@@ -1838,10 +1835,11 @@ mod tests {
             .is_empty());
     }
 
-    /// K-248 again, from the planar side: the track is of the *source*, so a
-    /// retimed clip's pin follows the retime rather than the comp's clock. A
-    /// half-speed first second puts source frame 5 under comp frame 10, and the
-    /// freeze after it holds source frame 15 for the rest of the shot.
+    /// The tracker ran on the file, from the planar side: the track is of the
+    /// *source*, so a retimed clip's pin follows the retime rather than the
+    /// comp's clock. A half-speed first second puts source frame 5 under comp
+    /// frame 10, and the freeze after it holds source frame 15 for the rest of
+    /// the shot.
     #[test]
     fn a_corner_pin_follows_the_tracked_layers_retime() {
         let media = Uuid::now_v7();
@@ -1914,7 +1912,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // The planar track's transform keys (K-734)
+    // The planar track's transform keys
     // -----------------------------------------------------------------------
 
     /// A written-down planar track of a **rigid** rectangle, so the pose the

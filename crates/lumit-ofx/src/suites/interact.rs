@@ -1,4 +1,4 @@
-//! `OfxInteractSuiteV1` — present, and never usable (K-757).
+//! `OfxInteractSuiteV1` — present, and never usable.
 //!
 //! **In plain terms.** An interact is the thing a plugin draws over the
 //! viewer: a crosshair to drag, a box to size. Lumit tells every plugin it has

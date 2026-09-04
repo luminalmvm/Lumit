@@ -1,5 +1,5 @@
 // The toolbar's tools: what they are, which of them is armed, and how a
-// keyboard chord picks one (docs/07 §1.7, K-216).
+// keyboard chord picks one (docs/07 §1.7).
 //
 // **In plain terms.** A tool is the answer to "what does dragging in the Viewer
 // do?" — nudge a layer about, pan the picture, draw a mask, cut a clip. Every
@@ -62,7 +62,7 @@ enum ToolMode {
 
   // The shape tools draw a mask on the selected layer, or a shape layer with
   // nothing selected — AE's rule, and the reason they are one group. Both
-  // halves are built: the mask half since K-222, the shape layer since K-237.
+  // halves are built.
   shapeRectangle(ToolGroup.shape, LumitIcon.rectangle, ready: true),
   shapeRoundedRectangle(ToolGroup.shape, LumitIcon.roundedRectangle,
       ready: true),
@@ -70,7 +70,7 @@ enum ToolMode {
   shapePolygon(ToolGroup.shape, LumitIcon.polygon, ready: true),
   shapeStar(ToolGroup.shape, LumitIcon.star, ready: true),
 
-  // The Pen builds a mask path point by point (K-223). Its four siblings edit a
+  // The Pen builds a mask path point by point. Its four siblings edit a
   // *finished* path, which is not built.
   pen(ToolGroup.pen, LumitIcon.pen, ready: true),
   penAddVertex(ToolGroup.pen, LumitIcon.vertexAdd),
@@ -78,20 +78,20 @@ enum ToolMode {
   penConvertVertex(ToolGroup.pen, LumitIcon.vertexConvert),
   penMaskFeather(ToolGroup.pen, LumitIcon.maskFeather),
 
-  // Making and editing text layers on the picture (K-225). Vertical type would
+  // Making and editing text layers on the picture. Vertical type would
   // need the engine to lay a line out downwards; it lays out one horizontal
   // line, so that member stays unbuilt.
   typeHorizontal(ToolGroup.type, LumitIcon.text, ready: true),
   typeVertical(ToolGroup.type, LumitIcon.textVertical),
 
-  // Painting on a layer (K-227): the brush lays the fill colour down, the
+  // Painting on a layer: the brush lays the fill colour down, the
   // eraser rubs through to transparent, and the clone stamp copies from an
   // Alt-clicked source elsewhere on the same layer.
   brush(ToolGroup.paint, LumitIcon.brush, ready: true),
   cloneStamp(ToolGroup.paint, LumitIcon.cloneStamp, ready: true),
   eraser(ToolGroup.paint, LumitIcon.eraser, ready: true),
 
-  // Cutting a subject out of a shot (K-717, docs/impl/roto.md §6). The
+  // Cutting a subject out of a shot (docs/impl/roto.md §6). The
   // **Roto brush** scribbles what is subject and what is not — `Alt` says "not"
   // — and **Refine edge** paints the band where the edge is allowed to be soft.
   // Both are live: a scribble is an edit to the Roto brush effect on the layer,
@@ -99,7 +99,7 @@ enum ToolMode {
   rotoBrush(ToolGroup.roto, LumitIcon.rotoBrush, ready: true),
   refineEdge(ToolGroup.roto, LumitIcon.refineEdge, ready: true),
 
-  // The four Puppet pins (K-704): a click places a pin of that kind on the
+  // The four Puppet pins: a click places a pin of that kind on the
   // selected layer's mesh, and a drag moves it at the playhead. All four are
   // live — the position pin moves a spot, and the other three season the move
   // (docs/impl/puppet.md §2.2), which is a value on the pin rather than a
@@ -109,8 +109,8 @@ enum ToolMode {
   puppetOverlap(ToolGroup.puppet, LumitIcon.puppetOverlap, ready: true),
   puppetBend(ToolGroup.puppet, LumitIcon.puppetBend, ready: true),
 
-  // Moving the composition's active camera by dragging on the picture
-  // (K-229): orbit round what it is looking at, track across, dolly in.
+  // Moving the composition's active camera by dragging on the picture:
+  // orbit round what it is looking at, track across, dolly in.
   cameraOrbit(ToolGroup.camera, LumitIcon.cameraOrbit, ready: true),
   cameraPan(ToolGroup.camera, LumitIcon.cameraPan, ready: true),
   cameraDolly(ToolGroup.camera, LumitIcon.cameraDolly, ready: true);
@@ -124,7 +124,7 @@ enum ToolMode {
   ///
   /// A getter rather than a constructor argument: an enum constant is built
   /// once, when the program starts, and the interface language can change
-  /// after that (K-303).
+  /// after that.
   String get label => switch (this) {
         ToolMode.select => l10n.toolSelect,
         ToolMode.hand => l10n.toolHand,
@@ -167,13 +167,13 @@ enum ToolMode {
   static List<ToolMode> membersOf(ToolGroup group) =>
       ToolMode.values.where((m) => m.group == group).toList(growable: false);
 
-  /// The members of [group] that do something today (K-228). Empty for a group
+  /// The members of [group] that do something today. Empty for a group
   /// nothing in which is built, which is what makes its button disabled.
   static List<ToolMode> builtMembersOf(ToolGroup group) =>
       membersOf(group).where((m) => m.ready).toList(growable: false);
 }
 
-/// The keymap action each group answers to (docs/07 §15, K-199). The engine
+/// The keymap action each group answers to (docs/07 §15). The engine
 /// owns the chords; this only says which group an action arms, so rebinding a
 /// tool in Settings → Keymap moves the shortcut and nothing here changes.
 const Map<String, ToolGroup> toolActions = {
@@ -193,8 +193,7 @@ const Map<String, ToolGroup> toolActions = {
 };
 
 /// A colour the toolbar holds, in the document's own scene-linear channels — the
-/// same numbers a fill crosses the bridge as, so nothing is converted twice
-/// (K-225).
+/// same numbers a fill crosses the bridge as, so nothing is converted twice.
 @immutable
 class ToolColour {
   final double r;
@@ -245,14 +244,14 @@ class ToolsState extends ChangeNotifier {
   /// variant you chose rather than snapping back to the first one.
   final Map<ToolGroup, ToolMode> _lastUsed = {};
 
-  /// **The magnet** (docs/07 §4.5, K-689): whether a drag on the picture
+  /// **The magnet** (docs/07 §4.5): whether a drag on the picture
   /// reaches for the guides and, when [snapToGrid] is on, for the grid.
   ///
   /// It lives here, on the toolbar's own state, because the toolbar is where
   /// the switch that applies to a *gesture* goes — and the Viewer's guides menu
   /// shows the same switch under its own name, the way the layer-controls
   /// switch is shown in two places. It was taken off the strip when nothing in
-  /// the application read it (K-230); it is back because the Viewer's layer
+  /// the application read it; it is back because the Viewer's layer
   /// drags read it now.
   ///
   /// On by default, as the Timeline's magnet is: `Ctrl` held suspends it for
@@ -278,7 +277,7 @@ class ToolsState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// The **fill** the drawing tools use: the colour new text is set in (K-225),
+  /// The **fill** the drawing tools use: the colour new text is set in,
   /// and the colour a shape layer's fill will take once there are shape layers.
   ToolColour _fill = ToolColour.white;
   ToolColour get fill => _fill;
@@ -305,7 +304,7 @@ class ToolsState extends ChangeNotifier {
   }
 
   /// The **stroke** a shape layer's art is outlined in, and how wide that
-  /// outline is in layer pixels (K-237).
+  /// outline is in layer pixels.
   ///
   /// Live since shape layers landed: a width of zero draws no outline, which is
   /// how a fill-only shape is made.
@@ -317,7 +316,7 @@ class ToolsState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// The stroke as the bridge wants it, for a shape layer's outline (K-237).
+  /// The stroke as the bridge wants it, for a shape layer's outline.
   BridgeColourRgba get strokeRgba =>
       BridgeColourRgba(r: _stroke.r, g: _stroke.g, b: _stroke.b, a: 1);
 
@@ -331,7 +330,7 @@ class ToolsState extends ChangeNotifier {
   }
 
   /// The **brush**: how wide a paint stroke is in layer pixels, how hard its
-  /// edge is and how opaque the mark it leaves (K-227). Its own settings rather
+  /// edge is and how opaque the mark it leaves. Its own settings rather
   /// than the shape tools' stroke, because a brush is a different thing that
   /// happens to have a width — and because these three are live while the
   /// stroke pair is not.
@@ -354,7 +353,7 @@ class ToolsState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Which shape the brush stamps (K-548). Round is the brush everything was
+  /// Which shape the brush stamps. Round is the brush everything was
   /// painted with before there was a choice, and stays the default.
   BridgeBrushShape _brushShape = BridgeBrushShape.round;
   BridgeBrushShape get brushShape => _brushShape;
@@ -364,7 +363,7 @@ class ToolsState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Whether a stylus's pressure widens the mark (K-583). On, because a pen
+  /// Whether a stylus's pressure widens the mark. On, because a pen
   /// that does not thin under a light hand is a pen nobody reaches for — and
   /// with no stylus in the room it changes nothing at all.
   bool _brushPressureSize = true;
@@ -384,7 +383,7 @@ class ToolsState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// **How wide a roto scribble is**, in source pixels (K-717).
+  /// **How wide a roto scribble is**, in source pixels.
   ///
   /// Its own number rather than the paint brush's [brushSize]: a roto stroke is
   /// not a mark on the picture but a claim about what the subject is, and it is
@@ -400,15 +399,15 @@ class ToolsState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// **The puppet mesh** (K-704, docs/impl/puppet.md §1.1): the triangle edge
+  /// **The puppet mesh** (docs/impl/puppet.md §1.1): the triangle edge
   /// the mesh aims for, and how far the opaque region is grown before its
   /// outline is walked — both in the layer's own pixels at natural size.
   ///
   /// Session state, like every other tool option §1.7 lists: these are what the
   /// *next* puppet is meshed at. Changing one with a puppeted layer selected
-  /// re-meshes that layer too, which is the "live" half of K-225 — but the
-  /// numbers are not read back off the block, so they say what you last asked
-  /// for rather than what the layer under the pointer happens to hold.
+  /// re-meshes that layer too — but the numbers are not read back off the
+  /// block, so they say what you last asked for rather than what the layer
+  /// under the pointer happens to hold.
   ///
   /// Smaller density is suppler and dearer; the engine clamps both, and coarsens
   /// by itself rather than building a mesh past its vertex cap.
@@ -440,7 +439,7 @@ class ToolsState extends ChangeNotifier {
       (ToolMode.builtMembersOf(group).firstOrNull ??
           ToolMode.membersOf(group).first);
 
-  /// Arm [tool], if it is a tool that does anything (K-228).
+  /// Arm [tool], if it is a tool that does anything.
   ///
   /// A tool whose behaviour is not built cannot be armed — by click, by flyout
   /// or by chord. It stays on the strip, drawn disabled, because the tool set
@@ -466,7 +465,7 @@ class ToolsState extends ChangeNotifier {
   /// walks rectangle → rounded rectangle → ellipse → polygon → star → rectangle
   /// without ever opening the flyout.
   void cycleGroup(ToolGroup group) {
-    // Only the built ones are in the walk (K-228): a chord that stepped onto a
+    // Only the built ones are in the walk: a chord that stepped onto a
     // tool that does nothing would be a chord that appears to do nothing.
     final members = ToolMode.builtMembersOf(group);
     if (members.isEmpty) return;

@@ -5,10 +5,10 @@ use crate::GpuContext;
 
 use super::{work_texture, BlurOp, FxEngine};
 
-/// One resolved matte key (docs/08 §3.21, K-121/K-154): a Keylight-style
+/// One resolved matte key (docs/08 §3.21): a Keylight-style
 /// colour-difference keyer on straight (unpremultiplied) colour. Mirrors
 /// `lumit_core::fx::MatteKeyParams` field-for-field so the kernel and the CPU
-/// oracle consume the identical numbers (K-031). The kernel derives the screen's
+/// oracle consume the identical numbers. The kernel derives the screen's
 /// primary channel and reference from `key`, exactly as the CPU reference does.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MatteKeyOp {
@@ -36,15 +36,15 @@ pub struct MatteKeyOp {
     pub replace_method: u32,
     /// Scene-linear RGBA replace colour.
     pub replace_colour: [f32; 4],
-    /// Screen pre-blur radius, raster pixels (K-546). 0 skips the stage.
+    /// Screen pre-blur radius, raster pixels. 0 skips the stage.
     pub pre_blur: f32,
-    /// Screen matte shrink (−) / grow (+), raster pixels (K-546). 0 skips it.
+    /// Screen matte shrink (−) / grow (+), raster pixels. 0 skips it.
     pub shrink_grow: f32,
-    /// Screen matte softness (a blur of the matte), raster pixels (K-546).
+    /// Screen matte softness (a blur of the matte), raster pixels.
     pub softness: f32,
-    /// Despot black, 0..1 (K-546).
+    /// Despot black, 0..1.
     pub despot_black: f32,
-    /// Despot white, 0..1 (K-546).
+    /// Despot white, 0..1.
     pub despot_white: f32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
@@ -65,17 +65,17 @@ impl MatteKeyOp {
 }
 
 /// The most straight pieces one garbage mask's outline is walked as — mirrors
-/// `lumit_core::fx::cpu::MASK_FILL_SEGMENTS` (K-546).
+/// `lumit_core::fx::cpu::MASK_FILL_SEGMENTS`.
 pub const MASK_FILL_SEGMENTS: usize = 512;
 
 /// The farthest a shrink or grow may reach, raster pixels — mirrors
-/// `lumit_core::fx::cpu::MATTE_MORPH_MAX_PX` (K-546). Both paths clamp, so both
+/// `lumit_core::fx::cpu::MATTE_MORPH_MAX_PX`. Both paths clamp, so both
 /// paths reach the same distance when a nonsense number arrives.
 pub const MATTE_MORPH_MAX_PX: f32 = 256.0;
 
-/// One resolved garbage mask (docs/08 §3.21, K-546): a closed outline in raster
+/// One resolved garbage mask (docs/08 §3.21): a closed outline in raster
 /// pixels and how soft its edge is. Mirrors `lumit_core::fx::cpu::MaskFillParams`
-/// field-for-field, exactly as [`MatteKeyOp`] mirrors its own params (K-031).
+/// field-for-field, exactly as [`MatteKeyOp`] mirrors its own params.
 ///
 /// A `count` of zero is the row's no-op: the pass is not dispatched at all.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -208,7 +208,7 @@ struct VignetteParams {
     _pad2: f32,
 }
 
-/// One resolved transform (docs/08 §3.5, K-090): the inverse affine arrives
+/// One resolved transform (docs/08 §3.5): the inverse affine arrives
 /// host-computed (`lumit_core::fx::transform_op`) so the kernel never runs
 /// its own trigonometry and the CPU reference consumes bit-identical
 /// numbers. A degenerate (zero-scale) transform arrives as opacity 0 with
@@ -223,7 +223,7 @@ pub struct TransformOp {
     pub opacity: f32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
-    /// The revealed border's edge policy (P3, K-145): 0 Transparent, 1 Repeat,
+    /// The revealed border's edge policy (P3): 0 Transparent, 1 Repeat,
     /// 2 Mirror. The Transform effect passes 0; Shake threads its Edges control.
     pub edge: u32,
 }
@@ -236,21 +236,21 @@ struct TransformParams {
     opacity: f32,
     mix_amt: f32,
     edge: u32,
-    /// 1 = scale the displacement by the matte (K-427) — the Shake's claim;
+    /// 1 = scale the displacement by the matte — the Shake's claim;
     /// the Transform effect never binds one.
     matte_on: f32,
     _pad1: f32,
     _pad2: f32,
 }
 
-/// The number of Shake motion-blur sub-frame taps (T18/K-165): the fixed-size
+/// The number of Shake motion-blur sub-frame taps (T18): the fixed-size
 /// end of the uniform array and the WGSL kernel's `array<Tap, 9>` / `MAX_TAPS`.
 /// Must equal `lumit_core::fx::SHAKE_MB_SAMPLES` — the GPU crate can't name that
 /// const (lumit-core is a dev-dependency only), so the oracle tests assert the
 /// two agree, and the WGSL literal is kept in step by the same tests.
 pub const SHAKE_MB_SAMPLES: usize = 9;
 
-/// One resolved Shake motion blur (docs/08 §3.4, T18/K-165): the shake's own
+/// One resolved Shake motion blur (docs/08 §3.4, T18): the shake's own
 /// inter-frame smear. Each tap is a host-computed inverse affine (the same
 /// `shake_affine` → `transform_op` construction the plain Shake uses, one per
 /// motion-blur sub-frame); the kernel resamples the input through the first
@@ -263,7 +263,7 @@ pub struct ShakeMbOp {
     pub taps: [ShakeMbTap; SHAKE_MB_SAMPLES],
     /// Active taps, `1..=SHAKE_MB_SAMPLES`.
     pub count: u32,
-    /// The revealed border's edge policy (P3, K-145): 0 Transparent, 1 Repeat,
+    /// The revealed border's edge policy (P3): 0 Transparent, 1 Repeat,
     /// 2 Mirror.
     pub edge: u32,
     /// 0..1, blended against the unprocessed input.
@@ -292,12 +292,12 @@ struct ShakeMbParams {
     count: u32,
     edge: u32,
     mix_amt: f32,
-    /// 1 = scale every tap's displacement by the matte (K-427).
+    /// 1 = scale every tap's displacement by the matte.
     matte_on: f32,
 }
 
 /// One resolved Block glitch (docs/08 §3.12, split out of the old combined
-/// Glitch effect by K-107). `tick` arrives already computed from local time
+/// Glitch effect). `tick` arrives already computed from local time
 /// (`lumit_core::fx::GLITCH_TICK_HZ`), so the kernel never sees raw time or
 /// does its own time maths.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -332,14 +332,14 @@ struct BlockGlitchParams {
     chan: f32,
     slice_frac: f32,
     mix_amt: f32,
-    /// 1 = scale Intensity by the matte (K-427).
+    /// 1 = scale Intensity by the matte.
     matte_on: f32,
     _pad1: f32,
     _pad2: f32,
 }
 
 /// One resolved Scanlines (docs/08 §3.12, split out of the old combined
-/// Glitch effect by K-107; single Intensity since FX-13/K-147). `roll_px`
+/// Glitch effect; single Intensity since FX-13). `roll_px`
 /// arrives already computed from local time (roll speed × time × period), so
 /// the kernel never sees raw time.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -363,7 +363,7 @@ struct ScanlinesParams {
     roll_px: f32,
     interlace: u32,
     mix_amt: f32,
-    /// 1 = widen Line period by the matte (K-427).
+    /// 1 = widen Line period by the matte.
     matte_on: f32,
     _pad1: f32,
     _pad2: f32,
@@ -444,7 +444,7 @@ impl FxEngine {
         op: &RoughenEdgesOp,
     ) -> wgpu::Texture {
         // The whole claim: Border IS this blur's radius, and the matte scales a
-        // radius per pixel already (K-428, K-395). The second pass needs no
+        // radius per pixel already. The second pass needs no
         // matte of its own — a narrower ramp is a narrower band to chew.
         let soft = self.blur(
             ctx,
@@ -492,7 +492,7 @@ impl FxEngine {
         out
     }
 
-    /// Apply one matte key (docs/08 §3.21, K-121/K-154, K-546) to a linear
+    /// Apply one matte key (docs/08 §3.21) to a linear
     /// working texture, returning a new texture of the same size.
     ///
     /// **The default is one pointwise pass** — the §2.2 unpremultiply wrap fused
@@ -711,13 +711,13 @@ impl FxEngine {
         out
     }
 
-    /// Apply one transform (docs/08 §3.5, K-090) to a linear working
+    /// Apply one transform (docs/08 §3.5) to a linear working
     /// texture, returning a new texture of the same size. One pass: each
     /// output pixel takes a single bilinear tap through the host-computed
     /// inverse affine, transparent outside the frame, opacity folded in.
     /// Identity parameters reproduce the input bit-exactly.
     ///
-    /// `matte` is the Shake's claim (K-427): it scales the displacement the
+    /// `matte` is the Shake's claim: it scales the displacement the
     /// affine gives each pixel toward none, read at the destination pixel. The
     /// Transform effect passes `None` and keeps the strength dissolve.
     pub fn transform(
@@ -753,7 +753,7 @@ impl FxEngine {
         out
     }
 
-    /// Apply one Shake motion blur (docs/08 §3.4, T18/K-165): resample the input
+    /// Apply one Shake motion blur (docs/08 §3.4, T18): resample the input
     /// through the op's sub-frame inverse affines and average them, then blend
     /// by mix — the shake's own inter-frame smear, on this effect alone. One
     /// pass with up to [`SHAKE_MB_SAMPLES`] bilinear taps.
@@ -795,10 +795,10 @@ impl FxEngine {
         out
     }
 
-    /// Apply one Block glitch (docs/08 §3.12, split out by K-107) to a
-    /// linear working texture, returning a new texture of the same size.
-    /// One pointwise-with-taps pass: block UV displacement and channel
-    /// offset.
+    /// Apply one Block glitch (docs/08 §3.12, split out of the old combined
+    /// Glitch effect) to a linear working texture, returning a new texture of
+    /// the same size. One pointwise-with-taps pass: block UV displacement and
+    /// channel offset.
     pub fn block_glitch(
         &self,
         ctx: &GpuContext,
@@ -836,9 +836,10 @@ impl FxEngine {
         out
     }
 
-    /// Apply one Scanlines (docs/08 §3.12, split out by K-107) to a linear
-    /// working texture, returning a new texture of the same size. One
-    /// pointwise pass: periodic darkening in raster Y, no neighbour taps.
+    /// Apply one Scanlines (docs/08 §3.12, split out of the old combined
+    /// Glitch effect) to a linear working texture, returning a new texture of
+    /// the same size. One pointwise pass: periodic darkening in raster Y, no
+    /// neighbour taps.
     pub fn scanlines(
         &self,
         ctx: &GpuContext,
@@ -896,7 +897,7 @@ struct MedianParams {
     keep: i32,
     alpha_on: f32,
     mix_amt: f32,
-    /// 1 = the matte scales Radius per pixel (K-428).
+    /// 1 = the matte scales Radius per pixel.
     matte_on: f32,
     _pad0: f32,
     _pad1: f32,
@@ -963,7 +964,7 @@ struct EmbossParams {
     offset: [f32; 2],
     contrast: f32,
     mix_amt: f32,
-    /// 1 = the matte scales Relief per pixel (K-428).
+    /// 1 = the matte scales Relief per pixel.
     matte_on: f32,
     _pad0: f32,
     _pad1: f32,
@@ -994,7 +995,7 @@ struct TexturizeParams {
     inv_scale: f32,
     placement: u32,
     mix_amt: f32,
-    /// 1 = the matte scales Relief per pixel (K-428).
+    /// 1 = the matte scales Relief per pixel.
     matte_on: f32,
     _pad1: f32,
 }
@@ -1177,7 +1178,7 @@ impl FxEngine {
         out
     }
 
-    /// Apply one Stroke **style** (K-706, docs/impl/layer-styles.md §4) to a
+    /// Apply one Stroke **style** (docs/impl/layer-styles.md §4) to a
     /// linear working texture, returning a new texture of the same size.
     ///
     /// Three passes: the two separable morphological passes that carry the
@@ -1192,7 +1193,7 @@ impl FxEngine {
         op: &StrokeOp,
     ) -> wgpu::Texture {
         // The rings and the fractional easing are taken once here rather than
-        // per pixel (K-137's host-side arithmetic rule), by exactly the
+        // per pixel (the host-side arithmetic rule), by exactly the
         // expressions `cpu::matte_morph` takes them by — same clamp, same floor,
         // same remainder — so the two paths cannot disagree about how wide the
         // element is, and a nonsense number cannot turn a pass into a hang.
@@ -1255,9 +1256,9 @@ impl FxEngine {
     }
 }
 
-/// One resolved Stroke **style** (K-706). Mirrors
+/// One resolved Stroke **style**. Mirrors
 /// `lumit_core::fx::cpu::StrokeContourParams` field-for-field so the kernel and
-/// the CPU oracle consume the identical numbers (K-031); the Position choice was
+/// the CPU oracle consume the identical numbers; the Position choice was
 /// already spent into the two half-widths by `StrokeStyle::packed`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct StrokeOp {

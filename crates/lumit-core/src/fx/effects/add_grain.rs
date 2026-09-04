@@ -9,7 +9,7 @@
 //!
 //! Like Noise it needs one number that is not a control: which frame this is.
 //! That is worked out at resolve time from the layer's own clock
-//! ([`EffectDef::resolve_derived`], K-385) and handed over as a plain integer, so
+//! ([`EffectDef::resolve_derived`]) and handed over as a plain integer, so
 //! the kernel never sees time and two exports agree bit-for-bit (§2.4).
 
 use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, ParamId, Params, ResolveCx, Value};
@@ -29,8 +29,8 @@ use lumit_fx_macros::Effect;
     // evenly over it.
     premultiplied = false,
     seeded = true,
-    // K-428: the matte scales the amount, inside the kernel (the owner's rule
-    // for mattes); the generic strength dissolve does not also run.
+    // The matte scales the amount, inside the kernel (the owner's rule for
+    // mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales Intensity per pixel: white grains at the full Intensity, grey          more finely, black not at all",

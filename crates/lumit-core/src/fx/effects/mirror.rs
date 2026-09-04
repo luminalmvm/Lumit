@@ -21,10 +21,10 @@ use lumit_fx_macros::Effect;
     premultiplied = true,
 )]
 pub struct Mirror {
-    /// px@comp: where the reflection axis passes through (K-260 — point
-    /// parameters are pixels, never per cent of frame). The schema default is
-    /// nominal 1080p centre; `instantiate_for_raster` centres a fresh instance
-    /// on the actual comp.
+    /// px@comp: where the reflection axis passes through (point parameters are
+    /// pixels, never per cent of frame). The schema default is nominal 1080p
+    /// centre; `instantiate_for_raster` centres a fresh instance on the actual
+    /// comp.
     #[slider(label = "Centre X", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
     pub centre_x: f32,
 

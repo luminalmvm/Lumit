@@ -17,7 +17,7 @@
 //! keyframe*: a glow threshold that After Effects measured as a display value
 //! becomes scene-linear light, including the number on each key and the speed
 //! of each handle. A blur radius needs no arithmetic — After Effects' pixels
-//! are Lumit's px@comp (docs/08 §2.3, K-419). Where the
+//! are Lumit's px@comp (docs/08 §2.3). Where the
 //! conversion is not a straight line — a colour crossing from display space
 //! into scene-linear light — the values are still exact and the *handles* are
 //! not, and that is a report row of its own.
@@ -87,10 +87,10 @@ fn build(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Effect
     let row = super::table::table().row(match_name_of(node))?;
     // A row the table deliberately sends to a placeholder, naming what does the
     // job in Lumit instead (docs/11 §5). Curves is not one of them any more:
-    // its point list is the property After Effects' own scripting cannot read
-    // (K-410), but the direct `.aep` route reads it out of the file, so the
-    // effect maps on that route and takes the ordinary placeholder road on the
-    // Bridge's, where there are no bytes to decode.
+    // its point list is the property After Effects' own scripting cannot read,
+    // but the direct `.aep` route reads it out of the file, so the effect maps
+    // on that route and takes the ordinary placeholder road on the Bridge's,
+    // where there are no bytes to decode.
     if let Some(instead) = &row.suggest {
         suggest(conv, path, node, instead);
         return None;
@@ -194,7 +194,7 @@ impl<'a> Fx<'a> {
     }
 
     /// The same, for an effect that is **not in the mapping table**: the layer
-    /// styles (K-706), whose nine match names are a fixed family rather than
+    /// styles, whose nine match names are a fixed family rather than
     /// entries an `ae-effect-map.toml` could add or take away.
     ///
     /// `ae` is what the report calls it and `lumit` is the match name to build.
@@ -243,7 +243,7 @@ impl<'a> Fx<'a> {
     /// One AE float onto one Lumit float, through `value × k + c` — applied to
     /// the still value, to every keyframe's value, and to every bezier
     /// handle's speed, which is in value-units a second and so scales with the
-    /// value (K-025).
+    /// value.
     pub(super) fn float(
         &mut self,
         conv: &mut Conv<'_>,
@@ -290,7 +290,7 @@ impl<'a> Fx<'a> {
     }
 
     /// An AE colour onto a Lumit colour. The three light channels cross from
-    /// the project's display space into scene-linear (K-026) and the alpha
+    /// the project's display space into scene-linear and the alpha
     /// lane passes through, exactly as a solid's colour does.
     pub(super) fn colour(&mut self, conv: &mut Conv<'_>, ae_id: &str, lumit_id: &str) {
         let Some(node) = self.leaf(ae_id) else {
@@ -365,7 +365,7 @@ impl<'a> Fx<'a> {
         }
     }
 
-    /// An AE mask reference onto the K-408 mask-path row. Unset is Lumit's
+    /// An AE mask reference onto the mask-path row. Unset is Lumit's
     /// "First mask" entry, which is what an unset AE reference means too;
     /// an index naming a mask the import did not bring over falls back to it
     /// and says so.
@@ -536,8 +536,7 @@ pub(super) fn map_values(p: LumProperty, f: impl Fn(f64) -> f64) -> (LumProperty
 /// "Gaussian Blur" → **Gaussian blur** (docs/08 §3.8). One control carries the
 /// look — AE's pixels are Lumit's px@comp, so the number is the same — and
 /// both of the others are switches Lumit's Gaussian does not have: it always
-/// blurs on both axes, and its edge policy is the fixed Repeat that K-137
-/// settled on.
+/// blurs on both axes, and its edge policy is fixed at Repeat.
 fn gaussian_blur(
     conv: &mut Conv<'_>,
     path: &ItemPath,
@@ -566,9 +565,9 @@ fn directional_blur(
 }
 
 /// "Radial Blur" → **Radial blur** (docs/08 §3.10). Amount carries as pixels
-/// and the centre is a point on both sides since K-558 — AE's layer pixels are
-/// Lumit's px@comp, so the two numbers copy across — while AE's antialiasing
-/// and seed have no counterpart.
+/// and the centre is a point on both sides — AE's layer pixels are Lumit's
+/// px@comp, so the two numbers copy across — while AE's antialiasing and seed
+/// have no counterpart.
 fn radial_blur(
     conv: &mut Conv<'_>,
     path: &ItemPath,
@@ -586,9 +585,9 @@ fn radial_blur(
     fx.done()
 }
 
-/// "Sharpen" → **Sharpen** (docs/08 §3.9, the plain 3×3 sibling K-138 split
-/// out). Both sides run the same fixed high-pass — `u + a·(4u − neighbours)` —
-/// so the shape carries and only the dial's base differs.
+/// "Sharpen" → **Sharpen** (docs/08 §3.9, the plain 3×3 sibling). Both sides
+/// run the same fixed high-pass — `u + a·(4u − neighbours)` — so the shape
+/// carries and only the dial's base differs.
 ///
 /// **The base is undocumented, so the defaults are the anchor** (docs/11 §5's
 /// standing rule). After Effects shows Sharpen Amount as a whole number with no
@@ -712,9 +711,9 @@ fn channel_group(v: i64) -> Option<&'static str> {
     }
 }
 
-/// "Curves" → **Curves** (docs/08 §3.30, K-639). All five channels' control
+/// "Curves" → **Curves** (docs/08 §3.30). All five channels' control
 /// points live in one arbitrary-data blob that After Effects' own scripting
-/// refuses to hand over (K-410); [`super::curves`] reads it out of the file
+/// refuses to hand over; [`super::curves`] reads it out of the file
 /// itself, and the five point lists land on Lumit's five in the same order.
 ///
 /// **The Bridge route still gets a placeholder.** Its capture has the property
@@ -858,7 +857,7 @@ fn hue_saturation(
     fx.done()
 }
 
-/// "Brightness & Contrast" → **Brightness** (docs/08 §3.32, K-397). One effect
+/// "Brightness & Contrast" → **Brightness** (docs/08 §3.32). One effect
 /// carrying both sliders under AE's names and AE's neutral point, so both
 /// numbers cross unchanged.
 fn brightness(
@@ -1160,8 +1159,8 @@ fn invert(
 /// Everything else about After Effects' Exposure is a second grade wearing the
 /// same panel — an Offset added after the gain, a Gamma Correction, and the
 /// whole of it again per channel behind a Channels dropdown. Lumit's Exposure
-/// is stops and nothing else on purpose (K-106: the single photographic lever,
-/// with Colour balance and Gamma beside it for the rest), so each of those is
+/// is stops and nothing else on purpose (the single photographic lever, with
+/// Colour balance and Gamma beside it for the rest), so each of those is
 /// reported by name and left for the grade that actually does it. Bypass Linear
 /// Light Conversion goes the same way: Lumit's working space *is* scene-linear
 /// (docs/01 §6), so there is nothing to bypass.
@@ -1194,11 +1193,11 @@ fn exposure(
 ///
 /// **The cube itself cannot come across.** After Effects holds the chosen file
 /// in a custom control its own scripting does not read (the trap Curves falls
-/// into, K-410), so the file row lands empty and the report names it: the
+/// into), so the file row lands empty and the report names it: the
 /// effect is in the stack, in the right place, with the right neighbours, and
 /// the `.cube` is re-picked once. Input space is left at Linear, which is what
 /// After Effects applies the table in and what this effect did before the row
-/// existed (K-543).
+/// existed.
 fn apply_colour_lut(
     conv: &mut Conv<'_>,
     path: &ItemPath,
@@ -1365,7 +1364,7 @@ fn fractal_noise(
 /// Perspective foreshortens from a camera Lumit keeps on the composition.
 ///
 /// AE's Length is a fraction of the run between the two points and Lumit's is
-/// px@comp (K-558), so it is multiplied by the run the points just converted
+/// px@comp, so it is multiplied by the run the points just converted
 /// describe — read at time zero, since a keyframed pair means AE's fraction
 /// stood for a distance that moved and no single pixel number is all of them.
 fn beam(
@@ -1581,10 +1580,10 @@ fn radio_waves(
     fx.done()
 }
 
-/// "Vegas" → **Vegas** (docs/08 §3.76), both halves since K-408. The stroke
-/// and the segments convert; AE's count of segments becomes a length, exactly
-/// on the Mask/Path half where the perimeter can be measured and approximately
-/// on the Image Contours half where it cannot.
+/// "Vegas" → **Vegas** (docs/08 §3.76), both halves. The stroke and the
+/// segments convert; AE's count of segments becomes a length, exactly on the
+/// Mask/Path half where the perimeter can be measured and approximately on
+/// the Image Contours half where it cannot.
 fn vegas(
     conv: &mut Conv<'_>,
     path: &ItemPath,
@@ -1732,7 +1731,7 @@ fn add_grain(
 }
 
 /// "Scribble" → **Scribble** (docs/08 §3.78), the first import to carry a mask
-/// reference across (K-408). The mask, the stroke and the wiggle convert; the
+/// reference across. The mask, the stroke and the wiggle convert; the
 /// edge options, the variations and the multi-mask fill types are reported.
 fn scribble(
     conv: &mut Conv<'_>,

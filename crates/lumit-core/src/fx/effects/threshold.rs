@@ -14,7 +14,7 @@
 //! antialias the cut — and enough that the CPU and the GPU cannot disagree about
 //! a pixel sitting exactly on the line.
 //!
-//! The Matte moves the cut rather than fading it (K-559): the Level is
+//! The Matte moves the cut rather than fading it: the Level is
 //! multiplied by the matte at each pixel, so a bright matte region cuts where
 //! the user set it and a dark one cuts near black.
 
@@ -33,8 +33,8 @@ use lumit_fx_macros::Effect;
     // §2.2: the decision is about the pixel's own colour, not about how much of
     // it there is.
     premultiplied = false,
-    // K-559: the matte moves the cut, inside the kernel; the generic strength
-    // dissolve does not also run.
+    // The matte moves the cut, inside the kernel; the generic strength dissolve
+    // does not also run.
     matte = (
         "matte",
         "scales Level per pixel: white cuts where you set it, black cuts at 0, \
@@ -56,7 +56,7 @@ pub struct Threshold {
 
     /// Per cent of the tone range the crossing is spread over. 0 is AE's hard
     /// cut (floored at a thousandth, so it is still antialiased); raise it for a
-    /// gradient between the two tones. Not an AE control (K-401), and neutral at
+    /// gradient between the two tones. Not an AE control, and neutral at
     /// its default.
     #[slider(min = 0.0, max = 100.0, default = 0.0, hard_min = 0.0, unit = Percent)]
     pub softness: f32,

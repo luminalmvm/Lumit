@@ -2,7 +2,7 @@
 // wheel, and the drag that picks a colour or a point.
 //
 // Split out of viewer_panel_frb.dart, which had grown past the length anyone
-// can hold in their head (K-007). Nothing here changed in the move: it is the
+// can hold in their head. Nothing here changed in the move: it is the
 // same widget, with the same state, called from the same one place — the
 // Viewer's stage, which is the only thing that knows where the picture is.
 
@@ -19,7 +19,7 @@ import '../widgets/dropper_overlay.dart';
 import '../widgets/escape_ladder.dart';
 
 /// The armed dropper over the picture: the magnifier, the sample-size wheel,
-/// and the **drag** that picks (docs/07 §6.1, K-532).
+/// and the **drag** that picks (docs/07 §6.1).
 ///
 /// **A pick is a drag.** The press does not write anything. It starts a
 /// gesture: every move stages the sample under the pointer and previews it, so

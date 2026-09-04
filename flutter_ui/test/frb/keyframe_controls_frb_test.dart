@@ -42,7 +42,7 @@ void main() {
 
     Future<void> mount(WidgetTester tester, dynamic p) async {
       // These exercise the Transform rows' keyframe controls, and the
-      // Transform card is off by default (K-193) — so the tests ask for it,
+      // Transform card is off by default — so the tests ask for it,
       // exactly as a user would from Settings → Interface.
       (p.uiState as LumitUiState)
           .workspace
@@ -311,7 +311,7 @@ void main() {
 
     /// **The fold-out's hit target** (docs/15 §5). The two layouts share one
     /// button builder, and when the Effect controls panel's fixed columns
-    /// arrived (K-443) the horizontal padding was dropped to nothing for
+    /// arrived the horizontal padding was dropped to nothing for
     /// *both* — which is right for the columns, whose 18px the button's own
     /// reserved edge already fills, and wrong for the Timeline's fold-out,
     /// whose buttons quietly shrank by 6px and became harder to hit.
@@ -348,11 +348,11 @@ void main() {
       expect(loose.width, fixed.width + 6,
           reason: '3px either side, as the fold-out always had');
       expect(fixed.width, 18,
-          reason: 'the fixed columns are measured in unpadded buttons (K-443)');
+          reason: 'the fixed columns are measured in unpadded buttons');
     });
 
     // -------------------------------------------------------------------
-    // **A colour keyframes like anything else** (K-535, owner desk test: "for
+    // **A colour keyframes like anything else** (owner desk test: "for
     // effects that have a color value property, I can't animate them, the
     // stopwatch is just gone").
     //

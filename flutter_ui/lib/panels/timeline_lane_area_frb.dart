@@ -35,7 +35,7 @@ import 'timeline_group_row_frb.dart';
 
 /// One selected keyframe, and where it sits: which row's curve it belongs to,
 /// which key of that curve it is, what frame it reads and where its lane is in
-/// the area's own pixels (K-458).
+/// the area's own pixels.
 ///
 /// The block tools' unit of work. A stretch scales [frame]; Reverse mirrors
 /// it; Stagger pushes it; the box and its badge measure the set of them; and
@@ -61,7 +61,7 @@ class SelectedKey {
 }
 
 /// Write a finished key gesture: every key [moved] holds re-timed to where it
-/// has been seen to travel, the whole set **one undo step** (K-458).
+/// has been seen to travel, the whole set **one undo step**.
 ///
 /// One writer for the block stretch and for a lane key's drag (6.24), because
 /// they are one act — a set of keys, and a rule saying where each of them
@@ -77,7 +77,7 @@ bool commitKeyGesture({
   required int fpsNum,
   required int fpsDen,
   required ProjectReference? project,
-  // Only a group header's rows read it (K-731) — their list lives on the
+  // Only a group header's rows read it — their list lives on the
   // comp, not on any layer.
   CompositionReference? comp,
 }) {
@@ -102,8 +102,7 @@ bool commitKeyGesture({
 }
 
 /// Everything a drag on the Timeline can land on (docs/07 §4.5), built from
-/// the read model and the memoised marker list — so it costs no bridge calls
-/// (K-184).
+/// the read model and the memoised marker list — so it costs no bridge calls.
 ///
 /// One list for the whole panel: the lanes' keys and bars, the ruler's
 /// work-area edges and markers, and the graph's key drags all reach for the
@@ -120,7 +119,7 @@ List<SnapTarget> timelineSnapTargets({
       layers: [for (final row in rows) row.entry],
       compMarkers: markersOf(comp),
       keyRows: [
-        // A group header's own rows (K-731) are places to land like any
+        // A group header's own rows are places to land like any
         // other lane's — the run is short (a header's stack, open or not).
         for (final layer in rows)
           for (final row in layer.groupFoldRows)
@@ -154,16 +153,16 @@ class LayerArea extends StatelessWidget {
   /// again, so this half cannot come to a different answer from the other.
   final List<LayerRow> rows;
 
-  /// The same selection the outline draws from (K-217) — a bar outlines when
+  /// The same selection the outline draws from — a bar outlines when
   /// its name row is lit, so the two halves of the table never disagree about
   /// what is chosen. **Listened to, one layer at a time** ([LayerBlock]): a
   /// click that lights a bar must not rebuild the fifty-six it did not touch.
   final ValueListenable<TimelineSelection> selection;
 
-  /// Open or close a Sequence layer's view (K-248).
+  /// Open or close a Sequence layer's view.
   final void Function(BridgeLayerEntry entry)? onOpenSequence;
 
-  /// What a group's combined bar can be asked to do (K-702) — the panel's own
+  /// What a group's combined bar can be asked to do — the panel's own
   /// set, shared with the outline's header row so the two halves of a group
   /// act on one answer.
   final GroupActions groupActions;
@@ -172,7 +171,7 @@ class LayerArea extends StatelessWidget {
   final void Function(BridgeLayerEntry entry, double height)? onGraphHeight;
 
   /// A clip's envelope is being dragged: show it under the map it has not
-  /// been given yet (K-247).
+  /// been given yet.
   final void Function(
           BridgeLayerEntry entry, BridgeClip clip, List<BridgeKeyframe> keys)?
       onClipPreview;
@@ -181,17 +180,17 @@ class LayerArea extends StatelessWidget {
   /// the window's edge rather than at the start of time.
   final ScrollController? hScroll;
 
-  /// Where the open sequence views sit, so the row seams skip them (K-248).
+  /// Where the open sequence views sit, so the row seams skip them.
   final List<(double, double)> sequenceBlanks;
 
   /// Each layer's source peaks, for the waveform lanes.
   final Map<String, BridgeAudioPeaks> peaks;
 
-  /// Each spectral-mode layer's spectrogram window (K-699) — the other
+  /// Each spectral-mode layer's spectrogram window — the other
   /// picture, fetched instead of peaks while a lane's chip reads Spectral.
   final Map<String, BridgeSpectrogram> spectra;
 
-  /// How waveforms draw (K-280, K-285) — the lanes' own answer, handed down so
+  /// How waveforms draw — the lanes' own answer, handed down so
   /// an open Sequence view's clips agree with it.
   final WaveformStyle waveformStyle;
 
@@ -220,7 +219,7 @@ class LayerArea extends StatelessWidget {
   /// lanes, so the peaks move with the gesture rather than on release.
   final ValueNotifier<BarDragPreview?> dragPreview;
 
-  /// How far each layer's ends may be dragged, by layer id (K-211). A layer
+  /// How far each layer's ends may be dragged, by layer id. A layer
   /// with no entry has free ends — the honest answer while a source length is
   /// still being read.
   final Map<String, BarBounds> bounds;
@@ -233,29 +232,29 @@ class LayerArea extends StatelessWidget {
   /// reports what it caught.
   ///
   /// **Listened to, not handed down.** Clicking a property's name picks its
-  /// keyframes with it (K-500 §2.1), so a click changes this as well as the
-  /// outline's selection — and a panel-wide `setState` to say so redrew the
-  /// ruler, the bars and every lane to fill a handful of diamonds. Each
-  /// layer's lanes watch their own share of it instead ([_LayerKeys]), on the
-  /// same rule the outline's blocks follow. Everything outside a build reads
-  /// `.value`, which is where a gesture has always taken it from.
+  /// keyframes with it, so a click changes this as well as the outline's
+  /// selection — and a panel-wide `setState` to say so redrew the ruler, the
+  /// bars and every lane to fill a handful of diamonds. Each layer's lanes
+  /// watch their own share of it instead ([_LayerKeys]), on the same rule the
+  /// outline's blocks follow. Everything outside a build reads `.value`, which
+  /// is where a gesture has always taken it from.
   final ValueListenable<Set<String>> selectedKeys;
   final ValueChanged<Set<String>> onKeysSelected;
 
   /// A right-click on a lane key, by id and at the pointer in global
   /// coordinates — the panel opens the menu, because the rows it acts on
-  /// reach past this lane (K-500 §2.1).
+  /// reach past this lane.
   final void Function(String id, Offset position) onKeyMenu;
 
   /// The block stretch in flight, written by the handle and read by every lane
-  /// — the same arrangement the bar drag uses (K-208), and for the same
+  /// — the same arrangement the bar drag uses, and for the same
   /// reason: the keys being stretched are spread across rows in two scroll
   /// views, so a gesture only the handle knew about would move the box while
   /// the diamonds sat still.
   final ValueNotifier<KeyStretch?> stretch;
 
   /// The project the block tools commit against, for the undo group that makes
-  /// a stretch across several rows one step (K-458). Null in a widget test with
+  /// a stretch across several rows one step. Null in a widget test with
   /// no project open, where [asOneUndoStep] simply runs the writes.
   final ProjectReference? project;
 
@@ -265,10 +264,10 @@ class LayerArea extends StatelessWidget {
   final ValueChanged<Offset> onEase;
 
   /// A click on empty lane space — no bar, no diamond, no drag. Everything
-  /// lets go (K-203).
+  /// lets go.
   final VoidCallback onDeselectAll;
 
-  /// The work area in frames, read once by the panel (K-203).
+  /// The work area in frames, read once by the panel.
   final ({int start, int end, bool whole}) work;
 
   /// The ruler's mid-drag span, handed straight up to the panel — see
@@ -282,7 +281,7 @@ class LayerArea extends StatelessWidget {
 
   /// The layer drag in flight, and the block heights it slides by — the
   /// outline makes the gesture, and these are what let this side move with it
-  /// rather than sit still while its layers are reordered (K-208).
+  /// rather than sit still while its layers are reordered.
   final ValueNotifier<LayerDrag?> layerDrag;
   final List<double> blockHeights;
 
@@ -298,12 +297,12 @@ class LayerArea extends StatelessWidget {
   /// are left alone, so they still reach the scrollable.
   final void Function(PointerScrollEvent event, double contentX) onWheel;
 
-  /// Settings ▸ Interface ▸ Panels ▸ *Layer names on lane bars* (K-514), off
+  /// Settings ▸ Interface ▸ Panels ▸ *Layer names on lane bars*, off
   /// by default. Read once by the panel and handed down, never looked up in a
   /// bar's own build.
   final bool barNames;
 
-  /// What a move drag on a selected bar carries (K-720) — the panel's answer,
+  /// What a move drag on a selected bar carries — the panel's answer,
   /// asked at drag start. See [Bar.selectionMove].
   final SelectionMove Function() selectionMove;
 
@@ -358,14 +357,14 @@ class LayerArea extends StatelessWidget {
   ///
   /// The height comes off the row itself rather than from a theme lookup: this
   /// runs from a drag, outside any build, and a row already knows what it
-  /// measures (K-454).
+  /// measures.
   Set<String> _keysIn(Rect rect) {
     final caught = <String>{};
     var y = 0.0;
     for (final layer in rows) {
       final step = layer.rowHeight;
       y += step; // the layer's own bar row
-      // **And the room an open Sequence view took** (K-248, §4.4). The view
+      // **And the room an open Sequence view took** (§4.4). The view
       // sits between the layer's own row and its fold-out, so a walk that
       // stepped only by row heights put every row below one adrift by the
       // view's extra height — the box caught keys the user had not drawn it
@@ -411,8 +410,7 @@ class LayerArea extends StatelessWidget {
   }
 
   /// A click on lane ground: `Ctrl` plants a key on the keyed row under the
-  /// pointer at that time (docs/07 §4.3, K-500 §2.1), a plain click lets
-  /// everything go (K-203).
+  /// pointer at that time (docs/07 §4.3), a plain click lets everything go.
   ///
   /// The new key takes the value the curve already reads there, so planting
   /// one moves nothing — it is a place to grab. A two-axis row keys both axes,
@@ -438,7 +436,7 @@ class LayerArea extends StatelessWidget {
     if (planted) onChanged();
   }
 
-  /// One key picked: alone, or toggled in and out when [additive] (K-500 §2.1).
+  /// One key picked: alone, or toggled in and out when [additive].
   ///
   /// One implementation, because a click has more than one way in now: the
   /// diamond's own gesture, and a click on the block handle standing over it
@@ -513,7 +511,7 @@ class LayerArea extends StatelessWidget {
       final step = layer.rowHeight;
       // The same walk [LayerRow.height] describes, or the block's box drifts
       // off the diamonds below any group header: the header row and its own
-      // lanes (K-731) first, then — only while the fold shows a body — the
+      // lanes first, then — only while the fold shows a body — the
       // bar, the view's room, and the fold-out.
       if (layer.groupHeader != null) {
         y += step; // the header row
@@ -558,7 +556,7 @@ class LayerArea extends StatelessWidget {
             // keeps the drawn line and the edge exactly the same place.
             .frame
             .roundToDouble();
-    // The blade pointer and the line that says where the cut lands (K-220).
+    // The blade pointer and the line that says where the cut lands.
     // Round the whole area rather than inside a bar: the line spans every row,
     // and a pointer clipped to one bar would vanish at its edges. Inert — and
     // free — while the razor is not armed.
@@ -576,7 +574,7 @@ class LayerArea extends StatelessWidget {
                 // (docs/07 §4.1), so the lane side gives their whole height to
                 // the ruler — which is exactly what `density.ruler` is: the
                 // token carries that derivation now, rather than this file
-                // adding two constants up (K-454, docs/15 §12A.6). The cache
+                // adding two constants up (docs/15 §12A.6). The cache
                 // bar is drawn *inside* it, on the ruler's floor over the
                 // work-area band, rather than taking three pixels of its own
                 // beneath it. That is what makes the ruler **double height**
@@ -648,7 +646,7 @@ class LayerArea extends StatelessWidget {
                         },
                         child: Stack(
                           children: [
-                            // The ground, in two shades (K-202): the work area keeps
+                            // The ground, in two shades: the work area keeps
                             // the panel's own surface, and everything outside it is
                             // washed a step darker. Without it the lane area was one
                             // long strip at a single value, which left a selected
@@ -678,12 +676,12 @@ class LayerArea extends StatelessWidget {
                               child: MarqueeSelect(
                                 key: const ValueKey('tl-lane-marquee'),
                                 // **Additive with `Shift` or `Ctrl`** held when
-                                // the drag began (K-500 §2.1): the box adds to
-                                // what was already in hand rather than
-                                // replacing it, which is how a selection is
-                                // built up out of rows that are not next to
-                                // each other. The graph's box has always done
-                                // this; the lanes were replace-only.
+                                // the drag began: the box adds to what was
+                                // already in hand rather than replacing it,
+                                // which is how a selection is built up out of
+                                // rows that are not next to each other. The
+                                // graph's box has always done this; the lanes
+                                // were replace-only.
                                 onSelect: (rect, additive) => onKeysSelected(
                                     additive
                                         ? {
@@ -719,7 +717,7 @@ class LayerArea extends StatelessWidget {
                                   // The block slides by the same rule and
                                   // the same heights the outline's does, so
                                   // a layer dragged up the stack takes its
-                                  // bar and its lanes with it (K-208).
+                                  // bar and its lanes with it.
                                   LayerDragSlide(
                                 drag: layerDrag,
                                 heights: blockHeights,
@@ -730,7 +728,7 @@ class LayerArea extends StatelessWidget {
                                   // view added, so it reads as one
                                   // region belonging to one layer
                                   // rather than as loose strips that
-                                  // happen to sit under it (K-248).
+                                  // happen to sit under it.
                                   // A *foreground* decoration: a
                                   // border in the ordinary one insets
                                   // its child, which made the lane's
@@ -761,7 +759,7 @@ class LayerArea extends StatelessWidget {
                                       // of clips is one region, and a
                                       // bar drawn across the first of
                                       // them would put a seam through
-                                      // the middle of it (K-248).
+                                      // the middle of it.
                                       // **The layer selection is listened to
                                       // here**, the same way the outline row
                                       // listens to it: a bar draws itself lit
@@ -769,7 +767,7 @@ class LayerArea extends StatelessWidget {
                                       // that lights one bar rebuilds one bar
                                       // (docs/impl/ui-performance.md §4.4).
                                       // The group's combined bar, level with
-                                      // its header row in the outline (K-702):
+                                      // its header row in the outline:
                                       // the earliest member's in point to the
                                       // latest one's out, and dragging it
                                       // slides every member as one step.
@@ -783,7 +781,7 @@ class LayerArea extends StatelessWidget {
                                           framesOfDx: (dx) =>
                                               axis.framesOfPx(dx).round(),
                                         ),
-                                      // The header's own effect lanes (K-731),
+                                      // The header's own effect lanes,
                                       // level with the outline's rows for
                                       // them: the same _lane the layer fold
                                       // uses, keyed under the group's own
@@ -867,7 +865,7 @@ class LayerArea extends StatelessWidget {
                                         ),
                                       // A Sequence layer's own clips and
                                       // their speed envelope, in the room
-                                      // the row grew for them (K-248) —
+                                      // the row grew for them —
                                       // the same `sequenceExtra` the
                                       // outline left the gap for, so the
                                       // view and its room are one answer.
@@ -907,7 +905,7 @@ class LayerArea extends StatelessWidget {
                                       // One lane per fold-out row the outline shows,
                                       // from the same list it builds: keyframe rows
                                       // draw their diamonds, the waveform row its
-                                      // peaks (K-172), the rest leave their room.
+                                      // peaks, the rest leave their room.
                                       // **The key selection is listened
                                       // to here, one layer at a time** —
                                       // the seam that keeps a click on a
@@ -954,7 +952,7 @@ class LayerArea extends StatelessWidget {
                                   t.timelineOutOfRange.withValues(alpha: 0.55),
                             ),
                             // The row hairlines, over everything and touching
-                            // nothing (K-190): they run the full width of the lane
+                            // nothing: they run the full width of the lane
                             // area so the eye can track a row across the table,
                             // and they are drawn rather than given to each row as
                             // a border because a decorated box absorbs pointers —
@@ -990,7 +988,7 @@ class LayerArea extends StatelessWidget {
                               ),
                             ),
                             // The block-selection box, over the keys it holds
-                            // and over the seams that cross it (K-458): it is
+                            // and over the seams that cross it: it is
                             // the one thing here that describes the *whole*
                             // selection, so anything drawn on top of it would
                             // be drawn on top of the answer. It is also the one
@@ -1051,21 +1049,21 @@ class LayerArea extends StatelessWidget {
     final id = entry.layer.internallayerId.toString();
     if (row is FoldWaveformRow) {
       // The mode store is listened to here, so flipping a chip repaints this
-      // lane and nothing else — the toggle never rebuilds the table (K-699).
+      // lane and nothing else — the toggle never rebuilds the table.
       return ListenableBuilder(
         listenable: laneModes,
         builder: (context, _) => ValueListenableBuilder<BarDragPreview?>(
         valueListenable: dragPreview,
         builder: (context, preview, _) {
           // Whether the drag in flight carries **this** layer — its own bar,
-          // or a selection-mate's move it rides along with (K-720). The three
+          // or a selection-mate's move it rides along with. The three
           // deltas are the mover's, which for the only plural grab (a move)
           // are one number for the whole set.
           final p = preview != null && preview.layers.contains(id) ? preview : null;
           final span = entry.info.span;
           // The span as drawn — the document's frames plus any drag in flight —
           // and where its source starts, so a bar being dragged or trimmed
-          // carries its transients with it in realtime (K-172).
+          // carries its transients with it in realtime.
           final inFrame = entry.info.inFrame.toInt() + (p?.deltaIn ?? 0);
           final outFrame = entry.info.outFrame.toInt() + (p?.deltaOut ?? 0);
           final startOffset =
@@ -1091,7 +1089,7 @@ class LayerArea extends StatelessWidget {
                       secondsPerPixel: secondsPerPixel,
                       left: axis.xOf(inFrame),
                       right: axis.xOf(outFrame),
-                      // Both rows, the wave's own K-437 bargain.
+                      // Both rows, the same bargain the waveform lane strikes.
                       height: t.density.laneRow * 2,
                     ),
                   ),
@@ -1113,12 +1111,12 @@ class LayerArea extends StatelessWidget {
                   colours: t.waveform,
                   // The chip's answer, not the setting's alone: the stack for
                   // a stack lane, the single wave otherwise, sitting wherever
-                  // the Settings choice puts every wave (K-285).
+                  // the Settings choice puts every wave.
                   style: WaveformStyle(
                     multiwave: mode == LaneMode.stack,
                     fromBottom: waveformStyle.fromBottom,
                   ),
-                  // Both rows (K-437): the lane's own, and the empty one
+                  // Both rows: the lane's own, and the empty one
                   // belonging to the **Waveform** twirl directly above it. A
                   // centred wave then sits on the divider between the two
                   // rather than inside half of one, and a wave rising from
@@ -1128,7 +1126,7 @@ class LayerArea extends StatelessWidget {
                   height: t.density.laneRow * 2,
                 ),
               ),
-              // The volume rubber band ON the wave (K-695, the board): the
+              // The volume rubber band ON the wave (the board): the
               // Volume curve as a line the pointer takes hold of, claiming
               // only the pixels near itself so the marquee keeps the rest of
               // the row.
@@ -1158,7 +1156,7 @@ class LayerArea extends StatelessWidget {
     // the same reason: a key that jumps only on release was never seen to
     // move. A trim leaves them where they are, which is what the release
     // writes too, since keys cross on the comp's clock by way of the layer's
-    // start offset (K-213) and only a move carries that offset with it.
+    // start offset and only a move carries that offset with it.
     return ValueListenableBuilder<BarDragPreview?>(
       valueListenable: dragPreview,
       builder: (context, preview, _) => KeyLane(

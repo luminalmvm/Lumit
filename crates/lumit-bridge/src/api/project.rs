@@ -20,11 +20,11 @@ pub struct BridgeHistory {
     pub can_redo: bool,
 }
 
-/// One row of the History list (K-688): what the step is called, and whether it
+/// One row of the History list: what the step is called, and whether it
 /// has been undone.
 ///
 /// The name is the engine's English (`Op::name`), translated on arrival like
-/// every other engine word (K-303) — an undone row is still on the list, greyed,
+/// every other engine word — an undone row is still on the list, greyed,
 /// until a fresh commit clears the forward history.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,7 +33,7 @@ pub struct BridgeHistoryEntry {
     pub undone: bool,
 }
 
-/// One colour on the project's shelf (K-448): four 0–1 channels and an
+/// One colour on the project's shelf: four 0–1 channels and an
 /// optional name. Empty `name` means unnamed, which is the ordinary case — a
 /// shelf is read by eye.
 #[frb(non_opaque)]
@@ -124,15 +124,15 @@ impl ProjectReference {
             let mut s = STREAMS.write().map_err(|_| BridgeError::WriteFailed)?;
             s.remove(&self.id);
         }
-        // The camera solves go with the project (K-417). The `track/` sidecar
+        // The camera solves go with the project. The `track/` sidecar
         // is untouched, so reopening reads every one of them straight back —
         // this is the session's copy being dropped, not the answer.
         lumit_render::track::clear();
-        // The roto mattes go the same way and for the same reason (K-713): the
+        // The roto mattes go the same way and for the same reason: the
         // `roto/` sidecar is untouched, so reopening reads them back.
         lumit_render::roto::clear();
-        // And so do the puppet wireframes the render left for the overlay
-        // (K-704): they name layers this project owned.
+        // And so do the puppet wireframes the render left for the overlay:
+        // they name layers this project owned.
         lumit_render::puppet::clear();
         drop(removed);
         Ok(())
@@ -191,7 +191,7 @@ impl ProjectReference {
     }
 
     /// Add a folder, as one undo step — the Project panel's bottom-bar Folder
-    /// button (K-451, docs/07 §3.1).
+    /// button (docs/07 §3.1).
     ///
     /// Both decisions are the engine's ([`lumit_core::ops::new_folder_ops`]):
     /// a blank name becomes the next unused "Folder N", counted past the names
@@ -291,7 +291,7 @@ impl ProjectReference {
             height: settings.height.clamp(16, 16384),
             frame_rate,
             duration,
-            // The dialog's own answers (K-469): the Background row and the
+            // The dialog's own answers: the Background row and the
             // Motion blur section decide these at creation, and a settings
             // block that was never filled in carries the defaults anyway.
             background: LinearColour(settings.background),
@@ -351,10 +351,10 @@ impl ProjectReference {
     /// the panel root, matching the egui frontend exactly.
     ///
     /// The bare file name becomes the relative path; saving rebases it against the
-    /// project folder (K-173).
+    /// project folder.
     ///
-    /// **A still that has numbered neighbours imports as one image sequence**
-    /// (K-539), not as one item per file: picking `frames0001.png` out of a
+    /// **A still that has numbered neighbours imports as one image sequence**,
+    /// not as one item per file: picking `frames0001.png` out of a
     /// folder of two thousand brings in the whole run, named for its span and
     /// pointed at its first file. Two guards keep that from surprising anyone —
     /// only still-image formats are considered at all (a folder of numbered mp4s
@@ -476,8 +476,8 @@ impl ProjectReference {
     /// (docs/13 §2.1) asks for a stress-document save to be non-blocking, and an
     /// async frb call is that for free.
     ///
-    /// Media paths are rebased against the destination directory before writing
-    /// (K-173), so a project saved somewhere new keeps relative links that work.
+    /// Media paths are rebased against the destination directory before writing,
+    /// so a project saved somewhere new keeps relative links that work.
     /// A successful save clears the crash journal: the journal covers work
     /// *between* saves, so once the document is on disk it is redundant.
     pub fn save(&self, path: String) -> Result<String, BridgeError> {
@@ -633,7 +633,7 @@ impl ProjectReference {
 
     /// How hard the renderer works at the edges of transformed layers, as the
     /// number of coverage samples per pixel: 1, 2, 4 or 8, where 1 is off
-    /// (K-274, docs/impl/anti-aliasing.md).
+    /// (docs/impl/anti-aliasing.md).
     ///
     /// The project's own setting, exactly as stored — **what the current
     /// machine can actually draw is a separate question**, answered by
@@ -671,7 +671,7 @@ impl ProjectReference {
     /// An ordinary op, so it is undoable, journalled and saved in the `.lum`,
     /// which is the point of it living in the document — it changes what the
     /// comp looks like, so it must travel with the file and match on another
-    /// machine (K-274).
+    /// machine.
     #[frb(sync)]
     pub fn set_anti_aliasing(&self, samples: u32) -> Result<(), BridgeError> {
         let anti_aliasing = lumit_core::model::AntiAliasing::from_samples(samples);
@@ -684,7 +684,7 @@ impl ProjectReference {
         Ok(())
     }
 
-    /// The project's colour shelf, in the order the colours were kept (K-448).
+    /// The project's colour shelf, in the order the colours were kept.
     ///
     /// Empty for a project nobody has kept a colour in. The picker reads this
     /// when it opens — a shelf is a handful of colours, so there is nothing to
@@ -719,7 +719,7 @@ impl ProjectReference {
         Ok(())
     }
 
-    /// The project-wide *use proxies* master switch (K-501).
+    /// The project-wide *use proxies* master switch.
     ///
     /// On — the default, and what every project written before proxies existed
     /// opens as — means each item's own tick decides. Off reads the originals
@@ -751,7 +751,7 @@ impl ProjectReference {
     }
 
     /// How the interface was arranged when this project was last saved, as the
-    /// JSON the frontend itself wrote (K-245), or `None` for a project that has
+    /// JSON the frontend itself wrote, or `None` for a project that has
     /// never carried one.
     ///
     /// The engine never looks inside it. It is the frontend's own record,
@@ -796,7 +796,7 @@ impl ProjectReference {
         })
     }
 
-    /// The History list (K-688): every step still applied, oldest first, then
+    /// The History list: every step still applied, oldest first, then
     /// every step that has been undone, in the order redoing would put them
     /// back. [`Self::applied_steps`] says where the two halves meet.
     #[frb(sync)]
@@ -824,7 +824,7 @@ impl ProjectReference {
     }
 
     /// Take the document to the point where exactly `applied` steps have been
-    /// applied — what clicking a row of the History list does (K-688).
+    /// applied — what clicking a row of the History list does.
     ///
     /// Undo and redo in a loop, so a jump reaches only states the keyboard
     /// could; a number past either end stops at that end rather than failing.

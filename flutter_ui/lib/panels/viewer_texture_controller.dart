@@ -1,20 +1,20 @@
-// The Viewer's zero-copy texture lifecycle (K-177).
+// The Viewer's zero-copy texture lifecycle.
 //
 // In plain terms: the engine can draw the Viewer's picture straight into a piece
 // of GPU memory that Flutter shows without any copy. The engine hands us an OS
 // "handle" naming that memory — a shared-texture handle on Windows, an
-// IOSurface id on macOS (K-195), a DMA-BUF descriptor on Linux; this object
+// IOSurface id on macOS, a DMA-BUF descriptor on Linux; this object
 // registers it with the platform's runner (over a small platform channel each
 // runner implements),
 // gets back a `textureId` the `Texture` widget shows, and tells the runner each
 // time a new frame has been drawn. It re-registers when the handle or size
 // changes (a comp resize). No pixels ever pass through this object.
 //
-// **There is nothing behind it.** Zero-copy is the Viewer's only transport
-// (K-183, reaffirmed at K-755): a texture path that does not reach the screen is
-// a defect to be found and fixed, not routed around by a slower copy that
-// vaguely works. So nothing here switches to an alternative — what it does
-// instead is refuse to fail *silently*, which is what made issue #104 a hunt.
+// **There is nothing behind it.** Zero-copy is the Viewer's only transport: a
+// texture path that does not reach the screen is a defect to be found and
+// fixed, not routed around by a slower copy that vaguely works. So nothing here
+// switches to an alternative — what it does instead is refuse to fail
+// *silently*, which is what made issue #104 a hunt.
 //
 // The platform-channel shape (method names, the shared-handle surface type, the
 // register/frame-available dance) follows the MIT-licensed `flutter_wgpu_texture`
@@ -171,7 +171,7 @@ class ViewerTextureController {
     } catch (err) {
       // The runner has a handler and it refused: a bad descriptor, a driver
       // that will not import it, a size it cannot make. There is nowhere to go
-      // (K-755) and no point announcing frames into a texture that does not
+      // and no point announcing frames into a texture that does not
       // exist, so the path latches off — but it says so on the way, because a
       // Viewer that goes blank without a word is what issue #104 cost a week.
       _available = false;
@@ -203,7 +203,7 @@ class ViewerTextureController {
   /// So: announce a few frames, then check whether any of them were drawn. If
   /// none were, **write it to the diagnostics file** — the one a bug report is
   /// asked for — and carry on announcing. Carrying on is deliberate: with no
-  /// second transport to move to (K-755), switching this one off can only
+  /// second transport to move to, switching this one off can only
   /// guarantee a dead Viewer where a recovering one was still possible.
   int _announced = 0;
   int _drawn = 0;

@@ -1,4 +1,4 @@
-//! Curves (docs/08 §3.30, K-412): the per-channel tone curve, as a real
+//! Curves (docs/08 §3.30): the per-channel tone curve, as a real
 //! curve — an ordered list of control points a channel, the shape an editor
 //! edits.
 //!
@@ -7,7 +7,7 @@
 //! points in a unit square with a smooth line drawn through them; the line
 //! says what an input brightness comes out as.
 //!
-//! **The line is drawn here, not in the kernel** (K-412, Lightning's
+//! **The line is drawn here, not in the kernel** (Lightning's
 //! discipline in §3.74). [`Curves::packed`] fits the spline once and writes it
 //! down as a 257-entry table a channel; both render paths are handed the
 //! identical tables and do nothing but look up and interpolate, which is what
@@ -18,7 +18,7 @@ use crate::fx::{cpu, CurvePoints, EffectDef, EffectMetadata, EffectSchema, Param
 use lumit_fx_macros::Effect;
 
 /// Curves' controls: one curve on each of Master, Red, Green, Blue and
-/// Alpha — After Effects' own five (K-412).
+/// Alpha — After Effects' own five.
 ///
 /// Each curve is an ordered list of 2..=16 points in the unit square, the
 /// identity diagonal by default, so a fresh Curves is the bit-exact
@@ -26,12 +26,12 @@ use lumit_fx_macros::Effect;
 /// default" rule (docs/08 §3.10).
 ///
 /// The rows carry only their channel's name because the panel draws them as
-/// channel tabs over one editor (K-412), not as five stacked widgets.
+/// channel tabs over one editor, not as five stacked widgets.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "curves",
     label = "Curves",
-    // K-412 replaced K-396's twenty fixed knots outright rather than
+    // The curve replaced the earlier twenty fixed knots outright rather than
     // migrating them: the effect is days old and unreleased, and a version
     // bump is what keeps a cached frame from the knot generation out of the
     // curve generation's picture (docs/08 §1.1).

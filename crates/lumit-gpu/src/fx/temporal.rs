@@ -6,7 +6,7 @@ use crate::GpuContext;
 use super::{work_texture, FxEngine};
 
 /// One resolved echo (docs/08 §3.13; blend modes + 16-echo cap since
-/// FX-17/K-149). The neighbour frames arrive as textures keyed by offset;
+/// FX-17). The neighbour frames arrive as textures keyed by offset;
 /// `weights[i]` is the tap intensity for the echo at offset `-(i+1)`
 /// (0 = skip). `mode` is the combine blend: 0 = Add, 1 = Behind, 2 = Max,
 /// 3 = Screen, 4 = Normal, 5 = Multiply, 6 = Overlay, 7 = Soft light,
@@ -24,7 +24,7 @@ pub struct EchoOp {
 struct EchoParams {
     weight: f32,
     mode: u32,
-    /// 1 = the matte scales Decay per pixel (K-429).
+    /// 1 = the matte scales Decay per pixel.
     matte_on: f32,
     /// Which tap this dispatch folds in (0 = one frame back): the exponent
     /// the per-pixel decay is raised to.
@@ -51,7 +51,7 @@ pub struct MotionBlurOp {
     /// Shutter ÷ 360: streak length as a fraction of the inter-frame motion.
     pub shutter_frac: f32,
     /// The cap on bilinear taps along the streak; the count adapts below it
-    /// (K-390, docs/impl/optical-flow.md §4).
+    /// (docs/impl/optical-flow.md §4).
     pub samples: i32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
@@ -62,7 +62,7 @@ pub struct MotionBlurOp {
     /// Reconstruction tier: the `lumit_core::fx::MbQuality::code()` integer
     /// (0 Normal, 1 High — curved trails and half the tap spacing).
     pub quality: i32,
-    /// px@raster a full **Motion vectors** channel means (K-429). Read only
+    /// px@raster a full **Motion vectors** channel means. Read only
     /// when a vectors layer is bound; the measured flow is already in pixels.
     pub vector_scale: f32,
 }
@@ -76,7 +76,7 @@ struct MotionBlurParams {
     view: i32,
     tile: i32,
     quality: i32,
-    /// 1 = the matte scales Shutter angle per pixel (K-429).
+    /// 1 = the matte scales Shutter angle per pixel.
     matte_on: f32,
     _pad: i32,
 }
@@ -86,26 +86,26 @@ struct MotionBlurParams {
 struct MbTileParams {
     tile: i32,
     /// px@raster a full Motion vectors channel means, read by `mb_vectors`
-    /// alone (K-429); the reduction ignores it.
+    /// alone; the reduction ignores it.
     vector_scale: f32,
     _pad: [i32; 2],
 }
 
-/// One resolved Datamosh pass (docs/08 §3.12, K-104; its own effect since
-/// K-107; reworked to a flow-driven melt by K-164/T19). The raw -1 source
-/// neighbour and the dense current→previous flow field arrive as their own
-/// textures (see [`FxEngine::datamosh`]); this op carries the melt scalars.
+/// One resolved Datamosh pass (docs/08 §3.12; its own effect, reworked to a
+/// flow-driven melt by T19). The raw -1 source neighbour and the dense
+/// current→previous flow field arrive as their own textures (see
+/// [`FxEngine::datamosh`]); this op carries the melt scalars.
 /// Callers fold the schema's Intensity and host Mix into `intensity` before
 /// calling (mixing the same two inputs twice collapses to one mix by the
 /// product), so this kernel and its CPU oracle need no second blend knob.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DatamoshOp {
-    /// Blended over the current frame; > 1 extrapolates (K-135/FX-14).
+    /// Blended over the current frame; > 1 extrapolates (FX-14).
     pub intensity: f32,
-    /// Frames of predicted motion the streamline walk reaches (K-164); the
+    /// Frames of predicted motion the streamline walk reaches; the
     /// walk's `steps` taps span it.
     pub displacement: f32,
-    /// 0..1, how much of the reach accumulates into the smear (K-161): 0 a
+    /// 0..1, how much of the reach accumulates into the smear: 0 a
     /// short trail, 1 a long melting bloom.
     pub bloom: f32,
     /// Bilinear taps along the walk (2..64, or 1 at a sub-frame reach) — the
@@ -140,7 +140,7 @@ impl FxEngine {
         matte: Option<&wgpu::Texture>,
         op: &EchoOp,
     ) -> wgpu::Texture {
-        // The Matte scales Decay per pixel (K-429): it rides on the tap
+        // The Matte scales Decay per pixel: it rides on the tap
         // dispatches alone. The accumulator's first copy and the final Mix are
         // not the decay, so they take none.
         let params = |weight: f32, mode: u32, tap: i32, matted: bool| EchoParams {
@@ -199,7 +199,7 @@ impl FxEngine {
 
     /// Apply one flow motion blur (docs/08 §3.2) to a linear working texture,
     /// returning a new texture of the same size. The Guertin-class
-    /// reconstruction of K-390 (docs/impl/optical-flow.md §4.5 item 3).
+    /// reconstruction (docs/impl/optical-flow.md §4.5 item 3).
     ///
     /// **Two passes.** The first reduces `flow` to one dominant vector per
     /// `MB_TILE`-square tile; the second does the blur, and each pixel reads the
@@ -219,7 +219,7 @@ impl FxEngine {
     /// reduction matches `lumit_core::fx::cpu::motion_blur_tiles`, so the two
     /// agree (§1.6).
     /// Accumulation motion blur's average with a **per-pixel shutter** (docs/08
-    /// §3.26, K-429): the same N sub-frame renders the equal-weight combine
+    /// §3.26): the same N sub-frame renders the equal-weight combine
     /// takes, but each pixel's weights decided by how far open the matte says
     /// its shutter is.
     ///
@@ -276,8 +276,8 @@ impl FxEngine {
         acc
     }
 
-    /// A supplied **Motion vectors** layer read as a dense flow field (K-429,
-    /// docs/08 §3.2) — the GPU twin of
+    /// A supplied **Motion vectors** layer read as a dense flow field
+    /// (docs/08 §3.2) — the GPU twin of
     /// `lumit_core::fx::cpu::motion_vectors_field`.
     ///
     /// **In plain terms.** A game engine or a 3D renderer already knows how
@@ -460,7 +460,7 @@ impl FxEngine {
                     binding: 4,
                     resource: ubuf.as_entire_binding(),
                 },
-                // The Matte (K-429). `None` binds `src` in its place, the same
+                // The Matte. `None` binds `src` in its place, the same
                 // "bound but not read" convention `dispatch_matted` uses.
                 wgpu::BindGroupEntry {
                     binding: 5,
@@ -491,15 +491,15 @@ impl FxEngine {
         out
     }
 
-    /// Apply Datamosh (docs/08 §3.12, K-104; its own effect since K-107;
-    /// reworked to a flow-driven melt by K-164/T19) to a linear working
-    /// texture, returning a new texture of the same size. One pass: per output
-    /// pixel, a streamline walk of `op.steps` taps follows the `flow` field out
-    /// of `prev` (re-sampling the flow each step, advancing ~one frame of
-    /// motion), accumulating the samples with a `op.bloom` geometric weight,
-    /// then blends the weighted mean over `cur` by Intensity. Shares
-    /// [`Self::mb_layout`]/its pipeline layout with Motion blur (same
-    /// three-sampled-input shape); its own pipeline and shader.
+    /// Apply Datamosh (docs/08 §3.12; its own effect, reworked to a
+    /// flow-driven melt by T19) to a linear working texture, returning a new
+    /// texture of the same size. One pass: per output pixel, a streamline walk
+    /// of `op.steps` taps follows the `flow` field out of `prev` (re-sampling
+    /// the flow each step, advancing ~one frame of motion), accumulating the
+    /// samples with a `op.bloom` geometric weight, then blends the weighted
+    /// mean over `cur` by Intensity. Shares [`Self::mb_layout`]/its pipeline
+    /// layout with Motion blur (same three-sampled-input shape); its own
+    /// pipeline and shader.
     #[allow(clippy::too_many_arguments)]
     pub fn datamosh(
         &self,
@@ -550,8 +550,8 @@ impl FxEngine {
                     binding: 4,
                     resource: ubuf.as_entire_binding(),
                 },
-                // The Matte slot Motion blur added to this shared layout
-                // (K-429). This kernel never reads it, so `cur` stands in it:
+                // The Matte slot Motion blur added to this shared layout.
+                // This kernel never reads it, so `cur` stands in it:
                 // a binding cannot be left empty, and it is the same
                 // "bound but not read" convention `dispatch_matted` uses.
                 wgpu::BindGroupEntry {

@@ -1,4 +1,4 @@
-//! Spectral colour for the Lens flare (docs/impl/lens-flare.md §5, K-256):
+//! Spectral colour for the Lens flare (docs/impl/lens-flare.md §5):
 //! the CIE (2006) 10° XYZ colour-matching functions at 5 nm steps over the
 //! visible range, and the XYZ → linear Rec. 709 conversion into the working
 //! space. Data from cvrl.org via the realflare reference (GPLv3, as Lumit is).

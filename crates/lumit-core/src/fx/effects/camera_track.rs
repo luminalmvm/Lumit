@@ -1,9 +1,9 @@
-//! Camera track (docs/08 §3.85, K-417): the handle for a camera solve.
+//! Camera track (docs/08 §3.85): the handle for a camera solve.
 //!
 //! **In plain terms.** Drop this on the footage you want tracked and press
 //! Analyse. The effect itself does nothing to the picture — it is not a look,
 //! it is a *button and a readout*. The work happens on its own thread, on the
-//! whole unaltered source clip (K-248), and what comes back is a solved camera
+//! whole unaltered source clip, and what comes back is a solved camera
 //! path a Camera layer can be linked to. You keep editing while it runs, which
 //! is the working shape After Effects has and the owner asked for.
 //!
@@ -61,12 +61,12 @@ pub fn density(index: u32) -> (usize, usize, usize) {
     category = Utility,
     cost = Trivial,
     roi = Exact,
-    // No picture, so no matte — the Controls family's reasoning (K-395's
-    // `None`), for an effect that is a handle rather than an image operation.
+    // No picture, so no matte — the Controls family's `None`, for an effect
+    // that is a handle rather than an image operation.
     matte = false,
 )]
 pub struct CameraTrack {
-    /// Start the analysis. A button, not a value (K-417's fifth ruling).
+    /// Start the analysis. A button, not a value.
     #[action(label = "Analyse")]
     pub analyse: (),
     /// Stop a running analysis. Live only while one is running, which is job
@@ -78,13 +78,13 @@ pub struct CameraTrack {
     /// tracker's own default.
     #[choice(options = DENSITY_OPTIONS, default = DENSITY_DEFAULT, label = "Feature density")]
     pub density: u32,
-    /// Whether the layer's masks exclude regions from tracking (K-408's mask
+    /// Whether the layer's masks exclude regions from tracking (the mask
     /// carriage, which the tracker reads). On by default: a mask drawn on a
     /// tracked layer is almost always drawn round the thing that moves.
     #[toggle(default = true, label = "Use masks")]
     pub use_masks: bool,
     /// Whether the solved point cloud draws over the picture on this layer.
-    /// On after a solve, per K-417's fourth ruling.
+    /// On after a solve.
     #[toggle(default = true, label = "Show points")]
     pub show_points: bool,
 }

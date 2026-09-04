@@ -69,7 +69,7 @@ String maskModeLabel(BridgeMaskMode mode) => switch (mode) {
 /// with no name is worse than a row named after its tool.
 ///
 /// **Why not a single click.** A single tap on these names *selects* the row,
-/// and selection is what `Delete` acts on (K-234), so the rename needs a
+/// and selection is what `Delete` acts on, so the rename needs a
 /// gesture of its own.
 ///
 /// **Why not `onDoubleTap`.** A double-tap recogniser holds every single tap
@@ -80,7 +80,7 @@ String maskModeLabel(BridgeMaskMode mode) => switch (mode) {
 /// `Delete` is waiting on. Two timestamps owe the arena nothing.
 ///
 /// The commit is one write through the row's own `_write`, so it is one op and
-/// one undo step, exactly as the opacity drag beside it is (K-234, K-240).
+/// one undo step, exactly as the opacity drag beside it is.
 mixin _InlineRename<T extends StatefulWidget> on State<T> {
   TextEditingController? _editor;
   final DoubleTap _nameTaps = DoubleTap();
@@ -145,7 +145,7 @@ mixin _InlineRename<T extends StatefulWidget> on State<T> {
           autofocus: true,
           onSubmitted: (_) => _endRename(keep: true),
           // Clicking anywhere else finishes the edit and keeps what was typed,
-          // the same as every other inline rename here (K-243).
+          // the same as every other inline rename here.
           onTapOutside: () => _endRename(keep: true),
         ),
       );
@@ -162,7 +162,7 @@ mixin _InlineRename<T extends StatefulWidget> on State<T> {
   }
 }
 
-/// One mask's row in the fold-out (K-222): its name, its mode, its invert
+/// One mask's row in the fold-out: its name, its mode, its invert
 /// switch and its opacity. Its feather and its expansion are rows of their own
 /// underneath, because the value column holds one field.
 ///
@@ -171,7 +171,7 @@ mixin _InlineRename<T extends StatefulWidget> on State<T> {
 /// the Delete key once the row is selected; a button per mask on every row is a
 /// row of ways to lose work by mistake.
 ///
-/// The row is selectable like any other property (K-234): tapping its name
+/// The row is selectable like any other property: tapping its name
 /// calls [onLabelTap], the outline highlights it, and Delete acts on it.
 class MaskRow extends StatefulWidget {
   final LayerReference layer;
@@ -181,7 +181,7 @@ class MaskRow extends StatefulWidget {
   final VoidCallback onChanged;
   final VoidCallback? onLabelTap;
 
-  /// The composition, for the live preview a drag shows (K-240).
+  /// The composition, for the live preview a drag shows.
   final CompositionReference comp;
 
   const MaskRow({super.key, 
@@ -312,7 +312,7 @@ class _MaskRowState extends State<MaskRow> with _InlineRename<MaskRow> {
           // The same bare "Rename" the Project panel's row menu offers.
           child: Text(l10n.rename),
         ),
-        // **Where a varying feather is switched on** (K-545). Turning it on
+        // **Where a varying feather is switched on**. Turning it on
         // gives every point the width the mask already had, so the picture
         // does not move until a point is actually dragged; turning it off
         // drops the points and the one width stands again.
@@ -348,8 +348,8 @@ class _MaskRowState extends State<MaskRow> with _InlineRename<MaskRow> {
   }
 }
 
-/// One of a mask's values on a row under it (K-222, K-340): its shape, its
-/// opacity, its feather — one width or one point's own (K-545) — or its
+/// One of a mask's values on a row under it: its shape, its
+/// opacity, its feather — one width or one point's own — or its
 /// expansion.
 ///
 /// **Every one of them animates, and animates the way everything else does.**
@@ -359,10 +359,10 @@ class _MaskRowState extends State<MaskRow> with _InlineRename<MaskRow> {
 ///
 /// The **shape** is the exception in one respect only: a path has no number to
 /// put in a field, so its row is a name, a stopwatch and its diamonds, and the
-/// shape itself is edited where it is drawn (K-339).
+/// shape itself is edited where it is drawn.
 ///
 /// The drag is staged and previewed exactly as it always was, so the whole
-/// gesture is one op and one undo step (K-234, K-240).
+/// gesture is one op and one undo step.
 ///
 /// The row has no label tap: the mask itself is what Delete acts on, and a
 /// selectable value row under it would give Delete a path it cannot resolve to
@@ -374,14 +374,14 @@ class MaskValueRow extends StatefulWidget {
   final MaskValue value;
 
   /// Which point this row's width belongs to, for a per-point feather row;
-  /// `-1` on every other row (K-545).
+  /// `-1` on every other row.
   final int vertex;
   final ValueColumn valueColumn;
   final int playheadFrame;
   final ValueChanged<int> onSeek;
   final VoidCallback onChanged;
 
-  /// Clicking the name selects the property and its keys (K-500 §2.1).
+  /// Clicking the name selects the property and its keys.
   final VoidCallback? onLabelTap;
 
   const MaskValueRow({super.key, 
@@ -431,7 +431,7 @@ class _MaskValueRowState extends State<MaskValueRow> {
     super.dispose();
   }
 
-  /// Show the value the drag is passing through without writing it (K-240).
+  /// Show the value the drag is passing through without writing it.
   void _preview(BridgeScalar v) {
     final ui = Provider.of<LumitUiState>(context, listen: false);
     _throttle.request(() {
@@ -530,7 +530,7 @@ class _MaskValueRowState extends State<MaskValueRow> {
   }
 
   /// This row's key, which per-point feather rows must not share: they are
-  /// several rows of the same value on the same mask (K-545).
+  /// several rows of the same value on the same mask.
   String get _rowKey => 'tl-mask-${widget.value.name}-${widget.mask.id}'
       '${widget.vertex < 0 ? '' : '-${widget.vertex}'}';
 
@@ -578,7 +578,7 @@ class _MaskValueRowState extends State<MaskValueRow> {
 }
 
 /// One named, deletable item with an opacity of its own — a piece of a shape
-/// layer's art (K-237) or a paint stroke (K-227). The two rows were twins:
+/// layer's art or a paint stroke. The two rows were twins:
 /// an icon, the name, the staged-and-previewed opacity drag, and the
 /// right-click menu that deletes it. What differs — how a preview is asked
 /// for, how an edit is written, whether the name renames — comes in as
@@ -586,7 +586,7 @@ class _MaskValueRowState extends State<MaskValueRow> {
 ///
 /// The drag is staged and previewed like every other dragged value here: the
 /// tick shows live and the release commits once, so a gesture is one op and
-/// one undo step (K-238, K-239).
+/// one undo step.
 class ItemOpacityRow extends StatefulWidget {
   final LumitIcon icon;
   final String name;
@@ -596,11 +596,11 @@ class ItemOpacityRow extends StatefulWidget {
   final String keyPrefix;
   final String id;
 
-  /// The item's opacity, or **null** for a kind that has none — a puppet pin
-  /// (K-704), which is a place rather than a mark and has nothing to be see
-  /// through. A null leaves the value column empty and drops the preview and
-  /// the commit with it; everything else about the row — the icon, the inline
-  /// rename, the right-click menu, the Delete row — is the same.
+  /// The item's opacity, or **null** for a kind that has none — a puppet pin,
+  /// which is a place rather than a mark and has nothing to be see through. A
+  /// null leaves the value column empty and drops the preview and the commit
+  /// with it; everything else about the row — the icon, the inline rename, the
+  /// right-click menu, the Delete row — is the same.
   final double? opacity;
   final ValueColumn valueColumn;
 
@@ -618,7 +618,7 @@ class ItemOpacityRow extends StatefulWidget {
   final String deleteLabel;
 
   /// A control of the item's own, drawn between the name and the value column
-  /// — a paint stroke's blend mode (K-550). Null for a shape item, which has
+  /// — a paint stroke's blend mode. Null for a shape item, which has
   /// no such choice.
   final Widget? extra;
 
@@ -645,7 +645,7 @@ class _ItemOpacityRowState extends State<ItemOpacityRow>
     with _InlineRename<ItemOpacityRow> {
   /// The opacity a drag is part way through, or null when nothing is
   /// dragging. Without it the field committed on every tick, so one drag was
-  /// a stack of ops and `Ctrl+Z` backed out a hair (K-238, K-239).
+  /// a stack of ops and `Ctrl+Z` backed out a hair.
   double? _staged;
 
   final PreviewThrottle _throttle = PreviewThrottle();

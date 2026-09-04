@@ -24,10 +24,10 @@ use lumit_fx_macros::Effect;
     // ≈ N× a full comp render.
     cost = Heavy,
     roi = FullFrame,
-    // K-429: the matte scales the amount, and here that amount is the open
-    // shutter itself. It is spent in the combine that averages the sub-frame
-    // renders (`realise::accumulate_below`) rather than in a kernel, because
-    // this effect has no kernel — but it is the same claim, so the generic
+    // The matte scales the amount, and here that amount is the open shutter
+    // itself. It is spent in the combine that averages the sub-frame renders
+    // (`realise::accumulate_below`) rather than in a kernel, because this
+    // effect has no kernel — but it is the same claim, so the generic
     // strength dissolve does not also run.
     matte = (
         "matte",
@@ -71,7 +71,7 @@ pub struct AccumulationMb {
     )]
     pub shutter_phase: f32,
 
-    /// Force per-layer motion blur (K-120) on every layer during the sub-frame
+    /// Force per-layer motion blur on every layer during the sub-frame
     /// sample renders — the shutter above stands in for the comp master and each
     /// layer's own switch, without mutating the comp. So one effect blurs every
     /// moving layer without toggling each one; each accumulation sample is itself

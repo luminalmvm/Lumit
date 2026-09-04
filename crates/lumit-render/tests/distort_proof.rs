@@ -12,7 +12,7 @@
 //! 1. **Turbulent displace** must swirl, and its pinned edges must stay put
 //!    while the middle churns. The matted pair is the one that matters most:
 //!    under a ramp matte the warp must *grow* across the frame rather than fade
-//!    in, which is the whole claim of the K-395 override.
+//!    in, which is the whole claim of the matte override.
 //! 2. **Tile** must repeat, and Mirror edges must hide the joins.
 //! 3. **Offset** must wrap with no seam and no lost content.
 //! 4. **Mirror** must be symmetric about the line, not merely flipped.
@@ -173,8 +173,8 @@ fn render_the_five_distort_effects() {
         write("4-turbdisplace-matte-dissolved", &to_srgb(&faded));
 
         // ---- Tile: the 2x2 default, and a mirrored, phase-shifted 3x3.
-        // The four sizes are px@comp since K-558, so the shares this proof
-        // draws are taken against the frame here rather than typed as per cents.
+        // The four sizes are px@comp, so the shares this proof draws are
+        // taken against the frame here rather than typed as per cents.
         let tile = |width: f32, height: f32, mirror: bool, phase: f32, out_w: f32| {
             let mut t = Tile::read(Params::EMPTY);
             t.tile_centre_x = fw * 0.5;

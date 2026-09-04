@@ -1,8 +1,8 @@
-// The Viewer's **bottom bar** (K-466): the ways of looking, the snapshot pair,
+// The Viewer's **bottom bar**: the ways of looking, the snapshot pair,
 // the transport with its clock, and the composition's own reading — plus the
 // shedding ladder that decides which of them a narrow Viewer keeps.
 //
-// Split out of viewer_panel_frb.dart (K-007). The sizes and the mark it is
+// Split out of viewer_panel_frb.dart. The sizes and the mark it is
 // drawn with are viewer_strips.dart's, shared with the header strip.
 
 import 'package:flutter/widgets.dart';
@@ -25,7 +25,7 @@ import 'viewer_progress_bar.dart';
 import 'viewer_stage.dart';
 import 'viewer_strips.dart';
 
-/// The Viewer's **bottom bar** (K-466, §12A.6: 22 tall).
+/// The Viewer's **bottom bar** (§12A.6: 22 tall).
 ///
 /// Left to right, and this is the drawing's own order: the ways of *looking* —
 /// the transparency board, the view menu, the channel, the exposure — then a
@@ -37,7 +37,7 @@ class ViewerBar extends StatelessWidget {
   final bool grid;
   final bool wireframes;
 
-  /// How the fronted comp is being looked at (K-314). Passed down rather than
+  /// How the fronted comp is being looked at. Passed down rather than
   /// read here: this bar rebuilds for every frame that arrives, and a control
   /// that asked the engine what it is set to would cross the boundary sixty
   /// times a second to be told what the frontend already knows.
@@ -77,10 +77,10 @@ class ViewerBar extends StatelessWidget {
   /// panel's bottom edge under Sharp.
   final bool detached;
 
-  /// What leads the strip when the setting has gathered both bars into one
-  /// (K-448): the panel's kicker and the three pickers the header would
-  /// otherwise carry, in that same order. Empty in the drawing's own split,
-  /// where the header carries them.
+  /// What leads the strip when the setting has gathered both bars into one:
+  /// the panel's kicker and the three pickers the header would otherwise
+  /// carry, in that same order. Empty in the drawing's own split, where the
+  /// header carries them.
   final List<Widget> leading;
 
   const ViewerBar({
@@ -146,7 +146,7 @@ class ViewerBar extends StatelessWidget {
           );
           final row = Row(
             // **The two gaps are the same gap, and they are what gives way
-            // first** (§12A.6, K-451). The drawing sets the transport and the
+            // first** (§12A.6). The drawing sets the transport and the
             // reading each with a `margin-left: auto`, which in a flex row
             // splits whatever is left over equally between them — so the
             // reading is at its own natural width and the gaps take the rest.
@@ -184,9 +184,8 @@ class ViewerBar extends StatelessWidget {
                 Flexible(
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
                     Flexible(child: reading),
-                    // Nothing at all while no frame is being waited on
-                    // (K-287), so at rest the reading really is the bar's
-                    // right-hand end.
+                    // Nothing at all while no frame is being waited on, so at
+                    // rest the reading really is the bar's right-hand end.
                     ViewerProgressBar(
                       tracker: Provider.of<LumitUiState>(context, listen: false)
                           .previewProgress,
@@ -254,7 +253,7 @@ class ViewerBar extends StatelessWidget {
         ),
         // One edge to allow for rather than two: the exposure is text.
         SizedBox(width: viewerBarGap - viewerMarkEdge),
-        // The exposure (K-314, docs/07 §2.2 item 12), bare: the number with
+        // The exposure (docs/07 §2.2 item 12), bare: the number with
         // no well under it. Preview only, and the header's colour picker is
         // what says so while it is engaged.
         LumitTooltip(
@@ -286,7 +285,7 @@ class ViewerBar extends StatelessWidget {
           color: t.hairline,
         ),
         SizedBox(width: viewerBarGap - viewerMarkEdge),
-        // Snapshots (K-416, K-532, §2.2 item 14): **two marks**, because a
+        // Snapshots (§2.2 item 14): **two marks**, because a
         // snapshot nobody can see they have taken is a snapshot nobody uses.
         // Take photographs the picture on a plain click; Show, beside it, puts
         // the photograph back over the live one while it is held — and is
@@ -307,7 +306,7 @@ class ViewerBar extends StatelessWidget {
 
   /// The five transport buttons and the clock, one instrument at one spacing.
   ///
-  /// Round gathers them into a pill (K-394, §12.1); Sharp is handed the very
+  /// Round gathers them into a pill (§12.1); Sharp is handed the very
   /// same widgets with nothing wrapped round them.
   ///
   /// [clock] is the ladder's last step but one: on the narrowest bar the five
@@ -394,8 +393,8 @@ class ViewerBar extends StatelessWidget {
   }
 }
 
-/// **The bar's shedding ladder, and what is left at the end of it** (§12A.6,
-/// K-451, and the owner's ruling on the order).
+/// **The bar's shedding ladder, and what is left at the end of it** (§12A.6
+/// and the owner's ruling on the order).
 ///
 /// In plain terms: the bar cannot hold everything on a Viewer docked into a
 /// sidebar, so things leave. **The transport is the last to go** — a person
@@ -481,7 +480,7 @@ class _LookingOverflow extends StatelessWidget {
   }
 }
 
-/// **What is on screen, in one line** (K-466): the composition, the time, the
+/// **What is on screen, in one line**: the composition, the time, the
 /// pixels the engine actually made, and the magnification they are drawn at.
 ///
 /// It is the drawing's right-hand end, and it absorbs the degradation badge
@@ -489,7 +488,7 @@ class _LookingOverflow extends StatelessWidget {
 /// reading that always says `1920×1080 → 960×540` states the tier plainly, in
 /// the one place a person already looks to ask what they are looking at, and
 /// without a box appearing mid-playback and dragging the bar about.
-/// **What it sheds, and in what order** (§12A.6's ladder, K-451). The reading is
+/// **What it sheds, and in what order** (§12A.6's ladder). The reading is
 /// four statements on one line, so step 1 — "flexible text ellipsises" — is not
 /// one decision but four, and cutting the line at the ellipsis would take the
 /// magnification, which is the part a person is most often watching.
@@ -585,7 +584,7 @@ class _Readout extends StatelessWidget {
   }
 }
 
-/// The channel picker's mark, and the menu of names behind it (K-411, K-466).
+/// The channel picker's mark, and the menu of names behind it.
 ///
 /// A bare mark rather than a boxed dropdown, which is what the drawing draws:
 /// the answer is a colour, and a border round a colour is a box round a colour.
@@ -729,19 +728,19 @@ class ChannelFacePainter extends CustomPainter {
       old.channel != channel || old.theme != theme;
 }
 
-/// **Show the snapshot**, the second half of the pair (K-416, K-532).
+/// **Show the snapshot**, the second half of the pair.
 ///
 /// A **press and hold** puts the stored picture back over the live one for as
 /// long as the button is down — the before/after read every grade leans on —
 /// and releasing it is the whole of a comparison's life. Nothing crosses the
 /// bridge: what is stored is what the stage's own boundary rasterised.
 ///
-/// **Its own mark rather than a hold on Take** (K-532, superseding that half of
-/// K-466). Folding both gestures onto one glyph left a taken snapshot with
-/// nothing on screen to say it existed or how to see it: the only way to find
-/// the comparison was to hold a button that, as far as anyone could tell, took
-/// photographs. A second mark states the affordance — and states its absence,
-/// by standing muted with a tooltip saying why, until one has been taken.
+/// **Its own mark rather than a hold on Take**. Folding both gestures onto one
+/// glyph left a taken snapshot with nothing on screen to say it existed or how
+/// to see it: the only way to find the comparison was to hold a button that, as
+/// far as anyone could tell, took photographs. A second mark states the
+/// affordance — and states its absence, by standing muted with a tooltip saying
+/// why, until one has been taken.
 ///
 /// A raw [Listener] rather than a gesture recogniser: the comparison must last
 /// exactly as long as the button is down, and a recogniser only reports once
@@ -786,7 +785,7 @@ String timecodeOf(int frame, BridgeCompSettings settings) =>
 /// The last frame of a comp, from its settings alone.
 ///
 /// Worked out here rather than asked of the engine: this is read while the bar
-/// is being built, and the bar is built for every frame of playback (K-184).
+/// is being built, and the bar is built for every frame of playback.
 /// Whole-integer arithmetic, so a long comp at 29.97 cannot drift the way a
 /// double would.
 int _lastFrameOf(BridgeCompSettings settings) {

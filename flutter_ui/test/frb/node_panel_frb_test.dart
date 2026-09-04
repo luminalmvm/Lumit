@@ -125,8 +125,8 @@ void main() {
       }
     });
 
-    /// **Audio level's source row is a dropdown that starts on the comp**
-    /// (K-657). Unset means the composition's own mix, so the empty entry reads
+    /// **Audio level's source row is a dropdown that starts on the comp**.
+    /// Unset means the composition's own mix, so the empty entry reads
     /// *This comp* rather than None — and the list offers **every** layer, not
     /// only the ones that draw a picture. That second half is the repair: music
     /// arrives as an audio-only clip, which has no picture, so the one picker in
@@ -250,7 +250,7 @@ void main() {
 
     /// Put Particulate on the layer beside the blur and add a Points sample
     /// driver whose Count drives the blur's Radius. The stream itself is left
-    /// unwired: that is the state K-509 is about.
+    /// unwired: that is the hazard the tests below are about.
     UuidValue seedSample(LayerReference layer) {
       layer.addEffect(name: 'particulate');
       final made = layer.newDriver(name: 'points_sample');
@@ -277,7 +277,7 @@ void main() {
     }
 
     /// **One row for the point, none for the stream.** Position is an `_x`/`_y`
-    /// pair and folds like every other point pair (K-443), dropper and all;
+    /// pair and folds like every other point pair, dropper and all;
     /// the Points input is wire-only — no stored value, nothing to keyframe —
     /// so there is nothing here for it to be a row of.
     testWidgets('Points sample folds its Position and draws no stream row',
@@ -300,7 +300,7 @@ void main() {
       expect(find.text('Position y'), findsNothing);
 
       // The query point is px@comp, so it takes the crosshair that picks a
-      // place off the Viewer (K-260).
+      // place off the Viewer.
       expect(find.byKey(ValueKey<String>('dropper-fx-$sample-position_x')),
           findsOneWidget);
 
@@ -309,7 +309,7 @@ void main() {
           reason: 'a wire-only input has no row anywhere');
     });
 
-    /// **The hazard, on the row it reaches** (K-509). A driven row cannot show
+    /// **The hazard, on the row it reaches**. A driven row cannot show
     /// the number arriving along its wire — that is a per-frame value and no
     /// rebuild may ask for one — but it can say that the box at the far end
     /// has no stream, which is the case where the number is a documented

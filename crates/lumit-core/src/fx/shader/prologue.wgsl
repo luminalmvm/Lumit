@@ -73,7 +73,7 @@ fn lumit_orig(uv: vec2<f32>) -> vec4<f32> {
     return lumit_bilinear(orig, uv);
 }
 
-// The K-395 matte's strength at a point: the premultiplied Rec. 709 luma the
+// The matte's strength at a point: the premultiplied Rec. 709 luma the
 // seam already prepared. `lumit.matte_on` says whether it means anything —
 // binding 4 stands in as `src` when no matte is bound.
 fn lumit_matte(uv: vec2<f32>) -> f32 {

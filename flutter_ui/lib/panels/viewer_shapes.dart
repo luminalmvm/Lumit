@@ -1,5 +1,5 @@
 // The shape tools and the Pen: the paths they draw, in the layer's own
-// coordinates (K-222, K-223, docs/07 §1.7, §2.3.1).
+// coordinates (docs/07 §1.7, §2.3.1).
 //
 // **In plain terms.** A mask is a shape drawn on a layer that decides which of
 // its pixels show. The shape tools draw one: rectangle, rounded rectangle,
@@ -220,7 +220,7 @@ List<BridgeVertex> shapePath({
       // A regular polygon inscribed in the box, first point at the top — the
       // star without its notches, and the same tool After Effects has. (The
       // *path-building* gesture that was briefly on this tool belongs to the
-      // Pen, where After Effects puts it — K-223.)
+      // Pen, where After Effects puts it.)
       final rx = w / 2;
       final ry = h / 2;
       final cx = left + rx;
@@ -240,10 +240,10 @@ List<BridgeVertex> shapePath({
 }
 
 /// One cubic path through [count] vertices, on whichever screen mapping the
-/// caller draws with — the walk every path outline and preview shares (K-224,
-/// K-237). The callbacks answer, for vertex `i`, where it sits and where its
-/// two handles reach, so a caller can fold in nudges or an art offset without
-/// a second copy of the cubic walk.
+/// caller draws with — the walk every path outline and preview shares. The
+/// callbacks answer, for vertex `i`, where it sits and where its two handles
+/// reach, so a caller can fold in nudges or an art offset without a second
+/// copy of the cubic walk.
 Path bezierPath({
   required int count,
   required Offset Function(int i) at,
@@ -267,7 +267,7 @@ Path bezierPath({
 }
 
 /// [mask] showing [vertices] instead of its own — the shape an animated path
-/// is really at (K-342). Everything else is the mask untouched, so this is
+/// is really at. Everything else is the mask untouched, so this is
 /// only ever a *view* of it and never something written back.
 BridgeMask maskWithVertices(BridgeMask mask, List<BridgeVertex> vertices) =>
     BridgeMask(
@@ -285,11 +285,11 @@ BridgeMask maskWithVertices(BridgeMask mask, List<BridgeVertex> vertices) =>
     );
 
 /// Half the soft edge's width at each of [mask]'s vertices, in layer pixels —
-/// what the Viewer's guide is drawn from (K-545).
+/// what the Viewer's guide is drawn from.
 ///
 /// `null` when there is nothing to draw: a hard-edged mask, or one whose width
 /// is **keyframed**. A keyframed width has no number here — evaluating one is
-/// the engine's job and the Viewer does not ask it while it paints (K-184) —
+/// the engine's job and the Viewer does not ask it while it paints —
 /// so the guide steps aside rather than drawing a width that is not the one in
 /// the picture.
 List<double>? stillHalfFeather(BridgeMask mask) {
@@ -356,7 +356,7 @@ String maskName(ToolMode tool, int existing) => tool == ToolMode.pen
     ? l10n.maskNumbered(existing + 1)
     : shapeMaskName(tool);
 
-/// A path being drawn with the **Pen** (K-223): the vertices placed so far.
+/// A path being drawn with the **Pen**: the vertices placed so far.
 ///
 /// **The gesture this models.** A click places a corner. A click *and drag*
 /// places a vertex and pulls a pair of bezier handles out of it, mirrored so
@@ -425,7 +425,7 @@ class PathDraft {
 ///
 /// [screenScale] converts layer pixels to screen ones, so the tolerance is a
 /// fixed number of *screen* pixels however far the picture is zoomed — the same
-/// rule the anchor's snapping follows (K-220).
+/// rule the anchor's snapping follows.
 bool withinClosingDistance(
   (double, double) at,
   (double, double) target, {

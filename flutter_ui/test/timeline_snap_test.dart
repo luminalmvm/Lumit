@@ -126,7 +126,7 @@ void main() {
       expect(r.caught, isNull, reason: 'never a division by zero');
     });
 
-    test('no targets at all is the whole-frame magnet, unchanged (K-190)', () {
+    test('no targets at all is the whole-frame magnet, unchanged', () {
       expect(
         snapFrame(
                 frame: 12.6, targets: const [], perFrame: perFrame, magnet: true)

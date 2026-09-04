@@ -32,7 +32,7 @@ A new Flutter FFI plugin project.
     # library. The frb template ships `../../rust rust_lib_lumit_flutter`, which
     # assumes its own layout; our crate is a workspace member at
     # crates/lumit-bridge and its cdylib is `lumit_bridge`. Untested — the macOS
-    # pass is K-033, still to come — but the template values are certainly wrong.
+    # pass is still to come — but the template values are certainly wrong.
     :script => 'sh "$PODS_TARGET_SRCROOT/../cargokit/build_pod.sh" ../../../crates/lumit-bridge lumit_bridge',
     :execution_position => :before_compile,
     :input_files => ['${BUILT_PRODUCTS_DIR}/cargokit_phony'],

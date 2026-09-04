@@ -27,11 +27,10 @@
 //! `lumit-aplug-broker` crate, which is this crate with a pipe in front of it.
 //!
 //! **The architecture is the OFX host's, the code is not shared.** `lumit-ofx`
-//! proved this shape and its lessons are carried over verbatim as rules
-//! (K-589/K-592/K-594), but the messages here carry blocks of sound and
-//! parameter events, which have nothing in common with frames and clips: one
-//! crate for both would be an abstraction with one and a half users
-//! (docs/impl/audio-plugins.md §5).
+//! proved this shape and its lessons are carried over verbatim as rules, but
+//! the messages here carry blocks of sound and parameter events, which have
+//! nothing in common with frames and clips: one crate for both would be an
+//! abstraction with one and a half users (docs/impl/audio-plugins.md §5).
 
 pub mod broker;
 pub mod handles;

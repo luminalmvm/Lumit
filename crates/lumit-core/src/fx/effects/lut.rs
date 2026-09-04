@@ -1,18 +1,18 @@
-//! LUT (docs/08 §3.11, docs/impl/lut.md, K-114): a 3D colour look-up from a
+//! LUT (docs/08 §3.11, docs/impl/lut.md): a 3D colour look-up from a
 //! `.cube` file — a colourist's baked grade dropped onto a layer.
 //!
 //! **In plain terms.** The grade itself is not a number: it is a file, parsed
 //! and uploaded as a 3D texture by whoever is rendering. So the declaration
 //! carries the File row (for the panel, and so the render knows to go looking),
 //! but the cube travels *beside* the resolved op in the render's parallel LUT
-//! list — the k-th `lut` effect in the stack binds the k-th slot (K-387). What
+//! list — the k-th `lut` effect in the stack binds the k-th slot. What
 //! the effect itself resolves to is the Mix alone.
 //!
 //! There is no CPU reference. The parsed cube never reaches the single-buffer
 //! CPU dispatcher, so the degradation rung renders a LUT as identity, exactly as
 //! the old `Resolved::Lut` arm did; the §1.6 oracle is [`crate::lut::Lut3d::
 //! sample_in`], exercised directly from the lumit-gpu test — the transfer into
-//! and back out of the Input space (K-543) is part of that oracle, so the two
+//! and back out of the Input space is part of that oracle, so the two
 //! paths cannot disagree about where the picture sits when the table reads it.
 
 use crate::fx::{EffectDef, EffectMetadata, EffectSchema};
@@ -32,17 +32,17 @@ use lumit_fx_macros::Effect;
     premultiplied = false,
 )]
 pub struct Lut {
-    /// The `.cube` file (K-111); animatable only by stepping between paths with
+    /// The `.cube` file; animatable only by stepping between paths with
     /// hold keys, since two files cannot be blended.
     ///
     /// **Always `None` here, by design.** A file slot is decided by the caller —
     /// only the render knows which cube actually loaded — so `resolve_into_arena`
     /// carries no `Value::File`, and the cube arrives at the GPU pass as its aux
-    /// slot instead (K-387). The row exists because the panel needs it.
+    /// slot instead. The row exists because the panel needs it.
     #[file(filter = ["cube"], filter_name = "Cube LUT")]
     pub file: Option<u32>,
 
-    /// The transfer function the cube was authored against (K-543). The picture
+    /// The transfer function the cube was authored against. The picture
     /// converts into it, the table applies, the result converts back — so a
     /// `.cube` baked in a display-referred grading application lands in the
     /// cells of the table its author was looking at. Linear is the default and
@@ -70,7 +70,7 @@ pub struct Lut {
 impl Lut {
     /// The two numbers the kernel needs: the mix it blends the graded result by,
     /// clamped exactly as the old resolve arm clamped it, and the space the
-    /// lookup happens in (K-543). The grade itself is still the file.
+    /// lookup happens in. The grade itself is still the file.
     pub fn packed(self) -> (f32, crate::lut::LutSpace) {
         (
             (self.mix / 100.0).clamp(0.0, 1.0),

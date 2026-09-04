@@ -116,7 +116,7 @@ pub struct RenderRequest {
     /// Which way up the pictures are handed over. Both are legal and the tests
     /// render the same frame through both, but what a plugin is actually sent
     /// is bottom-up with positive row bytes: a shipped plugin (ntsc-rs) applies
-    /// a negative stride in the wrong units and writes past the block (K-756).
+    /// a negative stride in the wrong units and writes past the block.
     pub order: RowOrder,
     /// One picture per input clip, by the name the plugin gave the clip.
     pub inputs: BTreeMap<String, Frame16>,
@@ -261,7 +261,7 @@ pub fn render_with_prefetch(
     // the clips in time for `kOfxImageEffectActionRender` answers "there is no
     // image" to all of that, and a well-written plugin answers `kOfxStatFailed`
     // to the action. Most of openfx-misc does exactly that, which is how this
-    // was found (K-595). They come off again on every path out, below.
+    // was found. They come off again on every path out, below.
     let mut images = BTreeMap::new();
     for (name, frame) in &request.inputs {
         images.insert(name.clone(), Image::from_frame(frame, request.order)?);
@@ -274,7 +274,7 @@ pub fn render_with_prefetch(
     // Taken with no host lock held, and now held for the whole conversation
     // rather than for the render alone: every action in it calls into the
     // plugin, and a plugin that says two of its renders may not overlap is not
-    // saying its `getRegionOfDefinition` may (docs/14 §7, K-066).
+    // saying its `getRegionOfDefinition` may (docs/14 §7).
     let guard = instance.render_lock();
     let _held = guard.as_ref().map(crate::instance::RenderGuard::hold);
 
@@ -657,7 +657,7 @@ fn sequence_args(request: &RenderRequest) -> PropertySet {
     args
 }
 
-/// The OFX 1.3 to 1.5 GPU render arguments, all saying no (K-757): the flags
+/// The OFX 1.3 to 1.5 GPU render arguments, all saying no: the flags
 /// are nought and the queues and streams are null, which is what the spec
 /// says a CPU render carries. The stock support library reads every one of
 /// them on the begin, the render and the end.

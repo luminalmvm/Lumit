@@ -128,7 +128,7 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
           path: clearPath ? null : (path ?? document.path),
           pathOffset: pathOffset ?? document.pathOffset,
           // Carried through untouched: the animators are edited on their own
-          // section (K-609), and a document written from here must not drop
+          // section, and a document written from here must not drop
           // them — the write takes the whole document, so anything left out is
           // deleted.
           animators: document.animators,
@@ -198,7 +198,7 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
           onPicked: (c) => write(fill: c),
         ),
       ),
-      // **Text on a path** (K-607): the words run along one of the layer's own
+      // **Text on a path**: the words run along one of the layer's own
       // masks. "None" is the straight line every text layer starts as, and a
       // layer with no masks drawn yet offers nothing else — which is the
       // honest reading rather than a row that promises a curve there is none
@@ -361,10 +361,10 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
   ///
   /// This card used to carry a whole second retiming system beside it: an
   /// enable switch, a constant speed and a reverse gate, writing a segment
-  /// store that rivalled the Retime property. K-249 deleted it. Retiming is
-  /// **Ctrl+Alt+T** and the Retime graph now, which is the only place a ramp
-  /// was ever editable anyway; what is left here was never part of the map
-  /// (docs/04 §10) and applies whether or not the layer is retimed.
+  /// store that rivalled the Retime property. An earlier change deleted it.
+  /// Retiming is **Ctrl+Alt+T** and the Retime graph now, which is the only
+  /// place a ramp was ever editable anyway; what is left here was never part
+  /// of the map (docs/04 §10) and applies whether or not the layer is retimed.
   ///
   /// Shown on footage only. Every layer *has* the setting — it is a plain
   /// field with a default, and the engine asks any layer for it — but a layer
@@ -373,12 +373,12 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
   /// card on screen at all, so an offer here would give an adjustment layer a
   /// source card describing a source it does not have.
   ///
-  /// **Flow is not one of the choices here (K-331).** It used to be a third
+  /// **Flow is not one of the choices here.** It used to be a third
   /// entry in this dropdown, which made it look like a peer of Nearest and
   /// Blend — a small setting you pick and forget. It is not: it carries eight
   /// parameters of its own and is the most expensive thing a layer can ask for.
   /// It is the Flow switch in the layer's switch cluster instead, which reveals
-  /// the Flow group (K-088). Choosing Nearest or Blend here turns it off, since
+  /// the Flow group. Choosing Nearest or Blend here turns it off, since
   /// they are the same setting underneath.
   List<Widget> _retimeRows(LumitTheme t) {
     if (widget.layer.getKind() != BridgeLayerKind.footage) return const [];

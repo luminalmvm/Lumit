@@ -23,11 +23,11 @@ import 'layer_fold_frb.dart';
 import 'timeline_group_row_frb.dart';
 import 'package:lumit_flutter/src/rust/api/retime.dart';
 
-/// The layer-number column: the mockup's own 18 (K-451), shared by the column
+/// The layer-number column: the mockup's own 18, shared by the column
 /// header's `#` and the muted mono number under it so the two stack.
 const double numberCellWidth = 18;
 
-/// How thick a scrollbar thumb is — 7 (K-451, docs/15 §12A.6, where it is
+/// How thick a scrollbar thumb is — 7 (docs/15 §12A.6, where it is
 /// named for the graph side's horizontal bar; the lanes' bar carries the same
 /// one, so the two modes do not swap bar shapes on the switch).
 ///
@@ -44,26 +44,26 @@ const double scrollbarThickness = 7;
 /// Half a pixel off centre cannot be seen; half a pixel across the grid can.
 /// A filled block draws its edge grey ([scrollbarThickness] in a 12px gutter,
 /// §6.15) and a glyph's strokes smear — and where the glyph carries the icon
-/// set's own half-pixel nudge onto the grid (K-456), a fractional base moves
+/// set's own half-pixel nudge onto the grid, a fractional base moves
 /// it back off again, which is the switch column's drift (§6.20).
 double wholePixelInset(double extent, double size) =>
     ((extent - size) / 2).floorToDouble().clamp(0.0, extent);
 
 /// Half a keyframe's height on a property's own lane — **the same in Layers
-/// mode and in Keys mode** (K-459). The drawing measures the key 11px point
+/// mode and in Keys mode**. The drawing measures the key 11px point
 /// to point in both, so this is 5.5. Layers mode used to draw them at 8: a
 /// mark you take hold of should not shrink because there happen to be bars
 /// beside it, and the two modes showing the same key at two sizes made the
 /// switch between them look like a change to the comp.
 const double laneKeyHalf = 5.5;
 
-/// How a key is drawn: the shape says its interpolation (§12A.1, K-457 —
-/// **diamond linear, hourglass bezier, square hold**), which is what lets a
-/// lane of keys be read rather than merely counted.
+/// How a key is drawn: the shape says its interpolation (§12A.1 — **diamond
+/// linear, hourglass bezier, square hold**), which is what lets a lane of keys
+/// be read rather than merely counted.
 enum KeyShape { diamond, hourglass, square }
 
 /// One side of a key's interpolation as a shape. Each side answers for its own
-/// half of the mark (K-457), so nothing here has to choose between them: a key
+/// half of the mark, so nothing here has to choose between them: a key
 /// that eases in and holds out is half hourglass and half square, which is the
 /// truth about it and was previously unsayable.
 /// An **automatic** side is an eased one — the hourglass half — because that
@@ -86,7 +86,7 @@ KeyShape keyShapeOfSide(BridgeSideInterp side) => switch (side) {
 
 /// One side of one key's mark: [shape]'s left half when [left], its right half
 /// otherwise, standing [half] above and below [mid] and split down the line at
-/// [x] (K-457).
+/// [x].
 ///
 /// **Every shape is the same height** — that is what makes a lane of mixed
 /// keys read as one row of marks rather than as a row that also changes size.
@@ -231,7 +231,7 @@ double zoomNudged(double zoom,
 /// A layer drag in flight: the index lifted, and the index it would land on.
 ///
 /// **Held by the panel and read by both halves of the table**, which is the
-/// point (K-208). The outline owns the gesture — the name is the stack handle
+/// point. The outline owns the gesture — the name is the stack handle
 /// — so when only it knew about the drag, only it could move: the lanes sat
 /// still while their layers were being reordered beside them. One value, read
 /// by the outline rows and the lane blocks alike, and the two halves slide as
@@ -254,7 +254,7 @@ class LayerDrag {
 ///
 /// The outline and the lane area are still two widget trees, and they have to
 /// be: they sit in two scroll views, and only the lane half rebuilds when the
-/// zoom moves (K-293). What they must never be is two *opinions*. Each half
+/// zoom moves. What they must never be is two *opinions*. Each half
 /// used to walk [layerFoldRows] for itself, test `open` for itself and look up
 /// `sequenceExtra` for itself, and the table was level only because all three
 /// pairs happened to agree — a layer could grow a row on one side and not the
@@ -275,7 +275,7 @@ class LayerRow {
   ///
   /// Held for a shut layer too, because snapping wants them: a keyframe is
   /// somewhere in time whether or not its row is on screen, and a key drag or
-  /// a razor cut can land on it either way (`_snapTargets`, K-292). Everything
+  /// a razor cut can land on it either way (`_snapTargets`). Everything
   /// that *draws* reads [drawnRows] instead — the one place that difference is
   /// written down, rather than an `open` test remembered at each of five call
   /// sites.
@@ -285,24 +285,24 @@ class LayerRow {
   /// twirled open, nothing when it is not.
   List<LayerFoldRow> get drawnRows => open ? foldRows : const [];
 
-  /// How much taller an open Sequence view makes this row (K-248), or null
+  /// How much taller an open Sequence view makes this row, or null
   /// when the layer has no view open. **The outline reserves exactly the room
   /// the lanes draw the view in**, or every row below sits at a different
   /// height on the two sides.
   final double? sequenceExtra;
 
   /// Whether this layer's source carries sound, and whether it has a picture
-  /// to show (K-435). What the switches column reads to draw only the switches
+  /// to show. What the switches column reads to draw only the switches
   /// this layer can actually use: no audible switch on a solid that has never
   /// made a sound, no visibility switch on a music track that has never shown
   /// anything.
   ///
   /// Carried here, decided once by the panel, because answering either means
-  /// probing the media — the cost K-184 exists to keep out of a row's build.
+  /// probing the media — a cost that must stay out of a row's build.
   final bool hasAudio;
   final bool hasPicture;
 
-  /// What one row of this layer measures — `t.density.laneRow` (K-454).
+  /// What one row of this layer measures — `t.density.laneRow`.
   ///
   /// **Carried, not looked up.** This is a plain description of a row, built
   /// once for the whole panel and read by the maths that has no `BuildContext`
@@ -319,7 +319,7 @@ class LayerRow {
   final List<BridgeKeyframe> summaryKeys;
 
   /// The **layer group's header row**, when this layer is the topmost member of
-  /// one (K-702), or null for every other layer.
+  /// one, or null for every other layer.
   ///
   /// Carried on the carrier layer rather than standing as a row of its own,
   /// which is what let groups arrive without touching the drag arithmetic, the
@@ -328,7 +328,7 @@ class LayerRow {
   /// carrier's own block.
   final GroupHeader? groupHeader;
 
-  /// The header's own fold-out (K-731): its effect headings and their
+  /// The header's own fold-out: its effect headings and their
   /// parameter rows, riding the carrier's block exactly as the header itself
   /// does — so the drag arithmetic and both halves' windows still see one
   /// entry per visible layer. Empty for every layer that carries no header,
@@ -407,7 +407,7 @@ class LayerRow {
 }
 
 /// What a column group is called — in its header, and on the bottom bar's
-/// toggle for it (K-448), which must name the same thing the header does.
+/// toggle for it, which must name the same thing the header does.
 /// **The same words the column headers carry** (§12A.1): Switches, Modes,
 /// Parent — the mockup's own bottom-bar row.
 String columnGroupLabel(TimelineGroup group) => switch (group) {
@@ -421,18 +421,18 @@ String columnGroupLabel(TimelineGroup group) => switch (group) {
 
 /// Decide every layer's row, once for the whole panel. `flowParams` and
 /// `volumeDb` are the panel's once-per-revision reads, riding down onto the
-/// fold rows (K-184).
+/// fold rows.
 ///
 /// [reveal] names the layers drawn **filtered**, and by which rule: each builds
 /// its fold-out as though every twirl in it were down, and then keeps only the
 /// rows that answer ([revealFoldRows]). A layer with nothing qualifying comes
 /// back shut.
 ///
-/// Three things ask for it. The **Animated filter** (K-441, 6.43) asks for the
+/// Three things ask for it. The **Animated filter** (6.43) asks for the
 /// whole comp, and passes [everyLayerKeyframed]. A single **`U`** asks for the
-/// layers it just revealed and no others (K-622), so that opening one layer's
+/// layers it just revealed and no others, so that opening one layer's
 /// keyed rows does not quietly filter every other layer on the panel. The
-/// **Animation ▸ Reveal** rows (K-684) ask the same of the selection, with the
+/// **Animation ▸ Reveal** rows ask the same of the selection, with the
 /// wider filters. [compWidth]/[compHeight] ride along for the widest of them,
 /// which is the only one that needs to know where an unmoved layer sits.
 List<LayerRow> layerRows({
@@ -487,7 +487,7 @@ List<LayerRow> layerRows({
       // so appearing and then going is far less startling than the reverse.
       hasPicture: hasPicture[id] ?? true,
       groupHeader: groupHeaders[id],
-      // The header's own fold-out (K-731), built from the read model's
+      // The header's own fold-out, built from the read model's
       // listing with the same open set the layer folds use — a header
       // effect's twirl is remembered under its group-prefixed path.
       groupFoldRows: switch (groupHeaders[id]) {
@@ -734,14 +734,14 @@ class _LazyBlocksState extends State<LazyBlocks> {
 
   /// The blocks already built for this widget's [LazyBlocks.builder], by index.
   ///
-  /// **This is what makes a scroll incremental** (K-678,
-  /// docs/impl/ui-performance.md §4.3). A slide used to hand the `Column` a
-  /// freshly built widget for every block in the window, so bringing one new
-  /// row in at the edge rebuilt three screenfuls — a ~75 ms build frame at the
-  /// owner's window, 8.6 fps. Handing back the *same instance* for a block
-  /// that has not changed makes `Element.updateChild` short-circuit it: no
-  /// rebuild, and no layout either, since its render object is never dirtied
-  /// and its constraints have not moved. A slide then costs the entering rows.
+  /// **This is what makes a scroll incremental** (docs/impl/ui-performance.md
+  /// §4.3). A slide used to hand the `Column` a freshly built widget for every
+  /// block in the window, so bringing one new row in at the edge rebuilt three
+  /// screenfuls — a ~75 ms build frame at the owner's window, 8.6 fps. Handing
+  /// back the *same instance* for a block that has not changed makes
+  /// `Element.updateChild` short-circuit it: no rebuild, and no layout either,
+  /// since its render object is never dirtied and its constraints have not
+  /// moved. A slide then costs the entering rows.
   final Map<int, Widget> _built = {};
 
   /// The block at [i], built once per builder.
@@ -810,14 +810,13 @@ class _LazyBlocksState extends State<LazyBlocks> {
     // 2,000-layer precomp holds three screenfuls of widgets rather than the
     // whole comp's.
     _built.removeWhere((i, _) => i < first || i >= last);
-    // **The stack keeps its own layer** (K-626's pattern). Everything drawn
-    // over the blocks — the playhead, the marquee, the work-area wash — sits
-    // in the same `Stack` as they do, and a stack that is relaid out repaints
-    // every child of it that has no layer of its own. That put the whole cost
-    // of the blocks on screen behind a single vertical line moving, which is
-    // exactly what a scrub over cached frames is. Behind a boundary, the
-    // blocks are repainted when the blocks change and not when something above
-    // them does.
+    // **The stack keeps its own layer**. Everything drawn over the blocks —
+    // the playhead, the marquee, the work-area wash — sits in the same `Stack`
+    // as they do, and a stack that is relaid out repaints every child of it
+    // that has no layer of its own. That put the whole cost of the blocks on
+    // screen behind a single vertical line moving, which is exactly what a
+    // scrub over cached frames is. Behind a boundary, the blocks are repainted
+    // when the blocks change and not when something above them does.
     return RepaintBoundary(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -841,7 +840,7 @@ class _LazyBlocksState extends State<LazyBlocks> {
 ScrollPosition? positionOf(ScrollController controller) =>
     controller.positions.length == 1 ? controller.positions.first : null;
 
-/// The Timeline's two views (K-529, §12A.1), in the order their tabs sit.
+/// The Timeline's two views (§12A.1), in the order their tabs sit.
 ///
 /// Both share the ruler, the cache bar, the work area, the markers, the
 /// playhead **and the outline** — what changes is the body under them: bars or

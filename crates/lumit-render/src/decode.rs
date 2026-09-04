@@ -32,7 +32,7 @@ pub struct Request {
 pub struct CompJob {
     pub layer: Uuid,
     pub item: Uuid,
-    /// One media file, or the numbered run of stills this item is (K-539) —
+    /// One media file, or the numbered run of stills this item is —
     /// whichever it is, the decode worker opens it the same way.
     pub source: lumit_media::MediaSource,
     pub source_frame: usize,
@@ -43,11 +43,12 @@ pub struct CompJob {
     pub natural_w: u32,
     pub natural_h: u32,
     /// Frame interpolation: `Some((ceil_frame, weight))` pairs
-    /// `source_frame` with `ceil_frame` at `weight` (K-021 Blend/Flow).
+    /// `source_frame` with `ceil_frame` at `weight` (the Blend and Flow
+    /// retiming policies).
     pub blend: Option<(usize, f32)>,
     /// Set when `blend`'s pair is combined by optical-flow synthesis rather
-    /// than a plain crossfade (K-021 Flow policy), carrying the parameters the
-    /// synthesis runs with (K-331).
+    /// than a plain crossfade (the Flow policy), carrying the parameters the
+    /// synthesis runs with.
     ///
     /// `None` covers both "the policy is not Flow" and "it is, but the
     /// engagement gate declined" — flow that cannot help renders as Nearest,
@@ -60,12 +61,12 @@ pub struct CompJob {
     /// a single-frame stack decodes exactly one frame.
     pub temporal: Vec<(i32, usize)>,
     /// One entry per flow-consuming effect in the stack (Flow motion blur,
-    /// docs/08 §3.2, wants `1`; Datamosh, §3.12, K-104, wants `-1`), sorted and
+    /// docs/08 §3.2, wants `1`; Datamosh, §3.12, wants `-1`), sorted and
     /// deduplicated: the decode worker measures the dense motion from this frame
     /// to the neighbour at each offset (already fetched via `temporal`) and
     /// stamps them onto [`CompLayerPixels::flow_fields`]. Empty for a stack that
-    /// consumes no flow. See [`lumit_core::fx::stack_flow_neighbours`] — and
-    /// K-544 for why this is a list rather than the one slot it used to be.
+    /// consumes no flow. See [`lumit_core::fx::stack_flow_neighbours`] - a list
+    /// rather than the one slot it used to be.
     pub flow_neighbours: Vec<i32>,
     /// The file could not be found (docs/07 §3.3): the worker synthesises the
     /// test-bar slate at the layer's size instead of decoding, so a comp with
@@ -95,11 +96,11 @@ pub struct CompLayerPixels {
     /// keyed by that offset. An offset whose neighbour did not decode is simply
     /// absent, which is its consumer's passthrough. Fast motion blur (docs/08
     /// §3.2, offset `1`) smears along its field, scaling the streak by `conf`
-    /// (FX-19); Datamosh (§3.12, K-104, offset `-1`) warps the previous frame
+    /// (FX-19); Datamosh (§3.12, offset `-1`) warps the previous frame
     /// along the `(u, v)` and ignores `conf`. **Both at once is one field each,
-    /// not one field shared** (K-544): they are opposite measurements.
+    /// not one field shared**: they are opposite measurements.
     pub flow_fields: Vec<(i32, FlowFieldData)>,
-    /// The content name of this decode (K-421): a hash of the [`CompJob`]
+    /// The content name of this decode: a hash of the [`CompJob`]
     /// identity [`crate::plan::same_decode`] compares — item, path, source
     /// frame, decode width, slate, blend partner, flow settings, temporal
     /// window. Two jobs that decode the same pixels get the same name, which is
@@ -107,7 +108,7 @@ pub struct CompLayerPixels {
     /// renders without hashing its bytes.
     pub source_key: u128,
     /// The **source frame** these pixels are, which is what a Roto brush's
-    /// matte is indexed by (K-710). The stamper works it out again for the
+    /// matte is indexed by. The stamper works it out again for the
     /// frame key; the draw builder cannot, because the document holds no frame
     /// rate for a media item and this is the one place the plan's answer is
     /// already in hand.
@@ -260,12 +261,12 @@ pub struct DecodePool {
     /// Flow backend, created on the first Flow-policy frame. Uses [`Self::gpu`]
     /// — the renderer's own device — when the pool was given one, so flow runs
     /// where the frames are already going rather than on a second device of its
-    /// own (K-331). Falls back to a headless device, then to the CPU oracle;
+    /// own. Falls back to a headless device, then to the CPU oracle;
     /// lumit-flow degrades by itself and never faults.
     flow_engine: Option<lumit_flow::FlowEngine>,
     /// The renderer's GPU, when the owner shared it.
     gpu: Option<lumit_gpu::GpuContext>,
-    /// Measured flow pairs (K-331), so a scrub does not remeasure and the two
+    /// Measured flow pairs, so a scrub does not remeasure and the two
     /// consumers of a layer's motion share one measurement.
     flow_cache: lumit_cache::ByteLru<FlowKey, CachedFlow>,
     /// How many comp frames this pool has actually decoded. Diagnostic, and the
@@ -274,11 +275,11 @@ pub struct DecodePool {
     comp_decodes: u64,
 }
 
-/// The decoded-frame cache's default share of RAM (K-016 tier seed); Settings →
-/// Performance moves it.
+/// The decoded-frame cache's default share of RAM; Settings → Performance
+/// moves it.
 pub const DEFAULT_DECODE_CACHE_BYTES: usize = 512 * 1024 * 1024;
 
-/// The measured-flow cache's share of RAM (K-331).
+/// The measured-flow cache's share of RAM.
 ///
 /// A 1080p field pair is about 37 MB at native flow resolution, so this holds
 /// roughly seven of them — a scrub window, which is what it is for. Smaller than
@@ -310,7 +311,7 @@ impl lumit_cache::ByteSized for CachedFlow {
 
 /// What a cached flow pair is filed under: which source, which two frames of
 /// it, and the settings it was measured with — every one of which changes the
-/// field (K-331).
+/// field.
 type FlowKey = (Uuid, usize, usize, u64);
 
 /// A stable hash of the settings that shape a measurement.
@@ -348,7 +349,7 @@ impl DecodePool {
     }
 
     /// A pool that runs flow on the renderer's device rather than one of its
-    /// own (K-331). The handles are reference-counted clones, so this shares
+    /// own. The handles are reference-counted clones, so this shares
     /// the device rather than duplicating it — flow work then queues behind the
     /// same driver as everything else instead of competing with it from a
     /// second context.
@@ -370,7 +371,7 @@ impl DecodePool {
     }
 
     /// What the decoded-frame cache is holding, and how many decoders are
-    /// open — the pool's share of the memory report (K-294).
+    /// open — the pool's share of the memory report.
     ///
     /// The decoders are counted rather than measured: what a `VideoDecoder`
     /// holds is FFmpeg's business (and, with hardware decode, the driver's), so
@@ -570,7 +571,7 @@ impl PreviewEngine {
 }
 
 /// Measure the flow between two source frames, or return the pair already
-/// measured for them (K-331).
+/// measured for them.
 ///
 /// **The one door both consumers go through.** A layer can want motion for two
 /// reasons at once — the retime policy inventing an in-between frame, and Fast
@@ -610,8 +611,8 @@ fn flow_for(
     (fwd, bwd)
 }
 
-/// The flow engine for this pool: on the renderer's device when one was shared
-/// (K-331), otherwise a headless device of its own, otherwise the CPU oracle.
+/// The flow engine for this pool: on the renderer's device when one was
+/// shared, otherwise a headless device of its own, otherwise the CPU oracle.
 fn flow_engine_for(gpu: Option<&lumit_gpu::GpuContext>) -> lumit_flow::FlowEngine {
     match gpu {
         Some(ctx) => lumit_flow::FlowEngine::with_context(ctx),
@@ -620,7 +621,7 @@ fn flow_engine_for(gpu: Option<&lumit_gpu::GpuContext>) -> lumit_flow::FlowEngin
 }
 
 /// Translate a layer's stored [`lumit_core::retime::FlowParams`] into the
-/// plain-numbers [`lumit_flow::FlowSettings`] the engine takes (K-331).
+/// plain-numbers [`lumit_flow::FlowSettings`] the engine takes.
 ///
 /// `lumit-flow` is an engine crate that knows nothing of the document, so the
 /// mapping has to live somewhere that sees both — here, once, so preview,
@@ -705,8 +706,8 @@ fn decode_comp(
                     .map(|p| (offset, p.rgba))
             })
             .collect();
-        // Flow motion blur (docs/08 §3.2, offset +1) and Datamosh (§3.12,
-        // K-104, offset -1) both need a dense motion field: the forward
+        // Flow motion blur (docs/08 §3.2, offset +1) and Datamosh
+        // (§3.12, offset -1) both need a dense motion field: the forward
         // flow from this frame to the requested neighbour (already
         // decoded above). Computed from the raw current frame before it
         // is consumed into `rgba` below, where both frames live as RGBA —
@@ -715,7 +716,7 @@ fn decode_comp(
         // dropped neighbour just leaves that offset absent, degrading its
         // flow-consuming effect to a passthrough.
         //
-        // **One measurement per offset asked for** (K-544). The two effects
+        // **One measurement per offset asked for**. The two effects
         // want opposite directions — forward to the next frame, back to the
         // previous — so a single shared field was never something both could
         // read; the layer used to carry one and the first effect in stack order
@@ -735,7 +736,7 @@ fn decode_comp(
                     //
                     // Half resolution, though, not the retime default of
                     // native. Retime measures natively so that preview and
-                    // export agree about the picture (K-331); an effect has no
+                    // export agree about the picture; an effect has no
                     // such argument, and a smaller working size is *better*
                     // here rather than merely cheaper. Between consecutive
                     // frames of a fast camera move the displacement is large,
@@ -770,7 +771,7 @@ fn decode_comp(
                     );
                     // The per-pixel confidence Fast motion blur tapers the streak
                     // by (FX-19); the same deterministic function export runs, so
-                    // the two match (K-031). Datamosh ignores it.
+                    // the two match. Datamosh ignores it.
                     let conf = lumit_flow::confidence(&fwd, &bwd);
                     // The consumers want a field at the frame's own size. The
                     // vectors scale with the image — a 3 px move at half res is
@@ -977,7 +978,7 @@ mod tests {
         );
     }
 
-    /// K-331: the flow cache is keyed by content — the source, the two frames,
+    /// The flow cache is keyed by content — the source, the two frames,
     /// and the settings that shape the measurement — so a second ask for the
     /// same pair is answered rather than remeasured, and a changed setting is
     /// a different entry rather than a stale one.

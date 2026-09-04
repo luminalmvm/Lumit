@@ -7,8 +7,7 @@
 // wave's radius. Sides, Star and Star depth therefore cost nothing per wave.
 //
 // `newest` — floor(Time × Frequency) — is taken host-side, because it decides
-// WHICH rings exist and one bit of disagreement about it is a whole ring
-// (K-399).
+// WHICH rings exist and one bit of disagreement about it is a whole ring.
 //
 // The sector fold is floor(x + 0.5) and NOT round(): Rust rounds halves away
 // from zero and WGSL rounds them to even.
@@ -28,7 +27,7 @@ struct Params {
     newest: i32,                 // the newest wave's index
     count: i32,                  // how many waves to walk back from it
     composite: u32,              // 1 keeps the layer under the waves
-    matte_on: f32,               // 1 = the matte scales Opacity per pixel (K-428)
+    matte_on: f32,               // 1 = the matte scales Opacity per pixel
     _pad1: u32,
     _pad2: u32,
 };
@@ -38,14 +37,14 @@ struct Params {
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
 
-// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// The Matte (docs/08 §2.6), bound for every kernel on this layout and
 // read only under `matte_on` — bound to `src` when there is none, since a
 // texture binding cannot be left empty.
 @group(0) @binding(4) var matte: texture_2d<f32>;
 
 // This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
 // luma, clamped. The Channel pick and Invert already happened, once, at the
-// seam (fx_matte_prepare.wgsl, K-425).
+// seam (fx_matte_prepare.wgsl).
 fn matte_k(xy: vec2<i32>) -> f32 {
     let m = textureLoad(matte, xy, 0);
     return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
@@ -98,7 +97,7 @@ fn radio_waves(@builtin(global_invocation_id) gid: vec3<u32>) {
         let fade = min(clamp(u / fade_in, 0.0, 1.0), clamp((1.0 - u) / fade_out, 0.0, 1.0));
         acc = max(acc, cov * fade);
     }
-    // The matte pulls Opacity toward 0 per pixel, before the composite (K-428).
+    // The matte pulls Opacity toward 0 per pixel, before the composite.
     var opacity = p.opacity;
     if (p.matte_on != 0.0) {
         opacity = matte_toward(opacity, 0.0, matte_k(xy));

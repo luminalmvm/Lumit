@@ -4,7 +4,7 @@
 //! number you can keyframe, sitting on a layer where an expression on some other
 //! property can read it — one dial that drives six things at once. It is After
 //! Effects' Slider Control, which half the rigs in the world are wired through,
-//! and it is why the Controls category exists (K-414).
+//! and it is why the Controls category exists.
 //!
 //! **Why the row is a plain Float and not the new Slider kind.** A Slider
 //! control has no range: whatever it is about to drive decides what its numbers
@@ -27,7 +27,8 @@ use lumit_fx_macros::Effect;
     cost = Trivial,
     roi = Exact,
     // No picture, so no matte: a strength dissolve on an effect that changes
-    // nothing would be a row that could never do anything (K-395's `None`).
+    // nothing would be a row that could never do anything (the matte rule's
+    // `None`).
     matte = false,
 )]
 pub struct SliderControl {

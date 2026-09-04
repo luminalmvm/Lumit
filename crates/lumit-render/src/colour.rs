@@ -1,5 +1,5 @@
-//! The project's OCIO config, as the renderer holds it (K-490,
-//! docs/impl/ocio.md §3.2, §3.3, §5.2).
+//! The project's OCIO config, as the renderer holds it (docs/impl/ocio.md
+//! §3.2, §3.3, §5.2).
 //!
 //! **In plain terms.** The document stores a *name*: the path to a config file.
 //! Everything else — the parsed config, the chains it resolves to, the baked
@@ -17,13 +17,13 @@
 //! colour family so a frame is always produced. The export does the opposite
 //! and refuses — a wrong colour space in a delivered file is worse than an
 //! export that did not run. That asymmetry is deliberate and is the whole of
-//! K-490's degrade rule.
+//! the degrade rule.
 //!
 //! The second is that **nothing here is a second implementation**. A chain is
 //! resolved by `lumit-colour`, baked by `lumit-colour`, and the baked table is
 //! handed to the graphics card. The Viewer and the export bind the same table
 //! to the same pass, so preview equals export because they are one dispatch
-//! rather than two implementations that agree (K-031, K-185).
+//! rather than two implementations that agree.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -49,7 +49,7 @@ pub enum Edge {
 ///
 /// The facts are the **config's own words** — a colour space, a display, a
 /// look-up-table path — so they cross verbatim and are never translated, in
-/// exactly the way a codec name is not (K-303).
+/// exactly the way a codec name is not.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Refusal {
     /// `lumit_colour::ColourError::key`, or `config_unreadable` for the one
@@ -98,7 +98,7 @@ pub struct Loaded {
     /// every one of these sentences has a config's own name or a file path in
     /// the middle of it, so no whole-text lookup could ever translate one. The
     /// frontend writes its own sentence from this id and its named facts
-    /// (K-005, K-303, docs/17), exactly as the After Effects import report's
+    /// (docs/17), exactly as the After Effects import report's
     /// rows are written.
     pub refusal: Option<Refusal>,
     /// Baked artefacts by edge, worked out on first use and kept. Behind a
@@ -243,10 +243,10 @@ impl ColourState {
     }
 
     /// Whether a named colour space can actually be delivered right now — the
-    /// question an export's refusal asks (K-479, K-490), and the one the export
+    /// question an export's refusal asks, and the one the export
     /// dialogue asks of every name it offers before it draws the row live.
     ///
-    /// It is the half of K-490's asymmetry that says no: a preview degrades to
+    /// It is the half of the degrade rule that says no: a preview degrades to
     /// the built-in transform, a delivery does not. `false` for a config that is
     /// missing or refused, and for a name this config does not have.
     ///
@@ -335,7 +335,7 @@ fn load(path: &str, hash: u64, present: bool) -> Loaded {
 ///
 /// ponytail: the LUT files are folded in by path, length and last-modified
 /// stamp rather than by their bytes — the same identity
-/// [`crate::fxops::LutCache`] keys an effect's `.cube` on (K-271), and for the
+/// [`crate::fxops::LutCache`] keys an effect's `.cube` on, and for the
 /// same reason: this runs at the top of every render, and re-reading tens of
 /// megabytes of cube per frame to be told nothing changed is a cost that only
 /// shows up on someone else's machine. The ceiling is an edit that changes
@@ -403,7 +403,7 @@ pub fn tables(artefact: &Artefact) -> lumit_gpu::OcioTables {
                 pre: pre.map(|c| c.table.data.clone()),
                 // Double on the way here so compositions cancel exactly; single
                 // from here on, because this is what the card multiplies and
-                // the CPU sampler rounds to the same twelve numbers (K-031).
+                // the CPU sampler rounds to the same twelve numbers.
                 matrix: lumit_colour::matrix::single(&matrix),
                 post: post.map(|c| c.table.data.clone()),
                 shaper: shaper(&curve_shaper),
@@ -413,7 +413,7 @@ pub fn tables(artefact: &Artefact) -> lumit_gpu::OcioTables {
 }
 
 /// The footage colour space a layer's pixels arrived in, if the layer is
-/// footage and somebody has said (K-490).
+/// footage and somebody has said.
 #[must_use]
 pub fn footage_colour_space(doc: &Document, kind: &lumit_core::model::LayerKind) -> Option<String> {
     let lumit_core::model::LayerKind::Footage { item } = kind else {

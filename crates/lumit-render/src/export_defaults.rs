@@ -59,7 +59,7 @@ pub struct ExportDefaults {
     /// The output format key (`h264`, `png`, …), or empty for the preset's own.
     pub codec: String,
     /// The filename pattern, in `{comp}`/`{preset}`/`{date}`. Empty gives each
-    /// preset's own suggested name, byte for byte (K-119).
+    /// preset's own suggested name, byte for byte.
     pub filename_template: String,
     /// [`DESTINATION_ASK`], [`DESTINATION_PROJECT`] or [`DESTINATION_FOLDER`].
     /// Read through [`ExportDefaults::policy`], never directly: an answer a

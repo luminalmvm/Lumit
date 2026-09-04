@@ -1,4 +1,4 @@
-// Which layers a razor click cuts (K-220).
+// Which layers a razor click cuts.
 //
 // The rule is small and easy to get wrong in ways nobody notices until a stray
 // Shift-click has cut six layers that were only *nearly* under the pointer, so

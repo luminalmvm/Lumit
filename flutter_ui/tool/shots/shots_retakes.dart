@@ -325,7 +325,7 @@ Future<void> _blendKeysAndWaveform() async {
 
   // ---- Shot: a footage layer's waveform in its lane -----------------------
   // Stood on the floor of its row rather than centred about silence: the
-  // setting is Settings ▸ Interface ▸ Editing (K-280, K-285), and it is what
+  // setting is Settings ▸ Interface ▸ Editing, and it is what
   // puts a 22-pixel row's whole height under signal.
   ui.workspace.interface.waveformsFromBottom = true;
   ui.workspace.settingsChanged();

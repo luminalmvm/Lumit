@@ -1,5 +1,4 @@
-// Where this copy of Lumit lives, and whether it is allowed to replace itself
-// (K-297).
+// Where this copy of Lumit lives, and whether it is allowed to replace itself.
 //
 // # In plain terms
 //
@@ -11,7 +10,7 @@
 // needs elevation, which is why it has to hand the job to an installer that
 // asks for it.
 //
-// So Lumit installs per user now (K-297), and this file is the part that knows:
+// So Lumit installs per user now, and this file is the part that knows:
 //
 //   1. **Where the application is** — the folder on Windows and Linux, the
 //      `Lumit.app` bundle on macOS.
@@ -34,7 +33,7 @@
 // running process, and Windows will not delete a loaded DLL. It is swept up on
 // the next launch, from the new copy, when nothing is holding it.
 //
-// **One trap, and it is not the one you would expect** (K-746). Renaming the
+// **One trap, and it is not the one you would expect**. Renaming the
 // folder a running application lives in is fine on Windows — its executable and
 // libraries are mapped images and do not mind the path moving. What Windows
 // will not do is rename a folder that some process is *standing in*, and Lumit
@@ -57,7 +56,7 @@ enum InstallKind {
   bundle,
 
   /// A Flatpak. The application cannot write to its own files — that is the
-  /// point of the sandbox — so updating belongs to Flatpak (K-297).
+  /// point of the sandbox — so updating belongs to Flatpak.
   flatpak,
 
   /// Somewhere Lumit cannot reason about: a build tree, a test harness, an
@@ -232,7 +231,7 @@ void swapInStagedUpdate(InstallSite site) {
   // only ever the version before last, and nothing is holding it now.
   _removeQuietly(site.previous);
 
-  // **Stand somewhere else first, or the swap cannot happen at all** (K-746).
+  // **Stand somewhere else first, or the swap cannot happen at all**.
   //
   // Windows refuses to rename a directory that is any process's current
   // directory, and Lumit's own current directory is its install folder: the

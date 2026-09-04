@@ -19,13 +19,13 @@ pub const WIPE_OPTIONS: &[&str] = &["Clockwise", "Anticlockwise", "Both"];
     label = "Radial wipe",
     version = 1,
     category = Transition,
-    // One `atan2` a pixel — docs/08 §3.42's admission again, recorded by K-399:
-    // the angle IS a function of the pixel and cannot be lifted host-side.
+    // One `atan2` a pixel — docs/08 §3.42's admission again: the angle IS a
+    // function of the pixel and cannot be lifted host-side.
     cost = Cheap,
     roi = Exact,
     premultiplied = true,
-    // K-429: the matte scales the amount, inside the kernel (the owner's rule
-    // for mattes); the generic strength dissolve does not also run.
+    // The matte scales the amount, inside the kernel (the owner's rule for
+    // mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales Completion per pixel: the hand has swept further where the \
@@ -34,9 +34,9 @@ pub const WIPE_OPTIONS: &[&str] = &["Clockwise", "Anticlockwise", "Both"];
     ),
 )]
 pub struct RadialWipe {
-    /// Where the hand pivots, px@comp (K-260: point parameters are PIXELS). The
-    /// schema default is nominal 1080p centre; `instantiate_for_raster` centres
-    /// a fresh instance on the actual comp.
+    /// Where the hand pivots, px@comp (point parameters are PIXELS). The schema
+    /// default is nominal 1080p centre; `instantiate_for_raster` centres a
+    /// fresh instance on the actual comp.
     #[slider(label = "Wipe centre x", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
     pub centre_x: f32,
 
@@ -46,7 +46,7 @@ pub struct RadialWipe {
 
     /// How far round the sweep has got, per cent. **50 by default, where AE's
     /// is 0**, for docs/08 §3.39's reason (§1.2: no no-op defaults).
-    /// Closed 0..100 (K-414): a wipe cannot be less than begun or more than
+    /// Closed 0..100: a wipe cannot be less than begun or more than
     /// complete, so the range is the parameter, and typing past either end
     /// would offer a picture that does not exist.
     #[bounded(min = 0.0, max = 100.0, default = 50.0, unit = Percent)]

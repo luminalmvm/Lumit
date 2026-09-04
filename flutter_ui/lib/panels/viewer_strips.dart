@@ -1,10 +1,10 @@
-// The Viewer's **strip vocabulary**, and the header strip built out of it
-// (K-466): the shared sizes both strips are measured in, the mark and the gap
-// box every control on them is made of, and the three pickers — magnification,
-// preview quality, colour pipeline — the drawing puts at the header's right.
+// The Viewer's **strip vocabulary**, and the header strip built out of it: the
+// shared sizes both strips are measured in, the mark and the gap box every
+// control on them is made of, and the three pickers — magnification, preview
+// quality, colour pipeline — the drawing puts at the header's right.
 //
-// Split out of viewer_panel_frb.dart (K-007). The bottom bar is a file of its
-// own (viewer_bar.dart) and is built from these same pieces, which is why they
+// Split out of viewer_panel_frb.dart. The bottom bar is a file of its own
+// (viewer_bar.dart) and is built from these same pieces, which is why they
 // live here rather than in either strip.
 
 import 'package:flutter/widgets.dart';
@@ -42,7 +42,7 @@ const double viewerHeaderGap = 6;
 /// The gap inside the transport, which is one instrument and is spaced as one.
 const double viewerTransportGap = 10;
 
-/// **Every glyph on the Viewer's bars is 14** (K-456, K-466): the size the
+/// **Every glyph on the Viewer's bars is 14**: the size the
 /// approved drawing computes for each of them, rather than the 16 a panel icon
 /// takes or the 20 the transport used to. A 22px strip has 14 of room in it
 /// once the mark is given air above and below.
@@ -63,7 +63,7 @@ const double viewerTimecodeSize = 11;
 /// 2 short of the drawing's number for the same reason.
 const double viewerMarkEdge = 1;
 
-/// One mark on the Viewer's bars: the glyph at its drawn size (K-456), in a
+/// One mark on the Viewer's bars: the glyph at its drawn size, in a
 /// cell as tall as the strip so the aim is a bar's worth of target rather than
 /// a 14px square (§7.2).
 Widget viewerBarMark({
@@ -96,7 +96,7 @@ Widget viewerBarGapBox(double glyphGap) =>
     SizedBox(width: glyphGap - 2 * viewerMarkEdge);
 
 /// The strip's own ground: `surface_2` welded to the panel edge under Sharp,
-/// and a tile of its own — rounded, outlined, shadowed — under Round (K-394).
+/// and a tile of its own — rounded, outlined, shadowed — under Round.
 BoxDecoration viewerStripDecoration(LumitTheme t, bool detached) =>
     BoxDecoration(
       color: t.surface2,
@@ -106,7 +106,7 @@ BoxDecoration viewerStripDecoration(LumitTheme t, bool detached) =>
       boxShadow: detached ? t.tokens.cardShadow : null,
     );
 
-/// The Viewer's **panel header strip** (K-466, §12A.6: 22 tall): the panel's
+/// The Viewer's **panel header strip** (§12A.6: 22 tall): the panel's
 /// own kicker, then the three pickers the approved drawing puts at its right —
 /// the magnification, the preview quality, and the colour pipeline.
 ///
@@ -204,8 +204,7 @@ const double _headerMinimum = 360;
 const double _headerGatheredGap = 24;
 
 /// Which route frames take from the engine to the Viewer, in words — the
-/// quality picker's tooltip, where the two playback behaviours are chosen
-/// (K-466).
+/// quality picker's tooltip, where the two playback behaviours are chosen.
 ///
 /// The bridge is asked once and kept — it reports what this build compiled to,
 /// and it was asked for in a `build()` that runs for each frame of playback.
@@ -220,8 +219,8 @@ String get _transportName => switch (_transport) {
 /// The three pickers the drawing puts at the header's right-hand end, 6 apart.
 ///
 /// A list rather than a widget because the strip they sit in is not always the
-/// header: with the bars gathered into one (K-448's setting) they lead the
-/// bottom bar instead, in this same order.
+/// header: with the bars gathered into one they lead the bottom bar instead,
+/// in this same order.
 List<Widget> viewerPickers({
   required double? zoom,
   required double shownScale,
@@ -259,7 +258,7 @@ List<Widget> viewerPickers({
       ),
     ];
 
-/// **How good the preview is** — the header's middle picker (K-466).
+/// **How good the preview is** — the header's middle picker.
 ///
 /// It carries two answers that used to sit apart: the preview resolution
 /// (docs/07 §2.2 item 2), whose name the closed face reads, and the playback
@@ -300,7 +299,7 @@ class _QualityDropdown extends StatelessWidget {
     showMenuAt<void>(
       context: context,
       position: box.localToGlobal(Offset(0, box.size.height + 2)),
-      // **Every row here is an option row** (K-671): both halves of this menu
+      // **Every row here is an option row**: both halves of this menu
       // change the picture in front of you, and picking one is usually
       // comparing it with the last. So the menu stays until the pointer
       // leaves it, and the ticks are redrawn in place — which is what the
@@ -358,25 +357,24 @@ Widget _menuHeading(LumitTheme t, String text) => Padding(
     );
 
 /// **What am I looking at?** — the colour pipeline, the header's third picker
-/// (docs/07 §2.2 item 8, K-466).
+/// (docs/07 §2.2 item 8).
 ///
 /// It always names the display transform the picture is being shown through:
 /// working space to display. With no colour config that is the one built-in
 /// pair, scene-linear to sRGB (docs/06 §3.3); with one loaded the menu grows a
 /// section per display the config declares, each of its views a row, and the
-/// face names the view in force (K-490, docs/impl/ocio.md §6.2).
+/// face names the view in force (docs/impl/ocio.md §6.2).
 ///
 /// **And while either preview-only control is engaged, it says so.** Exposure
-/// and the tone map live inside that same display transform (K-314) and change
+/// and the tone map live inside that same display transform and change
 /// nothing the export will ever see. The statement that *the picture is not the
 /// export* belongs here, stated calmly rather than warned about (15-DESIGN) —
 /// a reading you can take without leaving the picture.
 ///
 /// **A config that is not in force is said, not hidden.** A missing or refused
-/// one leaves the picture on the built-in transform (the calm half of K-490's
-/// asymmetry), so the face says the config is not in force and the menu carries
-/// the reason in one quiet line, in the same words the Project settings row
-/// uses.
+/// one leaves the picture on the built-in transform, so the face says the
+/// config is not in force and the menu carries the reason in one quiet line, in
+/// the same words the Project settings row uses.
 ///
 /// It was a read-only badge at the right-hand end of the bar until the drawing
 /// made it a picker; the tone map came with it, off a bar seat the drawing does
@@ -398,7 +396,7 @@ class _ColourDropdown extends StatelessWidget {
     final t = ThemeScope.of(context).theme;
     final ui = Provider.of<LumitUiState>(context);
     // A held answer, never a bridge call: the summary is fetched when the
-    // document changes and read from Dart here (K-183).
+    // document changes and read from Dart here.
     final summary = ui.colourSummary;
     final engaged = look.stops != 0 || look.toneMap;
     final name = _faceName(summary, ui.colourView);
@@ -478,7 +476,7 @@ class _ColourDropdown extends StatelessWidget {
             ),
           ),
         // One section per display, its views the rows — the config's own
-        // words, in the config's own order, never translated (K-303).
+        // words, in the config's own order, never translated.
         for (final display in summary.displays) ...[
           _menuHeading(t, display.name),
           for (final name in display.views)

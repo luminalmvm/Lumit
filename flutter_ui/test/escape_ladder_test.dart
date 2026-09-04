@@ -1,4 +1,4 @@
-// One Escape, one step back (K-575, docs/07-UI-SPEC.md §14.1).
+// One Escape, one step back (docs/07-UI-SPEC.md §14.1).
 //
 // The bug these pin: every surface used to add its own handler to
 // `HardwareKeyboard`, which runs all of them on every press whatever the ones

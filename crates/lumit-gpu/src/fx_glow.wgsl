@@ -11,12 +11,12 @@
 
 struct Params {
     tint: vec4<f32>,   // scene-linear halo tint; alpha unused
-    threshold: f32,    // linear-light bright threshold, ≥ 0 (K-090: open above)
+    threshold: f32,    // linear-light bright threshold, ≥ 0 (open above)
     knee: f32,         // soft-knee width around the threshold, 0..1
     intensity: f32,    // halo gain; 0 is the neutral point
     mix_amt: f32,      // 0..1, blended against the unprocessed input
-    matte_on: f32,     // 1 = gate the bright pass by the matte (K-395)
-    _pad0: f32,        // was Invert; applied once at the seam since K-425
+    matte_on: f32,     // 1 = gate the bright pass by the matte
+    _pad0: f32,        // was Invert; the seam applies it once
     _pad: vec2<f32>,
 };
 
@@ -43,7 +43,7 @@ fn bright(x: f32) -> f32 {
 
 // src premultiplied → dst, the light above the threshold.
 //
-// **The Matte gates the seed** (K-395, docs/08 §2.6). Glow is one of the effects
+// **The Matte gates the seed** (docs/08 §2.6). Glow is one of the effects
 // that claim the matte inside their own maths, and this is where: the source is
 // multiplied by the matte's luma BEFORE the threshold, so only what the matte
 // lights is allowed to bloom. The halo then spreads from those pixels normally,
@@ -54,7 +54,7 @@ fn bright(x: f32) -> f32 {
 // bright pass is dispatched with src == orig (it needs one picture), so the
 // second slot was free, and using it costs no binding and no second layout.
 // With `matte_on == 0` the matte is never read and the store is bit-for-bit what
-// it was before K-395 (K-258).
+// it was before the Matte existed.
 @compute @workgroup_size(8, 8)
 fn glow_bright(@builtin(global_invocation_id) gid: vec3<u32>) {
     let size = vec2<i32>(textureDimensions(src));
@@ -66,7 +66,7 @@ fn glow_bright(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (p.matte_on != 0.0) {
         let m = textureLoad(orig, xy, 0);
         // Channel pick and Invert already applied, once, by
-        // fx_matte_prepare.wgsl (K-425).
+        // fx_matte_prepare.wgsl.
         let k = clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
         c = c * k;
     }

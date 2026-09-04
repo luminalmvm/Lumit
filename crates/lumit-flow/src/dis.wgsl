@@ -383,7 +383,7 @@ fn smooth_flow(@builtin(global_invocation_id) gid: vec3u) {
 }
 
 // ---------------------------------------------------------------------------
-// Variational refinement â€” DIS part three (Â§1 step 5, K-332).
+// Variational refinement â€” DIS part three (Â§1 step 5).
 //
 // Four short kernels plus a two-colour solver, mirroring `refine` in lib.rs
 // step for step. The SOR sweeps are redâ€“black in the oracle *because* of this
@@ -580,7 +580,7 @@ fn vr_apply(@builtin(global_invocation_id) gid: vec3u) {
     out_vec[i] = vec4f(d.z + d.x, d.w + d.y, 0.0, 0.0);
 }
 
-// Validity from the residual of the refined field (K-332): does this flow
+// Validity from the residual of the refined field: does this flow
 // actually explain these pixels? Rewrites .z of the dense field in place.
 @compute @workgroup_size(8, 8)
 fn vr_validity(@builtin(global_invocation_id) gid: vec3u) {

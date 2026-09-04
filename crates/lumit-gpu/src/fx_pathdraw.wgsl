@@ -5,9 +5,9 @@
 //
 // ONE KERNEL, THREE EFFECTS. They differ entirely in where the line goes and
 // hardly at all in how it is drawn, and where the line goes is decided on the
-// CPU (K-408's polyline, then a hatch, a brush trail or the path itself). What
-// arrives here is the same in all three cases: straight pieces in raster pixels,
-// each carrying how far along the drawing its start sits.
+// CPU (the flattened polyline, then a hatch, a brush trail or the path
+// itself). What arrives here is the same in all three cases: straight pieces
+// in raster pixels, each carrying how far along the drawing its start sits.
 //
 // THE GEOMETRY IS NOT BUILT HERE, exactly as §3.74's bolt is not — which is what
 // makes this a plain maximum over capsules, and what disposes of §1.6 for free,
@@ -37,7 +37,7 @@ struct Params {
     seed: u32,
     count: u32,             // how many pieces are real
     style: u32,             // 0 on original, 1 on transparent, 2 reveal original
-    matte_on: f32,          // 1 = the matte scales Opacity per pixel (K-428)
+    matte_on: f32,          // 1 = the matte scales Opacity per pixel
     _pad1: u32,
     // (ax, ay, bx, by) in raster pixels.
     segs: array<vec4<f32>, 512>,
@@ -50,14 +50,14 @@ struct Params {
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
 
-// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// The Matte (docs/08 §2.6), bound for every kernel on this layout and
 // read only under `matte_on` — bound to `src` when there is none, since a
 // texture binding cannot be left empty.
 @group(0) @binding(4) var matte: texture_2d<f32>;
 
 // This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
 // luma, clamped. The Channel pick and Invert already happened, once, at the
-// seam (fx_matte_prepare.wgsl, K-425).
+// seam (fx_matte_prepare.wgsl).
 fn matte_k(xy: vec2<i32>) -> f32 {
     let m = textureLoad(matte, xy, 0);
     return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
@@ -119,7 +119,7 @@ fn path_draw(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let o = textureLoad(src, xy, 0);
     // `coverage` is the drawing's coverage times Opacity, and Opacity enters
-    // nowhere else, so scaling its result IS scaling Opacity (K-428).
+    // nowhere else, so scaling its result IS scaling Opacity.
     var cov = coverage(vec2<f32>(f32(xy.x) + 0.5, f32(xy.y) + 0.5));
     if (p.matte_on != 0.0) {
         cov = matte_toward(cov, 0.0, matte_k(xy));

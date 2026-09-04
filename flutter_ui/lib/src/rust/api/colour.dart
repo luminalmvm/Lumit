@@ -57,7 +57,7 @@ class BridgeColourDisplay {
 }
 
 /// Everything the frontend needs to know about the project's colour config, in
-/// one read (K-451's one-call-per-structure rule).
+/// one read (the one-call-per-structure rule).
 ///
 /// The four states it describes, and how to tell them apart:
 ///
@@ -68,7 +68,7 @@ class BridgeColourDisplay {
 /// | named but missing, unreadable or refused | the path | `false` | the id |
 class BridgeColourSummary {
   /// The path the project names, as it would be shown — the relative one a
-  /// saved `.lum` actually carries (K-173). Empty when no config is named.
+  /// saved `.lum` actually carries. Empty when no config is named.
   final String path;
 
   /// A config is named, was read, and can do colour.

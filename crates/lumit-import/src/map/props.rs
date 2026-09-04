@@ -1,4 +1,4 @@
-//! Properties and keyframes: the value copy (K-025).
+//! Properties and keyframes: the value copy.
 //!
 //! # In plain terms
 //!
@@ -132,9 +132,9 @@ pub(crate) fn from_node(
     }
 
     let name = display_name(node, match_name_of(node));
-    // A property After Effects itself could not read (a CUSTOM_VALUE blob —
-    // K-410). There is nothing to import, and saying so is the whole point of
-    // the walker recording it rather than omitting it.
+    // A property After Effects itself could not read (a CUSTOM_VALUE blob).
+    // There is nothing to import, and saying so is the whole point of the
+    // walker recording it rather than omitting it.
     if node.unreadable.is_some() {
         conv.report.row(
             path.property(name),

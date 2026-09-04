@@ -1,4 +1,4 @@
-// The drawn pointers (K-226): the brush ring's size, and that each tool badges
+// The drawn pointers: the brush ring's size, and that each tool badges
 // its own icon.
 //
 // The ring is the part with arithmetic in it — a brush width is in *picture*
@@ -17,7 +17,7 @@ import 'package:lumit_flutter/widgets/controls.dart';
 
 void main() {
   /// **Which pointers the Viewer asks the platform for, and which it draws
-  /// itself (K-230).** Windows has no grab and no magnifier; Flutter will
+  /// itself.** Windows has no grab and no magnifier; Flutter will
   /// happily be asked for them and the embedder quietly hands back the ordinary
   /// arrow, which is how the Hand and Zoom tools came to look like no tool at
   /// all. Anything drawn must therefore hide the system pointer rather than
@@ -33,7 +33,7 @@ void main() {
       expect(viewerCursorFor(ToolMode.razor), SystemMouseCursors.basic);
     });
 
-    /// The hardware crosshair leads for every tool that aims (K-724): the OS
+    /// The hardware crosshair leads for every tool that aims: the OS
     /// moves it at input rate whatever the application's frame rate is doing,
     /// where an app-drawn pointer at 10 fps made aiming genuinely difficult.
     /// The overlays' own `DrawnPointerRegion`s ask for the same pointer, so
@@ -112,8 +112,8 @@ void main() {
     });
   });
 
-  /// **A drawn pointer follows the pointer whichever button is held (K-230,
-  /// docs/07 §2.3.3).** Taken from hover alone it froze on a right-press: a
+  /// **A drawn pointer follows the pointer whichever button is held
+  /// (docs/07 §2.3.3).** Taken from hover alone it froze on a right-press: a
   /// `MouseRegion` reports hover, and hover stops the moment *any* button goes
   /// down — including the secondary one, which none of these tools handle. The
   /// hand and the magnifier stand for the whole family; they share

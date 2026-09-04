@@ -17,7 +17,7 @@ use lumit_project::JournalFile;
 
 use crate::api::{project::ProjectReference, BridgeError};
 
-/// What this build can truthfully say about itself at load time (K-008).
+/// What this build can truthfully say about itself at load time.
 ///
 /// Facts only. The GPU adapter is not named, because it is not known until the
 /// first render — a splash that claimed one would be inventing it.
@@ -49,7 +49,7 @@ pub fn boot_log() -> Vec<String> {
     ]
 }
 
-/// How coarsely playback is currently rendering (K-030/K-171).
+/// How coarsely playback is currently rendering.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BridgePlaybackTier {
@@ -80,11 +80,10 @@ pub fn reset_realtime() -> BridgePlaybackTier {
     playback_tier()
 }
 
-/// Render live drags at the Viewer's own resolution instead of the drag budget
-/// (K-744, qualifying K-383).
+/// Render live drags at the Viewer's own resolution instead of the drag budget.
 ///
-/// K-383 caps a drag preview at a 640x360 raster so the picture keeps up with
-/// the pointer, and said the reduction needed no flag from the frontend. This
+/// The drag budget caps a preview at a 640x360 raster so the picture keeps up
+/// with the pointer, and normally no flag from the frontend touches it. This
 /// is that flag, and only that: `true` renders a dragged frame exactly as a
 /// committed one, sharp and as slow as the composition really is. Everything
 /// else about a drag is unchanged.

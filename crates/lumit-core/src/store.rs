@@ -19,7 +19,7 @@ pub struct JournalEntry {
     pub op: Op,
     pub inverse: Op,
     /// [`Op::name`] of the op as it was committed, pinned at that moment and
-    /// carried through every undo and redo of this step (K-688).
+    /// carried through every undo and redo of this step.
     ///
     /// **Why it is stored rather than asked for.** Undoing re-derives the
     /// forward op by applying the inverse, and an op whose inverse is a batch —
@@ -75,7 +75,7 @@ struct Journal {
     depth: usize,
 }
 
-/// One row of the **History** list (K-688): what the step is called, and
+/// One row of the **History** list: what the step is called, and
 /// whether it has been undone — a step that has been undone is still on the
 /// road, greyed, until a fresh commit clears the forward history.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -97,17 +97,17 @@ pub struct DocumentStore {
     current: ArcSwap<Document>,
     journal: Mutex<Journal>,
     /// The change observer. Behind an `ArcSwapOption` rather than owned
-    /// outright so it can be attached to a store that is **already shared**
-    /// (K-273): a `&mut self` setter meant the observer had to be registered
-    /// before the store went into its `Arc`, which is an ordering rule no type
-    /// enforced and one every caller had to remember. Reading and swapping are
+    /// outright so it can be attached to a store that is **already shared**: a
+    /// `&mut self` setter meant the observer had to be registered before the
+    /// store went into its `Arc`, which is an ordering rule no type enforced
+    /// and one every caller had to remember. Reading and swapping are
     /// lock-free, so the callback — which crosses into the frontend — can
     /// never run under a lock (docs/14 §3: no locks across FFI).
     on_change: ArcSwapOption<ChangeCallback>,
     /// Bumped once per published snapshot (commit, undo, redo, replace).
     /// A reader that remembers the number it last saw can ask "has anything
     /// changed?" for the cost of one atomic load — the frontend's read model
-    /// freshens on this (K-184) instead of re-reading the world per rebuild.
+    /// freshens on this instead of re-reading the world per rebuild.
     revision: std::sync::atomic::AtomicU64,
 }
 
@@ -139,7 +139,7 @@ impl DocumentStore {
     ///
     /// Takes `&self`, so it can be called on a store that is already shared —
     /// the observer usually wants to refer back to the thing that owns the
-    /// store, which is impossible if it has to be attached first (K-273).
+    /// store, which is impossible if it has to be attached first.
     /// Registering a second observer replaces the first; there is one.
     pub fn set_callback(&self, callback: ChangeCallback) {
         self.on_change.store(Some(Arc::new(callback)));
@@ -183,7 +183,7 @@ impl DocumentStore {
         self.current.load_full()
     }
 
-    /// Record how the interface is arranged for this project (K-245), to be
+    /// Record how the interface is arranged for this project, to be
     /// written into the `.lum` on the next save.
     ///
     /// **Not an op, on purpose.** Three things follow from that, and each is the
@@ -375,7 +375,7 @@ impl DocumentStore {
     }
 
     /// The whole road, oldest first: every step that has been applied, then
-    /// every step that has been undone and is waiting to be redone (K-688).
+    /// every step that has been undone and is waiting to be redone.
     ///
     /// # In plain terms
     ///
@@ -414,7 +414,7 @@ impl DocumentStore {
 
     /// Move the document to the point on [`Self::history`] where exactly
     /// `applied` steps have been applied: 0 is as far back as the history
-    /// reaches, and `history().len()` is everything redone (K-688).
+    /// reaches, and `history().len()` is everything redone.
     ///
     /// One press of Ctrl-Z at a time, in a loop — a jump *is* undoing or
     /// redoing several times, and going through the same two methods means a
@@ -491,10 +491,10 @@ mod tests {
         assert!(store.snapshot().cache_location.is_some());
     }
 
-    /// **The colour shelf is one coarse, exactly invertible op** (K-448,
-    /// docs/03 §8): keeping a colour and forgetting one are both a whole-list
-    /// swap, so each is one undo step and undo puts the previous shelf back —
-    /// including the colour a remove took out.
+    /// **The colour shelf is one coarse, exactly invertible op** (docs/03 §8):
+    /// keeping a colour and forgetting one are both a whole-list swap, so each
+    /// is one undo step and undo puts the previous shelf back — including the
+    /// colour a remove took out.
     #[test]
     fn the_project_colour_shelf_undoes_and_redoes() {
         let store = DocumentStore::new(Document::new());
@@ -541,7 +541,7 @@ mod tests {
         assert_eq!(store.snapshot().swatches, vec![red, blue]);
     }
 
-    /// **Both colour ops undo like anything else** (K-490, docs/impl/ocio.md
+    /// **Both colour ops undo like anything else** (docs/impl/ocio.md
     /// §3.1). The project's config and one item's colour space are ordinary
     /// document changes: they change what every comp looks like, so they are
     /// journalled, saved and reversible, and clearing either is the same op
@@ -627,7 +627,7 @@ mod tests {
         );
     }
 
-    /// **The arrangement is carried, not edited** (K-245). Moving a panel is not
+    /// **The arrangement is carried, not edited**. Moving a panel is not
     /// work done to the project, so recording it must not put a step on the undo
     /// stack — Ctrl-Z after a save would otherwise rearrange the window — and
     /// must not move the revision, which is what tells the shell the project has
@@ -662,7 +662,7 @@ mod tests {
         doc.folder(id).expect("the folder exists").name.clone()
     }
 
-    /// The Project panel's Folder button (K-451): one op batch, one undo step,
+    /// The Project panel's Folder button: one op batch, one undo step,
     /// and with no parent named the folder lands at the panel root.
     #[test]
     fn making_a_folder_is_one_undoable_step() {
@@ -746,7 +746,7 @@ mod tests {
     }
 
     /// Filing an item into a folder, and refiling it from one folder into
-    /// another (K-451): the panel's drag onto a folder row, and its **Move to
+    /// another: the panel's drag onto a folder row, and its **Move to
     /// folder** menu. Both are one undo step, and a refile takes the item out
     /// of its old folder in the same step it lands in the new one — an item
     /// listed by two folders at once would draw twice in the panel.
@@ -876,7 +876,7 @@ mod tests {
         );
     }
 
-    /// **An item's colour tag is an ordinary op** (K-451): undoable, journalled
+    /// **An item's colour tag is an ordinary op**: undoable, journalled
     /// and saved with the project like a layer's label. Untagged is the absence
     /// of an entry rather than an entry saying zero, so tagging an item and
     /// untagging it again leaves the document exactly as it was found — which
@@ -975,7 +975,7 @@ mod tests {
     }
 
     /// **Attaching, switching and detaching a proxy are ordinary undoable
-    /// edits** (K-501): one step each, each its own inverse, and detaching
+    /// edits**: one step each, each its own inverse, and detaching
     /// leaves the document exactly as it was found so a project whose proxies
     /// have all gone writes no line for them again.
     #[test]
@@ -1326,8 +1326,7 @@ mod tests {
         );
     }
 
-    /// **An observer can be attached to a store that is already shared**
-    /// (K-273).
+    /// **An observer can be attached to a store that is already shared.**
     ///
     /// The setter used to take `&mut self`, so the observer had to be
     /// registered before the store went into its `Arc` — an ordering rule that
@@ -1707,13 +1706,13 @@ mod tests {
         assert_eq!(n(&store.snapshot()), 1);
     }
 
-    /// **The one kind flip** (K-484): a solid becomes an adjustment and an
+    /// **The one kind flip**: a solid becomes an adjustment and an
     /// adjustment becomes a solid, each flip is one undo step, and the undone
     /// flip hands the solid back the `def` it always had rather than a fresh
     /// one. Every other kind is refused with the document untouched.
     ///
-    /// Since K-537 the adjustment switch is a flag rather than this flip, and
-    /// the only edit that still reaches here is normalising a layer *born* an
+    /// The adjustment switch is now a flag rather than this flip, and the only
+    /// edit that still reaches here is normalising a layer *born* an
     /// adjustment when its switch goes off — it has no picture to give back,
     /// so it is handed a solid. The op is otherwise unchanged, and so is this.
     #[test]
@@ -1788,7 +1787,7 @@ mod tests {
         assert_eq!(kind(solid_id), LayerKind::Solid { def: other });
     }
 
-    /// **The adjustment switch** (K-537): it goes on and off on a layer with a
+    /// **The adjustment switch**: it goes on and off on a layer with a
     /// source of its own, one undo step each way, and the layer keeps
     /// everything while it is on — which is the whole reason it is a flag and
     /// not the kind flip above. Refused on the kinds with no picture to set
@@ -1860,7 +1859,7 @@ mod tests {
     }
 
     /// The frame-interpolation policy round-trips through undo, and it is a
-    /// layer's own setting rather than part of its retime (K-249): the layer
+    /// layer's own setting rather than part of its retime: the layer
     /// here is never retimed at all, and still has a policy — which is the
     /// case that used to be unrepresentable, because the only home for it was
     /// inside a retime the layer did not have.
@@ -1918,7 +1917,7 @@ mod tests {
         );
     }
 
-    /// The Retime *property* (K-197) round-trips through undo, and it is what
+    /// The Retime *property* round-trips through undo, and it is what
     /// `source_time_at` answers with — the mapping the render plan and the
     /// cache key both read.
     #[test]
@@ -2191,7 +2190,7 @@ mod tests {
         store.undo().unwrap();
         assert!(vis(&store));
 
-        // Lock and label (K-168) round-trip the same way.
+        // Lock and label round-trip the same way.
         let lock_label = |s: &DocumentStore| {
             let doc = s.snapshot();
             let l = doc
@@ -2279,7 +2278,7 @@ mod tests {
         store.undo().unwrap();
         assert_eq!(vol(&store), 0.0, "default volume is unity (0 dB)");
 
-        // The master fader (docs/09 §3.1, K-691) is comp state and round-trips
+        // The master fader (docs/09 §3.1) is comp state and round-trips
         // the same way — one op, one undo step, back to unity.
         let master = |s: &DocumentStore| s.snapshot().comp(comp_id).unwrap().master_volume_db;
         assert_eq!(master(&store), 0.0, "a comp opens at unity master");
@@ -2293,7 +2292,7 @@ mod tests {
         store.undo().unwrap();
         assert_eq!(master(&store), 0.0);
 
-        // The confirmed beat grid (docs/09 §5, K-698) is comp state on the
+        // The confirmed beat grid (docs/09 §5) is comp state on the
         // same pattern: set, read back exactly, undone to nothing — and a
         // grid with no tempo in it is refused rather than stored.
         let grid = |s: &DocumentStore| s.snapshot().comp(comp_id).unwrap().beat_grid;
@@ -2548,10 +2547,10 @@ mod tests {
         assert_eq!(layer.transform.scale_x.value_at(0.0), 100.0);
     }
 
-    /// **The guide switch is one undo step, and an older project has none**
-    /// (K-497). A layer saved before the switch existed loads with it off, so
-    /// every existing project delivers exactly what it delivered before; a
-    /// guide layer saved now says so on the way back in.
+    /// **The guide switch is one undo step, and an older project has none**. A
+    /// layer saved before the switch existed loads with it off, so every
+    /// existing project delivers exactly what it delivered before; a guide
+    /// layer saved now says so on the way back in.
     #[test]
     fn the_guide_switch_commits_undoes_and_round_trips() {
         let (store, comp, layer) = doc_with_layer();
@@ -2620,7 +2619,7 @@ mod tests {
         assert!(!store.can_undo());
     }
 
-    /// The read model's freshness check (K-184): every published snapshot has
+    /// The read model's freshness check: every published snapshot has
     /// a new revision number, and a refused op leaves it alone. Fails without
     /// the bump on any one of commit, undo or redo — the frontend would then
     /// keep drawing a stale copy after exactly that kind of edit.
@@ -2653,9 +2652,9 @@ mod tests {
         assert_eq!(store.revision(), r3, "a refused op moves nothing");
     }
 
-    /// K-471 §3: the whole-graph commit is exactly invertible — one undo puts
-    /// back the drivers *and* the wires, exactly as one undo puts back the whole
-    /// effect stack.
+    /// The whole-graph commit is exactly invertible — one undo puts back the
+    /// drivers *and* the wires, exactly as one undo puts back the whole effect
+    /// stack.
     #[test]
     fn set_layer_graph_undoes_nodes_and_edges_together() {
         use crate::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
@@ -2721,8 +2720,8 @@ mod tests {
         assert_eq!(read(&store), wired, "and the redo brings both back");
     }
 
-    /// K-471 §1.5: taking a **wired** effect out of the stack takes its wires
-    /// with it, in the same undo step — and one undo puts both back.
+    /// Taking a **wired** effect out of the stack takes its wires with it, in
+    /// the same undo step — and one undo puts both back.
     ///
     /// Without the prune the graph kept an edge naming a box that was gone, and
     /// the next graph write of any kind was refused for it.
@@ -2823,9 +2822,9 @@ mod tests {
         assert_eq!(read(&store), wired, "the undo brings the wires back");
     }
 
-    /// K-492: a **points** wire heals the two ways a stack edit can break one —
-    /// the producer removed, and the producer dragged below its consumer — and
-    /// each heal rides the same single-undo-step inverse a driver's does.
+    /// A **points** wire heals the two ways a stack edit can break one — the
+    /// producer removed, and the producer dragged below its consumer — and each
+    /// heal rides the same single-undo-step inverse a driver's does.
     ///
     /// The reorder is the new one. A stack-to-stack points wire must flow down
     /// the stack, so a reorder can break a wire without removing anything at
@@ -3098,11 +3097,11 @@ mod tests {
             .expect("the lock switch is never itself refused");
     }
 
-    /// **A locked layer refuses the edits the interface used to let through**
-    /// (K-291). The Timeline guarded the *gestures* — the bar, the razor,
-    /// rename, reorder, delete — while the fold-out's transform, effect and
-    /// volume rows went on editing the layer, so the switch did not mean what
-    /// it says. The guard is in the op applier, so it covers every caller.
+    /// **A locked layer refuses the edits the interface used to let through.**
+    /// The Timeline guarded the *gestures* — the bar, the razor, rename,
+    /// reorder, delete — while the fold-out's transform, effect and volume rows
+    /// went on editing the layer, so the switch did not mean what it says. The
+    /// guard is in the op applier, so it covers every caller.
     #[test]
     fn a_locked_layer_refuses_an_edit_to_what_it_is() {
         let (store, comp, layer) = doc_with_layer();
@@ -3405,7 +3404,7 @@ mod tests {
     }
 
     /// The History list is the ops that were committed, named and in order,
-    /// and an undone step stays on it greyed rather than vanishing (K-688).
+    /// and an undone step stays on it greyed rather than vanishing.
     #[test]
     fn the_history_list_names_the_ops_it_was_given() {
         let store = DocumentStore::new(Document::new());
@@ -3501,7 +3500,7 @@ mod tests {
         assert_eq!(store.applied_steps(), total);
     }
 
-    /// **Trim comp to work area** (K-686): the comp becomes the work area, and
+    /// **Trim comp to work area**: the comp becomes the work area, and
     /// everything on the timeline slides back with it. Nothing is deleted, and
     /// one undo puts the whole comp back exactly — including the work area,
     /// which is why the batch clears it first.
@@ -3547,7 +3546,7 @@ mod tests {
         assert_eq!(
             layer(c, outside_id).in_point,
             t(18, 1),
-            "a layer outside the work area is kept, not deleted (K-153)"
+            "a layer outside the work area is kept, not deleted"
         );
         assert_eq!(
             c.markers[0].time,
@@ -3564,10 +3563,10 @@ mod tests {
         );
     }
 
-    /// **A locked layer rides the reshape** (K-686, K-687) rather than
+    /// **A locked layer rides the reshape** rather than
     /// refusing it: the lock comes off and goes back on inside the same batch,
     /// so the whole comp moves together and the switch is where it was when the
-    /// step ends. Without this the lock guard (K-291) would refuse a member of
+    /// step ends. Without this the lock guard would refuse a member of
     /// the batch and take the whole command down with it.
     #[test]
     fn a_locked_layer_moves_with_the_comp_and_stays_locked() {
@@ -3623,7 +3622,7 @@ mod tests {
         assert_eq!(json(&store.snapshot()), before, "two undos, both exact");
     }
 
-    /// A comp with no work area is already its own work area (K-203), so there
+    /// A comp with no work area is already its own work area, so there
     /// is nothing to trim to and nothing changes.
     #[test]
     fn trimming_a_comp_with_no_work_area_changes_nothing() {
@@ -3643,7 +3642,7 @@ mod tests {
         assert_eq!(json(&store.snapshot()), before);
     }
 
-    /// **Crop comp to the region of interest** (K-687): the frame becomes the
+    /// **Crop comp to the region of interest**: the frame becomes the
     /// rectangle and every unparented layer moves back by its corner, so the
     /// picture inside it does not budge. A parented layer travels with its
     /// parent and must not be moved twice.

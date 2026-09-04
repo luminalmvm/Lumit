@@ -1,5 +1,5 @@
 //! The layer driver graph: the additive wiring a layer carries beside its
-//! effect stack (K-471, K-472, [impl/node-graph.md](../../../docs/impl/node-graph.md)).
+//! effect stack ([impl/node-graph.md](../../../docs/impl/node-graph.md)).
 //!
 //! # In plain terms
 //!
@@ -44,7 +44,7 @@ pub const INPUT_PORT: Port = Port::new("input", "Input", PortType::Image);
 /// An effect node's one picture out.
 pub const OUTPUT_PORT: Port = Port::new("output", "Output", PortType::Image);
 /// The Layer out node's sound. Drawn and unfilled: audio comes only from a
-/// footage layer's own stream (K-435), so this accepts no wire in this phase
+/// footage layer's own stream, so this accepts no wire in this phase
 /// (§7) — listed rather than faked.
 pub const AUDIO_PORT: Port = Port::new("audio", "Audio", PortType::Audio);
 /// The Layer out node's **Volume** — the one layer property a wire may land on
@@ -59,7 +59,7 @@ pub const OUT_VOLUME_PORT: Port = Port::new("volume", "Volume", PortType::Number
 /// the Source node, an effect's picture in and out and the Layer out node are
 /// all worked out from the effect stack rather than stored.
 ///
-/// Gathered in one list so the K-303 label walk ([`crate::fx::labels`]) can
+/// Gathered in one list so the label walk ([`crate::fx::labels`]) can
 /// find their words the same way it finds an effect's.
 pub const DERIVED_PORTS: [Port; 6] = [
     IMAGE_PORT,
@@ -70,12 +70,12 @@ pub const DERIVED_PORTS: [Port; 6] = [
     OUT_VOLUME_PORT,
 ];
 
-/// What the canvas calls [`NodeRef::Source`] — display text (K-303).
+/// What the canvas calls [`NodeRef::Source`] — display text.
 pub const SOURCE_LABEL: &str = "Source";
-/// What the canvas calls [`NodeRef::Out`] — display text (K-303).
+/// What the canvas calls [`NodeRef::Out`] — display text.
 pub const OUT_LABEL: &str = "Layer out";
 
-/// Names anything the graph canvas draws (K-471 §1.2).
+/// Names anything the graph canvas draws.
 ///
 /// The image-path nodes are **derived** from the effect stack rather than
 /// stored, so they get stable synthetic refs: there is exactly one Source and
@@ -110,7 +110,7 @@ pub enum OutputRef {
     /// exists.
     SourceMatte,
     /// A **stack** effect's declared data output — the first wire whose source
-    /// is an effect rather than a driver (K-492, points-stream.md §1.1).
+    /// is an effect rather than a driver (points-stream.md §1.1).
     ///
     /// The effect goes on making its picture for the chain; this taps the data
     /// it declares beside it, which today means Particulate's Points stream.
@@ -144,10 +144,11 @@ pub struct Edge {
     pub to: InputRef,
 }
 
-/// The additive wiring a layer carries beside its effect stack (K-471).
+/// The additive wiring a layer carries beside its effect stack.
 ///
 /// Empty by default and **absent from the saved file when empty**, which is
-/// what makes every pre-K-471 project load unchanged and re-save byte for byte.
+/// what makes a project saved before graphs existed load unchanged and re-save
+/// byte for byte.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct LayerGraph {
     /// The driver nodes — ordinary [`EffectInstance`]s whose definition
@@ -169,13 +170,13 @@ pub struct LayerGraph {
     /// reaches no frame key. A wired socket draws regardless of it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub exposed: Vec<NodeRef>,
-    /// The named regions of the canvas (K-651). Presentation state beside
+    /// The named regions of the canvas. Presentation state beside
     /// [`Self::layout`] and for the same reasons: it persists and travels, it
     /// is committed by the same whole-graph write, and it reaches no frame key
     /// because it changes no pixel.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub groups: Vec<NodeGroup>,
-    /// **The Layer out box's image socket is unplugged** (K-738): the layer
+    /// **The Layer out box's image socket is unplugged**: the layer
     /// makes no picture at all.
     ///
     /// The one piece of this graph that is not presentation. Every other
@@ -195,7 +196,7 @@ pub struct LayerGraph {
     pub out_unwired: bool,
 }
 
-/// A named set of boxes drawn on one tinted wash (K-651).
+/// A named set of boxes drawn on one tinted wash.
 ///
 /// # In plain terms
 ///
@@ -215,7 +216,7 @@ pub struct NodeGroup {
     pub name: String,
     /// Which chip of the label palette tints it. An index, not a colour: no
     /// colour has ever crossed the bridge, and the frontend takes this modulo
-    /// its own palette length (K-188's set).
+    /// its own palette length.
     pub colour: u32,
     /// The boxes inside it. A box may sit in one group or none — a member
     /// listed twice is the same as listed once, and a member the layer no
@@ -246,7 +247,7 @@ pub enum GraphError {
 }
 
 /// How many of `effects` lie at or above `node` in the image chain — the
-/// **prefix** a Node preview shows (K-486, note §8 WP5).
+/// **prefix** a Node preview shows (note §8 WP5).
 ///
 /// The picture at a node is the picture the layer makes with its stack cut off
 /// there: nothing at the Source, the first *n* effects at the *n*th effect
@@ -267,7 +268,7 @@ pub fn prefix_len(effects: &[EffectInstance], node: NodeRef) -> Option<usize> {
 }
 
 /// `doc` with `layer`'s effect stack cut to its first `keep` entries — the
-/// document a Node preview renders (K-486).
+/// document a Node preview renders.
 ///
 /// A patched **copy**, never anything the document remembers: exactly the shape
 /// the drag previews and the dropper's solo read already use. Because the frame
@@ -304,7 +305,7 @@ pub fn truncated_effects(
 }
 
 /// Whether `edge` obeys the **downstream-only** rule for a stack-to-stack data
-/// wire (K-492, points-stream.md §1.2): the producing effect must sit strictly
+/// wire (points-stream.md §1.2): the producing effect must sit strictly
 /// earlier in `effects` than the consuming one.
 ///
 /// **Why the rule exists.** A points stream is data, but a stack consumer reads
@@ -360,7 +361,7 @@ impl LayerGraph {
     }
 
     /// Drop everything that names an effect the stack no longer carries, and
-    /// say whether anything went (K-471 §1.5).
+    /// say whether anything went.
     ///
     /// **Why the graph heals here rather than refusing.** Every other broken
     /// state in this file is an edit somebody made *to the graph*, so refusing
@@ -374,7 +375,7 @@ impl LayerGraph {
     /// Only `NodeRef::Effect` entries are considered: a driver, the Source and
     /// the Layer out are not the effect stack's to remove.
     ///
-    /// Two things dangle now that a wire can *source* from an effect (K-492).
+    /// Two things dangle now that a wire can *source* from an effect.
     /// A removed producer takes its outgoing data wires with it, exactly as a
     /// removed consumer takes its incoming ones. And a **reorder** can break a
     /// wire without removing anything at all: a stack-to-stack points wire must
@@ -458,7 +459,7 @@ impl LayerGraph {
             if self.edges[..i].iter().any(|e| e.to == edge.to) {
                 return Err(GraphError::InputAlreadyWired);
             }
-            // The downstream-only rule (K-492) is about where the two *boxes*
+            // The downstream-only rule is about where the two *boxes*
             // sit, not about what their sockets carry, so it is answered before
             // any port is looked up — a wire drawn back up the stack gets the
             // loop sentence whether or not its ports would have matched, which
@@ -557,8 +558,8 @@ impl LayerGraph {
                     .iter()
                     .find(|p| p.id == port)
                     .and_then(|p| p.kind.port_type())
-                    // A **declared data input** beside the schema's parameters
-                    // (K-492 §4.1): wire-only, with no stored value to fall
+                    // A **declared data input** beside the schema's
+                    // parameters: wire-only, with no stored value to fall
                     // back on, which is why `InputRef::Param` needs no new arm
                     // to reach it.
                     .or_else(|| def.signature().input(port))
@@ -568,7 +569,7 @@ impl LayerGraph {
     }
 
     /// Refuse a loop among the driver nodes **and the effects that hand out
-    /// data** (K-492, points-stream.md §1.2).
+    /// data** (points-stream.md §1.2).
     ///
     /// Kahn's algorithm; anything left when no node has an unwired input is in
     /// a loop. Until points wires existed only drivers could close one, because
@@ -583,7 +584,7 @@ impl LayerGraph {
     ///
     /// **The image chain is deliberately not in this link set.** An effect's
     /// *picture* depends on the previous effect's picture, but a stream depends
-    /// only on the producer's own parameters and the time (K-474), so adding
+    /// only on the producer's own parameters and the time, so adding
     /// chain links would refuse the perfectly sound arrangement of a Points
     /// sample driving a parameter of an effect *above* its producer. The chain's
     /// own constraint on data wires is the positional one
@@ -686,7 +687,7 @@ mod tests {
         )
     }
 
-    /// The Node preview's prefix (K-486): the picture at a node is the stack
+    /// The Node preview's prefix: the picture at a node is the stack
     /// cut off there, so naming the node names a length. A driver has no
     /// length because it has no picture.
     #[test]
@@ -748,8 +749,8 @@ mod tests {
         assert_eq!(graph.validate(&effects), Err(GraphError::UnknownPort));
     }
 
-    /// Number accepts number and colour accepts colour (K-472 §6.1); the two
-    /// crossed over are refused in both directions.
+    /// Number accepts number and colour accepts colour. The two crossed over
+    /// are refused in both directions.
     #[test]
     fn a_number_into_a_colour_is_refused_and_so_is_a_colour_into_a_number() {
         let fill = inst("fill");
@@ -1000,7 +1001,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // The points edge (K-492, points-stream.md §1).
+    // The points edge (points-stream.md §1).
     // -----------------------------------------------------------------------
 
     /// A wire out of a stack effect's declared data output.
@@ -1120,7 +1121,7 @@ mod tests {
         assert_eq!(graph.validate(&[]), Err(GraphError::UnknownNode));
     }
 
-    /// The recorded carve-out (K-492, §1.2): a stack-to-stack points wire flows
+    /// The recorded carve-out (§1.2): a stack-to-stack points wire flows
     /// **down** the stack. Tested in both directions, and on the smallest loop
     /// of all — an effect wired into itself.
     #[test]
@@ -1356,7 +1357,7 @@ mod tests {
         assert_eq!(graph.edges.len(), 1);
     }
 
-    /// The healing half of the carve-out (K-492): a reorder that inverts a
+    /// The healing half of the carve-out: a reorder that inverts a
     /// points wire drops it, because a **stack** edit cannot be refused on the
     /// wiring's behalf. Without this the document would hold a graph its own
     /// validator refuses, and the next wire anybody drew would be refused for
@@ -1392,7 +1393,7 @@ mod tests {
         graph.validate(&up).expect("healed, and so committable");
     }
 
-    /// **A real stack-to-stack points wire** (K-492, K-600): the arrangement
+    /// **A real stack-to-stack points wire**: the arrangement
     /// §1.2 was written for, now that there is a consumer to draw one into.
     ///
     /// Everything it exercises was landed by PS3 against a made-up port name;
@@ -1466,7 +1467,7 @@ mod tests {
     }
 
     /// **The cross-layer tap is an ordinary wire out of an ordinary node**
-    /// (K-604, points-stream.md §1.2): the edge rules needed no arm for it,
+    /// (points-stream.md §1.2): the edge rules needed no arm for it,
     /// which is the point of settling the design as a *layer-reference
     /// parameter* rather than as an edge that crosses layers.
     ///
@@ -1550,8 +1551,8 @@ mod tests {
         assert_eq!(orphaned.validate(&[consumer]), Err(GraphError::UnknownNode));
     }
 
-    /// §4 and K-471's promise: an empty graph writes nothing at all, so a layer
-    /// that never opened the Graph panel carries no `graph` key — which is what
+    /// §4's promise: an empty graph writes nothing at all, so a layer that
+    /// never opened the Graph panel carries no `graph` key — which is what
     /// makes an untouched document re-save byte for byte.
     #[test]
     fn an_empty_graph_is_absent_from_the_file() {

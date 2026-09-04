@@ -9,7 +9,7 @@ publish = false
 
 [dependencies]
 lumit-core = { path = "../lumit-core" }
-# The solve is written to the `track/` sidecar and read back (K-417). Deriving
+# The solve is written to the `track/` sidecar and read back. Deriving
 # here rather than mirroring `CameraSolve` in the crate that writes it: a mirror
 # is a second definition of the same thing, and the two drift the first time a
 # field is added.

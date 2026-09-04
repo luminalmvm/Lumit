@@ -1,4 +1,4 @@
-//! Smooth (K-471 §1.3): takes the jitter off whatever feeds it.
+//! Smooth (node-graph.md §1.3): takes the jitter off whatever feeds it.
 //!
 //! **In plain terms.** An audio level jumps about frame to frame, and a scale
 //! driven straight from one stutters. Smooth is the answer: it averages its
@@ -10,7 +10,7 @@
 //! Everything else in the Drivers family answers from the frame it is on;
 //! this one reads its input at a spread of nearby times, so the frame key has
 //! to fold that range in or a cached frame could outlive the values it was
-//! averaged from (K-471 §2.3).
+//! averaged from (node-graph.md §2.3).
 //!
 //! Centred, not trailing: a smoothed ramp comes out as the same ramp rather
 //! than as the ramp running late, which is what makes Smooth safe to drop into

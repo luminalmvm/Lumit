@@ -16,16 +16,16 @@
 // with a zero span reading as 0 rather than dividing. Almost every creative
 // `.cube` uses the default 0..1 domain, where this is the identity — but a cube
 // that does not used to render with the domain silently ignored on the GPU
-// while the CPU oracle remapped it (K-271). Out-of-domain input clamps to the
+// while the CPU oracle remapped it. Out-of-domain input clamps to the
 // edge (it does not wrap). `mix == 0` reproduces the input bit-exactly.
 
-// The Input space (K-543) the cube was authored against: the picture converts
+// The Input space the cube was authored against: the picture converts
 // into it, the table applies, the result converts back. `to_space` / `to_linear`
 // below mirror `lumit_core::lut::LutSpace::from_linear` / `to_linear` operation
 // for operation, `max(v, 0.0)` included — a negative working-space value is
 // legal (out of gamut) and must take the linear segment, not `pow` a negative
 // into NaN. Space 0 (Linear) returns its argument untouched, so the default is
-// the bit-exact picture this kernel rendered before the row existed (K-258).
+// the bit-exact picture this kernel rendered before the row existed.
 struct Params {
     size: u32,     // LUT edge length N (the cube holds N³ samples)
     mix: f32,      // 0..1, blended against the unprocessed input
@@ -102,7 +102,7 @@ fn lut_apply(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let o = textureLoad(src, xy, 0);
-    // Straight colour, then into the space the cube was authored for (K-543).
+    // Straight colour, then into the space the cube was authored for.
     let u = to_space(unpremult(o));
 
     // Map each channel through its domain onto the grid and clamp

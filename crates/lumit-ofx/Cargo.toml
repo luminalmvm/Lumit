@@ -37,7 +37,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 # An effect instance is named by a uuid, and a plugin definition keeps one live
-# plugin instance per effect instance (K-593).
+# plugin instance per effect instance.
 uuid = { version = "1", features = ["v7"] }
 # The control plane: length-prefixed `bincode` over a duplex local socket —
 # a named pipe on Windows, a Unix socket elsewhere (docs/impl/ofx-host.md §4).

@@ -8,8 +8,8 @@
 // the mapped disc; the angle starts straight up and turns clockwise, which is
 // also where a wrapped picture's seam falls.
 //
-// Three transcendentals a pixel — §3.42's fourth note and K-399's rule: the
-// angle IS a function of the pixel and cannot be lifted host-side, so both paths
+// Three transcendentals a pixel — §3.42's fourth note: the angle IS a
+// function of the pixel and cannot be lifted host-side, so both paths
 // run their own platform's atan2/sin/cos and the oracle is judged on absolute
 // difference over a smooth corpus.
 //

@@ -21,7 +21,7 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../icons/icons.dart';
-// The K-440 set's drawing widget, under a prefix: `LumitIcon` is also the name
+// The icon set's drawing widget, under a prefix: `LumitIcon` is also the name
 // of the by-name enum in icons.dart that this file uses for layer kinds.
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
@@ -61,7 +61,7 @@ class CompTabsFrb extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    // Served from LumitState's cached walk (K-184): the item tree is only
+    // Served from LumitState's cached walk: the item tree is only
     // re-read when the engine says it changed shape. Filtered to the tabs the
     // user has opened, so a deleted comp's tab also simply stops matching.
     final selected = uiState.selectedComp?.internalid;
@@ -207,7 +207,7 @@ class DoubleTap {
 /// what was picked (or null when it is dismissed). With no [width] the menu
 /// sizes itself to its widest row, which is what the marker menus always did.
 ///
-/// A [MenuRow.option] in here leaves the menu up (K-671); the pointer leaving
+/// A [MenuRow.option] in here leaves the menu up; the pointer leaving
 /// the surface is then what takes it down, which is why the close is handed to
 /// the surface as well as to the rows.
 Future<T?> showMenuAt<T>({
@@ -238,7 +238,7 @@ Future<T?> showMenuAt<T>({
 ///
 /// One row of chips, in the theme's own label palette — so no colour literal
 /// lives at either call site. Opened by a layer's label dot and by a group's
-/// colour tick (K-523), which drew the same popup twice; [keyPrefix] keeps each
+/// colour tick, which drew the same popup twice; [keyPrefix] keeps each
 /// surface's long-standing chip keys.
 Future<int?> showLabelPicker(
   BuildContext context,
@@ -278,7 +278,7 @@ Future<int?> showLabelPicker(
 
 /// The right-click menu on a marker flag: edit what it says, take it away, or
 /// — for a layer's own markers — clear the lot. Shared by the ruler's comp
-/// markers and the bars' layer markers (K-254), which had grown one copy each.
+/// markers and the bars' layer markers, which had grown one copy each.
 ///
 /// [markers] is read when a command is picked, not when the menu opens, so an
 /// edit made while the label dialog was up is not silently overwritten.
@@ -324,9 +324,9 @@ Future<void> showMarkerMenuFrb({
       write([
         for (final m in markers())
           if (m.id == marker.id)
-            // The span rides along: the seam carries it now (K-441), so a
-            // marker rebuilt without it would be the panel saying "make this a
-            // moment" — the same shape of loss K-270 fixed for a beat's kind.
+            // The span rides along: the seam carries it now, so a marker
+            // rebuilt without it would be the panel saying "make this a
+            // moment" — the same shape of loss already fixed for a beat's kind.
             BridgeMarker(
                 id: m.id,
                 time: m.time,
@@ -416,7 +416,7 @@ class _CompTabState extends State<_CompTab> {
         onSecondaryTapUp: (d) => widget.onMenu(d.globalPosition),
         child: Container(
           padding: const EdgeInsets.only(left: 10, right: 10),
-          // **The pointer says the tab is a control** (K-640). A tab that is
+          // **The pointer says the tab is a control**. A tab that is
           // not the open one answered a hover with nothing at all, so there
           // was no way to tell a name from a name you could press. It wears
           // the value well's own hover face — one pixel of `hairlineStrong`
@@ -432,7 +432,7 @@ class _CompTabState extends State<_CompTab> {
                 )
               : null,
           decoration: BoxDecoration(
-            // Round fills the fronted tab with the accent (K-394, §12.1); Sharp
+            // Round fills the fronted tab with the accent (§12.1); Sharp
             // seats the fronted tab in the panel's own surface, so the tab and
             // the comp under it read as one thing.
             color: dropping
@@ -563,7 +563,7 @@ class _LayerSearchFrbState extends State<LayerSearchFrb> {
 /// refuses it anyway, but offering a choice that always fails is a worse way to
 /// say so than not offering it.
 ///
-/// Costs no bridge calls at all (K-184): the current parent's name and every
+/// Costs no bridge calls at all: the current parent's name and every
 /// other layer's name come from the read model. This used to be one name call
 /// per other layer per row per rebuild — O(layers²) across the outline.
 class ParentPickerFrb extends StatelessWidget {
@@ -593,7 +593,7 @@ class ParentPickerFrb extends StatelessWidget {
       width: width,
       child: BareLazyDropdown(
         key: ValueKey<String>('tl-parent-${layer.internallayerId}'),
-        // In an outline row, so the mockup's 16/10 face (§12A.6, K-451).
+        // In an outline row, so the mockup's 16/10 face (§12A.6).
         dense: true,
         label: info.parent == null ? l10n.none : (info.parentName ?? l10n.none),
         options: () => [
@@ -623,7 +623,7 @@ class ParentPickerFrb extends StatelessWidget {
 }
 
 /// The layer's matte cell (docs/06 §1.6): which layer gates this one, drawn
-/// straight from the row's info (K-184). The dropdown picks the source; with
+/// straight from the row's info. The dropdown picks the source; with
 /// one set, the two small toggles choose luma-over-alpha and invert.
 class MattePickerFrb extends StatelessWidget {
   final LayerReference layer;
@@ -637,7 +637,7 @@ class MattePickerFrb extends StatelessWidget {
   final double width;
 
   /// Whether this cell's width includes room for the two mode toggles: true
-  /// while any visible row in the comp has a matte set (K-463), so the rows
+  /// while any visible row in the comp has a matte set, so the rows
   /// that have none keep their face and their toggle slot in the same columns
   /// as the row that does.
   final bool toggleRoom;
@@ -685,18 +685,18 @@ class MattePickerFrb extends StatelessWidget {
             // that room is theirs on every row of a comp that has a matte
             // somewhere — including the rows that have none, so the blend
             // column stays a column. On a comp with no matte at all the cell
-            // is the face and nothing else (K-463), and the dropdown still
+            // is the face and nothing else, and the dropdown still
             // does not swell into room it is not given.
             width: toggleRoom
                 ? (width - matteToggleWidth).clamp(40.0, width)
                 : width,
             child: BareLazyDropdown<UuidValue?>(
               key: ValueKey<String>('tl-matte-${layer.internallayerId}'),
-              // In an outline row, so the mockup's 16/10 face (§12A.6, K-451).
+              // In an outline row, so the mockup's 16/10 face (§12A.6).
               dense: true,
               label: sourceName,
               // Built when the menu opens, never per rebuild — which is what
-              // lets it probe (K-194). A matte gates this layer with another
+              // lets it probe. A matte gates this layer with another
               // layer's *picture*, so a layer with none (a camera, a Null, an
               // audio-only clip) is not offered, and neither is this one:
               // matting a layer with itself has no meaning.
@@ -926,7 +926,7 @@ class _MarkerEditorState extends State<_MarkerEditor> {
   }
 }
 
-/// The work area as the Timeline draws it, in frames (K-203).
+/// The work area as the Timeline draws it, in frames.
 ///
 /// The engine stores "no work area" as null, which is right — it means the
 /// comp has not been narrowed. The *interface* has no such state: a comp that
@@ -1003,14 +1003,14 @@ LumitIcon iconForKind(BridgeLayerKind kind) => switch (kind) {
       BridgeLayerKind.sequence => LumitIcon.sequence,
       BridgeLayerKind.precomp => LumitIcon.comp,
       BridgeLayerKind.text => LumitIcon.text,
-      // Vector art, drawn as the shape tool that usually makes it (K-237).
+      // Vector art, drawn as the shape tool that usually makes it.
       BridgeLayerKind.shape => LumitIcon.rectangle,
       BridgeLayerKind.camera => LumitIcon.camera,
-      // A light borrows the aperture glyph (K-360): the icon set has no lamp,
+      // A light borrows the aperture glyph: the icon set has no lamp,
       // and an iris is at least the right family — something about how light
       // reaches the sensor rather than about the picture.
       BridgeLayerKind.light => LumitIcon.aperture,
-      // An Audio layer (K-435) wears the speaker the audible switch wears, so
+      // An Audio layer wears the speaker the audible switch wears, so
       // a row that only makes sound says so in the same glyph twice.
       BridgeLayerKind.audio => LumitIcon.audio,
       BridgeLayerKind.solid => LumitIcon.solid,
@@ -1034,7 +1034,7 @@ LumitIcon iconForKind(BridgeLayerKind kind) => switch (kind) {
 /// it at this size. Nothing drawn means nothing held. No amber, no red, no
 /// pulsing — an empty cache is not a fault.
 ///
-/// **And the tier says at what size** (K-441, docs/15 §6.3). Each strip byte
+/// **And the tier says at what size** (docs/15 §6.3). Each strip byte
 /// carries two nibbles: the storage state above in the low one, and in the high
 /// one the preview *divisor* the picture that was found was actually made at,
 /// relative to the resolution the Viewer is showing. Full holds its colour;
@@ -1049,13 +1049,13 @@ LumitIcon iconForKind(BridgeLayerKind kind) => switch (kind) {
 /// resolution changes — is the cache asked. Held in state rather than read in
 /// `build` for exactly that reason: a zoom flight rebuilds this widget on every
 /// animation frame, and a stateless read made each of those frames take the
-/// render lock and allocate a byte per frame of the composition (K-293).
+/// render lock and allocate a byte per frame of the composition.
 class TimelineCacheBar extends StatefulWidget {
   final CompositionReference comp;
   final CacheBarAxis axis;
   final Listenable revision;
 
-  /// Three logical pixels — the approved mockup's own stripe (K-451), and
+  /// Three logical pixels — the approved mockup's own stripe, and
   /// docs/15 §6.3. It is drawn **on the ruler's floor**, inside its 36
   /// (§12A.6), over the work-area band's own row rather than as a strip of its
   /// own below it: the mockup draws the cached segments on the band, and a
@@ -1202,7 +1202,7 @@ class TimelineRuler extends StatefulWidget {
   final double height;
   final ValueChanged<int> onSeek;
 
-  /// Dragging a work-area edge (K-202), or double-clicking the band to give
+  /// Dragging a work-area edge, or double-clicking the band to give
   /// the whole comp back (docs/07 §4.1) — which is what the **null span**
   /// means, the same "not narrowed" the engine holds. The callback itself
   /// being null leaves the edges as plain marks, which is what a caller with
@@ -1229,7 +1229,7 @@ class TimelineRuler extends StatefulWidget {
   /// while the ruler's own band moves (owner, 2026-08-25).
   final ValueChanged<({int start, int end, bool whole})?>? onWorkPreview;
 
-  /// A marker was moved, renamed or removed on the ruler (K-254) — the ruler
+  /// A marker was moved, renamed or removed on the ruler — the ruler
   /// has already written it to the document, and this is the panel being told
   /// so the rest of it redraws. Null in a ruler with no markers to edit.
   final VoidCallback? onMarkersChanged;
@@ -1501,11 +1501,11 @@ class _TimelineRulerState extends State<TimelineRuler> {
         // (docs/07 §4.1). Anywhere else: a marker is made at that frame.
         //
         // **The waist divides this one gesture**, though nothing is drawn
-        // along it any more (K-513). It has to: a comp nobody has narrowed
+        // along it any more. It has to: a comp nobody has narrowed
         // has a work area of the whole comp, so a ruler-wide double-click
         // would clear a work area that is already whole and there would be
         // nowhere left on the ruler to make a marker. The highlight is on the
-        // second row again (K-529), so the line this gesture reads by is now
+        // second row again, so the line this gesture reads by is now
         // the line the highlight itself draws.
         final x = d.localPosition.dx;
         final onBand = d.localPosition.dy >= widget.height / 2 &&
@@ -1521,7 +1521,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
           widget.onSeek(axis.frameAt(d.localPosition.dx)),
       child: Container(
         height: widget.height,
-        // **The lane ground, not a strip of its own** (K-451): the mockup
+        // **The lane ground, not a strip of its own**: the mockup
         // draws the whole lane pane — ruler, cache bar and lanes — on one
         // colour, so the clock reads as the top of the time area rather than
         // as a bar bolted above it.
@@ -1545,15 +1545,15 @@ class _TimelineRulerState extends State<TimelineRuler> {
               ),
             ),
             // The work area: the span the Viewer previews and the export
-            // writes. **The ruler's second row**, not the whole of it (K-529,
-            // reverting that half of K-513 — the owner tried the full-height
-            // highlight on a real composition and asked for the lower row
-            // back). A wash over the clock made the numbers harder to read
-            // for no gain: the band's job is to say *which stretch of time*,
-            // and the row that carries the markers is the row that says where
-            // things sit in time. It is still the top of *one* highlight,
-            // carrying on behind the cache bar and down through the lanes
-            // (docs/15 §12A.1) — it simply starts at the waist again.
+            // writes. **The ruler's second row**, not the whole of it (the
+            // owner tried the full-height highlight on a real composition
+            // and asked for the lower row back). A wash over the clock made
+            // the numbers harder to read for no gain: the band's job is to
+            // say *which stretch of time*, and the row that carries the
+            // markers is the row that says where things sit in time. It is
+            // still the top of *one* highlight, carrying on behind the cache
+            // bar and down through the lanes (docs/15 §12A.1) — it simply
+            // starts at the waist again.
             Positioned(
               left: axis.xOf(work.start),
               width:
@@ -1568,12 +1568,12 @@ class _TimelineRulerState extends State<TimelineRuler> {
                 ),
               ),
             ),
-            // The beat band's bar numbers (K-698, docs/09 §5): dim marks in
-            // the ruler's lower row, from the confirmed grid — the same row
-            // the markers and the work-area band already share, because
-            // K-682 pinned the ruler's geometry and a third band would push
-            // every row under it. The beat ticks themselves are the beat
-            // markers below, dressed as ticks.
+            // The beat band's bar numbers (docs/09 §5): dim marks in the
+            // ruler's lower row, from the confirmed grid — the same row the
+            // markers and the work-area band already share, because the
+            // ruler's geometry is pinned and a third band would push every
+            // row under it. The beat ticks themselves are the beat markers
+            // below, dressed as ticks.
             if (beatGridOf(comp) case final grid?)
               Positioned(
                 left: 0,
@@ -1595,18 +1595,18 @@ class _TimelineRulerState extends State<TimelineRuler> {
                   ),
                 ),
               ),
-            // The work area's two edges, draggable (K-202). Grabbable rather
+            // The work area's two edges, draggable. Grabbable rather
             // than drawn-only: the menu's "set from playhead" is precise but
             // roundabout, and a span you can see is one you expect to be able
             // to take hold of. Each edge stops one frame short of the other,
             // so a drag can never invert the span.
             //
-            // **The full height of the ruler**, both rows (K-513, kept by
-            // K-529 where the highlight was not): the band says which stretch
-            // of time, and the handle is a *thing to take hold of* — so it
-            // stands up the whole ruler where the eye and the pointer are,
-            // rather than hiding in the lower row with the markers. The ten
-            // pixels either side of an edge are the edge's.
+            // **The full height of the ruler**, both rows (kept full where
+            // the highlight was not): the band says which stretch of time,
+            // and the handle is a *thing to take hold of* — so it stands up
+            // the whole ruler where the eye and the pointer are, rather than
+            // hiding in the lower row with the markers. The ten pixels either
+            // side of an edge are the edge's.
             if (widget.onWorkArea != null)
               for (final isStart in const [true, false])
                 Positioned(
@@ -1617,8 +1617,8 @@ class _TimelineRulerState extends State<TimelineRuler> {
                   bottom: 0,
                   child: MouseRegion(
                     // The cursor is the whole of what the pointer changes
-                    // here: the tab itself is solid and does not brighten
-                    // (K-616), so there is no hover state to hold.
+                    // here: the tab itself is solid and does not brighten, so
+                    // there is no hover state to hold.
                     cursor: SystemMouseCursors.resizeLeftRight,
                     child: GestureDetector(
                       key: ValueKey('tl-work-${isStart ? 'start' : 'end'}'),
@@ -1682,7 +1682,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
                         _escape.end();
                         _abandonWorkDrag();
                       },
-                      // **A drawn tab** (owner's reference image, K-529).
+                      // **A drawn tab** (owner's reference image).
                       // The handles used to draw nothing at all and let the
                       // band's own edge stand for them — which worked while
                       // the band ran the ruler's whole height, and stopped
@@ -1717,7 +1717,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
                     ),
                   ),
                 ),
-            // A spanning marker's bar (docs/15 §12A.1, K-441): a marker can
+            // A spanning marker's bar (docs/15 §12A.1): a marker can
             // carry a duration, and the ruler draws it as a bar running from
             // the marker's own frame for that long. Drawn **before** the flags
             // so a flag parked inside another marker's span is still the thing
@@ -1804,7 +1804,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
                       _escape.end();
                       _abandonMarkerDrag();
                     },
-                    // A detected beat wears a tick, not a flag (K-698): the
+                    // A detected beat wears a tick, not a flag: the
                     // board's grammar, and the only one that survives forty
                     // of them in a row. It is still the same marker with the
                     // same drag, menu and snapping — only the clothing
@@ -1856,7 +1856,7 @@ const double _workHandleWidth = 10;
 
 /// A comp marker on the time ruler: an **upward triangle sitting on the cache
 /// bar**, half inside the backdrop pill that carries what it says
-/// (docs/15 §12A.1, docs/07 §4.1, K-254).
+/// (docs/15 §12A.1, docs/07 §4.1).
 ///
 /// The point is the whole of the design. It is what carries the meaning — this
 /// frame, not the one next door — so it points *up*, at the clock in the
@@ -1998,7 +1998,7 @@ class _MarkerFlagPainter extends CustomPainter {
   bool shouldRepaint(_MarkerFlagPainter old) => old.fill != fill;
 }
 
-/// A detected beat on the ruler (K-698): a small tick standing on the cache
+/// A detected beat on the ruler: a small tick standing on the cache
 /// bar where an ordinary marker wears its flag. The same footprint as a flag,
 /// so the drag and the menu that come with being a marker keep their target;
 /// smaller and gold, so forty of them read as rhythm rather than as a picket
@@ -2045,7 +2045,7 @@ class _BeatTickPainter extends CustomPainter {
   bool shouldRepaint(_BeatTickPainter old) => old.fill != fill;
 }
 
-/// Where the beat band's bar numbers land (K-698): each labelled bar and the
+/// Where the beat band's bar numbers land: each labelled bar and the
 /// frame it starts on, from the confirmed grid — four beats to the bar, the
 /// labelling step doubling (1, 2, 4, 8 bars…) until neighbouring numbers
 /// clear each other at the current zoom.
@@ -2190,7 +2190,7 @@ class _MarkerLabelDialogState extends State<_MarkerLabelDialog> {
                 HouseButton(
                   key: const ValueKey('marker-edit-ok'),
                   small: true,
-                  // The default action (K-319). The label field holds focus,
+                  // The default action. The label field holds focus,
                   // so Enter lands there and submits the same commit.
                   primary: true,
                   onPressed: () => widget.onDone(_label.text),
@@ -2206,7 +2206,7 @@ class _MarkerLabelDialogState extends State<_MarkerLabelDialog> {
 }
 
 /// Put a marker labelled [label] at [frame], replacing anything already on that
-/// frame and any marker already carrying that label (K-254).
+/// frame and any marker already carrying that label.
 ///
 /// Two replacement rules, each for its own reason. **One per frame**, because
 /// markers do not stack: two flags on the same moment are two things to click
@@ -2224,7 +2224,7 @@ void addMarkerFrb(
 
 /// [comp]'s marker list with one marker placed at [frame] — the shared
 /// placement rule, used both when a marker is added and when one is dragged
-/// onto a new moment (K-254).
+/// onto a new moment.
 ///
 /// Two things give way to the newcomer. **Whatever is already on that frame**,
 /// because markers do not stack: two flags on one moment are two things to
@@ -2257,7 +2257,7 @@ List<BridgeMarker> markersWithFrb(
         // being made is a moment, which is what every new cue is.
         durationFrames: id == null ? null : _spanOf(comp, id),
         // Read-only across the seam: the engine's merge decides what stays a
-        // beat (K-270), so what is written here is never read back.
+        // beat, so what is written here is never read back.
         isBeat: false,
       ),
     ];
@@ -2296,7 +2296,7 @@ class PlayheadMarker extends StatelessWidget {
   /// Half the head's width — how far left of the frame the marker starts.
   static const double halfWidth = 5;
 
-  /// How tall the head is — the mockup's own 6 (K-451). It sits at the very
+  /// How tall the head is — the mockup's own 6. It sits at the very
   /// top of the ruler, with the labels: in the lower half the work-area band
   /// would sit over it.
   static const double headHeight = 6;
@@ -2326,7 +2326,7 @@ class PlayheadMarker extends StatelessWidget {
 }
 
 /// The playhead, standing over a view and following [playhead] **on its own
-/// layer** (K-626's pattern).
+/// layer**.
 ///
 /// **Why it is not simply a `Positioned` that moves.** It was, and moving a
 /// `Positioned` child changes the parent `Stack`'s layout: the stack relaid out
@@ -2454,7 +2454,7 @@ double rulerMinorStepSeconds({
   required double labelStep,
   required double fps,
 }) {
-  // **Thirty pixels, not six** (K-451, the approved mockup). The mockup's ruler
+  // **Thirty pixels, not six** (the approved mockup). The mockup's ruler
   // at the resting zoom labels every two seconds 140px apart and puts three
   // minor ticks between them — a half-second apart, at 35px. Six pixels was a
   // floor on *legibility*, and at 70 pixels a second it let the ladder fall two
@@ -2487,7 +2487,7 @@ double rulerMinorStepSeconds({
   return labelStep;
 }
 
-/// The work-area band (docs/15 §12A.1, K-441): **one** band in `animated`
+/// The work-area band (docs/15 §12A.1): **one** band in `animated`
 /// running from the ruler's lower half, behind the cache bar, down through the
 /// lanes — the span the Viewer previews and the export writes.
 ///
@@ -2506,7 +2506,7 @@ BoxDecoration workAreaBand(LumitTheme t, {required double fillAlpha}) =>
 /// The band's two edges, at half strength (§12A.1).
 Color workAreaEdgeColour(LumitTheme t) => t.animated.withValues(alpha: 0.5);
 
-/// A work-area **handle**'s tab (K-529, the owner's reference image; K-616).
+/// A work-area **handle**'s tab (the owner's reference image).
 ///
 /// The band's own colour at full strength, never a second hex and never an
 /// alpha: a tab drawn through is a tab whose colour changes with whatever it
@@ -2533,12 +2533,12 @@ const double workAreaHandleRadius = 1;
 /// Where the tab starts, measured down from the ruler's top (owner,
 /// 2026-08-25): **below the clock's labels**, which are painted four px in
 /// and set at nine. The handle still stands up out of the band and into the
-/// ruler's upper row — that is the half of K-513 that stands — but it stops
-/// short of the numbers rather than running alongside them. What it *grabs*
-/// is unchanged: the whole ruler height is still the edge's to catch.
+/// ruler's upper row, but it stops short of the numbers rather than running
+/// alongside them. What it *grabs* is unchanged: the whole ruler height is
+/// still the edge's to catch.
 const double workAreaHandleTopInset = 18;
 
-/// What a marker's label is set in: mono at 8, the mockup's own size (K-451) —
+/// What a marker's label is set in: mono at 8, the mockup's own size —
 /// a marker's label is a cue read at a glance beside a clock, and it sets in
 /// the same face the clock does, one step quieter so the pill stays a pill
 /// inside the ruler's 12px lower row.
@@ -2547,12 +2547,12 @@ TextStyle markerLabelStyle(LumitTheme t) =>
 
 /// The band's fill over the ruler's surface, and over the lane ground. Two
 /// values because the two grounds are not the same value; one band either way.
-/// Both are the mockup's own alphas (K-451).
+/// Both are the mockup's own alphas.
 const double workAreaRulerFillAlpha = 0.10;
 const double workAreaLaneFillAlpha = 0.04;
 
 /// How a layer bar — and every clip inside a Sequence layer — fills, as a
-/// share of its label colour (§12A.1, K-441).
+/// share of its label colour (§12A.1).
 ///
 /// The bar is that colour *thinned* over the lane's ground rather than the
 /// colour itself: at full strength a stack of layers is a row of bright slabs
@@ -2561,13 +2561,13 @@ const double workAreaLaneFillAlpha = 0.04;
 /// recoloured layer recolours its bar and its clips in any theme.
 const double clipFillAlpha = 0.38;
 
-/// A bar's corner radius under Sharp: **none**, as the mockup draws it
-/// (K-451). Round keeps its stadium ends (K-394, §12.1) — that is the shape's
-/// whole difference — and this is the other end of the same choice. It was 2,
-/// which rounded nothing visibly and softened every bar end by a pixel.
+/// A bar's corner radius under Sharp: **none**, as the mockup draws it. Round
+/// keeps its stadium ends (§12.1) — that is the shape's whole difference —
+/// and this is the other end of the same choice. It was 2, which rounded
+/// nothing visibly and softened every bar end by a pixel.
 const double sharpClipRadius = 0;
 
-/// A bar's own height inside a lane row (§12A.6's table, K-451). A plain
+/// A bar's own height inside a lane row (§12A.6's table). A plain
 /// constant, because it is one of the rows the table gives the same height
 /// under both densities — only the ground around it changes.
 const double clipBarHeight = 16;
@@ -2631,7 +2631,7 @@ String rulerLabelOf(double seconds) {
 
 /// The ruler's ticks and time labels (docs/15 §12A.1).
 ///
-/// **One band, not two** (K-513). The ruler used to be ruled across its waist,
+/// **One band, not two**. The ruler used to be ruled across its waist,
 /// with the clock above the line and the markers and work area below it; the
 /// owner's ruling after desktop testing is that it should read as a single
 /// ruler. So the seam is gone, and a **labelled** tick now crosses the waist
@@ -2642,8 +2642,8 @@ String rulerLabelOf(double seconds) {
 /// rather than as a comb.
 class _RulerTicksPainter extends CustomPainter {
   /// How far a labelled tick reaches either side of the ruler's waist, and how
-  /// far a minor tick reaches above it — the mockup's own pair (K-451), with
-  /// the labelled one now drawn twice, once up and once down (K-513).
+  /// far a minor tick reaches above it — the mockup's own pair, with
+  /// the labelled one now drawn twice, once up and once down.
   static const double labelledTick = 7;
   static const double minorTickLength = 4;
 
@@ -2666,7 +2666,7 @@ class _RulerTicksPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     // The waist is still where the ticks are hung from and where the labels
-    // stop — it is simply no longer *drawn* (K-513).
+    // stop — it is simply no longer *drawn*.
     final mid = size.height / 2;
     final quiet = Paint()
       ..color = minorTick
@@ -2696,8 +2696,8 @@ class _RulerTicksPainter extends CustomPainter {
     for (var s = 0.0; s <= seconds; s += step) {
       final x = axis.xOf(s * fps);
       // Seven pixels of labelled tick against the minor ticks' four — the
-      // mockup's own pair (K-451) — drawn **through** the waist and the same
-      // distance again below it, so the ruler reads as one band (K-513).
+      // mockup's own pair — drawn **through** the waist and the same
+      // distance again below it, so the ruler reads as one band.
       canvas.drawLine(
           Offset(x, mid - labelledTick), Offset(x, mid + labelledTick), paint);
       final text = TextPainter(
@@ -2745,7 +2745,7 @@ List<(int, int, int)> cacheBarRuns(List<int> tiers) {
   return runs;
 }
 
-/// The two halves of a cache-strip byte (K-441). The **storage state** — `0`
+/// The two halves of a cache-strip byte. The **storage state** — `0`
 /// nothing, `1` held coarser, `2` held here, `3` parked coarser, `4` parked
 /// here — and the **preview divisor** the found picture was made at, `1` full
 /// through `4` quarter, `0` when nothing is held. One split, named once, so
@@ -2755,7 +2755,7 @@ int cacheStorageOf(int byte) => byte & 0x0f;
 int cacheDivisorOf(int byte) => byte >> 4;
 
 /// How faint a run is drawn, by the preview divisor its picture was made at
-/// (docs/15 §6.3, K-441). Full holds its family's colour; half steps down; and
+/// (docs/15 §6.3). Full holds its family's colour; half steps down; and
 /// **the faintest step means a third _or_ a quarter**, deliberately — the
 /// realtime controller renders a third as well as the half and quarter §6.3
 /// names, and lumping it in with the coarsest under-promises rather than
@@ -2810,7 +2810,7 @@ class _CacheBarPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final paint = Paint();
     for (final (start, end, byte) in cacheBarRuns(tiers)) {
-      // Two nibbles (K-441). The low one is the storage state the bar has
+      // Two nibbles. The low one is the storage state the bar has
       // always drawn: 1 held coarser, 2 held at this resolution, 3 on disk
       // coarser, 4 on disk at this resolution. The high one is the preview
       // divisor the found picture was made at. A storage state from a newer
@@ -2852,7 +2852,7 @@ class _CacheBarPainter extends CustomPainter {
       old.onDisk != onDisk;
 }
 
-/// The Timeline's two-tone ground (K-202): the work area at one value, and a
+/// The Timeline's two-tone ground: the work area at one value, and a
 /// darker wash either side of it.
 ///
 /// Painted rather than laid out as two boxes because it sits *under* the bars
@@ -2972,7 +2972,7 @@ class WorkAreaGroundPainter extends CustomPainter {
 }
 
 /// The work area's ground, standing over a view and following the edge being
-/// dragged **on its own layer** (K-626's pattern, as the playhead took it).
+/// dragged **on its own layer**, as the playhead takes it.
 ///
 /// **Why the span is a listenable and not a field.** The band spans the ruler
 /// and every lane under it, so an edge drag has to move three washes at once —
@@ -3042,14 +3042,13 @@ class WorkAreaGround extends StatelessWidget {
       );
 }
 
-/// The stretches of a collapsed Sequence layer's bar that no clip covers
-/// (K-248).
+/// The stretches of a collapsed Sequence layer's bar that no clip covers.
 ///
 /// A Sequence layer's bar runs from its first clip to its last, and the gaps
 /// in between render transparent — they are legal, and never closed for you.
 /// Shut, that used to be invisible: the bar read as solid footage all the way
 /// across. This washes the gaps out, the same idea as the faint outline a
-/// trimmed footage layer draws over the source it is not using (K-212): the
+/// trimmed footage layer draws over the source it is not using: the
 /// bar says what is there, and what is only reserved.
 class SequenceGapsPainter extends CustomPainter {
   final List<BridgeClip> clips;

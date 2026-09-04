@@ -122,10 +122,10 @@ pub struct FractalNoise {
 
     /// Flip the finished field, after contrast and brightness.
     ///
-    /// Labelled "Invert noise" rather than AE's bare "Invert" because the K-395
-    /// matte pair puts an **Invert** row at the bottom of every effect's panel,
-    /// and two rows a panel apart with the same word on them is a question
-    /// nobody should have to answer twice. The stored id is still `invert`.
+    /// Labelled "Invert noise" rather than AE's bare "Invert" because the matte
+    /// pair puts an **Invert** row at the bottom of every effect's panel, and
+    /// two rows a panel apart with the same word on them is a question nobody
+    /// should have to answer twice. The stored id is still `invert`.
     #[toggle(label = "Invert noise", default = false)]
     pub invert: bool,
 

@@ -1,4 +1,4 @@
-// The Viewer's preview progress bar (docs/07 §2.5, K-287).
+// The Viewer's preview progress bar (docs/07 §2.5).
 //
 // **In plain terms.** When a frame takes long enough to notice, this says so: a
 // slim bar on the right-hand end of the Viewer's transport that fills as the
@@ -23,7 +23,7 @@
 // **The motion.** The fill animates towards each report rather than jumping,
 // so a bar that advances in five steps reads as one movement; and while it is
 // waiting it carries a slow sheen, which is what distinguishes "working" from
-// "stuck" at a glance. Both respect the theme's animation level (K-092) — at
+// "stuck" at a glance. Both respect the theme's animation level — at
 // `none` the bar simply sits at its reported fraction.
 
 import 'package:flutter/widgets.dart';

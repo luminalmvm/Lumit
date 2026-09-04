@@ -1,5 +1,5 @@
 // The Viewer's grid and safe-area overlays, and the bar menu that turns them
-// on (K-416, docs/07 §2.2 items 5–6).
+// on (docs/07 §2.2 items 5–6).
 //
 // **In plain terms.** Two sets of thin lines drawn on top of the picture to
 // help you place things: a grid that divides the frame into eighths, and the
@@ -29,7 +29,7 @@ import 'viewer_panel_frb.dart'
         viewerMarkEdge,
         viewerStripHeight;
 
-/// The bar's **view menu** (K-416, K-466): one mark, and everything that is
+/// The bar's **view menu**: one mark, and everything that is
 /// drawn over the picture behind it.
 ///
 /// It is a *menu* rather than a row of toggles because the approved drawing
@@ -37,12 +37,12 @@ import 'viewer_panel_frb.dart'
 /// to come — rulers, draggable guides, snapping — which land as entries here
 /// rather than as more chrome on a bar that is one row. What it governs:
 ///
-/// * the **grid** and the **safe areas** (K-416), the two marks the display
+/// * the **grid** and the **safe areas**, the two marks the display
 ///   draws over the shot;
-/// * the **layer controls** (K-217) — the wireframe boxes, the handles and the
+/// * the **layer controls** — the wireframe boxes, the handles and the
 ///   hover highlight, which are marks over the picture like any other;
-/// * the **region of interest** (K-362), armed or cleared from the same place;
-/// * the composition's own **background** (K-357), which is the same question
+/// * the **region of interest**, armed or cleared from the same place;
+/// * the composition's own **background**, which is the same question
 ///   asked from behind the picture rather than in front of it.
 ///
 /// The face reads in the accent while anything it governs is drawn, which is
@@ -133,7 +133,7 @@ class ViewerGuidesMenu extends StatelessWidget {
                 ui.setViewerOverlays(safeAreas: !ui.viewerOverlays.safeAreas),
           ),
           // The rulers, and the magnet that decides whether a drag reaches for
-          // what they put on the picture (K-689). The magnet is the toolbar's
+          // what they put on the picture. The magnet is the toolbar's
           // own switch under a second name, exactly as the layer-controls row
           // is the View menu's: one switch, two places to find it.
           (
@@ -158,7 +158,7 @@ class ViewerGuidesMenu extends StatelessWidget {
           (
             key: 'viewer-region',
             // A region that exists is cleared; otherwise the next drag on the
-            // picture is armed to sweep one out (K-362).
+            // picture is armed to sweep one out.
             text: region
                 ? l10n.viewerOverlayClearRegion
                 : l10n.viewerOverlayRegion,
@@ -181,7 +181,7 @@ class ViewerGuidesMenu extends StatelessWidget {
               ],
             ),
           ),
-        // Taking every guide off this comp at once (K-689). Only offered when
+        // Taking every guide off this comp at once. Only offered when
         // there is something to take off, and no tick: it is a command, not a
         // state you can be in.
         if (ui.guides.isNotEmpty)
@@ -273,7 +273,7 @@ class ViewerOverlayPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Bounded by the panel, exactly as the transparency board is (K-230): at a
+    // Bounded by the panel, exactly as the transparency board is: at a
     // high magnification the picture is far bigger than the panel, and there is
     // no reason to draw a line where nobody can see it.
     final area = picture.intersect(Offset.zero & size);

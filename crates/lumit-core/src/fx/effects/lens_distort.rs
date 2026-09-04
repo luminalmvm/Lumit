@@ -25,8 +25,8 @@ use lumit_fx_macros::Effect;
     // A strong bend pulls the corners in from well outside the frame.
     roi = FullFrame,
     premultiplied = true,
-    // K-427: the matte scales the displacement, inside the kernel (the
-    // owner's rule for mattes); the generic strength dissolve does not also run.
+    // The matte scales the displacement, inside the kernel (the owner's rule
+    // for mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales the distortion per pixel, read where the pixel lands: white \
@@ -65,8 +65,8 @@ pub struct LensDistort {
     )]
     pub orientation: u32,
 
-    /// px@comp: the optical centre the bend is about (K-260 — point parameters
-    /// are pixels). The schema default is nominal 1080p centre;
+    /// px@comp: the optical centre the bend is about (point parameters are
+    /// pixels). The schema default is nominal 1080p centre;
     /// `instantiate_for_raster` centres a fresh instance on the actual comp.
     #[slider(label = "Centre X", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
     pub centre_x: f32,
@@ -75,7 +75,7 @@ pub struct LensDistort {
     #[slider(label = "Centre Y", min = 0.0, max = 2160.0, default = 540.0, unit = Px)]
     pub centre_y: f32,
 
-    /// The reusable Edges control (P3, K-145): what a sample that lands outside
+    /// The reusable Edges control (P3): what a sample that lands outside
     /// the frame reads. Transparent by default — a bend that reaches past the
     /// border has genuinely nothing there, and repeating the border pixel into a
     /// fan reads as a fault.

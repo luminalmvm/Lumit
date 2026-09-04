@@ -44,14 +44,14 @@ pub struct MediaProbe {
 
 impl MediaProbe {
     /// Whether this file carries a picture at all — a video stream, still image
-    /// or otherwise (K-435). A music file answers false.
+    /// or otherwise. A music file answers false.
     #[must_use]
     pub fn has_picture(&self) -> bool {
         self.video.is_some()
     }
 
     /// Whether this file's picture actually **runs**: a video stream lasting
-    /// more than a single frame (K-246).
+    /// more than a single frame.
     ///
     /// # In plain terms
     ///
@@ -193,7 +193,7 @@ mod tests {
         }
     }
 
-    /// **A still is a still, not a sound with no width** (K-451). The Project
+    /// **A still is a still, not a sound with no width**. The Project
     /// panel's second fact line asks the probe result what the file is, and it
     /// has to answer honestly for all three shapes of media — a still image
     /// probes with a video stream of exactly one frame, so the question is
@@ -237,8 +237,8 @@ mod tests {
     /// A container that declares no rate leaves no frame length to measure
     /// against, so the test falls back to "does it last at all": a single
     /// undated still is still a still, and a stream that plays for a minute is
-    /// still a video. This is the behaviour `add_footage_layer` shipped with
-    /// (K-246) and it must not change with the rule moving here.
+    /// still a video. This is the behaviour `add_footage_layer` shipped with,
+    /// and it must not change with the rule moving here.
     #[test]
     fn a_stream_with_no_declared_rate_falls_back_to_lasting_at_all() {
         assert!(!probe_of(0.0, Some(video(0, 0, "png")), None).runs_as_video());

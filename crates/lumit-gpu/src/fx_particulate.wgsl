@@ -1,4 +1,4 @@
-// Particulate (docs/08 §3.86, K-446, K-474, K-475) — the WGSL twin of
+// Particulate (docs/08 §3.86) — the WGSL twin of
 // `lumit_core::fx::points`, op for op.
 //
 // This file is prepended with `fx_noise_core.wgsl`, whose `nc_hash01` and
@@ -92,7 +92,7 @@ struct Params {
     sprite_h: f32,
     wind_z: f32,
 
-    // The third axis (K-561). Every one of these is nought on a 2D layer.
+    // The third axis. Every one of these is nought on a 2D layer.
     em_z: f32,
     em_depth: f32,
     dir_z: f32,
@@ -109,11 +109,11 @@ struct Params {
     // **Which field the vertex stage rejects against**, set by the generic
     // points draw: FIELD_NONE for Particulate, whose points were already
     // decided by the compaction, and for every generator whose set is its set;
-    // FIELD_ALPHA for Scatter (K-599); FIELD_LUMA for Emit from image (K-603).
+    // FIELD_ALPHA for Scatter; FIELD_LUMA for Emit from image.
     field_mode: u32,
-    // Scatter's Invert row (K-599): the points land where the alpha is *not*.
+    // Scatter's Invert row: the points land where the alpha is *not*.
     field_invert: u32,
-    // Emit from image's Threshold (K-603), 0..1: how bright a pixel must be
+    // Emit from image's Threshold, 0..1: how bright a pixel must be
     // before it stands any chance at all. Unread in the other two modes.
     field_threshold: f32,
 };
@@ -125,7 +125,7 @@ const FIELD_LUMA: u32 = 2u;
 
 // Rec.709 luminance weights, the same three numbers `lumit_core::fx::cpu::LUMA`
 // holds. Spelled here rather than pulled in from `colour.wgsl`, which this
-// module does not include (K-603).
+// module does not include.
 const LUMA: vec3<f32> = vec3<f32>(0.2126, 0.7152, 0.0722);
 
 // The mode codes, matching `lumit_core::fx::points::RenderMode::from_code`. An
@@ -147,7 +147,7 @@ const A_ROTATION: u32 = 7u;
 const A_EMIT_W: u32 = 8u;
 const A_DIRECTION_Z: u32 = 9u;
 
-// Scatter's acceptance die (K-599), well clear of the per-particle draws above
+// Scatter's acceptance die, well clear of the per-particle draws above
 // and of the turbulence lattices below.
 const A_ACCEPT: u32 = 16u;
 
@@ -167,7 +167,7 @@ const SCAN_BLOCK: u32 = 256u;
 @group(0) @binding(1) var<storage, read> frames_buf: array<vec2<u32>>;
 // The two baked over-life curves, size then opacity, 257 entries each.
 @group(0) @binding(2) var<storage, read> curves: array<f32>;
-// The mask path: `(x, y, arc length, unused)` per vertex (K-408).
+// The mask path: `(x, y, arc length, unused)` per vertex.
 @group(0) @binding(3) var<storage, read> path: array<vec4<f32>>;
 // Aliveness on the way in, the exclusive prefix sum on the way out — one
 // buffer, because a rank is what a flag becomes.
@@ -181,7 +181,7 @@ const SCAN_BLOCK: u32 = 256u;
 @group(0) @binding(7) var<storage, read_write> args: array<u32>;
 
 // The stream's regions, in words, for a capacity of `c` particles. Position,
-// speed and the draw's tail are three components each since K-561.
+// speed and the draw's tail are three components each.
 fn r_pos(c: u32) -> u32 { return 0u; }
 fn r_speed(c: u32) -> u32 { return 3u * c; }
 fn r_age(c: u32) -> u32 { return 6u * c; }
@@ -196,8 +196,8 @@ fn r_tail(c: u32) -> u32 { return 14u * c; }
 //
 // `.xy` is where the camera puts the particle on the layer's plane and `.z` is
 // the foreshortening. With `on` clear — a 2D layer — it hands back the same
-// bits it was given and a scale of exactly one, which is the K-258 guarantee:
-// the flat path is not an approximation of itself.
+// bits it was given and a scale of exactly one, which is the bit-exactness
+// guarantee: the flat path is not an approximation of itself.
 fn pt_project(m0: vec4<f32>, m1: vec4<f32>, m2: vec4<f32>, on: u32, q: vec3<f32>) -> vec3<f32> {
     if (on == 0u) {
         return vec3<f32>(q.x, q.y, 1.0);
@@ -255,7 +255,7 @@ struct Motion {
 };
 
 // == lumit_core::fx::points::integrate. Three axes, one algebra: the depth
-// component takes the same drag and wind terms. Gravity stays down (K-561).
+// component takes the same drag and wind terms. Gravity stays down.
 fn pt_integrate(p0: vec3<f32>, v0: vec3<f32>, age: f32) -> Motion {
     let k = max(p.drag, 0.0);
     let x = k * age;
@@ -318,7 +318,7 @@ fn pt_path_at(s_in: f32) -> vec2<f32> {
 // emitter has nothing to emit from — a Mask path row that came to no mask,
 // which is the documented no-op; `.xyz` is the birth point's three axes.
 //
-// `w_die` is the draw through the emitter's Depth (K-561), filled uniformly: a
+// `w_die` is the draw through the emitter's Depth, filled uniformly: a
 // Point becomes a segment, an Ellipse a cylinder, a Rectangle a box. Line and
 // Mask path ignore it and stay on the plane.
 fn pt_birth_point(u: f32, v: f32, w_die: f32) -> vec4<f32> {
@@ -336,7 +336,7 @@ fn pt_birth_point(u: f32, v: f32, w_die: f32) -> vec4<f32> {
     var local = vec2<f32>(0.0, 0.0);
     var depth = (w_die - 0.5) * p.em_depth;
     if (p.shape >= 5u) {
-        // The two outline shapes (K-597). The host flattened the emitter's own
+        // The two outline shapes. The host flattened the emitter's own
         // outline into the very buffer a mask path uses, in the emitter's local
         // frame, so the walk is the same walk and the turn and the placement
         // below are the ones the filled shape already gets.
@@ -514,7 +514,7 @@ fn pt_scatter(@builtin(global_invocation_id) gid: vec3<u32>) {
     let blocks = (p.candidates + SCAN_BLOCK - 1u) / SCAN_BLOCK;
     let rank = ranks[c] + block_sums[c / SCAN_BLOCK];
     let total = block_sums[blocks];
-    // **The cap rule** (K-474, K-475): over budget the newest `cap` by birth
+    // **The cap rule**: over budget the newest `cap` by birth
     // index survive, and the same rule again at half the cap is the degradation
     // rung. Old particles vanishing early under overload is visible,
     // deterministic and the same from any scrub direction.
@@ -565,7 +565,7 @@ fn pt_scatter(@builtin(global_invocation_id) gid: vec3<u32>) {
         // sprite is stamped into, which has no depth axis to turn about.
         rot = atan2(speed_out.y, speed_out.x) + rot;
     }
-    // The per-particle rotation spread (K-507), from the seed hash like every
+    // The per-particle rotation spread, from the seed hash like every
     // other die, so two sprites born together do not point the same way.
     rot = rot + (pt_die(lo, hi, A_ROTATION) - 0.5) * radians(p.rotation_jitter)
         + radians(p.spin) * age;
@@ -606,7 +606,7 @@ fn pt_scatter(@builtin(global_invocation_id) gid: vec3<u32>) {
 @group(1) @binding(0) var<uniform> dp: Params;
 @group(1) @binding(1) var<storage, read> dstream: array<u32>;
 @group(1) @binding(2) var sprite: texture_2d<f32>;
-// The picture the points were thrown at, for the alpha test above (K-599).
+// The picture the points were thrown at, for the alpha test above.
 // Particulate binds its own input here and never reads it.
 @group(1) @binding(3) var field_src: texture_2d<f32>;
 
@@ -635,7 +635,7 @@ fn pt_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> Vs
         bitcast<f32>(dstream[r_tail(cap) + ii * 3u + 1u]),
         bitcast<f32>(dstream[r_tail(cap) + ii * 3u + 2u]),
     );
-    // Through the composition's camera (K-561): where it is seen, and how much
+    // Through the composition's camera: where it is seen, and how much
     // it foreshortens. The tail takes the same camera, so a streak that runs
     // towards the lens really does run towards the lens. Flat on a 2D layer, in
     // which case these are the same bits the stream holds.
@@ -645,7 +645,7 @@ fn pt_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> Vs
     let tail = pt.xy;
     var size = bitcast<f32>(dstream[r_size(cap) + ii]) * ph.z;
     if (dp.field_mode != FIELD_NONE) {
-        // **Rejection over the raster** (K-599, K-603): the point stands where
+        // **Rejection over the raster**: the point stands where
         // the field under it outvotes its own die. A refused point is given no
         // size, which draws nothing at all — a disc of no radius covers no
         // pixel — rather than being compacted away, because the picture is the
@@ -658,7 +658,7 @@ fn pt_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> Vs
         let texel = textureLoad(field_src, px, 0);
         var a = texel.a;
         if (dp.field_mode == FIELD_LUMA) {
-            // **Brightness, unpremultiplied and then thresholded** (K-603).
+            // **Brightness, unpremultiplied and then thresholded**.
             // The picture is premultiplied, so a half-covered white pixel
             // carries half the light of a covered one and would read as grey —
             // the honest reading of "how bright is what is *there*" divides the
@@ -724,7 +724,7 @@ fn pt_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> Vs
     out.head = head;
     out.tail = tail;
     // The host Mix, folded into the source's coverage. For a premultiplied
-    // `over` that is the dissolve exactly, so no second pass runs (K-425).
+    // `over` that is the dissolve exactly, so no second pass runs.
     out.colour = vec4<f32>(rg.x, rg.y, ba.x, ba.y) * dp.mix;
     out.geom = vec4<f32>(radius, edge, size, rot);
     return out;

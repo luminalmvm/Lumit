@@ -111,7 +111,7 @@ Future<void> main() async {
   project.importFootage(path: '$fixtures/Logo.png');
 
   // One item given a proxy, and set to use it, so the row wears the `proxy`
-  // badge beside `in use` (K-501) and the manual's picture of the panel shows
+  // badge beside `in use` and the manual's picture of the panel shows
   // both of the marks a row can carry. A second fixture stands in for the
   // smaller file somebody would really have made: what the badge is about is
   // that a substitute is attached and switched on, not what is inside it.

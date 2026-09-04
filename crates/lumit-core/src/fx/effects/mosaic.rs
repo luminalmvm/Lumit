@@ -7,7 +7,7 @@
 //! Two things are worth knowing. **Every block boundary is worked out in whole
 //! numbers**, not by dividing a coordinate by a block width — a division that
 //! comes out exact lands a pixel in different blocks on the CPU and the GPU,
-//! which is K-399's rule about a threshold arriving on a *coordinate* (§3.65).
+//! which is the rule about a threshold arriving on a *coordinate* (§3.65).
 //! And **the averaged mode samples the block rather than reading all of it**: a
 //! true mean of a block would be thousands of taps redone by every pixel inside
 //! it, so at most an 8×8 stratified sample is taken, which for a flat block is

@@ -12,7 +12,7 @@
 //! composited, processed, and blended back by coverage.
 //!
 //! Because every caller drives this one walk, a comp looks the same in the
-//! viewport, in Flutter, and in the exported file (K-031).
+//! viewport, in Flutter, and in the exported file.
 
 use crate::draw::{AccumulationBelow, CompLayerDraw, DrawSource, LayerInputDraw};
 use crate::fxops::LoadedLut;
@@ -23,7 +23,7 @@ use crate::fxops::LoadedLut;
 /// one borrowed handle is what lets preview and export share a single re-render
 /// path (`render_below_at`, docs/impl/temporal-rerender.md): all of them drive
 /// the identical compositor, so a comp realises the same in the viewport and
-/// the file (K-031).
+/// the file.
 pub struct Realiser<'a> {
     /// Owned handle (a cheap Arc-backed clone via [`lumit_gpu::GpuContext::
     /// from_parts`]) so the realise code can keep passing `&self.ctx`; the
@@ -33,27 +33,27 @@ pub struct Realiser<'a> {
     pub compositor: &'a lumit_gpu::Compositor,
     pub fx: &'a lumit_gpu::fx::FxEngine,
     pub lut_cache: &'a std::cell::RefCell<crate::fxops::LutCache>,
-    /// The per-effect intermediate cache (K-421), held by the same owner as
+    /// The per-effect intermediate cache, held by the same owner as
     /// the LUT cache and for the same reason: it outlives a frame. Every
     /// layer's stack reads from it; only committed renders add to it (see
     /// [`crate::fxops::FxCache::keep_outputs`]).
     pub fx_cache: &'a std::cell::RefCell<crate::fxops::FxCache>,
-    /// The preview render scale (the K-185 follow-up): every composite this
+    /// The preview render scale: every composite this
     /// walk performs allocates its target at [`lumit_gpu::scaled_size`] of the
     /// comp dims while all geometry stays in logical comp pixels. A field
     /// rather than a parameter so the nested/below/adjustment recursions
     /// inherit it with no signature ripple. Export always builds with 1.0, so
-    /// the K-031 preview == export identity is untouched at full scale.
+    /// the preview == export identity is untouched at full scale.
     pub render_scale: f32,
-    /// The project's anti-aliasing sample count (K-274,
-    /// docs/impl/anti-aliasing.md): how many coverage samples per pixel the
-    /// composite is drawn with. 1 is the picture Lumit made before the setting
-    /// existed. A field beside [`Self::render_scale`], for the same reason —
-    /// the nested, below and adjustment recursions inherit it with no signature
-    /// ripple — but **not** like it in one way that matters: `render_scale`
-    /// differs between preview and export by design, and this must not. Both
-    /// paths read the same project field, which is what keeps the K-031
-    /// preview-equals-export identity true with anti-aliasing on.
+    /// The project's anti-aliasing sample count (docs/impl/anti-aliasing.md):
+    /// how many coverage samples per pixel the composite is drawn with. 1 is
+    /// the picture Lumit made before the setting existed. A field beside
+    /// [`Self::render_scale`], for the same reason — the nested, below and
+    /// adjustment recursions inherit it with no signature ripple — but **not**
+    /// like it in one way that matters: `render_scale` differs between preview
+    /// and export by design, and this must not. Both paths read the same
+    /// project field, which is what keeps the preview-equals-export identity
+    /// true with anti-aliasing on.
     ///
     /// Already run through [`lumit_gpu::supported_sample_count`] by whoever
     /// built the realiser: by the time it is here it is a count this adapter
@@ -78,7 +78,7 @@ pub struct Realiser<'a> {
     /// anybody's camera, so it has no colour space to be interpreted through and
     /// takes the built-in path deliberately.
     pub colour_inputs: Option<&'a crate::colour::InputTransforms>,
-    /// The flow backend a composite measurement runs on (docs/08 §3.2, K-565),
+    /// The flow backend a composite measurement runs on (docs/08 §3.2),
     /// held by the render's owner beside the caches above and for the same
     /// reason: the solver's plan is worth keeping between frames. `None` — a
     /// caller that never asks for one, and every builder in the tests that has
@@ -88,9 +88,9 @@ pub struct Realiser<'a> {
     pub flow: Option<&'a std::cell::RefCell<CompositeFlow>>,
 }
 
-/// The flow backend for measuring a **composite's** motion (docs/08 §3.2,
-/// K-565), built on the render's own device the first time a layer actually
-/// asks for one.
+/// The flow backend for measuring a **composite's** motion (docs/08 §3.2),
+/// built on the render's own device the first time a layer actually asks for
+/// one.
 ///
 /// # In plain terms
 ///
@@ -142,7 +142,7 @@ impl Realiser<'_> {
                 // holds a frame's commands back to the end, and a fence over an
                 // empty queue would time nothing — so a *measured* frame gives
                 // up the batching, layer by layer, which is the cost the
-                // stopwatch already declares (docs/13 §7.1, K-276: measuring
+                // stopwatch already declares (docs/13 §7.1: measuring
                 // waits for the card at each layer, which is why it is opt-in
                 // and never runs during playback).
                 self.ctx.flush();
@@ -167,7 +167,7 @@ impl Realiser<'_> {
     }
 
     /// Read a layer's `lens_file` paths into (content hash, text) slots,
-    /// 1:1 with the stack's `lens_flare` ops (K-264). A `None`
+    /// 1:1 with the stack's `lens_flare` ops. A `None`
     /// slot (unset, missing on disk, unreadable) degrades to the picked
     /// library lens inside the bake — a labelled fallback, never a fault.
     /// No cache, deliberately: a .lens file is about a kilobyte, the read
@@ -190,7 +190,7 @@ impl Realiser<'_> {
     /// Turn a layer's ordered `lut_files` into the parallel `luts` list
     /// `run_ops` binds (docs/08 §3.11): each `Some(path)` is parsed and
     /// uploaded once — cached by path *and* last-modified time, bounded and
-    /// LRU-evicted (K-271, docs/impl/lut.md §4) — and a 1D or unreadable/absent
+    /// LRU-evicted (docs/impl/lut.md §4) — and a 1D or unreadable/absent
     /// file yields a `None` slot (a labelled no-op, never a fault). The output
     /// is 1:1 and in order with `files`, so the k-th slot lines up with the
     /// k-th `lut` op.
@@ -209,9 +209,9 @@ impl Realiser<'_> {
     /// working raster `(w, h)` through the shared
     /// [`crate::fxops::render_layer_input`], so the parallel list handed to
     /// `run_ops` is 1:1 with the stack's ops and aligned with the layer
-    /// texture the kernel reads. Export renders these identically (K-031).
+    /// texture the kernel reads. Export renders these identically.
     ///
-    /// [`LayerInputDraw::ThisLayer`] (K-288) renders nothing here: it names
+    /// [`LayerInputDraw::ThisLayer`] renders nothing here: it names
     /// the texture `run_ops` is already carrying, which only `run_ops` can
     /// hand over, so it passes through as [`LayerInput::ThisLayer`].
     fn render_layer_inputs(
@@ -230,7 +230,7 @@ impl Realiser<'_> {
                     LayerInputDraw::Layer(d) => d,
                 };
                 // A Precomp input realises its nested comp exactly as a
-                // Precomp layer's picture does (K-266); anything else is
+                // Precomp layer's picture does; anything else is
                 // the uploaded source pixels.
                 let linear = if let Some(n) = &d.nested {
                     self.realise_nested(n.key, n.camera, n.width, n.height, n.background, &n.draws)
@@ -238,7 +238,7 @@ impl Realiser<'_> {
                     let src = self
                         .engine
                         .upload_srgb8(&self.ctx, &d.rgba, d.tex_w, d.tex_h);
-                    // Through the referenced layer's own colour space (K-490):
+                    // Through the referenced layer's own colour space:
                     // a background plate is a picture like any other, and it is
                     // read as what it is rather than as what the layer reading
                     // it happens to be.
@@ -248,11 +248,11 @@ impl Realiser<'_> {
                         self.input_transform(&d.colour_space),
                     )
                 };
-                // Effects-and-masks depth (K-142): run the depth layer's own
+                // Effects-and-masks depth: run the depth layer's own
                 // stack on its texture before it is resampled, when the consumer's
                 // depth source is Effects and masks (`d.fx` non-empty). Temporal
                 // inputs stay empty in v1 (same boundary as the matte). Export
-                // does the same, so the two depth passes match (K-031).
+                // does the same, so the two depth passes match.
                 let linear = if d.fx.is_empty() {
                     linear
                 } else {
@@ -271,7 +271,7 @@ impl Realiser<'_> {
                         &[],
                         &[],
                         // No mask paths through a referenced layer's own stack
-                        // (K-408) — the same v1 boundary its mattes take.
+                        // — the same v1 boundary its mattes take.
                         &[],
                         // And no birth schedules: a Particulate inside a
                         // referenced layer's own stack takes the same v1
@@ -282,12 +282,12 @@ impl Realiser<'_> {
                         // it, not a row of its own: its cost is inside that
                         // layer's span already.
                         None,
-                        // Nothing names a referenced layer's picture in v1
-                        // (K-421), so its stack runs uncached.
+                        // Nothing names a referenced layer's picture in v1,
+                        // so its stack runs uncached.
                         None,
                     )
                 };
-                // Same boundary as the matte's (K-542): the referenced layer
+                // Same boundary as the matte's: the referenced layer
                 // is placed by `d.tex_w × d.tex_h` just below, so its own stack
                 // is cropped back to that raster rather than growing it.
                 let linear = lumit_gpu::fx::fit_centred(&self.ctx, linear, d.tex_w, d.tex_h);
@@ -320,7 +320,7 @@ impl Realiser<'_> {
         self.realise_region(camera, width, height, background, layers, None)
     }
 
-    /// A nested comp's picture (K-422): the texture held under its frame key
+    /// A nested comp's picture: the texture held under its frame key
     /// when there is one, else [`Self::realise`] and — on a committed render —
     /// file it. The three places a Precomp is realised (a layer, a matte, a
     /// layer input) all come through here, so "the same nested comp used in
@@ -353,8 +353,7 @@ impl Realiser<'_> {
         made
     }
 
-    /// Stamp a Precomp layer's paint strokes into its realised picture
-    /// (K-547).
+    /// Stamp a Precomp layer's paint strokes into its realised picture.
     ///
     /// Every other kind of layer is painted on the CPU, in the layer's own
     /// 8-bit sRGB raster, before it is uploaded — a Precomp has no such
@@ -398,7 +397,7 @@ impl Realiser<'_> {
     }
 
     /// As [`Self::realise`], but compositing only `region` of the composition
-    /// — the Viewer's region of interest (K-362). The returned texture is the
+    /// — the Viewer's region of interest. The returned texture is the
     /// region's size, not the comp's, and every layer lands where it would
     /// have, simply windowed.
     ///
@@ -475,7 +474,7 @@ impl Realiser<'_> {
             // layer are a later refinement, so no neighbours here. Its LUT and
             // depth-of-field effects still apply (§3.11, §3.22): load/render
             // them the same way the per-layer path does, so preview stays
-            // identical to export (K-031). The adjustment stack runs on the
+            // identical to export. The adjustment stack runs on the
             // comp-sized composite, so its depth inputs resample to comp size.
             let luts = self.load_luts(&l.lut_files);
             let layer_inputs = self.render_layer_inputs(&l.dof_inputs, tw, th);
@@ -485,7 +484,7 @@ impl Realiser<'_> {
             // target may be smaller (reduced-resolution preview), and every
             // px-dimensioned parameter must shrink with it or the flare's
             // light (and every aperture and radius) lands past where the
-            // user put it (K-266).
+            // user put it.
             let fx_ops = match l.fx_ref_width {
                 Some(ref_w) if ref_w > 0.0 => {
                     let mut ops = l.fx.clone();
@@ -498,7 +497,7 @@ impl Realiser<'_> {
             // adjustment's own effects run on is the below-stack held at the
             // posterised time, not the plain below-composite. The held draws and
             // camera were built by the shared `below_draws_at` (identical to the
-            // texture export's `render_below_at` produces, K-031); the coverage
+            // texture export's `render_below_at` produces); the coverage
             // blend below still lays the result over the live below-at-t, so a
             // mask reveals the held region. None on an ordinary adjustment.
             // Accumulation motion blur (docs/08 §3.26) takes precedence: it
@@ -516,7 +515,7 @@ impl Realiser<'_> {
             } else {
                 below.clone()
             };
-            // **The motion of the composite below** (docs/08 §3.2, K-565). An
+            // **The motion of the composite below** (docs/08 §3.2). An
             // adjustment layer has no decoded frames, so its Fast motion blur
             // and Datamosh used to bind nothing and pass through — on exactly
             // the layer §3.2 calls the commonest place to put the effect. The
@@ -544,10 +543,10 @@ impl Realiser<'_> {
                 &l.mask_paths,
                 &l.points_schedules,
                 fx_ms.as_mut(),
-                // The composite below carries no name in v1 (K-421).
+                // The composite below carries no name in v1.
                 None,
             );
-            // An adjustment layer's stack cannot grow the raster (K-542): what
+            // An adjustment layer's stack cannot grow the raster: what
             // follows blends it against the composite beneath it, texel for
             // texel, and there is no "beneath" outside the comp to grow into.
             // A Tile above 100 % output on an adjustment layer therefore reads
@@ -584,8 +583,8 @@ impl Realiser<'_> {
     /// the frame-time below-composite `below` by `mix` (a linear interpolation
     /// the additive blend gives exactly). The result stands in for the
     /// below-composite the adjustment's own effects and coverage blend see. A
-    /// still scene averages back to `below` bit-for-bit (the K-031 identity); a
-    /// moving one smears. Export runs the identical combine, so the two agree.
+    /// still scene averages back to `below` bit-for-bit; a moving one smears.
+    /// Export runs the identical combine, so the two agree.
     fn accumulate_below(
         &self,
         width: u32,
@@ -606,10 +605,10 @@ impl Realiser<'_> {
         // The sub-frames and `below` are all at the ACTUAL raster size; the
         // combine is a full-frame identity pass, so it runs at that size too.
         let (tw, th) = lumit_gpu::scaled_size(width, height, self.render_scale);
-        // **The Matte scales Shutter angle per pixel** (K-429). With none bound
+        // **The Matte scales Shutter angle per pixel**. With none bound
         // — the default, and every project saved before this — the equal-weight
-        // hardware pass below runs exactly as it always did, byte for byte
-        // (K-258). With one, each pixel's weights come from how far open its
+        // hardware pass below runs exactly as it always did, byte for byte.
+        // With one, each pixel's weights come from how far open its
         // own shutter is, and the average is taken over a shorter slice of the
         // same N moments, shrunk toward the frame's own instant.
         let matte = self
@@ -618,7 +617,7 @@ impl Realiser<'_> {
             .next()
             .and_then(|slot| slot.texture(below).cloned());
         let average = if let Some(matte) = matte {
-            // Channel and Invert, once, before anything reads it (K-425). The
+            // Channel and Invert, once, before anything reads it. The
             // dispatch seam does this for every other effect; this one has no
             // dispatch, so it does it here.
             let matte =
@@ -656,7 +655,7 @@ impl Realiser<'_> {
         }
     }
 
-    /// **Motion measured between two composites** (docs/08 §3.2, K-565): the
+    /// **Motion measured between two composites** (docs/08 §3.2): the
     /// picture this layer's effects run on, and the same picture built again at
     /// each neighbour time ([`CompLayerDraw::flow_below`]).
     ///
@@ -664,7 +663,7 @@ impl Realiser<'_> {
     /// the same shape a footage layer's decoded neighbours and fields arrive in
     /// — so nothing downstream knows where they came from. Both halves matter:
     /// Fast motion blur reads only the field, Datamosh also drags the `-1`
-    /// picture along it, and K-544's contract that each consumer gets the
+    /// picture along it, and the contract that each consumer gets the
     /// measurement it asked for holds here because the builder emitted one
     /// entry per offset the stack wanted.
     ///
@@ -692,7 +691,7 @@ impl Realiser<'_> {
     }
 
     /// One measurement, entirely on the card: two pictures in, the `rgba32float`
-    /// field the kernels read out (docs/08 §3.2, K-565).
+    /// field the kernels read out (docs/08 §3.2).
     ///
     /// The flow engine's texture entry point converts each picture to the luma
     /// its pyramid starts from with one compute pass, so neither composite is
@@ -707,7 +706,7 @@ impl Realiser<'_> {
     /// ponytail: measured per realise, not cached across them. The decode
     /// worker's flow cache keys by *content* — the source item and the two
     /// frames — and a composite has no such name (`fx_input_key` is `None` for
-    /// exactly this reason, K-421), so filing one under the layer and the time
+    /// exactly this reason), so filing one under the layer and the time
     /// would go stale the moment somebody edited a layer below. Caching would
     /// also save the smaller half: the neighbour composite is a whole extra comp
     /// render and the flow is ~8 ms on top of it. So the ceiling is a doubled
@@ -717,8 +716,8 @@ impl Realiser<'_> {
     /// against the same effect over footage, where the decode worker's cache
     /// answers instead. If the composite path is the one missing B3's 50 ms
     /// while the footage path holds it, this is the whole of the difference.
-    /// The upgrade is to name the below-composite the way K-422 named a nested
-    /// comp's frame, and then both halves can be cached under the one name.
+    /// The upgrade is to name the below-composite the way a nested comp's
+    /// frame is named, and then both halves can be cached under the one name.
     fn measure_flow(&self, a: &wgpu::Texture, b: &wgpu::Texture) -> Option<wgpu::Texture> {
         let cell = self.flow?;
         // The solver reads these two pictures on an encoder of its own, and a
@@ -770,27 +769,27 @@ impl Realiser<'_> {
         cam_mat: Option<lumit_gpu::Mat4>,
         m: &crate::draw::MatteDraw,
     ) -> wgpu::Texture {
-        // A Precomp matte realises its nested comp exactly as a
-        // Precomp layer's picture does (K-268, the K-266 layer-input
-        // shape); anything else is the uploaded source pixels.
+        // A Precomp matte realises its nested comp exactly as a Precomp
+        // layer's picture does (the layer-input shape); anything else is the
+        // uploaded source pixels.
         let linear = if let Some(n) = &m.nested {
             self.realise_nested(n.key, n.camera, n.width, n.height, n.background, &n.draws)
         } else {
             let src = self
                 .engine
                 .upload_srgb8(&self.ctx, &m.rgba, m.tex_w, m.tex_h);
-            // Through the matte source's own colour space (K-490),
+            // Through the matte source's own colour space,
             // as its own picture would be: log footage read as
             // sRGB gates by the wrong shape, and a matte is
             // nothing but a shape.
             self.engine
                 .linearise_through(&self.ctx, &src, self.input_transform(&m.colour_space))
         };
-        // After-effects matte (K-142): run the matte source's own
+        // After-effects matte: run the matte source's own
         // stack on its texture before it gates the consumer, so a keyed
         // or blurred matte works. Temporal inputs stay empty in v1 — the
         // matte source's echo/flow degrades to a still (documented). The
-        // same run export performs, so the two agree (K-031).
+        // same run export performs, so the two agree.
         let linear = if m.fx.is_empty() {
             linear
         } else {
@@ -815,12 +814,12 @@ impl Realiser<'_> {
                 // A matte's own stack is part of the layer it
                 // gates, not a row of its own.
                 None,
-                // As above: unnamed in v1 (K-421), so uncached.
+                // As above: unnamed in v1, so uncached.
                 None,
             )
         };
         // A matte source's own stack cannot grow the raster
-        // either (K-542): it is placed by `m.natural_size` below,
+        // either: it is placed by `m.natural_size` below,
         // and a matte is a shape, not a picture that reaches
         // further. Cropped back to the size it was placed at.
         let linear = lumit_gpu::fx::fit_centred(&self.ctx, linear, m.tex_w, m.tex_h);
@@ -865,7 +864,7 @@ impl Realiser<'_> {
         let src = self.engine.upload_srgb8(&self.ctx, rgba, w, h);
         let linear = self.engine.linearise(&self.ctx, &src);
         let cam_mat = camera.map(|pose| crate::export::camera_mat(width, height, pose));
-        // **The adjustment layer's own Matte** (K-142). An adjustment has no
+        // **The adjustment layer's own Matte**. An adjustment has no
         // picture for a matte to gate — what it has is coverage, which is
         // exactly where the effect lands, so the matte multiplies into that.
         // The result reads the way it does on any other layer: the stack
@@ -932,7 +931,7 @@ impl Realiser<'_> {
     ) -> wgpu::Texture {
         let mut linear_textures: Vec<wgpu::Texture> = Vec::with_capacity(layers.len());
         // How much wider and taller each layer's finished picture is than the
-        // source it started from (K-542). `(1.0, 1.0)` for every layer whose
+        // source it started from. `(1.0, 1.0)` for every layer whose
         // stack holds no Tile above 100 % output, which is every layer until one
         // does — and multiplying a placement by 1.0 moves nothing, so the
         // composite below is byte for byte what it was.
@@ -987,7 +986,7 @@ impl Realiser<'_> {
                 }
             };
             // The raster the stack starts from, kept because one effect can
-            // grow it (K-542) and the composite must then place a picture wider
+            // grow it and the composite must then place a picture wider
             // than the layer it came from.
             let (source_w, source_h) = (tex.width(), tex.height());
             // The effect stack runs on the linear source, after masks and
@@ -998,7 +997,7 @@ impl Realiser<'_> {
                 let (w, h) = (tex.width(), tex.height());
                 // Neighbour source frames a temporal effect (echo) reads;
                 // empty for a plain stack, so this uploads nothing then.
-                // **A Precomp measures its own motion** (docs/08 §3.2, K-565).
+                // **A Precomp measures its own motion** (docs/08 §3.2).
                 // A comp has no decoded frames either, so a Fast motion blur or
                 // Datamosh on a Precomp layer bound nothing and passed through;
                 // the nested picture was built again at each neighbour time, and
@@ -1023,7 +1022,7 @@ impl Realiser<'_> {
                             })
                             .collect();
                         // The dense motion fields, one per offset a
-                        // flow-consuming effect asked for (K-544), each uploaded
+                        // flow-consuming effect asked for, each uploaded
                         // as its own texture (only when it matches the layer's
                         // raster). The confidence rides in the .z channel
                         // (FX-19).
@@ -1042,21 +1041,21 @@ impl Realiser<'_> {
                     }
                 };
                 // The parsed-and-uploaded `.cube` LUTs, 1:1 with the stack's
-                // `lut` ops (§3.11); the same load export uses (K-031).
+                // `lut` ops (§3.11); the same load export uses.
                 let luts = self.load_luts(&l.lut_files);
                 // The layer inputs — a depth pass, a Light wrap background —
                 // resampled to this layer's working raster (w, h), 1:1 with the
                 // stack's consuming ops (§3.22, §3.28); the same render export
-                // runs (K-031).
+                // runs.
                 let layer_inputs = self.render_layer_inputs(&l.dof_inputs, w, h);
                 let mattes = self.render_layer_inputs(&l.mattes, w, h);
                 let flare_lens = self.load_flare_lens(&l.flare_lens_files);
                 // A stack resolved against a raster wider than the one it is
                 // about to run on (a Precomp layer's, under reduced-resolution
                 // preview) has its px@comp parameters rescaled to this raster,
-                // the same correction the adjustment path applies (K-266,
-                // K-268). `None` — every other kind — resolved at its own
-                // decode scale already, so nothing moves.
+                // the same correction the adjustment path applies. `None` —
+                // every other kind — resolved at its own decode scale already,
+                // so nothing moves.
                 let fx_ops = match l.fx_ref_width {
                     Some(ref_w) if ref_w > 0.0 => {
                         let mut ops = l.fx.clone();
@@ -1066,7 +1065,7 @@ impl Realiser<'_> {
                     _ => l.fx.clone(),
                 };
                 // The propagated mattes, uploaded once each at the source's
-                // own raster (K-710). `fit_centred` inside the walk takes them
+                // own raster. `fit_centred` inside the walk takes them
                 // to the working raster, which is where every differently-sized
                 // input is fitted. Empty on every layer with no Roto brush,
                 // which costs nothing at all.
@@ -1092,12 +1091,12 @@ impl Realiser<'_> {
                     &l.points_schedules,
                     &roto_mattes,
                     fx_ms.as_mut(),
-                    // The per-effect cache (K-421), for a source the builder
+                    // The per-effect cache, for a source the builder
                     // could name; a nested comp, text or shape runs as before.
                     l.fx_input_key.map(|key| (self.fx_cache, key)),
                 )
             };
-            // The lighting pass (docs/06, K-361): shade the finished layer
+            // The lighting pass (docs/06): shade the finished layer
             // with the comp's Light layers, after its effects and before it is
             // placed. `l.lights` is empty unless the comp holds lights and
             // this layer accepts them, and empty means the pass never runs —
@@ -1115,10 +1114,10 @@ impl Realiser<'_> {
             linear_textures.push(tex);
         }
         let cam_mat = camera.map(|pose| crate::export::camera_mat(width, height, pose));
-        // Per-layer motion blur (docs/06 §4, K-120): a blurring layer's
+        // Per-layer motion blur (docs/06 §4): a blurring layer's
         // fx-processed texture is drawn at each sub-frame placement and
         // averaged into one comp-sized smear by the shared helper both preview
-        // and export call (K-031). The layer's real blend/opacity/matte/mask
+        // and export call. The layer's real blend/opacity/matte/mask
         // then apply once to the averaged image, at the 1:1 composite below.
         let mb_textures: Vec<Option<wgpu::Texture>> = linear_textures
             .iter()
@@ -1127,7 +1126,7 @@ impl Realiser<'_> {
             .map(|((tex, l), g)| {
                 (!l.mb.is_empty()).then(|| {
                     // A grown picture is placed by the grown transform at every
-                    // sub-frame too (K-542), or the smear would be of a layer
+                    // sub-frame too, or the smear would be of a layer
                     // in a different place from the one the composite draws.
                     let mb: Vec<lumit_gpu::MbSample> = if *g == (1.0, 1.0) {
                         Vec::new()
@@ -1159,13 +1158,13 @@ impl Realiser<'_> {
         // Layer-space mask textures (Precomp masks — GPU mask pass). No colour
         // space is applied to one and none ever will be: this raster is a
         // shape's coverage, drawn here from the mask's own geometry, not image
-        // content that arrived in somebody's colour space (K-490).
+        // content that arrived in somebody's colour space.
         let mask_textures: Vec<Option<wgpu::Texture>> = layers
             .iter()
             .zip(&grown)
             .map(|(l, g)| {
                 l.mask_cov.as_ref().map(|(rgba, w, h)| {
-                    // A grown picture (K-542) is placed over a wider quad, and
+                    // A grown picture is placed over a wider quad, and
                     // the mask is sampled across that quad — so a mask left at
                     // the layer's own size would stretch, and its edge would
                     // move. Grown into the same margin with nothing in it: the
@@ -1234,7 +1233,7 @@ impl Realiser<'_> {
                     },
                     None => lumit_gpu::CompositeLayer {
                         texture,
-                        // A picture its stack grew (K-542) covers more of layer
+                        // A picture its stack grew covers more of layer
                         // space than the layer's own rectangle, evenly on all
                         // four sides — so the quad is that much bigger and the
                         // anchor moves with it, which leaves every pixel of the
@@ -1275,7 +1274,7 @@ impl Realiser<'_> {
     }
 }
 
-/// The quad a grown picture needs (K-542, docs/08 §3.39).
+/// The quad a grown picture needs (docs/08 §3.39).
 ///
 /// **In plain terms.** Tile with Output width or height above 100 % hands back a
 /// picture wider than the layer it came from, grown evenly on all four sides.
@@ -1297,7 +1296,7 @@ fn grow_offset(natural: (f32, f32), grow: (f32, f32)) -> (f32, f32) {
     )
 }
 
-/// The lighting pass's parameters for one draw (docs/06, K-361), or `None`
+/// The lighting pass's parameters for one draw (docs/06), or `None`
 /// when nothing lights it — which is the common case and the reason a comp
 /// without Light layers pays nothing.
 ///
@@ -1355,7 +1354,7 @@ fn cross(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
     ]
 }
 
-/// Whether a region of interest can be applied to this draw list (K-362), or
+/// Whether a region of interest can be applied to this draw list, or
 /// whether the whole frame has to be composited and cropped instead.
 ///
 /// Two stagings are written against a comp-sized intermediate: an **adjustment
@@ -1371,7 +1370,7 @@ fn region_is_safe(layers: &[CompLayerDraw]) -> bool {
         .any(|l| matches!(l.source, DrawSource::Adjust) || !l.mb.is_empty())
 }
 
-/// One propagated matte on the card (K-710): a gray8 plane at the source's own
+/// One propagated matte on the card: a gray8 plane at the source's own
 /// raster, uploaded as the working linear format so it goes through the same
 /// sampler every other auxiliary picture does.
 ///

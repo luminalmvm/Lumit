@@ -1,4 +1,4 @@
-//! VST3: the second standard, onto the road the first one built (K-707).
+//! VST3: the second standard, onto the road the first one built.
 //!
 //! # In plain terms
 //!
@@ -37,7 +37,7 @@
 //! vtables of exactly the shape Steinberg's own plain-C projection declares, and
 //! the same interface ids. **No SDK source is vendored and none is needed to
 //! build.** Lumit hosts under the VST3 SDK's GPLv3 branch, which is the whole
-//! reason VST3 is hostable here at all (docs/impl/audio-plugins.md §1, K-707).
+//! reason VST3 is hostable here at all (docs/impl/audio-plugins.md §1).
 //!
 //! # Thread role and contract
 //!
@@ -584,7 +584,7 @@ impl Vst3Instance {
     ///
     /// The flags are translated rather than carried, so that
     /// [`ParamDescription::row_worthy`] asks one question of both standards and
-    /// the schema is minted by one piece of code (K-692).
+    /// the schema is minted by one piece of code.
     #[must_use]
     pub fn params(&self) -> Vec<ParamDescription> {
         let Some(controller) = self.controller.as_ref() else {

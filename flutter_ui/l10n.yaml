@@ -1,8 +1,8 @@
 # How lib/l10n/*.arb becomes Dart. Flutter's own generator runs this on
 # `flutter pub get` and on every build, because pubspec.yaml sets `generate: true`.
 #
-# The source of truth is app_en.arb, in British English (K-005). Every other
-# file in lib/l10n/ is written by the translation ingest tool (K-653) and is
+# The source of truth is app_en.arb, in British English. Every other
+# file in lib/l10n/ is written by the translation ingest tool and is
 # never hand-edited — a fix to a translation goes through the site's translation
 # page, not through this folder.
 arb-dir: lib/l10n

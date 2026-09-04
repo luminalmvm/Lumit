@@ -1,9 +1,8 @@
-# Roto brush and Refine edge: flow-propagated segmentation (K-705)
+# Roto brush and Refine edge: flow-propagated segmentation
 
-**Built: RB1 (K-708, `crates/lumit-roto`), RB2 (K-710, K-713, K-714) and RB3 (K-717;
-first-touch behaviour reworked by K-723).**
+**Built: RB1 (`crates/lumit-roto`), RB2 and RB3.**
 [07-UI-SPEC.md](../07-UI-SPEC.md) §1 puts the Roto pair on the
-tool strip (Alt+W, armed since K-717) and §2.3.7 the tools themselves; [16-ROADMAP.md](../16-ROADMAP.md) Phase 5 lists
+tool strip (Alt+W, armed since RB3) and §2.3.7 the tools themselves; [16-ROADMAP.md](../16-ROADMAP.md) Phase 5 lists
 rotoscoping; this note is the binding *how*: the algorithms (pinned, with their ceilings
 named), the stroke model, the propagation and correction loop, the sidecar cache and its
 invalidation rules, determinism, budgets, refusals, the test plan, and the ordered work
@@ -39,7 +38,7 @@ So v1 is the classical machine, stated plainly: **stroke-seeded geodesic segment
 propagated frame-to-frame by the in-tree optical flow, with per-frame corrections layered
 on, and a guided-filter matting band at the boundary.** On well-separated subjects —
 a player model against sky, a talking head against a wall, the high-contrast game footage
-this project exists for (K-002) — it does the job with a handful of strokes. On hair
+this project exists for — it does the job with a handful of strokes. On hair
 against similar tones it needs more correction strokes than AE 2024 does, and the note says
 so rather than promising otherwise. The neural upgrade is §9, recorded as growth with a
 defined seam, exactly as `rife` is for flow.
@@ -55,9 +54,9 @@ Two kinds of state, and keeping them apart is the whole design:
   strokes are ([paint.md](paint.md): samples of a gesture, not a designed shape, thinned at
   two screen pixels), with `kind` one of `Foreground`, `Background`, `Refine`, and `frame`
   the **source frame index** it was drawn on. Points are in **source raster pixels** on
-  the full, unaltered footage — the K-248 stance, for the same reason the tracker takes
-  it: the matte describes the *file's* frames, so it survives every comp-side transform,
-  retime and preview tier, and one shot's mattes serve every comp that cuts it.
+  the full, unaltered footage, the stance the tracker takes for the same reason: the
+  matte describes the *file's* frames, so it survives every comp-side transform, retime
+  and preview tier, and one shot's mattes serve every comp that cuts it.
 - **Mattes** are derived data, cached in the sidecar (§5) like camera solves — one gray8
   plane per source frame, at source raster. The project file never references them
   (docs/10 §3's binding rule); deleting the sidecar costs a re-propagation and nothing
@@ -226,14 +225,13 @@ which would be a wrong answer wearing a right one's face.
 
 1. Pick the Roto brush (Alt+W), on a layer with footage. Stroke the subject on a clear
    frame; that frame becomes the base — **and if the layer carries no Roto brush yet, the
-   stroke brings one with it**, the two landing as one op and one undo step (K-723,
-   superseding K-717's refusal). The matte appears on that frame on release: the commit
-   fires the propagation job stopped at the scribbled frame (`RotoJob::stop_after`), the
-   card shows the solving status while the second or so passes, and the solo run is filed
-   in the ordinary sidecar so nothing is ever solved twice. A base-only solo never opens
-   the flow engine, so this first feedback works even where a full propagation would
-   refuse `FlowUnavailable`.
-2. Press **Propagate** (a `ParamKind::Action`, the machinery K-417 built). A background
+   stroke brings one with it**, the two landing as one op and one undo step. The matte
+   appears on that frame on release: the commit fires the propagation job stopped at the
+   scribbled frame (`RotoJob::stop_after`), the card shows the solving status while the
+   second or so passes, and the solo run is filed in the ordinary sidecar so nothing is
+   ever solved twice. A base-only solo never opens the flow engine, so this first feedback
+   works even where a full propagation would refuse `FlowUnavailable`.
+2. Press **Propagate** (a `ParamKind::Action`, existing machinery). A background
    job — one at a time, `Busy` refusal, progress as a polled value, the whole §5b thread
    discipline — walks outward from the base, filing mattes. The timeline's span reading
    updates as it goes; the user can keep working.
@@ -241,11 +239,11 @@ which would be a wrong answer wearing a right one's face.
    re-solves **that frame** at once (the same stop-after job, everything between the base
    and it copied from the cache), so the correction is judged on the spot; pressing
    Propagate carries it onward, prefix reused. The frames the correction invalidated
-   leave the span honestly until then — passthrough, never a stale matte (K-723).
+   leave the span honestly until then — passthrough, never a stale matte.
 4. **Refine edge** (the tool the strip already pairs with the brush) paints the band
    wider where the edge needs more room; the Radius and band parameters cover the
    ordinary case without any refine stroke at all.
-5. **Cancel finalises rather than discards** (the K-540 pattern): the frames already
+5. **Cancel finalises rather than discards** (the tracker's pattern): the frames already
    solved are correct and correctly keyed, so they are kept and the span says how far it
    got; a later Propagate resumes from the cache.
 
@@ -263,7 +261,7 @@ because it sits inside the frame walk. If the CPU halves blow the budget the upg
 is WGSL ports — both algorithms are fixed-count pass pyramids shaped exactly like the
 flow kernels — not an algorithm change.
 
-**Measured, and the CPU halves did blow it (K-714).** RB2's `--ignored` test reports **895 ms
+**Measured, and the CPU halves did blow it.** RB2's `--ignored` test reports **895 ms
 a frame at 1080p**, fifteen times the target above. The flow estimate holds; the two CPU
 estimates do not, by more than an order of magnitude — fifty million geodesic relaxations is
 not 25 ms of real arithmetic, the guided filter runs several box passes over six planes rather
@@ -351,7 +349,7 @@ fixture philosophy — so every claim is an assertion, not a look:
 
 ## 11. Ordered work packages
 
-**RB1 — the engine crate. Built (K-708).** `crates/lumit-roto`: `RotoStroke`, seed stamping, the §2 GDT
+**RB1 — the engine crate. Built.** `crates/lumit-roto`: `RotoStroke`, seed stamping, the §2 GDT
 solve, the §4 guided filter, the §3 warp-and-seed derivation taking flow, validity and
 confidence as plain slices — **no `lumit-flow` dependency** (it pulls wgpu; the tracker's
 §1 stance, for the same reason). Pure CPU, deterministic, no panics. Tests 1–5 of §10 in
@@ -363,14 +361,14 @@ propagation job, `RotoStore` and warm/clear in `lumit-render` (the §5b thread d
 cancel-finalises), flow via `FlowEngine`, the `roto/` tier with docs/10 §3's section, the
 frame-key stamp, the matte applied in `build.rs`; the bridge surface (strokes down,
 Propagate/Cancel actions, span and progress up) with its docs/17 section. Engine labels
-into `engine_labels.dart` + arb, GUIDE.md's plain-English section, tests 3–8.
+into `engine_labels.dart` + arb, tests 3–8.
 
-**RB3 — the tools, the overlay and the panel. Built (K-717).** `tool.roto` armed
-(`ToolMode.ready` — the strip, flyout and Alt+W chord all wake together, K-228's gate); the
+**RB3 — the tools, the overlay and the panel. Built.** `tool.roto` armed
+(`ToolMode.ready` — the strip, flyout and Alt+W chord all wake together); the
 brush and refine-edge gestures on the viewer writing source-pixel strokes through the
 comp→layer chain, `Alt` claiming background, samples thinned at paint's two screen pixels and
 pressures ignored; the overlay (this frame's strokes in theme colours, and the Boundary view's
-matte edge); the effect card's K-540 span bar, status line and base-frame row; arb keys.
+matte edge); the effect card's span bar, status line and base-frame row; arb keys.
 **Two bridge calls were owed and landed with it**, because the frontend could answer neither:
 `roto_source_frame` (the decode planner's own comp→source frame arithmetic — a Retime is a
 property curve) and `roto_boundary` (the matte's outline, thinned to a fixed cap; the matte
@@ -383,7 +381,7 @@ itself still never crosses). §10 item 9's Flutter halves are in
   side of every motion boundary the flow blurred; the 2 px erosion plus the confidence
   floor is load-bearing, not tidiness.
 - **Holding the nearest matte outside the span** looks helpful and ships wrong pictures;
-  passthrough plus an honest span reading is the K-540 lesson re-applied.
+  passthrough plus an honest span reading is the tracker's lesson re-applied.
 - **A convergence test in the GDT** trades determinism for nothing — three pass pairs is
   already conservative for seeds this dense; fixed counts everywhere.
 - **Running the guided filter's output everywhere** greys solid interiors wherever the

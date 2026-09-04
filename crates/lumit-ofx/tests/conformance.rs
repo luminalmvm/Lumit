@@ -22,7 +22,7 @@
 //!   finite, and not mostly transparent. A NaN in a plugin's output is the
 //!   host's problem the moment it reaches a composite; a frame that is mostly
 //!   alpha nought from an opaque fixture is one the plugin never wrote, and a
-//!   blank viewer with no error is exactly what that ships as (K-756).
+//!   blank viewer with no error is exactly what that ships as.
 //! * **A rejection is not a failure.** This host is fp32 RGBA, full-frame, no
 //!   tiles, two contexts. A plugin that legitimately cannot work in it is
 //!   *rejected at describe* with a reason, and the reason is a row in the table
@@ -242,7 +242,7 @@ fn drive(
     // The fixture is opaque everywhere. A plugin that hands back a picture
     // mostly without alpha did not write most of it: ntsc-rs handed a negative
     // stride wrote past the block and left the rest as the zeros it was
-    // allocated with, which the checks above call a picture (K-756).
+    // allocated with, which the checks above call a picture.
     let pixels = width * height;
     let without_alpha = frame
         .pixels()
@@ -424,9 +424,9 @@ fn the_bench_describes_instances_and_renders_with_no_refused_suite_call() {
     // a host still missing features it needs is measured and printed, not
     // asserted: today the biggest shortfall is that openfx-misc writes
     // parameter values during `kOfxActionCreateInstance` and this host cannot
-    // accept a write (docs/impl/ofx-host.md §5, K-595), and a suite that went
+    // accept a write (docs/impl/ofx-host.md §5), and a suite that went
     // red for a feature nobody has built yet would block everything else
-    // (K-007) while proving nothing. `LUMIT_OFX_BENCH_STRICT` turns the third
+    // while proving nothing. `LUMIT_OFX_BENCH_STRICT` turns the third
     // column into an assertion, and it is set the day the host can carry it.
     assert_eq!(
         bad_handle, 0,

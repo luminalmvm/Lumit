@@ -1,5 +1,5 @@
-// The Viewer's **rulers** and the **guides** dragged out of them (K-689,
-// docs/07 §2.2 item 6).
+// The Viewer's **rulers** and the **guides** dragged out of them (docs/07 §2.2
+// item 6).
 //
 // **In plain terms.** Two strips along the top and left edges of the picture,
 // counting the composition's own pixels — so a 1920×1080 comp reads 0 to 1920
@@ -10,8 +10,8 @@
 //
 // Everything here is **display only**. A guide is not in the composition, no
 // export has ever seen one, and none of it crosses the bridge; guides ride the
-// per-project session beside the overlay switches (K-689), so a comp opens with
-// the lines it was left with and Ctrl+Z never undoes one.
+// per-project session beside the overlay switches, so a comp opens with the
+// lines it was left with and Ctrl+Z never undoes one.
 //
 // **Where the numbers live.** A guide's position is kept in **comp pixels** —
 // the units the rulers count and the units a layer's Position is measured in —
@@ -410,8 +410,8 @@ class ViewerRulerPainter extends CustomPainter {
       ..color = line
       ..strokeWidth = 1;
     // Only the part of the comp the panel can actually show, which is what
-    // keeps a ruler at 800 % the same cost as one at 25 % (K-230's rule for
-    // the transparency board, and the same arithmetic).
+    // keeps a ruler at 800 % the same cost as one at 25 %. That is the
+    // transparency board's rule, and the same arithmetic.
     final start = viewerGuideComp(viewerRulerBand,
         vertical: vertical, picture: picture, compSize: compSize);
     final end = viewerGuideComp(vertical ? size.width : size.height,

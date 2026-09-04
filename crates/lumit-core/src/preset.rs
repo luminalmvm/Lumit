@@ -1,4 +1,4 @@
-//! Effect presets (docs/07-UI-SPEC.md §6/§7, K-065): save a layer's whole
+//! Effect presets (docs/07-UI-SPEC.md §6/§7): save a layer's whole
 //! effect stack to a file and load it onto another layer.
 //!
 //! In plain terms: an effect preset is just the list of effects on a layer,
@@ -57,7 +57,7 @@ pub fn instantiated(preset: &EffectPreset) -> Vec<EffectInstance> {
 }
 
 /// The earliest keyframe time across `effects`, in **layer-local** seconds, or
-/// `None` when nothing in them is animated (K-275).
+/// `None` when nothing in them is animated.
 ///
 /// Copying an effect and pasting it somewhere else is copying a piece of
 /// *timing* as much as a look, so the paste has to know where that timing
@@ -78,7 +78,7 @@ pub fn first_key_time(effects: &[EffectInstance]) -> Option<crate::time::Rationa
     earliest
 }
 
-/// Shift every keyframe in `effects` by `delta` layer-local seconds (K-275).
+/// Shift every keyframe in `effects` by `delta` layer-local seconds.
 ///
 /// A key whose time cannot be moved without overflowing is left where it is
 /// rather than wrapping — an engine crate does not panic, and a paste that
@@ -122,9 +122,9 @@ fn for_each_property(effects: &[EffectInstance], visit: &mut impl FnMut(&crate::
                 // seed, a layer reference, a mask-path reference and a tone
                 // curve are all static in v1 (docs/03 §8). A mask path's
                 // *shape* animates, but it animates on the mask, not here —
-                // this value is only which mask (K-408); a curve's shape is
+                // this value is only which mask; a curve's shape is
                 // right here and still does not animate, because a list that
-                // grows has nothing to interpolate (K-412).
+                // grows has nothing to interpolate.
                 crate::model::EffectValue::Bool(_)
                 | crate::model::EffectValue::Choice(_)
                 | crate::model::EffectValue::Seed(_)
@@ -230,7 +230,7 @@ pub fn load_instantiated(path: &std::path::Path) -> Option<Vec<EffectInstance>> 
 }
 
 /// The effects a "Save stack as preset" writes, given the current selection
-/// (docs/07-UI-SPEC.md §6/§7, K-156). Pure so it can be tested without egui.
+/// (docs/07-UI-SPEC.md §6/§7). Pure so it can be tested without egui.
 ///
 /// - `effects` is the layer's whole effect stack.
 /// - `selected_effects` are the stack indices whose parameter rows are
@@ -304,7 +304,7 @@ pub fn selection_subset(
     out
 }
 
-// --- Node groups (K-651) --------------------------------------------------
+// --- Node groups ----------------------------------------------------------
 //
 // **In plain terms.** A group preset is to the Graph panel what an effect
 // preset is to the effect stack: pick a few boxes, give the set a name, and it
@@ -321,7 +321,7 @@ pub fn selection_subset(
 pub struct GroupPreset {
     pub format: u32,
     pub name: String,
-    /// Which chip of the label palette the group wears (K-188's set, indexed).
+    /// Which chip of the label palette the group wears, as an index.
     #[serde(default)]
     pub colour: u32,
     /// The driver instances, in the order the graph carried them.

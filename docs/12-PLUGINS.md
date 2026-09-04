@@ -4,9 +4,8 @@
 the placeholder plumbing that lets unknown OFX/LFX/expression data round-trip without loss:
 the `EffectNamespace` enum's `Ofx`/`Lfx`/`Placeholder` variants render as identity while
 preserving parameters and keyframes (shared with [11-AE-IMPORT.md](11-AE-IMPORT.md) §6).
-This document specifies Lumit's extensibility surfaces: the OFX
-host (K-061), the LFX native plugin API (K-062), and the expression/scripting runtime
-(K-305, superseding K-063) — see [02-DECISIONS.md](02-DECISIONS.md). Terminology follows
+This document specifies Lumit's extensibility surfaces: the OFX host, the LFX native
+plugin API, and the expression/scripting runtime. Terminology follows
 [01-GLOSSARY.md](01-GLOSSARY.md) exactly. RFC-2119 keywords (MUST, SHOULD, MAY) are
 binding. Process/thread architecture context: [05-ARCHITECTURE.md](05-ARCHITECTURE.md) §7;
 effect placeholder behaviour is shared with [11-AE-IMPORT.md](11-AE-IMPORT.md) §6.
@@ -15,8 +14,8 @@ effect placeholder behaviour is shared with [11-AE-IMPORT.md](11-AE-IMPORT.md) �
 
 ## 1. Philosophy
 
-Plugins ship **after** the main application. Lumit's built-in effect suite (K-064) covers
-the montage staples in-box, so v1 does not depend on third parties. But per K-062, **every
+Plugins ship **after** the main application. Lumit's built-in effect suite covers
+the montage staples in-box, so v1 does not depend on third parties. But **every
 engine boundary is designed against these APIs from day one**: the evaluation graph's node
 interface, the property system, ROI/DoD metadata, temporal frame requests, and the
 thread-safety capability flag all exist in the first release because retrofitting them is
@@ -108,20 +107,20 @@ The main process runs a thin proxy node in the evaluation graph.
   macOS) is the later optimisation for GPU-rendering plugins, reusing the LFX transport
   (§3.5).
 - **Watchdog policy**: every plugin call carries a deadline (default 10 s for `render`,
-  2 s for control actions, except describe, which opens the module and so waits under the ten-second handshake ceiling (K-751); configurable per plugin in the quirks table). A missed deadline
+  2 s for control actions, except describe, which opens the module and so waits under the ten-second handshake ceiling; configurable per plugin in the quirks table). A missed deadline
   or a crashed process kills and restarts the server; the in-flight node renders as an
   errored placeholder for that frame. Three consecutive failures disable the plugin for the
   session with a calm notice — no modal, no red alarm. State is reconstructible because the
   host owns all parameters.
 - Plugins advertising thread-unsafe render serialise on their own server process without
   stalling the rest of the graph.
-- **Multi-frame scheduling (K-066)**: OFX plugins cannot be forced to be
+- **Multi-frame scheduling**: OFX plugins cannot be forced to be
   frame-parallel, so the host schedules from each plugin's declared
   `kOfxImageEffectPluginRenderThreadSafety`: *fully safe* → frames render in parallel
   across pooled instances (same adaptive-concurrency policy as LFX §3.4); *instance safe*
   → parallel across instances, serialised within one; *unsafe* → bundle-serialised. Depth:
   the host offers fp32 (all major OFX plugins accept it) and converts fp16 comps at the
-  boundary — the depth guarantee of K-066 is delivered by the host here, by the plugin in
+  boundary — the depth guarantee is delivered by the host here, by the plugin in
   LFX.
 
 ### 2.4 GPU rendering
@@ -129,7 +128,7 @@ The main process runs a thin proxy node in the evaluation graph.
 CPU float-RGBA rendering ships first — every major OFX plugin retains a CPU path. The OFX
 1.5 GPU render suites come later: CUDA and OpenCL (Windows), Metal (macOS). The host passes
 a command queue/stream and GPU-resident buffers; interop with wgpu goes through the same
-external-memory machinery as K-014's CUDA nodes. Vulkan is not in the OFX standard yet.
+external-memory machinery as the engine's CUDA nodes. Vulkan is not in the OFX standard yet.
 Which suites the target plugins actually require is an open question inherited from
 [05-ARCHITECTURE.md](05-ARCHITECTURE.md) and needs a plugin-by-plugin audit before the GPU
 milestone is scheduled.
@@ -152,7 +151,7 @@ Vendor relations: the OpenFX TSC includes the vendors that matter most to Lumit'
 audience; engage early so "Lumit" appears in vendors' supported-host lists and licence
 activation works. This is outreach, not engineering, but it gates real-world usability.
 
-**Some vendors gate on the host's name** (K-757). A plugin reads `kOfxPropName` and
+**Some vendors gate on the host's name.** A plugin reads `kOfxPropName` and
 answers `kOfxStatErrMissingHostFeature` to any host it was not tested against, however
 complete that host is: Red Giant Universe accepts DaVinci Resolve and Vegas and refuses
 Lumit, Natron and Nuke; HitFilm's Vegas-bundled edition accepts Vegas alone. The quirks
@@ -214,8 +213,8 @@ values are the only truth. This is the one OFX idea kept whole, minus the string
 
 - Frames are **scene-linear, premultiplied alpha, RGBA float** — the working space, no
   colour conversion at the boundary ([06-RENDER-PIPELINE.md](06-RENDER-PIPELINE.md)).
-- **Every colour depth is mandatory (K-066)**: a LFX plugin MUST process both fp16 and
-  fp32 frames correctly — the host sends whichever depth the project is set to (K-069) and never
+- **Every colour depth is mandatory**: a LFX plugin MUST process both fp16 and
+  fp32 frames correctly — the host sends whichever depth the project is set to and never
   converts to accommodate a plugin. A plugin MAY declare a preferred depth as a
   performance hint only. The validator (§3.6) runs the conformance suite at both depths.
 - **ROI-aware**: a process request carries the output ROI and DoD; the plugin declared its
@@ -240,7 +239,7 @@ Stated precisely, in the header comments, per function — the CLAP lesson:
 - Every callback in every extension is annotated with its allowed calling context; the
   validator (§3.6) enforces the annotations at test time.
 
-**Multi-frame rendering is mandatory (K-066).** The two rules above make it so: because
+**Multi-frame rendering is mandatory.** The two rules above make it so: because
 the host may run many instances concurrently, it renders **different frames in parallel by
 default** through a host-owned instance pool (one instance per in-flight frame, parameters
 applied per evaluation snapshot). Plugins therefore MUST NOT assume frames arrive in order,
@@ -286,7 +285,7 @@ ever adding one). Same server-process model, watchdog, and restart policy as OFX
 
 LFX effects appear in Effects & Presets identically to built-ins: same categories, same
 search, same apply gestures, same Effect Controls layout rules
-([07-UI-SPEC.md](07-UI-SPEC.md)), same preset save/load (K-065). No plugin ghetto.
+([07-UI-SPEC.md](07-UI-SPEC.md)), same preset save/load. No plugin ghetto.
 
 ---
 
@@ -294,17 +293,17 @@ search, same apply gestures, same Effect Controls layout rules
 
 ### 4.1 Engine
 
-**Rhai, embedded in `lumit-core` (K-305).** Rhai is a small scripting language written for
+**Rhai, embedded in `lumit-core`.** Rhai is a small scripting language written for
 embedding in Rust: it compiles in as a normal crate with no C dependency, no separate
 runtime to sandbox, and no marshalling layer — a Lumit `f64` is a Rhai `f64`. It has no
 filesystem, network, or process surface to remove, because it never had one.
 
-This **supersedes K-063**, which chose JavaScript on QuickJS-ng. That entry gave one
+This replaces the earlier choice of JavaScript on QuickJS-ng. That choice had one
 reason: QuickJS is a pure-software interpreter, so numbers are bit-identical on every
-machine. K-305 records why that no longer decides it — the same is already true of much of
-the engine, and emphatically of the GPU, where most of Lumit's arithmetic happens, so
-exactness in the evaluator alone does not buy exactness in the picture. See §4.3 for the
-promise that replaces it.
+machine. That no longer decides it — the same is already true of much of the engine,
+and emphatically of the GPU, where most of Lumit's arithmetic happens, so exactness in
+the evaluator alone does not buy exactness in the picture. See §4.3 for the promise that
+replaces it.
 
 **What that costs, stated plainly: Rhai is not JavaScript, so AE expressions do not run
 unmodified.** The earlier plan was for the community's copy-paste knowledge to transfer
@@ -336,7 +335,7 @@ each frame. Expressions read the property graph; they never write it.
 | Composition | `comp()` → `.name` |
 | Layer | `layer()`, `layer("name")` → `.name`, `.time`, `.x`, `.y`, `.rotation`, `.scale_x`, `.scale_y`, `.anchor_x`, `.anchor_y`, `.opacity` |
 | Property kinds | **scalars only** — Float parameters and the scalar transform properties |
-| Text | a text layer's line may be an expression, of any result type (K-306) |
+| Text | a text layer's line may be an expression, of any result type |
 
 `time` is comp time, matching AE. A layer's own clock is `layer().time`. A reference that
 does not resolve returns `-1.0` (or `"Invalid Layer Reference"`) rather than erroring,
@@ -372,7 +371,7 @@ filter can list every disabled expression.
 
 ### 4.3 Determinism rules
 
-**The promise is reproducibility, not bit-identity (K-305).** Binding:
+**The promise is reproducibility, not bit-identity.** Binding:
 
 - **Same project, same machine, same frames, every run.** This is what the frame cache key
   relies on and what the tests assert. Nothing in the evaluator may break it.
@@ -388,13 +387,13 @@ filter can list every disabled expression.
   allows and does not promise the last bit.** Rhai's `sin`/`cos` reach the platform's libm,
   which may differ in the final ulp. Someone moving a project between platforms should
   expect the same picture, not a byte-identical file. Distributed export across mixed
-  machines is the case that would reopen this, and it brings its own evidence (K-305).
+  machines is the case that would reopen this, and it brings its own evidence.
 - Do not introduce host-side fast paths that shortcut through `f32`.
 
 ### 4.4 Performance model
 
-Expressions evaluate per property per frame, on worker threads (never the UI thread,
-K-017) — and twice over, since the frame-cache key resolves them too.
+Expressions evaluate per property per frame, on worker threads (never the UI thread) —
+and twice over, since the frame-cache key resolves them too.
 
 - **Engines are pooled, not built per evaluation.** Building one costs ~370µs against ~1µs
   to run a typical expression, which is the difference between about forty driven
@@ -436,25 +435,25 @@ an expression's engine has no such functions registered at all.
 
 ---
 
-## 4a. Audio plugins: CLAP and VST3 (K-683)
+## 4a. Audio plugins: CLAP and VST3
 
 Lumit hosts **CLAP** (MIT, C ABI) and **VST3** (under its GPLv3 dual-licence branch)
 audio effect plugins; **VST2 is not hosted** (Steinberg stopped granting licences in
 2018 — no GPLv3-compatible road exists). CLAP ships first. Everything structural follows
 §1 and §2's discipline: out-of-process brokers per vendor module, parameters as
-first-class Lumit properties, opaque state blobs round-tripped under the K-040 schema,
+first-class Lumit properties, opaque state blobs round-tripped under the project schema,
 missing plugins as inert placeholders, a quirks table from day one.
 
 What is specific to audio: a plugin is an **insert on the layer, ahead of Volume and
 Pan** — an entry in the ordinary effect stack ("the stack is the rack": no separate FX
 panel), processed in fixed 512-frame blocks at the 48 kHz session rate. The blocks are
 counted from the layer's own first sample and the whole placed span is rendered on the
-background mix worker (K-700), so the realtime callback plays finished sound and never
+background mix worker, so the realtime callback plays finished sound and never
 waits on a plugin process, and a dying plugin costs one block (played dry, ramped), not
 the session. Latency is compensated by placement; export processes offline on the same
 block schedule and is the preview's own arithmetic rather than a second opinion. v1 hosts stereo effect plugins with
 parameters-only UI (derived rows); the plugin's own native editor window is a recorded
-follow-on, not a v1 promise. The surface (K-709): one **Audio plugins** group in the
+follow-on, not a v1 promise. The surface: one **Audio plugins** group in the
 browser with §2.6's provenance-and-switch-off menu, the layer's rack under an Audio
 heading in Effect controls as ordinary cards, the §2.3 calm badge fed by the mix bake,
 and a small chain chip on the Mixer strip.
@@ -467,7 +466,7 @@ mix seam, contracts, traps, test plans, and the work packages AP1–AP5.
 ## 5. Security model
 
 Plugins and expressions are **untrusted input**, including the ones the user installed on
-purpose — the threat model covers both malice and bugs, and shared project files (K-065)
+purpose — the threat model covers both malice and bugs, and shared project files
 mean effects and expressions arrive from strangers by design.
 
 Boundaries:
@@ -514,8 +513,8 @@ Boundaries:
   activation flows break under them — needs empirical testing with real licensed plugins.
 - **OFX Message suite UX**: plugin-raised dialogs and progress from an out-of-process
   server need a policy (marshal to the UI thread; do modal vendor dialogs get shown, calm
-  toast instead?). Decide with [07-UI-SPEC.md](07-UI-SPEC.md). **What ships until then**
-  (K-594): a plugin's message is a calm notice on the status strip and **never** modal — a
+  toast instead?). Decide with [07-UI-SPEC.md](07-UI-SPEC.md). **What ships until then**:
+  a plugin's message is a calm notice on the status strip and **never** modal — a
   vendor dialogue in the middle of playback is the worst available answer, and a plugin's
   *question* is already answered "you decide" at the suite, which is what OFX defines for a
   host that cannot ask. The question is what the finished shape should be, not what happens

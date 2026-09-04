@@ -38,7 +38,7 @@
     "ffmpeg-n8.1-latest-win64-gpl-shared-8.1.zip" asset) and extract it under
     %USERPROFILE%\ffmpeg\. Install LLVM 18 (winget install LLVM.LLVM --version 18.1.8):
     bindgen 0.71 mis-generates opaque structs against very new libclang, so pin 18.
-    See docs/GUIDE.md "Building on Windows" and docs/impl/phase-0-kickoff.md slice 4.
+    See docs/GUIDE.md "Build and run" and docs/impl/phase-0-kickoff.md slice 4.
 #>
 [CmdletBinding()]
 param(

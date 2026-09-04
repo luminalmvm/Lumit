@@ -1,11 +1,10 @@
 # Layer styles
 
-Decision: K-706. Status: **all three of §10's packages have landed** — the
-model, all nine declarations, the render seam, all seven v1 styles rendering on
-both paths with §2's order pinned in pixels, and the frontend and importer
-halves: the bridge's styles accessor and shared instance lookup, the Timeline's
-Styles group, the panel's Styles section, the Layer menu's seven rows, and the
-`.aep` map stage.
+Status: **all three of §10's packages have landed** — the model, all nine
+declarations, the render seam, all seven v1 styles rendering on both paths with
+§2's order pinned in pixels, and the frontend and importer halves: the bridge's
+styles accessor and shared instance lookup, the Timeline's Styles group, the
+panel's Styles section, the Layer menu's seven rows, and the `.aep` map stage.
 
 **In plain terms.** Photoshop lets you hang a wardrobe on a layer — a shadow
 behind it, a glow around it, a colour or gradient painted across its face, a
@@ -44,7 +43,7 @@ pub struct Layer {
   then a `Property` (keyframeable, expression-drivable, undo-covered) for free,
   and serialisation is the shape every tool already reads. Forward compatibility
   is the effect system's own: an unknown match name in a newer file loads,
-  reports, and renders as identity (K-258's degrade rule).
+  reports, and renders as identity (the degrade rule).
 - **Each style is a `#[derive(Effect)]` struct** in a new
   `lumit-core/src/fx/styles/` module, registered in its own `STYLE_DEFS` table
   beside `BUILTIN_DEFS` — *not* in the effect catalogue, so the Add-effect
@@ -98,7 +97,7 @@ inherit, not ours.
 **Where the two overlays' Opacity lives.** Colour overlay and Gradient overlay
 have no Opacity row of their own: their **Mix row is labelled "Opacity" and is
 it**. That is not a saving, it is the only place the number can sit and mean what
-Photoshop means. The K-425 seam applies Mix *after* the style's Blend mode —
+Photoshop means. The blend seam applies Mix *after* the style's Blend mode —
 "blend the overlay in, then take this much of the result" — whereas a separate
 opacity inside the kernel would fade the overlay *before* it was blended, which
 is a different picture on every mode but Normal. The styles that draw new pixels
@@ -160,7 +159,7 @@ declared mask-path row, a schedule for an op with a points port — and a style
 declares none of them. So the `mattes` / `dof_inputs` / `mask_paths` /
 `points_schedules` builders go on walking `layer.effects` alone, the style ops
 consume no slot, and because styles are appended *after* the effect stack no
-earlier index moves. (The K-395 injected Matte row is suppressed on style
+earlier index moves. (The injected Matte row is suppressed on style
 schemas: a style dresses the layer's own alpha; gating a shadow by another layer
 is an effect's job.) The rule that makes this safe is a test rather than a
 convention — `no_style_declares_a_row_the_render_would_have_to_fill`, in
@@ -351,7 +350,8 @@ wrong.
 
 Engine (lumit-core / lumit-render / lumit-gpu):
 - **Identity**: empty `styles` renders byte-identical to before the field
-  existed (K-258 regression, the field's serde default included).
+  existed (the forward-compatibility regression, the field's serde default
+  included).
 - **Order**: two styles enabled compose in §2's order — colour overlay over
   gradient overlay pinned by pixel test; drop shadow under outer glow.
 - **One instance per style / fixed position**: the add command's invariants,

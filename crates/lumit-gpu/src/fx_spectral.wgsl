@@ -1,5 +1,5 @@
-// The RGB split's Wavelength mode (docs/08-EFFECTS.md §3.6, K-090 quality
-// tier; chromatic aberration's own Wavelength mode, K-144): wavelength-based
+// The RGB split's Wavelength mode (docs/08-EFFECTS.md §3.6, the quality
+// tier; chromatic aberration's own Wavelength mode): wavelength-based
 // dispersion. Mirrors lumit_core::fx::cpu::spectral_split op-for-op (§1.6:
 // the CPU is the oracle): `count` spectral taps spread across ±offset, each
 // carrying its rgb weight (xyz) and its offset fraction in [-1, +1] (the w
@@ -20,7 +20,7 @@ struct Params {
     radial: u32,    // 1 = offsets grow from the frame centre
     count: u32,     // number of active taps (2..=64)
     mix_amt: f32,   // 0..1, blended against the unprocessed input
-    matte_on: f32,  // 1 = the matte scales Amount (K-427)
+    matte_on: f32,  // 1 = the matte scales Amount
     _pad1: f32,
 };
 
@@ -29,14 +29,14 @@ struct Params {
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
 
-// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// The Matte (docs/08 §2.6), bound for every kernel on this layout and
 // read only under `matte_on` — bound to `src` when there is none, since a
 // texture binding cannot be left empty.
 @group(0) @binding(4) var matte: texture_2d<f32>;
 
 // This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
 // luma, clamped. The Channel pick and Invert already happened, once, at the
-// seam (fx_matte_prepare.wgsl, K-425).
+// seam (fx_matte_prepare.wgsl).
 fn matte_k(xy: vec2<i32>) -> f32 {
     let m = textureLoad(matte, xy, 0);
     return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
@@ -81,7 +81,7 @@ fn spectral_split(@builtin(global_invocation_id) gid: vec3<u32>) {
         let k = p.amount / (0.5 * diag);
         off = vec2<f32>((pos.x - fsize.x * 0.5) * k, (pos.y - fsize.y * 0.5) * k);
     }
-    // The matte scales Amount per pixel (K-427, == cpu::spectral_split_matted).
+    // The matte scales Amount per pixel (== cpu::spectral_split_matted).
     if (p.matte_on != 0.0) {
         off = off * matte_k(xy);
     }

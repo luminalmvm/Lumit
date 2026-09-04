@@ -36,7 +36,7 @@ class LumitAppNew extends StatelessWidget {
   final LumitState state;
   final LumitUiState uiState;
 
-  /// Whether to open on the welcome screen (K-464). False when a project came
+  /// Whether to open on the welcome screen. False when a project came
   /// in on the command line: that is already the answer the screen asks for.
   final bool welcome;
 
@@ -96,7 +96,7 @@ class LumitAppNew extends StatelessWidget {
 }
 
 /// The boot splash, the welcome screen, and the shell behind them once both are
-/// done (K-008, K-464).
+/// done.
 ///
 /// **Each of the three is the window in turn**, never a card floating over a
 /// half-built application: the shell is not put in the tree until boot has
@@ -134,7 +134,7 @@ class _BootGateState extends State<BootGate> {
   /// Whether the welcome screen is the window right now. Both answers have to
   /// agree: a `.lum` on the command line stands the screen down for this launch
   /// ([BootGate.welcome]), and Settings ▸ General stands it down for every
-  /// launch (K-481). Read once, here, because the shell behind it is what the
+  /// launch. Read once, here, because the shell behind it is what the
   /// setting sends somebody to.
   late bool _welcoming;
 
@@ -198,7 +198,7 @@ class _LumitAppViewState extends State<LumitAppView> {
     // focused-text-field guard inside _onKey keeps typing safe.
     HardwareKeyboard.instance.addHandler(_handleKey);
     // The pointer is tracked the same way — globally, not through the widget
-    // tree. The Ctrl+Space console opens its ring at the mouse (K-325), and a
+    // tree. The Ctrl+Space console opens its ring at the mouse, and a
     // key event carries no position; a widget `Listener` missed everywhere no
     // widget claims the hit (the Viewer's texture, above all), so the console
     // kept opening at wherever the pointer had last crossed a panel. A global
@@ -206,19 +206,19 @@ class _LumitAppViewState extends State<LumitAppView> {
     // no setState, no bridge.
     GestureBinding.instance.pointerRouter.addGlobalRoute(_trackPointer);
     // A Lumit document copied while this window was away — in another Lumit
-    // window, most of all — is picked up when the window comes back (K-302), so
+    // window, most of all — is picked up when the window comes back, so
     // Paste is live rather than greyed over something that is genuinely there.
     _clipboardWatch = AppLifecycleListener(
       onShow: () => context.read<LumitUiState>().adoptSystemClipboard(),
       onRestart: () => context.read<LumitUiState>().adoptSystemClipboard(),
     );
-    // The first-run question (K-246), after the first frame so there is an
+    // The first-run question, after the first frame so there is an
     // Overlay to put it in. It asks nothing on any later launch.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final ui = context.read<LumitUiState>();
       // The update check follows the question rather than racing it: the
-      // setup screen is where somebody may have just switched it off (K-296).
+      // setup screen is where somebody may have just switched it off.
       maybeShowFirstRunFrb(context, ui.workspace)
           .then((_) => ui.maybeCheckForUpdates());
     });
@@ -274,7 +274,7 @@ class _LumitAppViewState extends State<LumitAppView> {
               ? ValueListenableBuilder<OpenProgress?>(
                   valueListenable: state.openProgress,
                   // Null is the sweep: an import says nothing about how far it
-                  // has got, and opening a `.lum` says everything (K-628).
+                  // has got, and opening a `.lum` says everything.
                   builder: (context, progress, _) => OpeningOverlay(
                     label: progress == null
                         ? null
@@ -333,8 +333,8 @@ class _LumitAppViewState extends State<LumitAppView> {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
-    // A modal surface is up — a dialogue, or the FX console (K-328): its keys
-    // are its own, exactly as the panels' handlers already treat it (K-243).
+    // A modal surface is up — a dialogue, or the FX console: its keys
+    // are its own, exactly as the panels' handlers already treat it.
     // Without this, a keystroke aimed at the console's search box also ran
     // whatever shell command it happened to spell.
     if (lumitModalOpen) return KeyEventResult.ignored;
@@ -351,7 +351,7 @@ class _LumitAppViewState extends State<LumitAppView> {
     // A focused house control (a dialog's OK button, a tabbed-to checkbox)
     // keeps its keys the same way a text field does: Enter or Space there
     // presses the control, and must not also run a panel command underneath
-    // it (K-319).
+    // it.
     if (FocusManager.instance.primaryFocus is ControlFocusNode) {
       return KeyEventResult.ignored;
     }
@@ -360,7 +360,7 @@ class _LumitAppViewState extends State<LumitAppView> {
     final comp = ui.selectedComp;
 
     // Which action this chord means is the engine's answer, not a ladder of key
-    // comparisons here (K-199). Asked in the *focused panel's* context, because
+    // comparisons here. Asked in the *focused panel's* context, because
     // a binding scoped to one panel has to beat the app-wide one while that
     // panel is active — the engine falls back to Global itself, so one call
     // answers both. (This handler runs wherever focus is; the active panel is
@@ -419,7 +419,7 @@ class _LumitAppViewState extends State<LumitAppView> {
       case 'playback.frame.next10':
         ui.stepFrame(10);
       // The ends of the work area (Shift+Home / Shift+End). A comp nobody has
-      // narrowed reads as the whole comp (K-203), so the pair always has
+      // narrowed reads as the whole comp, so the pair always has
       // somewhere to go — the same rule B and N set it by.
       case 'playback.workarea.start' || 'playback.workarea.end':
         if (comp == null) {
@@ -455,9 +455,9 @@ class _LumitAppViewState extends State<LumitAppView> {
       case 'layer.retime.enable':
         // Give the selected layer a Retime, or take it away again (docs/04
         // §12). On installs the identity map, so the picture does not move —
-        // it just gains a row above Transform to key. Ctrl+Alt+T by default
-        // (K-200): AE's own Time Remap chord, and one Windows cannot steal.
-        // The Composition menu carries the command too (K-198's lesson).
+        // it just gains a row above Transform to key. Ctrl+Alt+T by default:
+        // AE's own Time Remap chord, and one Windows cannot steal.
+        // The Composition menu carries the command too.
         final layer = ui.selectedLayer.value;
         if (layer == null) {
           handled = false;
@@ -480,7 +480,7 @@ class _LumitAppViewState extends State<LumitAppView> {
         ui.setPreviewResolution(PreviewResolution.half);
       case 'viewer.res.quarter':
         ui.setPreviewResolution(PreviewResolution.quarter);
-      // `Ctrl+R` puts the rulers up and takes them down (§15's table, K-689).
+      // `Ctrl+R` puts the rulers up and takes them down (§15's table).
       // Per comp, like every other mark over the picture.
       case 'viewer.rulers.toggle':
         ui.setViewerOverlays(rulers: !ui.viewerOverlays.rulers);
@@ -498,7 +498,7 @@ class _LumitAppViewState extends State<LumitAppView> {
         handled = ui.requestPanelSearch();
       case 'console.open':
         // The menu bar owns the console's lists too, so the key asks for it
-        // rather than assembling a second one (K-324).
+        // rather than assembling a second one.
         ui.requestConsole();
       case 'palette.open':
         // The menu bar owns the palette's list of commands, so the key asks
@@ -506,7 +506,7 @@ class _LumitAppViewState extends State<LumitAppView> {
         ui.requestPalette();
       // `X` in the Timeline: the eye, for every selected layer at once, taking
       // the first one's state as the state they all end up in — the switch
-      // cells' own rule (K-720), so a mixed selection comes out even.
+      // cells' own rule, so a mixed selection comes out even.
       case 'layer.toggle.visible':
         final ids = ui.selectedLayerIds;
         final entries = [
@@ -532,7 +532,7 @@ class _LumitAppViewState extends State<LumitAppView> {
           layer.duplicate();
           state.notifyDocumentChanged();
         }
-      // The light fold, beside the heavy one below it (K-702). Ctrl+G gathers
+      // The light fold, beside the heavy one below it. Ctrl+G gathers
       // the selected run into a named band in the outline; the engine refuses
       // a selection that is not an unbroken run of the stack, which is the
       // whole of the rule and the reason nothing here checks it first.
@@ -579,7 +579,7 @@ class _LumitAppViewState extends State<LumitAppView> {
             workspace: ui.workspace,
           );
         }
-      // The rest of the menu bar's own commands (K-244). Each calls the very
+      // The rest of the menu bar's own commands. Each calls the very
       // function its menu row calls, so there is one implementation of "open a
       // project" rather than a keyboard's copy of one.
       case 'file.new':
@@ -602,7 +602,7 @@ class _LumitAppViewState extends State<LumitAppView> {
         } else {
           newCompositionFrb(context, state);
         }
-      // Cut, copy and paste (K-300). The same three functions the Edit menu's
+      // Cut, copy and paste. The same three functions the Edit menu's
       // rows call — the chords had no handler at all before, which is why
       // `Ctrl+C` on a selected layer did nothing while the menu row worked.
       case 'edit.copy':
@@ -614,7 +614,7 @@ class _LumitAppViewState extends State<LumitAppView> {
         // and the paste lands a frame later rather than being declined here.
         pasteSelectionFrb(state, ui, comp, ui.selectedLayer.value);
       case 'edit.select.all':
-        // The focused panel answers first (K-522): "everything" is the items
+        // The focused panel answers first: "everything" is the items
         // in the Project panel, the effects on the layer, the nodes in the
         // graph. Only where no panel claims it does it mean every layer.
         if (ui.requestSelectAll()) {
@@ -635,15 +635,15 @@ class _LumitAppViewState extends State<LumitAppView> {
           showProjectSettingsFrb(context, project);
         }
       case 'file.save':
-        // Ctrl+S goes through exactly the same call the File menu's Save does
-        // (K-203) — a shortcut with its own path to disk is a second save to
-        // keep honest. Without a path yet it opens the picker, which is what
-        // Save has always meant on a document that has never been written.
+        // Ctrl+S goes through exactly the same call the File menu's Save does —
+        // a shortcut with its own path to disk is a second save to keep honest.
+        // Without a path yet it opens the picker, which is what Save has always
+        // meant on a document that has never been written.
         saveProjectFrb(state, ui);
-      // The work area is the span the Viewer previews and the export writes
-      // (K-037), so setting its ends from the playhead is a two-key job, not a
-      // trip to a menu. A comp that has never had one set reads as the whole
-      // comp, so B and N always have something to move.
+      // The work area is the span the Viewer previews and the export writes, so
+      // setting its ends from the playhead is a two-key job, not a trip to a
+      // menu. A comp that has never had one set reads as the whole comp, so B
+      // and N always have something to move.
       case 'workarea.set.start' || 'workarea.set.end':
         if (comp == null) {
           handled = false;
@@ -658,7 +658,7 @@ class _LumitAppViewState extends State<LumitAppView> {
           );
           state.notifyDocumentChanged();
         }
-      // Markers (K-254). `Shift+M` (or AE's numpad `*`) drops a plain cue at
+      // Markers. `Shift+M` (or AE's numpad `*`) drops a plain cue at
       // the playhead; `Ctrl`+digit sets the numbered one and the bare digit
       // returns to it. The numbered pair is the whole point — the key that
       // marks a moment is the key that goes back to it.
@@ -703,12 +703,12 @@ class _LumitAppViewState extends State<LumitAppView> {
         }
       case 'edit.delete.selection':
         // A panel holding a finer selection than the layer one gets the key
-        // first (K-234) — a selected mask row is what Delete is about, not the
+        // first — a selected mask row is what Delete is about, not the
         // layer under it.
         if (ui.deleteClaim?.call() ?? false) {
           break;
         }
-        // The whole selection, not just the primary (K-217): with several
+        // The whole selection, not just the primary: with several
         // layers boxed in the Viewer, Delete taking one of them would be a
         // surprise every time.
         final layers = ui.selectedLayers.value;

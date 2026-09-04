@@ -1,4 +1,4 @@
-// The Puppet tools' own arithmetic (K-704, PU3 — test 15 of
+// The Puppet tools' own arithmetic (PU3 — test 15 of
 // docs/impl/puppet.md's plan, the half that needs no engine).
 //
 // Three things are easy to get subtly wrong and are all here: which kind of pin
@@ -35,7 +35,7 @@ BridgePuppetPin pin(
     );
 
 void main() {
-  group('The four tools are armable (K-228)', () {
+  group('The four tools are armable', () {
     test('every puppet tool can be armed, by click and by chord', () {
       final members = ToolMode.builtMembersOf(ToolGroup.puppet);
       expect(members, ToolMode.membersOf(ToolGroup.puppet),

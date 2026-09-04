@@ -30,7 +30,7 @@
 //! - [`media`] — probing footage and decoding frames (`media` feature).
 //! - `render` — the composited-comp Viewer path (`render` feature): turns
 //!   `(comp, frame)` into an RGBA8 buffer through `lumit_render::headless`.
-//! - [`framecache`] — the RAM tier of the three-tier frame cache (K-176, K-178):
+//! - [`framecache`] — the RAM tier of the three-tier frame cache:
 //!   an LRU of finished frames named by a hash of their *content*, so an edit
 //!   that cannot change a pixel throws nothing away and an undo is instantly
 //!   valid. It also holds the cross-thread controls and mirrors for the two tiers
@@ -44,12 +44,12 @@
 //!   thread of its own, so a detection cannot sit on the pool every panel's
 //!   reads share.
 //! - [`peaks`] — the session's waveform peak cache: one multi-zoom summary per
-//!   audio file, so a lane redraws at any zoom without decoding again (K-280).
+//!   audio file, so a lane redraws at any zoom without decoding again.
 //! - [`probe`] — the probe worker and the session's probe cache: footage is
 //!   read for its vital statistics on a background thread, with a synchronous
 //!   fallback so an op that needs the answer now still gets exactly the answer
 //!   the prober gives.
-//! - [`realtime`] — the adaptive playback tier decision core (K-171).
+//! - [`realtime`] — the adaptive playback tier decision core.
 //! - [`audio`] — comp audio playback and the sample clock (`media` feature).
 //! - [`export`] — the export runner and its progress reporting.
 

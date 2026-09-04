@@ -1,11 +1,11 @@
 // The drawn pointers the drawing and painting tools wear over the picture
-// (K-226, K-724, docs/07 §2.3.3).
+// (docs/07 §2.3.3).
 //
 // **In plain terms.** A tool should say what it is without you looking away
 // from the picture, and no operating system ships a "rectangle tool" pointer.
 // So the tools that aim at a pixel keep the **hardware crosshair** — the OS
 // `precise` pointer, which moves at input rate however slowly the application
-// is repainting (K-724) — with the tool's own icon tucked just down and to the
+// is repainting — with the tool's own icon tucked just down and to the
 // right of it, the way After Effects badges its pointers. The crosshair is
 // where the shape starts; the badge only says which shape.
 //
@@ -17,7 +17,7 @@
 //
 // **What is still drawn outright.** A system cursor is a small fixed picture
 // from a list the platform ships, and the hand, the magnifier and the sideways
-// I-beam are not on it (K-230). Those tools hide the system pointer and paint
+// I-beam are not on it. Those tools hide the system pointer and paint
 // their own — they drag and click rather than aim at a pixel, so a pointer a
 // frame behind costs them nothing.
 //
@@ -32,7 +32,7 @@ import 'package:lumit_flutter/state/tools.dart';
 import '../icons/icons.dart';
 
 /// Where the pointer is, for a tool that draws its own, and the hidden system
-/// cursor that goes with it (K-230).
+/// cursor that goes with it.
 ///
 /// **Why a `Listener` and not the `MouseRegion` alone.** A `MouseRegion` reports
 /// *hover*, and hovering stops the instant any mouse button is held — including
@@ -87,7 +87,7 @@ class _DrawnPointerRegionState extends State<DrawnPointerRegion> {
     super.dispose();
   }
 
-  /// Every key, because the point is not *which* key it was (K-235).
+  /// Every key, because the point is not *which* key it was.
   ///
   /// Alt is the one that does this on Windows — it is the key reserved for the
   /// window menu, and pressing it takes the pointer's own state with it — but a
@@ -100,7 +100,7 @@ class _DrawnPointerRegionState extends State<DrawnPointerRegion> {
     return false;
   }
 
-  /// Ask the platform to hide the pointer again (K-235).
+  /// Ask the platform to hide the pointer again.
   ///
   /// The arrow comes back and sits beside the drawn pointer, which is two
   /// pointers — exactly what hiding the system one is for. Flutter will not
@@ -216,11 +216,10 @@ const double toolBadgeSize = 13;
 const double minBrushRingRadius = 3;
 const double maxBrushRingRadius = 200;
 
-/// The decoration a tool that aims wears beside the hardware crosshair
-/// (K-724): the tool's icon badged down and to the right, and — for the
-/// painting tools — the brush ring. The OS `precise` pointer does the aiming;
-/// nothing here is a point to aim with, which is why it may honestly lag a
-/// frame behind.
+/// The decoration a tool that aims wears beside the hardware crosshair: the
+/// tool's icon badged down and to the right, and — for the painting tools —
+/// the brush ring. The OS `precise` pointer does the aiming; nothing here is a
+/// point to aim with, which is why it may honestly lag a frame behind.
 ///
 /// [at] is in the same coordinates as the layer this is placed in — panel-local
 /// for every caller here. A null [at] draws nothing, which is what a pointer
@@ -252,7 +251,7 @@ class ToolPointer extends StatelessWidget {
     if (at == null) return const SizedBox.shrink();
     return Positioned.fill(
       // Its own layer, so moving the pointer repaints the pointer and not the
-      // picture or the shape being dragged out under it (K-233).
+      // picture or the shape being dragged out under it.
       child: RepaintBoundary(
         child: IgnorePointer(
           child: Stack(
@@ -307,10 +306,9 @@ class _ToolPointerPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Only the ring; the point itself is the hardware crosshair's (K-724). A
-    // drawn crosshair or a centre dot here would sit a frame behind the real
-    // pointer and read as two pointers — the very thing K-226 hid the arrow
-    // to avoid.
+    // Only the ring; the point itself is the hardware crosshair's. A drawn
+    // crosshair or a centre dot here would sit a frame behind the real pointer
+    // and read as two pointers — the very thing hiding the system arrow avoids.
     final radius = ringRadius;
     if (radius == null) return;
     paintTwoPassStroke(
@@ -328,14 +326,13 @@ class _ToolPointerPainter extends CustomPainter {
 /// The ring a brush of [width] layer pixels draws at this magnification, kept
 /// within sight either way.
 ///
-/// The painting tools are disabled on this branch (K-228) — the engine has no
+/// The painting tools are disabled on this branch — the engine has no
 /// paint strokes — so nothing calls this yet; it is the pointer they wear the
 /// moment they do, and it is tested so it will be right when they arrive.
 double brushRingRadius(double width, double viewScale) =>
     (width * viewScale / 2).clamp(minBrushRingRadius, maxBrushRingRadius);
 
-/// The Hand tool's pointer: an open hand, and a closed one while it drags
-/// (K-230).
+/// The Hand tool's pointer: an open hand, and a closed one while it drags.
 ///
 /// **Why this is drawn.** Flutter can only ask for the pointers the platform
 /// ships, and Windows ships no hand-with-fingers at all — `grab` and `grabbing`
@@ -366,7 +363,7 @@ class HandPointer extends StatelessWidget {
     if (at == null) return const SizedBox.shrink();
     return Positioned.fill(
       // Its own layer, so moving the pointer repaints the pointer and not the
-      // picture, the wireframes or the tool's own preview under it (K-233).
+      // picture, the wireframes or the tool's own preview under it.
       child: RepaintBoundary(
         child: IgnorePointer(
           child: CustomPaint(
@@ -503,8 +500,7 @@ class _ViewerHandLayerState extends State<ViewerHandLayer> {
     if (!widget.active) return const SizedBox.shrink();
     return Positioned.fill(
       // The system pointer is hidden, because the hand below replaces it: an
-      // arrow sitting inside the drawn hand would read as two pointers (K-219's
-      // rule).
+      // arrow sitting inside the drawn hand would read as two pointers.
       child: DrawnPointerRegion(
         onPointer: (at) => setState(() => _pointer = at),
         child: GestureDetector(
@@ -535,7 +531,7 @@ class _ViewerHandLayerState extends State<ViewerHandLayer> {
 }
 
 /// The Zoom tool's pointer: a magnifier with a plus in it, or a minus while Alt
-/// says the click will zoom out (K-230).
+/// says the click will zoom out.
 ///
 /// Drawn for the same reason the hand is: Flutter's `zoomIn`/`zoomOut` are not
 /// in the Windows embedder's list of pointers, so asking for one got the plain
@@ -630,7 +626,7 @@ class _MagnifierPainter extends CustomPainter {
       old.outline != outline;
 }
 
-/// The text pointer, for the Type tool's vertical member (K-226).
+/// The text pointer, for the Type tool's vertical member.
 ///
 /// Horizontal type wears the system's own I-beam — every platform has one and
 /// it is the pointer everybody already reads as "you can type here". Nobody

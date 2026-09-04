@@ -138,7 +138,7 @@ void main() {
       await tester.pump();
       // Near its left end, not its centre: a fold row spans the whole outline,
       // and the outline is wider than this panel (the render-time column
-      // widened it again, K-276), so the row's centre is off screen.
+      // widened it again), so the row's centre is off screen.
       await tapNearLeft(
           tester, find.byKey(ValueKey<String>('tl-group-$id/transform')));
       await tester.pump();
@@ -161,10 +161,10 @@ void main() {
           reason: 'the click actually changed the selection');
       // ignore: avoid_print
       print('CLICK COST ${counter.total} calls\n${counter.ranking()}');
-      // Measured at 5 with the read model in place (K-184) and its revision
-      // check folded to one per frame: a selection is pure interface state, so
-      // what remains is that one check plus the ruler's own reads. The cap
-      // stays roughly 2x measured so honest growth does not trip it.
+      // Measured at 5 with the read model in place and its revision check
+      // folded to one per frame: a selection is pure interface state, so what
+      // remains is that one check plus the ruler's own reads. The cap stays
+      // roughly 2x measured so honest growth does not trip it.
       expect(
         counter.total,
         lessThan(12),
@@ -283,7 +283,7 @@ void main() {
     /// bridge two to four times, the cache bar asked for the composition's
     /// whole cache map, and the outline rebuilt every row for a change that
     /// happens entirely to the right of the seam. That is the "super super
-    /// laggy" the owner reported (K-293). Only the lane side listens to the
+    /// laggy" the owner reported. Only the lane side listens to the
     /// zoom now, and the cache bar holds its read until a frame arrives.
     testWidgets('dragging the zoom slider asks the engine almost nothing',
         (tester) async {
@@ -359,7 +359,7 @@ void main() {
       );
     });
 
-    /// **A column-seam drag reaches the engine not at all** (K-529). Column
+    /// **A column-seam drag reaches the engine not at all**. Column
     /// widths are pure view state, and the owner's report of a lagging seam
     /// was the panel rebuilding whole on every pointer move — so what is
     /// guarded here is the seam's own bill: nought.
@@ -412,7 +412,7 @@ void main() {
     });
 
     /// **A graph handle drag is bounded, and free where the picture cannot
-    /// change** (K-529). The owner's report: dragging a tangent handle fired
+    /// change**. The owner's report: dragging a tangent handle fired
     /// calls by the hundred per second wherever it was made. Two things bound
     /// it — the preview throttle, which coalesces the ticks between renders,
     /// and the span guard, which does not ask for a render at all when the
@@ -538,9 +538,9 @@ void main() {
       await settleFrb(tester, minRounds: 8);
 
       final rows = [
-        // The folder row is in here because it is the panel's drop target
-        // (K-451): a drop target that asked the engine what it could offer
-        // per rebuild would put the chatter back exactly where it was.
+        // The folder row is in here because it is the panel's drop target: a
+        // drop target that asked the engine what it could offer per rebuild
+        // would put the chatter back exactly where it was.
         find.text('Compositions'),
         find.text('Scene'),
         find.text('shot.mov'),
@@ -601,7 +601,7 @@ void main() {
       await tester.tap(find.text('shot.mov'));
       await tester.pump();
       counter.counting = false;
-      // A tap arms the double-tap recogniser's own timer (K-534's
+      // A tap arms the double-tap recogniser's own timer (the
       // click-versus-open rule); the test has to outlive it.
       await tester.pump(const Duration(milliseconds: 400));
 
@@ -649,7 +649,7 @@ void main() {
     });
 
     /// The Graph panel's whole canvas is arithmetic over one held read
-    /// (K-183, docs/impl/node-graph.md §5): `getGraph` is asked when the
+    /// (docs/impl/node-graph.md §5): `getGraph` is asked when the
     /// selection or the document changes, and nothing about a box needs a
     /// second question. Moving the pointer over the canvas — over boxes, over
     /// sockets, over empty ground — must therefore cost nothing at all.
@@ -848,7 +848,7 @@ void main() {
     });
 
     /// **A mask is asked about only when its interpolated shape is drawn**
-    /// (K-342, ui-performance §4.5). The wireframe wants the shape the picture
+    /// (ui-performance §4.5). The wireframe wants the shape the picture
     /// has, rather than the one the drawing tools last wrote, on exactly two
     /// conditions: the path is keyed, and the layer is outlined. Both are known
     /// here for nothing — `pathKeys` rides in the read model and the outline
@@ -1117,7 +1117,7 @@ void main() {
         0,
         reason: 'a compile-time constant is read once, not per frame',
       );
-      // The exposure box and the tone-map switch (K-314) are told to the engine
+      // The exposure box and the tone-map switch are told to the engine
       // when they *change*, and are drawn from the value the frontend already
       // holds. A rebuild must not restate them: that would be a call per frame
       // for a setting that has not moved, and every one of them would ask for
@@ -1148,7 +1148,7 @@ void main() {
       );
     });
 
-    /// **A Viewer that has grown asks for the frame again** (K-430).
+    /// **A Viewer that has grown asks for the frame again**.
     ///
     /// On Auto the scale a frame is rendered at is whatever the panel could
     /// show when it laid itself out, and the first layout of a session happens
@@ -1166,8 +1166,8 @@ void main() {
       comp.addSolidLayer();
       p.uiState.setSelectedComp(comp);
       // Auto is the tier that follows the panel, so it is the one a resize can
-      // change the render scale of at all (K-430); Full is the default since
-      // K-670, and on a fixed tier a resize correctly asks for nothing.
+      // change the render scale of at all; Full is the default now, and on a
+      // fixed tier a resize correctly asks for nothing.
       p.uiState.setPreviewResolution(PreviewResolution.auto);
 
       final width = ValueNotifier<double>(400);
@@ -1224,7 +1224,7 @@ void main() {
       );
     });
 
-    /// **Panning the picture must ask the engine nothing (K-230).**
+    /// **Panning the picture must ask the engine nothing.**
     ///
     /// A pan moves where the picture is drawn and changes nothing else, but it
     /// rebuilt the whole panel — which re-read the composition's settings, its
@@ -1375,7 +1375,7 @@ void main() {
       );
     });
 
-    /// **Nor must moving the pointer with a camera tool in hand (K-230).**
+    /// **Nor must moving the pointer with a camera tool in hand.**
     ///
     /// That layer redraws on every movement — its pointer is drawn, so it has
     /// to — and finding the active camera reads the layer's focal distance and
@@ -1428,7 +1428,7 @@ void main() {
     });
 
     /// **Nor must fronting a composition, while nobody is looking through
-    /// anything (K-314).**
+    /// anything.**
     ///
     /// The Viewer's exposure and tone map are per composition, so fronting one
     /// is what puts its view on the renderer — but a view that is neutral onto
@@ -1481,7 +1481,7 @@ void main() {
       );
     });
 
-    /// **A path drag shows the picture it is making (K-308).**
+    /// **A path drag shows the picture it is making.**
     ///
     /// Dragging a point used to move the wireframe and leave the picture until
     /// the release, so an edit to a shape was a guess right up to the moment it
@@ -1553,9 +1553,9 @@ void main() {
       await settleFrb(tester, minRounds: 8);
 
       // Where the art is drawn: its own coordinates, because a shape layer's
-      // box starts at the art's own corner (K-308).
+      // box starts at the art's own corner.
       // Measured rather than worked out from the panel less a bar height: the
-      // Viewer wears a header strip as well as a bottom bar (K-466).
+      // Viewer wears a header strip as well as a bottom bar.
       final stage = tester.getRect(find.byKey(const ValueKey('viewer-stage')));
       final size = comp.getSize();
       final w = size.width.toDouble();

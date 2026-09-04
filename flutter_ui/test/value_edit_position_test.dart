@@ -14,7 +14,7 @@
 //   gone: an `EditableText` handed a tight height lays its line out at the top.
 // * [TimeReadout] kept its box, but rested against the left of a slot cut for
 //   the longest reading it could ever carry. The frame count rests as `F48`
-//   and edits as `48` (K-460), so the letter went and the digits slid one
+//   and edits as `48`, so the letter went and the digits slid one
 //   glyph left to fill the gap.
 //
 // All three are now anchored the same way in both states, so the glyphs that

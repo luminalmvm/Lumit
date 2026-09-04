@@ -1,7 +1,7 @@
 // The Lumit theme, ported one-for-one from crates/lumit-ui/src/theme.rs
-// (K-084/K-092/K-097; docs/15-DESIGN.md). This is the ONLY Dart file where
-// colour hex values may appear — everything else reads the LumitTheme object,
-// mirroring the Rust no-hex-outside-theme rule.
+// (docs/15-DESIGN.md). This is the ONLY Dart file where colour hex values may
+// appear — everything else reads the LumitTheme object, mirroring the Rust
+// no-hex-outside-theme rule.
 //
 // In plain terms: every colour, radius, gap and shadow the interface uses is a
 // named token here, in the same seven colour schemes the Rust frontend ships.
@@ -13,13 +13,13 @@ import 'package:lumit_flutter/l10n/strings.dart';
 
 Color _rgb(int r, int g, int b) => Color.fromARGB(0xff, r, g, b);
 
-/// Light vs dark colour family (K-092).
+/// Light vs dark colour family.
 enum ThemeMode2 { dark, light }
 
-/// Sharp (edge-to-edge, hairline) or Round (floating card) geometry (K-092).
+/// Sharp (edge-to-edge, hairline) or Round (floating card) geometry.
 enum ThemeShape { sharp, round }
 
-/// How much UI-chrome motion to show (K-092).
+/// How much UI-chrome motion to show.
 enum AnimationLevel { all, minimal, none }
 
 /// The duration owned widgets animate with under a level. All ≈ the egui
@@ -30,7 +30,7 @@ Duration animationDuration(AnimationLevel level) => switch (level) {
       AnimationLevel.none => Duration.zero,
     };
 
-/// Every named colour scheme Lumit ships (K-097), in picker order.
+/// Every named colour scheme Lumit ships, in picker order.
 enum LumitColorScheme {
   dark,
   darkBlue,
@@ -70,14 +70,14 @@ enum LumitColorScheme {
       };
 }
 
-/// Shape-dependent chrome geometry (K-092). `sharp` reproduces the egui
-/// frontend's pre-K-092 numbers exactly; `round` is the floating-card system.
+/// Shape-dependent chrome geometry. `sharp` reproduces the egui frontend's
+/// original numbers exactly; `round` is the floating-card system.
 class ShapeTokens {
   /// A control's corner radius — button, chip, tab, dropdown, value box.
   ///
-  /// Under Round this is [stadium] rather than a number (K-394, §12.1): every
-  /// control is a full capsule, and a capsule's radius is half the control's
-  /// **own** height, which a token cannot know. It does not have to: a rounded
+  /// Under Round this is [stadium] rather than a number (§12.1): every control
+  /// is a full capsule, and a capsule's radius is half the control's **own**
+  /// height, which a token cannot know. It does not have to: a rounded
   /// rectangle scales its radii down to fit the box it is drawn into, so a
   /// radius larger than any control is tall *is* the capsule, at whatever
   /// height the control turns out to be. That is why this stays one number
@@ -106,8 +106,8 @@ class ShapeTokens {
   });
 
   static const sharp = ShapeTokens(
-    // The mockups draw 2 on almost every control (K-476, measured from the
-    // computed-style manifests); 4 was K-394's original guess.
+    // The mockups draw 2 on almost every control (measured from the
+    // computed-style manifests); 4 was the original guess.
     controlRadius: 2,
     floatRadius: 6,
     cardRadius: 0,
@@ -141,7 +141,7 @@ class ShapeTokens {
       shape == ThemeShape.sharp ? sharp : round;
 }
 
-/// **How much room a row gets** (K-454, docs/15-DESIGN.md §12A.6).
+/// **How much room a row gets** (docs/15-DESIGN.md §12A.6).
 ///
 /// In plain terms: the same panels, drawn with a little more or a little less
 /// air between their lines. There are exactly two settings of this dial and
@@ -169,13 +169,13 @@ class DensityTokens {
   /// counts the hairline beneath it in, as §12A.6 already does for the
   /// Project panel's column header.
   ///
-  /// **The Timeline's own chrome is no longer one of these** (K-512): its two
-  /// rows are [timelineChromeRow] and [timelineHeaderRow], which under Regular
-  /// stand taller than a secondary row anywhere else.
+  /// **The Timeline's own chrome is no longer one of these**: its two rows are
+  /// [timelineChromeRow] and [timelineHeaderRow], which under Regular stand
+  /// taller than a secondary row anywhere else.
   final double secondaryRow;
 
   /// The Timeline's first chrome row — the timecode and frame readouts, the
-  /// layer search, and the Layers / Keys / Graph tabs (K-512).
+  /// layer search, and the Layers / Keys / Graph tabs.
   ///
   /// **24 under Regular**, where every other secondary row is 19: the owner's
   /// ruling from desktop testing is that this row is aimed at constantly and
@@ -183,15 +183,15 @@ class DensityTokens {
   final double timelineChromeRow;
 
   /// The Timeline's second chrome row — the column-group headers in Layers
-  /// mode, the dope sheet's filters in Keys mode, the graph's in Graph mode
-  /// (K-512). **23 under Regular**, 18 under Compact.
+  /// mode, the dope sheet's filters in Keys mode, the graph's in Graph mode.
+  /// **23 under Regular**, 18 under Compact.
   ///
   /// It is a separate number from [timelineChromeRow] because the two rows do
   /// different work: the row above is aimed at, this one is mostly read.
   final double timelineHeaderRow;
 
   /// How tall a control standing in either Timeline chrome row is *told* to
-  /// be, or **null for "measure yourself"** (K-512).
+  /// be, or **null for "measure yourself"**.
   ///
   /// In plain terms: Regular's rows grew, so the buttons and wells in them
   /// grow too rather than floating in a band of empty ground — one number, so
@@ -223,17 +223,16 @@ class DensityTokens {
   /// The Timeline ruler, which is **derived and not declared**: the lane side
   /// gives the ruler exactly the height the outline side spends on its two
   /// chrome rows, and that is the whole reason the two halves of the panel
-  /// line up row for row. Grow either row and the ruler grows with it — which
-  /// is what K-512 did, taking Regular's ruler from 38 to **47** while Compact
-  /// keeps its 36.
+  /// line up row for row. Grow either row and the ruler grows with it, which is
+  /// how Regular's ruler reached **47** from 38 while Compact keeps its 36.
   ///
   /// The extra room goes to the clock: the ruler's two halves are no longer
-  /// ruled apart (K-512 again), so what the reader sees is one taller band
-  /// with the labels near its top and the markers and work area on its floor.
+  /// ruled apart, so what the reader sees is one taller band with the labels
+  /// near its top and the markers and work area on its floor.
   double get ruler => timelineChromeRow + timelineHeaderRow;
 
   /// What the mockups render, with the Timeline's chrome at the height the
-  /// owner asked for after desktop testing. The default (K-454, K-512).
+  /// owner asked for after desktop testing. The default.
   static const regular = DensityTokens(
     laneRow: 23,
     secondaryRow: 19,
@@ -247,7 +246,7 @@ class DensityTokens {
 
   /// A pixel or two off each row, for more visible at once. What the app drew
   /// before the setting existed — **including the Timeline's chrome**, which
-  /// K-512 grew under Regular alone.
+  /// grew under Regular alone.
   static const compact = DensityTokens(
     laneRow: 22,
     secondaryRow: 18,
@@ -275,10 +274,10 @@ class LayerColours {
   });
 }
 
-/// Colours the Scopes panel draws with (15-DESIGN §8, K-096). One fixed set
-/// shared by every theme — a scope is always read on a near-black graticule,
-/// whatever the chrome, the same grading-accuracy reasoning that keeps
-/// `viewerSurround` neutral.
+/// Colours the Scopes panel draws with (15-DESIGN §8). One fixed set shared by
+/// every theme — a scope is always read on a near-black graticule, whatever the
+/// chrome, the same grading-accuracy reasoning that keeps `viewerSurround`
+/// neutral.
 class ScopeColours {
   final Color bg, graticule, trace, red, green, blue;
   const ScopeColours({
@@ -300,7 +299,7 @@ class ScopeColours {
   );
 }
 
-/// What the fault box is painted in when a panel's build throws (K-741).
+/// What the fault box is painted in when a panel's build throws.
 ///
 /// One fixed set, and it **cannot** come off the theme struct even though every
 /// other colour does. The widget wearing these replaces one that has just
@@ -310,9 +309,9 @@ class ScopeColours {
 /// the frame. It asks for nothing, so it cannot.
 ///
 /// Dark, in a theme that may be light: the box is a fault report rather than
-/// chrome, it is legible either way, and dark-first is the house adaptation
-/// (K-004). [detail] carries the exception's own words, which are the engineer's
-/// half of the box and are deliberately quieter than the line above them.
+/// chrome, it is legible either way, and dark-first is the house adaptation.
+/// [detail] carries the exception's own words, which are the engineer's half of
+/// the box and are deliberately quieter than the line above them.
 class FaultColours {
   final Color background, heading, detail;
   const FaultColours({
@@ -329,17 +328,17 @@ class FaultColours {
 }
 
 /// What a wire and its sockets are painted in on the Graph panel's canvas
-/// (K-472, 15-DESIGN §4.1/§12A.7). Seven port types wear **five** colours,
-/// grouped as the approved NodeGraph drawing's legend groups them:
-/// image·matte, number, colour, shape·points, audio.
+/// (15-DESIGN §4.1/§12A.7). Seven port types wear **five** colours, grouped as
+/// the approved NodeGraph drawing's legend groups them: image·matte, number,
+/// colour, shape·points, audio.
 ///
 /// One fixed set shared by every theme, and **deliberately not an editable
 /// token** — the same reasoning that keeps `viewerSurround` out of the
-/// editor's reach. Colour *is* the legend here (K-445): the strip along the
-/// canvas's bottom edge, the manual and the drawings all say "amber is a
-/// number", so a palette taste could retint would be a legend that lies. The
-/// five are the layer palette's own azure, amber, magenta, teal and mint, which
-/// were picked to be told apart at a glance and already read on both grounds.
+/// editor's reach. Colour *is* the legend here: the strip along the canvas's
+/// bottom edge, the manual and the drawings all say "amber is a number", so a
+/// palette taste could retint would be a legend that lies. The five are the
+/// layer palette's own azure, amber, magenta, teal and mint, which were picked
+/// to be told apart at a glance and already read on both grounds.
 class PortColours {
   /// Image and matte — the picture's own path down the stack.
   final Color image;
@@ -348,8 +347,8 @@ class PortColours {
   final Color number;
   final Color colour;
 
-  /// Shape and points (K-472 §6.2) — geometry, whether it is one outline or a
-  /// stream of thousands.
+  /// Shape and points — geometry, whether it is one outline or a stream of
+  /// thousands.
   final Color geometry;
   final Color audio;
 
@@ -372,7 +371,7 @@ class PortColours {
 
 /// The colours a waveform draws in (docs/15-DESIGN.md §6.4). Split out of the
 /// roles the lanes used to borrow when the waveform lane learned to follow the
-/// zoom and to stack its bands (K-280) — §6.4's standing direction is that each
+/// zoom and to stack its bands — §6.4's standing direction is that each
 /// grouping becomes a token of its own as its area is next touched, and this is
 /// that touch. Waveforms are **content, not state**, so none of these is the
 /// accent: a wave says what the sound is, never that something is selected.
@@ -416,9 +415,9 @@ class LumitTheme {
   final ThemeShape shape;
   final ShapeTokens tokens;
 
-  /// How much room a row gets (K-454). It rides on the theme because that is
-  /// what every widget already has in hand, and because changing it has to
-  /// repaint everything at once — the same journey a shape change makes.
+  /// How much room a row gets. It rides on the theme because that is what every
+  /// widget already has in hand, and because changing it has to repaint
+  /// everything at once — the same journey a shape change makes.
   final DensityTokens density;
 
   // Surfaces (near-neutral ramp; direction depends on mode).
@@ -437,10 +436,10 @@ class LumitTheme {
   // Roles — the accent is THE single accent per view.
   final Color accent, accentHover;
 
-  /// "This is animated or in hand" (K-439): keyframe diamonds, stopwatch-on,
-  /// selected keyframes, selected gizmo handles, the focused value field and
-  /// the work-area band — and nothing else. The job list is closed, so a third
-  /// kind of use is a mistake rather than a new job. A desaturated warm amber,
+  /// "This is animated or in hand": keyframe diamonds, stopwatch-on, selected
+  /// keyframes, selected gizmo handles, the focused value field and the
+  /// work-area band — and nothing else. The job list is closed, so a third kind
+  /// of use is a mistake rather than a new job. A desaturated warm amber,
   /// deliberately quieter than `accent`: "keyed" is a state a composition is
   /// full of, while the accent marks the one thing in hand.
   final Color animated;
@@ -450,43 +449,43 @@ class LumitTheme {
   final List<Color> curve;
   final LayerColours layer;
 
-  /// The Timeline's ground *outside* the work area (K-202). The lane, layer
-  /// and graph areas are read as one long strip, and until this existed there
-  /// was nothing to tell "the part you are delivering" from the rest — so the
-  /// whole strip sat at one value and a selected row had only `surface2` to
-  /// stand out against. Inside the work area the strip keeps `surface1`; this
-  /// is the wash either side of it.
+  /// The Timeline's ground *outside* the work area. The lane, layer and graph
+  /// areas are read as one long strip, and until this existed there was nothing
+  /// to tell "the part you are delivering" from the rest — so the whole strip
+  /// sat at one value and a selected row had only `surface2` to stand out
+  /// against. Inside the work area the strip keeps `surface1`; this is the wash
+  /// either side of it.
   final Color timelineOutOfRange;
 
   /// The fill under a selected row, and at reduced strength under a
-  /// highlighted one (K-202). Its own token rather than `surface2` reused: a
-  /// selection has to out-contrast the ground it sits on, and on a light
-  /// scheme that means going *darker* where the surfaces go lighter — a rule
-  /// the surface ramp cannot express because it is a ramp.
+  /// highlighted one. Its own token rather than `surface2` reused: a selection
+  /// has to out-contrast the ground it sits on, and on a light scheme that
+  /// means going *darker* where the surfaces go lighter — a rule the surface
+  /// ramp cannot express because it is a ramp.
   final Color selectionFill;
 
-  /// What waveforms draw in (K-280) — the single wave and the three bands of
-  /// the multiwave stack. Its own grouping rather than roles borrowed one at a
+  /// What waveforms draw in — the single wave and the three bands of the
+  /// multiwave stack. Its own grouping rather than roles borrowed one at a
   /// time, per the §6.4 direction.
   final WaveformColours waveform;
 
-  /// What the Graph panel's wires and sockets draw in, by port type (K-472).
-  /// Fixed rather than per-scheme, and not offered to the theme editor — see
+  /// What the Graph panel's wires and sockets draw in, by port type. Fixed
+  /// rather than per-scheme, and not offered to the theme editor — see
   /// [PortColours].
   final PortColours port;
 
-  /// Comp markers on the time ruler (K-254). A plain grey, not a role colour:
-  /// a marker says *here*, not *good* or *careful*, and the ruler already has
-  /// the accent doing the work area. Light on a dark scheme and dark on a light
-  /// one — After Effects' own reading, and the one that stays legible over the
+  /// Comp markers on the time ruler. A plain grey, not a role colour: a marker
+  /// says *here*, not *good* or *careful*, and the ruler already has the accent
+  /// doing the work area. Light on a dark scheme and dark on a light one —
+  /// After Effects' own reading, and the one that stays legible over the
   /// work-area band either way.
   final Color marker;
 
-  /// The wash a modal window lays over the app behind it (K-269). Its own
-  /// token because it is not a surface: it is the *absence* of attention, a
-  /// translucent black that dims whatever it covers rather than a colour the
-  /// ramp could supply. Translucent black under a light scheme too — dimming
-  /// is dimming, and a pale scrim over pale panels would say nothing.
+  /// The wash a modal window lays over the app behind it. Its own token because
+  /// it is not a surface: it is the *absence* of attention, a translucent black
+  /// that dims whatever it covers rather than a colour the ramp could supply.
+  /// Translucent black under a light scheme too — dimming is dimming, and a
+  /// pale scrim over pale panels would say nothing.
   final Color scrim;
 
   /// The three Timeline tokens default from the mode rather than being spelled
@@ -536,8 +535,8 @@ class LumitTheme {
 
   /// The ground outside the work area: a step *away* from the surface ramp's
   /// direction — darker under a dark scheme, and darker again under a light
-  /// one, because on white the only direction with anywhere to go is down
-  /// (K-202). Deliberately gentle: this marks a region, it is not a border.
+  /// one, because on white the only direction with anywhere to go is down.
+  /// Deliberately gentle: this marks a region, it is not a border.
   static Color defaultOutOfRange(ThemeMode2 mode, Color surface1) {
     final by = mode == ThemeMode2.dark ? -0x08 : -0x0e;
     return _shift(surface1, by);
@@ -600,22 +599,22 @@ class LumitTheme {
     return Color.fromARGB(0xff, ch(c.r), ch(c.g), ch(c.b));
   }
 
-  /// **Spruce** — THE default accent (K-538, after the brand went green with
-  /// it; clay is one click away). The stock dark and light schemes both build
-  /// their accent pair from it, so a single edit here moves the whole family.
-  /// Hover derives by the same ±0x12 step [withAccent] gives a user-picked
-  /// accent (K-092), which is what makes `withAccent(defaultAccent)` reproduce
-  /// each stock scheme's pair exactly rather than approximately — now in
-  /// **both** schemes, since spruce clears the contrast floor on white and
-  /// Light no longer needs a hand-darkened accent of its own.
+  /// **Spruce** — THE default accent (after the brand went green with it; clay
+  /// is one click away). The stock dark and light schemes both build their
+  /// accent pair from it, so a single edit here moves the whole family. Hover
+  /// derives by the same ±0x12 step [withAccent] gives a user-picked accent,
+  /// which is what makes `withAccent(defaultAccent)` reproduce each stock
+  /// scheme's pair exactly rather than approximately — now in **both** schemes,
+  /// since spruce clears the contrast floor on white and Light no longer needs
+  /// a hand-darkened accent of its own.
   static const defaultAccent = Color(0xff35785e);
 
-  /// The layer-label palette (TL2, K-188): bright, clearly distinct chips. A
-  /// layer's label colours both its swatch and its bar in the lane area, and
-  /// each layer kind defaults to a different one — so the set is a dedicated
-  /// palette, not the theme's role colours, which were built to be quiet rather
-  /// than tellable-apart. Index 0 is the neutral default; the Null layer (K-206)
-  /// took the ninth chip, since every one below it was already a kind's own.
+  /// The layer-label palette (TL2): bright, clearly distinct chips. A layer's
+  /// label colours both its swatch and its bar in the lane area, and each layer
+  /// kind defaults to a different one — so the set is a dedicated palette, not
+  /// the theme's role colours, which were built to be quiet rather than
+  /// tellable-apart. Index 0 is the neutral default; the Null layer took the
+  /// ninth chip, since every one below it was already a kind's own.
   static const _labelSet = [
     Color(0xff8b93a3), // slate — the quiet default
     Color(0xff4aa3e0), // azure — footage
@@ -635,7 +634,7 @@ class LumitTheme {
   Color labelColour(int i) => _labelSet[i % _labelSet.length];
 
   /// This theme with a user-picked accent: hover brightens by 0x12 per
-  /// channel on a dark surface, darkens by the same on a light one (K-092).
+  /// channel on a dark surface, darkens by the same on a light one.
   LumitTheme withAccent(Color rgb) {
     int shift(int c) => mode == ThemeMode2.dark
         ? (c + 0x12).clamp(0, 255)
@@ -716,7 +715,7 @@ class LumitTheme {
         textDisabled: _rgb(0x5e, 0x66, 0x6b),
         hairline: _rgb(0x26, 0x29, 0x2c),
         hairlineStrong: _rgb(0x3c, 0x41, 0x45),
-        accent: defaultAccent, // spruce #35785e (K-538)
+        accent: defaultAccent, // spruce #35785e
         accentHover: _shift(defaultAccent, 0x12), // #478a70, derived - which is
         // what keeps withAccent(defaultAccent) reproducing this pair
         animated: _rgb(0xd8, 0xa2, 0x4a),
@@ -740,8 +739,7 @@ class LumitTheme {
         ),
       );
 
-  /// The pre-K-084 ramp: bluer, a step lighter; everything else shared with
-  /// dark().
+  /// The older ramp: bluer, a step lighter; everything else shared with dark().
   factory LumitTheme.darkBlue() {
     final base = LumitTheme.dark();
     return LumitTheme(
@@ -770,7 +768,7 @@ class LumitTheme {
     );
   }
 
-  /// The light ramp (K-092): one uniform light theme.
+  /// The light ramp: one uniform light theme.
   factory LumitTheme.light() => LumitTheme(
         mode: ThemeMode2.light,
         surface0: _rgb(0xee, 0xec, 0xe9),
@@ -790,7 +788,7 @@ class LumitTheme {
         // the exception is gone: both stock schemes are now exactly
         // withAccent(defaultAccent), and the hover is the same ±0x12 step in
         // each - lighter in Dark, darker here.
-        accent: defaultAccent, // spruce #35785e (K-538)
+        accent: defaultAccent, // spruce #35785e
         accentHover: _shift(defaultAccent, -0x12), // #23664c
         // Provisional pending the light-mode pass: the dark scheme's amber
         // taken down until it holds against white.
@@ -815,7 +813,7 @@ class LumitTheme {
         ),
       );
 
-  /// Gruvbox dark (K-097).
+  /// Gruvbox dark.
   factory LumitTheme.gruvboxDark() => LumitTheme(
         mode: ThemeMode2.dark,
         surface0: _rgb(0x28, 0x28, 0x28),
@@ -853,7 +851,7 @@ class LumitTheme {
         ),
       );
 
-  /// Gruvbox light (K-097).
+  /// Gruvbox light.
   factory LumitTheme.gruvboxLight() => LumitTheme(
         mode: ThemeMode2.light,
         surface0: _rgb(0xeb, 0xdb, 0xb2),
@@ -892,7 +890,7 @@ class LumitTheme {
         ),
       );
 
-  /// Catppuccin Mocha (K-097).
+  /// Catppuccin Mocha.
   factory LumitTheme.catppuccinMocha() => LumitTheme(
         mode: ThemeMode2.dark,
         surface0: _rgb(0x11, 0x11, 0x1b),
@@ -930,7 +928,7 @@ class LumitTheme {
         ),
       );
 
-  /// Catppuccin Latte (K-097).
+  /// Catppuccin Latte.
   factory LumitTheme.catppuccinLatte() => LumitTheme(
         mode: ThemeMode2.light,
         surface0: _rgb(0xe6, 0xe9, 0xef),
@@ -979,8 +977,8 @@ class LumitTheme {
   static const List<String> fontFamilyFallback = ['Inter'];
 
   /// The face every number, timecode and container label is set in
-  /// (docs/15-DESIGN.md §7.1, K-438). The fallbacks only matter if the bundled
-  /// asset is missing, and both platform names resolve to a monospaced face.
+  /// (docs/15-DESIGN.md §7.1). The fallbacks only matter if the bundled asset
+  /// is missing, and both platform names resolve to a monospaced face.
   static const String monoFontFamily = 'Geist Mono';
   static const List<String> monoFontFamilyFallback = [
     'Consolas',
@@ -1020,8 +1018,8 @@ class LumitTheme {
   /// (docs/15-DESIGN.md §7.1).
   TextStyle get caption => small.copyWith(fontSize: 9);
 
-  /// **Every container label** (docs/15-DESIGN.md §7.1, K-438): panel titles,
-  /// section headers, column headers, tab labels, dialog titles, attribution.
+  /// **Every container label** (docs/15-DESIGN.md §7.1): panel titles, section
+  /// headers, column headers, tab labels, dialog titles, attribution.
   ///
   /// In plain terms, a kicker is the small capitalised word above a thing that
   /// says what the thing is. Lumit sets all of them in Geist Mono, small, with
@@ -1036,11 +1034,11 @@ class LumitTheme {
         fontFamily: monoFontFamily,
         fontFamilyFallback: monoFontFamilyFallback,
         // 9px at +0.12em, regular weight — **the approved mockups' own
-        // `.kick`** (K-451: the mockups' metrics are canonical), and the
-        // bottom of §7.1's 9–11px / 0.08–0.12em band rather than its middle.
-        // It was 10px at +0.10em in Medium, which read a size heavier than
-        // every kicker the mockups draw. Flutter measures tracking in logical
-        // pixels, so an em is the font size.
+        // `.kick`** (their metrics are canonical), and the bottom of §7.1's
+        // 9–11px / 0.08–0.12em band rather than its middle. It was 10px at
+        // +0.10em in Medium, which read a size heavier than every kicker the
+        // mockups draw. Flutter measures tracking in logical pixels, so an em
+        // is the font size.
         fontSize: 9,
         // 1.08 written out, not `9 * 0.12`: the product is 0.12000000000000001
         // in binary floating point, which lands a hair outside the band the
@@ -1094,7 +1092,7 @@ class LumitTheme {
   /// meaning as the theme does. The full wheel is still a click away in the
   /// theme editor — these are the quick answers, not the whole answer.
   static const List<Color> accentPresets = [
-    defaultAccent, // spruce - THE default (K-538)
+    defaultAccent, // spruce - THE default
     Color(0xFFE05A72), // clay - what it replaced; one click back
     Color(0xFF4AA3E0),
     Color(0xFF46C98E),

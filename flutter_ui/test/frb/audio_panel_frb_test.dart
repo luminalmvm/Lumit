@@ -1,7 +1,7 @@
 // The Audio panel against the real engine: the three sections, the Beats
 // controls over the beat engine, and the two graph templates — whose staged
 // chains land as real wires the engine validates, Duck under's on the Layer
-// out's Volume socket (K-697).
+// out's Volume socket.
 
 import 'dart:io';
 import 'dart:typed_data';
@@ -60,7 +60,7 @@ void main() {
       expect(find.byKey(const ValueKey('beats-generate')), findsOneWidget);
       expect(find.byKey(const ValueKey('beats-clear')), findsOneWidget);
       // A solid is selected: the template buttons stand, the sound rows do
-      // not — a silent layer says so instead (K-435).
+      // not — a silent layer says so instead.
       expect(find.byKey(const ValueKey('audio-drive')), findsOneWidget);
       expect(find.byKey(const ValueKey('audio-duck')), findsOneWidget);
       expect(find.text('This layer makes no sound.'), findsOneWidget);
@@ -127,8 +127,8 @@ void main() {
           reason: 'the chain ends on the effect\'s own socket');
     });
 
-    /// *Lower behind…* (the ducking template, K-730) stages the inverted
-    /// chain onto the selected layer's own Volume socket (K-697): Audio level
+    /// *Lower behind…* (the ducking template) stages the inverted
+    /// chain onto the selected layer's own Volume socket: Audio level
     /// listening to the picked layer, Remap upside down, Smooth, into the
     /// Layer out — and the engine accepts the wire, which is the whole road
     /// being proved.

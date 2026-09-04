@@ -1,4 +1,4 @@
-//! Oklab/OkLCh perceptual colour operations (decision K-034).
+//! Oklab/OkLCh perceptual colour operations.
 //!
 //! In plain terms: linear RGB is where light adds correctly; Oklab is where
 //! *perception* behaves. Interpolate a gradient here and it stays vivid;
@@ -9,7 +9,7 @@
 //! Constants are Björn Ottosson's reference values. The WGSL twin
 //! (`oklab.wgsl`) carries the SAME constants; a test compiles it so the two
 //! implementations cannot silently diverge in validity, and the CPU functions
-//! below are the oracle for future effect kernels (K-019).
+//! below are the oracle for future effect kernels.
 
 /// Linear sRGB → Oklab.
 #[inline]
@@ -71,7 +71,7 @@ pub fn linear_from_oklch([l, c, h]: [f32; 3]) -> [f32; 3] {
     oklab_to_linear_srgb([l, c * h.cos(), c * h.sin()])
 }
 
-/// THE gradient primitive (K-034): interpolate in OkLCh with shortest-arc
+/// THE gradient primitive: interpolate in OkLCh with shortest-arc
 /// hue, so a ramp between two saturated colours travels around the hue wheel
 /// at full chroma instead of cutting through grey. Achromatic ends adopt the
 /// other end's hue (hue is undefined at zero chroma).

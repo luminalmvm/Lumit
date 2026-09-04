@@ -1,8 +1,8 @@
 # Retime
 
-**Status: canonical.** This document specifies Retime, Lumit's single retiming system
-(K-021), end to end: the segment data model and its exact maths, the two graph-editor lenses,
-the beat-sync covenant (K-022), cutting behaviour, overrun, frame interpolation policy, and
+**Status: canonical.** This document specifies Retime, Lumit's single retiming system,
+end to end: the segment data model and its exact maths, the two graph-editor lenses,
+the beat-sync covenant, cutting behaviour, overrun, frame interpolation policy, and
 how Retime composes with the rest of the engine. Terminology follows
 [01-GLOSSARY.md](01-GLOSSARY.md) §4 exactly. Object ownership (where a Retime lives on a Clip
 or Footage layer) is defined in [03-DATA-MODEL.md](03-DATA-MODEL.md) and is referenced, not
@@ -11,31 +11,31 @@ redefined, here.
 The key words MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are to be interpreted as described
 in RFC 2119.
 
-## 0. The current Retime surface (K-197)
+## 0. The current Retime surface
 
 **Retime was restarted as an ordinary property.** A layer carries
 `retime: Option<Property>` — a keyframable scalar whose value is the source time in seconds,
-the AE Time Remap shape — given with **Ctrl+Alt+T** or Composition ▸ Enable Retime (K-198,
-K-200) and drawn as a single row above Transform in the Timeline's fold-out. It has exactly
+the AE Time Remap shape — given with **Ctrl+Alt+T** or Composition ▸ Enable Retime and
+drawn as a single row above Transform in the Timeline's fold-out. It has exactly
 the graph options every other property has and **nothing else**: no lenses, no ease presets,
 no freeze, no interpolation policy on that path. That parity is the rule, not a temporary
 state — Retime-specific affordances return only as they are built on top of the property.
 
-**Sections 1–13 below specify the segment engine.** K-249 (2026-08-02) resolved which of the
-two survives: **the property does**. The segment store's layer arm is deleted (documents that
+**Sections 1–13 below specify the segment engine.** Which of the two survives was settled on
+2026-08-02: **the property does**. The segment store's layer arm is deleted (documents that
 carry one convert to property keyframes at load), `Clip::retime` migrates to the same
 property shape, and the segment engine remains only as that load-time conversion. Read
 §§1–13 as the mathematical reference the property path draws on — the integration, splitting
 and overrun maths — not as a description of the shipping store. The speed lens additionally
-has a Vegas mode: with the K-246 preference on it is a single-point **envelope** (speed as
-the value, default range 100% to −25%, K-247) rather than the two-sided derivative view.
+has a Vegas mode: with the preference on it is a single-point **envelope** (speed as
+the value, default range 100% to −25%) rather than the two-sided derivative view.
 [TODO.md](TODO.md) tracks the migration and every remaining gap.
 
 ---
 
 ## 1. Purpose and design principles
 
-Retime is the feature Lumit is built around. The target editor (K-002) spends most of a
+Retime is the feature Lumit is built around. The target editor spends most of a
 montage session ramping clips against beats. Every design choice below traces to five
 principles:
 
@@ -43,9 +43,9 @@ principles:
    layer. The value graph (AE-style map from local time to source time) and the speed graph
    (Vegas-style rate semantics) are views of that one store, edited in the graph editor.
    The speed view is drawn in the graph editor pane, below or instead of the value view —
-   it is NEVER overlaid on the clip in the timeline (K-021).
+   it is NEVER overlaid on the clip in the timeline.
 2. **The beat-sync covenant.** Editing a retime curve MUST NOT move clip boundaries, edit
-   points, or layer in/out points, and MUST NOT ripple anything (K-022). A ramped clip is a
+   points, or layer in/out points, and MUST NOT ripple anything. A ramped clip is a
    stable rectangle; beats already synced stay synced.
 3. **Exact boundaries.** Every segment boundary stores the exact rational source position.
    Cutting, trimming, and repeated editing never accumulate floating-point drift: the frame
@@ -115,7 +115,7 @@ pub struct RateSegment {
 pub enum Ease { Linear, Slow, Fast, Smooth, Sharp }
 
 /// Value-defined segment: x-monotone parametric cubic bezier in (t, s),
-/// AE-compatible per K-025 (§4.2). Endpoint values come from the boundaries.
+/// AE-compatible (§4.2). Endpoint values come from the boundaries.
 pub struct MapSegment {
     pub m0: Rational,     // outgoing speed (source seconds per local second) at start
     pub m1: Rational,     // incoming speed at end
@@ -194,8 +194,8 @@ occurs only under pathological editing.
 
 ### 4.2 MapSegment: the cubic value curve
 
-A MapSegment is an x-monotone parametric cubic bezier, exactly AE's temporal keyframe maths
-(K-025) so AE import is lossless (§13.1). With endpoints (tᵢ, sᵢ) and (tᵢ₊₁, sᵢ₊₁):
+A MapSegment is an x-monotone parametric cubic bezier, exactly AE's temporal keyframe maths,
+so AE import is lossless (§13.1). With endpoints (tᵢ, sᵢ) and (tᵢ₊₁, sᵢ₊₁):
 
 ```
 P0 = (tᵢ,            sᵢ)
@@ -334,7 +334,7 @@ flatten reversing regions to freezes.
 
 ## 7. Overrun and the beat-sync covenant
 
-### 7.1 The covenant (K-022, restated as requirements)
+### 7.1 The covenant (restated as requirements)
 
 - Editing any part of a Retime MUST NOT change the clip's in/out on the Sequence layer, any
   edit point, or the layer's in/out points, and MUST NOT move any other clip or layer.
@@ -386,7 +386,7 @@ An explicit freeze anywhere is a zero-speed segment (§3). The interaction with 
 clip or retime selection; final bindings in [07-UI-SPEC.md](07-UI-SPEC.md)) — performs a
 **non-ripple** out-point trim to the last local frame whose resolved source position is
 within the source extent. On a Sequence layer this leaves a gap after the clip; the gap is
-never closed automatically (K-022). The mirror command `retime.trim_to_source_start` trims
+never closed automatically. The mirror command `retime.trim_to_source_start` trims
 the in point for head overrun. When there is no overrun, the command does nothing and says
 so in the status line.
 
@@ -394,10 +394,10 @@ so in the status line.
 
 ### 8.1 Razor through a ramped clip
 
-**An eased ramp cuts like anything else** (K-573). The blade never used to bite on a clip
+**An eased ramp cuts like anything else.** The blade never used to bite on a clip
 that had been ramped, which was exactly backwards: the point of a montage cut is to land on
-the beat, and a ramped clip is the one most likely to be sitting on one. Since K-249 a clip's
-map is an ordinary keyframed property, and a keyframe span is one cubic — so the cut is a
+the beat, and a ramped clip is the one most likely to be sitting on one. A clip's map is now
+an ordinary keyframed property, and a keyframe span is one cubic — so the cut is a
 cubic split, and two cubics from a de Casteljau split *are* the original curve rather than an
 approximation of it. Sampled at every frame across the span, the halves and the original
 agree to the last bit.
@@ -406,13 +406,13 @@ Cutting a clip at local time t_c (t_c on the comp frame grid, hence rational):
 
 1. Evaluate s_c = f(t_c) and split the containing span at it, exactly
    (`Property::insert_key_preserving_shape`, the same cubic split a razor through a retimed
-   *layer* uses — K-221, §5.3). Where the span is a Hold there is no shape to keep: the key
+   *layer* uses, §5.3). Where the span is a Hold there is no shape to keep: the key
    goes in flat and the freeze continues on both sides.
 2. The left clip keeps keys with t ≤ t_c, ending on the new key (t_c, s_c). The right clip
    takes the rest, re-based: t′ = t − t_c for every key (exact rational subtraction). Its
    first key is (0, s_c).
 3. **Automatic tangents either side of the cut are written down first.** An automatic
-   tangent (K-506) stores no direction — it works one out from the keys on each side — and a
+   tangent stores no direction — it works one out from the keys on each side — and a
    cut changes precisely those neighbours, so left alone it would re-aim itself and both
    halves would drift off the curve. Resolving the two keys the cut lands between into the
    beziers they already were is the same curve said explicitly; every other key goes on
@@ -450,14 +450,14 @@ rather than a dialogue.
   local time — cropped if the target is shorter, extended per §7.3 if longer. A modifier
   offers time-normalised pasting (boundary times scaled by the duration ratio, speeds scaled
   inversely; exact rational scaling). This is the sharing path for ramp presets in community
-  packs (K-065).
+  packs.
 
 ## 9. The two graph-editor lenses
 
 Both lenses live in the graph editor panel ([07-UI-SPEC.md](07-UI-SPEC.md)): the value view,
 the speed view, or both stacked (speed below value). The timeline clip shows only read-only
 indication — a retime badge, boundary tick marks, and overrun hatching. No editable curve is
-ever drawn on the clip (K-021).
+ever drawn on the clip.
 
 Common to both lenses: boundary drags snap to beat markers and to comp frames (snapping
 toggleable, with a temporary-disable modifier); horizontal boundary drags are clamped between
@@ -480,7 +480,7 @@ descending (only with `allow_reverse`) is reverse.
 | Numeric entry on a boundary | Fields for local timecode `t` and source timecode `s`; identical semantics to the corresponding drags. | none |
 
 The value lens is realised as the **ordinary graph editor** running on the source-position
-channel (K-078): `Retime::source_keyframes` reads the store into bezier keyframes (each
+channel: `Retime::source_keyframes` reads the store into bezier keyframes (each
 MapSegment contributing its stored tangents, each RateSegment shown as a straight Linear side)
 and `Retime::from_source_keyframes` writes an edited keyframe list back as MapSegments, using
 the same control-point construction as `anim::CubicSpan::from_ae` — so a Time curve renders
@@ -515,7 +515,7 @@ vertically after the edited segment.
 ### 9.3 Numeric entry and readouts
 
 - **The Retime row's own value reads as a timecode** (`HH:MM:SS:FF`, with a leading minus
-  for a source time before zero), not as a number of seconds — K-287, realising K-075's
+  for a source time before zero), not as a number of seconds, realising the
   value lens for the outline row. It is dragged and typed in whole source frames, at the
   **footage's own rate** — 600 fps footage counts to `:599` whatever the comp's rate is.
   The rate is probed from the media when the row appears; until it answers, and for a
@@ -548,7 +548,7 @@ resolves a fractional source position; the policy decides the pixels:
 - **Blend:** crossfade the two neighbouring frames weighted by the fractional phase.
   Cheap smoothness; visible ghosting on fast motion.
 - **Flow:** optical-flow synthesis of the intermediate frame (engine and parameters in
-  [08-EFFECTS.md](08-EFFECTS.md)). Twixtor-class quality is the bar (K-064).
+  [08-EFFECTS.md](08-EFFECTS.md)). Twixtor-class quality is the bar.
 
 Switching the policy away from Flow **parks** the Flow group rather than dropping it: the
 parameters live inside the `Flow` variant, so while the policy is Nearest or Blend they wait
@@ -559,7 +559,7 @@ so a single undo restores both.
 
 There is **no composition-wide master** for this policy, unlike motion blur: each layer and
 each clip carries its own, and that choice is the whole of it. So the export's *Retime blend*
-override (K-502, `RenderOptions::retime_blend`, [15-DESIGN.md](15-DESIGN.md) §12A.4) has two answers
+override (`RenderOptions::retime_blend`, [15-DESIGN.md](15-DESIGN.md) §12A.4) has two answers
 rather than three — leave every policy alone, or fall them all back to Nearest for the
 delivery, clips included. There is nothing for an "on for checked layers" to switch on.
 
@@ -576,7 +576,7 @@ Requirements and expectations for Flow:
   (never at export — glossary §5). Per-frame, when the flow solver's confidence falls below
   threshold, the engine SHOULD fall back to Blend for that frame and MAY mark the frame in
   the cache bar diagnostics. Export MUST honour the requested policy, using the CPU
-  reference implementation when no capable GPU is present (K-019); export never silently
+  reference implementation when no capable GPU is present; export never silently
   downgrades.
 - Source-rate guidance surfaced in the UI: when any segment's effective sampling ratio
   r = |speed| × source_fps / comp_fps falls below 0.3 and the policy is Nearest or Blend,
@@ -608,7 +608,7 @@ In/out edits are boundary edits, not retime edits; they crop or extend the map p
 
 ### 11.2 Stretch
 
-**Stretch is a command, not a field** (K-584). There is no stretch factor stored on a layer
+**Stretch is a command, not a field.** There is no stretch factor stored on a layer
 and nothing at playback consults one: Layer ▸ Stretch… asks for a speed, works out the length
 that speed implies, and writes the layer's span and its Retime map together as one undo step
 (`LayerReference::stretch`). The same lowering the AE importer already does from the other
@@ -622,7 +622,7 @@ rationals. A layer with no map yet is given the identity one first.
 offers three anchors; Lumit offers the one that needs no extra question, and the dialogue says
 so on its face.
 
-Refused on a Sequence layer: its clips carry the maps (K-075), and a clip's own numeric speed
+Refused on a Sequence layer: its clips carry the maps, and a clip's own numeric speed
 entry (§12.1) is its road ([03-DATA-MODEL.md](03-DATA-MODEL.md)).
 
 ### 11.3 Precomps
@@ -643,7 +643,7 @@ vectors computed for frame synthesis SHOULD be reused for flow-based motion blur
 
 ### 11.5 Audio
 
-v1 Retime is video-only (K-050 scope). Audio layers have no Retime; a retimed clip or layer
+v1 Retime is video-only. Audio layers have no Retime; a retimed clip or layer
 contributes no speed-matched audio, and Lumit MUST NOT attempt naive resampled audio under
 a ramp. Pitch-preserving audio retime is a Composer-era feature
 ([09-AUDIO.md](09-AUDIO.md)). Montage practice — game audio muted, music driving the edit —
@@ -664,14 +664,14 @@ Expressions ([12-PLUGINS.md](12-PLUGINS.md) §scripting) observe:
 
 ### 11.7 Evaluation graph and cache keys
 
-Retime resolves during the cheap metadata pass (K-015): for each requested output frame it
+Retime resolves during the cheap metadata pass: for each requested output frame it
 emits a **sample request tuple** — for Nearest `(footage id, interp settings, frame index)`;
 for Blend `(…, frameA, frameB, phase)` with phase quantised to 1/1024; for Flow
 `(…, frameA, frameB, phase, flow params, algorithm version)`. Motion blur multiplies
 requests by shutter sub-samples.
 
 Cache entries are keyed by content hash of the resolved tuple, never by timeline position or
-by a hash of the whole curve (K-016). Consequences (MUST):
+by a hash of the whole curve. Consequences (MUST):
 
 - A retime edit invalidates exactly the output frames whose resolved tuples changed. Frames
   before the edited segment are untouched; frames after it invalidate only because their
@@ -705,13 +705,13 @@ semantics, and proposed defaults are normative here.
 | `retime.toggle_lens` | Value / speed / stacked | `Tab` (graph editor) |
 | `retime.stretch` | Stretch… — a new speed, or the duration it implies (§11.2) | none (Layer right-click) |
 
-**What is wired today** (K-584). A layer's right-click carries Enable/Disable Retime,
-**Stretch…** and **Freeze frame at playhead**, each applying to the whole picked set (K-523);
+**What is wired today.** A layer's right-click carries Enable/Disable Retime,
+**Stretch…** and **Freeze frame at playhead**, each applying to the whole picked set;
 a Sequence clip's right-click carries **Speed…** (`retime.set_segment_speed`) beside Reset
 speed, Copy/Paste shape and Delete. The rest of the table above has no engine behind it yet:
 `add_boundary`, `trim_to_source_end` / `…_start`, `quantise_boundaries_to_beats`,
 `apply_preset` (Hold included — it needs a segment's entry speed nothing reads out) and
-`toggle_reverse_allowed`, whose `allow_reverse` flag went with the segment store at K-249.
+`toggle_reverse_allowed`, whose `allow_reverse` flag went with the segment store.
 
 ### 12.2 Preset ramp shapes
 
@@ -728,7 +728,7 @@ Boundary drags snap to beat markers (glossary §3) in both lenses. The
 `retime.quantise_boundaries_to_beats` command bulk-snaps. Beat markers also drive playhead
 navigation (jump to next/previous beat), which combined with `R` makes ramp placement a
 two-key loop. Nothing about beat snapping ever moves a clip edge — snapping applies to
-retime boundaries and the playhead only (K-022).
+retime boundaries and the playhead only.
 
 ### 12.4 The three-point kill ramp
 
@@ -752,14 +752,14 @@ boundaries later reproduces these rationals bit-for-bit.
 
 ## 13. Import mappings
 
-### 13.1 After Effects → Lumit (via the exporter panel, K-060; pipeline in [11-AE-IMPORT.md](11-AE-IMPORT.md))
+### 13.1 After Effects → Lumit (via the exporter panel; pipeline in [11-AE-IMPORT.md](11-AE-IMPORT.md))
 
 AE's **Time Remap** property (AE's name for the value-graph view of retiming) maps to Retime
 losslessly:
 
 - Each adjacent pair of Time Remap keyframes → one **MapSegment**: keyframe values become
   boundary `s`, per-side speed becomes m, per-side influence becomes b — the identical
-  parametric-bezier maths (K-025), so the curve is reproduced exactly, including
+  parametric-bezier maths, so the curve is reproduced exactly, including
   free-influence shapes outside the polynomial subclass.
 - AE hold keyframes → a MapSegment with m₀ = m₁ = 0 and equal boundary values (an exact
   freeze), or equivalently `Rate { 0, 0, Linear }` — the importer SHOULD emit the Rate form
@@ -773,7 +773,7 @@ losslessly:
 - An expression on AE's Time Remap imports as preserved-but-disabled expression text attached
   to the layer notes, with the keyframe curve imported as above (expressions cannot drive
   Retime in v1, §11.6). AE Timewarp (the effect) does not map to Retime; it imports as an
-  inert placeholder (K-060). AE frame blending switches map to the interpolation policy:
+  inert placeholder. AE frame blending switches map to the interpolation policy:
   off → Nearest, Frame Mix → Blend, Pixel Motion → Flow.
 
 ### 13.2 Vegas → Lumit (mapping documented now; a Vegas importer is future work)
@@ -800,7 +800,7 @@ constant-factor mechanisms. The mapping, for when an importer exists:
 
 ## Open questions
 
-1. **Resolved — the property survives (K-249, 2026-08-02).** The layer segment arm
+1. **Resolved — the property survives (2026-08-02).** The layer segment arm
    (`LayerKind::Footage::retime`, the `Layer::source_time_at` fallback, the Source card's
    speed/reverse/frames rows) is deleted with a one-way load-time conversion, and
    `Clip::retime` migrates to the property shape. See §0.

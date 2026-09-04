@@ -4,7 +4,7 @@
 // left (layer number, label chip, name, switches, blend mode, parent) and a
 // **layer area** on the right (the ruler, the playhead, one bar per layer, the
 // work area and the markers). Everything draws from the comp read model
-// (state/comp_model.dart, K-184); edits go out through the reference handles.
+// (state/comp_model.dart); edits go out through the reference handles.
 //
 // **What is here.** Adding every layer kind, deleting, duplicating, reordering,
 // the eight switches, blend mode, parenting, dragging and trimming a layer's
@@ -89,7 +89,7 @@ import 'waveform_frb.dart';
 import 'timeline_group_row_frb.dart';
 import 'transform_rows_frb.dart';
 
-// The parts this file was split into (the split rule, K-007): every name they
+// The parts this file was split into (the split rule): every name they
 // hold was reachable through this file before the split, and still is.
 export 'timeline_metrics_frb.dart';
 export 'timeline_layer_rows_frb.dart';
@@ -121,14 +121,14 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// name that does not line up with its bar is worse than no fold-out at all.
   final Set<String> _open = {};
 
-  /// Which **layer groups** are folded shut (K-702), by group id. Session
+  /// Which **layer groups** are folded shut, by group id. Session
   /// state, held beside [_open] and for the same reason: a fold changes how
   /// many rows the table has, and the outline and the lanes have to leave room
   /// for exactly the same ones. Not document state — whether a band is twirled
   /// open is no more part of the composition than whether a layer is.
   final Set<String> _foldedGroups = {};
 
-  /// Which group headers have their **effect lanes** twirled open (K-731), by
+  /// Which group headers have their **effect lanes** twirled open, by
   /// group id — the fx tick's own fold, session state like the two above.
   /// The per-effect twirls under it live in [_open] under the header's
   /// group-prefixed paths, so the ordinary toggle road serves them unchanged.
@@ -136,10 +136,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
 
   /// Whether [id]'s twirl is down.
   ///
-  /// One set, since K-529: the flat-sheet twirl set went with Keys mode and
-  /// with the graph's own outline — both views that opened every layer by
-  /// default, and neither of which exists now. Both remaining views are the
-  /// Layers outline, where shut-by-default is the right answer.
+  /// One set now: the flat-sheet twirl set went with Keys mode and with the
+  /// graph's own outline — both views that opened every layer by default, and
+  /// neither of which exists now. Both remaining views are the Layers outline,
+  /// where shut-by-default is the right answer.
   bool _isOpen(String id) => _open.contains(id);
 
   /// Open or shut one twirl. The paths reach below the layer
@@ -149,7 +149,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// remembered, so twirling it back down finds it as it was.
   void _setOpen(String path, bool open) {
     // Whatever this path belongs to is being twirled by hand or by another
-    // reveal, so it stops answering the last single `U` (K-622).
+    // reveal, so it stops answering the last single `U`.
     _revealed.remove(path.split('/').first);
     if (open) {
       _open.add(path);
@@ -173,20 +173,20 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// answer arrives.
   final Map<String, bool> _hasAudio = {};
 
-  /// Which layers have a picture to show, by id (K-435) — the mirror of
+  /// Which layers have a picture to show, by id — the mirror of
   /// [_hasAudio], cached for the same reason and filled in the same pass.
   /// A layer with no entry is assumed to have one: the visibility switch is
   /// the one nearly every layer uses.
   final Map<String, bool> _hasPicture = {};
 
   /// Each layer's waveform peaks, by id — the stretch of its source the lanes
-  /// are currently showing, summarised to one bucket per pixel column (K-280).
+  /// are currently showing, summarised to one bucket per pixel column.
   ///
   /// Refetched when the zoom or the scroll moves the window far enough to
   /// matter, which is what keeps the drawn detail level with the zoom instead
   /// of blocky. Peaks belong to the file, so the painter maps them through the
   /// live in/out/offset and a drag or a trim carries the transients with it
-  /// without asking again (K-172).
+  /// without asking again.
   final Map<String, BridgeAudioPeaks> _peaks = {};
 
   /// What each layer's peaks were fetched for: the window, the bucket count
@@ -195,7 +195,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// same key by design ([WaveformRequest]).
   final Map<String, String> _peakKeys = {};
 
-  /// Each spectral-mode layer's spectrogram window (K-699), and what it was
+  /// Each spectral-mode layer's spectrogram window, and what it was
   /// fetched for — the peaks' own bargain, for the other picture. A layer
   /// holds one or the other, never both: the mode decides which fetch runs,
   /// and the loser's entry is dropped so a long session does not keep two
@@ -203,7 +203,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   final Map<String, BridgeSpectrogram> _spectra = {};
   final Map<String, String> _spectraKeys = {};
 
-  /// A lane-mode chip changed (K-699): fetch what the new mode needs. No
+  /// A lane-mode chip changed: fetch what the new mode needs. No
   /// rebuild here — the chips and the lanes listen to [laneModes] themselves,
   /// which is what keeps the toggle off the rest of the table.
   void _onLaneMode() {
@@ -215,10 +215,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// build and never read to decide layout.
   ///
   /// Two things read it: how much audio a waveform lane is showing, which is
-  /// what the peak window is worked out from (K-280); and the zoom, which
+  /// what the peak window is worked out from; and the zoom, which
   /// needs the width at magnification 1 to know what a frame is worth in
   /// pixels *now* — it cannot ask the axis, because the axis is rebuilt from
-  /// the zoom itself ([_laneFrames] is its other half, K-293).
+  /// the zoom itself ([_laneFrames] is its other half).
   double _laneViewport = 0;
 
   /// Each Footage layer's source length in comp frames, by layer id. Cached
@@ -228,18 +228,18 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// missing file), which leaves that layer's ends free.
   final Map<String, int?> _footageFrames = {};
 
-  /// How far each layer's ends may be dragged, by layer id (K-211) — what the
+  /// How far each layer's ends may be dragged, by layer id — what the
   /// bars trim within and draw their corner marks from.
   Map<String, BarBounds> _barBounds = {};
 
   /// The document revision [_barBounds] was worked out at. A precomp's length
   /// and a layer's Retime are both one edit away from changing, so the bounds
   /// are taken again whenever the document moves — and never in between, which
-  /// is what keeps a rebuild free of bridge calls (K-184).
+  /// is what keeps a rebuild free of bridge calls.
   BigInt? _boundsRevision;
 
   /// Whether a layer's name is written along its bar — Settings ▸ Interface ▸
-  /// Panels, off by default (K-514). Read here, once per build of the panel,
+  /// Panels, off by default. Read here, once per build of the panel,
   /// and handed down to the bars.
   bool get _barNames => Provider.of<LumitUiState>(context, listen: false)
       .workspace
@@ -247,14 +247,14 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       .layerNamesOnBars;
 
   /// What the chrome says — Settings ▸ Appearance ▸ Interface ▸ *Chrome
-  /// labels* (K-440), read once per build of the panel and handed down.
+  /// labels*, read once per build of the panel and handed down.
   ///
   /// Held in a field rather than looked up by each toggle: the column toggles
   /// rebuild on every hover in the bar, and a settings lookup per toggle per
-  /// hover is exactly the pattern K-184 keeps out of the paint path.
+  /// hover is exactly the pattern that must stay out of the paint path.
   ChromeLabels _chromeLabels = ChromeLabels.icons;
 
-  /// How waveforms draw — Settings ▸ Interface ▸ Editing (K-280, K-285).
+  /// How waveforms draw — Settings ▸ Interface ▸ Editing.
   WaveformStyle get _waveformStyle {
     final interface =
         Provider.of<LumitUiState>(context, listen: false).workspace.interface;
@@ -270,9 +270,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// **This is what makes the resolution follow the zoom.** The old lane asked
   /// once for 2 048 buckets across the whole source and kept them for the
   /// session, so zooming in stretched the same coarse summary until it was a
-  /// staircase (K-172, superseded here). Now the window is the visible one and
-  /// the buckets are the visible pixel columns, so a wave has as much detail as
-  /// there is room to show, at any zoom.
+  /// staircase. Now the window is the visible one and the buckets are the
+  /// visible pixel columns, so a wave has as much detail as there is room to
+  /// show, at any zoom.
   ///
   /// Called from the build *and* from the lanes' scroll, because scrolling
   /// moves the window without changing anything the panel rebuilds for. The
@@ -288,8 +288,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // Only the band split reaches the engine: where the wave sits is a
     // drawing decision, so toggling it repaints and fetches nothing.
     final multiwave = _waveformStyle.needsBands;
-    // What a layer with no chip choice of its own shows (K-699) — read here,
-    // once, rather than in every waveform row's build (K-184).
+    // What a layer with no chip choice of its own shows — read here,
+    // once, rather than in every waveform row's build.
     laneModes.stackDefault = multiwave;
     // The comp seconds under the lanes' window, from the same mapping the axis
     // draws with.
@@ -320,13 +320,13 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         pixels: _laneViewport,
       );
       if (request == null) continue;
-      // A retimed layer's buckets are taken through its Retime map (K-436), so
+      // A retimed layer's buckets are taken through its Retime map, so
       // reshaping the map changes the answer without moving the window. Only a
       // retimed layer pays for that: an ordinary one keys on the window alone
       // and an edit anywhere else in the document asks for nothing.
       final retimed =
           entry.info.retime == null ? '' : '|${ui.model.heldRevision}';
-      // The lane's mode decides which picture is fetched (K-699): the
+      // The lane's mode decides which picture is fetched: the
       // spectrogram in spectral mode, the peaks otherwise — never both.
       final mode = laneModes.of(id);
       if (mode == LaneMode.spectral) {
@@ -384,7 +384,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// without a rebuild to hand them over.
   List<BridgeLayerEntry> _lastLayers = const [];
 
-  /// Work out how far every layer's ends may be dragged (K-211).
+  /// Work out how far every layer's ends may be dragged.
   ///
   /// Two costs, kept apart. A **footage** length means opening the file, so it
   /// is asked once per layer, off the build, and kept for the session — the
@@ -431,7 +431,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // The Flow group's parameters and the Volume scalar, for the fold-out's
     // rows: neither is in the read model, so they are read here — once per
     // document revision, on the same bargain as the bounds — and ride down on
-    // the rows rather than being asked for per rebuild (K-184).
+    // the rows rather than being asked for per rebuild.
     final flowParams = <String, BridgeFlowParams>{};
     final volumeDb = <String, BridgeScalar>{};
     final driven = <String, Map<String, DrivenParam>>{};
@@ -439,15 +439,15 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       final id = entry.layer.internallayerId.toString();
       try {
         if (entry.info.flow) flowParams[id] = entry.layer.getFlowParams();
-        // Off the read model (K-680), where the Flow rate has always been: it
+        // Off the read model, where the Flow rate has always been: it
         // was a `get_volume_db` per sounding layer on every document revision.
         if (_hasAudio[id] ?? false) volumeDb[id] = entry.info.volumeDb;
-        // Which parameters a wire is deciding (K-471, K-627), so a fold-out
+        // Which parameters a wire is deciding, so a fold-out
         // row draws its *driven* mark where its stopwatch would be. Only a
         // layer with an effect stack can have one, and the answer rides down
         // on the row rather than being asked for per rebuild.
         //
-        // **And only a layer with a wire in it at all** (K-680). Reading the
+        // **And only a layer with a wire in it at all**. Reading the
         // graph is the most expensive question on this walk, and it was asked
         // of every layer carrying effects on every document revision — 49
         // crossings and 17 ms per click on the owner's project — to hear "no
@@ -465,7 +465,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _driven = driven;
   }
 
-  /// Per-layer answers the fold rows carry (K-184) — see [_refreshBounds].
+  /// Per-layer answers the fold rows carry — see [_refreshBounds].
   Map<String, BridgeFlowParams> _flowParams = {};
   Map<String, BridgeScalar> _volumeDb = {};
   Map<String, Map<String, DrivenParam>> _driven = {};
@@ -477,13 +477,13 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// for the document's below, so the lane and graph highlights move with the
   /// hand while the write still lands once, on release.
   ///
-  /// **A notifier, not a field the panel rebuilds on** (K-626's pattern). The
-  /// grounds that draw the band listen to it for themselves ([WorkAreaGround]),
-  /// so a pointer move repaints three washes instead of rebuilding the whole
-  /// Timeline — the outline, every row, the lanes, the key counts and the snap
-  /// targets — which is what made an edge drag crawl on a real project. Its
-  /// value is still read at build time, so a rebuild that happens mid-drag for
-  /// its own reasons draws the staged span rather than jumping back.
+  /// **A notifier, not a field the panel rebuilds on**. The grounds that draw
+  /// the band listen to it for themselves ([WorkAreaGround]), so a pointer move
+  /// repaints three washes instead of rebuilding the whole Timeline — the
+  /// outline, every row, the lanes, the key counts and the snap targets — which
+  /// is what made an edge drag crawl on a real project. Its value is still read
+  /// at build time, so a rebuild that happens mid-drag for its own reasons draws
+  /// the staged span rather than jumping back.
   final ValueNotifier<({int start, int end, bool whole})?> _workPreview =
       ValueNotifier(null);
   BigInt? _workRevision;
@@ -493,9 +493,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   BarBounds _boundsOf(BridgeLayerEntry entry, int fpsNum, int fpsDen) {
     final info = entry.info;
     // Retime frees both ends (docs/04-RETIMING.md). One question now, not two:
-    // K-249 left the Retime property as the only map, so the read model's own
-    // field is the whole answer and the bar no longer crosses the bridge to
-    // ask a second time.
+    // the Retime property is the only map, so the read model's own field is
+    // the whole answer and the bar no longer crosses the bridge to ask a
+    // second time.
     final retimed = info.retime != null;
     int? sourceFrames;
     try {
@@ -503,7 +503,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         case BridgeLayerKind.footage:
           sourceFrames = _footageFrames[entry.layer.internallayerId.toString()];
         case BridgeLayerKind.precomp:
-          // Off the read model (K-680), already at *this* comp's rate. It was
+          // Off the read model, already at *this* comp's rate. It was
           // a `get_source_item` and a `get_settings` per precomp layer, run
           // again on every document revision — the two calls this walk cost
           // that the engine's own model walk already had in hand
@@ -525,10 +525,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     );
   }
 
-  /// Twirl a fold open or shut. Shutting one drops the selection inside it
-  /// (K-203): a selected property that is no longer on screen is a highlight
-  /// with nowhere to sit, and it came back as soon as the fold reopened — on a
-  /// layer the user had since stopped working on.
+  /// Twirl a fold open or shut. Shutting one drops the selection inside it: a
+  /// selected property that is no longer on screen is a highlight with nowhere
+  /// to sit, and it came back as soon as the fold reopened — on a layer the user
+  /// had since stopped working on.
   ///
   /// **A twirl on a selected row moves every selected row with it** (§6.4, the
   /// rule the Effect controls' twirls follow): five layers picked out and one
@@ -566,7 +566,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _graphKeySelection.clear();
   }
 
-  /// Nothing selected: no layer, no properties, no keyframes (K-203).
+  /// Nothing selected: no layer, no properties, no keyframes.
   ///
   /// Clicking empty space in either half of the table is how you get here. An
   /// editor with no way *out* of a selection makes every following command
@@ -597,14 +597,14 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// ([_selectProperty]), because a selection that behaved one way for rows
   /// and another for layers would be two selections to learn.
   ///
-  /// The list is the shell's (K-217), so this hands the work to
+  /// The list is the shell's, so this hands the work to
   /// [LumitUiState.setSelection] and [LumitUiState.toggleSelected] rather than
   /// keeping a second idea of what is selected: the Viewer's boxes, Delete and
   /// the split all read that one list.
   ///
   /// A layer's properties are not selected with it: a click on a layer's name
   /// means "this layer", and leaving a property of the layer before it lit is
-  /// the highlight belonging to nothing on screen that K-203 went looking for.
+  /// a highlight belonging to nothing on screen.
   ///
   /// **Published, not `setState`** (docs/impl/ui-performance.md §4.4). A layer
   /// click used to redraw the whole panel to move one row's lit state: measured
@@ -615,7 +615,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// Graph mode is the exception the property paths already carve out: the
   /// picked properties *are* its curves, and dropping them gives it a new
   /// picture to draw.
-  /// Everything a **layer group's** two rows can be asked to do (K-702), built
+  /// Everything a **layer group's** two rows can be asked to do, built
   /// once per build and handed to both halves so the header and its combined
   /// bar act on one set rather than two that agree.
   ///
@@ -642,7 +642,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           // After the write, not before: setting the selection notifies the
           // listener that clears this, so the order is what leaves it set.
           _selectedGroup = g.id;
-          // The header is now the Effect controls panel's subject (K-731) —
+          // The header is now the Effect controls panel's subject —
           // after setSelection for the same clears-then-sets reason above.
           ui.selectedGroupHeader.value = g.id;
           // Published, not `setState` — [_selectLayer]'s own rule (WP-2): the
@@ -693,7 +693,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
             ui: ui,
             workspace: ui.workspace,
             // Named so the engine carries the header's effect stack onto the
-            // new Precomp layer and retires the emptied band (K-731 §5).
+            // new Precomp layer and retires the emptied band.
             group: g.id,
           );
         },
@@ -701,7 +701,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           comp.shiftGroup(group: g.id, delta: delta);
           ui.model.refresh();
         },
-        // The fx tick's twirl (K-731): the header's effect lanes, session
+        // The fx tick's twirl: the header's effect lanes, session
         // state like the member fold above it.
         onToggleFxFold: (id) => setState(() {
           if (!_openGroupFx.remove(id)) _openGroupFx.add(id);
@@ -722,7 +722,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       LumitUiState ui, LayerReference? layer, List<BridgeLayerEntry> among) {
     if (ui.selectedLayer.value?.internallayerId != layer?.internallayerId) {
       // The one place this is decided, shared with the listener that catches a
-      // selection made in the Viewer (K-275). The highlight goes with the
+      // selection made in the Viewer. The highlight goes with the
       // property selection it belongs to: left behind, the previous layer's
       // row stayed lit after a click on a different layer.
       _dropLayerLocalSelection();
@@ -758,7 +758,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
 
   /// Fill in any layer's has-audio and has-picture answers we do not have, off
   /// the build. Both come from probing the source, so both are asked once per
-  /// layer and remembered (K-184, K-435).
+  /// layer and remembered.
   void _refreshAudio(List<BridgeLayerEntry> layers) {
     for (final entry in layers) {
       final id = entry.layer.internallayerId.toString();
@@ -796,7 +796,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// leaves the rest alone, so the outline grows by what the drag moved.
   Map<TimelineGroup, double> _groupWidths = {...defaultGroupWidths};
 
-  /// The column groups the bottom bar has switched **off** (K-448, §12A.1),
+  /// The column groups the bottom bar has switched **off** (§12A.1),
   /// so the outline pares down to names and bars when the columns are not in
   /// use. Session-lived, like the order and the widths. The identity group is
   /// never in here: names and bars are what "pared down" means, and a table
@@ -853,7 +853,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
 
   /// The drawn widths with a seam drag's live width in place of the stored
   /// one. The matte toggles' room is added back the same way the build adds
-  /// it, so a dragged compose column keeps its two pickers in step (K-463).
+  /// it, so a dragged compose column keeps its two pickers in step.
   Map<TimelineGroup, double> _liveWidths(Map<TimelineGroup, double> widths,
           MapEntry<TimelineGroup, double>? live, bool matteToggles) =>
       live == null || !widths.containsKey(live.key)
@@ -900,7 +900,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// draw has changed, so a publish that says the same thing costs no repaint.
   void _publishRowSelection([Map<String, List<Color>>? colours]) {
     final next = TimelineSelection(
-      // The shell's list (K-217) as the rows read it: strings, because that is
+      // The shell's list as the rows read it: strings, because that is
       // what a block is keyed by on both sides of the table.
       layers: {
         for (final layer in _ui?.selectedLayers.value ?? const [])
@@ -933,7 +933,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// so the bottom bar's buttons and the shortcuts act on the same set.
   final Set<String> _graphKeySelection = {};
 
-  /// The Sequence layers whose view is open (K-248) — double-clicking one
+  /// The Sequence layers whose view is open — double-clicking one
   /// opens its clips and their speed envelope inside its own row.
   final Set<String> _sequenceOpen = {};
 
@@ -950,7 +950,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         for (final id in _sequenceOpen)
           // The clips' top row *is* the layer's own bar row, so opening adds
           // only the two under it — which is what keeps the layer's row
-          // looking exactly as it did when the view is shut (K-248).
+          // looking exactly as it did when the view is shut.
           id: sequenceClipExtra + (_sequenceGraph[id] ?? sequenceEnvelopeStrip),
       };
 
@@ -976,7 +976,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     return out;
   }
 
-  /// What a double-click on a layer opens (K-243): a Sequence layer's view,
+  /// What a double-click on a layer opens: a Sequence layer's view,
   /// in place, or the comp a Precomp draws — fronted the way the outline's
   /// name, the Project panel and the Hierarchy already front it. The lane
   /// bar reaches here too (owner, 2026-08-31: "if I double click a precomp
@@ -1032,16 +1032,16 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// Select [path] by click: plain replaces, Ctrl toggles, Shift extends from
   /// the last selected along the visible rows. Marks its layer either way.
   ///
-  /// **A property's name is its row's "select all"** (K-500 §2.1): picking a
-  /// row picks its keyframes too, so the block box, the Ease popover and the
-  /// F9 family act on the row that was just clicked without the user drawing a
-  /// box round diamonds they can already see are all of them. Each of the three
-  /// click rules carries its keys the same way it carries its rows — Ctrl
-  /// toggles the row's keys in and out of the standing selection, Shift takes
-  /// the keys of every row the run passes over.
+  /// **A property's name is its row's "select all"**: picking a row picks its
+  /// keyframes too, so the block box, the Ease popover and the F9 family act on
+  /// the row that was just clicked without the user drawing a box round diamonds
+  /// they can already see are all of them. Each of the three click rules carries
+  /// its keys the same way it carries its rows — Ctrl toggles the row's keys in
+  /// and out of the standing selection, Shift takes the keys of every row the
+  /// run passes over.
   ///
   /// The stopwatch and the value well are not this gesture: they animate and
-  /// they edit, and neither re-aims the selection (K-196).
+  /// they edit, and neither re-aims the selection.
   /// **Published, not `setState`.** A click on a name lights a row and fills
   /// that row's diamonds, and nothing else on screen can say anything about
   /// either — so the two halves of the table listen for their own share and
@@ -1093,7 +1093,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   }
 
   /// The other direction: an effect picked in the Effect controls panel lights
-  /// its row here (K-300). A no-op when the selection is already what this
+  /// its row here. A no-op when the selection is already what this
   /// panel published, which is what keeps the two from bouncing.
   void _onEffectSelectionChanged() {
     if (!mounted) return;
@@ -1125,7 +1125,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     if (_graph) setState(() {});
   }
 
-  /// Hand the effect headings among the selected rows to the shell (K-300), so
+  /// Hand the effect headings among the selected rows to the shell, so
   /// Copy — and the Effect controls panel, which lights the same effects —
   /// sees what was picked here.
   ///
@@ -1133,7 +1133,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// has one idea of what is selected, and an effect heading is a row in it.
   /// Rows on more than one layer resolve to the first layer with an effect
   /// picked, because a `.lumfx` document is one layer's stack.
-  /// Tell the rest of the shell which property rows are picked (K-341), so the
+  /// Tell the rest of the shell which property rows are picked, so the
   /// Viewer can outline the layer they belong to and show the points of a mask
   /// whose Path row is among them.
   void _publishPropertySelection() {
@@ -1194,9 +1194,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     ui.clearEffectSelection();
   }
 
-  /// Opening a **Retime** row lands in the lens the user asked for (K-246):
+  /// Opening a **Retime** row lands in the lens the user asked for:
   /// with *Retime opens to Speed* on, the speed view — which in that mode
-  /// is the Vegas envelope (K-247).
+  /// is the Vegas envelope.
   ///
   /// Only on the way *in*, and only for a Retime: switching lens by hand
   /// afterwards must stick, and selecting Position must not drag the Retime
@@ -1210,16 +1210,16 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _publishEasingClaim();
   }
 
-  /// Settings ▸ Interface ▸ Editing ▸ *Video arrives as a Sequence layer*
-  /// (K-246). Forwarded to the engine, which decides whether this particular
-  /// media is something to cut.
+  /// Settings ▸ Interface ▸ Editing ▸ *Video arrives as a Sequence layer*.
+  /// Forwarded to the engine, which decides whether this particular media is
+  /// something to cut.
   bool _videoAsSequence(BuildContext context) =>
       Provider.of<LumitUiState>(context, listen: false)
           .workspace
           .interface
           .videoAsSequenceLayer;
 
-  /// Settings ▸ Interface ▸ Editing ▸ *Retime opens to Speed* (K-246).
+  /// Settings ▸ Interface ▸ Editing ▸ *Retime opens to Speed*.
   bool _vegas(BuildContext context) =>
       Provider.of<LumitUiState>(context, listen: false)
           .workspace
@@ -1231,7 +1231,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   ///
   /// Published rather than `setState` for the same reason [_selectProperty] is,
   /// and it matters here as much: a plain click on a property's name *is* this
-  /// gesture first — the press picks the row before the tap does (K-334) — so
+  /// gesture first — the press picks the row before the tap does — so
   /// leaving it a panel-wide redraw would have left the click costing one
   /// anyway.
   void _selectOnEdit(String path) {
@@ -1246,7 +1246,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     if (_graph) setState(() {});
   }
 
-  /// Which of the two views is up (K-529, §12A.1).
+  /// Which of the two views is up (§12A.1).
   ///
   /// One field rather than a flag per mode: two booleans can say "both at
   /// once", and a state that cannot be drawn is a state that will one day be
@@ -1266,7 +1266,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _publishEasingClaim();
   }
 
-  /// Whether the razor is armed — which is now the *toolbar's* answer (K-220):
+  /// Whether the razor is armed — which is now the *toolbar's* answer:
   /// the Razor tool (`C`) and this panel's own menu item are two doors into one
   /// state, because two razors that could disagree is one razor too many. The
   /// menu item arms and disarms the tool.
@@ -1422,7 +1422,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     return true;
   }
 
-  /// The FX console has planted a key and wants its row visible (K-326): open
+  /// The FX console has planted a key and wants its row visible: open
   /// the layer and the named row, leaving whatever else is open alone.
   void _onRevealRequested() {
     final request = _ui?.revealPropertyRequest.value;
@@ -1472,7 +1472,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// only the waveform lanes redraw as the pointer moves, not the whole table.
   final ValueNotifier<BarDragPreview?> _barDrag = ValueNotifier(null);
 
-  /// What a move drag starting on a selected bar carries (K-720): every
+  /// What a move drag starting on a selected bar carries: every
   /// **unlocked** selected layer — a locked one sits still, the way it sits
   /// out a switch batch — and the earliest in frame among them, the wall the
   /// whole set stops at. Asked from the drag's start handler, never from a
@@ -1491,7 +1491,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     return SelectionMove(ids, minIn ?? 0);
   }
 
-  /// The block stretch in flight (K-458), on the same terms and for the same
+  /// The block stretch in flight, on the same terms and for the same
   /// reason: the box and every lane it crosses have to move together, and only
   /// they need to repaint while a handle is being dragged.
   final ValueNotifier<KeyStretch?> _keyStretch = ValueNotifier(null);
@@ -1528,13 +1528,13 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _laneKeys.value = UnmodifiableSetView(_laneKeySelection);
   }
 
-  /// The layer drag in flight (K-208), read by both halves of the table. A
+  /// The layer drag in flight, read by both halves of the table. A
   /// notifier rather than panel state: a drag slides rows, and rebuilding the
   /// whole panel per pointer move to do it would cost the table its bridge
   /// budget (docs/13).
   final ValueNotifier<LayerDrag?> _layerDrag = ValueNotifier(null);
 
-  /// The layer `Enter` has asked to rename (K-243). A notifier for the same
+  /// The layer `Enter` has asked to rename. A notifier for the same
   /// reason the drag is one: only the row it names has anything to do, and
   /// rebuilding the whole table to tell it would be the panel's budget spent
   /// on a text field.
@@ -1548,7 +1548,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
 
   /// The lanes' horizontal scroll, once zoomed past fit.
   ///
-  /// Anchored (K-293): a zoom hands it the frame to hold and where to hold it,
+  /// Anchored: a zoom hands it the frame to hold and where to hold it,
   /// and it makes the offset agree with the new width **during layout**, which
   /// is the only moment the two are known together. Jumping it from outside
   /// layout put the offset past the end of content that had not been laid out
@@ -1557,13 +1557,13 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   final ZoomAnchoredScrollController _hLane = ZoomAnchoredScrollController();
 
   /// Time zoom: 1 is fit-to-panel, and it **flies** rather than cutting
-  /// (docs/07 §4.6). The Viewer's magnification has flown since K-218; this is
-  /// the same helper, so the two read as one application rather than two.
+  /// (docs/07 §4.6). The Viewer's magnification flies too, and this is the
+  /// same helper, so the two read as one application rather than two.
   ///
   /// Only the **lane side** rebuilds when it moves: the whole panel used to,
   /// sixty times a second through a flight, which put the outline's every row —
-  /// and the work-area and cache reads that come with it — inside the zoom
-  /// (K-293). Nothing left of the seam depends on the zoom.
+  /// and the work-area and cache reads that come with it — inside the zoom.
+  /// Nothing left of the seam depends on the zoom.
   late final SmoothZoom _zoomMotion;
 
   /// What the flight is holding still: the frame that was under the pointer (or
@@ -1609,7 +1609,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// default: landing between frames is the deliberate exception.
   bool _magnet = true;
 
-  /// The **Animated filter** (K-441, 6.43): with it on the outline lists only
+  /// The **Animated filter** (6.43): with it on the outline lists only
   /// the rows that carry keyframes, across every layer; off, the twirl-down
   /// lists come back exactly as they were.
   ///
@@ -1621,7 +1621,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   bool _animatedOnly = false;
 
   /// Layers a reveal opened onto **the rows it named alone**, and which rule
-  /// each was opened by (K-622, K-684).
+  /// each was opened by.
   ///
   /// The reveal cycle used to open a layer's *groups* — Transform, the effects,
   /// Audio — and a group opens whole, so revealing one keyed Intensity also
@@ -1640,7 +1640,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// The comp's size when the last **modified** reveal was run, kept for the
   /// builds after it: that reveal asks whether a layer has been moved, and
   /// unmoved means the middle of the comp — a fact about the document that a
-  /// build may not go and ask for (K-681).
+  /// build may not go and ask for.
   double _revealCompWidth = 0;
   double _revealCompHeight = 0;
 
@@ -1660,16 +1660,16 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _vOutline.addListener(() => _followScroll(_vOutline, _vLane));
     _vLane.addListener(() => _followScroll(_vLane, _vOutline));
     // Scrolling sideways moves which stretch of audio the waveform lanes show,
-    // and a summary is only as detailed as the window it was taken over
-    // (K-280). Nothing else about the panel changes, so this listens rather
-    // than the panel rebuilding on every scrolled pixel.
+    // and a summary is only as detailed as the window it was taken over.
+    // Nothing else about the panel changes, so this listens rather than the
+    // panel rebuilding on every scrolled pixel.
     _hLane.addListener(_onLaneScroll);
     // A lane-mode chip flipping to spectral needs data the peaks fetch never
-    // asked for (K-699). Fetch only: the lanes and chips listen to the store
+    // asked for. Fetch only: the lanes and chips listen to the store
     // themselves, so the toggle repaints them without this panel rebuilding.
     laneModes.addListener(_onLaneMode);
     HardwareKeyboard.instance.addHandler(_onKey);
-    // Claim Delete for the finer selection this panel holds (K-234). The state
+    // Claim Delete for the finer selection this panel holds. The state
     // is kept, not looked up again: `dispose` runs after the element is
     // deactivated, where an ancestor lookup is no longer safe.
     _ui = Provider.of<LumitUiState>(context, listen: false);
@@ -1677,17 +1677,17 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _ui!.copyClaim = _copySelectedKeys;
     _ui!.pasteClaim = _pasteKeysIntoSelection;
     _publishEasingClaim();
-    // An effect can be picked in the Effect controls panel too (K-300), and one
+    // An effect can be picked in the Effect controls panel too, and one
     // selection means the row here lights up when it is.
     _ui!.selectedEffects.addListener(_onEffectSelectionChanged);
     // The selection can change from outside this panel — a click on the
-    // picture in the Viewer is the everyday case (K-275). The property
+    // picture in the Viewer is the everyday case. The property
     // selection, the graph's key selection and the row highlight all belong to
     // whichever layer was chosen, so they are cleared wherever the choosing
     // happened rather than only in this panel's own click path. Without this,
     // picking a different layer on the picture left the *previous* layer's
     // rows lit in the Timeline: two layers appearing chosen at once, which is
-    // the ambiguity K-203 set out to remove.
+    // the ambiguity this clears.
     _primary = _ui!.selectedLayer.value?.internallayerId;
     _ui!.selectedLayer.addListener(_onPrimaryChanged);
     _ui!.selectedLayers.addListener(_onLayerSelectionChanged);
@@ -1697,21 +1697,21 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _measuringWas = _ui!.renderTimings.measuring;
     _ui!.renderTimings.addListener(_onTimingsChanged);
     // The FX console's Keyframe ring plants a key and then asks for its row to
-    // be on screen (K-326). Ensure-open, not the reveal keys' toggle: showing
+    // be on screen. Ensure-open, not the reveal keys' toggle: showing
     // a row that is already showing must never hide it.
     _ui!.revealPropertyRequest.addListener(_onRevealRequested);
-    // Animation ▸ Reveal … (K-684): the menu says which reveal, the panel runs
+    // Animation ▸ Reveal …: the menu says which reveal, the panel runs
     // it over the selection, exactly as `U` does.
     _ui!.revealFilterRequest.addListener(_onRevealFilterRequested);
     _ui!.selectPropertyRequest.addListener(_onSelectPropertyRequested);
     // Merged **once**, not per build: a fresh `Listenable` every rebuild makes
     // every cache bar under it unsubscribe and resubscribe, which during a zoom
-    // flight is sixty times a second for nothing (K-293).
+    // flight is sixty times a second for nothing.
     _cacheRevision = Listenable.merge([_ui!.frameArrived, _ui!.cacheChanged]);
     // Edge-follow: the playhead stays on screen while the transport runs
     // (docs/07 §4.6).
     _ui!.playheadFrame.addListener(_edgeFollow);
-    // The workspace strip landed on an arrangement (K-728): the Audio board
+    // The workspace strip landed on an arrangement: the Audio board
     // draws the Timeline with every sounding layer's waveform lane open, and
     // the dock split alone cannot say so.
     _ui!.workspace.presetApplied.addListener(_onPresetApplied);
@@ -1720,9 +1720,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// A shipped preset was applied. Audio's board (docs/09 §1) draws the
   /// Timeline with the sound of every layer open — wave, rubber band, lane
   /// chip — so the preset twirls the Audio group and the Waveform lane open on
-  /// every layer that carries sound, exactly as `LL` does one layer at a time
-  /// (K-281). Additive only: nothing a hand has opened is shut, and the lanes
-  /// stay session state a twirl can put away again.
+  /// every layer that carries sound, exactly as `LL` does one layer at a time.
+  /// Additive only: nothing a hand has opened is shut, and the lanes stay
+  /// session state a twirl can put away again.
   void _onPresetApplied() {
     final ui = _ui;
     if (ui == null || !mounted) return;
@@ -1756,7 +1756,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// whole timeline in motion for the whole of playback, which is the harder
   /// thing to read — and it is the flip that After Effects' own default does.
   ///
-  /// **Only while playing.** Scrubbing stops the transport (K-254), so this
+  /// **Only while playing.** Scrubbing stops the transport, so this
   /// never fights a hand: the spec's "MUST NOT recentre while the user is
   /// dragging anything" is kept by the transport being off whenever anything
   /// is being dragged.
@@ -1787,7 +1787,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// the column's cells and header redraw for themselves (each carries its own
   /// `ListenableBuilder`), or the measuring switch flipping, which takes the
   /// whole column away or puts it back — a layout change, and the one case
-  /// the panel rebuilds for (K-750).
+  /// the panel rebuilds for.
   ///
   /// It used to rebuild for both. With measuring on by default, every
   /// composited frame rebuilt two hundred rows for one column of milliseconds
@@ -1829,10 +1829,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     if (mounted) _publishRowSelection();
   }
 
-  /// The group whose header made the current selection (K-702), or null when
+  /// The group whose header made the current selection, or null when
   /// anything else has chosen since. What `Enter` renames when it is set: the
   /// band itself, through the same [_renameRequest] road a layer's rename
-  /// takes (K-243) — "we must be able to change its name the same as any
+  /// takes — "we must be able to change its name the same as any
   /// other" (owner, 2026-08-31).
   UuidValue? _selectedGroup;
 
@@ -1897,7 +1897,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// The channels a **key command** acts on: the rows the key selection sits
   /// on where there is one, and the picked properties otherwise.
   ///
-  /// One resolution for every key command (K-529). Copy and Paste used to ask
+  /// One resolution for every key command. Copy and Paste used to ask
   /// [_channelsNow] instead — the *picked properties*, which is a different
   /// question in the lane views, where the selection speaks in row paths. The
   /// two answers agree while nothing has changed the property selection since
@@ -1918,8 +1918,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     return graphChannels(layers: ui.model.layers, selected: paths);
   }
 
-  /// The project the block tools group their writes into one undo step against
-  /// (K-458). Null in a widget test with no project open.
+  /// The project the block tools group their writes into one undo step against.
+  /// Null in a widget test with no project open.
   ProjectReference? get _project =>
       Provider.of<LumitState>(context, listen: false).project;
 
@@ -1952,12 +1952,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     });
   }
 
-  /// Remove the selected keys — the lane key menu's *Delete key* (K-500 §2.1),
-  /// the same removal the graph's Delete makes, and what `Delete` itself does
-  /// with lane keys in hand (6.6).
+  /// Remove the selected keys — the lane key menu's *Delete key*, the same
+  /// removal the graph's Delete makes, and what `Delete` itself does with lane
+  /// keys in hand (6.6).
   ///
   /// One undo step however many rows it reaches across: a block deleted in one
-  /// gesture comes back in one (K-458). Returns whether anything went, which is
+  /// gesture comes back in one. Returns whether anything went, which is
   /// what lets the Delete claim answer honestly.
   bool _deleteSelectedKeys() {
     final ui = Provider.of<LumitUiState>(context, listen: false);
@@ -1973,7 +1973,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     return true;
   }
 
-  /// What `Delete` acts on in this panel, finest selection first (K-234).
+  /// What `Delete` acts on in this panel, finest selection first.
   ///
   /// **Keyframes before masks before layers.** The shell asks this before it
   /// deletes anything, so a rung that answers `true` is a rung that has already
@@ -1998,9 +1998,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     return true;
   }
 
-  /// The right-click menu on a lane keyframe (K-500 §2.1): the graph key's own
-  /// menu — Linear / Easy ease / Hold / Delete key — plus *Ease…*, which opens
-  /// the popover on whatever is selected.
+  /// The right-click menu on a lane keyframe: the graph key's own menu —
+  /// Linear / Easy ease / Hold / Delete key — plus *Ease…*, which opens the
+  /// popover on whatever is selected.
   ///
   /// A right-click on an **unselected** key selects it first, so the menu acts
   /// on the thing that was clicked; on a selected one it acts on the whole
@@ -2056,7 +2056,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     );
   }
 
-  /// Open the Ease popover on the selection, anchored at [position] (K-458).
+  /// Open the Ease popover on the selection, anchored at [position].
   ///
   /// Reached from the block badge, which sits where the drawing puts the
   /// popover, and from the Keys bottom bar's Ease. Nothing here shapes a curve
@@ -2163,7 +2163,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// not looking at.
   /// The Easing… button: dock the Easing panel, or — with Settings ▸ Interface
   /// ▸ Editing ▸ *Shape eases in a popup* on — open the same editor over the
-  /// footer (K-349).
+  /// footer.
   ///
   /// Docking rather than only focusing: the button is how the panel is
   /// discovered, and a button that does nothing because the panel is already in
@@ -2190,7 +2190,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
 
   /// What the Easing panel and the popup both press. Published to the shell as
   /// [LumitUiState.easingApply] while this panel can take a shape, so the panel
-  /// can grey its Apply when it cannot (K-349).
+  /// can grey its Apply when it cannot.
   ///
   /// The popup is an overlay entry, so it outlives the panel that opened it —
   /// a re-dock while it is up would otherwise land an Apply on a dead State.
@@ -2202,7 +2202,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     final selection = _actionKeySelection(channels);
     if (selection.isEmpty) return;
     // One press, one undo step, however many layers the selection spans — the
-    // batch writes one op per layer, and K-720's rule is that a multi-selection
+    // batch writes one op per layer, and the rule is that a multi-selection
     // edit is one edit.
     asOneUndoStep(_project, () {
       applyEasingToSelection(
@@ -2234,7 +2234,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// keeps its keys.
   bool _onKey(KeyEvent event) {
     if (event is! KeyDownEvent || !mounted) return false;
-    // A dialogue is up: its keys are its own (K-243). These commands are
+    // A dialogue is up: its keys are its own. These commands are
     // registered on the hardware keyboard rather than on focus, so without
     // this the Pre-compose dialogue's `Enter` also renamed the layer behind it.
     if (lumitModalOpen) return false;
@@ -2245,9 +2245,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       return false;
     }
     // What this chord means in the Timeline — or in the graph editor while it
-    // is open, which has bindings of its own (K-199). The engine answers;
-    // nothing here compares keys at all since K-300 took the last two
-    // comparisons out (copy and paste, now bound actions like everything else).
+    // is open, which has bindings of its own. The engine answers;
+    // nothing here compares keys at all. Copy and paste were the last two
+    // comparisons, and they are bound actions now like everything else.
     final ui = Provider.of<LumitUiState>(context, listen: false);
     // This panel is one surface with two views, so a chord bound in either
     // context works in both — the view's own context first, the other as the
@@ -2278,20 +2278,20 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     if (action == 'reveal.audio') {
       return _revealAudioTap(ui);
     }
-    // Enter renames the selected layer in place (docs/07 §15, K-243): the row
+    // Enter renames the selected layer in place (docs/07 §15): the row
     // it names opens its own editor, which is why this sets a value rather
     // than reaching into a row. Only while this is the focused panel — the
     // Project panel and Effect controls answer the same key for their own
-    // selections now (K-321), and two renames on one press is a mess.
+    // selections now, and two renames on one press is a mess.
     if (action == 'layer.rename') {
       // A different panel is focused: its own rename answers this key. No
       // panel focused yet falls to the Timeline, as it always did.
       final active = ui.activePanel.value;
       if (active != null && active != Panel.timeline) return false;
       // A group header chose the current selection: Enter renames the band
-      // itself, through the same request road (K-243 for groups — the owner's
-      // "the same as any other"). Checked against the model so a group that
-      // has since been ungrouped falls through to the layer below.
+      // itself, through the same request road (the owner's "the same as any
+      // other"). Checked against the model so a group that has since been
+      // ungrouped falls through to the layer below.
       final group = _selectedGroup;
       if (group != null && ui.model.groups.any((g) => g.id == group)) {
         _renameRequest.value = group;
@@ -2321,7 +2321,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // The zoom keys (docs/07 §4.6): `=` in, `-` out, `\` between the whole
     // composition and wherever the zoom was before. They hold the **playhead**
     // still, because a key press has no pointer to zoom about — the same
-    // answer the bottom bar's slider gives (K-293).
+    // answer the bottom bar's slider gives.
     if (action == 'timeline.zoom.in' || action == 'timeline.zoom.out') {
       _zoomBeforeFit = null;
       _setZoom(zoomNudged(_zoomMotion.target,
@@ -2356,9 +2356,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // handlers runs, in registration order, so a `true` from this one would not
     // stop the shell's Delete removing the layer as well. The Timeline claims
     // the key through [LumitUiState.deleteClaim] instead, which the shell asks
-    // *before* it deletes anything (K-234) — and the graph pane's own keys are
+    // *before* it deletes anything — and the graph pane's own keys are
     // on that claim for the same reason. Copy and paste are claimed the same
-    // way (K-300): they used to be compared against `Ctrl+C`/`Ctrl+V` here,
+    // way: they used to be compared against `Ctrl+C`/`Ctrl+V` here,
     // which was fine while the shell had no copy of its own and became a
     // double action the moment it did.
 
@@ -2371,7 +2371,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     return false;
   }
 
-  /// Delete every selected mask row, returning whether there was one (K-234).
+  /// Delete every selected mask row, returning whether there was one.
   ///
   /// The shell's Delete calls this before it deletes the selected layers, so a
   /// picked mask row is what the key acts on — the mask sits *on* the selected
@@ -2379,12 +2379,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   ///
   /// The same call the row's own context menu makes, so there is one way a mask
   /// is deleted. One op per mask, as deleting several layers is one op each.
-  /// Copy claims the chord when keyframes are selected (K-300, K-196's copy
-  /// under the claim the shell asks) — and when whole property *rows* are, with
-  /// no individual keys picked, in which case it copies those rows: every key
-  /// of an animated one, the plain value of one with no keyframes at all
-  /// (K-301). With neither the chord falls through to the shell, which copies
-  /// the picked effects or the layer.
+  /// Copy claims the chord when keyframes are selected — and when whole
+  /// property *rows* are, with no individual keys picked, in which case it
+  /// copies those rows: every key of an animated one, the plain value of one
+  /// with no keyframes at all. With neither the chord falls through to the
+  /// shell, which copies the picked effects or the layer.
   bool _copySelectedKeys() {
     if (!mounted) return false;
     final ui = Provider.of<LumitUiState>(context, listen: false);
@@ -2491,7 +2490,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// engine's, and it is asked afresh on each tap — the answer depends on the
   /// document, and the document may have changed between taps.
   ///
-  /// **The first tap stops at the keys** (K-622). It used to open the *groups*
+  /// **The first tap stops at the keys**. It used to open the *groups*
   /// holding animation, and a group opens whole: one keyed Intensity unrolled
   /// the whole of Glow, and one keyed Position unrolled every transform
   /// property beside it, so "reveal animated properties" reliably showed rows
@@ -2501,14 +2500,14 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// `UU` is where everything still opens.
   bool _revealTap() {
     final ui = Provider.of<LumitUiState>(context, listen: false);
-    // With nothing selected the reveal is the whole composition's (K-203):
+    // With nothing selected the reveal is the whole composition's:
     // "show me what is animated" is a question about the comp as often as
     // about one layer, and refusing to answer it unless something was selected
     // made the commonest use of the key the one it did not serve.
     //
-    // **The whole selection, not its primary** (K-523): reading
-    // `selectedLayer` meant `Ctrl+A` then `U` revealed the top layer alone,
-    // and looked like a dead key whenever that one layer carried no keys.
+    // **The whole selection, not its primary**: reading `selectedLayer`
+    // meant `Ctrl+A` then `U` revealed the top layer alone, and looked like a
+    // dead key whenever that one layer carried no keys.
     final selected = ui.selectedLayers.value;
     final layers = selected.isNotEmpty
         ? selected
@@ -2572,18 +2571,18 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   }
 
   /// **Animation ▸ Reveal properties with keyframes / with animation / all
-  /// modified properties** (K-684): the same filtered opening a single `U`
+  /// modified properties**: the same filtered opening a single `U`
   /// does, over the same layers, under a wider rule each.
   ///
   /// The menu is *not* the cycle. A menu row is chosen deliberately and names
   /// what it does, so it says it once: no tap counting, and no third press that
   /// shuts what the first two opened. Which layers is the `U` answer — the
-  /// selection, or the whole comp when nothing is selected (K-203, K-523).
+  /// selection, or the whole comp when nothing is selected.
   ///
   /// **The rows decide whether a layer opens**, not a separate question to the
   /// engine: the reveal is built here, so asking the engine "does anything
   /// qualify" could disagree with what the filter then keeps, and a layer
-  /// opened onto no rows is the empty fold-out K-622 set out to remove.
+  /// opened onto no rows is an empty fold-out.
   void _revealFiltered(LumitUiState ui, RevealFilter filter) {
     final selected = ui.selectedLayers.value;
     final ids = {
@@ -2644,13 +2643,13 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     });
   }
 
-  /// The menu asked for one of the three reveals (K-684).
+  /// The menu asked for one of the three reveals.
   void _onRevealFilterRequested() {
     if (!mounted) return;
     _revealFiltered(_ui!, _ui!.revealFilter);
   }
 
-  /// When the last `L` was pressed, and how many times in a row (K-281) — the
+  /// When the last `L` was pressed, and how many times in a row — the
   /// same shape as the `U` cycle, and for the same reason: three taps inside
   /// the window are three different commands.
   DateTime? _lastAudioReveal;
@@ -2763,7 +2762,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   }
 
   /// Zoom from somewhere other than the pointer — the bottom bar's slider —
-  /// holding the **playhead** still (owner, 2026-08-06; K-293).
+  /// holding the **playhead** still (owner, 2026-08-06).
   ///
   /// A slider has no pointer to zoom about, so something has to be chosen, and
   /// the playhead is what the editor is working at: After Effects zooms its own
@@ -2780,7 +2779,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// wheel, is a discrete jump and still flies.
   void _setZoom(double z, {bool fly = true}) {
     // While the slider is being dragged the anchor was chosen once, at the
-    // start of the gesture, and holds to the end (K-319). Re-measuring it on
+    // start of the gesture, and holds to the end. Re-measuring it on
     // every drag update read the scroll offset before layout had corrected it
     // for the zoom just applied — a fresh zoom against a stale offset — and
     // each update re-anchored somewhere slightly wrong, which is what made
@@ -2901,7 +2900,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// **No `setState`.** The lane side listens to [_zoomMotion] itself, so a
   /// tick rebuilds the lanes and nothing else; calling `setState` here rebuilt
   /// the outline's every row, and the bridge reads that come with it, once per
-  /// animation frame (K-293).
+  /// animation frame.
   void _onZoomTick() {
     if (_laneFrames <= 0) return;
     _hLane.hold(ZoomAnchor(
@@ -2916,7 +2915,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// of front can be told from an ordinary rebuild.
   UuidValue? _shownComp;
 
-  /// This panel's half of "a composition remembers where you were" (K-624):
+  /// This panel's half of "a composition remembers where you were":
   /// the magnification and how far the lanes are scrolled. The shell holds the
   /// other half, the playhead, because that is not the Timeline's alone.
   ///
@@ -3034,7 +3033,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       return EmptyTimelineDrop(state: Provider.of<LumitState>(context));
     }
 
-    // Everything this panel draws comes from the read model (K-184): zero
+    // Everything this panel draws comes from the read model: zero
     // bridge calls per rebuild. The ListenableBuilder repaints the panel when
     // the model refreshes — which happens once per committed change.
     return ListenableBuilder(
@@ -3050,7 +3049,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // How much motion the shell shows, for the zoom's flight.
     _animationLevel = scope.animationLevel;
     // The columns actually drawn. The render-time column is only there while
-    // something is being measured (K-276): switched off it takes no width, no
+    // something is being measured: switched off it takes no width, no
     // header and no cells — a column of blanks is not a column, and the outline
     // is short of room as it is. Everything downstream — the header, the rows,
     // the fold-out's value and render-time cells, the outline's own width —
@@ -3058,7 +3057,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // follows in one place.
     final measuring = ui.renderTimings.measuring;
     // A group is drawn unless it is the render-time column with nothing being
-    // measured, or its bottom-bar toggle is off (K-448). One test, one place.
+    // measured, or its bottom-bar toggle is off. One test, one place.
     bool drawn(TimelineGroup group) =>
         (measuring || group != TimelineGroup.timings) &&
         !_hiddenGroups.contains(group);
@@ -3069,7 +3068,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     final frames = ui.model.durationFrames;
     final (fpsNum, fpsDen) = ui.model.fpsExact;
     final needle = _search.trim().toLowerCase();
-    // Where the comp's groups land on its rows (K-702): the header each
+    // Where the comp's groups land on its rows: the header each
     // carrier layer draws, and the members a shut fold takes off the list —
     // both from one walk, so the two halves cannot disagree about how many
     // rows there are.
@@ -3086,7 +3085,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           e,
     ];
     // Whether the matte column is carrying its two mode toggles' room: it does
-    // while some visible row has a matte set, and not otherwise (K-463) — a
+    // while some visible row has a matte set, and not otherwise — a
     // comp with no mattes would else read as a 28px hole between every matte
     // face and the blend column beside it. Read off the list already in hand,
     // once for the panel, and handed to the header and the rows alike so the
@@ -3112,9 +3111,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // seams alike. It used to be worked out four times over from the same
     // three inputs, once per reader.
     //
-    // **One answer for both views** since K-529: the graph's own filtered
-    // outline is gone and its outline is the Layers outline, identical — so
-    // there is no second row model to keep in step with this one.
+    // **One answer for both views**: the graph's own filtered outline is gone
+    // and its outline is the Layers outline, identical — so there is no second
+    // row model to keep in step with this one.
     final rows = layerRows(
         layers: layers,
         open: _open,
@@ -3126,7 +3125,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         volumeDb: _volumeDb,
         driven: _driven,
         // The strip filters the whole comp; a reveal filters only the layers
-        // it opened, by the rule it opened them with (K-622, K-684).
+        // it opened, by the rule it opened them with.
         reveal: _animatedOnly ? everyLayerKeyframed : _revealed,
         groupHeaders: folds.headers,
         compWidth: _revealCompWidth,
@@ -3136,19 +3135,18 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // range runs along — and the graph channels the selection resolves to,
     // each with its stroke colour for the outline's labels to match.
     //
-    // Headings are in the list too since K-300: an effect's heading is a row
-    // that can be picked (and copied), so a Shift+click has to be able to run
-    // over one. Waveforms are not a row anything selects.
+    // Headings are in the list too: an effect's heading is a row that can be
+    // picked (and copied), so a Shift+click has to be able to run over one.
+    // Waveforms are not a row anything selects.
     _visiblePropertyPaths = [
       for (final layer in rows)
         for (final row in layer.drawnRows)
           if (row is! FoldWaveformRow) foldRowPath(layer.id, row),
     ];
     // How many diamonds each of those rows draws, so a click on a property's
-    // *name* can take its keys with it (K-500 §2.1) without walking the model
-    // again from a callback that has no rows to hand. Read off the same rows
-    // the lanes draw from, so the two cannot disagree about how many keys a
-    // row has.
+    // *name* can take its keys with it without walking the model again from a
+    // callback that has no rows to hand. Read off the same rows the lanes draw
+    // from, so the two cannot disagree about how many keys a row has.
     _visibleKeyCounts = {
       for (final layer in rows)
         for (final row in layer.drawnRows)
@@ -3157,9 +3155,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     };
     final channels =
         graphChannels(layers: ui.model.layers, selected: _selectedProperties);
-    // The work area, in frames, read once for the whole panel (K-203) — and
+    // The work area, in frames, read once for the whole panel — and
     // once per document *revision*, not per rebuild: `workAreaFrames` is two
-    // to four bridge calls, and only an edit can change its answer (K-184).
+    // to four bridge calls, and only an edit can change its answer.
     final revision = ui.model.revision;
     if (_workArea == null || revision != _workRevision || comp != _workComp) {
       _workRevision = revision;
@@ -3190,7 +3188,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           state: Provider.of<LumitState>(context, listen: false),
           uiState: ui,
           // The File menu's own command, not a second route to the dialog:
-          // one function decides what "export" means (K-303's reason applies
+          // one function decides what "export" means (a reason that applies
           // to commands as much as to strings).
           onExport: () => exportFrb(context),
         ),
@@ -3293,13 +3291,13 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                   // `setState` during build and an outright crash.
                   _zoomMotion.max = _maxZoom;
                   _pullZoomBackToCeiling();
-                  // How wide the lanes are is how many buckets a waveform wants
-                  // (K-280). Measured here because this is where it is known;
-                  // acted on after the frame, since a build must not start one.
+                  // How wide the lanes are is how many buckets a waveform wants.
+                  // Measured here because this is where it is known; acted
+                  // on after the frame, since a build must not start one.
                   //
                   // The axis and the work area's pixels are *not* worked out
                   // here any more: they belong to the zoom, and the zoom only
-                  // rebuilds the lane side (K-293), so they are worked out
+                  // rebuilds the lane side, so they are worked out
                   // inside that half's builder below.
                   if (_laneViewport != laneViewport) {
                     _laneViewport = laneViewport;
@@ -3373,11 +3371,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              // The time navigator (T5, K-648): the
+                              // The time navigator (T5): the
                               // whole comp as a strip, with the slice
                               // the lanes are showing drawn on it.
                               //
-                              // **Over the lane area alone** (K-682, the
+                              // **Over the lane area alone** (the
                               // owner's ruling): it spanned the whole
                               // panel and stood blank over the outline,
                               // which read as a sliver of dead ground
@@ -3398,8 +3396,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                 onWindowEnd: _zoomDragEnd,
                               ),
                               Expanded(
-                                // **Only this half rebuilds when the zoom moves**
-                                // (K-293). The zoom is a `Listenable`, and the lane
+                                // **Only this half rebuilds when the zoom moves**.
+                                // The zoom is a `Listenable`, and the lane
                                 // side listens to it here rather than the panel
                                 // calling `setState`: nothing left of the seam — the
                                 // toolbar, the column header, every outline row, and
@@ -3455,7 +3453,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
 
   /// The outline half of the table: the toolbar, the column header, the rows
   /// and their gutter — everything left of the seam, which the zoom never
-  /// rebuilds (K-293).
+  /// rebuilds.
   Widget _outlineHalf(
     BuildContext context,
     LumitUiState ui,
@@ -3467,7 +3465,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     required Map<TimelineGroup, double> groupWidths,
 
     /// Whether the compose group's width is carrying the matte mode toggles'
-    /// room (K-463) — the header and every row split the column by the same
+    /// room — the header and every row split the column by the same
     /// answer, so they line up either way.
     required bool matteToggles,
     required Map<String, List<Color>> graphColours,
@@ -3526,8 +3524,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                               onSearch: (v) => setState(() => _search = v),
                             ),
                             // The second row of the outline: the column
-                            // headers, in both views (K-529 — the graph's
-                            // own filter row went with its own outline).
+                            // headers, in both views (the graph's own
+                            // filter row went with its own outline).
                             ColumnHeader(
                               order: groupOrder,
                               widths: groupWidths,
@@ -3543,7 +3541,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                             // and header, in step with the lanes.
                             Expanded(
                               // A click that misses every row
-                              // deselects (K-203). Translucent
+                              // deselects. Translucent
                               // and outermost, so a name, a
                               // switch or a property still
                               // wins its own tap in the arena
@@ -3560,7 +3558,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                     builder: (context, box) =>
                                         SingleChildScrollView(
                                           controller: _vOutline,
-                                          // **One outline, in both views** (K-529):
+                                          // **One outline, in both views**:
                                           // Graph mode's colour-ticked filtered list
                                           // is gone and the graph shows exactly this,
                                           // so a property is picked the same way
@@ -3615,7 +3613,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                     showThumb: _graph,
                     header: [
                       // The toolbar's block carries the navigator band the
-                      // toolbar itself does (K-682), or the gutter's thumb
+                      // toolbar itself does, or the gutter's thumb
                       // would start a band above the rows it scrolls.
                       Container(
                           height: t.density.timelineChromeRow +
@@ -3629,12 +3627,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                 ],
               ),
               // The row seams, over the columns *and* the
-              // gutter so they meet the lane area's (K-192);
+              // gutter so they meet the lane area's;
               // phased by the scroll so they travel with the
               // rows they separate.
               Positioned(
                 // Below the outline's own two chrome rows — the first of
-                // which carries the navigator's band (K-682) — level with
+                // which carries the navigator's band — level with
                 // the foot of the lane side's ruler.
                 top: TimelineNavigator.band + t.density.ruler,
                 left: 0,
@@ -3677,7 +3675,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
             ),
           // The outline's own end of the bottom bar: the key commands and the
           // column-group toggles, where the lane side carries the zoom and the
-          // scrollbar (K-448). The block was already reserved to keep the two
+          // scrollbar. The block was already reserved to keep the two
           // halves the same height — it now has something in it.
           //
           // One row, two runs. The strip is loose, so at any ordinary outline
@@ -3687,7 +3685,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           Row(children: [
             Flexible(
               child: KeyCommandStrip(
-                // The keyframe strip (K-458) in Layers, the graph's own
+                // The keyframe strip in Layers, the graph's own
                 // commands in graph view — the same seven or ten buttons that
                 // stood on the lane bar, in the same order.
                 strip: !_graph,
@@ -3752,7 +3750,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     final t = ThemeScope.of(context).theme;
     // The one shared target list (docs/07 §4.5), for the ruler's edges and
     // markers and for the pane's own key drags. Built from the read model, so
-    // it costs no bridge calls (K-184).
+    // it costs no bridge calls.
     final snap = timelineSnapTargets(
       rows: rows,
       comp: comp,
@@ -3790,7 +3788,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                               },
                               // No `setState`: the grounds listen for
                               // themselves, so an edge drag repaints the band
-                              // and rebuilds nothing (K-626's pattern).
+                              // and rebuilds nothing.
                               onWorkPreview: (span) =>
                                   _workPreview.value = span,
                               onMarkersChanged: () => setState(() {}),
@@ -3811,7 +3809,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                 children: [
                                   // The same two-shade
                                   // ground the lanes
-                                  // get (K-203): the
+                                  // get: the
                                   // work area runs the
                                   // full height of
                                   // whichever view is
@@ -3911,7 +3909,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
 
   /// The lane half: the ruler, the cache bar, one bar per layer and the
   /// bottom bar — and, in Keys mode, the same everything with the dope
-  /// sheet's rows where the bars were (K-455).
+  /// sheet's rows where the bars were.
   Widget _laneHalf(
     BuildContext context,
     LumitUiState ui,
