@@ -92,7 +92,9 @@ Locale localeFromTag(String tag) {
 const Map<String, String> languageNames = {
   'en': 'English',
   'de': 'Deutsch',
+  'es': 'Español',
   'kk': 'Қазақша',
+  'pl': 'Polski',
   'uk': 'Українська',
   'zh': '简体中文',
   'zh-Hant': '繁體中文',

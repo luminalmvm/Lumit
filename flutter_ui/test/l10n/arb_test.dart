@@ -161,7 +161,7 @@ void main() {
   test('the target languages have a file to be translated into', () {
     // The ingest tool writes these; a short one is normal and means the
     // language is part-way done. Every key it lacks falls back to English.
-    for (final tag in ['de', 'kk', 'uk', 'zh', 'zh_Hant']) {
+    for (final tag in ['de', 'es', 'kk', 'pl', 'uk', 'zh', 'zh_Hant']) {
       expect(File('lib/l10n/app_$tag.arb').existsSync(), isTrue,
           reason: 'app_$tag.arb is missing — it is a target language');
     }
