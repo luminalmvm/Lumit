@@ -11495,7 +11495,7 @@ fn every_migrated_effect_renders_what_the_old_dispatch_rendered() {
     both(
         // Matte key is the only one of the side-table batch with a CPU
         // reference to compare at all: the other four (Light wrap, Depth of
-        // field, Fast motion blur, Datamosh) need a second picture the
+        // field, Motion blur, Datamosh) need a second picture the
         // single-buffer dispatcher has not got, so their `apply_cpu` is the
         // identity by design — the same passthrough their `cpu::apply` arms
         // were, and pinned by `the_side_table_batch_stays_a_cpu_passthrough`.

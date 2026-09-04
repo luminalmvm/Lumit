@@ -7549,6 +7549,68 @@ surfaces:
         );
     }
 
+    /// Each accumulation motion blur sample is handed to the card on its own.
+    ///
+    /// A frame is one batch, and nothing a batch allocates is freed until it
+    /// has run. With the N sub-frame renders inside that one batch, every
+    /// sample's scratch was alive at once: eight samples over one 1080p layer
+    /// held 2.1 GB against 200 MB for the frame alone, and a card with less to
+    /// spare lost its device mid-frame. Submitting and waiting per sample is
+    /// what bounds it, and the submission count is how that shows from
+    /// outside: a frame with N samples submits at least N more buffers than
+    /// the same frame without the effect.
+    #[test]
+    fn each_accumulation_sample_is_its_own_submission() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (cw, ch) = (32u32, 16u32);
+        const SAMPLES: u64 = 4;
+
+        let mut submits_for = |accumulate: bool| -> u64 {
+            let (mut doc, comp_id, _) = matrix_base(cw, ch, LinearColour([0.8, 0.1, 0.1, 1.0]));
+            if accumulate {
+                let mut adjust = matrix_layer("Adjust", LayerKind::Adjustment, cw, ch);
+                let mut mb = lumit_core::fx::instantiate("accumulation_mb").expect("registered");
+                for p in &mut mb.params {
+                    if p.id == "samples" {
+                        p.value =
+                            lumit_core::model::EffectValue::Float(Property::fixed(SAMPLES as f64));
+                    }
+                }
+                adjust.effects = vec![mb];
+                let comp = doc
+                    .items
+                    .iter_mut()
+                    .find_map(|item| match item {
+                        ProjectItem::Composition(c) if c.id == comp_id => Some(c),
+                        _ => None,
+                    })
+                    .expect("the comp matrix_base made");
+                comp.layers.insert(0, adjust);
+            }
+            let store = DocumentStore::new(doc);
+            let doc = store.snapshot();
+            // Warm the lazily-built pipelines, then count the steady state.
+            let _ = r.render_rgba(&doc, comp_id, 0, 1.0).expect("render");
+            let before = r.gpu.submits_so_far();
+            let _ = r.render_rgba(&doc, comp_id, 0, 1.0).expect("render");
+            r.gpu.submits_so_far() - before
+        };
+
+        let plain = submits_for(false);
+        let accumulated = submits_for(true);
+        assert!(
+            accumulated >= plain + SAMPLES,
+            "each of the {SAMPLES} samples must be its own submission: the plain \
+             frame submitted {plain}, the accumulating one {accumulated}"
+        );
+    }
+
     /// A consumer layer matted by a hidden source carrying a mask and an
     /// effect, with the matte's sampling mode chosen per row.
     fn matte_doc(

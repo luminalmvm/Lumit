@@ -94,7 +94,7 @@ pub struct CompLayerPixels {
     /// `conf`idence in 0..1, row-major, same `width × height` as `rgba`) from
     /// this frame to each neighbour [`CompJob::flow_neighbours`] asked for,
     /// keyed by that offset. An offset whose neighbour did not decode is simply
-    /// absent, which is its consumer's passthrough. Fast motion blur (docs/08
+    /// absent, which is its consumer's passthrough. Motion blur (docs/08
     /// §3.2, offset `1`) smears along its field, scaling the streak by `conf`
     /// (FX-19); Datamosh (§3.12, offset `-1`) warps the previous frame
     /// along the `(u, v)` and ignores `conf`. **Both at once is one field each,
@@ -769,7 +769,7 @@ fn decode_comp(
                         &gb,
                         &set,
                     );
-                    // The per-pixel confidence Fast motion blur tapers the streak
+                    // The per-pixel confidence Motion blur tapers the streak
                     // by (FX-19); the same deterministic function export runs, so
                     // the two match. Datamosh ignores it.
                     let conf = lumit_flow::confidence(&fwd, &bwd);

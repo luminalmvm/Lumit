@@ -861,7 +861,7 @@ controls have landed. What is left:
     judge to be measured against: `flow_quality.rs` and `clip_cadence.rs` landed
     and the measurement programme ran through them
     (docs/impl/optical-flow.md §4.5–§4.7, §5.5). A learned synthesiser emits no
-    flow field, so Fast motion blur and Datamosh need DIS vectors regardless.
+    flow field, so Motion blur and Datamosh need DIS vectors regardless.
 4. **A second matching cost is measured out, not open.** Census scoring cost
     game capture 0.0073 against a 0.005 allowance; choosing census
     or SSD per patch from the Hessian trace recovered most of it

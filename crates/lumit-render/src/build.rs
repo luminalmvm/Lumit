@@ -2008,7 +2008,7 @@ pub fn build_comp_draws_at(
                     false,
                 );
                 // The nested picture again at each neighbour time (docs/08
-                // §3.2), for a Fast motion blur or Datamosh on the
+                // §3.2), for a Motion blur or Datamosh on the
                 // Precomp layer itself: a comp has no decoded frames for the
                 // worker to measure between, but it can be built again at
                 // another moment. The offset steps by the *parent* comp's
@@ -2244,7 +2244,7 @@ pub fn build_comp_draws_at(
                     lights: Vec::new(),
                     temporal_below,
                     accumulation_below,
-                    // The composite this layer's Fast motion blur or Datamosh
+                    // The composite this layer's Motion blur or Datamosh
                     // measures its motion against (docs/08 §3.2): the
                     // below-stack again at each neighbour time. Empty unless
                     // one of those effects is live, which is the whole cost
@@ -2742,7 +2742,7 @@ pub fn accumulation_mb_below(
 /// layer carries no such effect.
 ///
 /// An adjustment layer's picture is the composite of everything below it, which
-/// the decode worker never sees — so Fast motion blur and Datamosh on one were
+/// the decode worker never sees — so Motion blur and Datamosh on one were
 /// a silent passthrough, on exactly the layer docs/08 §3.2 calls the most common
 /// place to put the effect. The answer is the one the temporal re-renders
 /// already use: build the below-stack again at the neighbour time through the
@@ -4118,7 +4118,7 @@ mod render_below_at_tests {
     }
 
     // An adjustment layer carrying the named built-in effects at their
-    // defaults — Fast motion blur (docs/08 §3.2) and Datamosh (§3.12) are the
+    // defaults — Motion blur (docs/08 §3.2) and Datamosh (§3.12) are the
     // two that want measured motion.
     fn flow_adjustment(names: &[&str]) -> Layer {
         let mut l = accumulation_adjustment(4.0);
@@ -4167,7 +4167,7 @@ mod render_below_at_tests {
         assert_eq!(
             offsets(&["motion_blur"]),
             vec![1],
-            "Fast motion blur measures forward, to the next frame"
+            "Motion blur measures forward, to the next frame"
         );
         assert_eq!(
             offsets(&["datamosh"]),
@@ -4275,7 +4275,7 @@ mod render_below_at_tests {
             .count()
     }
 
-    // docs/08 §3.2: **the headline case**. Fast motion blur on an
+    // docs/08 §3.2: **the headline case**. Motion blur on an
     // adjustment layer over a moving scene must actually smear it — the effect's
     // commonest placement, and a silent passthrough until the composite below
     // could be measured. Deterministic across two runs, as every render is.
@@ -4293,7 +4293,7 @@ mod render_below_at_tests {
         let b = rig.render(&doc, &blurred, 0.5);
         assert_ne!(
             a, b,
-            "Fast motion blur on an adjustment layer must smear the composite \
+            "Motion blur on an adjustment layer must smear the composite \
              below it, not pass it through"
         );
         assert_eq!(
@@ -4314,7 +4314,7 @@ mod render_below_at_tests {
     // *other* measurement — back to the previous frame — and it drags that
     // previous picture along the field, so both halves of the composite
     // measurement have to arrive. Before this it could have neither, and passed
-    // through. Sharing the machinery with Fast motion blur must not mean sharing
+    // through. Sharing the machinery with Motion blur must not mean sharing
     // the field: a stack holding both is checked structurally above.
     #[test]
     fn an_adjustment_datamosh_drags_the_previous_composite() {
@@ -4385,7 +4385,7 @@ mod render_below_at_tests {
         assert_eq!(
             d.flow_below.iter().map(|(o, _, _)| *o).collect::<Vec<_>>(),
             vec![1],
-            "the Precomp carries the +1 neighbour Fast motion blur asked for"
+            "the Precomp carries the +1 neighbour Motion blur asked for"
         );
         let here = match &d.source {
             DrawSource::Nested { draws, .. } => draws[0].position.0,
@@ -4401,7 +4401,7 @@ mod render_below_at_tests {
         let b = rig.render(&doc, &blurred, 0.5);
         assert_ne!(
             a, b,
-            "Fast motion blur on a Precomp layer must smear the comp inside it"
+            "Motion blur on a Precomp layer must smear the comp inside it"
         );
         assert_eq!(
             b,

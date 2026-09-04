@@ -116,7 +116,7 @@ pub enum AuxData<'a> {
     /// computed, and the neighbour frames it displaces. Both come off the one
     /// decode, and Datamosh reads both — the field to walk along, the −1 frame
     /// to drag — which is why they arrive together, as the flare's matte and its
-    /// prescription do. Fast motion blur ignores the frames.
+    /// prescription do. Motion blur ignores the frames.
     FlowField {
         field: Option<&'a Tex>,
         neighbours: &'a [(i32, Tex)],
@@ -242,7 +242,7 @@ impl<'a> AuxSlot<'a> {
     }
 
     /// **This op's auxiliary layer** — Light wrap's background
-    /// plate, Texturize's Texture, Fast motion blur's Motion vectors, Set
+    /// plate, Texturize's Texture, Motion blur's Motion vectors, Set
     /// matte's source — already resolved against the picture the chain is
     /// carrying, so a reference to the effect's own layer is a real
     /// texture by the time it arrives here.
@@ -6407,7 +6407,7 @@ mod tests {
             // carriage, and the schema is its own predicate: both
             // `build.rs` and `run_ops` walk `EffectSchema::layer_input`, so
             // what has to hold is that the schema finds the row — not that the
-            // effect names a kind. That is what lets Fast motion blur take a
+            // effect names a kind. That is what lets Motion blur take a
             // Motion vectors layer while its `aux()` is still the flow field.
             let extra_layer = def.schema().params.iter().any(|p| {
                 let is_matte = matte_row.is_some_and(|m| p.id == m || p.id.starts_with(m));
@@ -7442,7 +7442,7 @@ mod tests {
         }
     }
 
-    /// **Fast motion blur reads a flow field, a Motion vectors layer and a
+    /// **Motion blur reads a flow field, a Motion vectors layer and a
     /// matte, all three**. The reason the auxiliary layer became a field
     /// on the slot rather than a sixth `AuxKind`: this effect already names the
     /// flow field, so a kind could not also carry its layer.
@@ -7539,7 +7539,7 @@ mod tests {
 
     /// **Both flow consumers on one layer are served**.
     ///
-    /// Fast motion blur measures forward to the next frame, Datamosh measures
+    /// Motion blur measures forward to the next frame, Datamosh measures
     /// back to the previous one. The layer used to carry a single field and the
     /// first of the two in stack order took it, so the other read nothing and
     /// silently rendered its passthrough. They are separate measurements now,
@@ -7638,11 +7638,11 @@ mod tests {
         );
         assert_ne!(
             both, blur_only,
-            "Datamosh must read its own -1 field, not silently do nothing              because Fast motion blur was asked first"
+            "Datamosh must read its own -1 field, not silently do nothing              because Motion blur was asked first"
         );
         assert_ne!(
             both, mosh_only,
-            "Fast motion blur must read its own +1 field, not silently do              nothing because Datamosh was asked first"
+            "Motion blur must read its own +1 field, not silently do              nothing because Datamosh was asked first"
         );
         // Neither one-field run is the passthrough either: each effect on its
         // own field really is changing the picture, so the comparisons above

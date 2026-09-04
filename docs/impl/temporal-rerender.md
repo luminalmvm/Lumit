@@ -53,7 +53,13 @@ composites, so unlike per-layer `motion_blur_average`'s `fs_layer` it must NOT r
 Preview (`Realiser::accumulate_below`) and export both render the N sub-frames through the one
 `render_below_at`, average at `1/N`, then blend the average against the frame-time below by
 `mix` (a second `accumulate` of two weighted layers `1 − mix` and `mix` — a linear interpolation
-the additive pass gives exactly). Still-scene bit-identity holds because `1/N` is exact in fp16
+the additive pass gives exactly). **Each sample is submitted and waited for on its own**
+(`flush` then `settle`) rather than left inside the frame's one batch: nothing a batch
+allocates is freed until it has run, so with N renders inside it every sample's scratch was
+alive at once — 2.1 GB for eight samples over one 1080p layer, against 200 MB for the frame
+alone, enough to lose the device on a card with less to spare. The wait costs only the
+overlap between encoding one sample and drawing the last, which is nothing beside N full
+renders; `each_accumulation_sample_is_its_own_submission` pins it by submission count. Still-scene bit-identity holds because `1/N` is exact in fp16
 for a power-of-two N and the N copies sum back exactly; a moving scene smears. **On real
 hardware**, which is the qualification the identity needs: Linux CI runs the pixel tests
 against Mesa's lavapipe, a CPU rasteriser, and there the sum-and-divide path lands up to one
@@ -133,7 +139,7 @@ no per-pixel oracle; the test is a still-scene identity + a moving-scene coverag
 per-layer MB used).
 
 ## 8. A third consumer: measuring the composite's motion
-`below_draws_at` turned out to have one more customer. Fast motion blur (docs/08 §3.2) and
+`below_draws_at` turned out to have one more customer. Motion blur (docs/08 §3.2) and
 Datamosh (§3.12) want per-pixel motion, which the decode worker can only measure between
 decoded source frames — so on an **adjustment layer**, the placement §3.2 calls the commonest
 of all, they bound nothing and passed through. The below-stack at `t ± dt` is exactly the
@@ -157,5 +163,6 @@ adjustment, which is measured by putting the effect on the footage layer.
 - Recursion: an adjustment layer's below-set excludes itself; nested comps already cycle-guard
   via `visited`.
 - Cost: N× render is Heavy — respect docs/13 budgets; degrade N under the preview-draft/scrub
-  path (fewer samples while interacting), full N on export.
+  path (fewer samples while interacting), full N on export. And N× *memory* if the samples
+  share one submission (§3): submit each on its own.
 - Preview == export is the whole risk surface — one shared `render_below_at`, reviewed by hand.

@@ -257,7 +257,7 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
         ],
 
         // --- temporal ---
-        // Fast motion blur smears motion the footage already contains, so the
+        // Motion blur smears motion the footage already contains, so the
         // example plays the plate faster (see wants_speed_up). The shutter stays
         // where it opens by default: doubling the speed and opening the shutter
         // as well turned the picture into porridge.
@@ -479,7 +479,7 @@ fn animate_whip(plate: &mut Layer, span: Rational) {
     };
 }
 
-/// Fast motion blur reads motion out of the footage itself, so its example plays
+/// Motion blur reads motion out of the footage itself, so its example plays
 /// the plate faster through the frame it is sampled at. (Accumulation motion blur
 /// cannot read a retime, see `animate_whip`, so that page moves the transform at
 /// a matching rate instead.)

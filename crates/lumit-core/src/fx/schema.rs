@@ -985,7 +985,7 @@ impl EffectSchema {
     /// second rule is a thing to forget when an effect gains a layer row.
     ///
     /// It is deliberately *independent* of the matte carriage and of whatever
-    /// else the effect consumes: Fast motion blur reads a whole flow field and
+    /// else the effect consumes: Motion blur reads a whole flow field and
     /// a Motion vectors layer and a matte, and Set matte reads a layer and no
     /// matte at all. An effect takes at most one auxiliary layer, because a
     /// second would need a second carriage and nothing has asked for one.
