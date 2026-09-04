@@ -349,52 +349,30 @@ pub struct OfxImageEffectSuiteV1 {
     pub image_memory_unlock: unsafe extern "C" fn(memory_handle: OfxImageMemoryHandle) -> OfxStatus,
 }
 
-/// One trailing argument of `paramSetValue`, as the machine word it arrives in.
-///
-/// **Why a word and not a type.** Writing a value is variadic in the header and
-/// the argument is an `int`, a `double` or a `char *` depending on what the
-/// parameter was defined as — so unlike `paramGetValue`, where every trailing
-/// argument is a pointer and one fixed declaration serves all of them, there is
-/// no single Rust type that reads the register correctly for all three.
-///
-/// The Microsoft x64 ABI is what makes one possible anyway: in a **variadic**
-/// call it requires the caller to put a floating-point argument in the
-/// general-purpose register *as well as* the vector one, precisely so a callee
-/// that does not know the type can still find it. So the word is read, and the
-/// parameter's own declared type says how to read it —
-/// [`crate::suites::parameter`] does the reinterpreting.
-///
-/// The ceiling is the one K-591 already recorded for `paramGetValue`, and it is
-/// the same ceiling for the same reason: on System V the duplication does not
-/// happen, and on Apple silicon variadic arguments do not use registers at all.
-/// Lumit is Windows-first; the test plugin shares these declarations, so both
-/// sides agree on every platform; and the real fix is the out-of-process broker
-/// unpacking the call from a message (docs/impl/ofx-host.md §4).
-pub type OfxParamSlot = u64;
-
 /// `OfxParameterSuiteV1` — eighteen entry points, in header order.
 ///
-/// Eight of them are **C-variadic** in the header (`paramGetValue` and its
-/// relatives take the out-parameters as trailing arguments, one per dimension).
-/// Rust cannot define a C-variadic function on stable, so the two that must
-/// now answer with a value — `paramGetValue` and `paramGetValueAtTime` — are
-/// declared with the **widest fixed arity a standard parameter can ask for**:
-/// four trailing pointers, which is RGBA, the largest of them.
+/// Six of them are **C-variadic** in the header: the four value entry points
+/// take one trailing argument per dimension of the parameter, and the
+/// derivative and integral take out-pointers the same way. Rust cannot
+/// *define* a C-variadic function on stable, and declaring one with a fixed
+/// number of arguments instead is only right where the ABI happens to put
+/// variadic and fixed arguments in the same place. It does on x86-64 Windows
+/// and it does not on Apple silicon, where variadic arguments go on the stack
+/// and a plugin's out-pointer would be read from the wrong register and
+/// written through. That was a recorded ceiling of the host until the shim.
 ///
-/// That is deliberate and it has a ceiling worth writing down (K-591). On
-/// x86-64 — Windows and System V alike — a variadic call and a fixed call
-/// place pointer arguments in exactly the same registers and stack slots, so a
-/// plugin compiled against the C header lands its out-parameters where these
-/// declarations read them, and the trailing pointers a one-dimensional
-/// parameter never passed are simply never read. On Apple silicon that is not
-/// true: the arm64 Apple ABI puts *variadic* arguments on the stack while
-/// fixed ones stay in registers, so a third-party plugin's `paramGetValue`
-/// would read rubbish. Lumit is Windows-first, the test plugin shares these
-/// same declarations (so both sides agree on every platform), and the real fix
-/// is the out-of-process broker, where the call is unpacked from a message
-/// rather than from a register — docs/impl/ofx-host.md §4.
+/// So the four that read or write a value are declared here **as the header
+/// declares them**, variadic, and are implemented in C
+/// (`suites/variadic.c`): the C pulls exactly as many arguments as the
+/// parameter has dimensions and hands them to a fixed-arity Rust function.
+/// Rust can *call* a variadic function pointer on stable, so the test plugin
+/// makes real variadic calls through these types and the same test proves the
+/// shim on every platform CI runs.
 ///
-/// The remaining six variadics stay stubs that read no trailing argument.
+/// The derivative and the integral stay fixed-arity stubs that read no
+/// trailing argument: a callee that ignores the variadic part is correct on
+/// every ABI, because the *named* arguments before the ellipsis are placed the
+/// same way whether or not the function is variadic.
 #[repr(C)]
 pub struct OfxParameterSuiteV1 {
     pub param_define: unsafe extern "C" fn(
@@ -417,43 +395,16 @@ pub struct OfxParameterSuiteV1 {
         param: OfxParamHandle,
         prop_handle: *mut OfxPropertySetHandle,
     ) -> OfxStatus,
-    pub param_get_value: unsafe extern "C" fn(
-        param: OfxParamHandle,
-        v0: *mut c_void,
-        v1: *mut c_void,
-        v2: *mut c_void,
-        v3: *mut c_void,
-    ) -> OfxStatus,
-    pub param_get_value_at_time: unsafe extern "C" fn(
-        param: OfxParamHandle,
-        time: OfxTime,
-        v0: *mut c_void,
-        v1: *mut c_void,
-        v2: *mut c_void,
-        v3: *mut c_void,
-    ) -> OfxStatus,
+    pub param_get_value: unsafe extern "C" fn(param: OfxParamHandle, ...) -> OfxStatus,
+    pub param_get_value_at_time:
+        unsafe extern "C" fn(param: OfxParamHandle, time: OfxTime, ...) -> OfxStatus,
     pub param_get_derivative:
         unsafe extern "C" fn(param: OfxParamHandle, time: OfxTime) -> OfxStatus,
     pub param_get_integral:
         unsafe extern "C" fn(param: OfxParamHandle, time1: OfxTime, time2: OfxTime) -> OfxStatus,
-    /// The trailing values arrive as raw machine words rather than as their
-    /// own types; [`OfxParamSlot`] says why, and the parameter suite turns
-    /// them back into numbers using the type the parameter was defined with.
-    pub param_set_value: unsafe extern "C" fn(
-        param: OfxParamHandle,
-        v0: OfxParamSlot,
-        v1: OfxParamSlot,
-        v2: OfxParamSlot,
-        v3: OfxParamSlot,
-    ) -> OfxStatus,
-    pub param_set_value_at_time: unsafe extern "C" fn(
-        param: OfxParamHandle,
-        time: OfxTime,
-        v0: OfxParamSlot,
-        v1: OfxParamSlot,
-        v2: OfxParamSlot,
-        v3: OfxParamSlot,
-    ) -> OfxStatus,
+    pub param_set_value: unsafe extern "C" fn(param: OfxParamHandle, ...) -> OfxStatus,
+    pub param_set_value_at_time:
+        unsafe extern "C" fn(param: OfxParamHandle, time: OfxTime, ...) -> OfxStatus,
     pub param_get_num_keys:
         unsafe extern "C" fn(param: OfxParamHandle, number_of_keys: *mut c_uint) -> OfxStatus,
     pub param_get_key_time: unsafe extern "C" fn(

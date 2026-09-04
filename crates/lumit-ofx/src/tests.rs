@@ -1263,13 +1263,7 @@ fn a_parameter_defined_twice_under_one_name_is_refused() {
         // than handing back the default as though it were a value.
         let mut value = 0.0_f64;
         assert_eq!(
-            (params.param_get_value)(
-                handle,
-                std::ptr::from_mut(&mut value).cast(),
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-            ),
+            (params.param_get_value)(handle, std::ptr::from_mut(&mut value).cast::<c_void>()),
             Status::ErrUnsupported.code()
         );
     }
@@ -1330,7 +1324,7 @@ fn an_unbuilt_parameter_entry_point_still_tells_a_bad_handle_apart() {
         // none to read. On an instance this is a real write; see
         // `a_plugin_writes_its_own_control_while_it_is_being_built`.
         assert_eq!(
-            (params.param_set_value)(handle, 0, 0, 0, 0),
+            (params.param_set_value)(handle, 0.0_f64),
             Status::ErrUnsupported.code()
         );
         assert_eq!(
@@ -1354,11 +1348,11 @@ fn an_unbuilt_parameter_entry_point_still_tells_a_bad_handle_apart() {
             Status::ErrBadHandle.code()
         );
         assert_eq!(
-            (params.param_set_value)(forged, 0, 0, 0, 0),
+            (params.param_set_value)(forged, 0.0_f64),
             Status::ErrBadHandle.code()
         );
         assert_eq!(
-            (params.param_set_value_at_time)(forged, 0.0, 0, 0, 0, 0),
+            (params.param_set_value_at_time)(forged, 0.0, 0.0_f64),
             Status::ErrBadHandle.code()
         );
         assert_eq!(
@@ -1832,11 +1826,12 @@ fn an_instance_knows_how_big_the_project_is_and_the_render_keeps_it_true() {
 /// the vendor's own handler turned the exception into (K-595,
 /// docs/impl/ofx-host.md §5).
 ///
-/// So the write is accepted, into the instance's snapshot, and reads back. The
-/// three shapes are here together because they are three different registers:
-/// an integer, a double whose bits arrive in a general-purpose register beside
-/// the vector one, and a pointer to a string
-/// ([`crate::ffi::OfxParamSlot`]).
+/// So the write is accepted, into the instance's snapshot, and reads back.
+/// **Every call here is a real C-variadic call** through the suite's own
+/// function pointers (an `int`, a `double`, two doubles, a `const char *`),
+/// so this one test proves the C shim (`suites/variadic.c`) pulls the right
+/// number of the right kind on whichever platform the suite is running on,
+/// including the one whose ABI puts variadic arguments somewhere else.
 #[test]
 fn a_plugin_writes_its_own_control_while_it_is_being_built() {
     let _ledger = image_ledger();
@@ -1872,22 +1867,15 @@ fn a_plugin_writes_its_own_control_while_it_is_being_built() {
             Status::Ok.code()
         );
 
-        // A double. The bits are what a variadic caller leaves in the
-        // general-purpose register on Windows, which is what the suite reads.
+        // A double.
         let amount = handle_of(param_set, c"gain");
         assert_eq!(
-            (params.param_set_value)(amount, 0.75_f64.to_bits(), 0, 0, 0),
+            (params.param_set_value)(amount, 0.75_f64),
             Status::Ok.code()
         );
         let mut read = 0.0_f64;
         assert_eq!(
-            (params.param_get_value)(
-                amount,
-                std::ptr::from_mut(&mut read).cast(),
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-            ),
+            (params.param_get_value)(amount, std::ptr::from_mut(&mut read).cast::<c_void>()),
             Status::Ok.code()
         );
         assert!(
@@ -1895,39 +1883,34 @@ fn a_plugin_writes_its_own_control_while_it_is_being_built() {
             "the double came back {read}"
         );
 
-        // An integer, in the low half of its word.
+        // An integer.
         let count = handle_of(param_set, c"count");
         assert_eq!(
-            (params.param_set_value)(count, 7_u64, 0, 0, 0),
+            (params.param_set_value)(count, c_int::from(7_i16)),
             Status::Ok.code()
         );
         let mut read: c_int = 0;
         assert_eq!(
-            (params.param_get_value)(
-                count,
-                std::ptr::from_mut(&mut read).cast(),
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-            ),
+            (params.param_get_value)(count, std::ptr::from_mut(&mut read).cast::<c_void>()),
             Status::Ok.code()
         );
         assert_eq!(read, 7);
 
-        // Two doubles, which proves the second slot is read and not assumed.
+        // Two doubles, which proves the second argument is pulled and not
+        // assumed, and at a time, which proves the shim skips the named
+        // argument before the list.
         let centre = handle_of(param_set, c"centre");
         assert_eq!(
-            (params.param_set_value)(centre, 3.0_f64.to_bits(), 4.0_f64.to_bits(), 0, 0),
+            (params.param_set_value_at_time)(centre, 12.0, 3.0_f64, 4.0_f64),
             Status::Ok.code()
         );
         let (mut x, mut y) = (0.0_f64, 0.0_f64);
         assert_eq!(
-            (params.param_get_value)(
+            (params.param_get_value_at_time)(
                 centre,
-                std::ptr::from_mut(&mut x).cast(),
-                std::ptr::from_mut(&mut y).cast(),
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
+                12.0,
+                std::ptr::from_mut(&mut x).cast::<c_void>(),
+                std::ptr::from_mut(&mut y).cast::<c_void>(),
             ),
             Status::Ok.code()
         );
@@ -1937,18 +1920,12 @@ fn a_plugin_writes_its_own_control_while_it_is_being_built() {
         let label = handle_of(param_set, c"caption");
         let text = c"written";
         assert_eq!(
-            (params.param_set_value)(label, text.as_ptr() as usize as u64, 0, 0, 0),
+            (params.param_set_value)(label, text.as_ptr()),
             Status::Ok.code()
         );
         let mut read: *const c_char = std::ptr::null();
         assert_eq!(
-            (params.param_get_value)(
-                label,
-                std::ptr::from_mut(&mut read).cast(),
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-            ),
+            (params.param_get_value)(label, std::ptr::from_mut(&mut read).cast::<c_void>()),
             Status::Ok.code()
         );
         assert_eq!(CStr::from_ptr(read), c"written");
@@ -1957,7 +1934,7 @@ fn a_plugin_writes_its_own_control_while_it_is_being_built() {
         // and it is `kOfxStatErrUnsupported`, not a bad handle.
         let button = handle_of(param_set, c"trigger");
         assert_eq!(
-            (params.param_set_value)(button, 0, 0, 0, 0),
+            (params.param_set_value)(button),
             Status::ErrUnsupported.code()
         );
     }

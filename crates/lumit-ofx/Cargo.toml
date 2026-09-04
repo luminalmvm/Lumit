@@ -48,6 +48,14 @@ interprocess = "2"
 # spelled once instead of twice.
 memmap2 = "0.9"
 
+[build-dependencies]
+# The four parameter-suite entry points that are C-variadic in the header are
+# written in C (`src/suites/variadic.c`), because Rust cannot define one on
+# stable and a fixed-arity stand-in is only right on some ABIs. `cc` is already
+# in the lock file through the tree's other dependencies; this is its first use
+# in the workspace's own code.
+cc = "1"
+
 [dev-dependencies]
 # The minimal OFX plugin the host is tested against. It is declared here so a
 # plain `cargo test -p lumit-ofx` builds the cdylib the tests dlopen; the

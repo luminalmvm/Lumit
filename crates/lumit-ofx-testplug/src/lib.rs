@@ -1029,16 +1029,16 @@ fn param_double(
         return fallback;
     }
     let mut value = fallback;
-    // SAFETY: the host declares this entry point with four trailing pointers
-    // and reads only as many as the parameter has dimensions; a double is one.
+    // A real C-variadic call, as a plugin compiled against the header makes
+    // it: one trailing pointer, because a double is one dimension. This is
+    // what proves the host's shim on every platform the suite runs on.
+    // SAFETY: the host's own entry point, given a live handle and a pointer to
+    // a double, which is what it declares the parameter to be.
     let read = unsafe {
         (param_suite.param_get_value_at_time)(
             param,
             time,
-            std::ptr::from_mut(&mut value).cast(),
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
+            std::ptr::from_mut(&mut value).cast::<c_void>(),
         )
     };
     if read == Status::Ok.code() {

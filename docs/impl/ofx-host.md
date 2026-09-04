@@ -265,17 +265,22 @@ registered into the same catalogue the built-ins live in — the seam
    [rust-lang#44930](https://github.com/rust-lang/rust/issues/44930)) — and therefore a
    small C shim.
 
-   It needs neither. The Microsoft x64 ABI requires a **variadic** caller to put a
-   floating-point argument in the general-purpose register as well as the vector one,
-   exactly so a callee that does not know the argument's type can still find it. So the
-   trailing arguments are declared as four machine words, and the parameter's own declared
-   type says how to read each of them: the low half for an `int`, the bits for a `double`,
-   the address for a string. The ceiling is the one K-591 already recorded for
-   `paramGetValue` and it is the same ceiling for the same reason — System V does not
-   duplicate, Apple silicon puts variadic arguments on the stack — and the real fix for
-   both is the broker unpacking the call from a message rather than from a register (§4).
-   The write lands in the instance's snapshot and no further; making it reach the document
-   is still the package docs/12 §2.2 describes.
+   The first fix closed it without the C, on the Microsoft x64 rule that a variadic caller
+   duplicates a floating-point argument into the general-purpose register. True, and
+   Windows-only, so it kept the ceiling above: on Apple silicon variadic arguments go on the
+   stack and a fixed-arity callee reads the wrong register, for reads and writes alike.
+   Each platform ships the same host at the same version, so **the ceiling is retired with
+   the shim after all**: `src/suites/variadic.c`, built by
+   the crate's `build.rs`, defines the four value entry points exactly as the header
+   declares them, asks Rust how many trailing arguments the parameter has and of which
+   kind, pulls exactly those with `va_arg`, and hands them to a fixed-arity Rust function.
+   Every decision stays in Rust; the C does the one thing Rust cannot. The suite table
+   declares the four as variadic, which Rust *can* do, so the test plugin makes real
+   variadic calls and one test proves the shim on every platform CI runs. (The note used to
+   say the broker was the real fix for this. It is not: the broker is a Rust process that
+   hands the plugin the same tables, so the plugin's call is just as variadic there.) The
+   write lands in the instance's snapshot and no further; making it reach the document is
+   still the package docs/12 §2.2 describes.
 
    The tail is ten plugins whose own render or region-of-definition answers
    `kOfxStatErrUnsupported` for reasons of their own, and one `createInstance` that answers
@@ -288,13 +293,12 @@ registered into the same catalogue the built-ins live in — the seam
    a hundred plugins on it offered none of them. `bundle::scan_dir` now walks four levels
    down and does not look inside a bundle for another bundle.
 
-   **And a rejection that is not a host bug, worth writing down so it is not chased again.**
-   Some plugins are locked to named hosts. HitFilm's Vegas bundle reads `kOfxPropName` twice
-   during `kOfxActionDescribe` and answers `kOfxStatErrMissingHostFeature`; Red Giant
-   Universe does the same in `describeInContext`. Neither reads another property first, and
-   putting another host's name in that field gets them past it — and then straight into an
-   access violation, because they expect that host's GPU environment too. There is nothing
-   here to fix, and claiming to be somebody else is not a fix.
+   **And a rejection that is not a host gap.** Some plugins are locked to named hosts:
+   HitFilm's Vegas bundle and Red Giant Universe both read `kOfxPropName` and answer
+   `kOfxStatErrMissingHostFeature` to a name they were not tested against. The real host
+   gaps those bundles hit first (the interact suite, message suite v2, the 1.3 to 1.5 host
+   properties) are closed above; the name itself is data in `quirks.json` (`present_as`),
+   given per bundle and never by default.
 
 2. Handle fuzzing: call every suite function with forged/expired handles → correct OFX
    status codes, zero UB (run under ASan in CI). **Landed** as

@@ -1776,6 +1776,7 @@ name = "lumit-ofx"
 version = "0.3.1"
 dependencies = [
  "bincode",
+ "cc",
  "half",
  "interprocess",
  "libloading",

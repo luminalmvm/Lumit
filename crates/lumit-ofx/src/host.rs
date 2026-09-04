@@ -74,6 +74,10 @@ pub struct HostState {
 
 impl HostState {
     fn new() -> Self {
+        // The C half of the parameter suite learns where its Rust half is
+        // here, on the first touch of the state, because there is no earlier
+        // moment: the host struct a plugin is handed is built from this.
+        suites::parameter::bind();
         let mut props = HandleRegistry::new(HandleKind::PropertySet);
         // The host's own set is the first thing in the registry; if that
         // insert could fail the registry would have to be full, which it
