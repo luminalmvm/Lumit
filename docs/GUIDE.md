@@ -283,8 +283,8 @@ Two things are easy to miss:
   `app_en.arb` key and a matching entry in `flutter_ui/lib/l10n/engine_labels.dart`.
   `flutter_ui/test/l10n/engine_labels_test.dart` walks the engine's own tables and fails on
   any label with no entry. A keymap action is a string.
-- **The other `app_*.arb` files are never hand-edited.** `app_de`, `app_kk`, `app_uk`,
-  `app_zh` and `app_zh_Hant` are written by `scripts/translations.ps1` from what the
+- **The other `app_*.arb` files are never hand-edited.** `app_de`, `app_es`, `app_kk`, `app_pl`,
+  `app_uk`, `app_zh` and `app_zh_Hant` are written by `scripts/translations.ps1` from what the
   translation page on lumitlab.com sends back, so a hand edit is overwritten by the next
   run. A new English key leaves the other languages short, which is expected and falls
   back to English. List the new keys in the commit message and the pull request so they

@@ -610,8 +610,8 @@ build, regenerates the Dart from the file.
    the repository is offered the next time the site is deployed. What a translator
    sends back is read in by `scripts/translations.ps1`, which is the only thing
    that writes a translation file.
-3. **Never hand-edit `app_de.arb`, `app_uk.arb`, `app_zh.arb`, `app_zh_Hant.arb`
-   or `app_kk.arb`.** Those belong to the ingest tool. A fix typed here is
+3. **Never hand-edit `app_de.arb`, `app_es.arb`, `app_kk.arb`, `app_pl.arb`, `app_uk.arb`,
+   `app_zh.arb` or `app_zh_Hant.arb`.** Those belong to the ingest tool. A fix typed here is
    overwritten by the next run; make it on the translation page instead.
 
 **When a translation arrives.** Somebody opens an issue with a `.json` from
