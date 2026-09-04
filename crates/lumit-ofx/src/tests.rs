@@ -896,6 +896,8 @@ fn the_host_is_given_to_a_plugin_once_before_it_is_loaded() {
     // Opening is not loading: nothing has been said to the plugin yet.
     assert_eq!(read(b"LumitTestPlugSetHostCalls\0"), 0);
 
+    // Loading sets the process-wide host name, so it takes the name lock.
+    let _name = host_name_lock();
     bundle.load();
     assert_eq!(bundle.plugins()[0].load_status, Some(Status::Ok));
     assert_eq!(
@@ -973,7 +975,12 @@ fn a_loaded_bundle(test: &str) -> Option<(tempfile::TempDir, Bundle)> {
         return None;
     };
     let mut bundle = Bundle::open(&binary).ok()?;
-    bundle.load();
+    // Loading sets the process-wide host name from the quirks table, so it
+    // takes the same lock the tests that read that name hold.
+    {
+        let _name = host_name_lock();
+        bundle.load();
+    }
     Some((root, bundle))
 }
 
