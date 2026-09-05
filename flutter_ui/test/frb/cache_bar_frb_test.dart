@@ -311,6 +311,18 @@ void main() {
       final p = freshProject();
       final comp = p.state.project!.newComposition(name: 'Scene');
       comp.addSolidLayer();
+      // A one-frame work area, so the worker's idle fill has nothing to make
+      // while this test is looking. The entry count below is the whole
+      // memory tier's, and a fill frame the card pushed out landed in it
+      // between the two readings on the Linux runner, reading as a second
+      // composite that never happened.
+      comp.setWorkArea(
+        span: BridgeSpan(
+          inPoint: comp.timeOfFrame(frame: 0),
+          outPoint: comp.timeOfFrame(frame: 1),
+          startOffset: const BridgeRational(num: 0, den: 1),
+        ),
+      );
       p.uiState.setSelectedComp(comp);
 
       await tester.pumpWidget(hostPanel(
@@ -321,6 +333,7 @@ void main() {
       ));
       await tester.pump();
 
+      final base = cacheStats().entries;
       comp.renderScope(
         frame: BigInt.zero,
         scale: p.uiState.viewerScale,
@@ -331,15 +344,19 @@ void main() {
       // count to be non-zero — earlier tests in this file leave residue in the
       // shared cache, and a `before` snapshotted on their entries races the
       // first trace (two queued traces collapse to the newest, so the first
-      // can vanish entirely).
+      // can vanish entirely). And for the memory tier to have gained an entry
+      // since the trace was asked for: the Viewer puts the frame on the card
+      // first, which the strip reports as held, and a `before` read then saw
+      // the first trace's own filing land as though the second had composited.
       await settleFrb(
         tester,
         minRounds: 15,
         maxRounds: 400,
         until: () =>
             cacheStorageOf(comp.cachedFrames(
-                frames: BigInt.one, scale: p.uiState.viewerScale)[0]) !=
-            0,
+                    frames: BigInt.one, scale: p.uiState.viewerScale)[0]) !=
+                0 &&
+            cacheStats().entries > base,
       );
 
       final before = cacheStats();

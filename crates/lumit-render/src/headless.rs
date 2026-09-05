@@ -1912,6 +1912,14 @@ impl HeadlessRenderer {
         self.demotions.len()
     }
 
+    /// Whether every read-back slot is taken, so the next eviction would be
+    /// dropped rather than read back. The fill waits on this rather than
+    /// rendering a frame the card would then let go.
+    #[must_use]
+    pub fn demotions_saturated(&self) -> bool {
+        self.demotions.len() >= MAX_DEMOTIONS_IN_FLIGHT
+    }
+
     /// How many demotion read-backs the card has refused so far. Each is a
     /// frame that left VRAM and reached no lower tier, by design (a miss costs
     /// a render); a test counting held frames subtracts these.
