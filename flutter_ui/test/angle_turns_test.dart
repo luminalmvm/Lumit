@@ -156,4 +156,84 @@ void main() {
       expect(seen.last, closeTo(45, 1e-6));
     });
   });
+
+  group('the degrees box crossing 360', () {
+    /// The pair at [degrees], reporting every value a drag hands back. Each
+    /// value is fed straight back in as the new angle, the way the row does
+    /// with a live tick, since that rebuild is what the bug lived in.
+    Future<List<double>> mount(WidgetTester tester, double degrees) async {
+      final seen = <double>[];
+      var shown = degrees;
+      await tester.pumpWidget(Directionality(
+        textDirection: TextDirection.ltr,
+        child: ThemeScope(
+          theme: LumitTheme.dark(),
+          animationLevel: AnimationLevel.none,
+          showTooltips: false,
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: StatefulBuilder(
+              builder: (context, setState) => TurnsAndDegreesField(
+                keyName: 't',
+                degrees: shown,
+                onChanged: (v) => setState(() => seen.add(shown = v)),
+                onCommit: (v) => setState(() => seen.add(shown = v)),
+              ),
+            ),
+          ),
+        ),
+      ));
+      return seen;
+    }
+
+    /// Scrubbing the degrees box from 350 up through 360 used to send the
+    /// turns box racing: the box runs on from its own last tick, so it
+    /// reported 361, 362, and the row added the turn it had just gained on
+    /// top of each one. One turn is gained once, at 360, and no more.
+    testWidgets('scrubbing past 360 gains exactly one turn', (tester) async {
+      final seen = await mount(tester, 350);
+      final box = find.byKey(const ValueKey<String>('angle-degrees-t'));
+      final gesture = await tester.startGesture(tester.getCenter(box));
+      // Past the drag slop first, then the scrub proper in small steps.
+      await gesture.moveBy(const Offset(20, 0));
+      await tester.pump();
+      for (var i = 0; i < 10; i++) {
+        await gesture.moveBy(const Offset(2, 0));
+        await tester.pump();
+      }
+      await gesture.up();
+      await tester.pump();
+
+      expect(seen, isNotEmpty);
+      for (var i = 1; i < seen.length; i++) {
+        expect(seen[i] - seen[i - 1], inInclusiveRange(0, 30),
+            reason: 'tick $i jumped from ${seen[i - 1]} to ${seen[i]}');
+      }
+      expect(seen.last, inInclusiveRange(360, 400));
+      expect(TurnsAndDegreesField.turnsOf(seen.last), 1);
+    });
+
+    testWidgets('scrubbing down through 0 loses exactly one turn',
+        (tester) async {
+      final seen = await mount(tester, 370);
+      final box = find.byKey(const ValueKey<String>('angle-degrees-t'));
+      final gesture = await tester.startGesture(tester.getCenter(box));
+      await gesture.moveBy(const Offset(-20, 0));
+      await tester.pump();
+      for (var i = 0; i < 10; i++) {
+        await gesture.moveBy(const Offset(-2, 0));
+        await tester.pump();
+      }
+      await gesture.up();
+      await tester.pump();
+
+      expect(seen, isNotEmpty);
+      for (var i = 1; i < seen.length; i++) {
+        expect(seen[i - 1] - seen[i], inInclusiveRange(0, 30),
+            reason: 'tick $i jumped from ${seen[i - 1]} to ${seen[i]}');
+      }
+      expect(seen.last, inInclusiveRange(320, 360));
+      expect(TurnsAndDegreesField.turnsOf(seen.last), 0);
+    });
+  });
 }
