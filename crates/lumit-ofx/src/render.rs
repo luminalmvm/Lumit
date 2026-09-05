@@ -669,6 +669,15 @@ fn render_args(request: &RenderRequest) -> PropertySet {
     args.seed(keys::SEQUENTIAL_RENDER_STATUS, PropValue::int(0));
     args.seed(keys::INTERACTIVE_RENDER_STATUS, PropValue::int(0));
     args.seed(keys::RENDER_QUALITY_DRAFT, PropValue::int(0));
+    // **The GPU extensions are answered, not left unknown.** This host renders
+    // through the CPU boundary and none of these is on — but a plugin built on
+    // a vendor framework asks every frame, and a *failed fetch* is not the same
+    // to it as a nought: Red Giant's own log shows six thousand of each per
+    // session, after which the plugin returns `kOfxStatOK` having written
+    // nothing into the output image.
+    args.seed(keys::CUDA_ENABLED, PropValue::int(0));
+    args.seed(keys::OPENCL_ENABLED, PropValue::int(0));
+    args.seed(keys::METAL_ENABLED, PropValue::int(0));
     args
 }
 
@@ -699,4 +708,37 @@ fn rect_from_doubles(props: &PropertySet, key: &str) -> Option<RectI> {
         x2: ceil(x2),
         y2: ceil(y2),
     })
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests {
+    use super::{render_args, RenderRequest};
+    use crate::ffi::prop_keys as keys;
+    use crate::image::Frame16;
+
+    /// **A render's `inArgs` say the GPU extensions are off, in so many words**
+    /// (K-756). A plugin built on a vendor framework asks every frame whether a
+    /// CUDA, OpenCL or Metal render is on; if the fetch *fails* rather than
+    /// answering nought, the framework does not fall back to its CPU path — it
+    /// returns success having written nothing into the output image, and the
+    /// layer goes transparent with no error to attach a badge to. Red Giant's
+    /// own log carried six thousand of each failed read per session against
+    /// this host before these three were seeded.
+    #[test]
+    fn a_render_says_no_to_every_gpu_extension() {
+        let source = Frame16::black(4, 4).expect("a four-by-four frame");
+        let args = render_args(&RenderRequest::filter(0.0, source));
+        for key in [
+            keys::CUDA_ENABLED,
+            keys::OPENCL_ENABLED,
+            keys::METAL_ENABLED,
+        ] {
+            assert_eq!(
+                args.get_int(key, 0),
+                Ok(0),
+                "{key} must be answered with nought, not left unknown"
+            );
+        }
+    }
 }

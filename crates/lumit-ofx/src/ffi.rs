@@ -315,50 +315,48 @@ pub struct OfxImageEffectSuiteV1 {
     pub image_memory_unlock: unsafe extern "C" fn(memory_handle: OfxImageMemoryHandle) -> OfxStatus,
 }
 
-/// One trailing argument of `paramSetValue`, as the machine word it arrives in.
+/// One trailing argument of `paramSetValue`, as the machine word the shim hands
+/// it over in.
 ///
-/// **Why a word and not a type.** Writing a value is variadic in the header and
+/// **Why a word and not a type.** Writing a value is variadic in the header, and
 /// the argument is an `int`, a `double` or a `char *` depending on what the
 /// parameter was defined as — so unlike `paramGetValue`, where every trailing
-/// argument is a pointer and one fixed declaration serves all of them, there is
-/// no single Rust type that reads the register correctly for all three.
+/// argument is a pointer, there is no one Rust type that serves all three. The
+/// C shim pulls each with the right `va_arg` type and passes the *bits* across
+/// in a word; the parameter's own declared type then says how to read them back
+/// ([`crate::suites::parameter`] does the reinterpreting).
 ///
-/// The Microsoft x64 ABI is what makes one possible anyway: in a **variadic**
-/// call it requires the caller to put a floating-point argument in the
-/// general-purpose register *as well as* the vector one, precisely so a callee
-/// that does not know the type can still find it. So the word is read, and the
-/// parameter's own declared type says how to read it —
-/// [`crate::suites::parameter`] does the reinterpreting.
-///
-/// The ceiling is the one K-591 already recorded for `paramGetValue`, and it is
-/// the same ceiling for the same reason: on System V the duplication does not
-/// happen, and on Apple silicon variadic arguments do not use registers at all.
-/// Lumit is Windows-first; the test plugin shares these declarations, so both
-/// sides agree on every platform; and the real fix is the out-of-process broker
-/// unpacking the call from a message (docs/impl/ofx-host.md §4).
+/// This type therefore describes the boundary between the shim and the Rust
+/// half, both of which this repository compiles together. It says nothing about
+/// how the plugin passed its argument — that question is `va_arg`'s, and it is
+/// answered in `shim/ofx_varargs.c` (K-756). It used to say a great deal about
+/// it, on the strength of a Microsoft x64 rule that does not hold elsewhere;
+/// that is what K-756 replaced.
 pub type OfxParamSlot = u64;
 
 /// `OfxParameterSuiteV1` — eighteen entry points, in header order.
 ///
-/// Eight of them are **C-variadic** in the header (`paramGetValue` and its
-/// relatives take the out-parameters as trailing arguments, one per dimension).
-/// Rust cannot define a C-variadic function on stable, so the two that must
-/// now answer with a value — `paramGetValue` and `paramGetValueAtTime` — are
-/// declared with the **widest fixed arity a standard parameter can ask for**:
-/// four trailing pointers, which is RGBA, the largest of them.
+/// Eight of them are **C-variadic** in the header: `paramGetValue` and its
+/// relatives take the out-parameters as trailing arguments, one per dimension,
+/// so a double passes one and an RGBA colour four.
 ///
-/// That is deliberate and it has a ceiling worth writing down (K-591). On
-/// x86-64 — Windows and System V alike — a variadic call and a fixed call
-/// place pointer arguments in exactly the same registers and stack slots, so a
-/// plugin compiled against the C header lands its out-parameters where these
-/// declarations read them, and the trailing pointers a one-dimensional
-/// parameter never passed are simply never read. On Apple silicon that is not
-/// true: the arm64 Apple ABI puts *variadic* arguments on the stack while
-/// fixed ones stay in registers, so a third-party plugin's `paramGetValue`
-/// would read rubbish. Lumit is Windows-first, the test plugin shares these
-/// same declarations (so both sides agree on every platform), and the real fix
-/// is the out-of-process broker, where the call is unpacked from a message
-/// rather than from a register — docs/impl/ofx-host.md §4.
+/// **The four that carry a value are declared here exactly as the header
+/// declares them** (K-756). Rust cannot *define* a C-variadic function on
+/// stable, but it can declare one, and declaring them honestly is what lets the
+/// test plugin call them the way a plugin nobody here wrote does — with as many
+/// arguments as the parameter has dimensions, and no more. The addresses these
+/// fields carry are the C shim's ([`lumit_ofx_shim_param_get_value`] and its
+/// three siblings), which pull the trailing arguments with `va_arg` and hand
+/// them to the fixed-arity Rust half.
+///
+/// This supersedes the fixed-arity-of-four declaration K-591 shipped and the
+/// ceiling it recorded. That arrangement read the arguments from where a
+/// *fixed* call would have left them, which is right on Windows x64, System V
+/// and standard AAPCS64 and wrong on Apple silicon, whose ABI puts every
+/// variadic argument on the stack — so on an M-series Mac the host read
+/// leftovers and, on a read, wrote the parameter's value through them. The
+/// declarations and the test plugin agreed with each other and with no real
+/// plugin, which is why the suite was green there while nothing worked.
 ///
 /// The remaining six variadics stay stubs that read no trailing argument.
 #[repr(C)]
@@ -383,43 +381,20 @@ pub struct OfxParameterSuiteV1 {
         param: OfxParamHandle,
         prop_handle: *mut OfxPropertySetHandle,
     ) -> OfxStatus,
-    pub param_get_value: unsafe extern "C" fn(
-        param: OfxParamHandle,
-        v0: *mut c_void,
-        v1: *mut c_void,
-        v2: *mut c_void,
-        v3: *mut c_void,
-    ) -> OfxStatus,
-    pub param_get_value_at_time: unsafe extern "C" fn(
-        param: OfxParamHandle,
-        time: OfxTime,
-        v0: *mut c_void,
-        v1: *mut c_void,
-        v2: *mut c_void,
-        v3: *mut c_void,
-    ) -> OfxStatus,
+    pub param_get_value: unsafe extern "C" fn(param: OfxParamHandle, ...) -> OfxStatus,
+    pub param_get_value_at_time:
+        unsafe extern "C" fn(param: OfxParamHandle, time: OfxTime, ...) -> OfxStatus,
     pub param_get_derivative:
         unsafe extern "C" fn(param: OfxParamHandle, time: OfxTime) -> OfxStatus,
     pub param_get_integral:
         unsafe extern "C" fn(param: OfxParamHandle, time1: OfxTime, time2: OfxTime) -> OfxStatus,
-    /// The trailing values arrive as raw machine words rather than as their
-    /// own types; [`OfxParamSlot`] says why, and the parameter suite turns
-    /// them back into numbers using the type the parameter was defined with.
-    pub param_set_value: unsafe extern "C" fn(
-        param: OfxParamHandle,
-        v0: OfxParamSlot,
-        v1: OfxParamSlot,
-        v2: OfxParamSlot,
-        v3: OfxParamSlot,
-    ) -> OfxStatus,
-    pub param_set_value_at_time: unsafe extern "C" fn(
-        param: OfxParamHandle,
-        time: OfxTime,
-        v0: OfxParamSlot,
-        v1: OfxParamSlot,
-        v2: OfxParamSlot,
-        v3: OfxParamSlot,
-    ) -> OfxStatus,
+    /// Variadic as the header declares it. The trailing values are an `int`, a
+    /// `double` or a `char *` by the parameter's own type; the shim pulls each
+    /// with the matching `va_arg` and passes its bits on as an
+    /// [`OfxParamSlot`], which the parameter suite reads back.
+    pub param_set_value: unsafe extern "C" fn(param: OfxParamHandle, ...) -> OfxStatus,
+    pub param_set_value_at_time:
+        unsafe extern "C" fn(param: OfxParamHandle, time: OfxTime, ...) -> OfxStatus,
     pub param_get_num_keys:
         unsafe extern "C" fn(param: OfxParamHandle, number_of_keys: *mut c_uint) -> OfxStatus,
     pub param_get_key_time: unsafe extern "C" fn(
@@ -444,6 +419,33 @@ pub struct OfxParameterSuiteV1 {
     pub param_edit_begin:
         unsafe extern "C" fn(param_set: OfxParamSetHandle, name: *const c_char) -> OfxStatus,
     pub param_edit_end: unsafe extern "C" fn(param_set: OfxParamSetHandle) -> OfxStatus,
+}
+
+// The C shim (`shim/ofx_varargs.c`, K-756). These four symbols are what the
+// parameter suite's table actually hands a plugin: each receives the variadic
+// call, pulls its trailing arguments with `va_arg` — the only construct that
+// knows where this platform's caller put them — and then calls straight back
+// into the fixed-arity Rust half, which is where every decision stays.
+//
+// Declaring them is legal on stable Rust; only *defining* one is not. That
+// asymmetry is the whole reason this arrangement works.
+extern "C" {
+    /// `paramGetValue`, as the plugin calls it.
+    pub fn lumit_ofx_shim_param_get_value(param: OfxParamHandle, ...) -> OfxStatus;
+    /// `paramGetValueAtTime`, as the plugin calls it.
+    pub fn lumit_ofx_shim_param_get_value_at_time(
+        param: OfxParamHandle,
+        time: OfxTime,
+        ...
+    ) -> OfxStatus;
+    /// `paramSetValue`, as the plugin calls it.
+    pub fn lumit_ofx_shim_param_set_value(param: OfxParamHandle, ...) -> OfxStatus;
+    /// `paramSetValueAtTime`, as the plugin calls it.
+    pub fn lumit_ofx_shim_param_set_value_at_time(
+        param: OfxParamHandle,
+        time: OfxTime,
+        ...
+    ) -> OfxStatus;
 }
 
 /// `OfxThreadFunctionV1` — the body a plugin asks `multiThread` to run once on
@@ -608,6 +610,30 @@ pub mod prop_keys {
     pub const SEQUENTIAL_RENDER_STATUS: &str = "OfxImageEffectPropSequentialRenderStatus";
     pub const INTERACTIVE_RENDER_STATUS: &str = "OfxImageEffectPropInteractiveRenderStatus";
     pub const RENDER_QUALITY_DRAFT: &str = "OfxImageEffectPropRenderQualityDraft";
+
+    // The GPU render extensions (OFX 1.5, and Resolve's before it). This host
+    // renders on the CPU side of the boundary and supports none of them — but
+    // "no" and "I have never heard of that property" are **different answers**,
+    // and a plugin built on a vendor framework takes the second one badly: it
+    // asks whether a GPU render is on, the fetch fails rather than answering
+    // nought, and the plugin returns success having drawn nothing. So they are
+    // declared, and declared false.
+    /// `kOfxImageEffectPropCudaRenderSupported` — host, `"false"` here.
+    pub const CUDA_RENDER_SUPPORTED: &str = "OfxImageEffectPropCudaRenderSupported";
+    /// `kOfxImageEffectPropCudaStreamSupported` — host, `"false"` here.
+    pub const CUDA_STREAM_SUPPORTED: &str = "OfxImageEffectPropCudaStreamSupported";
+    /// `kOfxImageEffectPropOpenCLRenderSupported` — host, `"false"` here.
+    pub const OPENCL_RENDER_SUPPORTED: &str = "OfxImageEffectPropOpenCLRenderSupported";
+    /// `kOfxImageEffectPropOpenCLSupported` — host, `"false"` here.
+    pub const OPENCL_SUPPORTED: &str = "OfxImageEffectPropOpenCLSupported";
+    /// `kOfxImageEffectPropMetalRenderSupported` — host, `"false"` here.
+    pub const METAL_RENDER_SUPPORTED: &str = "OfxImageEffectPropMetalRenderSupported";
+    /// `kOfxImageEffectPropCudaEnabled` — render `inArgs`, nought here.
+    pub const CUDA_ENABLED: &str = "OfxImageEffectPropCudaEnabled";
+    /// `kOfxImageEffectPropOpenCLEnabled` — render `inArgs`, nought here.
+    pub const OPENCL_ENABLED: &str = "OfxImageEffectPropOpenCLEnabled";
+    /// `kOfxImageEffectPropMetalEnabled` — render `inArgs`, nought here.
+    pub const METAL_ENABLED: &str = "OfxImageEffectPropMetalEnabled";
     pub const REGION_OF_DEFINITION: &str = "OfxImageEffectPropRegionOfDefinition";
     pub const REGION_OF_INTEREST: &str = "OfxImageEffectPropRegionOfInterest";
     pub const FRAME_RANGE: &str = "OfxImageEffectPropFrameRange";

@@ -13054,6 +13054,80 @@ box in the middle of the screen, never something that stops playback. A plugin t
 question is told "you decide" — which is the answer OFX itself defines for a host that
 cannot ask anybody.
 
+### The argument that was never where we looked (K-756)
+
+One thing worth understanding, because it made every commercial plugin useless on a Mac for
+a while and the test suite could not see it.
+
+When a plugin wants the value of one of its own controls, it calls a function this host
+handed it. How many things it passes depends on the control: a Strength is one number, so
+it passes one place to put it; a Centre is two; a colour is four. C has a way of writing a
+function like that — "and then however many more the caller felt like" — and `printf` is the
+famous example. OFX uses it for four of its parameter calls.
+
+Rust cannot write a function like that. So this host used to cheat: declare it as always
+taking four, since four is the most any control needs, and ignore the ones a smaller control
+never passed.
+
+Whether the cheat works depends entirely on **where the machine puts the arguments**. Think
+of it as a building where you register how you want parcels delivered: to your door, or to a
+mailroom downstairs. The plugin was posting to the mailroom; our function was standing at the
+door. It waited, saw nothing, and picked up whatever was lying by the door instead — which is
+to say, whatever the last delivery had left there.
+
+On Windows and on Intel machines the two happen to be the same place, so the cheat held and
+nobody noticed. Apple's own rule for its M-series chips is different, and there the plugin's
+arguments were somewhere our function never looked. It read rubbish, and then — because the
+call is "here is where to put the value" — it *wrote the value into* that rubbish. The
+plugin's own variables were never filled, so it worked with nothing and drew nothing. On
+screen, the layer simply went transparent, with no error anywhere.
+
+The fix is a forty-line C file. C has known how to collect those arguments since 1989 and
+knows the rule for every platform, so it now stands at the door, fetches the parcels, and
+hands them to the Rust half — which was always right and had only ever been given rubbish.
+
+The part worth remembering is why it lived so long. Lumit's own test plugin was built from
+the same declarations as the host, so **both sides made the same mistake and therefore
+agreed**: the test plugin also posted to the door. The suite was green on the very machines
+where nothing worked. The test plugin now passes exactly as many arguments as the control
+has, the way a stranger's plugin does, so if that ever drifts again a test goes red instead
+of a picture going blank.
+
+### The blank picture, and the queue it jumped (K-757)
+
+The other half of why plugins drew nothing, and the more embarrassing half, because this
+one was ours from end to end.
+
+A plugin's maths is compiled into somebody else's library, so it cannot run on the graphics
+card the way Lumit's own effects do. The picture has to come *off* the card, go to the
+plugin as ordinary numbers, and go back on again. That trip is the only place in a frame
+where anything leaves the card.
+
+Now, drawing a frame is not one instruction sent one at a time. Lumit collects a frame's
+worth of drawing into a batch and sends the whole batch to the card at the end — much
+faster, and it is what every graphics program does. Orders arrive at the card in the order
+they were sent.
+
+The read-back did not join the batch. It made its own little parcel and posted it
+immediately — so it arrived **first**, ahead of all the drawing still waiting in the batch,
+including the drawing that put the picture into the very texture it had come to fetch. What
+it collected was an empty frame: not an error, nothing logged, just a picture of nothing.
+
+The plugin then did its job perfectly on a picture of nothing, and handed back what a
+colour grade makes of nothing. On screen the layer simply vanished.
+
+The fix is one line — send the batch before collecting — and the reason it went unnoticed
+for so long is worth keeping in mind: **the built-in effects all travel inside the batch, so
+their order was right for free. Only the trip off the card leaves it, and only plugins take
+that trip.** The test suite could not see it either, because it hands plugins pictures it
+builds in memory rather than pictures that came off the card. Two well-tested things, and
+the fault sat in the seam between them.
+
+One practical footnote. A frame is remembered by what the project says, not by whether the
+render that made it worked — so the blank frames outlived the fix in the cache, and the way
+to tell is that the effect reports taking `0.00 ms`, which means it never ran at all. After
+a fix to anything that draws, empty the cache before believing what you see.
+
 ### Proving it against plugins we did not write
 
 Every test up to here has been the host against plugins Lumit wrote, and there is a limit

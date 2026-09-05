@@ -23993,3 +23993,174 @@ diagnostics file with one line per frame is a file nobody reads.
 fix is always at the cause — the renderer, the driver, the descriptor, the runner. What the
 frontend owes is that the failure names itself in the file we ask users for, so the next one
 takes an afternoon instead of a week.
+
+
+## K-756 — The parameter suite's variadics are answered by a C shim, because only C can receive one
+
+**Date:** 2026-09-05 · **Status:** DECIDED · **Scope:** `crates/lumit-ofx` (`ffi.rs`,
+`suites/parameter.rs`, the new `shim/` and `build.rs`), `crates/lumit-ofx-testplug`,
+docs/impl/ofx-host.md
+
+Reported from the field: on macOS, Magic Bullet Looks is discovered, described and offered;
+its parameter rows appear; the render spends real time and answers `kOfxStatOK` with no
+failure badge — and the layer it is on goes **fully transparent**. The same on an adjustment
+layer and on a footage layer, so the staging path is not involved.
+
+**The cause is the fixed-arity declaration K-591 shipped, on a machine whose ABI it does not
+suit.** `paramGetValue` and its three relatives are C-variadic in the header: a plugin
+passes one trailing argument per dimension — one for a double, two for a 2-D point, four for
+a colour. Rust cannot *define* a C-variadic function on stable
+([rust-lang#44930](https://github.com/rust-lang/rust/issues/44930), still true on 1.97.1, and
+checked rather than assumed), so this host declared those four with a fixed arity of four and
+read the arguments from where a *fixed* call would have left them. Windows x64, System V and
+standard AAPCS64 all place them identically, so it held everywhere anyone looked. **Apple's
+arm64 ABI passes every variadic argument on the stack**, so on an M-series Mac the host read
+four registers of leftovers — and on a read it then wrote the parameter's value through them
+as if they were the plugin's out-pointers, leaving the plugin's own variables untouched.
+
+Measured on the reporting machine, a variadic call carrying two stack addresses arriving at a
+fixed-arity callee:
+
+```
+passed:   v0 = 0x16d8ae2b0   v1 = 0x16d8ae2b8
+received: v0 = 0x102589f5c   v1 = 0x102589f5c   v2 = 0x13c808800   v3 = 0x2
+```
+
+Not one of them is either pointer, and `0x2` is not an address at all. With the shim in
+place, the same machine watching **Magic Bullet Looks' own** call — a plugin nobody here
+wrote, reading a one-dimensional parameter — sees what it should:
+
+```
+arity: type=OfxParamTypeCustom count=1 reading=2
+get:   slots=[0x16d699458, 0x0, 0x0, 0x0]
+```
+
+One clean pointer where the plugin put it, and the three slots the parameter does not have
+left empty. A plugin that reads
+its controls at render time therefore renders with uninitialised state. The picture
+*disappears* rather than merely being wrong because `render.rs` allocates the output image
+with `Image::black` and hands it over to be filled, so "the plugin wrote nothing" and "the
+plugin wrote transparency" are the same thing to this host, with no failure to hang a badge
+on.
+
+**The fix is the C shim K-595 first proposed**, and K-743's conclusion that it "needs
+neither" a shim nor a build script is superseded for every platform but the one it was
+measured on. `shim/ofx_varargs.c` is four functions: pull the trailing arguments with
+`va_arg` — the only construct that knows each platform's rule — and call the existing
+fixed-arity Rust entries, which were always right and were always being handed rubbish. It
+asks `lumit_ofx_param_arity` first, because `va_arg` cannot know how many arguments the
+caller pushed and pulling one too many would, on a read, be written through; the count comes
+from the parameter's own declaration, which this host has held since `paramDefine`. Every
+decision stays in Rust: there is no status code and no parameter-type table in the C, so
+there is no second copy of either to drift.
+
+**The suite's four fields are now declared as the header declares them.** Declaring a
+variadic function pointer is stable Rust; only defining one is not. That asymmetry is what
+makes the whole arrangement work, and it is what lets the test plugin call them the way a
+real plugin does.
+
+**The ceiling was recorded but its consequence was not, and the test suite could not see
+it.** `lumit-ofx-testplug` shared the host's own fixed-arity declarations — K-591 said so
+approvingly, "so both sides agree on every platform" — so both sides passed and read four
+arguments and agreed by construction, including on the platform where they agreed with no
+real plugin. The macOS job runs on `macos-latest`, which is arm64: the conformance suite was
+green on the very machine class where every commercial plugin was broken. **The test plugin
+now passes its true arity**, which is what makes the gap testable at all, and the existing
+round-trip assertions became genuine variadic calls in the same change.
+
+**One correction to the record.** K-591 and K-743 both say the real fix is "the broker
+unpacking the call from a message rather than from a register". It is not: the broker moves
+the *plugin* into another process, not the *call*. Inside the broker the plugin still calls
+these suite function pointers directly across the same C ABI, so the problem is identical
+there. docs/impl/ofx-host.md §4 and §5 are corrected in the same commit.
+
+**A second gap, found by the same instrumentation and fixed here too: the GPU render
+extensions were not answered at all.** Red Giant's own OFX support library writes a
+validation log, and against this host it carried **twenty-four thousand failed property
+reads per session** — six thousand each of `kOfxImageEffectPropCudaEnabled`,
+`...OpenCLEnabled` and `...MetalEnabled`, asked inside every render, plus their command
+queue and stream pointers. This host renders through the CPU boundary and supports none of
+them, but **"no" and "I have never heard of that property" are different answers**: the
+first lets a plugin take its CPU path, the second leaves a vendor framework unable to
+decide and it stops drawing without saying so. The five host-level `...RenderSupported`
+strings are now declared `"false"` and the three `...Enabled` integers are seeded nought in
+the render's `inArgs`. Measured effect: the plugin's log for one session fell from **37.5 MB
+to 0.1 MB**, and every one of those reads now succeeds.
+
+**What this uncovered, and what K-757 does about it.** With both of the above in place,
+Magic Bullet Looks and Mojo II *still* rendered a transparent frame — and instrumenting the
+frame either side of the plugin call said why in one line: the picture this host handed a
+CPU-path plugin was **entirely blank**, every channel of every pixel nought, before the
+plugin ever saw it. The plugin then did exactly what it should with a transparent black
+frame and handed back the colour a lift and a vignette make of nothing. That fault is
+upstream of the plugin and is settled in **K-757**; with it fixed, Mojo II grades this
+host's footage and its controls move the picture as they should.
+
+Two other candidates were tested against the running application and **eliminated**: the
+row order (both `TopDown` and `BottomUp` were tried; the picture was blank either way, so
+K-591's negative `rowBytes` is not at fault and stands unchanged), and Magic Bullet Looks'
+custom `paramCustomLookData`, which this host answers correctly with the empty string
+genuinely stored there — Mojo II reads no custom parameter at all and behaved identically.
+**Magic Bullet Looks specifically is still expected to stay unusable**, and now for the one
+reason left: its Look lives in that custom parameter, only its own window can fill one, and
+this host neither dispatches a push-button press to a plugin (`PluginHost` carries `render`
+and `frames_needed` and nothing else) nor answers `fetchSuite` for the interact suite. Both
+gaps are platform-independent and untouched here.
+
+Regression tests: `a_plugin_reads_and_writes_its_own_controls` (the round trip, now variadic
+throughout — its 2-D pair is the one that catches a wrong walk first),
+`the_shim_and_its_rust_half_agree_about_readings` (the `Reading` discriminants the C file
+reads back as an `int`), and `no_suite_entry_point_accepts_a_handle_that_is_not_one`
+(handle_fuzz, whose forged handles now exercise the arity refusal and the empty-slot path).
+
+
+## K-757 — A read-back inside a frame batch waits for the batch
+
+**Date:** 2026-09-05 · **Status:** DECIDED · **Scope:** `crates/lumit-gpu` (`fx/common.rs`)
+
+**Every CPU-path effect was handed a blank picture, on every platform.** An OFX plugin does
+not run on the card: the pass reads the picture back as plain floats, gives it to the
+plugin, and puts what comes back up again (K-593). Instrumenting either side of that call
+during a Magic Bullet render:
+
+```
+handed to the plugin:  2073600 pixels, 0 with colour, 0 with alpha, first pixels all 0.0
+handed back:           RGB written throughout, alpha still nought
+```
+
+The plugin was never at fault. It graded a transparent black frame and returned the colour
+a lift and a vignette make of nothing, which composites as nothing.
+
+**The cause is a submission ordering the read-back stepped outside of.**
+[`GpuContext::encoder`] has two behaviours: outside a frame batch it hands back an encoder
+that submits when it drops, and **inside** one it records into the frame's shared encoder
+and submits nothing until `end_frame`. `readback_linear_f32` did neither — it built an
+encoder of its own with `device.create_command_encoder` and submitted it immediately. On one
+queue submission order *is* execution order, so that copy ran **ahead of** everything still
+sitting in the batch, including the `linearise` pass that fills the very texture it was
+copying. What came back was a texture nobody had drawn into yet: not an error, not a
+warning, just zeroes — which downstream are indistinguishable from a picture that is
+legitimately blank.
+
+**The fix is `ctx.flush()` before the copy**: the batch goes to the queue, and the copy
+queues behind it, which is the order the caller always meant. Nothing else changes, and a
+read-back outside a batch is unaffected because there is then nothing to flush.
+
+**Why nothing caught it.** The built-in effects record into the same batch, so their
+ordering has always been correct for free — **only a read-back leaves the batch, which is
+to say only the CPU boundary a plugin sits behind**. And `lumit-ofx`'s own conformance suite
+feeds plugins frames it builds directly in memory, never one that came off the card, so a
+suite that drives eighty third-party plugins could not see it either. That is the same shape
+of blindness K-756 records for the parameter ABI, in a second place: **the seam nobody tests
+is the seam between two things that are each tested well.**
+
+Regression test: `a_readback_inside_a_batch_waits_for_what_is_still_batched`
+(`lumit-gpu`, skip-on-no-GPU) — a texel written into one texture, copied to another through
+a *batched* encoder, and read back before the batch ends. Remove the flush and it fails with
+every float nought, which is precisely what a plugin was being handed.
+
+**A cache note for whoever meets this next.** A frame's name is built from the document, not
+from whether the render that made it was correct, so the blank frames this bug produced
+outlive the fix in the frame cache — the giveaway is an effect timing of `0.00 ms`, meaning
+no render happened at all. Purging the cache is what makes a render-path fix visible.
+

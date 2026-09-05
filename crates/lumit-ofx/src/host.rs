@@ -232,6 +232,19 @@ fn host_property_set() -> PropertySet {
         set.seed(keys::SUPPORTED_CONTEXTS, contexts);
     }
 
+    // The GPU render extensions, answered as the false they are. Saying nothing
+    // is worse than saying no: a plugin whose framework cannot read the answer
+    // does not fall back, it simply stops drawing (see `render_args`).
+    for key in [
+        keys::CUDA_RENDER_SUPPORTED,
+        keys::CUDA_STREAM_SUPPORTED,
+        keys::OPENCL_RENDER_SUPPORTED,
+        keys::OPENCL_SUPPORTED,
+        keys::METAL_RENDER_SUPPORTED,
+    ] {
+        seed_string(&mut set, key, "false");
+    }
+
     // Lumit is an interactive application, not a render farm node.
     set.seed(keys::HOST_IS_BACKGROUND, PropValue::int(0));
     // No interact suite yet, so no overlays. Saying otherwise would have

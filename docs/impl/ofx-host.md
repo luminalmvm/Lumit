@@ -246,17 +246,29 @@ registered into the same catalogue the built-ins live in — the seam
    [rust-lang#44930](https://github.com/rust-lang/rust/issues/44930)) — and therefore a
    small C shim.
 
-   It needs neither. The Microsoft x64 ABI requires a **variadic** caller to put a
-   floating-point argument in the general-purpose register as well as the vector one,
-   exactly so a callee that does not know the argument's type can still find it. So the
-   trailing arguments are declared as four machine words, and the parameter's own declared
-   type says how to read each of them: the low half for an `int`, the bits for a `double`,
-   the address for a string. The ceiling is the one K-591 already recorded for
-   `paramGetValue` and it is the same ceiling for the same reason — System V does not
-   duplicate, Apple silicon puts variadic arguments on the stack — and the real fix for
-   both is the broker unpacking the call from a message rather than from a register (§4).
-   The write lands in the instance's snapshot and no further; making it reach the document
-   is still the package docs/12 §2.2 describes.
+   It needed neither **on Windows**, and that is as far as it went. The Microsoft x64 ABI
+   requires a **variadic** caller to put a floating-point argument in the general-purpose
+   register as well as the vector one, exactly so a callee that does not know the
+   argument's type can still find it. So the trailing arguments were declared as four
+   machine words, and the parameter's own declared type said how to read each of them: the
+   low half for an `int`, the bits for a `double`, the address for a string. The write
+   lands in the instance's snapshot and no further; making it reach the document is still
+   the package docs/12 §2.2 describes.
+
+   **That arrangement is gone, and the shim is back (K-756).** The ceiling K-591 recorded
+   for `paramGetValue` — Apple silicon passes every variadic argument on the stack, so a
+   fixed-arity callee reads leftovers — turned out to mean that *no commercial plugin's
+   parameters worked on an M-series Mac at all*, which is a defect rather than a ceiling.
+   `shim/ofx_varargs.c` now receives those four calls and pulls the trailing arguments with
+   `va_arg`, which is the only construct that knows each platform's rule; the Rust entries
+   behind it are unchanged and are now handed correct arguments. The suite's fields are
+   declared variadic, as the header declares them.
+
+   **And the sentence this note used to end on was wrong**: the real fix is *not* "the
+   broker unpacking the call from a message rather than from a register (§4)". The broker
+   moves the **plugin** into another process, not the **call** — inside it, the plugin
+   still calls these suite function pointers directly across the same C ABI, so the
+   mismatch is identical there. Nothing about out-of-process hosting addresses it.
 
    The tail is ten plugins whose own render or region-of-definition answers
    `kOfxStatErrUnsupported` for reasons of their own, and one `createInstance` that answers

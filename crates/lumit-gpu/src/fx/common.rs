@@ -217,6 +217,23 @@ pub fn readback_linear_f32(
     w: u32,
     h: u32,
 ) -> Result<Vec<f32>, GpuError> {
+    // **Anything still batched has to land before this copy** (K-757).
+    //
+    // Inside a frame batch [`GpuContext::encoder`] records into one shared
+    // encoder that is submitted when the frame ends, and the guard submits
+    // nothing of its own. The copy below is recorded on an encoder of *this*
+    // function's making and submitted at once — so without a flush it reaches
+    // the queue **ahead of** every draw still sitting in that batch, including
+    // the one that filled the texture it is copying. What comes back is then a
+    // texture nobody has drawn into yet: not an error, not a warning, just
+    // zeroes, which read downstream as a picture that is legitimately blank.
+    //
+    // This is the whole of why an OFX plugin was handed an empty frame on every
+    // platform: the built-ins record into the same batch and so keep their
+    // order for free, and only a read-back — which is to say only the CPU
+    // boundary a plugin sits behind — steps outside it.
+    ctx.flush();
+
     let row_bytes = w * 8;
     let padded = row_bytes.div_ceil(256) * 256;
     let buf = ctx.device.create_buffer(&wgpu::BufferDescriptor {

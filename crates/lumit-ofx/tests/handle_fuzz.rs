@@ -265,23 +265,10 @@ fn entries() -> Vec<Entry> {
             (parameter::SUITE.param_get_property_set)(h, out::handle_slot())
         }),
         entry!("paramGetValue", Expect::BadHandle, |h| unsafe {
-            (parameter::SUITE.param_get_value)(
-                h,
-                out::double_slot().cast(),
-                out::double_slot().cast(),
-                out::double_slot().cast(),
-                out::double_slot().cast(),
-            )
+            (parameter::SUITE.param_get_value)(h, out::double_slot().cast::<c_void>())
         }),
         entry!("paramGetValueAtTime", Expect::BadHandle, |h| unsafe {
-            (parameter::SUITE.param_get_value_at_time)(
-                h,
-                0.0,
-                out::double_slot().cast(),
-                out::double_slot().cast(),
-                out::double_slot().cast(),
-                out::double_slot().cast(),
-            )
+            (parameter::SUITE.param_get_value_at_time)(h, 0.0, out::double_slot().cast::<c_void>())
         }),
         entry!("paramGetDerivative", Expect::BadHandle, |h| unsafe {
             (parameter::SUITE.param_get_derivative)(h, 0.0)
@@ -290,10 +277,10 @@ fn entries() -> Vec<Entry> {
             (parameter::SUITE.param_get_integral)(h, 0.0, 1.0)
         }),
         entry!("paramSetValue", Expect::BadHandle, |h| unsafe {
-            (parameter::SUITE.param_set_value)(h, 0, 0, 0, 0)
+            (parameter::SUITE.param_set_value)(h, 0_i32)
         }),
         entry!("paramSetValueAtTime", Expect::BadHandle, |h| unsafe {
-            (parameter::SUITE.param_set_value_at_time)(h, 0.0, 0, 0, 0, 0)
+            (parameter::SUITE.param_set_value_at_time)(h, 0.0, 0_i32)
         }),
         entry!("paramGetNumKeys", Expect::BadHandle, |h| unsafe {
             (parameter::SUITE.param_get_num_keys)(h, out::uint_slot())

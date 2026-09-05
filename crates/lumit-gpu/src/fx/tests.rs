@@ -15616,3 +15616,113 @@ fn the_matte_scales_the_accumulation_shutter() {
     // Bit-stable, run to run (§2.4).
     assert_eq!(half, read(&flat(0.5)), "the combine must be bit-stable");
 }
+
+/// **A read-back inside a frame batch sees the frame's own drawing** (K-757).
+///
+/// [`GpuContext::encoder`] has two behaviours: outside a batch it hands back an
+/// encoder that submits when it drops, and *inside* one it records into the
+/// frame's shared encoder and submits nothing until the frame ends. A read-back
+/// that builds an encoder of its own and submits it at once therefore reaches
+/// the queue **ahead of** everything still batched — including whatever filled
+/// the texture it is copying — and comes back with a texture nobody has drawn
+/// into yet. Not an error: zeroes, which downstream read as a picture that is
+/// legitimately blank.
+///
+/// That is what handed every CPU-path plugin an empty frame. Remove the
+/// `ctx.flush()` from `readback_linear_f32` and this test fails with every
+/// float nought, which is exactly what a plugin was being given.
+#[test]
+fn a_readback_inside_a_batch_waits_for_what_is_still_batched() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let (w, h) = (4u32, 4u32);
+    let descriptor = |label| wgpu::TextureDescriptor {
+        label: Some(label),
+        size: wgpu::Extent3d {
+            width: w,
+            height: h,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: WORKING_FORMAT,
+        usage: wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    };
+    let src = ctx.device.create_texture(&descriptor("batch-src"));
+    let dst = ctx.device.create_texture(&descriptor("batch-dst"));
+
+    // Half a grey, opaque, in every texel. A queue write is ordered against
+    // submissions, so this lands before anything below whatever happens.
+    let texel = [f16_bits(0.5), f16_bits(0.5), f16_bits(0.5), f16_bits(1.0)];
+    let mut bytes = Vec::with_capacity((w * h) as usize * 8);
+    for _ in 0..w * h {
+        for half in texel {
+            bytes.extend_from_slice(&half.to_le_bytes());
+        }
+    }
+    ctx.queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &src,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        &bytes,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(w * 8),
+            rows_per_image: Some(h),
+        },
+        wgpu::Extent3d {
+            width: w,
+            height: h,
+            depth_or_array_layers: 1,
+        },
+    );
+
+    ctx.begin_frame();
+    {
+        // Recorded into the frame's shared encoder, and therefore **not**
+        // submitted when the guard drops — exactly as every pass in a real
+        // frame is.
+        let mut encoder = ctx.encoder("batch-copy");
+        encoder.copy_texture_to_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &src,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyTextureInfo {
+                texture: &dst,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
+        );
+    }
+    let read = readback_linear_f32(&ctx, &dst, w, h);
+    ctx.end_frame();
+
+    let Ok(read) = read else {
+        panic!("the read-back itself failed")
+    };
+    let nonzero = read.iter().filter(|v| **v != 0.0).count();
+    assert_eq!(
+        nonzero,
+        read.len(),
+        "a read-back inside a batch returned {} zeroes of {}: the copy was \
+         submitted ahead of the batch it should have queued behind",
+        read.len() - nonzero,
+        read.len()
+    );
+}

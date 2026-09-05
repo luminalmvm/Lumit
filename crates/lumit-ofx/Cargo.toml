@@ -48,6 +48,15 @@ interprocess = "2"
 # spelled once instead of twice.
 memmap2 = "0.9"
 
+[build-dependencies]
+# The C-variadic shim (K-756). Four of `OfxParameterSuiteV1`'s entry points take
+# a trailing `...` in the header, and Rust cannot *define* such a function on
+# stable — so `shim/ofx_varargs.c` holds the four that can, and this builds it.
+# `cc` picks the platform's own compiler (clang here, `cl.exe` on Windows),
+# which is the whole point: `va_arg` expands to that platform's rule for where a
+# variadic argument was put, and no two of those rules agree.
+cc = "1"
+
 [dev-dependencies]
 # The minimal OFX plugin the host is tested against. It is declared here so a
 # plain `cargo test -p lumit-ofx` builds the cdylib the tests dlopen; the

@@ -348,7 +348,12 @@ fn the_host_property_table_says_only_true_things() {
         "\
 OfxImageEffectHostPropIsBackground = 0
 OfxImageEffectInstancePropSequentialRender = 0
+OfxImageEffectPropCudaRenderSupported = \"false\"
+OfxImageEffectPropCudaStreamSupported = \"false\"
+OfxImageEffectPropMetalRenderSupported = \"false\"
 OfxImageEffectPropMultipleClipDepths = 0
+OfxImageEffectPropOpenCLRenderSupported = \"false\"
+OfxImageEffectPropOpenCLSupported = \"false\"
 OfxImageEffectPropSetableFielding = 0
 OfxImageEffectPropSetableFrameRate = 0
 OfxImageEffectPropSupportedComponents = \"OfxImageComponentRGBA\"
@@ -386,6 +391,27 @@ OfxPropVersionLabel = \"{version}\"
     // The two that would break plugins if they were ever quietly flipped.
     assert_eq!(set.get_int(keys::SUPPORTS_TILES, 0), Ok(0));
     assert_eq!(set.get_int(keys::TEMPORAL_CLIP_ACCESS, 0), Ok(1));
+
+    // **The GPU extensions are answered, and the answer is no** (K-756). Saying
+    // nothing is a different thing to a plugin than saying no: Red Giant's own
+    // validation log carried twenty-four thousand failed property reads per
+    // session against this host before these five were declared, six thousand
+    // of them per frame inside the render itself. What matters is that the
+    // fetch **succeeds**; that it succeeds with "false" keeps the table honest.
+    for key in [
+        keys::CUDA_RENDER_SUPPORTED,
+        keys::CUDA_STREAM_SUPPORTED,
+        keys::OPENCL_RENDER_SUPPORTED,
+        keys::OPENCL_SUPPORTED,
+        keys::METAL_RENDER_SUPPORTED,
+    ] {
+        assert_eq!(
+            set.get_string(key, 0)
+                .map(|text| text.to_string_lossy().into_owned()),
+            Ok("false".to_owned()),
+            "{key} must be answered, not left unknown"
+        );
+    }
 }
 
 /// **Six OFX properties are not named after their macros**, and a host that
@@ -1146,13 +1172,7 @@ fn a_parameter_defined_twice_under_one_name_is_refused() {
         // than handing back the default as though it were a value.
         let mut value = 0.0_f64;
         assert_eq!(
-            (params.param_get_value)(
-                handle,
-                std::ptr::from_mut(&mut value).cast(),
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-            ),
+            (params.param_get_value)(handle, std::ptr::from_mut(&mut value).cast::<c_void>()),
             Status::ErrUnsupported.code()
         );
     }
@@ -1213,7 +1233,7 @@ fn an_unbuilt_parameter_entry_point_still_tells_a_bad_handle_apart() {
         // none to read. On an instance this is a real write; see
         // `a_plugin_writes_its_own_control_while_it_is_being_built`.
         assert_eq!(
-            (params.param_set_value)(handle, 0, 0, 0, 0),
+            (params.param_set_value)(handle, 0_i32),
             Status::ErrUnsupported.code()
         );
         assert_eq!(
@@ -1237,11 +1257,11 @@ fn an_unbuilt_parameter_entry_point_still_tells_a_bad_handle_apart() {
             Status::ErrBadHandle.code()
         );
         assert_eq!(
-            (params.param_set_value)(forged, 0, 0, 0, 0),
+            (params.param_set_value)(forged, 0_i32),
             Status::ErrBadHandle.code()
         );
         assert_eq!(
-            (params.param_set_value_at_time)(forged, 0.0, 0, 0, 0, 0),
+            (params.param_set_value_at_time)(forged, 0.0, 0_i32),
             Status::ErrBadHandle.code()
         );
         assert_eq!(
@@ -1747,22 +1767,21 @@ fn a_plugin_writes_its_own_control_while_it_is_being_built() {
             Status::Ok.code()
         );
 
-        // A double. The bits are what a variadic caller leaves in the
-        // general-purpose register on Windows, which is what the suite reads.
+        // A double, passed the way a plugin passes one: **one** trailing
+        // argument, of the type the parameter declares (K-756). Until the C
+        // shim landed this test handed the double's *bits* over in a machine
+        // word — which is what the fixed-arity declaration read, and which is
+        // why the suite agreed with this test on a platform where it agreed
+        // with no real plugin. Every call below is a genuine variadic call, so
+        // these assertions fail on Apple silicon without the shim.
         let amount = handle_of(param_set, c"gain");
         assert_eq!(
-            (params.param_set_value)(amount, 0.75_f64.to_bits(), 0, 0, 0),
+            (params.param_set_value)(amount, 0.75_f64),
             Status::Ok.code()
         );
         let mut read = 0.0_f64;
         assert_eq!(
-            (params.param_get_value)(
-                amount,
-                std::ptr::from_mut(&mut read).cast(),
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-            ),
+            (params.param_get_value)(amount, std::ptr::from_mut(&mut read).cast::<c_void>()),
             Status::Ok.code()
         );
         assert!(
@@ -1770,39 +1789,32 @@ fn a_plugin_writes_its_own_control_while_it_is_being_built() {
             "the double came back {read}"
         );
 
-        // An integer, in the low half of its word.
+        // An integer, as a C `int` — which is what a bool and a choice arrive
+        // as too, C having promoted them before the push.
         let count = handle_of(param_set, c"count");
-        assert_eq!(
-            (params.param_set_value)(count, 7_u64, 0, 0, 0),
-            Status::Ok.code()
-        );
+        assert_eq!((params.param_set_value)(count, 7_i32), Status::Ok.code());
         let mut read: c_int = 0;
         assert_eq!(
-            (params.param_get_value)(
-                count,
-                std::ptr::from_mut(&mut read).cast(),
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-            ),
+            (params.param_get_value)(count, std::ptr::from_mut(&mut read).cast::<c_void>()),
             Status::Ok.code()
         );
         assert_eq!(read, 7);
 
-        // Two doubles, which proves the second slot is read and not assumed.
+        // Two doubles. **This is the pair that catches the ABI**: a second
+        // trailing argument only lands where the host reads it if the host
+        // walked the argument list the way this platform built it, so a
+        // 2D read is where a wrong walk shows up first.
         let centre = handle_of(param_set, c"centre");
         assert_eq!(
-            (params.param_set_value)(centre, 3.0_f64.to_bits(), 4.0_f64.to_bits(), 0, 0),
+            (params.param_set_value)(centre, 3.0_f64, 4.0_f64),
             Status::Ok.code()
         );
         let (mut x, mut y) = (0.0_f64, 0.0_f64);
         assert_eq!(
             (params.param_get_value)(
                 centre,
-                std::ptr::from_mut(&mut x).cast(),
-                std::ptr::from_mut(&mut y).cast(),
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
+                std::ptr::from_mut(&mut x).cast::<c_void>(),
+                std::ptr::from_mut(&mut y).cast::<c_void>(),
             ),
             Status::Ok.code()
         );
@@ -1812,27 +1824,24 @@ fn a_plugin_writes_its_own_control_while_it_is_being_built() {
         let label = handle_of(param_set, c"caption");
         let text = c"written";
         assert_eq!(
-            (params.param_set_value)(label, text.as_ptr() as usize as u64, 0, 0, 0),
+            (params.param_set_value)(label, text.as_ptr()),
             Status::Ok.code()
         );
         let mut read: *const c_char = std::ptr::null();
         assert_eq!(
-            (params.param_get_value)(
-                label,
-                std::ptr::from_mut(&mut read).cast(),
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-            ),
+            (params.param_get_value)(label, std::ptr::from_mut(&mut read).cast::<c_void>()),
             Status::Ok.code()
         );
         assert_eq!(CStr::from_ptr(read), c"written");
 
         // A push button has no value, so writing one is still the honest no —
         // and it is `kOfxStatErrUnsupported`, not a bad handle.
+        // A push button has nothing to pull, so the shim's arity question
+        // refuses and whatever the plugin passed is never read — the refusal
+        // still comes from the one place that decides it.
         let button = handle_of(param_set, c"trigger");
         assert_eq!(
-            (params.param_set_value)(button, 0, 0, 0, 0),
+            (params.param_set_value)(button, 0_i32),
             Status::ErrUnsupported.code()
         );
     }

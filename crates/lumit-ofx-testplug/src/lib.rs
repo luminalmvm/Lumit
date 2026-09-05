@@ -1029,16 +1029,18 @@ fn param_double(
         return fallback;
     }
     let mut value = fallback;
-    // SAFETY: the host declares this entry point with four trailing pointers
-    // and reads only as many as the parameter has dimensions; a double is one.
+    // SAFETY: the host declares this entry point as the header declares it —
+    // variadic — so a double passes **exactly one** out-pointer, which is what
+    // a plugin nobody here wrote passes (K-756). Passing four, the arity this
+    // host used to declare, is what made the suite agree with itself on a
+    // platform where it agreed with no real plugin: both sides read four
+    // registers, so both sides were wrong in the same direction and the tests
+    // stayed green.
     let read = unsafe {
         (param_suite.param_get_value_at_time)(
             param,
             time,
-            std::ptr::from_mut(&mut value).cast(),
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
+            std::ptr::from_mut(&mut value).cast::<c_void>(),
         )
     };
     if read == Status::Ok.code() {
