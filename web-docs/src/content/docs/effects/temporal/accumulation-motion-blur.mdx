@@ -17,10 +17,13 @@ Accumulation motion blur is a [Temporal](/effects/#temporal) effect.
 
 The expensive, physically correct motion blur. It renders the composition beneath 
 it multiple times *within* a frame, then averages the
-results to generate the motion blur. Every sample is a full render of everything
-below, so 8 samples is 8 times the work of the frame, and playback will drop
-frames. For blurring the motion inside footage, [Motion blur](/effects/temporal/motion-blur/)
-does that in one pass.
+results to generate the motion blur. Footage is sampled between its frames as
+well, so a clip playing under the effect blurs along with anything animated
+over it. On a footage layer itself it blurs the motion inside that clip, and
+the motion blur switch adds the layer's own movement on top. Every sample is a full render of everything below, so 8 samples is
+8 times the work of the frame, and playback will drop frames. For blurring only
+the motion inside footage, [Motion blur](/effects/temporal/motion-blur/) does
+that in one pass.
 
 ## Parameters
 

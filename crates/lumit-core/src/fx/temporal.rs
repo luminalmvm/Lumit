@@ -275,6 +275,63 @@ pub fn stack_accumulation_mb(
         })
 }
 
+/// The sub-frame offsets, in comp frames, each layer's **footage** is wanted at
+/// for the accumulation motion blur adjustments above it (docs/08 §3.26,
+/// docs/impl/temporal-rerender.md §2). 1:1 with `layers`, top-to-bottom; empty
+/// for a layer no live accumulation adjustment covers, which is every layer in
+/// an ordinary comp, so the decode planner pays nothing there.
+///
+/// **In plain terms.** Accumulation motion blur re-renders the scene below it
+/// at several moments inside one frame. Transforms and effects re-resolve at
+/// those moments for free; footage does not, because a decoded frame is a
+/// decoded frame. This is the list of moments the decode planner has to fetch
+/// (or synthesise) each covered clip at, so that a clip playing under the
+/// adjustment smears the way a moving layer does.
+///
+/// Every live accumulation adjustment above a layer contributes its offsets,
+/// as a union: with two stacked, the inner one's own re-render wants its
+/// samples of the footage and the outer one's re-render (inside which the inner
+/// is held to a still) wants its own. A **plain layer carrying the effect**
+/// wants its own offsets too, for itself alone: there it averages its own clip
+/// over the shutter rather than re-rendering anything beneath. Sorted and
+/// deduplicated on the exact value, since each consumer looks its offsets up
+/// by the same maths that made them. Visibility and span are read at `t_comp`,
+/// as the draw builder reads them for the draw itself.
+pub fn accumulation_shutter_offsets(layers: &[Layer], t_comp: f64) -> Vec<Vec<f64>> {
+    let mut above: Vec<f64> = Vec::new();
+    let mut out = Vec::with_capacity(layers.len());
+    for layer in layers {
+        let live = layer.switches.visible
+            && t_comp >= layer.in_point.0.to_f64()
+            && t_comp < layer.out_point.0.to_f64();
+        let lt = crate::time::layer_time(t_comp, layer.start_offset.0);
+        let own = live
+            .then(|| stack_accumulation_mb(&layer.effects, layer.switches.fx, lt))
+            .flatten()
+            .map(|p| p.sample_offsets())
+            .unwrap_or_default();
+        let merge = |into: &mut Vec<f64>| {
+            for &off in &own {
+                if !into.iter().any(|o| o.to_bits() == off.to_bits()) {
+                    into.push(off);
+                }
+            }
+            into.sort_by(f64::total_cmp);
+        };
+        if layer.is_adjustment() {
+            // The adjustment has no clip of its own; everything beneath it
+            // gets its moments.
+            out.push(above.clone());
+            merge(&mut above);
+        } else {
+            let mut mine = above.clone();
+            merge(&mut mine);
+            out.push(mine);
+        }
+    }
+    out
+}
+
 /// Whether an instance is one the catalogue can answer for — a built-in, or a
 /// plugin that registered at run time. A placeholder is not: it is a
 /// name this build does not understand, kept so the project round-trips, and it

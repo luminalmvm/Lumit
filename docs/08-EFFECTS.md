@@ -2079,7 +2079,12 @@ run, never in `run_ops` — and so resolves to **no** per-pixel op. See
 **Adjustment behaviour.** Like Posterize on an adjustment layer, it is an adjustment effect: the
 composite beneath the effect's layer is what re-renders, laid back over the live composite by
 the adjustment's coverage (mask × opacity). The owner's global "motion-blur the whole scene"
-pass is simply the effect on a full-frame adjustment layer.
+pass is simply the effect on a full-frame adjustment layer. **On a plain layer** it has nothing
+beneath it to re-render, so it averages the layer's own clip over the same shutter moments
+(the decode planner fetches them for the carrier itself), in the decoded bytes before masks,
+paint and the rest of the stack: the motion inside the footage, blurred. The layer's transform
+is not sampled there, which is the motion blur switch's job, and the two stack; Mix blends the
+average back toward the frame-time picture; the Matte is not read on a plain carrier.
 
 **Force on all layers.** With this on, every layer in each sub-frame sample render also smears
 along **its own transform** — per-layer motion blur forced on for the whole below-stack,
@@ -2096,10 +2101,16 @@ keep their own switches (a v1 follow-up).
 **one** shared `render_below_at` and average with the identical `Compositor::accumulate`, so a
 preview frame equals an export frame. A **still scene** averaged over N is bit-identical to the
 plain composite (pinned by test — `1/N` is exact in fp16, the N copies sum back exactly); a
-**moving scene** smears (a coverage-widening test). **Boundaries (v1):** temporal effects inside
-the sampled below-stack (echo, flow motion blur, datamosh) hold to stills (the same v1
-boundary Posterize takes), and an accumulation adjustment inside a collapsed Precomp degrades to
-a no-op (its sampled draws are sized for the nested comp). Honours the per-effect
+**moving scene** smears (a coverage-widening test). **Footage moves too**: each covered clip is
+decoded at every moment of the open shutter — the real frame where the moment lands on one,
+otherwise a flow-synthesised in-between made the way a Flow retime makes its frames — and each
+sample's below-stack reads that picture in place of the frame-time one, so a clip playing under
+the adjustment smears as a moving layer does (N decodes per covered clip per frame, one flow
+measurement per source-frame pair; `docs/impl/temporal-rerender.md` §2). **Boundaries (v1):**
+temporal effects inside the sampled below-stack (echo, flow motion blur, datamosh) hold to
+stills (the same v1 boundary Posterize takes), a Sequence clip under the adjustment holds its
+frame-time picture, and an accumulation adjustment inside a collapsed Precomp degrades to a
+no-op (its sampled draws are sized for the nested comp). Honours the per-effect
 `sample_temporally` flag — a particle system stays pinned to the playhead across the
 samples. Sub-frame sample-count reduction under the draft/scrub path is a tracked follow-up
 (full N always on export). `heavy` cost (≈ N× a full comp render), `FullFrame` ROI, `{0}`

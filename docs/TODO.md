@@ -117,18 +117,6 @@ surfaced and deliberately left open, so it is not re-derived:
     Measure first: the 2026-07-30 fixes may have made it moot. Not a revival of
     the deleted read-back transport - the Viewer receives a GPU handle
     and nothing else.
-- **Accumulation motion blur must smear footage motion, not only transforms.**
-    Each shutter sample's below-stack re-renders with the footage held at the
-    frame-time decode (`below_draws_at` reuses `pixels_by_layer`;
-    docs/impl/temporal-rerender.md §2), so a retimed or simply moving clip gives
-    every sample the same pixels and no smear - docs/08 §3.26 promises otherwise.
-    Owner's ruling (2026-08-23): a sample reads the footage at its own source
-    time - the real frame where the footage has one at that sub-frame point,
-    otherwise a flow-synthesised in-between - the same way per-layer motion blur
-    already samples the transform per shutter sample. Touches the decode planner,
-    export `prepare` and the cache (N decodes per layer per frame). Until it
-    lands the manual's Motion blur picture moves the layer by transform
-    (`effect_examples.rs`, `animate_whip`). Lane 3 (preview/cache) work.
 - **Playback's remaining bridge chatter scales with rows on screen** - one
     `sample_scalar` per animated row plus one `time_of_frame`. Batch per frame if
     it ever bites, the way `time_of_frame` already was.

@@ -482,6 +482,132 @@ fn posterize_sample_times_snap_covered_layers_to_the_grid() {
     assert!(st.iter().all(|&s| (s - 0.37).abs() < 1e-9));
 }
 
+// accumulation_shutter_offsets (docs/08 §3.26): the decode planner's per-layer
+// list of shutter moments — the piece that makes accumulation motion blur
+// sample *footage* between frames, not only transforms. An adjustment's
+// offsets reach every layer beneath it and none above; two stacked ones give
+// the layers under both the union; a bypassed, hidden or out-of-span
+// adjustment gives nothing.
+#[test]
+fn accumulation_shutter_offsets_cover_the_layers_beneath() {
+    use crate::model::{LayerKind, Switches, TransformGroup};
+    use crate::time::{CompTime, Rational};
+    let secs = |n: i64, d: i64| CompTime(Rational::new(n, d).unwrap());
+    let layer = |kind: LayerKind, effects: Vec<EffectInstance>| Layer {
+        graph: Default::default(),
+        markers: Vec::new(),
+        id: uuid::Uuid::now_v7(),
+        name: "l".into(),
+        kind,
+        in_point: secs(0, 1),
+        out_point: secs(10, 1),
+        start_offset: secs(0, 1),
+        transform: TransformGroup::default(),
+        matte: None,
+        parent: None,
+        label: 0,
+        volume_db: crate::anim::Property::zero(),
+        pan: crate::anim::Property::zero(),
+        audio_only: false,
+        adjustment: false,
+        retime: None,
+        interpolation: Default::default(),
+        parked_flow: None,
+        blend: Default::default(),
+        masks: Vec::new(),
+        paint: Vec::new(),
+        puppet: None,
+        effects,
+        styles: Vec::new(),
+        switches: Switches::default(),
+        extra: serde_json::Map::new(),
+    };
+    let footage = || {
+        layer(
+            LayerKind::Solid {
+                def: uuid::Uuid::now_v7(),
+            },
+            vec![],
+        )
+    };
+    let mb = |samples: f64| {
+        let mut e = instantiate("accumulation_mb").unwrap();
+        for p in &mut e.params {
+            if p.id == "samples" {
+                p.value = EffectValue::Float(Property::fixed(samples));
+            }
+        }
+        e
+    };
+    let offsets_of = |samples: f64| {
+        stack_accumulation_mb(&[mb(samples)], true, 0.0)
+            .unwrap()
+            .sample_offsets()
+    };
+
+    // One adjustment over two layers: both beneath get its moments, the
+    // adjustment itself and a layer above get none.
+    let layers = vec![
+        footage(),
+        layer(LayerKind::Adjustment, vec![mb(4.0)]),
+        footage(),
+        footage(),
+    ];
+    let got = accumulation_shutter_offsets(&layers, 0.5);
+    assert!(got[0].is_empty(), "a layer above is not covered");
+    assert!(got[1].is_empty(), "the adjustment does not cover itself");
+    assert_eq!(got[2], offsets_of(4.0));
+    assert_eq!(got[3], offsets_of(4.0));
+
+    // Two stacked: the layer between gets the outer's moments, the layer
+    // under both gets the union, sorted, with nothing twice.
+    let layers = vec![
+        layer(LayerKind::Adjustment, vec![mb(4.0)]),
+        footage(),
+        layer(LayerKind::Adjustment, vec![mb(2.0)]),
+        footage(),
+    ];
+    let got = accumulation_shutter_offsets(&layers, 0.5);
+    assert_eq!(got[1], offsets_of(4.0));
+    let mut union = offsets_of(4.0);
+    union.extend(offsets_of(2.0));
+    union.sort_by(f64::total_cmp);
+    union.dedup_by(|a, b| a.to_bits() == b.to_bits());
+    assert_eq!(got[3], union);
+    assert!(
+        got[3].len() > got[1].len(),
+        "the inner adjustment adds its own moments"
+    );
+
+    // Hidden, out of span, or with effects bypassed: nothing reaches below.
+    let mut hidden = layer(LayerKind::Adjustment, vec![mb(4.0)]);
+    hidden.switches.visible = false;
+    let mut early = layer(LayerKind::Adjustment, vec![mb(4.0)]);
+    early.out_point = secs(1, 4);
+    let mut bypassed = layer(LayerKind::Adjustment, vec![mb(4.0)]);
+    bypassed.switches.fx = false;
+    for off in [hidden, early, bypassed] {
+        let got = accumulation_shutter_offsets(&[off, footage()], 0.5);
+        assert!(got[1].is_empty());
+    }
+    // A plain layer carrying the effect wants its own moments, for itself
+    // alone: it averages its own clip, and nothing beneath it is covered.
+    let got = accumulation_shutter_offsets(
+        &[
+            layer(
+                LayerKind::Solid {
+                    def: uuid::Uuid::now_v7(),
+                },
+                vec![mb(4.0)],
+            ),
+            footage(),
+        ],
+        0.5,
+    );
+    assert_eq!(got[0], offsets_of(4.0), "the carrier samples itself");
+    assert!(got[1].is_empty(), "a plain carrier covers nothing beneath");
+}
+
 // stack_accumulation_mb (docs/08 §3.26) finds the effect, resolves its shutter
 // and Mix, and derives the centred sub-frame offsets; a bypassed or plain stack
 // reports nothing, and it resolves to no per-pixel op (executed at the
