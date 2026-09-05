@@ -297,6 +297,9 @@ class LayerArea extends StatelessWidget {
   /// are left alone, so they still reach the scrollable.
   final void Function(PointerScrollEvent event, double contentX) onWheel;
 
+  /// A middle-button drag over the lanes, in screen pixels.
+  final void Function(Offset delta) onPan;
+
   /// Settings ▸ Interface ▸ Panels ▸ *Layer names on lane bars*, off
   /// by default. Read once by the panel and handed down, never looked up in a
   /// bar's own build.
@@ -349,6 +352,7 @@ class LayerArea extends StatelessWidget {
     required this.fpsDen,
     required this.magnet,
     required this.onWheel,
+    required this.onPan,
     required this.selectionMove,
   });
 
@@ -625,6 +629,13 @@ class LayerArea extends StatelessWidget {
                       // wheel zooms or pans instead of scrolling, and a
                       // plain one is left alone.
                       child: Listener(
+                        // The middle button drags the view about, as it does in
+                        // After Effects, Blender and Resolve.
+                        onPointerMove: (event) {
+                          if (event.buttons == kMiddleMouseButton) {
+                            onPan(event.delta);
+                          }
+                        },
                         // A *modified* wheel is claimed through the resolver, so the
                         // scroll views around this one cannot act on the same event
                         // as well — a Ctrl+wheel zoom that also scrolled the lanes

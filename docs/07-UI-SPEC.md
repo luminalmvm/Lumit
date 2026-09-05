@@ -367,6 +367,12 @@ Every control on either strip keeps the behaviour its item below defines. The it
 1. **Magnification** dropdown: Fit, Fit up to 100%, then 25 / 33.3 / 50 / 100 / 200 / 400 /
    800 %. Magnification is display scaling only; it MUST NOT change render resolution.
    `Ctrl+scroll` zooms about the pointer; `Shift+/` fits.
+   **A middle-button drag MUST pan the picture**, whatever tool is armed, which is what
+   After Effects, Blender and Resolve all do with it. It MUST be read off the pointer's
+   held buttons rather than won in the gesture arena, so it reaches the picture through
+   whatever the tool has laid over it, and the Hand tool stays what it is: the way to pan
+   without a middle button. The one exception is an armed picker, which owns the picture
+   as it already does (§6.1) and holds it still while pixels are read off it.
    **Every magnification change is anchored**: the comp point the gesture names —
    under the pointer for a wheel notch or a click, the middle of the box for a sweep — MUST
    still be under that point afterwards. A magnification MUST be clamped to a sane range
@@ -1745,6 +1751,13 @@ arithmetic is the one shared pure module (`panels/timeline_snap.dart`).
 
 - Plain wheel scrolls vertically. `Shift+wheel` scrolls horizontally. `Ctrl+wheel` zooms
   time about the pointer. The wheel MUST never zoom without a modifier (no scroll hijack).
+- **A middle-button drag MUST pan the lanes, both ways at once**, which is what After
+  Effects, Blender and Resolve all do with it. The view moves against the drag, so the
+  lanes follow the pointer, and the outline comes with them because the two halves share
+  one vertical scroll. It MUST be read off the pointer's held buttons rather than won in
+  the gesture arena: the marquee is a pan recogniser over the whole ground, and a drag
+  that had to beat it would be a drag the marquee sometimes ate. The primary button is
+  untouched, so a drag on empty lane space still draws the box.
 - **Zoom flies rather than cutting**: magnification is a place changing, not a value
   being nudged, so it animates — geometrically, because zoom is a ratio and equal time should
   buy equal ratio. Notches arriving quickly are worth more, so a rolled wheel covers ground
@@ -1826,8 +1839,9 @@ half, outside the horizontal scroller so it stays pinned to the viewport edge, a
 outline reserves the same gutter with an undraggable block level with its toolbar and
 column header — so the columns never shift as the view changes. The lane bottom bar
 carries the time-zoom slider, the magnet, and the horizontal scrollbar. **The wheel
-scrolls, dragging never does**: a plain wheel moves the rows, `Shift+wheel` scrolls
-sideways, `Ctrl+wheel` zooms time about the pointer, and a drag on empty lane space is the
+scrolls, and so does the middle button**: a plain wheel moves the rows, `Shift+wheel`
+scrolls sideways, `Ctrl+wheel` zooms time about the pointer, a middle-button drag pans
+both ways at once, and a drag on empty lane space with the primary button is the
 keyframe marquee. A zoom with no pointer to zoom about — the slider — holds the playhead
 still instead (§4.6), so what is being worked on stays on screen. **Edge-follow is
 built as a page flip** (TI-9): while the transport runs, a playhead that leaves the viewport
