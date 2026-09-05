@@ -2755,10 +2755,21 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       );
       return;
     }
-    if (keys.isShiftPressed && _hLane.hasClients) {
-      _hLane.jumpTo((_hLane.offset + event.scrollDelta.dy)
-          .clamp(0.0, _hLane.position.maxScrollExtent));
-    }
+    if (keys.isShiftPressed) _scrollBy(_hLane, event.scrollDelta.dy);
+  }
+
+  /// Scroll a controller by [by], stopping at either end. A controller with no
+  /// viewport has nothing to scroll.
+  void _scrollBy(ScrollController c, double by) {
+    if (!c.hasClients || by == 0) return;
+    c.jumpTo((c.offset + by).clamp(0.0, c.position.maxScrollExtent));
+  }
+
+  /// A middle-button drag over the lanes, the way it does in After Effects,
+  /// Blender and Resolve.
+  void _panLanes(Offset delta) {
+    _scrollBy(_hLane, -delta.dx);
+    _scrollBy(_vLane, -delta.dy);
   }
 
   /// Zoom from somewhere other than the pointer — the bottom bar's slider —
@@ -3313,12 +3324,6 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                   // again every time. Only two things actually care where the
                   // playhead is: the line itself, and the razor (which reads it
                   // when clicked). Both listen for themselves now.
-                  //
-                  // Dragging never scrolls the timeline — the wheel, the
-                  // trackpad and the scrollbars do (docs/07 §4.6). A drag on
-                  // empty lane space is the keyframe marquee, and a scrollable
-                  // competing for it in the gesture arena would win and eat the
-                  // box.
                   //
                   // **The trackpad is the exception, and it has to be**: a
                   // two-finger scroll on a Mac arrives as a pan *gesture*, not
@@ -3984,6 +3989,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                       onKeysSelected: _onLaneKeysSelected,
                       onKeyMenu: _laneKeyMenu,
                       onWheel: (e, x) => _wheel(e, x, axis),
+                      onPan: _panLanes,
                       onSeek: (f) =>
                           ui.scrubTo(f.clamp(0, frames == 0 ? 0 : frames - 1)),
                       onSelect: (l) => _selectLayer(ui, l, among: layers),
