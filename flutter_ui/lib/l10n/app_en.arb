@@ -919,7 +919,7 @@
   },
   "fxVectorScale": "Vector scale",
   "@fxVectorScale": {
-    "description": "Fast motion blur parameter label in the Effect Controls panel — how many pixels of movement a full channel of the Motion vectors layer stands for."
+    "description": "Motion blur parameter label in the Effect Controls panel — how many pixels of movement a full channel of the Motion vectors layer stands for."
   },
   "fxVegas": "Vegas",
   "@fxVegas": {
@@ -2251,7 +2251,7 @@
   },
   "fxDominantMotion": "Dominant motion",
   "@fxDominantMotion": {
-    "description": "Effect controls — an option in the View dropdown on Fast motion blur. Shows the neighbourhood's strongest motion, which uncertain pixels borrow their blur direction from."
+    "description": "Effect controls — an option in the View dropdown on Motion blur. Shows the neighbourhood's strongest motion, which uncertain pixels borrow their blur direction from."
   },
   "fxDots": "Dots",
   "@fxDots": {
@@ -2345,9 +2345,9 @@
   "@fxFarBlur": {
     "description": "Effect controls — a control on Depth of field."
   },
-  "fxFastMotionBlur": "Fast motion blur",
-  "@fxFastMotionBlur": {
-    "description": "Effect controls — a control on Posterize time."
+  "fxAccumulationMotionBlur": "Accumulation motion blur",
+  "@fxAccumulationMotionBlur": {
+    "description": "Effect name in the Add effect menu and the Effect controls panel — the slow, whole-scene motion blur that re-renders everything below at several sub-frame moments and averages them."
   },
   "fxFeatureDensity": "Feature density",
   "@fxFeatureDensity": {
@@ -2771,7 +2771,7 @@
   },
   "fxMotionBlur": "Motion blur",
   "@fxMotionBlur": {
-    "description": "Effect controls — a control on an effect."
+    "description": "Effect name in the Add effect menu and the Effect controls panel — the optical-flow motion blur that smears each pixel along the motion in footage. Also the Motion blur group and checkbox on Shake."
   },
   "fxMotionVectors": "Motion vectors",
   "@fxMotionVectors": {

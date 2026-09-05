@@ -1,4 +1,4 @@
-// Dominant-motion tile reduction for Fast motion blur
+// Dominant-motion tile reduction for Motion blur
 // (docs/impl/optical-flow.md §4.5 item 3). The CPU twin is
 // `lumit_core::fx::cpu::motion_blur_tiles`, op-for-op: one thread per tile,
 // the same pixels scanned in the same raster order, the same strictly-greater

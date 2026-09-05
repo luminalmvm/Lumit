@@ -3637,7 +3637,7 @@ fn mb_cylinder(d: f32, l: f32) -> f32 {
     1.0 - t * t * (3.0 - 2.0 * t)
 }
 
-/// The §1.6 oracle for Fast motion blur (docs/08 §3.2): the CPU twin of
+/// The §1.6 oracle for Motion blur (docs/08 §3.2): the CPU twin of
 /// `fx_motionblur.wgsl`, op-for-op. `rgba` is linear premultiplied RGBA,
 /// mutated in place; `u`/`v` are the per-pixel forward flow (pixels of this
 /// raster, one entry per pixel) the decode worker measured between the current

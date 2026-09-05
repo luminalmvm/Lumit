@@ -132,7 +132,7 @@ direction at a time):
 1. **Flow pair** `(P, N)` from `lumit-flow` at the effect's flow settings (half
    resolution default, the engine's own default) — both directions, plus
    `lumit_flow::confidence(fwd, bwd)`, the forward–backward agreement already built and
-   shipped for Fast motion blur.
+   shipped for Motion blur.
 2. **Warp** the matte: `α_w(x) = α_P(x + flow_{N→P}(x))`, bilinear — the same
    backward-warp synthesis uses, holes and z-fighting avoided by construction.
 3. **Derive seeds** for N's solve: `α_w > 0.9` with confidence above a floor → foreground

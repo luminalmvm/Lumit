@@ -8,7 +8,7 @@ use crate::{
 };
 use uuid::Uuid;
 
-/// The Fast motion blur output view (docs/08 §3.2, FX-19): the finished blurred
+/// The Motion blur output view (docs/08 §3.2, FX-19): the finished blurred
 /// picture, or a diagnostic look at the motion field, the confidence that
 /// steers the streak, or the dominant motion the reconstruction borrows in the
 /// places confidence is low. A per-pixel choice the kernel branches on last.
@@ -44,7 +44,7 @@ impl MbView {
     }
 }
 
-/// The Fast motion blur reconstruction tier (docs/impl/optical-flow.md §4.5
+/// The Motion blur reconstruction tier (docs/impl/optical-flow.md §4.5
 /// "Tiers"). **The only choice a user sees** — there is no method
 /// picker; one method adapts internally, and this buys it more work per pixel.
 ///

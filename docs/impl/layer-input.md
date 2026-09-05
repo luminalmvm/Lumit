@@ -77,7 +77,7 @@ list is enumerated by `EffectSchema::matte.param()` and the layer-input list by
 answers `Some`, in the same order, and there is no list of match names in between for anyone
 to forget when an effect gains a layer row. The layer input is a **field on the aux slot**
 beside the matte and the mask path, not an `AuxKind` variant, for the reason those two are
-fields: Fast motion blur reads a whole flow field *and* a Motion vectors layer *and* a matte,
+fields: Motion blur reads a whole flow field *and* a Motion vectors layer *and* a matte,
 and a variant per pair is a seam the first effect that wanted two things would have to add.
 
 Everything below applies to both — one helper renders a referenced layer alone at the

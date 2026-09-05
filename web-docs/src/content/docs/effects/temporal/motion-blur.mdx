@@ -1,6 +1,6 @@
 ---
 title: "Motion blur"
-description: "Re-render the scene below at sub-frame moments and average them."
+description: "Smear each pixel along motion in footage."
 ---
 
 import Compare from "../../../../components/Compare.astro";
@@ -15,9 +15,8 @@ Motion blur is a [Temporal](/effects/#temporal) effect.
 
 ## What it does
 
-The expensive, physically correct motion blur. It renders the composition beneath 
-it multiple times *within* a frame, then averages the
-results to generate the motion blur.
+This effect measures where every pixel moved between one frame and the next, and
+smears each one along its own path. 
 
 ## Parameters
 
@@ -25,10 +24,12 @@ results to generate the motion blur.
 
 | Parameter | Control | Range | Default | Unit |
 | --- | --- | --- | --- | --- |
-| **Samples** | Slider | 2 to 32; up to 64 | 8 | - |
 | **Shutter angle** | Slider | 0 to 720 | 180 | Degrees |
-| **Shutter phase** | Slider | -360 to 360; down to -720 and up to 720 | -90 | Degrees |
-| **Force on all layers** | Checkbox | On or off | Off | - |
+| **Samples** | Slider | 8 to 32; down to 2 and up to 64 | 16 | - |
+| **Quality** | Dropdown | Normal · High | Normal | - |
+| **Motion vectors** | Layer | Any layer in the composition | None | - |
+| **Vector scale** | Slider | 0 to 200; up to 4000 | 32 | Pixels at composition size |
+| **View** | Dropdown | Rendered · Motion vectors · Confidence · Dominant motion | Rendered | - |
 | **Mix** | Slider | 0 to 100 | 100 | Per cent |
 | **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
 | **Matte** | Layer | Any layer in the composition | None | - |
@@ -37,26 +38,27 @@ results to generate the motion blur.
 
 In the Effect Controls panel:
 
-- **Matte** scales Shutter angle per pixel: the open shutter shrinks toward the frame's own moment where the matte is dark, so part of the picture is blurred over half a frame and part is not blurred at all. **Invert** reads that matte inverted.
+- **Vector scale** is editable while **Motion vectors** names a layer.
+- **Matte** scales Shutter angle per pixel: the streak is genuinely shorter where the matte is dark, gathering from nearer along the motion, rather than a long streak faded back over a sharp picture. **Invert** reads that matte inverted.
 
 {/* END GENERATED */}
 
 ## What each control does
 
-- **Samples** is how many times the scene below is rendered per frame at equal offsets.
-- **Shutter angle** says how much of the frame the shutter is open
-  for.
-- **Shutter phase** places the open window relative to the frame's own moment.
-- **Force on all layers** enables every layer's own transform motion blur for
-  the duration of each sample render, using this effect's shutter settings.
+- **Shutter angle** sets how long the imaginary shutter is open.
+- **Samples** is a *maximum* on the number of samples the blur combines.
+- **Quality**: increasing gives higher quality blur, for increased render time.
+- **View** is a diagnostic display. Motion vectors show measured movement
+  as colour. Confidence shows where the measurement is likely correct in white, and
+  Dominant motion shows the neighbourhood motion an uncertain pixel borrows.
 - **Mix**: how much of the result replaces the original.
 - **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
 ## Related
 
-- [Fast motion blur](/effects/temporal/fast-motion-blur/)
-- [Posterize time](/effects/temporal/posterize-time/)
-- [Layers](/use/layers/)
-- [Export](/use/export/)
+- [Accumulation motion blur](/effects/temporal/accumulation-motion-blur/)
+- [Echo](/effects/temporal/echo/)
+- [Directional blur](/effects/blur-sharpen/directional-blur/)
+- [Retime](/use/retime/)
 - [Temporal](/effects/#temporal)
 - [Effects](/use/effects/)

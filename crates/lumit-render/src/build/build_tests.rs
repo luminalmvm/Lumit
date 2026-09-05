@@ -78,6 +78,7 @@ fn footage_geometry_uses_native_size_not_decoded_size() {
         natural_h: 1080,
         temporal: Vec::new(),
         flow_fields: Vec::new(),
+        shutter: Vec::new(),
         source_key: 0,
         source_frame: 0,
     };
@@ -358,6 +359,7 @@ fn patch_layer_prop_overrides_the_previewed_value() {
         natural_h: 1080,
         temporal: Vec::new(),
         flow_fields: Vec::new(),
+        shutter: Vec::new(),
         source_key: 0,
         source_frame: 0,
     };
@@ -1453,6 +1455,7 @@ fn a_matte_from_tagged_footage_carries_its_own_colour_space() {
         natural_h: 360,
         temporal: Vec::new(),
         flow_fields: Vec::new(),
+        shutter: Vec::new(),
         source_key: 0,
         source_frame: 0,
     };
