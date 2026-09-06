@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "dev.lumit" "\0"
-            VALUE "FileDescription", "lumit_flutter" "\0"
+            VALUE "FileDescription", "Lumit" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "lumit_flutter" "\0"
+            VALUE "InternalName", "lumit" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 dev.lumit. All rights reserved." "\0"
-            VALUE "OriginalFilename", "lumit_flutter.exe" "\0"
-            VALUE "ProductName", "lumit_flutter" "\0"
+            VALUE "OriginalFilename", "lumit.exe" "\0"
+            VALUE "ProductName", "Lumit" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

@@ -12,7 +12,7 @@
 #ifndef MyAppVersion
 #define MyAppVersion "0.1.0"
 #endif
-#define MyAppExe "lumit_flutter.exe"
+#define MyAppExe "lumit.exe"
 
 [Setup]
 AppId={{8B6F1C6A-9E4B-4C7D-B1A4-6C1E5D2F7A31}
@@ -20,11 +20,11 @@ AppName=Lumit
 AppVersion={#MyAppVersion}
 AppPublisher=Lumit
 AppPublisherURL=https://github.com/luminalmvm/Lumit
-; Per user, not per machine. This is what lets Lumit update itself the
-; way Chrome and VS Code do: {localappdata} belongs to the person running it, so
-; the application can put a new version down beside the old one and swap them
-; over without an administrator and without running this installer again.
-; `PrivilegesRequired=lowest` means no UAC prompt to install in the first place.
+; Per user, not per machine, the way Chrome and VS Code install. {localappdata}
+; belongs to the person running it, so neither the first install nor an update
+; needs an administrator: an update downloads this installer again and runs it
+; silently over the folder it installed into. `PrivilegesRequired=lowest` means
+; no UAC prompt either way.
 PrivilegesRequired=lowest
 DefaultDirName={localappdata}\Programs\Lumit
 ; An existing installation keeps its folder, wherever a previous version put it
@@ -53,6 +53,11 @@ Source: "..\..\flutter_ui\build\windows\x64\runner\Release\*"; DestDir: "{app}";
 Source: "..\..\assets\brand\lumit-project.ico"; DestDir: "{app}\icons"
 Source: "..\..\assets\brand\lumit-preset.ico"; DestDir: "{app}\icons"
 Source: "..\..\assets\brand\lumit-theme.ico"; DestDir: "{app}\icons"
+
+[InstallDelete]
+; The runner was lumit_flutter.exe up to 0.3.2. An update over one of those
+; installs would leave the old name beside the new one without this.
+Type: files; Name: "{app}\lumit_flutter.exe"
 
 [Icons]
 Name: "{group}\Lumit"; Filename: "{app}\{#MyAppExe}"

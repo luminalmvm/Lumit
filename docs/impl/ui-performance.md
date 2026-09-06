@@ -764,7 +764,7 @@ cause. The wheel legs are sized from the measured vertical extent (printed) so t
 scroll rather than grind the stops — §2.6 is the row that mistake produced.
 `probe_frame_window_test.dart` pins the windowing. Two traps for whoever runs it
 next: fps figures from before this date read ~15% low, and **a leftover
-`lumit_flutter.exe` from an earlier run occludes the new window and halves the whole
+`lumit.exe` from an earlier run occludes the new window and halves the whole
 table** — kill it first, and trust the run only if the gesture rows reproduce their
 class.
 

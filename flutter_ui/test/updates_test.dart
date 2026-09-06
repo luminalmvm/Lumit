@@ -449,15 +449,30 @@ void main() {
   });
 
   group('choosing how to update', () {
-    test('a per-user installation is offered the package, not the installer',
-        () {
+    test('a per-user Windows installation takes the installer too', () {
+      // The installer is the one thing that rewrites the Start Menu shortcut
+      // and the file associations, which is what let the runner be renamed,
+      // and a per-user folder needs no administrator for it to run. The
+      // sample release still carries the package 0.3.2 shipped, and Windows
+      // has to walk past it.
       final release = UpdateRelease.parse(
         _releaseJson(),
         platform: 'windows',
         kind: InstallKind.folder,
         replaceable: true,
       );
-      expect(release?.assetName, 'lumit-0.2.0-windows-x64.zip');
+      expect(release?.assetName, 'lumit-0.2.0-windows-x64-setup.exe');
+      expect(release?.delivery, UpdateDelivery.installer);
+    });
+
+    test('a per-user macOS bundle is offered the package, not the image', () {
+      final release = UpdateRelease.parse(
+        _releaseJson(),
+        platform: 'macos',
+        kind: InstallKind.bundle,
+        replaceable: true,
+      );
+      expect(release?.assetName, 'lumit-0.2.0-macos-arm64.zip');
       expect(release?.delivery, UpdateDelivery.inPlace);
     });
 

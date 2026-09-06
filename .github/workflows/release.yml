@@ -4,9 +4,9 @@
 #
 # Three things are *installed*: a Windows setup .exe, a macOS .dmg and a
 # Linux .flatpak — one per platform, and the Linux tarball is withdrawn. Beside
-# them ride the plain application archives the in-place updater fetches:
-# a Windows .zip and a macOS .zip, which are not installers and are not offered
-# as a way to install. Every job gates the release; nothing is
+# them rides the plain macOS .zip the in-place updater fetches, which is not an
+# installer and is not offered as a way to install. Windows updates run the
+# setup .exe again, silently. Every job gates the release; nothing is
 # continue-on-error, so a partial release is never published quietly.
 #
 # Toolchain steps mirror ci.yml's `windows` and `flutter-linux` jobs exactly
@@ -91,25 +91,13 @@ jobs:
         run: |
           $version = "$env:RELEASE_VERSION".TrimStart('v')
           & packaging/windows/build-installer.ps1 -Version $version
-      # The same files the installer lays down, as a plain archive.
-      # This is what a per-user installation fetches to update itself: no
-      # installer to run, no elevation, no questions already answered once.
-      - name: Package the app for in-place updates
-        shell: pwsh
-        run: |
-          $version = "$env:RELEASE_VERSION".TrimStart('v')
-          $stage = "$env:RUNNER_TEMP\lumit-package"
-          New-Item -ItemType Directory -Force -Path "$stage\icons" | Out-Null
-          Copy-Item -Recurse -Force flutter_ui\build\windows\x64\runner\Release\* $stage
-          Copy-Item assets\brand\lumit-project.ico, assets\brand\lumit-preset.ico "$stage\icons"
-          Compress-Archive -Path "$stage\*" -Force `
-            -DestinationPath "packaging/windows/dist/lumit-$version-windows-x64.zip"
+      # The installer is the whole Windows release. An update downloads it
+      # again and runs it silently, which is also what renames or removes
+      # files the last version left, so there is no plain archive beside it.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: windows-installer
-          path: |
-            packaging/windows/dist/*.exe
-            packaging/windows/dist/*.zip
+          path: packaging/windows/dist/*.exe
           if-no-files-found: error
 
   linux-bundle:
