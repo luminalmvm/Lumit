@@ -904,13 +904,10 @@ mod tests {
     /// it teaches everybody to re-run rather than to look. Caught on this
     /// branch's own suite, pre-existing rather than new.
     ///
-    /// The lock is taken for the body of every test that touches the global; a
-    /// poisoned lock is recovered rather than propagated, so one genuine
-    /// failure does not cascade into "all the others failed too".
-    static CACHE_TESTS: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
+    /// The lock is `test_guard` above, the same one the worker thread's fill
+    /// test holds while it reads the frames these tests clear.
     fn cache_test_guard() -> std::sync::MutexGuard<'static, ()> {
-        CACHE_TESTS.lock().unwrap_or_else(|e| e.into_inner())
+        super::test_guard()
     }
 
     const A: FrameKey = 1;
