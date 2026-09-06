@@ -258,6 +258,32 @@ pub trait EffectDef: Sync + Send + 'static {
         self.apply_cpu(rgba, w, h, p);
     }
 
+    /// [`apply_cpu_at`](EffectDef::apply_cpu_at) with the layer's decoded
+    /// **neighbour frames** beside the picture, keyed by source-relative offset
+    /// and laid out exactly as `rgba` is.
+    ///
+    /// The neighbours are the frames the stack's temporal window asked for
+    /// ([`super::stack_temporal_window`]), decoded by the same job that decoded
+    /// the frame in hand. Every built-in ignores them here: Echo and the flow
+    /// effects read theirs as textures in their own kernels. A **plugin** reads
+    /// them on the CPU, because a motion blur or a retimer asks its input clip
+    /// for the frames either side and a host that answers every such ask with
+    /// the frame in hand shows it a scene with no motion in it. The default
+    /// drops them and calls `apply_cpu_at`.
+    #[allow(clippy::too_many_arguments)]
+    fn apply_cpu_temporal(
+        &self,
+        inst: uuid::Uuid,
+        lt: f64,
+        rgba: &mut [f32],
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _neighbours: &[(i32, &[f32])],
+    ) {
+        self.apply_cpu_at(inst, lt, rgba, w, h, p);
+    }
+
     /// Values derived at resolve time from things that are not parameters
     /// (docs/impl/effect-registry.md §2.4a): layer time, the marker
     /// context, a whole keyframed track.
@@ -336,7 +362,11 @@ pub trait EffectDef: Sync + Send + 'static {
     }
 
     /// The source-relative frame offsets **this instance** reads at this layer
-    /// time — the picture-side twin of [`driver_window`](EffectDef::driver_window).
+    /// frame, the picture-side twin of [`driver_window`](EffectDef::driver_window).
+    ///
+    /// `frame` is the layer's local time **in frames of the comp**, not in
+    /// seconds: a plugin is asked in the unit OFX counts in, and the answer it
+    /// gives is relative to the number it was asked at.
     ///
     /// `None` means "whatever the schema declares", which is every built-in:
     /// Echo's window is a fact about the effect, not about the copy of it on
@@ -347,7 +377,7 @@ pub trait EffectDef: Sync + Send + 'static {
     ///
     /// It must stay cheap and pure: [`super::stack_temporal_window`] calls it
     /// once per live effect per frame, from the key walk.
-    fn frames_needed(&self, _inst: &EffectInstance, _lt: f64) -> Option<Vec<i32>> {
+    fn frames_needed(&self, _inst: &EffectInstance, _frame: f64) -> Option<Vec<i32>> {
         None
     }
 

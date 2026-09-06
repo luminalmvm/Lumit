@@ -561,7 +561,7 @@ impl Broker {
 
         // Every input, plus one for the answer. The slots are taken before the
         // message goes out, because the message names them.
-        let mut inputs = Vec::with_capacity(request.inputs.len());
+        let mut inputs = Vec::with_capacity(request.inputs.len() + request.neighbours.len());
         for (clip, frame) in &request.inputs {
             let slot = self.take_slot();
             self.ring.write_frame(slot, frame, request.bounds, true)?;
@@ -570,6 +570,23 @@ impl Broker {
                 time: request.time,
                 slot,
             });
+        }
+        // The frames either side go in the same shipment, each under its own
+        // time, when the ring has a slot for each: a shipment wider than the
+        // ring would write over a frame the broker has not read yet, so it
+        // ships the frame in hand alone and the plugin gets that frame for
+        // every other time, the same answer a refused prefetch gives.
+        let fits = request.inputs.len() + request.neighbours.len() <= self.ring.slots() as usize;
+        if fits {
+            for (offset, frame) in &request.neighbours {
+                let slot = self.take_slot();
+                self.ring.write_frame(slot, frame, request.bounds, true)?;
+                inputs.push(FrameRef {
+                    clip: SOURCE_CLIP.to_owned(),
+                    time: request.time + f64::from(*offset),
+                    slot,
+                });
+            }
         }
         let output = self.take_slot();
 

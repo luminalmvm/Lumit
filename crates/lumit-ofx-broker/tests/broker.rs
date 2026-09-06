@@ -279,6 +279,50 @@ fn eleven_frames_cross_in_one_shipment() {
     );
 }
 
+/// The frames either side travel **with** the frame, not after it: the engine
+/// decodes a temporal effect's neighbours beside the frame in hand, and they
+/// go into the same shipment as it. A motion blur that fetches `t ± 1` inside
+/// its render then finds them in hand, and nothing crosses the pipe mid-render.
+/// Without them the plugin was handed the frame in hand for every other time,
+/// and a motion blur compared a frame with itself.
+#[test]
+fn neighbours_shipped_with_the_frame_reach_the_plugin_without_a_prefetch() {
+    let Ok(root) = tempfile::tempdir() else {
+        return;
+    };
+    let Some((mut broker, plugin)) = a_broker(root.path(), &[("LUMIT_TESTPLUG_TEMPORAL", "5")])
+    else {
+        skipped("neighbours_shipped_with_the_frame_reach_the_plugin_without_a_prefetch");
+        return;
+    };
+    let instance = broker
+        .create_instance(plugin, Context::Filter, ParamSnapshot::new())
+        .expect("an instance");
+
+    let value_at = |time: f64| (time / 100.0) as f32;
+    let mut request = RenderRequest::filter(20.0, a_flat_frame(value_at(20.0)));
+    request.neighbours = (-5..=5)
+        .filter(|offset| *offset != 0)
+        .map(|offset| (offset, a_flat_frame(value_at(20.0 + f64::from(offset)))))
+        .collect();
+    // Nothing to fetch from: every frame the plugin wants is already across.
+    let rendered = broker
+        .render(instance, &request, &|_, _| None)
+        .expect("a frame back");
+
+    assert!(!rendered.errored, "{:?}", rendered.error);
+    assert_eq!(
+        broker.shipments(),
+        0,
+        "the neighbours came with the frame, so no prefetch went out"
+    );
+    assert!(
+        (first(&rendered.frame) - 0.20).abs() < 1e-2,
+        "expected the mean of the frame and its ten neighbours, got {}",
+        first(&rendered.frame)
+    );
+}
+
 #[test]
 fn a_frame_crosses_the_ring_unchanged() {
     let Ok(root) = tempfile::tempdir() else {

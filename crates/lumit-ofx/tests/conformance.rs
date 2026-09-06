@@ -182,6 +182,7 @@ fn request_for(clips: &[String], source: &Frame16) -> RenderRequest {
         bounds: RectI::sized(width as i32, height as i32),
         order: RowOrder::BottomUp,
         inputs,
+        neighbours: Vec::new(),
     }
 }
 

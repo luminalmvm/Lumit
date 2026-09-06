@@ -258,10 +258,18 @@ impl Session {
         inputs: &[lumit_ofx::ipc::proto::FrameRef],
     ) -> RenderRequest {
         let mut frames = BTreeMap::new();
+        let mut neighbours = Vec::new();
         if let Some(ring) = self.ring.as_ref() {
             for input in inputs {
-                if let Ok((_, frame)) = ring.read_frame(input.slot) {
+                let Ok((_, frame)) = ring.read_frame(input.slot) else {
+                    continue;
+                };
+                if time_key(input.time) == time_key(time) {
                     frames.insert(input.clip.clone(), frame);
+                } else {
+                    // The Source clip at another time, filed by its offset
+                    // from the frame being rendered.
+                    neighbours.push(((input.time - time).round() as i32, frame));
                 }
             }
         }
@@ -270,6 +278,7 @@ impl Session {
             bounds,
             order,
             inputs: frames,
+            neighbours,
         }
     }
 
@@ -301,15 +310,8 @@ impl Session {
         // watchdog covers the case that matters.
         let epoch = Epoch::new();
         let token = epoch.token();
-        let time = request.time;
 
-        let mut prefetch = |needed: &BTreeMap<String, (f64, f64)>| {
-            let wanted = frames_wanted(needed, time);
-            if wanted.is_empty() {
-                return Ok(BTreeMap::new());
-            }
-            fetch(sender, receiver, ring, &wanted)
-        };
+        let mut prefetch = |wanted: &[FrameWanted]| fetch(sender, receiver, ring, wanted);
 
         let rendered =
             render_with_prefetch(plugin, &live.instance, &request, &token, &mut prefetch);
@@ -365,34 +367,6 @@ impl Session {
             message: message.to_owned(),
         })
     }
-}
-
-/// Every frame `getFramesNeeded` asked for that is not the one being rendered,
-/// as one flat list. The ranges come back per clip as a first and a last frame;
-/// a retimer's t±5 is eleven frames, and eleven is what goes on the wire — once.
-fn frames_wanted(needed: &BTreeMap<String, (f64, f64)>, time: f64) -> Vec<FrameWanted> {
-    /// A range no plugin means, and a list no host should build. A plugin that
-    /// asks for a thousand frames of one output frame has asked for something
-    /// the ring cannot hold anyway.
-    const MAX_FRAMES: usize = 256;
-
-    let mut wanted = Vec::new();
-    for (clip, (first, last)) in needed {
-        if !first.is_finite() || !last.is_finite() || last < first {
-            continue;
-        }
-        let mut frame = first.floor();
-        while frame <= *last && wanted.len() < MAX_FRAMES {
-            if time_key(frame) != time_key(time) {
-                wanted.push(FrameWanted {
-                    clip: clip.clone(),
-                    time: frame,
-                });
-            }
-            frame += 1.0;
-        }
-    }
-    wanted
 }
 
 /// Ask the host for frames, and wait for the one shipment that answers.
