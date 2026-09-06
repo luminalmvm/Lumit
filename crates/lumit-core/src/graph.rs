@@ -352,6 +352,7 @@ impl LayerGraph {
             && self.layout.is_empty()
             && self.exposed.is_empty()
             && self.groups.is_empty()
+            && !self.out_unwired
     }
 
     /// The driver instance named by `id`, if this graph carries one.
@@ -1560,6 +1561,22 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&LayerGraph::default()).expect("serialises"),
             "{}"
+        );
+    }
+
+    #[test]
+    fn disconnected_output_makes_the_graph_non_empty_and_persists() {
+        let graph = LayerGraph {
+            out_unwired: true,
+            ..LayerGraph::default()
+        };
+        assert!(!graph.is_empty());
+        let json = serde_json::to_string(&graph).expect("serialises");
+        assert!(json.contains("out_unwired"));
+        assert!(
+            serde_json::from_str::<LayerGraph>(&json)
+                .expect("deserialises")
+                .out_unwired
         );
     }
 }
