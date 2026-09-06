@@ -320,9 +320,20 @@ jobs:
           # dry run of the whole pipeline never becomes the download page's
           # "latest". Plain v0.2.0 is the real thing.
           case "$GITHUB_REF_NAME" in *-*) prerelease=--prerelease ;; *) prerelease= ;; esac
+          # The "Before you update" section of the release notes, when the
+          # file has one, goes at the top of the release ahead of the generated
+          # notes. Lumit reads it from there and shows it once the update is
+          # downloaded, before it restarts (flutter_ui/lib/state/updates.dart).
+          notes="web/src/content/releases/${GITHUB_REF_NAME#v}.md"
+          before=
+          if [ -f "$notes" ]; then
+            awk '/^#/ { keep = (tolower($0) ~ /^#+[[:space:]]*before you update[[:space:]]*$/) } keep' \
+              "$notes" > before.md
+            if [ -s before.md ]; then before="--notes-file before.md"; fi
+          fi
           gh release create "$GITHUB_REF_NAME" dist/* \
             --title "Lumit $GITHUB_REF_NAME" \
-            --generate-notes $prerelease
+            --generate-notes $prerelease $before
 
   announce:
     name: Discord announcement

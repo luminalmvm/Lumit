@@ -119,6 +119,10 @@ class UpdateRelease {
   /// without it is verified by size alone.
   final String? sha256;
 
+  /// What the release says to read before it is applied, a line at a time.
+  /// Empty for most releases, which have nothing to say ([updateNoticeFrom]).
+  final List<UpdateNoticeLine> notice;
+
   const UpdateRelease({
     required this.version,
     required this.tag,
@@ -128,6 +132,7 @@ class UpdateRelease {
     required this.assetBytes,
     required this.delivery,
     this.sha256,
+    this.notice = const [],
   });
 
   /// How big the download is, for a sentence a human reads. Whole MB: the
@@ -184,9 +189,75 @@ class UpdateRelease {
       assetBytes: size is int ? size : 0,
       delivery: deliveryFor(name, kind: kind, replaceable: replaceable),
       sha256: chosen['digest'] is String ? chosen['digest'] as String : null,
+      notice: updateNoticeFrom(
+          json['body'] is String ? json['body'] as String : ''),
     );
   }
 }
+
+/// The heading a release puts over what to read before it is applied.
+///
+/// It is written in the release notes file (web/src/content/releases), the
+/// release pipeline copies that section to the top of the GitHub release, and
+/// this file reads it back out of the release it already fetched. So the same
+/// words are on the site, on GitHub and in the window, and a warning added to
+/// the release page after the event reaches the window on the next check.
+const String updateNoticeHeading = 'Before you update';
+
+/// One line of that section: a bullet, or a paragraph.
+typedef UpdateNoticeLine = ({bool bullet, String text});
+
+/// What a release says to read before it is applied.
+///
+/// The lines under [updateNoticeHeading] in the release's notes, up to the
+/// next heading. Most releases have no such section and get an empty list,
+/// which is the window's cue to stay away. The notes are hard-wrapped
+/// Markdown, so a paragraph is joined back into one line, a bullet keeps its
+/// own, and the marks a window has no use for (bold, code, the address of a
+/// link) are dropped.
+List<UpdateNoticeLine> updateNoticeFrom(String body) {
+  final lines = <UpdateNoticeLine>[];
+  var inside = false;
+  var bullet = false;
+  var text = '';
+  void flush() {
+    if (text.isNotEmpty) lines.add((bullet: bullet, text: _plainNotes(text)));
+    text = '';
+    bullet = false;
+  }
+
+  for (final raw in body.split(RegExp(r'\r?\n'))) {
+    final line = raw.trim();
+    final heading = RegExp(r'^#+\s*(.*?)\s*$').firstMatch(line);
+    if (heading != null) {
+      flush();
+      inside =
+          heading.group(1)!.toLowerCase() == updateNoticeHeading.toLowerCase();
+      continue;
+    }
+    if (!inside) continue;
+    if (line.isEmpty) {
+      flush();
+      continue;
+    }
+    final mark = RegExp(r'^[-*+]\s+').firstMatch(line);
+    if (mark != null) {
+      flush();
+      bullet = true;
+      text = line.substring(mark.end);
+      continue;
+    }
+    text = text.isEmpty ? line : '$text $line';
+  }
+  flush();
+  return lines;
+}
+
+/// Bold, code and link marks off a line: `**Glow**` reads as Glow, and a link
+/// keeps its words and loses its address.
+String _plainNotes(String line) => line
+    .replaceAllMapped(RegExp(r'\[([^\]]+)\]\([^)]*\)'), (m) => m[1]!)
+    .replaceAll(RegExp(r'\*\*|__|`'), '');
 
 /// Which attachments suit this machine, best first.
 ///
