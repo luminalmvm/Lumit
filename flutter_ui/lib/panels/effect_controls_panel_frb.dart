@@ -680,7 +680,11 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
       onCurvePlotSize: ui.workspace.setCurvePlotSize,
       onAction: (effect, param) {
         try {
-          fireEffectAction(layer: layer, effect: effect, param: param);
+          fireEffectAction(
+              layer: layer,
+              effect: effect,
+              param: param,
+              frame: BigInt.from(ui.playheadFrame.value));
         } catch (_) {
           // Refused; the effect's own status line says why.
         }
@@ -1228,7 +1232,10 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                             }
                             try {
                               fireEffectAction(
-                                  layer: layer, effect: effect, param: param);
+                                  layer: layer,
+                                  effect: effect,
+                                  param: param,
+                                  frame: BigInt.from(playhead));
                             } catch (_) {
                               // Refused — another analysis is already running,
                               // or the media cannot be read. The effect's own

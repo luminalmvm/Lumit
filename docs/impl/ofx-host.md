@@ -154,7 +154,24 @@ registered into the same catalogue the built-ins live in — the seam
   slot rather than the string — so a plugin's path parameter keeps its declared default.
 - **The GPU pass is a read-back** (`lumit-render::gpufx::ofx`): working texture → linear
   fp32 → the definition → back. It talks to an `EffectDef` and nothing else, so
-  `lumit-render` depends on no plugin host. `AuxKind::None`, no matte of its own.
+  `lumit-render` depends on no plugin host. `AuxKind::None`, no matte of its own. The
+  read-back flushes the frame batch first: inside a batch every pass records into one
+  shared encoder that is submitted when the frame ends, and a copy submitted on its own
+  ran ahead of the drawing that filled the texture and read back zeroes, which is the
+  blank frame every plugin was handed until then.
+- **A button is the plugin's own** (`EffectDef::press`, `Instance::press`). A
+  `kOfxParamTypePushButton` row is pressed by sending `kOfxActionInstanceChanged` with the
+  Source frame already on the instance, because a plugin with an editor (Magic Bullet
+  Looks) asks `clipGetImage` for its preview and refuses to open without one. The call
+  lasts as long as the plugin wants, so through the broker it waits under `PRESS_TIMEOUT`
+  rather than the control deadline, and the bundle's other renders answer identity with a
+  "busy" badge instead of queueing behind the window. What comes back is every value the
+  plugin holds: rows it changed go into the document as rows, and everything no row
+  carries (a custom blob, a text) is packed into `EffectInstance::plugin_state` and laid
+  over the snapshot on every render, its hash in the bag so the frame key follows it.
+  The press runs on a thread of its own in the bridge, with the comp rendered at the
+  playhead, the pressed effect and everything after it on the layer switched off, as the
+  frame the plugin is shown.
 - **`getFramesNeeded` is asked per instance and per frame** through
   `EffectDef::frames_needed`, and the offsets it answers reach `stack_temporal_window` — and
   through it the frame key and the neighbour decode. The static declaration §3's describe

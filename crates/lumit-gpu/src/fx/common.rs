@@ -217,6 +217,12 @@ pub fn readback_linear_f32(
     w: u32,
     h: u32,
 ) -> Result<Vec<f32>, GpuError> {
+    // Inside a frame batch every pass records into one shared encoder that is
+    // submitted when the frame ends, and the copy below submits at once. Without
+    // this it would run ahead of the drawing that filled the texture and read
+    // back zeroes, which is the empty frame every OFX plugin was being handed.
+    ctx.flush();
+
     let row_bytes = w * 8;
     let padded = row_bytes.div_ceil(256) * 256;
     let buf = ctx.device.create_buffer(&wgpu::BufferDescriptor {

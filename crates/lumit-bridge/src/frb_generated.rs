@@ -5589,10 +5589,12 @@ fn wire__crate__api__track__fire_effect_action_impl(
             let api_layer = <crate::api::layer::LayerReference>::sse_decode(&mut deserializer);
             let api_effect = <uuid::Uuid>::sse_decode(&mut deserializer);
             let api_param = <String>::sse_decode(&mut deserializer);
+            let api_frame = <Option<u64>>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, BridgeError>((move || {
-                let output_ok =
-                    crate::api::track::fire_effect_action(api_layer, api_effect, api_param)?;
+                let output_ok = crate::api::track::fire_effect_action(
+                    api_layer, api_effect, api_param, api_frame,
+                )?;
                 Ok(output_ok)
             })())
         },
@@ -18267,6 +18269,17 @@ impl SseDecode for Option<crate::api::project::ProjectReference> {
     }
 }
 
+impl SseDecode for Option<u64> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<u64>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<Vec<String>> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -26874,6 +26887,16 @@ impl SseEncode for Option<crate::api::project::ProjectReference> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <crate::api::project::ProjectReference>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<u64> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <u64>::sse_encode(value, serializer);
         }
     }
 }

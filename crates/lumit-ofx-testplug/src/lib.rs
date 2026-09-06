@@ -332,6 +332,7 @@ unsafe fn dispatch(
         actions::GET_REGION_OF_DEFINITION => region_of_definition(handle.cast_mut()),
         actions::IS_IDENTITY => is_identity(variant, out_args),
         actions::GET_FRAMES_NEEDED => frames_needed(in_args, out_args),
+        actions::INSTANCE_CHANGED => instance_changed(handle.cast_mut(), in_args),
         actions::RENDER => render(variant, handle.cast_mut(), in_args),
         // An action a plugin does not implement is not an error.
         _ => Status::ReplyDefault.code(),
@@ -883,6 +884,59 @@ fn frames_needed(in_args: *mut c_void, out_args: *mut c_void) -> OfxStatus {
         1,
         time + radius,
     );
+    Status::Ok.code()
+}
+
+/// What the Trigger button writes into `gain`.
+pub const TRIGGERED_GAIN: f64 = 0.75;
+/// What the Trigger button writes into `vendorBlob`.
+pub const TRIGGERED_BLOB: &CStr = c"pressed";
+
+/// `kOfxActionInstanceChanged`: the Trigger button writes two of the plugin's
+/// own parameters, the way a plugin with an editor keeps what was done in it.
+/// Any other control changing is none of this plugin's business.
+fn instance_changed(effect: *mut c_void, in_args: *mut c_void) -> OfxStatus {
+    let (Some(props_suite), Some(param_suite), Some(effect_suite)) =
+        (properties(), parameter_suite(), image_effect_suite())
+    else {
+        return Status::ErrMissingHostFeature.code();
+    };
+    let mut name: *mut c_char = std::ptr::null_mut();
+    // SAFETY: the host's own function, given the `inArgs` it passed us.
+    unsafe {
+        (props_suite.prop_get_string)(in_args, c"OfxPropName".as_ptr(), 0, &raw mut name);
+    }
+    // SAFETY: the host keeps the string alive until the property is next
+    // written, which is after this action returns.
+    if name.is_null() || unsafe { CStr::from_ptr(name) } != c"trigger" {
+        return Status::ReplyDefault.code();
+    }
+    let mut params: OfxParamSetHandle = std::ptr::null_mut();
+    // SAFETY: the host's own function, given a valid out-parameter.
+    if unsafe { (effect_suite.get_param_set)(effect, &raw mut params) } != Status::Ok.code() {
+        return Status::Failed.code();
+    }
+    let handle = |name: &CStr| {
+        let mut param: OfxParamHandle = std::ptr::null_mut();
+        let mut props: OfxPropertySetHandle = std::ptr::null_mut();
+        // SAFETY: as above.
+        unsafe {
+            (param_suite.param_get_handle)(params, name.as_ptr(), &raw mut param, &raw mut props);
+        }
+        param
+    };
+    let (gain, blob) = (handle(c"gain"), handle(c"vendorBlob"));
+    if gain.is_null() || blob.is_null() {
+        return Status::Failed.code();
+    }
+    // Real C-variadic calls, as a plugin built against the header makes them:
+    // a double for the double, a string for the blob.
+    // SAFETY: the host's own entry point, given live handles and the value
+    // each parameter is declared to take.
+    unsafe {
+        (param_suite.param_set_value)(gain, TRIGGERED_GAIN);
+        (param_suite.param_set_value)(blob, TRIGGERED_BLOB.as_ptr());
+    }
     Status::Ok.code()
 }
 
