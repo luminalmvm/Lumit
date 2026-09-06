@@ -6214,6 +6214,44 @@ than beside it.
 
 ---
 
+### 3.97 OCIO - the four colour-management effects
+
+**Parameters.** Four effects, all in the Colour category, each ending with Mix:
+
+| Effect | Parameters |
+|---|---|
+| OCIO colour space transform | Input colour space, Output colour space, OCIO configuration (read-only) |
+| OCIO display transform | Input colour space, Display, View, Inverse, OCIO configuration (read-only) |
+| OCIO look transform | Input colour space, Look, Output colour space, Inverse, OCIO configuration (read-only) |
+| OCIO file transform | File (`.cube`, `.spi1d`, `.spi3d`, `.clf`, `.ctf`, `.cc`, `.ccc`, `.cdl`), Inverse |
+
+**OCIO configuration** is the Information row: what the loaded config calls itself (its
+`name`, or the first line of its `description`, or the file's name), read-only, and
+**None** with no config. The file transform has none; its File row shows the file.
+
+A name row lists the project's OCIO config (docs/impl/ocio.md §6.6): its colour spaces,
+displays, the views of the chosen display, or its looks. The value is the config's own
+spelling, kept when the config is missing. An unset space row means the working space,
+so a fresh colour space transform with only Output set is an output transform and with
+only Input set is an input transform. A view or look row unset is nothing to do.
+
+**Algorithm sketch.** The rows resolve to one chain of the loaded config, exactly as the
+footage, Viewer and export edges do: input space to the reference, then the reference to
+the output space, or through the view or the look. Inverse inverts the whole chain. The
+chain bakes once to the same table the display pass reads and one kernel applies it to
+straight colour (§2.2), then Mix. The file transform needs no config: it reads its file
+through the readers a config's own `FileTransform` uses, tetrahedral for a cube, first
+grade only for a CDL collection.
+
+**Degrade.** No config, an unusable one, a name it does not have, a view whose inverse
+would need a 3D table inverted, or a file that will not read: a passthrough, never a
+fault, as an unset LUT is. Export is not refused by an effect; the export's own colour
+space is what refuses.
+
+**Status (shipped).** GPU-only, as the LUT is: the §1.6 oracle is
+`lumit_colour::Artefact::eval`, held against the kernel in `lumit-render`'s
+`ocio_parity` test at the display pass's bound.
+
 ## 4. Tier 2 — AE parity direction (post-v1)
 
 One-line scope each; specs written when scheduled ([16-ROADMAP.md](16-ROADMAP.md)). Order

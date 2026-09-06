@@ -575,6 +575,7 @@ pub(super) fn resolve_into_arena(
             // and so it is not in the frame key either — pressing Analyse
             // renames no frame.
             ParamKind::File { .. }
+            | ParamKind::ColourName { .. }
             | ParamKind::Layer { .. }
             | ParamKind::MaskPath { .. }
             | ParamKind::Action => continue,

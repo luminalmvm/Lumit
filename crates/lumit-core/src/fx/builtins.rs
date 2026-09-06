@@ -311,6 +311,9 @@ pub fn default_param_value(kind: &ParamKind) -> Option<EffectValue> {
         ParamKind::Colour { default, .. } => EffectValue::Colour(default.map(Property::fixed)),
         ParamKind::Seed => EffectValue::Seed(fresh_seed()),
         ParamKind::File { .. } => EffectValue::File(FileParam::empty()),
+        // Unset: the working space for a space row, nothing for the rest  -
+        // the same sanctioned no-op default a File row takes.
+        ParamKind::ColourName { .. } => EffectValue::Text(String::new()),
         // A fresh layer reference is unset (docs/impl/layer-input.md): the
         // effect is a labelled no-op until the owner picks a layer, the same
         // sanctioned exception the File parameter takes to the "no no-op

@@ -1175,7 +1175,7 @@ pub fn build_comp_draws_at(
             tex_w: nested.width,
             tex_h: nested.height,
             fx: Default::default(),
-            lut_files: Vec::new(),
+            colour_tables: Vec::new(),
             nested: Some(nested),
             // A comp's layers were each interpreted as themselves while it was
             // realised; the picture that comes out is already working-space.
@@ -1216,7 +1216,7 @@ pub fn build_comp_draws_at(
         // texture before resampling. Uses that layer's decode scale (its
         // px@comp radii stay honest), the same resolve export uses. Empty
         // otherwise.
-        let (fx, lut_files) = if mode.folds_effects() && src.switches.fx {
+        let (fx, colour_tables) = if mode.folds_effects() && src.switches.fx {
             let slt = lumit_core::time::layer_time(t_comp, src.start_offset.0);
             let comp_diag = ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
             let scale = tex_w as f32 / natural.0.max(1.0);
@@ -1247,7 +1247,7 @@ pub fn build_comp_draws_at(
                     context,
                 )
                 .1,
-                lut_files(&src.effects, slt),
+                colour_tables(&src.effects, slt),
             )
         } else {
             Default::default()
@@ -1257,7 +1257,7 @@ pub fn build_comp_draws_at(
             tex_w,
             tex_h,
             fx,
-            lut_files,
+            colour_tables,
             nested: None,
             colour_space: crate::colour::footage_colour_space(doc, &src.kind),
         })
@@ -1697,7 +1697,7 @@ pub fn build_comp_draws_at(
                 // in v1 (§3, the documented degrade): nothing builds
                 // neighbours or flow for the unit.
                 flow_fields: Vec::new(),
-                lut_files: lut_files(&group.effects, t_comp),
+                colour_tables: colour_tables(&group.effects, t_comp),
                 dof_inputs: dof_inputs_for(group.id, &group.effects),
                 mattes: mattes_for(group.id, &group.effects, &group_graph),
                 mask_paths: mask_paths_for(&group.effects, &[], t_comp),
@@ -1847,7 +1847,7 @@ pub fn build_comp_draws_at(
             // (its px@comp radii stay honest under reduced-res preview), the same
             // §1.4 markers and the same resolve export uses. Empty for
             // None / Masks or when the source's fx switch is off.
-            let (fx, lut_files) = if nested.is_some() {
+            let (fx, colour_tables) = if nested.is_some() {
                 // The nested render already ran every layer's own stack.
                 Default::default()
             } else if mr.source.folds_effects() && src.switches.fx {
@@ -1868,7 +1868,7 @@ pub fn build_comp_draws_at(
                         context.clone(),
                     )
                     .1,
-                    lut_files(&src.effects, mlt),
+                    colour_tables(&src.effects, mlt),
                 )
             } else {
                 Default::default()
@@ -1899,7 +1899,7 @@ pub fn build_comp_draws_at(
                 luma: matches!(mr.channel, lumit_core::model::MatteChannel::Luma),
                 inverted: mr.inverted,
                 fx,
-                lut_files,
+                colour_tables,
                 nested,
                 colour_space: crate::colour::footage_colour_space(doc, &src.kind),
             })
@@ -2211,7 +2211,7 @@ pub fn build_comp_draws_at(
                     // Ordered file paths of the enabled built-in `lut` effects,
                     // 1:1 with the stack's `lut` ops (docs/08 §3.11);
                     // the same `lt` resolve_stack used above.
-                    lut_files: lut_files(&layer.effects, lt),
+                    colour_tables: colour_tables(&layer.effects, lt),
                     // Depth inputs of the enabled built-in `dof` and
                     // `light_wrap` effects, 1:1 with the stack's
                     // layer-input-consuming ops (docs/08 §3.22, §3.28).
@@ -2417,7 +2417,7 @@ pub fn build_comp_draws_at(
             // Ordered file paths of the enabled built-in `lut` effects, 1:1
             // with the stack's `lut` ops (docs/08 §3.11); the same `lt`
             // resolve_stack used for `fx`.
-            lut_files: lut_files(&layer.effects, lt),
+            colour_tables: colour_tables(&layer.effects, lt),
             // Depth inputs of the enabled built-in `dof` and `light_wrap`
             // effects, 1:1 with the stack's layer-input-consuming ops (docs/08
             // §3.22, §3.28); built the same way export does, so the two blur
@@ -2505,16 +2505,79 @@ fn fx_input_key(
 /// one op, so this list is 1:1 and in the same order as the stack's
 /// `lut` ops — the alignment `run_ops` relies on to bind LUT k to op
 /// k. Preview (here) and export build it the same way, so the two match.
-fn lut_files(effects: &[lumit_core::model::EffectInstance], lt: f64) -> Vec<Option<String>> {
-    use lumit_core::model::EffectNamespace;
+fn colour_tables(
+    effects: &[lumit_core::model::EffectInstance],
+    lt: f64,
+) -> Vec<Option<crate::colour::TableRequest>> {
+    use crate::colour::{Edge, OcioRequest, TableRequest};
+    use lumit_core::model::{EffectNamespace, EffectValue};
+    let name =
+        |e: &lumit_core::model::EffectInstance, id: &str| e.text(id).unwrap_or_default().to_owned();
+    let inverse = |e: &lumit_core::model::EffectInstance| {
+        matches!(e.param("inverse"), Some(EffectValue::Bool(true)))
+    };
     effects
         .iter()
         .filter(|e| {
             e.enabled
                 && e.effect.namespace == EffectNamespace::Builtin
-                && e.effect.match_name == "lut"
+                && crate::fxops::TABLE_EFFECTS.contains(&e.effect.match_name.as_str())
         })
-        .map(|e| e.path_at("file", lt).map(str::to_owned))
+        .map(|e| {
+            let edge = match e.effect.match_name.as_str() {
+                "lut" => {
+                    return e
+                        .path_at("file", lt)
+                        .map(|p| TableRequest::Cube(p.to_owned()))
+                }
+                "ocio_file" => {
+                    return e.path_at("file", lt).map(|p| {
+                        TableRequest::Ocio(OcioRequest::File {
+                            path: p.to_owned(),
+                            inverse: inverse(e),
+                        })
+                    })
+                }
+                // Both rows at the working space is nothing to do, and no
+                // slot says so more cheaply than an identity table would.
+                "ocio_colour_space" => {
+                    let (from, to) = (
+                        name(e, "input_colour_space"),
+                        name(e, "output_colour_space"),
+                    );
+                    if from.is_empty() && to.is_empty() {
+                        return None;
+                    }
+                    Edge::Convert { from, to }
+                }
+                "ocio_display" => {
+                    let (display, view) = (name(e, "display"), name(e, "view"));
+                    if display.is_empty() || view.is_empty() {
+                        return None;
+                    }
+                    Edge::Display {
+                        input: name(e, "input_colour_space"),
+                        display,
+                        view,
+                        inverse: inverse(e),
+                    }
+                }
+                "ocio_look" => {
+                    let look = name(e, "look");
+                    if look.is_empty() {
+                        return None;
+                    }
+                    Edge::Look {
+                        input: name(e, "input_colour_space"),
+                        look,
+                        output: name(e, "output_colour_space"),
+                        inverse: inverse(e),
+                    }
+                }
+                _ => return None,
+            };
+            Some(TableRequest::Ocio(OcioRequest::Config(edge)))
+        })
         .collect()
 }
 
@@ -3325,6 +3388,7 @@ mod render_below_at_tests {
             samples: 1,
             profiler: None,
             colour_inputs: None,
+            colour_config: None,
             flow: None,
         };
         // A softbox in front of the comp, big enough to rake across it.
@@ -3431,6 +3495,7 @@ mod render_below_at_tests {
             samples: 1,
             profiler: None,
             colour_inputs: None,
+            colour_config: None,
             flow: None,
         };
         let comp = Composition {
@@ -3546,6 +3611,7 @@ mod render_below_at_tests {
             samples: 1,
             profiler: None,
             colour_inputs: None,
+            colour_config: None,
             flow: None,
         };
         let comp = Composition {
@@ -3925,6 +3991,7 @@ mod render_below_at_tests {
             samples: 1,
             profiler: None,
             colour_inputs: None,
+            colour_config: None,
             flow: None,
         };
         let comp = posterize_comp();
@@ -4112,6 +4179,7 @@ mod render_below_at_tests {
             samples: 1,
             profiler: None,
             colour_inputs: None,
+            colour_config: None,
             flow: None,
         };
         let doc = Document::new();
@@ -4312,6 +4380,7 @@ mod render_below_at_tests {
                 samples: 1,
                 profiler: None,
                 colour_inputs: None,
+                colour_config: None,
                 flow: Some(&self.flow),
             }
         }

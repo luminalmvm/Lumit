@@ -1,0 +1,63 @@
+---
+title: "OCIO display transform"
+description: "Show a layer through a display and view of the project's OCIO config."
+---
+
+OCIO display transform is a [Colour](/effects/#colour) effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Runs the layer through a display and view of the project's OCIO config, the same
+transform the Viewer's colour picker offers, baked into the layer. **Inverse** runs the
+view backwards, which takes a display-referred picture back to scene-linear.
+
+:::note[Needs a config]
+With no config loaded, a display or view the config does not have, or an inverse the
+view's tables cannot give, the effect passes the layer through unchanged.
+:::
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Input colour space** | Dropdown | The config's colour spaces | Working space | - |
+| **Display** | Dropdown | The config's displays | None | - |
+| **View** | Dropdown | The chosen display's views | None | - |
+| **Inverse** | Checkbox | On or off | Off | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **OCIO configuration** | Read-only | The project's config, read-only | - | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Input colour space**: the space the layer's pixels are taken to be in.
+- **Display**: the display, from the config.
+- **View**: one of the chosen display's views.
+- **Inverse**: run the view backwards.
+- **Mix**: how much of the result replaces the original.
+- **OCIO configuration**: the name of the project's config, read-only.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [OCIO colour space transform](/effects/colour/ocio-colour-space-transform/)
+- [OCIO look transform](/effects/colour/ocio-look-transform/)
+- [Colour](/effects/#colour)
+- [Effects](/use/effects/)

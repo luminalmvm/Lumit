@@ -61,9 +61,20 @@ const CONTROL = {
   colour: "Colour",
   seed: "Seed",
   file: "File",
+  // A name from the project's OCIO config, offered as a dropdown.
+  colour_name: "Dropdown",
   layer: "Layer",
   mask_path: "Masks",
   curve: "Curve",
+};
+
+/** What a colour-name row lists, by the config list it draws from. */
+const COLOUR_ROLE = {
+  space: "The config's colour spaces",
+  display: "The config's displays",
+  view: "The chosen display's views",
+  look: "The config's looks",
+  config: "The project's config, read-only",
 };
 
 const UNIT = {
@@ -114,6 +125,8 @@ function rangeCell(p) {
       return "Any whole number";
     case "file":
       return p.file_filter.map((e) => `\`.${e}\``).join(", ");
+    case "colour_name":
+      return COLOUR_ROLE[p.colour_role] ?? "-";
     case "layer":
       return "Any layer in the composition";
     case "mask_path":
@@ -143,6 +156,9 @@ function defaultCell(p) {
       return "A fresh random seed per instance";
     case "file":
       return "None";
+    case "colour_name":
+      if (p.colour_role === "config") return "-";
+      return p.colour_role === "space" ? "Working space" : "None";
     case "layer":
       return p.self_default ? "This layer" : "None";
     case "mask_path":
@@ -205,7 +221,7 @@ function paramTable(effect) {
     effect.params.map((p) => ({
       name: cell(rowName(effect, p)),
       cells:
-        `${cell(CONTROL[p.kind] ?? p.kind)} | ${cell(rangeCell(p))} | ` +
+        `${cell(p.colour_role === "config" ? "Read-only" : (CONTROL[p.kind] ?? p.kind))} | ${cell(rangeCell(p))} | ` +
         `${cell(defaultCell(p))} | ${cell(UNIT[p.unit] ?? p.unit)}`,
     })),
   );

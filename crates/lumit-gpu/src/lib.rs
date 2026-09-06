@@ -1057,13 +1057,31 @@ struct OcioParamsRaw {
 /// every frame binds the same one.
 pub struct OcioArtefact {
     bind: wgpu::BindGroup,
-    /// Kept alive for the bind group, and read by the parity test.
-    #[allow(dead_code)]
+    /// Kept alive for the bind group, and bound again by the OCIO effects'
+    /// kernel, which reads the same three things at its own bindings.
     curve: wgpu::Texture,
-    #[allow(dead_code)]
     cube: wgpu::Texture,
-    #[allow(dead_code)]
     params: wgpu::Buffer,
+}
+
+impl OcioArtefact {
+    /// The curve table, both stages in one texture.
+    #[must_use]
+    pub fn curve(&self) -> &wgpu::Texture {
+        &self.curve
+    }
+
+    /// The cube, red fastest.
+    #[must_use]
+    pub fn cube(&self) -> &wgpu::Texture {
+        &self.cube
+    }
+
+    /// `OcioParams`, as `ocio_sample.wgsl` reads it.
+    #[must_use]
+    pub fn params(&self) -> &wgpu::Buffer {
+        &self.params
+    }
 }
 
 /// A read-back in flight: the copy is already on the graphics card's queue and
@@ -1139,9 +1157,21 @@ impl PendingReadback {
 
 impl ColourEngine {
     pub fn new(ctx: &GpuContext) -> Self {
+        // The OCIO sampler is prepended rather than included: WGSL has no
+        // modules, and the effects' kernel prepends the same file, which is
+        // what makes an effect and the display pass one implementation.
         let shader = ctx
             .device
-            .create_shader_module(wgpu::include_wgsl!("colour.wgsl"));
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("colour"),
+                source: wgpu::ShaderSource::Wgsl(
+                    concat!(
+                        include_str!("ocio_sample.wgsl"),
+                        include_str!("colour.wgsl")
+                    )
+                    .into(),
+                ),
+            });
         let layout = ctx
             .device
             .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {

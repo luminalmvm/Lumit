@@ -8,10 +8,11 @@
 //! config points it at.
 //!
 //! The part that needs stating out loud is the **bridge**. A config's reference
-//! space is its own; Lumit's working space is fixed — scene-linear Rec.709,
-//! premultiplied fp16 — and the two are not the same thing. There are
-//! three ways this crate joins them, and which one is in force is something the
-//! project settings face states rather than hides:
+//! space is its own; Lumit's working space is scene-linear Rec.709,
+//! premultiplied fp16, unless the project chooses the config's `scene_linear`
+//! ([`LoadedConfig::with_working`]), and the two are not the same thing. There
+//! are three ways this crate joins them, and which one is in force is something
+//! the project settings face states rather than hides:
 //!
 //! - **Exact.** An OCIO v2 config that declares `aces_interchange` (or
 //!   `cie_xyz_d65_interchange`) is saying "this named space *is* ACES2065-1"
@@ -79,6 +80,8 @@ const MAX_DEPTH: usize = 32;
 pub struct LoadedConfig {
     pub config: Config,
     bridge: Bridge,
+    /// The project composites in the config's `scene_linear` role.
+    from_config: bool,
 }
 
 impl LoadedConfig {
@@ -87,9 +90,32 @@ impl LoadedConfig {
         Ok(Self::new(Config::load(path)?))
     }
 
-    /// Wrap an already-parsed config.
+    /// Wrap an already-parsed config, compositing in Lumit's own linear
+    /// Rec.709 with the config at the edges.
     #[must_use]
     pub fn new(config: Config) -> Self {
+        Self::with_working(config, false)
+    }
+
+    /// Wrap an already-parsed config, and say whose working space the project
+    /// composites in. `from_config` takes the config's `scene_linear` role as
+    /// the working space outright, as Nuke and Blender do: the bridge is then
+    /// the compose-through one whatever roles the config declares, and
+    /// [`Self::rec709_to_working`] says how Lumit's own Rec.709 numbers reach
+    /// it. A config with no `scene_linear` has nothing to offer and keeps
+    /// Lumit's own working space.
+    #[must_use]
+    pub fn with_working(config: Config, from_config: bool) -> Self {
+        if from_config {
+            if let Some(space) = config.role("scene_linear") {
+                let space = space.to_string();
+                return Self {
+                    config,
+                    bridge: Bridge::ComposeThrough { space },
+                    from_config: true,
+                };
+            }
+        }
         let bridge = if let Some(space) = config.role("aces_interchange") {
             Bridge::Aces {
                 space: space.to_string(),
@@ -105,12 +131,62 @@ impl LoadedConfig {
         } else {
             Bridge::ReferenceIsWorking
         };
-        Self { config, bridge }
+        Self {
+            config,
+            bridge,
+            from_config: false,
+        }
     }
 
     #[must_use]
     pub fn bridge(&self) -> &Bridge {
         &self.bridge
+    }
+
+    /// The working space's name when it is the config's `scene_linear` role,
+    /// `None` when it is Lumit's own linear Rec.709.
+    #[must_use]
+    pub fn working_space(&self) -> Option<&str> {
+        match (&self.from_config, &self.bridge) {
+            (true, Bridge::ComposeThrough { space }) => Some(space),
+            _ => None,
+        }
+    }
+
+    /// Linear Rec.709 → the config-defined working space, as one matrix, for
+    /// the pixels Lumit makes in its own primaries: untagged footage after the
+    /// built-in decode, and the built-in view's encode run backwards.
+    ///
+    /// Only a config with an interchange role can say what its `scene_linear`
+    /// primaries are; without one, or with Lumit's own working space in
+    /// force, there is no matrix and Rec.709 is taken as the working space,
+    /// which is what compose-through always meant. A chain that is not pure
+    /// matrices (a `scene_linear` with a curve in it) answers `None` too, by
+    /// name of what it is rather than by an approximation.
+    pub fn rec709_to_working(&self) -> Result<Option<matrix::Matrix34>> {
+        let Some(working) = self.working_space() else {
+            return Ok(None);
+        };
+        let via = if let Some(space) = self.config.role("aces_interchange") {
+            Chain::new(vec![Op::Matrix(matrix::invert(&matrix::ap0_to_rec709()?)?)])
+                .then(self.to_reference(space)?)
+        } else if let Some(space) = self.config.role("cie_xyz_d65_interchange") {
+            Chain::new(vec![Op::Matrix(matrix::invert(
+                &matrix::xyz_d65_to_rec709()?,
+            )?)])
+            .then(self.to_reference(space)?)
+        } else {
+            return Ok(None);
+        };
+        let chain = via.then(self.from_reference(working)?);
+        let mut folded = matrix::IDENTITY;
+        for op in &chain.ops {
+            match op {
+                Op::Matrix(m) => folded = matrix::concat(&folded, m),
+                _ => return Ok(None),
+            }
+        }
+        Ok(Some(folded))
     }
 
     /// Every look-up-table file this config's transforms name, resolved through
@@ -279,20 +355,59 @@ impl LoadedConfig {
     /// A named space → Lumit's working space: the input transform for a piece
     /// of footage tagged with that name.
     pub fn from_space(&self, name: &str) -> Result<Chain> {
-        if self.is_data(name) {
-            return Ok(Chain::identity());
-        }
-        Ok(self.to_reference(name)?.then(self.reference_to_working()?))
+        self.convert(Some(name), None)
     }
 
     /// Lumit's working space → a named space: the export's output transform.
     pub fn to_space(&self, name: &str) -> Result<Chain> {
-        if self.is_data(name) {
+        self.convert(None, Some(name))
+    }
+
+    /// One space to another, where `None` on either side is Lumit's own
+    /// working space. The chain the OCIO colour space transform effect bakes:
+    /// its rows default to the working space, so a fresh instance with one
+    /// row set is an input transform or an output transform, and one with
+    /// both set is a space-to-space conversion between two of the config's
+    /// names.
+    pub fn convert(&self, from: Option<&str>, to: Option<&str>) -> Result<Chain> {
+        if self.names_data(from) || self.names_data(to) {
+            return Ok(Chain::identity());
+        }
+        Ok(self.reference_from(from)?.then(self.reference_to(to)?))
+    }
+
+    /// A look applied between two spaces (`None` is the working space, as in
+    /// [`Self::convert`]): the chain the OCIO look transform effect bakes. The
+    /// look runs in its own process space; `spec` is written as a view's
+    /// `looks:` field is, so `-name` inverts it.
+    pub fn look_between(&self, from: Option<&str>, spec: &str, to: Option<&str>) -> Result<Chain> {
+        if self.names_data(from) || self.names_data(to) {
             return Ok(Chain::identity());
         }
         Ok(self
-            .working_to_reference()?
-            .then(self.from_reference(name)?))
+            .reference_from(from)?
+            .then(self.looks(spec)?)
+            .then(self.reference_to(to)?))
+    }
+
+    fn names_data(&self, name: Option<&str>) -> bool {
+        name.is_some_and(|n| self.is_data(n))
+    }
+
+    /// A named space, or the working space for `None`, → the reference.
+    fn reference_from(&self, name: Option<&str>) -> Result<Chain> {
+        match name {
+            Some(n) => self.to_reference(n),
+            None => self.working_to_reference(),
+        }
+    }
+
+    /// The reference → a named space, or the working space for `None`.
+    fn reference_to(&self, name: Option<&str>) -> Result<Chain> {
+        match name {
+            Some(n) => self.from_reference(n),
+            None => self.reference_to_working(),
+        }
     }
 
     // -- displays and views -------------------------------------------------
@@ -331,6 +446,18 @@ impl LoadedConfig {
     /// Lumit's working space → what a display shows through a view: the chain
     /// the Viewer's display pass and the export's identical blit both sample.
     pub fn display_view(&self, display: &str, view: &str) -> Result<Chain> {
+        self.display_view_from(None, display, view)
+    }
+
+    /// A named space (`None`: the working space) → what a display shows
+    /// through a view. The chain the OCIO display transform effect bakes; the
+    /// Viewer's is the `None` case.
+    pub fn display_view_from(
+        &self,
+        input: Option<&str>,
+        display: &str,
+        view: &str,
+    ) -> Result<Chain> {
         if self.config.display(display).is_none() {
             return Err(ColourError::UnknownDisplay {
                 name: display.to_string(),
@@ -356,8 +483,8 @@ impl LoadedConfig {
             return Ok(Chain::identity());
         }
 
-        let mut chain = self.working_to_reference()?;
-        chain = chain.then(self.looks_chain(&view.looks)?);
+        let mut chain = self.reference_from(input)?;
+        chain = chain.then(self.looks(&view.looks)?);
 
         if let Some(name) = &view.view_transform {
             // The v2 shape: scene reference → display reference → the display's
@@ -421,7 +548,7 @@ impl LoadedConfig {
 
     /// A view's `looks:` field: comma-separated names, `+` forward (the
     /// default), `-` inverted, each applied inside its own process space.
-    fn looks_chain(&self, looks: &str) -> Result<Chain> {
+    pub fn looks(&self, looks: &str) -> Result<Chain> {
         let mut chain = Chain::identity();
         for entry in looks.split(',') {
             let entry = entry.trim();
@@ -1073,5 +1200,183 @@ colorspaces:
                 if name == "fancy" && style == "ACES-OUTPUT - SOMETHING"),
             "{bad:?}"
         );
+    }
+
+    /// The OCIO effects' edges (docs/impl/ocio.md §6.6): `None` is the working
+    /// space, so one name is an input or output transform and none at all is
+    /// nothing to do.
+    #[test]
+    fn convert_treats_no_name_as_the_working_space() {
+        let text = r#"
+ocio_profile_version: 1
+roles:
+  scene_linear: lin
+colorspaces:
+  - !<ColorSpace>
+    name: lin
+  - !<ColorSpace>
+    name: half
+    to_reference: !<MatrixTransform> {matrix: [0.5, 0, 0, 0, 0, 0.5, 0, 0, 0, 0, 0.5, 0, 0, 0, 0, 1]}
+  - !<ColorSpace>
+    name: matte
+    isdata: true
+"#;
+        let loaded = load(text);
+        assert!(loaded.convert(None, None).expect("resolves").is_identity());
+        // One name is the edge the footage and export paths already take.
+        let a = loaded.convert(Some("half"), None).expect("resolves");
+        let b = loaded.from_space("half").expect("resolves");
+        assert!(close(a.eval([1.0; 3]), b.eval([1.0; 3]), 1e-6));
+        assert!(close(a.eval([1.0; 3]), [0.5; 3], 1e-6));
+        let out = loaded.convert(None, Some("half")).expect("resolves");
+        assert!(close(out.eval([0.5; 3]), [1.0; 3], 1e-6));
+        // Two names go through the reference, and a data space on either
+        // side is left alone.
+        let round = loaded
+            .convert(Some("half"), Some("half"))
+            .expect("resolves");
+        assert!(close(round.eval([0.3; 3]), [0.3; 3], 1e-6));
+        assert!(loaded
+            .convert(Some("matte"), Some("half"))
+            .expect("resolves")
+            .is_identity());
+    }
+
+    #[test]
+    fn a_look_between_two_spaces_runs_in_its_process_space_and_inverts_by_spec() {
+        let text = r#"
+ocio_profile_version: 1
+roles:
+  scene_linear: lin
+looks:
+  - !<Look>
+    name: warm
+    process_space: lin
+    transform: !<CDLTransform> {slope: [1.1, 1.0, 0.9], style: no_clamp}
+colorspaces:
+  - !<ColorSpace>
+    name: lin
+  - !<ColorSpace>
+    name: half
+    to_reference: !<MatrixTransform> {matrix: [0.5, 0, 0, 0, 0, 0.5, 0, 0, 0, 0, 0.5, 0, 0, 0, 0, 1]}
+"#;
+        let loaded = load(text);
+        let forward = loaded.look_between(None, "warm", None).expect("resolves");
+        assert!(close(forward.eval([0.5; 3]), [0.55, 0.5, 0.45], 1e-4));
+        let back = loaded.look_between(None, "-warm", None).expect("resolves");
+        assert!(close(back.eval(forward.eval([0.5; 3])), [0.5; 3], 1e-4));
+        // Between two spaces: half in, the look in lin, back out to half.
+        let via = loaded
+            .look_between(Some("half"), "warm", Some("half"))
+            .expect("resolves");
+        assert!(close(via.eval([1.0; 3]), [1.1, 1.0, 0.9], 1e-4));
+        assert!(matches!(
+            loaded.look_between(None, "cold", None),
+            Err(ColourError::UnknownLook { .. })
+        ));
+        assert_eq!(loaded.config.look_names(), vec!["warm"]);
+    }
+
+    #[test]
+    fn a_display_view_from_a_named_space_starts_there_rather_than_at_working() {
+        let text = r#"
+ocio_profile_version: 1
+roles:
+  scene_linear: lin
+displays:
+  sRGB:
+    - !<View> {name: Plain, colorspace: lin}
+colorspaces:
+  - !<ColorSpace>
+    name: lin
+  - !<ColorSpace>
+    name: half
+    to_reference: !<MatrixTransform> {matrix: [0.5, 0, 0, 0, 0, 0.5, 0, 0, 0, 0, 0.5, 0, 0, 0, 0, 1]}
+"#;
+        let loaded = load(text);
+        let from_working = loaded
+            .display_view_from(None, "sRGB", "Plain")
+            .expect("resolves");
+        assert!(from_working.is_identity());
+        let from_half = loaded
+            .display_view_from(Some("half"), "sRGB", "Plain")
+            .expect("resolves");
+        assert!(close(from_half.eval([1.0; 3]), [0.5; 3], 1e-6));
+    }
+
+    /// An ACES-shaped config: AP0 reference, the interchange role on it, and
+    /// ACEScg as `scene_linear`, a matrix away.
+    fn aces_shaped() -> String {
+        let m = matrix::rgb_to_rgb(&matrix::AP1, &matrix::AP0).expect("matrix");
+        let row = |r: usize| format!("{}, {}, {}, 0", m[r * 4], m[r * 4 + 1], m[r * 4 + 2]);
+        format!(
+            r#"
+ocio_profile_version: 2
+roles:
+  aces_interchange: ap0
+  scene_linear: acescg
+colorspaces:
+  - !<ColorSpace>
+    name: ap0
+  - !<ColorSpace>
+    name: acescg
+    to_scene_reference: !<MatrixTransform> {{matrix: [{}, {}, {}, 0, 0, 0, 1]}}
+"#,
+            row(0),
+            row(1),
+            row(2)
+        )
+    }
+
+    /// A project that composites in the config's `scene_linear` takes it as
+    /// the working space outright, and says how Rec.709 reaches it.
+    #[test]
+    fn the_config_working_space_is_scene_linear_and_a_matrix_from_rec709() {
+        let text = aces_shaped();
+        let ours = load(&text);
+        assert_eq!(ours.working_space(), None);
+        assert!(ours.rec709_to_working().expect("resolves").is_none());
+        assert!(matches!(ours.bridge(), Bridge::Aces { .. }));
+
+        let theirs =
+            LoadedConfig::with_working(Config::parse(Path::new("."), &text).expect("parses"), true);
+        assert_eq!(theirs.working_space(), Some("acescg"));
+        assert!(matches!(theirs.bridge(), Bridge::ComposeThrough { space } if space == "acescg"));
+        let m = theirs
+            .rec709_to_working()
+            .expect("resolves")
+            .expect("an interchange role places scene_linear");
+        let want = matrix::rgb_to_rgb(&matrix::REC709, &matrix::AP1).expect("matrix");
+        for (a, b) in m.iter().zip(want.iter()) {
+            assert!((a - b).abs() < 1e-6, "{m:?} vs {want:?}");
+        }
+        // Footage tagged acescg is then the identity: it already is the
+        // working space.
+        assert!(theirs.from_space("acescg").expect("resolves").is_identity());
+    }
+
+    /// Without an interchange role nothing can place `scene_linear`, so it is
+    /// taken as Rec.709 and there is no matrix; and a config with no
+    /// `scene_linear` at all keeps Lumit's working space.
+    #[test]
+    fn a_config_that_cannot_place_its_scene_linear_has_no_matrix() {
+        let text = r#"
+ocio_profile_version: 1
+roles:
+  scene_linear: lin
+colorspaces:
+  - !<ColorSpace>
+    name: lin
+"#;
+        let loaded =
+            LoadedConfig::with_working(Config::parse(Path::new("."), text).expect("parses"), true);
+        assert_eq!(loaded.working_space(), Some("lin"));
+        assert!(loaded.rec709_to_working().expect("resolves").is_none());
+
+        let bare = LoadedConfig::with_working(
+            Config::parse(Path::new("."), "ocio_profile_version: 1\n").expect("parses"),
+            true,
+        );
+        assert_eq!(bare.working_space(), None);
     }
 }

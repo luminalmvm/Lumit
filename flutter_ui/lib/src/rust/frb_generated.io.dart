@@ -364,6 +364,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeColourDisplay dco_decode_bridge_colour_display(dynamic raw);
 
   @protected
+  BridgeColourNameRole dco_decode_bridge_colour_name_role(dynamic raw);
+
+  @protected
   BridgeColourRgba dco_decode_bridge_colour_rgba(dynamic raw);
 
   @protected
@@ -1509,6 +1512,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeColourDisplay sse_decode_bridge_colour_display(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeColourNameRole sse_decode_bridge_colour_name_role(
       SseDeserializer deserializer);
 
   @protected
@@ -2805,6 +2812,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_colour_display(
       BridgeColourDisplay self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_colour_name_role(
+      BridgeColourNameRole self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_colour_rgba(

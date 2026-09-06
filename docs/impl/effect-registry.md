@@ -344,8 +344,10 @@ and every `GpuEffect` names a schema.
 
 ### 2.5a Side-table inputs (the parallel-list seam)
 
-Some effects consume an input the render prepared beside the stack: the k-th LUT op
-binds `luts[k]`, a depth/layer input binds `layer_inputs[k]`, Echo reads the decoded
+Some effects consume an input the render prepared beside the stack: the k-th colour-table
+op (a `lut`, or one of the four OCIO effects, which share the list and its counter
+because one predicate, `fxops::TABLE_EFFECTS`, fills it) binds `tables[k]`, a
+depth/layer input binds `layer_inputs[k]`, Echo reads the decoded
 neighbour frames, the flow consumers read the dense field, and the k-th op declaring a
 `MaskPath` row binds `mask_paths[k]`. `build.rs` enumerates these
 with one predicate in one order, and `run_ops` walks shared counters so the two sides

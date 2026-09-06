@@ -332,6 +332,7 @@ Inner radius
 Inner shadow
 Input
 Input black
+Input colour space
 Input space
 Input white
 Inside
@@ -340,6 +341,7 @@ Inside mask
 Intensity
 Interlace offset
 Interpolation
+Inverse
 Invert
 Invert edges
 Invert noise
@@ -394,6 +396,7 @@ Linear burn
 Linear light
 Linear wipe
 Load from file…
+Look
 Low
 Lower left x
 Lower left y
@@ -448,6 +451,11 @@ Noise
 Noise type
 None
 Normal
+OCIO colour space transform
+OCIO configuration
+OCIO display transform
+OCIO file transform
+OCIO look transform
 Offset
 Offset x
 Offset y
@@ -471,6 +479,7 @@ Outer glow
 Outer radius
 Output
 Output black
+Output colour space
 Output height
 Output white
 Output width

@@ -1,0 +1,62 @@
+---
+title: "OCIO colour space transform"
+description: "Convert a layer between two colour spaces of the project's OCIO config."
+---
+
+OCIO colour space transform is a [Colour](/effects/#colour) effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Converts the layer's pixels from one colour space of the project's OCIO config to
+another. The lists come from the config chosen in **File ▸ Project settings ▸ Colour**.
+A space left at **Working space** is the space Lumit composites in, so setting only
+**Output colour space** is an output transform and setting only **Input colour space** is
+an input transform.
+
+:::note[Needs a config]
+With no config loaded, or a name the config no longer has, the effect passes the layer
+through unchanged.
+:::
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Input colour space** | Dropdown | The config's colour spaces | Working space | - |
+| **Output colour space** | Dropdown | The config's colour spaces | Working space | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **OCIO configuration** | Read-only | The project's config, read-only | - | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Input colour space**: the space the layer's pixels are taken to be in.
+- **Output colour space**: the space the pixels are converted to.
+- **Mix**: how much of the result replaces the original.
+- **OCIO configuration**: the name of the project's config, read-only.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [OCIO display transform](/effects/colour/ocio-display-transform/)
+- [OCIO look transform](/effects/colour/ocio-look-transform/)
+- [OCIO file transform](/effects/colour/ocio-file-transform/)
+- [Colour](/effects/#colour)
+- [Effects](/use/effects/)

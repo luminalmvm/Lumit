@@ -903,6 +903,12 @@ pub enum EffectValue {
     /// project a hand or an importer edited opens and renders instead of being
     /// rejected.
     Curve(Vec<[f32; 2]>),
+    /// A name from the project's OCIO config - a colour space, a display, a
+    /// view or a look - spelled as the config spells it, or empty for unset.
+    /// A name rather than an index into the config's list, because a config
+    /// edited on disk reorders its lists and a moved config must not silently
+    /// retarget a row. Static, exactly as [`EffectValue::File`] is.
+    Text(String),
 }
 
 /// One named parameter on an effect instance. `id` is the stable snake_case
@@ -1136,6 +1142,15 @@ impl EffectInstance {
     pub fn path_at(&self, id: &str, lt: f64) -> Option<&str> {
         match self.param(id)? {
             EffectValue::File(f) => f.path_at(lt),
+            _ => None,
+        }
+    }
+
+    /// A colour-name parameter's text, or None when the parameter is absent,
+    /// not a Text, or unset (empty).
+    pub fn text(&self, id: &str) -> Option<&str> {
+        match self.param(id)? {
+            EffectValue::Text(s) if !s.is_empty() => Some(s),
             _ => None,
         }
     }
@@ -2668,6 +2683,35 @@ pub struct ColourManagement {
     /// relinks through the machinery footage already uses.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub config: Option<MediaRef>,
+    /// Which primaries the compositing maths runs in (docs/impl/ocio.md
+    /// §2.1). Absent from the file at the default, so older projects
+    /// round-trip byte for byte.
+    #[serde(default, skip_serializing_if = "WorkingSpace::is_default")]
+    pub working_space: WorkingSpace,
+}
+
+/// The project's working space: the primaries every layer is composited in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkingSpace {
+    /// Scene-linear Rec.709, Lumit's own. What every project before the
+    /// choice existed composites in, and what the config's edges convert to
+    /// and from.
+    #[default]
+    Rec709Linear,
+    /// The loaded config's `scene_linear` role, as Nuke and Blender take it:
+    /// footage lands in it, views and exports start from it, and untagged
+    /// footage and the built-in view are carried across by the interchange
+    /// matrix. With no usable config, or a config that names no
+    /// `scene_linear`, this is Rec.709.
+    ConfigSceneLinear,
+}
+
+impl WorkingSpace {
+    #[must_use]
+    pub fn is_default(&self) -> bool {
+        *self == WorkingSpace::Rec709Linear
+    }
 }
 
 impl ColourManagement {

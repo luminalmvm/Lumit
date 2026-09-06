@@ -17,6 +17,8 @@ use std::path::Path;
 
 /// The shared noise core, exactly as `FxEngine::new` prepends it.
 const NOISE_CORE: &str = include_str!("../src/fx_noise_core.wgsl");
+/// The shared OCIO sampler, exactly as both its consumers prepend it.
+const OCIO_SAMPLE: &str = include_str!("../src/ocio_sample.wgsl");
 
 #[test]
 fn every_wgsl_kernel_parses_and_validates() {
@@ -46,7 +48,7 @@ fn every_wgsl_kernel_parses_and_validates() {
         // module (docs/08 §3.37, §3.38). So it is validated exactly as the engine
         // compiles it — as part of each consumer — rather than on its own, where
         // it has no entry point and its consumers have no `nc_fractal`.
-        if name == "fx_noise_core.wgsl" {
+        if name == "fx_noise_core.wgsl" || name == "ocio_sample.wgsl" {
             continue;
         }
         // Any `nc_` name means this kernel is one of the core's consumers —
@@ -55,6 +57,13 @@ fn every_wgsl_kernel_parses_and_validates() {
         // it alone and failed on an unknown identifier.
         let source = if source.contains("nc_") {
             format!("{NOISE_CORE}{source}")
+        } else {
+            source
+        };
+        // The OCIO sampler is the second shared module, prepended to the
+        // colour pipeline and to the OCIO effects' kernel the same way.
+        let source = if source.contains("ocio_apply(") {
+            format!("{OCIO_SAMPLE}{source}")
         } else {
             source
         };

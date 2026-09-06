@@ -459,12 +459,11 @@ void main() {
       expect(pathWell(tester), 'None');
       expect(find.textContaining('No configuration'), findsOneWidget);
       expect(
-          tester
-              .widget<Text>(
-                  find.byKey(const ValueKey('project-colour-working-space')))
-              .data,
-          'Linear Rec. 709',
-          reason: 'the working space is fixed in v1 and said outright');
+          find.descendant(
+              of: find.byKey(const ValueKey('project-colour-working-space')),
+              matching: find.text('Linear Rec. 709')),
+          findsOneWidget,
+          reason: 'the working space starts as linear Rec. 709, said outright');
 
       await tester
           .tap(find.byKey(const ValueKey('project-colour-config-choose')));
@@ -475,6 +474,16 @@ void main() {
           reason: 'what was read, in the calm voice');
       expect(p.state.project!.colourSummary().loaded, isTrue,
           reason: 'the control writes through to the document');
+
+      // The working space is the project's choice once a config is loaded:
+      // the second entry names the config's scene-linear space.
+      await tester
+          .tap(find.byKey(const ValueKey('project-colour-working-space')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('scene-linear space').last);
+      await tester.pumpAndSettle();
+      expect(p.state.project!.colourSummary().workingFromConfig, isTrue,
+          reason: 'the choice reached the document');
 
       await tester
           .tap(find.byKey(const ValueKey('project-colour-config-clear')));
