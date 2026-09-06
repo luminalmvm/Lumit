@@ -8476,6 +8476,30 @@ fn a_tracked_layer() -> (
     (project, comp, layer, media)
 }
 
+/// Closing a project forgets its own solves and nobody else's. The store is
+/// shared by every project in the process, and a close used to empty the whole
+/// of it, so a test closing its project beside this file's tracked-layer tests
+/// could take their solve away between the publish and the read.
+#[test]
+fn closing_another_project_leaves_a_solve_in_place() {
+    use crate::api::track::add_layer_at_points;
+
+    let (project, _comp, layer, media) = a_tracked_layer();
+    let other = LumitBridgeState::new_project(None).expect("a second project");
+    other.close().expect("closed");
+    assert!(
+        lumit_render::track::point_centroid(media, &[7, 9]).is_some(),
+        "another project's close leaves this one's solve alone"
+    );
+    add_layer_at_points(layer, vec![7, 9], 0, false).expect("a null, the solve still there");
+
+    project.close().expect("closed");
+    assert!(
+        lumit_render::track::point_centroid(media, &[7, 9]).is_none(),
+        "closing the project that owns the media forgets its solve"
+    );
+}
+
 /// The cloud lands where the tracker put it, on the frame the playhead is on,
 /// with the depth cue already worked out.
 ///

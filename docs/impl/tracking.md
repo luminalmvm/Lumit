@@ -855,7 +855,8 @@ sidecar. `api::state::adopt` collects the jobs beside the probe warm — after
 `resolve_all_media`, which is what stamps the fingerprints, and before the
 document moves into the store — and fires them after the registry lock, with
 `clear()` immediately in front so the departing project's solves go before this
-one's arrive. `ProjectReference::close` calls `clear()` and touches no file.
+one's arrive. `ProjectReference::close` calls `forget` with the ids `owned_ids` reads
+off its document, so another project's solves stay put, and touches no file.
 
 Two things about it are choices rather than transcription:
 

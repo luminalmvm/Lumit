@@ -124,10 +124,14 @@ impl ProjectReference {
             let mut s = STREAMS.write().map_err(|_| BridgeError::WriteFailed)?;
             s.remove(&self.id);
         }
-        // The camera solves go with the project. The `track/` sidecar
-        // is untouched, so reopening reads every one of them straight back —
-        // this is the session's copy being dropped, not the answer.
-        lumit_render::track::clear();
+        // The camera solves go with the project: its own, and nobody else's,
+        // since the store is shared by every project in the process. The
+        // `track/` sidecar is untouched, so reopening reads every one of them
+        // straight back. This is the session's copy being dropped, not the
+        // answer.
+        if let Some(state) = removed.as_ref().and_then(|s| s.read().ok()) {
+            lumit_render::track::forget(&lumit_render::track::owned_ids(&state.store.snapshot()));
+        }
         // The roto mattes go the same way and for the same reason: the
         // `roto/` sidecar is untouched, so reopening reads them back.
         lumit_render::roto::clear();

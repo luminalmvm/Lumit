@@ -1050,6 +1050,45 @@ pub fn clear() {
     }
 }
 
+/// Forget the solves and progress readings stored under `ids`, and no others.
+/// What closing a project does with its own media and Planar track instances
+/// (see [`owned_ids`]), since the store is shared by every project in the
+/// process and another one's solves are not this one's to drop. The sidecar is
+/// untouched, so reopening reads them straight back.
+pub fn forget(ids: &[Uuid]) {
+    if let Ok(mut held) = solves().write() {
+        held.retain(|id, _| !ids.contains(id));
+    }
+    if let Ok(mut held) = planars().write() {
+        held.retain(|id, _| !ids.contains(id));
+    }
+    if let Ok(mut held) = jobs().lock() {
+        held.progress.retain(|id, _| !ids.contains(id));
+    }
+}
+
+/// Every id a document's solves are stored under: its footage items, which key
+/// the camera solves and the progress readings, and its Planar track instances,
+/// enabled or not, which key the planar ones.
+#[must_use]
+pub fn owned_ids(doc: &Document) -> Vec<Uuid> {
+    let mut ids = Vec::new();
+    for item in &doc.items {
+        match item {
+            lumit_core::model::ProjectItem::Footage(f) => ids.push(f.id),
+            lumit_core::model::ProjectItem::Composition(comp) => ids.extend(
+                comp.layers
+                    .iter()
+                    .flat_map(|layer| &layer.effects)
+                    .filter(|e| e.effect.match_name == PLANAR_TRACK)
+                    .map(|e| e.id),
+            ),
+            _ => {}
+        }
+    }
+    ids
+}
+
 // ---------------------------------------------------------------------------
 // Asking for one
 // ---------------------------------------------------------------------------
@@ -2314,6 +2353,24 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// A close forgets one project's solves and leaves the rest: the store is
+    /// process-wide, and clearing the whole of it for every close is how a
+    /// bridge test lost its solve to a neighbour closing an unrelated project.
+    #[test]
+    fn forgetting_one_media_leaves_the_others_solve_in_place() {
+        let _serial = serially();
+        clear();
+        let (mine, theirs) = (Uuid::now_v7(), Uuid::now_v7());
+        publish(mine, 25.0, FRAMES, written_solve());
+        publish(theirs, 25.0, FRAMES, written_solve());
+        forget(&[theirs]);
+        assert!(solved(mine).is_some(), "the other project's solve survives");
+        assert!(
+            solved(theirs).is_none(),
+            "the closed project's solve is gone"
+        );
     }
 
     /// A written-down solve: a camera sliding along x, looking straight down
