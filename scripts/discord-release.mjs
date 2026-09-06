@@ -27,7 +27,6 @@ import { dirname, join } from 'node:path';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const NOTES_DIR = join(ROOT, 'web', 'src', 'content', 'releases');
 const SITE = 'https://lumitlab.com';
-const REPO = 'https://github.com/luminalmvm/Lumit';
 const LIMIT = 1900; // Discord's cap is 2000; leave room for a stray wide glyph
 
 const args = process.argv.slice(2);
@@ -201,9 +200,9 @@ async function main() {
     `# ${title}`,
     '',
     ...(meta.description ? [meta.description, ''] : []),
-    `Full notes: <${SITE}/releases/${version}>`,
+    // One link, to the download page. The notes below say what changed, and
+    // the site and the GitHub release are a click away from there.
     `Download: <${SITE}/download>`,
-    `GitHub release: <${REPO}/releases/tag/v${version}>`,
     '',
     unwrap(body),
   ].join('\n');
