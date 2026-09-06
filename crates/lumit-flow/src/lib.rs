@@ -1030,6 +1030,36 @@ fn occlusion_raw(f: &FlowField, g: &FlowField) -> Vec<u8> {
 /// plain smear, never a fault).
 pub fn confidence(f: &FlowField, g: &FlowField) -> Vec<f32> {
     let (w, h) = (f.w, f.h);
+    let raw = agreement(f, g);
+    let n = raw.len();
+    // 3×3 box blur: ramp the confidence over a pixel so the streak-length taper
+    // has no visible seam.
+    let mut out = vec![0f32; n];
+    for y in 0..h {
+        for x in 0..w {
+            let (mut acc, mut cnt) = (0f32, 0f32);
+            for oy in -1i32..=1 {
+                for ox in -1i32..=1 {
+                    let qx = (x as i32 + ox).clamp(0, w as i32 - 1) as usize;
+                    let qy = (y as i32 + oy).clamp(0, h as i32 - 1) as usize;
+                    acc += raw[qy * w + qx];
+                    cnt += 1.0;
+                }
+            }
+            out[y * w + x] = acc / cnt;
+        }
+    }
+    out
+}
+
+/// [`confidence`] before its blur: each pixel's own agreement between the two
+/// fields, exactly 0 where its vector fails the consistency test. The blur
+/// lends a pixel some of its neighbours' trust, which is right for tapering a
+/// streak and wrong for weighting a vector, since the pixel keeps its own bad
+/// vector while gaining the trust. [`borrow_uncertain`] reads this one.
+#[must_use]
+pub fn agreement(f: &FlowField, g: &FlowField) -> Vec<f32> {
+    let (w, h) = (f.w, f.h);
     let n = w * h;
     if g.w != w || g.h != h || f.u.len() != n || g.u.len() != n {
         return vec![1.0; n];
@@ -1056,24 +1086,131 @@ pub fn confidence(f: &FlowField, g: &FlowField) -> Vec<f32> {
             raw[i] = agree * if f.valid[i] == 0 { VALID_DIM } else { 1.0 };
         }
     }
-    // 3×3 box blur: ramp the confidence over a pixel so the streak-length taper
-    // has no visible seam.
-    let mut out = vec![0f32; n];
-    for y in 0..h {
-        for x in 0..w {
-            let (mut acc, mut cnt) = (0f32, 0f32);
-            for oy in -1i32..=1 {
-                for ox in -1i32..=1 {
-                    let qx = (x as i32 + ox).clamp(0, w as i32 - 1) as usize;
-                    let qy = (y as i32 + oy).clamp(0, h as i32 - 1) as usize;
-                    acc += raw[qy * w + qx];
-                    cnt += 1.0;
+    raw
+}
+
+/// `f` with every uncertain vector replaced by the motion of the nearest
+/// pixels the measurement is confident about, ready for synthesis. Each pixel
+/// blends its own vector with that borrowed one by its [`agreement`] with `g`,
+/// the way Motion blur steers an uncertain pixel (docs/impl/optical-flow.md
+/// §4.7), so a confident pixel keeps its vector to the bit and a pixel nothing
+/// explains takes the borrowed one whole. The agreement rather than the
+/// blurred [`confidence`], because a bad vector must weigh nothing at all.
+///
+/// The borrowed motion is the confidence-weighted average of the confident
+/// pixels round about, nearer ones counting for more: a push-pull pyramid,
+/// where each level averages the level below with confidence as the weight and
+/// a pixel short of confidence takes the rest from the level above. It is not
+/// the tile's longest vector the blur borrows, and deliberately. A still thing
+/// in front of a moving background, a rifle scope in a game capture, say,
+/// shares its tiles with the background, so the tile's dominant motion is the
+/// background's and its featureless inside would be warped along with the
+/// wall behind it. Its nearest confident pixels are its own rim, which stands
+/// still, which is the right answer. A streak can afford to be short and
+/// roughly directed, but a warp has to land a pixel where its neighbours
+/// land, or the seam is a tear.
+///
+/// Why synthesis needs it: a pixel whose vector the measurement does not trust
+/// used to be warped along that vector anyway, and a wild vector drops the
+/// pixel somewhere unrelated. Every pixel comes back valid, so the consistency
+/// test in synthesis judges the borrowed vector on its merits rather than
+/// writing the patch off unseen. A CPU pass over the field, so a caller that
+/// draws many moments from one pair keeps the result beside the pair.
+#[must_use]
+pub fn borrow_uncertain(f: &FlowField, g: &FlowField) -> FlowField {
+    let (w, h) = (f.w, f.h);
+    let n = w * h;
+    if n == 0 || f.u.len() != n || f.v.len() != n {
+        return f.clone();
+    }
+    let conf = agreement(f, g);
+    // Push: each level is the confidence-weighted average of the one below,
+    // carried premultiplied as (u * c, v * c, c) so the weights ride along.
+    let mut levels: Vec<(usize, usize, Vec<[f32; 3]>)> = vec![(
+        w,
+        h,
+        (0..n)
+            .map(|i| {
+                let c = conf[i].clamp(0.0, 1.0);
+                [f.u[i] * c, f.v[i] * c, c]
+            })
+            .collect(),
+    )];
+    while let Some(&(lw, lh, _)) = levels.last().filter(|(lw, lh, _)| *lw > 1 || *lh > 1) {
+        let src = &levels[levels.len() - 1].2;
+        let (nw, nh) = (lw.div_ceil(2), lh.div_ceil(2));
+        let mut next = vec![[0.0f32; 3]; nw * nh];
+        for (i, cell) in next.iter_mut().enumerate() {
+            let (cx, cy) = (i % nw, i / nw);
+            let mut sum = [0.0f32; 3];
+            let mut count = 0.0f32;
+            for y in (cy * 2)..((cy * 2) + 2).min(lh) {
+                for x in (cx * 2)..((cx * 2) + 2).min(lw) {
+                    let s = src[y * lw + x];
+                    sum = [sum[0] + s[0], sum[1] + s[1], sum[2] + s[2]];
+                    count += 1.0;
                 }
             }
-            out[y * w + x] = acc / cnt;
+            *cell = [sum[0] / count, sum[1] / count, sum[2] / count];
         }
+        levels.push((nw, nh, next));
     }
-    out
+    // Pull: from the coarsest level down, a pixel takes its own average by
+    // however much confidence it has and the rest from the level above, read
+    // bilinearly between that level's cell centres.
+    let normalised = |s: [f32; 3]| {
+        if s[2] > 0.0 {
+            [s[0] / s[2], s[1] / s[2]]
+        } else {
+            [0.0, 0.0]
+        }
+    };
+    let top = levels.len() - 1;
+    let mut coarse: Vec<[f32; 2]> = levels[top].2.iter().map(|&s| normalised(s)).collect();
+    let mut cw = levels[top].0;
+    let mut ch = levels[top].1;
+    for level in (0..top).rev() {
+        let (lw, lh, ref cells) = levels[level];
+        let mut cur = vec![[0.0f32; 2]; lw * lh];
+        for (i, out) in cur.iter_mut().enumerate() {
+            let (x, y) = (i % lw, i / lw);
+            let fx = ((x as f32 + 0.5) / 2.0 - 0.5).clamp(0.0, cw as f32 - 1.0);
+            let fy = ((y as f32 + 0.5) / 2.0 - 0.5).clamp(0.0, ch as f32 - 1.0);
+            let (x0, y0) = (fx.floor() as usize, fy.floor() as usize);
+            let (x1, y1) = ((x0 + 1).min(cw - 1), (y0 + 1).min(ch - 1));
+            let (tx, ty) = (fx - x0 as f32, fy - y0 as f32);
+            let (c00, c10, c01, c11) = (
+                coarse[y0 * cw + x0],
+                coarse[y0 * cw + x1],
+                coarse[y1 * cw + x0],
+                coarse[y1 * cw + x1],
+            );
+            let up = [
+                (c00[0] * (1.0 - tx) + c10[0] * tx) * (1.0 - ty)
+                    + (c01[0] * (1.0 - tx) + c11[0] * tx) * ty,
+                (c00[1] * (1.0 - tx) + c10[1] * tx) * (1.0 - ty)
+                    + (c01[1] * (1.0 - tx) + c11[1] * tx) * ty,
+            ];
+            let s = cells[i];
+            let own = normalised(s);
+            let c = s[2].min(1.0);
+            *out = [
+                own[0] * c + up[0] * (1.0 - c),
+                own[1] * c + up[1] * (1.0 - c),
+            ];
+        }
+        coarse = cur;
+        cw = lw;
+        ch = lh;
+    }
+    let (u, v) = coarse.iter().map(|p| (p[0], p[1])).unzip();
+    FlowField {
+        w,
+        h,
+        u,
+        v,
+        valid: vec![1; n],
+    }
 }
 
 /// Speed (px per frame pair) below which a pixel counts as fully static, and
@@ -1621,31 +1758,12 @@ impl FlowEngine {
         if phi >= 1.0 {
             return b.to_vec();
         }
-        let (ga, gb, reduced) = grays_at::<Bytes>(a, b, w, h, set);
+        let (ga, gb, _) = grays_at::<Bytes>(a, b, w, h, set);
         let (fwd, bwd) = self.flow_pair_with(&ga, &gb, set);
-        // The card paints straight from the working-resolution field: no
-        // upsample, no per-pixel CPU, no round trip. A failure here
-        // costs speed, never the frame.
-        if let Some(s) = self.synth.as_ref() {
-            match s.synthesize(a, b, w, h, &fwd, &bwd, phi, set) {
-                Ok(px) => return px,
-                Err(_) => self.synth = None, // degrade for the rest of this engine
-            }
-        }
-        let hud = set.hud_guard.then(|| hud_weights(&ga, &fwd));
-        let (fwd, bwd) = if reduced {
-            (upsample_field(&fwd, w, h), upsample_field(&bwd, w, h))
-        } else {
-            (fwd, bwd)
-        };
-        let hud = hud.map(|g| {
-            if reduced {
-                weights_to_size(&g, ga.w, ga.h, w, h)
-            } else {
-                g
-            }
-        });
-        synthesize_with(a, b, w, h, &fwd, &bwd, phi, set, hud.as_deref())
+        // Each field is steadied against the other as measured, before either
+        // is changed, so both borrow from the same confidence.
+        let (fwd, bwd) = (borrow_uncertain(&fwd, &bwd), borrow_uncertain(&bwd, &fwd));
+        self.synthesize_at(a, b, w, h, &fwd, &bwd, phi, set)
     }
 
     /// Paint the frame at `phi` from flow that has *already* been measured —
@@ -1654,7 +1772,9 @@ impl FlowEngine {
     /// Separating the halves is what lets a caller cache the measurement: the
     /// field between two source frames is one field however many phases are
     /// drawn from it, and a slow ramp draws many. `fwd`/`bwd` are at their own
-    /// (working) resolution, which need not be the frames'.
+    /// (working) resolution, which need not be the frames', and the caller
+    /// hands them steadied ([`borrow_uncertain`]), which it caches for the
+    /// same reason.
     #[allow(clippy::too_many_arguments)]
     pub fn synthesize_at(
         &mut self,
@@ -1673,10 +1793,13 @@ impl FlowEngine {
         if phi >= 1.0 {
             return b.to_vec();
         }
+        // The card paints straight from the working-resolution field: no
+        // upsample, no per-pixel CPU, no round trip. A failure here costs
+        // speed, never the frame.
         if let Some(s) = self.synth.as_ref() {
             match s.synthesize(a, b, w, h, fwd, bwd, phi, set) {
                 Ok(px) => return px,
-                Err(_) => self.synth = None,
+                Err(_) => self.synth = None, // degrade for the rest of this engine
             }
         }
         self.synthesize_cpu::<Bytes>(a, b, w, h, fwd, bwd, phi, set)
@@ -2545,6 +2668,61 @@ mod tests {
             valid: vec![1; 4],
         };
         assert!(confidence(&f, &small).iter().all(|&x| x == 1.0));
+    }
+
+    // An uncertain patch inside a neighbourhood that agrees ends up moving
+    // with the neighbourhood, and a confident pixel keeps its own vector to
+    // the bit. Synthesis used to warp the patch along its wild vector and drop
+    // it somewhere unrelated, which is what the torn blocks on a fast edge
+    // were.
+    #[test]
+    fn an_uncertain_patch_borrows_the_motion_its_neighbourhood_agrees_on() {
+        let (w, h) = (48usize, 48usize);
+        let n = w * h;
+        // Everything moves (8, 0), the backward twin (-8, 0), so the pair is
+        // consistent and fully confident.
+        let mut f = FlowField {
+            w,
+            h,
+            u: vec![8.0; n],
+            v: vec![0.0; n],
+            valid: vec![1; n],
+        };
+        let g = FlowField {
+            w,
+            h,
+            u: vec![-8.0; n],
+            v: vec![0.0; n],
+            valid: vec![1; n],
+        };
+        // A 6x6 patch in the middle has a wild vector nothing explains, and
+        // the measurement marked it invalid.
+        for y in 20..26 {
+            for x in 20..26 {
+                f.u[y * w + x] = -15.0;
+                f.v[y * w + x] = 15.0;
+                f.valid[y * w + x] = 0;
+            }
+        }
+        let out = borrow_uncertain(&f, &g);
+        assert_eq!((out.w, out.h, out.u.len()), (w, h, n));
+        let centre = 23 * w + 23;
+        assert!(
+            (out.u[centre] - 8.0).abs() < 0.5 && out.v[centre].abs() < 0.5,
+            "the patch moves with its neighbourhood: ({}, {})",
+            out.u[centre],
+            out.v[centre]
+        );
+        assert_eq!(
+            out.valid[centre], 1,
+            "a borrowed vector is judged on its merits"
+        );
+        let far = 4 * w + 4;
+        assert_eq!(
+            (out.u[far], out.v[far]),
+            (8.0, 0.0),
+            "a confident pixel is untouched"
+        );
     }
 
     // ---- The WGSL backend against the CPU oracle (impl note §6.5) ----

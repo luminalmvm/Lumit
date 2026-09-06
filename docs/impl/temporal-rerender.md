@@ -35,13 +35,16 @@ accumulation sample it is the frame-time decode with **each covered clip's pictu
 moment swapped in**: the decode planner reads `lumit_core::fx::accumulation_shutter_offsets`
 (the union of every live accumulation adjustment's offsets above each layer) and asks for the
 clip at each offset as a `CompJob::shutter` entry — a real frame where the moment lands on one,
-otherwise the pair it falls between, synthesised by flow (the layer's own Flow settings when its
-Retime uses Flow, else the defaults) through the same `combine_pair` a Flow retime uses. The
-worker files them on `CompLayerPixels::shutter` keyed by offset, `accumulation_mb_below` builds
-each sample's map from them, and a clip with no picture for a moment (a Sequence clip, a dropped
-decode) keeps its frame-time pixels. So footage motion smears as transforms do, at N decodes
-per covered clip per frame; the flow field between two source frames is measured once and
-reused across every moment drawn from it. A **plain layer carrying the effect** gets its own
+otherwise the pair it falls between, crossfaded through the same `combine_pair` a Blend retime
+uses. Only a layer whose Retime uses Flow gets its moments synthesised by flow, with its own
+settings: flow can tear on footage it cannot measure (a 60 fps game capture in a 24 fps comp
+showed it, a featureless scope sliding over a wall), and it runs only where the user switched
+it on. The worker files them on `CompLayerPixels::shutter` keyed by offset,
+`accumulation_mb_below` builds each sample's map from them, and a clip with no picture for a
+moment (a Sequence clip, a dropped decode) keeps its frame-time pixels. So footage motion
+smears as transforms do, at N decodes per covered clip per frame, and under Flow the field
+between two source frames is measured and steadied once and reused across every moment drawn
+from it. A **plain layer carrying the effect** gets its own
 offsets from the same helper and is not a re-render at all: `build::own_shutter_average`
 averages the clip's shutter moments in the decoded bytes (Mix blending back toward the
 frame-time picture) before masks and paint, so the effect on a footage layer blurs the motion

@@ -94,12 +94,13 @@ pub struct CompJob {
     /// a layer no such adjustment covers, so a plain layer decodes exactly one
     /// frame. Each is the frame pair the moment falls between, picked the way
     /// the Blend policy picks: a moment that lands on a real frame is that
-    /// frame alone, and one between two is synthesised from both with
-    /// [`Self::shutter_flow`].
+    /// frame alone, and one between two is a crossfade of both, or a flow
+    /// synthesis of both when [`Self::shutter_flow`] says so.
     pub shutter: Vec<ShutterSample>,
-    /// How the in-between moments in [`Self::shutter`] are made: the layer's
-    /// own Flow settings when its Retime uses Flow, otherwise the defaults.
-    /// `None` only when `shutter` is empty.
+    /// The layer's own Flow settings when its Retime uses Flow, so its
+    /// in-between moments are synthesised the way its retime is. `None`
+    /// otherwise, and the moments crossfade: flow can tear on footage it
+    /// cannot measure, and it runs only where the user switched it on.
     pub shutter_flow: Option<lumit_core::retime::FlowParams>,
 }
 
@@ -367,9 +368,10 @@ impl lumit_cache::ByteSized for CachedFlow {
 }
 
 /// What a cached flow pair is filed under: which source, which two frames of
-/// it, and the settings it was measured with — every one of which changes the
-/// field.
-type FlowKey = (Uuid, usize, usize, u64);
+/// it, and the settings it was measured with, every one of which changes the
+/// field. The flag says whether it is the pair as measured or the pair
+/// steadied for synthesis (see [`flow_for`]).
+type FlowKey = (Uuid, usize, usize, u64, bool);
 
 /// A stable hash of the settings that shape a measurement.
 fn flow_settings_key(s: &lumit_flow::FlowSettings) -> u64 {
@@ -679,6 +681,13 @@ impl PreviewEngine {
 ///
 /// Keyed by content, never by timeline position: the source, the two frames,
 /// and the settings that shape the measurement.
+///
+/// `settled` asks for the pair with every uncertain vector replaced by its
+/// confident neighbours' motion ([`lumit_flow::borrow_uncertain`]), which is
+/// what synthesis warps along. Motion blur wants the pair as measured, since
+/// it does that borrowing itself in its own kernel. The steadied pair is a CPU
+/// pass over the field, so it is cached like the measurement: an eight-sample
+/// shutter draws eight moments from one pair and pays once.
 #[allow(clippy::too_many_arguments)]
 fn flow_for(
     flow_engine: &mut Option<lumit_flow::FlowEngine>,
@@ -690,14 +699,37 @@ fn flow_for(
     a: &lumit_flow::Gray,
     b: &lumit_flow::Gray,
     set: &lumit_flow::FlowSettings,
+    settled: bool,
 ) -> (lumit_flow::FlowField, lumit_flow::FlowField) {
-    let key = (item, frame_a, frame_b, flow_settings_key(set));
+    let key = (item, frame_a, frame_b, flow_settings_key(set), settled);
     if let Some(hit) = flow_cache.get(&key) {
         return (hit.fwd.clone(), hit.bwd.clone());
     }
-    let (fwd, bwd) = flow_engine
-        .get_or_insert_with(|| flow_engine_for(gpu))
-        .flow_pair_with(a, b, set);
+    let (fwd, bwd) = if settled {
+        // Steadied from the pair as measured, which is cached on its own so a
+        // Motion blur on the same clip reads the raw measurement it wants.
+        // Each field borrows against the other before either is changed.
+        let (fwd, bwd) = flow_for(
+            flow_engine,
+            flow_cache,
+            gpu,
+            item,
+            frame_a,
+            frame_b,
+            a,
+            b,
+            set,
+            false,
+        );
+        (
+            lumit_flow::borrow_uncertain(&fwd, &bwd),
+            lumit_flow::borrow_uncertain(&bwd, &fwd),
+        )
+    } else {
+        flow_engine
+            .get_or_insert_with(|| flow_engine_for(gpu))
+            .flow_pair_with(a, b, set)
+    };
     flow_cache.insert(
         key,
         CachedFlow {
@@ -822,6 +854,7 @@ fn combine_pair(
         &ga,
         &gb,
         &set,
+        true,
     );
     let engine = flow_engine.get_or_insert_with(|| flow_engine_for(gpu));
     // The float synthesis runs on the processor rather than the card — see
@@ -961,6 +994,7 @@ fn decode_comp(
                         &ga,
                         &gb,
                         &set,
+                        false,
                     );
                     // The per-pixel confidence Motion blur tapers the streak
                     // by (FX-19); the same deterministic function export runs, so
@@ -1311,7 +1345,7 @@ mod tests {
         let set = lumit_flow::FlowSettings::default();
         let call = |e: &mut Option<lumit_flow::FlowEngine>,
                     c: &mut lumit_cache::ByteLru<FlowKey, CachedFlow>| {
-            flow_for(e, c, None, item, 0, 1, &ga, &gb, &set)
+            flow_for(e, c, None, item, 0, 1, &ga, &gb, &set, false)
         };
         let (f1, _) = call(&mut engine, &mut cache);
         assert_eq!(cache.len(), 1, "the first ask files an entry");
@@ -1323,5 +1357,22 @@ mod tests {
         assert_eq!(f1.u, f2.u);
         assert_eq!(f1.v, f2.v);
         assert_eq!(f1.valid, f2.valid);
+        // The steadied pair synthesis warps along is filed beside the
+        // measurement and made from it, so it needs no engine either, and a
+        // second ask for it is a plain hit.
+        let (s1, _) = flow_for(
+            &mut none, &mut cache, None, item, 0, 1, &ga, &gb, &set, true,
+        );
+        assert!(
+            none.is_none(),
+            "the steadied pair comes from the cached measurement"
+        );
+        assert_eq!(cache.len(), 2, "the steadied pair has an entry of its own");
+        assert!(s1.valid.iter().all(|&v| v == 1));
+        let (s2, _) = flow_for(
+            &mut none, &mut cache, None, item, 0, 1, &ga, &gb, &set, true,
+        );
+        assert_eq!(cache.len(), 2);
+        assert_eq!(s1.u, s2.u);
     }
 }
