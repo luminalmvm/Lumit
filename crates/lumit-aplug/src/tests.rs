@@ -712,3 +712,37 @@ fn the_broker_is_spawned_without_a_console_window() {
         "no_console must be CREATE_NO_WINDOW and nothing else"
     );
 }
+
+/// The host keeps its brokers in a static, and a static is never dropped, so
+/// a ring file only ever went away by luck. The maker's handle now carries
+/// delete-on-close: the file must be gone once the process that made it has
+/// ended, dropped or not. The probe is a child copy of this test binary that
+/// makes a ring, forgets it, and exits.
+#[cfg(windows)]
+#[test]
+fn a_forgotten_ring_goes_with_its_process() {
+    const PROBE: &str = "LUMIT_APLUG_RING_PROBE";
+    if let Ok(path) = std::env::var(PROBE) {
+        let ring = crate::ipc::ring::Ring::create(Path::new(&path)).expect("a ring");
+        std::mem::forget(ring);
+        std::process::exit(0);
+    }
+    let path = std::env::temp_dir().join(format!("lumit-aplug-probe-{}.ring", std::process::id()));
+    let status = std::process::Command::new(std::env::current_exe().expect("this test binary"))
+        .args([
+            "a_forgotten_ring_goes_with_its_process",
+            "--exact",
+            "--test-threads=1",
+        ])
+        .env(PROBE, &path)
+        .status()
+        .expect("the probe runs");
+    assert!(status.success(), "the probe made its ring and exited");
+    let leaked = path.exists();
+    let _ = std::fs::remove_file(&path);
+    assert!(
+        !leaked,
+        "the ring file outlived the process that made it: {}",
+        path.display()
+    );
+}
