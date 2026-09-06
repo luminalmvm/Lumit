@@ -377,13 +377,29 @@ mod tests {
         // Host structs returned by this module are leaked and immutable.
         let handle = Handle::from_ptr(unsafe { (*host).host });
         let state = state();
-        dump(state.props.get(handle).expect("bundle host property set"))
+        let props = state.props.get(handle);
+        assert!(props.is_ok(), "bundle host property set is missing");
+        let Ok(props) = props else {
+            return String::new();
+        };
+        dump(props)
     }
 
     #[test]
     fn compatibility_presentations_are_bundle_scoped() {
-        let first = host_for_presentation(Some("Compatibility A")).expect("first host");
-        let second = host_for_presentation(Some("Compatibility B")).expect("second host");
+        let first = host_for_presentation(Some("Compatibility A"));
+        assert!(first.is_ok(), "first compatibility host should be created");
+        let Ok(first) = first else {
+            return;
+        };
+        let second = host_for_presentation(Some("Compatibility B"));
+        assert!(
+            second.is_ok(),
+            "second compatibility host should be created"
+        );
+        let Ok(second) = second else {
+            return;
+        };
         assert_ne!(first, second);
         assert!(presented_name(first).contains("Compatibility A"));
         assert!(presented_name(second).contains("Compatibility B"));
