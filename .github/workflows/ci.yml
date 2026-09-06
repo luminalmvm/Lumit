@@ -21,6 +21,11 @@ on:
 permissions:
   contents: read
 
+# A newer push on the same branch cancels the run the older one started.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
