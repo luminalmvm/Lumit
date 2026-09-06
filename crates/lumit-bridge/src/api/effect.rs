@@ -756,6 +756,13 @@ pub enum BridgeParamKind {
         filter: Vec<String>,
         filter_name: String,
     },
+    /// A name from the project's OCIO config, drawn as a dropdown the panel
+    /// fills from the colour summary it already holds (docs/impl/ocio.md
+    /// §6.6). The value crossing is a [`BridgeEffectValue::Text`]: the
+    /// config's own spelling, empty for unset.
+    ColourName {
+        role: BridgeColourNameRole,
+    },
     Layer,
     /// One of the **owning layer's masks**, whose geometry the effect walks
     /// (docs/08 §1.2). The panel draws the layer's masks by name, with
@@ -785,6 +792,20 @@ pub enum BridgeParamKind {
     /// [`BridgeEffectInstanceInfo::values`] — because a press is an event and
     /// not a number that could be keyframed, undone or interpolated.
     Action,
+}
+
+/// Which of the config's lists a [`BridgeParamKind::ColourName`] row offers
+/// ([`lumit_core::fx::ColourNameRole`]). A View row lists the views of the
+/// display its sibling `display` row names.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeColourNameRole {
+    Space,
+    Display,
+    View,
+    Look,
+    /// Read-only: the row shows what the loaded config calls itself.
+    Config,
 }
 
 /// Every parameter `effect` declares, in schema order — what the panel draws a
@@ -875,6 +896,15 @@ pub(crate) fn bridge_param(param: &lumit_core::fx::ParamSchema) -> BridgeParamIn
             filter_name: filter_name.to_owned(),
         },
         ParamKind::Angle { default, dial_step } => BridgeParamKind::Angle { default, dial_step },
+        ParamKind::ColourName { role } => BridgeParamKind::ColourName {
+            role: match role {
+                lumit_core::fx::ColourNameRole::Space => BridgeColourNameRole::Space,
+                lumit_core::fx::ColourNameRole::Display => BridgeColourNameRole::Display,
+                lumit_core::fx::ColourNameRole::View => BridgeColourNameRole::View,
+                lumit_core::fx::ColourNameRole::Look => BridgeColourNameRole::Look,
+                lumit_core::fx::ColourNameRole::Config => BridgeColourNameRole::Config,
+            },
+        },
         // `self_default` is an engine-side instantiation detail —
         // the panel draws the same picker either way, and
         // the value it edits already carries the layer id.
@@ -1407,6 +1437,8 @@ pub enum BridgeEffectValue {
     /// mid-drag need not, and a curve is never refused for being momentarily
     /// out of order.
     Curve(Vec<Vec<f32>>),
+    /// A name from the OCIO config, as the config spells it; empty is unset.
+    Text(String),
 }
 
 impl BridgeEffectValue {
@@ -1440,6 +1472,7 @@ impl BridgeEffectValue {
             EffectValue::Curve(points) => {
                 BridgeEffectValue::Curve(points.iter().map(|xy| xy.to_vec()).collect())
             }
+            EffectValue::Text(name) => BridgeEffectValue::Text(name.clone()),
         }
     }
 
@@ -1526,6 +1559,10 @@ impl BridgeEffectValue {
                     .filter(|xy| xy.len() >= 2)
                     .map(|xy| [xy[0], xy[1]])
                     .collect();
+                Ok(())
+            }
+            (BridgeEffectValue::Text(name), EffectValue::Text(target)) => {
+                *target = name;
                 Ok(())
             }
             _ => Err(BridgeError::ParamKindMismatch),

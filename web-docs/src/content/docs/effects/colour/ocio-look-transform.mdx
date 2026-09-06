@@ -1,0 +1,62 @@
+---
+title: "OCIO look transform"
+description: "Apply a look from the project's OCIO config to a layer."
+---
+
+OCIO look transform is a [Colour](/effects/#colour) effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Applies one of the looks the project's OCIO config defines, between two of its colour
+spaces. The look runs in its own process space. **Inverse** runs it backwards.
+
+:::note[Needs a config]
+With no config loaded, or a look or space the config does not have, the effect passes
+the layer through unchanged.
+:::
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Input colour space** | Dropdown | The config's colour spaces | Working space | - |
+| **Look** | Dropdown | The config's looks | None | - |
+| **Output colour space** | Dropdown | The config's colour spaces | Working space | - |
+| **Inverse** | Checkbox | On or off | Off | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **OCIO configuration** | Read-only | The project's config, read-only | - | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Input colour space**: the space the layer's pixels are taken to be in.
+- **Look**: the look, from the config.
+- **Output colour space**: the space the result is written in.
+- **Inverse**: run the look backwards.
+- **Mix**: how much of the result replaces the original.
+- **OCIO configuration**: the name of the project's config, read-only.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [OCIO colour space transform](/effects/colour/ocio-colour-space-transform/)
+- [OCIO display transform](/effects/colour/ocio-display-transform/)
+- [Colour](/effects/#colour)
+- [Effects](/use/effects/)

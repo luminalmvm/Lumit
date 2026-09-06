@@ -20,6 +20,8 @@ import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/src/rust/api/colour.dart'
+    show BridgeColourSummary;
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -721,6 +723,12 @@ class EffectParamRowFrb extends StatelessWidget {
         }
         return Text('—', style: t.small);
 
+      case BridgeParamKind_ColourName(:final role):
+        if (value case BridgeEffectValue_Text(:final field0)) {
+          return _colourNamePicker(context, id, role, field0);
+        }
+        return Text('—', style: t.small);
+
       case BridgeParamKind_File(:final filter, :final filterName):
         if (value case BridgeEffectValue_File(:final field0)) {
           final paths = field0.paths;
@@ -776,6 +784,73 @@ class EffectParamRowFrb extends StatelessWidget {
         }
         return Text('—', style: t.small);
     }
+  }
+
+  /// A name from the project's OCIO config (docs/impl/ocio.md §6.6). The
+  /// lists come from the summary `LumitUiState` already holds - refreshed on
+  /// a document change, never asked for here - so the row costs no call. A
+  /// name the loaded config no longer has stays listed, chosen, exactly as
+  /// the Project panel's colour-space submenu keeps one: it is the user's
+  /// statement about the layer, and a moved config must not silently edit it.
+  Widget _colourNamePicker(BuildContext context, UuidValue id,
+      BridgeColourNameRole role, String current) {
+    final summary =
+        Provider.of<LumitUiState>(context, listen: false).colourSummary;
+    // The Information row: what the config calls itself, read-only.
+    if (role == BridgeColourNameRole.config) {
+      final t = ThemeScope.of(context).theme;
+      return Text(
+        summary.loaded && summary.name.isNotEmpty ? summary.name : l10n.fxNone,
+        key: ValueKey<String>('fx-colour-name-$id-${param.id}'),
+        style: t.small,
+        overflow: TextOverflow.ellipsis,
+      );
+    }
+    final names = switch (role) {
+      BridgeColourNameRole.space => summary.spaces,
+      BridgeColourNameRole.display => [
+          for (final d in summary.displays) d.name
+        ],
+      BridgeColourNameRole.view => _viewsOffered(summary),
+      BridgeColourNameRole.look => summary.looks,
+      BridgeColourNameRole.config => const <String>[],
+    };
+    final options = <String>[
+      '',
+      ...names,
+      if (current.isNotEmpty && !names.contains(current)) current,
+    ];
+    // An unset space row is the working space; an unset display, view or
+    // look is nothing at all.
+    final unset =
+        role == BridgeColourNameRole.space ? l10n.fxWorkingSpace : l10n.fxNone;
+    return SizedBox(
+      width: effectCellWidth + 40,
+      child: BareDropdown<String>(
+        key: ValueKey<String>('fx-colour-name-$id-${param.id}'),
+        value: current,
+        options: options,
+        label: (name) => name.isEmpty ? unset : name,
+        onChanged: (name) => _set(BridgeEffectValue.text(name)),
+      ),
+    );
+  }
+
+  /// The views of the display this effect's `display` row names, or every
+  /// display's views when the row is drawn without its siblings.
+  List<String> _viewsOffered(BridgeColourSummary summary) {
+    final display = switch (siblings['display']) {
+      BridgeEffectValue_Text(:final field0) => field0,
+      _ => '',
+    };
+    final out = <String>[];
+    for (final d in summary.displays) {
+      if (display.isNotEmpty && d.name != display) continue;
+      for (final v in d.views) {
+        if (!out.contains(v)) out.add(v);
+      }
+    }
+    return out;
   }
 
   /// The layer this row's effect sits on.
@@ -1960,6 +2035,8 @@ BridgeEffectValue? defaultEffectValue(BridgeParamKind kind) => switch (kind) {
       BridgeParamKind_Seed() => const BridgeEffectValue.seed(0),
       BridgeParamKind_File() => BridgeEffectValue.file(
           const BridgeFileParam(paths: [], index: BridgeScalar.static_(0))),
+      // Unset: the working space, or nothing - the engine's own default.
+      BridgeParamKind_ColourName() => const BridgeEffectValue.text(''),
       BridgeParamKind_Layer() => const BridgeEffectValue.layer(),
       // Unset is "First mask", not "no mask" — what it comes to is
       // the engine's answer, not a value written here.

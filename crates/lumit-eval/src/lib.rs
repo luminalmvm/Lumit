@@ -586,6 +586,13 @@ fn feed_effect_stack(
                         }
                     }
                 }
+                EffectValue::Text(name) => {
+                    // The config's name, length-prefixed. The config itself is
+                    // already in the key (`frame_identity`), so a name and the
+                    // file it is looked up in both rename the frame.
+                    h.update(&(name.len() as u64).to_le_bytes());
+                    h.update(name.as_bytes());
+                }
                 EffectValue::MaskPath(named) => {
                     // **Which** mask, by its position on the layer — never its
                     // id, because identity never feeds a key (a duplicated comp

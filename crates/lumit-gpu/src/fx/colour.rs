@@ -1239,3 +1239,90 @@ impl FxEngine {
         out
     }
 }
+
+/// `FxParams` in `fx_ocio.wgsl`.
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct OcioFxParams {
+    mix: f32,
+    _pad: [f32; 3],
+}
+
+impl FxEngine {
+    /// The OCIO effects' pass (docs/08 §3.97): one baked colour table applied
+    /// to **unpremultiplied** colour, then blended over the input by the host
+    /// Mix. The table is read by the sampler the colour pipeline's display and
+    /// input passes read (`ocio_sample.wgsl`, prepended to both), so an effect
+    /// in a stack and the Viewer's view are one implementation; the alpha
+    /// handling is `ocio_shade`'s, branch for branch. `mix == 0` is the
+    /// bit-exact input.
+    pub fn ocio(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        artefact: &crate::OcioArtefact,
+        mix: f32,
+    ) -> wgpu::Texture {
+        use wgpu::util::DeviceExt;
+        let out = work_texture(ctx, w, h, "fx-ocio-out");
+        let ubuf = ctx
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("fx-ocio-params"),
+                contents: bytemuck::bytes_of(&OcioFxParams {
+                    mix,
+                    _pad: [0.0; 3],
+                }),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
+        let view = |t: &wgpu::Texture| t.create_view(&Default::default());
+        let cube_view = artefact.cube().create_view(&wgpu::TextureViewDescriptor {
+            dimension: Some(wgpu::TextureViewDimension::D3),
+            ..Default::default()
+        });
+        let bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("fx-ocio-bind"),
+            layout: &self.ocio_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&view(src)),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&view(&out)),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: ubuf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::TextureView(&view(artefact.curve())),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::TextureView(&cube_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: artefact.params().as_entire_binding(),
+                },
+            ],
+        });
+        let mut enc = ctx.encoder("fx-ocio-enc");
+        {
+            let mut cpass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("fx-ocio-pass"),
+                timestamp_writes: None,
+            });
+            cpass.set_pipeline(&self.ocio);
+            cpass.set_bind_group(0, &bind, &[]);
+            cpass.dispatch_workgroups(w.div_ceil(8), h.div_ceil(8), 1);
+        }
+        drop(enc);
+        out
+    }
+}

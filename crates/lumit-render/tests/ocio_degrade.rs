@@ -64,6 +64,7 @@ fn doc_naming(path: &std::path::Path) -> Document {
             fingerprint: None,
             extra: serde_json::Map::new(),
         }),
+        working_space: Default::default(),
     };
     doc.items.push(ProjectItem::Footage(FootageItem {
         sequence: None,
@@ -93,7 +94,8 @@ fn a_config_that_loads_is_usable_and_offers_its_vocabulary() {
     assert!(loaded.usable(), "{:?}", loaded.problem);
     assert!(loaded.problem.is_none());
 
-    let (spaces, displays) = loaded.vocabulary();
+    let (spaces, displays, looks) = loaded.vocabulary();
+    assert!(looks.is_empty(), "{looks:?}");
     assert!(spaces.iter().any(|s| s == "srgb_texture"), "{spaces:?}");
     assert_eq!(displays.len(), 1);
     assert_eq!(displays[0].0, "sRGB");
@@ -395,8 +397,8 @@ fn one_input_table_is_uploaded_per_distinct_colour_space() {
     let mut state = ColourState::default();
     state.sync(&doc);
     let built = InputTransforms::build(&doc, &state, &ctx, engine);
-    assert!(built.get("srgb_texture").is_some());
-    assert!(built.get("no_such_space").is_none());
+    assert!(built.get(Some("srgb_texture")).is_some());
+    assert!(built.get(Some("no_such_space")).is_none());
     assert!(!built.is_empty());
 
     // A project with no config uploads nothing at all.
@@ -408,4 +410,206 @@ fn one_input_table_is_uploaded_per_distinct_colour_space() {
     std::fs::remove_file(&path).unwrap();
     state.sync(&doc);
     assert!(InputTransforms::build(&doc, &state, &ctx, engine).is_empty());
+}
+
+/// The OCIO effects' edges (docs/08 §3.97) bake off the same loaded config as
+/// the footage, Viewer and export edges, and an edge the config cannot make is
+/// `None` rather than a fault: the effect's passthrough.
+#[test]
+fn the_effect_edges_bake_and_refuse_by_name() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("config.ocio");
+    std::fs::write(&path, GOOD).unwrap();
+    let mut state = ColourState::default();
+    state.sync(&doc_naming(&path));
+    let loaded = state.loaded().expect("a config is named");
+
+    // A conversion with one name is the same table the footage path bakes.
+    let convert = loaded
+        .artefact(&Edge::Convert {
+            from: "srgb_texture".into(),
+            to: String::new(),
+        })
+        .expect("bakes");
+    let input = loaded
+        .artefact(&Edge::Input("srgb_texture".into()))
+        .expect("bakes");
+    assert_eq!(convert.eval([0.5; 3]), input.eval([0.5; 3]));
+
+    // The display edge from the working space, and its inverse, which undoes
+    // it.
+    let shown = loaded
+        .artefact(&Edge::Display {
+            input: String::new(),
+            display: "sRGB".into(),
+            view: "Standard".into(),
+            inverse: false,
+        })
+        .expect("bakes");
+    let back = loaded
+        .artefact(&Edge::Display {
+            input: String::new(),
+            display: "sRGB".into(),
+            view: "Standard".into(),
+            inverse: true,
+        })
+        .expect("bakes");
+    let there = shown.eval([0.18; 3]);
+    assert!((there[0] - 0.461).abs() < 2e-3, "{there:?}");
+    let home = back.eval(there);
+    assert!((home[0] - 0.18).abs() < 2e-3, "{home:?}");
+
+    // Names the config does not have refuse by name, never a wrong table.
+    assert!(loaded
+        .artefact(&Edge::Display {
+            input: String::new(),
+            display: "sRGB".into(),
+            view: "Nonsense".into(),
+            inverse: false,
+        })
+        .is_none());
+    assert!(loaded
+        .artefact(&Edge::Look {
+            input: String::new(),
+            look: "warm".into(),
+            output: String::new(),
+            inverse: false,
+        })
+        .is_none());
+}
+
+/// An ACES-shaped config: AP0 reference with the interchange role, ACEScg as
+/// `scene_linear`, and an sRGB view, for the working-space tests.
+fn aces_shaped() -> String {
+    use lumit_colour::matrix;
+    let m = matrix::rgb_to_rgb(&matrix::AP1, &matrix::AP0).unwrap();
+    let row = |r: usize| format!("{}, {}, {}, 0", m[r * 4], m[r * 4 + 1], m[r * 4 + 2]);
+    format!(
+        r#"
+ocio_profile_version: 2
+roles:
+  aces_interchange: ap0
+  scene_linear: acescg
+displays:
+  sRGB:
+    - !<View> {{name: Standard, colorspace: out_srgb}}
+colorspaces:
+  - !<ColorSpace>
+    name: ap0
+  - !<ColorSpace>
+    name: acescg
+    to_scene_reference: !<MatrixTransform> {{matrix: [{}, {}, {}, 0, 0, 0, 1]}}
+  - !<ColorSpace>
+    name: out_srgb
+    from_scene_reference: !<ExponentWithLinearTransform> {{gamma: [2.4, 2.4, 2.4, 1], offset: [0.055, 0.055, 0.055, 0], direction: inverse}}
+"#,
+        row(0),
+        row(1),
+        row(2)
+    )
+}
+
+/// The config-defined working space (docs/impl/ocio.md §2.1): the project
+/// composites in `scene_linear`, untagged footage and the built-in view are
+/// carried across by the interchange matrix, and the choice renames frames.
+#[test]
+fn a_config_defined_working_space_carries_the_built_in_edges_across() {
+    use lumit_core::model::WorkingSpace;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("config.ocio");
+    std::fs::write(&path, aces_shaped()).unwrap();
+    let mut doc = doc_naming(&path);
+
+    let mut state = ColourState::default();
+    state.sync(&doc);
+    let ours = state.loaded().expect("named");
+    assert!(ours.usable(), "{:?}", ours.problem);
+    assert_eq!(ours.working_space(), None);
+    assert!(ours.rec709_to_working().is_none());
+    assert!(
+        ours.artefact(&Edge::Untagged).is_none(),
+        "Rec.709 working: the hardware decode"
+    );
+    assert!(ours.artefact(&Edge::BuiltinDisplay).is_none());
+    let named_ours = state.frame_identity();
+
+    doc.colour.working_space = WorkingSpace::ConfigSceneLinear;
+    state.sync(&doc);
+    let theirs = state.loaded().expect("named");
+    assert!(theirs.usable(), "{:?}", theirs.problem);
+    assert_eq!(theirs.working_space(), Some("acescg"));
+    assert!(theirs.rec709_to_working().is_some());
+    assert_ne!(
+        state.frame_identity(),
+        named_ours,
+        "the choice renames every frame"
+    );
+
+    // Untagged footage: sRGB decode then Rec.709 → ACEScg. A neutral stays
+    // neutral (the interchange matrix is white-adapted) and a Rec.709 red
+    // does not.
+    let untagged = theirs.artefact(&Edge::Untagged).expect("bakes");
+    let grey = untagged.eval([0.5; 3]);
+    assert!((grey[0] - 0.214).abs() < 2e-3, "{grey:?}");
+    assert!((grey[0] - grey[1]).abs() < 1e-3 && (grey[1] - grey[2]).abs() < 1e-3);
+    let red = untagged.eval([1.0, 0.0, 0.0]);
+    assert!(
+        red[1] > 0.01 && red[2] > 0.0,
+        "Rec.709 red has green and blue in AP1: {red:?}"
+    );
+
+    // The built-in view undoes it: the same bytes come back.
+    let shown = theirs.artefact(&Edge::BuiltinDisplay).expect("bakes");
+    for c in [[0.5f32; 3], [1.0, 0.0, 0.0], [0.2, 0.7, 0.9]] {
+        let back = shown.eval(untagged.eval(c));
+        for k in 0..3 {
+            assert!((back[k] - c[k]).abs() < 4e-3, "{c:?} came back as {back:?}");
+        }
+    }
+
+    // A config that cannot place its scene_linear takes it as Rec.709: the
+    // built-in edges stay the hardware ones, as compose-through always was.
+    std::fs::write(&path, GOOD).unwrap();
+    state.sync(&doc);
+    let legacy = state.loaded().expect("named");
+    assert!(legacy.usable(), "{:?}", legacy.problem);
+    assert_eq!(legacy.working_space(), Some("lin"));
+    assert!(legacy.rec709_to_working().is_none());
+    assert!(legacy.artefact(&Edge::Untagged).is_none());
+}
+
+/// The choice is an ordinary op: it applies, it undoes, and it stays out of a
+/// project that never made it.
+#[test]
+fn the_working_space_choice_is_an_undoable_op_and_absent_by_default() {
+    use lumit_core::model::WorkingSpace;
+    use lumit_core::store::DocumentStore;
+    use lumit_core::Op;
+    let store = DocumentStore::new(Document::new());
+    assert_eq!(
+        store.snapshot().colour.working_space,
+        WorkingSpace::Rec709Linear
+    );
+    let json = serde_json::to_string(&store.snapshot().colour).unwrap();
+    assert!(
+        !json.contains("working_space"),
+        "the default is absent from the file: {json}"
+    );
+
+    store
+        .commit(Op::SetColourWorkingSpace {
+            working_space: WorkingSpace::ConfigSceneLinear,
+        })
+        .unwrap();
+    assert_eq!(
+        store.snapshot().colour.working_space,
+        WorkingSpace::ConfigSceneLinear
+    );
+    let json = serde_json::to_string(&store.snapshot().colour).unwrap();
+    assert!(json.contains("config_scene_linear"), "{json}");
+    store.undo().unwrap();
+    assert_eq!(
+        store.snapshot().colour.working_space,
+        WorkingSpace::Rec709Linear
+    );
 }

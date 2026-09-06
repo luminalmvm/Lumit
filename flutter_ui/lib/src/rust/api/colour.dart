@@ -90,6 +90,25 @@ class BridgeColourSummary {
   /// translated either, and empty unless `loaded`.
   final List<BridgeColourDisplay> displays;
 
+  /// The config's looks by name, for the OCIO look transform effect's row.
+  /// Never translated, and empty unless `loaded`.
+  final List<String> looks;
+
+  /// What the config calls itself, for the OCIO effects' read-only
+  /// Information row. Never translated, and empty unless `loaded`.
+  final String name;
+
+  /// The project asks to composite in the config's `scene_linear` role
+  /// (docs/impl/ocio.md §2.1). The document's own setting, whether or not a
+  /// config is loaded.
+  final bool workingFromConfig;
+
+  /// The working space's name when it is the config's: the `scene_linear`
+  /// space, never translated. Empty when the working space is Lumit's own
+  /// linear Rec.709, which is also what a config with no `scene_linear`
+  /// comes to.
+  final String workingSpace;
+
   const BridgeColourSummary({
     required this.path,
     required this.loaded,
@@ -98,6 +117,10 @@ class BridgeColourSummary {
     required this.problemEnglish,
     required this.spaces,
     required this.displays,
+    required this.looks,
+    required this.name,
+    required this.workingFromConfig,
+    required this.workingSpace,
   });
 
   static Future<BridgeColourSummary> default_() =>
@@ -111,7 +134,11 @@ class BridgeColourSummary {
       problemArgs.hashCode ^
       problemEnglish.hashCode ^
       spaces.hashCode ^
-      displays.hashCode;
+      displays.hashCode ^
+      looks.hashCode ^
+      name.hashCode ^
+      workingFromConfig.hashCode ^
+      workingSpace.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -124,5 +151,9 @@ class BridgeColourSummary {
           problemArgs == other.problemArgs &&
           problemEnglish == other.problemEnglish &&
           spaces == other.spaces &&
-          displays == other.displays;
+          displays == other.displays &&
+          looks == other.looks &&
+          name == other.name &&
+          workingFromConfig == other.workingFromConfig &&
+          workingSpace == other.workingSpace;
 }

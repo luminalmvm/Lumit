@@ -1,0 +1,58 @@
+---
+title: "OCIO file transform"
+description: "Apply a LUT or CDL file to a layer through the OCIO readers."
+---
+
+OCIO file transform is a [Colour](/effects/#colour) effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Applies a look-up table or an ASC CDL grade from a file, read the way an OCIO config
+reads its own files. No config is needed. A cube is sampled tetrahedrally, where the
+[LUT](/effects/colour/lut/) effect samples trilinearly. A `.ccc` or `.cdl` file with
+several grades applies the first.
+
+:::note[Unset or unreadable]
+An unset, missing or unreadable file passes the layer through unchanged. **Inverse** on
+a 3D table passes the layer through as well.
+:::
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **File** | File | `.cube`, `.spi1d`, `.spi3d`, `.clf`, `.ctf`, `.cc`, `.ccc`, `.cdl` | None | - |
+| **Inverse** | Checkbox | On or off | Off | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **File**: the LUT or CDL file to apply.
+- **Inverse**: run the file's transform backwards.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [LUT](/effects/colour/lut/)
+- [OCIO colour space transform](/effects/colour/ocio-colour-space-transform/)
+- [Colour](/effects/#colour)
+- [Effects](/use/effects/)

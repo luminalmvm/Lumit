@@ -13,8 +13,8 @@ use crate::op::{Chain, Direction, Op};
 use crate::sample::{Cube, Curve};
 use crate::{clf, spi};
 
-/// The look-up table extensions this crate reads.
-pub const READABLE: [&str; 4] = ["cube", "spi1d", "spi3d", "clf"];
+/// The look-up table and grade file extensions this crate reads.
+pub const READABLE: [&str; 8] = ["cube", "spi1d", "spi3d", "clf", "ctf", "cc", "ccc", "cdl"];
 
 /// Read a table file into a chain. `path` is used for the grammar and for the
 /// sentence any refusal shows.
@@ -63,6 +63,21 @@ pub fn parse(name: &str, extension: &str, text: &str) -> Result<Chain> {
         // `.ctf` is CTF: the same grammar with vendor-specific extras, which
         // this reader refuses individually when it meets one.
         "clf" | "ctf" => clf::parse_clf(name, text)?,
+        // An ASC CDL grade: one `ColorCorrection`, or a collection or decision
+        // list of them, of which the first is taken. Picking one by its
+        // `cccid` is refused where the config names one (`config.rs`), and an
+        // effect has no field to name one with.
+        "cc" | "ccc" | "cdl" => {
+            let mut chain = clf::parse_clf(name, text)?;
+            chain.ops.truncate(1);
+            if chain.ops.is_empty() {
+                return Err(ColourError::Parse {
+                    what: name.to_string(),
+                    reason: "no ColorCorrection in the file".to_string(),
+                });
+            }
+            chain
+        }
         other => {
             return Err(ColourError::UnsupportedLutFormat {
                 extension: if other.is_empty() {
@@ -128,5 +143,35 @@ mod tests {
     fn a_missing_file_is_a_typed_error() {
         let err = load(Path::new("this-file-does-not-exist.spi1d"));
         assert!(matches!(err, Err(ColourError::FileRead { .. })), "{err:?}");
+    }
+
+    /// The ASC CDL file grammar: the same block a CLF `ASC_CDL` node carries,
+    /// under its own wrappers. A collection yields its first grade only.
+    #[test]
+    fn a_cdl_file_becomes_one_cdl_step() {
+        let cc = r#"<ColorCorrection id="shot1">
+          <SOPNode><Slope>1.1 1.0 0.9</Slope><Offset>0 0 0</Offset><Power>1 1 1</Power></SOPNode>
+          <SatNode><Saturation>0.8</Saturation></SatNode>
+        </ColorCorrection>"#;
+        let chain = parse("shot.cc", "cc", cc).expect("parses");
+        assert_eq!(chain.ops.len(), 1);
+        assert!(matches!(
+            &chain.ops[0],
+            Op::Cdl { params, .. } if params.slope == [1.1, 1.0, 0.9] && params.saturation == 0.8
+        ));
+
+        let ccc = format!(
+            r#"<ColorCorrectionCollection xmlns="urn:ASC:CDL:v1.01">{cc}<ColorCorrection id="shot2">
+          <SOPNode><Slope>2 2 2</Slope></SOPNode></ColorCorrection></ColorCorrectionCollection>"#
+        );
+        let chain = parse("grades.ccc", "ccc", &ccc).expect("parses");
+        assert_eq!(chain.ops.len(), 1, "the first grade, not both");
+        assert!(matches!(
+            &chain.ops[0],
+            Op::Cdl { params, .. } if params.slope == [1.1, 1.0, 0.9]
+        ));
+
+        let err = parse("empty.cdl", "cdl", "<ColorDecisionList/>");
+        assert!(matches!(err, Err(ColourError::Parse { .. })), "{err:?}");
     }
 }
