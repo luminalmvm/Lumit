@@ -599,6 +599,10 @@ void main() {
       await tester.tap(find.byKey(ValueKey<String>(opacityKey(p.layer, 0))));
       await tester.pump();
       await openEditor();
+      // The popup keeps the smallest layout: the overlay would offer it the
+      // whole window to grow into, and the panel is where width is spent.
+      expect(
+          tester.getSize(find.byKey(const ValueKey('easing-box'))).width, 210);
       // A tile now applies as it loads, and the Apply press repeats
       // it — both are no-ops on a lone key.
       await tester.ensureVisible(find.text('Slow start'));
@@ -2155,6 +2159,169 @@ void main() {
           reason: 'held one frame short of the key after it, never past it');
       expect(p.comp.frameAtTime(time: keys[2].time), last,
           reason: 'which is still where it was');
+    });
+
+    // --- Keyframe speed (docs/07 §5.3) --------------------------------------
+
+    /// The key menu's *Keyframe speed…* opens the dialogue on the key's four
+    /// numbers, and Apply writes the ones typed - and only those.
+    testWidgets('the key menu\'s Keyframe speed writes the typed speed',
+        (tester) async {
+      final p = withLayer();
+      animateOpacity(p.comp, p.layer, frames: [0, 50, 100]);
+      await mountGraph(tester, p);
+
+      await tester.tapAt(
+        tester.getCenter(find.byKey(ValueKey<String>(opacityKey(p.layer, 1)))),
+        buttons: kSecondaryButton,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Keyframe speed…'));
+      await tester.pumpAndSettle();
+
+      for (final well in const [
+        'speed-in',
+        'influence-in',
+        'speed-out',
+        'influence-out'
+      ]) {
+        expect(find.byKey(ValueKey<String>('key-$well')), findsOneWidget,
+            reason: 'the $well well');
+      }
+      // A straight key on a straight ramp arrives and leaves at one speed, so
+      // Continuous opens ticked, so untick it to type one side alone.
+      tester
+          .widget<HouseCheckbox>(find.byKey(const ValueKey('key-continuous')))
+          .onChanged!(false);
+      await tester.pump();
+      await _type(tester, 'key-speed-out', '30');
+      await tester.tap(find.byKey(const ValueKey('keyframe-confirm')));
+      await tester.pumpAndSettle();
+
+      final key = opacityKeys(p.layer)[1];
+      expect(key.interpOut, isA<BridgeSideInterp_Bezier>());
+      expect((key.interpOut as BridgeSideInterp_Bezier).field0.speed, 30,
+          reason: 'the typed speed, in units per second');
+      expect(sideInfluence(key.interpOut), closeTo(1 / 3, 1e-9),
+          reason: 'the reach it already showed');
+      expect(key.interpIn, isA<BridgeSideInterp_Linear>(),
+          reason: 'the side not typed into is untouched');
+    });
+
+    /// Continuous ticked, one typed speed lands on both sides.
+    testWidgets('Continuous puts one typed speed on both sides',
+        (tester) async {
+      final p = withLayer();
+      animateOpacity(p.comp, p.layer, frames: [0, 50, 100]);
+      await mountGraph(tester, p);
+
+      await tester.tapAt(
+        tester.getCenter(find.byKey(ValueKey<String>(opacityKey(p.layer, 1)))),
+        buttons: kSecondaryButton,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Keyframe speed…'));
+      await tester.pumpAndSettle();
+      await _type(tester, 'key-speed-in', '12');
+      await tester.tap(find.byKey(const ValueKey('keyframe-confirm')));
+      await tester.pumpAndSettle();
+
+      final key = opacityKeys(p.layer)[1];
+      expect((key.interpIn as BridgeSideInterp_Bezier).field0.speed, 12);
+      expect((key.interpOut as BridgeSideInterp_Bezier).field0.speed, 12);
+    });
+
+    /// The readout pill is the way in too: a click opens the same numbers as
+    /// a popover that writes as they are typed.
+    testWidgets('the readout pill opens the ease fields, writing live',
+        (tester) async {
+      final p = withLayer();
+      animateOpacity(p.comp, p.layer, frames: [0, 50, 100]);
+      await mountGraph(tester, p);
+
+      await tester.tap(find.byKey(ValueKey<String>(opacityKey(p.layer, 1))));
+      await tester.pump();
+      final pill = find.byKey(const ValueKey('graph-value-hint'));
+      expect(pill, findsOneWidget);
+      await tester.tap(pill);
+      await tester.pumpAndSettle();
+
+      final well = find.byKey(const ValueKey('graph-ease-influence-out'));
+      expect(well, findsOneWidget, reason: 'the popover is up');
+      tester.widget<DragValueField>(well).onChanged(75);
+      await tester.pumpAndSettle();
+
+      final key = opacityKeys(p.layer)[1];
+      expect(sideInfluence(key.interpOut), closeTo(0.75, 1e-6),
+          reason: 'written at once, no Apply');
+      expect(key.interpIn, isA<BridgeSideInterp_Linear>(),
+          reason: 'the other side did not move');
+    });
+
+    /// In the speed lens a dot is one side, so its menu's dialogue offers
+    /// that side alone.
+    testWidgets('a speed dot\'s menu offers its own side only', (tester) async {
+      final p = withLayer();
+      animateOpacity(p.comp, p.layer, frames: [0, 50, 100]);
+      await mountGraph(tester, p);
+      await tester
+          .ensureVisible(find.byKey(const ValueKey('graph-lens-speed')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('graph-lens-speed')));
+      await tester.pump();
+
+      final base =
+          'graph-key-${p.layer.internallayerId}/transform/opacity@opacity#1';
+      await tester.tapAt(
+        tester.getCenter(find.byKey(ValueKey<String>('$base-out'))),
+        buttons: kSecondaryButton,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Keyframe speed…'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('key-speed-out')), findsOneWidget);
+      expect(find.byKey(const ValueKey('key-influence-out')), findsOneWidget);
+      expect(find.byKey(const ValueKey('key-speed-in')), findsNothing);
+      expect(find.byKey(const ValueKey('key-continuous')), findsNothing,
+          reason: 'one side has nothing to be continuous with');
+      await tester.tap(find.byKey(const ValueKey('keyframe-cancel')));
+      await tester.pumpAndSettle();
+    });
+
+    /// The Timeline tells the shell about the one selected key, so the Easing
+    /// panel can show its numbers, and a second key withdraws it.
+    testWidgets('one selected key is published to the shell', (tester) async {
+      final p = withLayer();
+      animateOpacity(p.comp, p.layer, frames: [0, 50, 100]);
+      await mountGraph(tester, p);
+      expect(p.uiState.easingKey.value, isNull, reason: 'nothing at rest');
+
+      await tester.tap(find.byKey(ValueKey<String>(opacityKey(p.layer, 1))));
+      await tester.pump();
+      await tester.pump();
+      final claim = p.uiState.easingKey.value;
+      expect(claim, isNotNull);
+      expect(claim!.frame, 50);
+      expect(claim.unit, '%');
+      expect(claim.ease.inInfluence, closeTo(1 / 3, 1e-9));
+
+      // Writing through the claim lands on the document, and the claim is
+      // republished with the new number.
+      claim.write(const KeyEase(outInfluence: 0.6));
+      await tester.pump();
+      await tester.pump();
+      expect(
+          sideInfluence(opacityKeys(p.layer)[1].interpOut), closeTo(0.6, 1e-9));
+      expect(p.uiState.easingKey.value?.ease.outInfluence, closeTo(0.6, 1e-9));
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.tap(find.byKey(ValueKey<String>(opacityKey(p.layer, 2))));
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+      await tester.pump();
+      expect(p.uiState.easingKey.value, isNull,
+          reason: 'two keys are a block, not a key');
     });
   }, skip: !engineAvailable);
 }

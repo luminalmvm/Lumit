@@ -47,7 +47,8 @@ List<GraphChannel> selectedChannels(LumitUiState ui) => graphChannels(
 ///
 /// What the dialogues open showing: a set of keys asked about together has to
 /// be seeded from one of them, and the first is the one whose row is highest.
-({List<BridgeKeyframe> keys, int index})? keyAtPlayhead(LumitUiState ui) {
+({GraphChannel channel, List<BridgeKeyframe> keys, int index})? keyAtPlayhead(
+    LumitUiState ui) {
   final fps = ui.model.fps;
   final frame = ui.playheadFrame.value;
   for (final channel in selectedChannels(ui)) {
@@ -55,7 +56,7 @@ List<GraphChannel> selectedChannels(LumitUiState ui) => graphChannels(
     final keys = channel.keys;
     for (var i = 0; i < keys.length; i++) {
       if (keyFrame(keys[i], fps).round() == frame) {
-        return (keys: keys, index: i);
+        return (channel: channel, keys: keys, index: i);
       }
     }
   }
@@ -104,15 +105,6 @@ KeyframeInterp interpOf(BridgeSideInterp side) => switch (side) {
       BridgeSideInterp_Linear() => KeyframeInterp.linear,
       BridgeSideInterp_Auto() => KeyframeInterp.auto,
       BridgeSideInterp_Bezier() => KeyframeInterp.bezier,
-    };
-
-/// How far a side's handle reaches, as the per cent the dialogue shows. A
-/// straight or held side has no reach of its own, so it offers the easy-ease
-/// third rather than a zero nobody asked for.
-double influenceOf(BridgeSideInterp side) => switch (side) {
-      BridgeSideInterp_Bezier(:final field0) => field0.influence * 100,
-      BridgeSideInterp_Auto(:final field0) => field0.influence * 100,
-      _ => 100 / 3,
     };
 
 /// The side [want] names, for the key at [index].
@@ -204,8 +196,7 @@ MenuEntry toggleHoldRow(LumitState app, LumitUiState ui) {
               app.notifyDocumentChanged();
             }
           },
-    checked: at != null &&
-        at.keys[at.index].interpOut is BridgeSideInterp_Hold,
+    checked: at != null && at.keys[at.index].interpOut is BridgeSideInterp_Hold,
   );
 }
 
@@ -240,11 +231,13 @@ MenuEntry keyframeInterpolationRow(
   );
 }
 
-/// Animation ▸ Keyframe speed…: how far each side's handle reaches.
+/// Animation ▸ Keyframe speed…: each side's speed and how far its handle
+/// reaches, as numbers.
 ///
-/// A side that was straight becomes a curve that looks exactly as it did — the
-/// only way to give a straight side a reach at all — because the speed comes
-/// from the chord it was already lying along.
+/// Only the numbers typed are written, so a side left alone in the dialogue
+/// stays what it was. A side given a number becomes a curve: a straight one
+/// keeps the reach its handle already showed, so it looks exactly as it did
+/// until the second number is typed too.
 MenuEntry keyframeSpeedRow(
     BuildContext context, LumitState app, LumitUiState ui) {
   final at = keyAtPlayhead(ui);
@@ -253,23 +246,14 @@ MenuEntry keyframeSpeedRow(
     at == null
         ? null
         : () async {
-            final key = at.keys[at.index];
             final asked = await showKeyframeSpeedFrb(
               context: context,
-              inPercent: influenceOf(key.interpIn),
-              outPercent: influenceOf(key.interpOut),
+              ease: keyEaseOf(at.keys, at.index),
+              unit: graphChannelUnit(at.channel),
             );
-            if (asked == null) return;
+            if (asked == null || asked.isEmpty) return;
             if (editKeysAtPlayhead(
-              ui,
-              (keys, i) => _keyWith(
-                keys[i],
-                inSide:
-                    sideWithInfluence(keys, i, false, asked.inPercent),
-                outSide:
-                    sideWithInfluence(keys, i, true, asked.outPercent),
-              ),
-            )) {
+                ui, (keys, i) => keyWithEase(keys, i, asked))) {
               app.notifyDocumentChanged();
             }
           },
@@ -305,8 +289,7 @@ MenuEntry addExpressionRow(
             final was = channels.first.scalar;
             final asked = await showExpressionDialogFrb(
               context: context,
-              initial:
-                  was is BridgeScalar_Expression ? was.field0 : '',
+              initial: was is BridgeScalar_Expression ? was.field0 : '',
             );
             // Blank changes nothing. Taking an expression *off* a property is
             // the row's own control (docs/07 §4.3, still owed), not a menu row

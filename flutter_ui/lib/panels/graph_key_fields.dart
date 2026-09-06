@@ -95,73 +95,86 @@ class _KeyFieldsPopoverState extends State<_KeyFieldsPopover> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _row(t, l10n.graphKeyFrameField, 'graph-fields-frame', _frame,
+          keyFieldRow(t, l10n.graphKeyFrameField, 'graph-fields-frame', _frame,
               min: widget.minFrame,
               max: widget.maxFrame,
-              decimals: 0, set: (v) {
-            _frame = v;
-            _apply();
-          }),
-          _row(t, l10n.graphKeyValueField, 'graph-fields-value', _value,
-              min: -100000, max: 100000, decimals: 2, set: (v) {
-            _value = v;
-            _apply();
-          }),
-          _row(t, l10n.graphEaseIn, 'graph-fields-in', _in,
+              decimals: 0,
+              set: (v) => setState(() {
+                    _frame = v;
+                    _apply();
+                  })),
+          keyFieldRow(t, l10n.graphKeyValueField, 'graph-fields-value', _value,
+              min: -100000,
+              max: 100000,
+              decimals: 2,
+              set: (v) => setState(() {
+                    _value = v;
+                    _apply();
+                  })),
+          keyFieldRow(t, l10n.graphEaseIn, 'graph-fields-in', _in,
               min: 0,
               max: 100,
               decimals: 0,
-              suffix: l10n.unitSymbolPercent, set: (v) {
-            _in = v;
-            _apply();
-          }),
-          _row(t, l10n.graphEaseOut, 'graph-fields-out', _out,
+              suffix: l10n.unitSymbolPercent,
+              set: (v) => setState(() {
+                    _in = v;
+                    _apply();
+                  })),
+          keyFieldRow(t, l10n.graphEaseOut, 'graph-fields-out', _out,
               min: 0,
               max: 100,
               decimals: 0,
-              suffix: l10n.unitSymbolPercent, set: (v) {
-            _out = v;
-            _apply();
-          }),
+              suffix: l10n.unitSymbolPercent,
+              set: (v) => setState(() {
+                    _out = v;
+                    _apply();
+                  })),
         ],
       ),
     );
   }
-
-  Widget _row(
-    LumitTheme t,
-    String label,
-    String key,
-    double value, {
-    required num min,
-    required num max,
-    required int decimals,
-    String? suffix,
-    required ValueChanged<double> set,
-  }) =>
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-        child: Row(
-          children: [
-            SizedBox(
-              width: _keyFieldsLabel,
-              child: Text(label,
-                  style: t.body, maxLines: 1, overflow: TextOverflow.ellipsis),
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: DragValueField(
-                key: ValueKey<String>(key),
-                value: value,
-                min: min,
-                max: max,
-                decimals: decimals,
-                suffix: suffix,
-                keyed: true,
-                onChanged: (v) => setState(() => set(v.toDouble())),
-              ),
-            ),
-          ],
-        ),
-      );
 }
+
+/// One labelled well, the row every small box of key numbers is made of: the
+/// label in a fixed column, the well taking the rest. [set] hears a committed
+/// number, and [live] hears each tick of a well drag, for a caller that shows the
+/// number as it goes and writes it once on release.
+Widget keyFieldRow(
+  LumitTheme t,
+  String label,
+  String key,
+  double value, {
+  required num min,
+  required num max,
+  required int decimals,
+  String? suffix,
+  double labelWidth = _keyFieldsLabel,
+  ValueChanged<double>? live,
+  required ValueChanged<double> set,
+}) =>
+    Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      child: Row(
+        children: [
+          SizedBox(
+            width: labelWidth,
+            child: Text(label,
+                style: t.body, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: DragValueField(
+              key: ValueKey<String>(key),
+              value: value,
+              min: min,
+              max: max,
+              decimals: decimals,
+              suffix: suffix,
+              keyed: true,
+              onChangeLive: live == null ? null : (v) => live(v.toDouble()),
+              onChanged: (v) => set(v.toDouble()),
+            ),
+          ),
+        ],
+      ),
+    );

@@ -42,6 +42,8 @@ import 'graph_channels.dart';
 import 'graph_edits.dart';
 import 'graph_key_fields.dart';
 import 'graph_painters.dart';
+import 'key_ease_fields.dart';
+import '../shell/keyframe_dialogs_frb.dart' show showKeyframeSpeedFrb;
 
 // The pane was one file; it is now six. Everything the pane's callers and its
 // tests reached for through this library is still reachable through it.
@@ -1852,10 +1854,79 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     }
   }
 
+  // --- keyframe speed (docs/07 §5.3) ---------------------------------------
+
+  /// One key's speed and influence, typed: the key menu's *Keyframe speed…*
+  /// opens the dialogue on it. In the value lens a key is one point with two
+  /// sides, so both are offered. In the speed lens the menu was opened on one
+  /// dot, which *is* one side ([side]), so that side alone is offered.
+  Future<void> _openKeySpeed(GraphChannel channel, int index,
+      {bool? side}) async {
+    final keys = channel.keys;
+    if (index < 0 || index >= keys.length) return;
+    var ease = keyEaseOf(keys, index);
+    if (side != null) ease = ease.side(isOut: side);
+    // A lone key has no span on either side, so there is no ease to set.
+    if (ease.isEmpty) return;
+    final asked = await showKeyframeSpeedFrb(
+      context: context,
+      ease: ease,
+      unit: graphChannelUnit(channel),
+    );
+    if (asked == null || asked.isEmpty) return;
+    _applyKeyEase(channel.id, index, asked);
+  }
+
+  /// The readout pill's box: the same numbers in a small popover that writes
+  /// each change as it is typed, so the handles follow the numbers live.
+  void _openKeyEaseAt(GraphChannel channel, int index, Offset position) {
+    final keys = channel.keys;
+    if (index < 0 || index >= keys.length) return;
+    final ease = keyEaseOf(keys, index);
+    if (ease.isEmpty) return;
+    final channelId = channel.id;
+    showKeyEasePopover(
+      context: context,
+      // Hung just under the pill, so the numbers it was opened from stay
+      // readable beside the box.
+      position: position + const Offset(0, 12),
+      ease: ease,
+      unit: graphChannelUnit(channel),
+      onApply: (edit) => _applyKeyEase(channelId, index, edit),
+    );
+  }
+
+  /// Write typed ease numbers onto one key. Looked up by id at the moment of
+  /// the write, as [_applyKeyFields] does, because a channel is a snapshot.
+  ///
+  /// Only the sides with a number in [edit] change, so typing into one side
+  /// leaves the other exactly as it was - which is what makes the two handles
+  /// independent from here, whatever they were before.
+  void _applyKeyEase(String channelId, int index, KeyEase edit) {
+    for (final channel in widget.channels) {
+      if (channel.id != channelId) continue;
+      final keys = channel.keys;
+      if (index < 0 || index >= keys.length) return;
+      // A typed number is a new length for the handle: the pixel length
+      // remembered from the last drag no longer describes it, and a joined
+      // drag that read it would swing the partner back to the old one.
+      final key = keys[index];
+      _handleLenPx.remove(_handleLenKey(channel, key, true));
+      _handleLenPx.remove(_handleLenKey(channel, key, false));
+      commitChannelEdits({
+        channel: BridgeScalar.keyframed(keysWithEase(keys, index, edit)),
+      });
+      widget.onChanged();
+      return;
+    }
+  }
+
   // --- menus ---------------------------------------------------------------
 
-  Future<void> _showKeyMenu(
-      GraphChannel channel, int index, Offset position) async {
+  /// The key's right-click menu. [side] is the speed-lens dot it was opened
+  /// on, or null for the value lens's one key.
+  Future<void> _showKeyMenu(GraphChannel channel, int index, Offset position,
+      {bool? side}) async {
     final picked = await showLumitPopup<String>(
       context: context,
       position: position,
@@ -1870,6 +1941,9 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
             MenuRow(onPressed: () => close('ease'), child: Text(l10n.easeEasy)),
             MenuRow(onPressed: () => close('hold'), child: Text(l10n.easeHold)),
             MenuRow(
+                onPressed: () => close('speed'),
+                child: Text(l10n.menuKeyframeSpeed)),
+            MenuRow(
                 onPressed: () => close('delete'), child: Text(l10n.deleteKey)),
           ],
         ),
@@ -1879,6 +1953,10 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     final id = '${channel.id}#$index';
     if (picked == 'delete') {
       _deleteSelection(fallback: id);
+      return;
+    }
+    if (picked == 'speed') {
+      await _openKeySpeed(channel, index, side: side);
       return;
     }
     final targets =
@@ -2292,6 +2370,9 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
               (sideInfluence(key.interpIn) * 100).round(),
               (sideInfluence(key.interpOut) * 100).round(),
             ),
+            // The readout is also the way in: a click on it opens the key's
+            // speed and influence as wells, writing as they are typed.
+            onTap: (at) => _openKeyEaseAt(channel, index, at),
           ),
         ),
       ];
@@ -2359,8 +2440,9 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                 _selectKey(id,
                     toggle: HardwareKeyboard.instance.isControlPressed);
               },
-              onSecondaryTapDown: (d) =>
-                  _showKeyMenu(channel, i, d.globalPosition),
+              onSecondaryTapDown: (d) => _showKeyMenu(
+                  channel, i, d.globalPosition,
+                  side: widget.lens == GraphLens.value ? null : isOut),
               supportedDevices: dragDevices,
               onPanStart: (_) {
                 if (widget.lens == GraphLens.value) {

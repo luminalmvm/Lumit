@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:lumit_flutter/panels/easing_curve.dart' show EasingCurve;
+import 'package:lumit_flutter/panels/key_ease_fields.dart' show KeyEaseClaim;
 import 'package:lumit_flutter/panels/layer_fold_frb.dart' show RevealFilter;
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/panels/viewer_texture_controller.dart';
@@ -282,6 +283,16 @@ class LumitUiState extends ChangeNotifier {
   /// the panel sends a shape and is told nothing about what it landed on.
   final ValueNotifier<ValueChanged<EasingCurve>?> easingApply =
       ValueNotifier(null);
+
+  /// The one selected keyframe, as its speed and influence on each side, with
+  /// the write that changes them - published by the Timeline while exactly
+  /// one key is selected and null otherwise (docs/07 §5.4).
+  ///
+  /// This is the one thing the Easing panel learns about the selection, and
+  /// it is the key's *numbers*, not the selection: the panel shows them under
+  /// the editor and hands typed ones back, and still never knows what a shape
+  /// it sends will land on.
+  final ValueNotifier<KeyEaseClaim?> easingKey = ValueNotifier(null);
 
   /// The appearance the shell is drawing in.
   ///

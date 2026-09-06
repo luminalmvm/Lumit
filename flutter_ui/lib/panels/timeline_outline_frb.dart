@@ -18,7 +18,6 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'graph_editor_frb.dart';
 import 'graph_maths.dart';
-import 'effect_param_row_frb.dart';
 import 'layer_fold_frb.dart';
 import 'timeline_timings.dart';
 import 'timeline_metrics_frb.dart';
@@ -472,40 +471,6 @@ class ColumnHeader extends StatelessWidget {
 String keysNumberText(double v) =>
     v == v.roundToDouble() ? v.round().toString() : v.toStringAsFixed(2);
 
-/// What rides beside a graph channel's value, or null for a number with no
-/// unit — the readout row's answer to §12A.3's rule.
-///
-/// An effect parameter's unit is its **declaration's**, never its id.
-/// A transform axis has no declaration to ask, so it is read off the property
-/// itself: the two scales and opacity are per cent, the three rotations are
-/// degrees, and everything else is a distance — pixels at composition size.
-String? graphChannelUnit(GraphChannel channel) {
-  if (channel.param case final param?) return unitRiderText(param.unit);
-  if (channel.retime) return l10n.unitSymbolSeconds;
-  if (channel.maskValue case final value?) {
-    return switch (value) {
-      MaskValue.opacity => l10n.unitSymbolPercent,
-      MaskValue.feather ||
-      MaskValue.vertexFeather ||
-      MaskValue.expansion =>
-        l10n.unitSymbolPx,
-      MaskValue.path => null,
-    };
-  }
-  return switch (channel.prop) {
-    null => null,
-    BridgeTransformProp.opacity ||
-    BridgeTransformProp.scaleX ||
-    BridgeTransformProp.scaleY =>
-      l10n.unitSymbolPercent,
-    BridgeTransformProp.rotation ||
-    BridgeTransformProp.rotationX ||
-    BridgeTransformProp.rotationY =>
-      l10n.unitSymbolDegrees,
-    _ => l10n.unitSymbolPx,
-  };
-}
-
 /// The **Key readout row** (§3.3, `GraphMode.dc.html`): pinned at the foot of
 /// Graph mode's outline while exactly one key is selected, reading
 /// `KEY f<frame> <value><unit>` and offering that key's two influences as
@@ -796,9 +761,8 @@ class _LayerBlockState extends State<LayerBlock> {
 
   void _follow() {
     final next = _read();
-    final same = widget.onlyLit
-        ? next.selected == _mine.selected
-        : next.sameAs(_mine);
+    final same =
+        widget.onlyLit ? next.selected == _mine.selected : next.sameAs(_mine);
     if (same) return;
     setState(() => _mine = next);
   }
@@ -932,8 +896,7 @@ class Outline extends StatelessWidget {
               // and window below it kept its shape.
               if (rows[i].groupHeader != null)
                 GroupOutlineRow(
-                  key: ValueKey<String>(
-                      'tl-group-${rows[i].groupHeader!.id}'),
+                  key: ValueKey<String>('tl-group-${rows[i].groupHeader!.id}'),
                   header: rows[i].groupHeader!,
                   groupOrder: groupOrder,
                   widths: widths,
@@ -971,29 +934,29 @@ class Outline extends StatelessWidget {
               // A shut fold draws the header and nothing else: the carrier's
               // own row is one of the rows the fold hid.
               if (rows[i].bodyDrawn)
-              OutlineRow(
-                key: ValueKey<String>('tl-row-${rows[i].id}'),
-                comp: comp,
-                entry: rows[i].entry,
-                onOpenSequence: () => onOpenSequence?.call(rows[i].entry),
-                layers: layers,
-                groupOrder: groupOrder,
-                widths: widths,
-                matteToggles: matteToggles,
-                index: i,
-                count: rows.length,
-                selected: mine.selected,
-                highlighted: mine.highlighted,
-                open: rows[i].open,
-                hasAudio: rows[i].hasAudio,
-                hasPicture: rows[i].hasPicture,
-                onToggleOpen: () => onToggle(rows[i].id),
-                onSelect: () => onSelect(rows[i].entry.layer),
-                onChanged: onChanged,
-                layerDrag: layerDrag,
-                renameRequest: renameRequest,
-                blockHeights: blockHeights,
-              ),
+                OutlineRow(
+                  key: ValueKey<String>('tl-row-${rows[i].id}'),
+                  comp: comp,
+                  entry: rows[i].entry,
+                  onOpenSequence: () => onOpenSequence?.call(rows[i].entry),
+                  layers: layers,
+                  groupOrder: groupOrder,
+                  widths: widths,
+                  matteToggles: matteToggles,
+                  index: i,
+                  count: rows.length,
+                  selected: mine.selected,
+                  highlighted: mine.highlighted,
+                  open: rows[i].open,
+                  hasAudio: rows[i].hasAudio,
+                  hasPicture: rows[i].hasPicture,
+                  onToggleOpen: () => onToggle(rows[i].id),
+                  onSelect: () => onSelect(rows[i].entry.layer),
+                  onChanged: onChanged,
+                  layerDrag: layerDrag,
+                  renameRequest: renameRequest,
+                  blockHeights: blockHeights,
+                ),
               // The room the lanes draw an open sequence view in. The
               // outline has nothing to put here — the clips and their envelope are
               // the lane's to draw — but it must leave exactly the same gap, or
@@ -1009,34 +972,34 @@ class Outline extends StatelessWidget {
               // The fold-out, from the same list the lanes leave room for.
               if (rows[i].bodyDrawn)
                 for (final row in rows[i].drawnRows)
-                // A raw pointer listener, not a gesture: touching a sub-item
-                // highlights its layer, and it must never fight the row's own
-                // taps and drags for the gesture arena.
-                Listener(
-                  onPointerDown: (_) => onHighlight(rows[i].id),
-                  child: FoldRow(
-                    // Named after the property it draws, so a test — and a
-                    // reveal — can find one row among a stack of them.
-                    key: ValueKey<String>(
-                        'tl-keys-prop-${foldRowPath(rows[i].id, row)}'),
-                    comp: comp,
-                    layer: rows[i].entry.layer,
-                    row: row,
-                    valueColumn: valueColumn,
-                    timingsColumn: timingsColumn,
-                    baseIndent: baseIndent,
-                    path: foldRowPath(rows[i].id, row),
-                    selectedProperties: mine.properties,
-                    graphColours: mine.colours,
-                    onSelectProperty: onSelectProperty,
-                    onEditProperty: onEditProperty,
-                    playheadFrame: playheadFrame,
-                    onSeek: onSeek,
-                    onToggle: onToggle,
-                    onChanged: onChanged,
-                    locked: rows[i].entry.info.switches.locked,
+                  // A raw pointer listener, not a gesture: touching a sub-item
+                  // highlights its layer, and it must never fight the row's own
+                  // taps and drags for the gesture arena.
+                  Listener(
+                    onPointerDown: (_) => onHighlight(rows[i].id),
+                    child: FoldRow(
+                      // Named after the property it draws, so a test — and a
+                      // reveal — can find one row among a stack of them.
+                      key: ValueKey<String>(
+                          'tl-keys-prop-${foldRowPath(rows[i].id, row)}'),
+                      comp: comp,
+                      layer: rows[i].entry.layer,
+                      row: row,
+                      valueColumn: valueColumn,
+                      timingsColumn: timingsColumn,
+                      baseIndent: baseIndent,
+                      path: foldRowPath(rows[i].id, row),
+                      selectedProperties: mine.properties,
+                      graphColours: mine.colours,
+                      onSelectProperty: onSelectProperty,
+                      onEditProperty: onEditProperty,
+                      playheadFrame: playheadFrame,
+                      onSeek: onSeek,
+                      onToggle: onToggle,
+                      onChanged: onChanged,
+                      locked: rows[i].entry.info.switches.locked,
+                    ),
                   ),
-                ),
             ],
           ),
         ),

@@ -16,6 +16,8 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/easing_curve.dart';
 import 'package:lumit_flutter/panels/easing_editor.dart';
 import 'package:lumit_flutter/panels/easing_panel_frb.dart';
+import 'package:lumit_flutter/panels/graph_maths.dart' show KeyEase;
+import 'package:lumit_flutter/panels/key_ease_fields.dart';
 import 'package:lumit_flutter/state/custom_easings.dart';
 import 'package:lumit_flutter/state/workspace.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
@@ -28,23 +30,42 @@ void main() {
   Future<({LumitUiState ui, List<EasingCurve> applied})> mount(
     WidgetTester tester, {
     required bool claimed,
+    double width = 320,
   }) async {
     final p = freshProject();
     final applied = <EasingCurve>[];
     if (claimed) p.uiState.easingApply.value = applied.add;
+    // The panel lays out to the window it is given, not to the MediaQuery
+    // size, and the default test window is a third of 800 across.
+    tester.view.physicalSize = Size(width, 600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
     await tester.pumpWidget(hostPanel(
       child: const EasingPanelFrb(),
       state: p.state,
       uiState: p.uiState,
-      size: const Size(320, 600),
+      size: Size(width, 600),
     ));
     await tester.pump();
     return (ui: p.uiState, applied: applied);
   }
 
+  /// How many tiles share the grid's first row: the buttons level with the
+  /// first shipped shape, Easy ease.
+  int tilesInFirstRow(WidgetTester tester) {
+    final tile = find.ancestor(
+        of: find.text('Easy ease'), matching: find.byType(HouseButton));
+    final top = tester.getTopLeft(tile.first).dy;
+    return find
+        .byType(HouseButton)
+        .evaluate()
+        .where((e) =>
+            (e.renderObject as RenderBox).localToGlobal(Offset.zero).dy == top)
+        .length;
+  }
+
   group('Easing panel (frb)', () {
-    testWidgets('a preset tile applies its curve in one click',
-        (tester) async {
+    testWidgets('a preset tile applies its curve in one click', (tester) async {
       final m = await mount(tester, claimed: true);
 
       await tester.ensureVisible(find.text('Back out'));
@@ -134,11 +155,18 @@ void main() {
       final m = await mount(tester, claimed: true);
 
       // Take hold of the first handle — the easy ease it opens on puts it at
-      // (1/3, 0) of the 170 px box, whose margins are 20 across and 85 down —
-      // and drag it up and left.
-      final box = tester.getTopLeft(find.byKey(const ValueKey('easing-box')));
-      final gesture =
-          await tester.startGesture(box + const Offset(20 + 170 / 3, 85 + 170));
+      // (1/3, 0) of the box - and drag it up and left. The box is sized to
+      // the panel (docs/07 §5.4), so its side and margins are read off the
+      // drawing: 20 across up to the box's largest, centred past that, and the
+      // rest of the height split above and below.
+      final paint = find.byKey(const ValueKey('easing-box'));
+      final box = tester.getTopLeft(paint);
+      final size = tester.getSize(paint);
+      final side = (size.width - 40).clamp(170.0, 240.0);
+      final boxLeft = (size.width - side) / 2;
+      final marginY = (size.height - side) / 2;
+      final gesture = await tester
+          .startGesture(box + Offset(boxLeft + side / 3, marginY + side));
       await tester.pump();
       await gesture.moveBy(const Offset(-30, -60));
       await tester.pump();
@@ -150,10 +178,10 @@ void main() {
       await tester.pump();
 
       // What went out is exactly what the handles show: the first control
-      // point moved by (−30, −60) px of a 170 px box, the second untouched.
+      // point moved by (−30, −60) px of the box, the second untouched.
       final sent = m.applied.single;
-      expect(sent.x1, closeTo(1 / 3 - 30 / 170, 1e-6));
-      expect(sent.y1, closeTo(60 / 170, 1e-6));
+      expect(sent.x1, closeTo(1 / 3 - 30 / side, 1e-6));
+      expect(sent.y1, closeTo(60 / side, 1e-6));
       expect(sent.x2, 2 / 3);
       expect(sent.y2, 1);
     });
@@ -192,6 +220,119 @@ void main() {
       // capitals as a style rather than as a second string (§7.1).
       expect(find.text('Apply'.toUpperCase()), findsOneWidget);
     });
+
+    // The panel fills its width (docs/07 §5.4): four tiles to a row where
+    // four fit, three in a narrow panel, and the box grown with the panel.
+    testWidgets('the grid takes four to a row at the panel\'s width',
+        (tester) async {
+      await mount(tester, claimed: true, width: 400);
+      expect(tilesInFirstRow(tester), 4);
+      final paint = tester.getSize(find.byKey(const ValueKey('easing-box')));
+      expect(paint.width, greaterThanOrEqualTo(4 * 64 + 9),
+          reason: 'the editor took the panel\'s width');
+      expect(paint.width - 40, greaterThan(170),
+          reason: 'the box grew past the popup\'s 170');
+    });
+
+    testWidgets('a narrow panel keeps three to a row', (tester) async {
+      await mount(tester, claimed: true, width: 240);
+      expect(tilesInFirstRow(tester), 3);
+    });
+
+    testWidgets('the handle numbers are labelled by side', (tester) async {
+      await mount(tester, claimed: true);
+      // The easy ease it opens on: the out handle a third along and flat, the
+      // in handle two thirds along and at the top.
+      expect(find.text('Out 0.33, 0.00 · In 0.67, 1.00'), findsOneWidget);
+    });
+
+    // The selected key's own numbers, under the editor (docs/07 §5.4).
+    testWidgets('one selected key puts its speed and influence under the box',
+        (tester) async {
+      final m = await mount(tester, claimed: true);
+      expect(find.byKey(const ValueKey('easing-key')), findsNothing,
+          reason: 'nothing at rest');
+
+      final written = <KeyEase>[];
+      m.ui.easingKey.value = KeyEaseClaim(
+        channelId: 'c',
+        index: 1,
+        frame: 12,
+        unit: 'px',
+        ease: const KeyEase(
+            inSpeed: 10, inInfluence: 0.25, outSpeed: 40, outInfluence: 0.5),
+        apply: (_, __, edit) => written.add(edit),
+      );
+      await tester.pump();
+      final section = find.byKey(const ValueKey('easing-key'));
+      expect(section, findsOneWidget);
+      expect(find.descendant(of: section, matching: find.text('f12')),
+          findsOneWidget);
+      for (final well in const [
+        'speed-in',
+        'influence-in',
+        'speed-out',
+        'influence-out'
+      ]) {
+        expect(find.byKey(ValueKey<String>('easing-key-$well')), findsOneWidget,
+            reason: 'the $well well');
+      }
+
+      // A typed speed writes that side and nothing else: the two speeds
+      // differed, so the Continuous tick opened unticked.
+      tester
+          .widget<DragValueField>(
+              find.byKey(const ValueKey('easing-key-speed-out')))
+          .onChanged(80);
+      await tester.pump();
+      expect(written, [const KeyEase(outSpeed: 80)]);
+
+      // Ticking Continuous gives the out side the in side's speed; a speed
+      // typed after that lands on both.
+      tester
+          .widget<HouseCheckbox>(
+              find.byKey(const ValueKey('easing-key-continuous')))
+          .onChanged!(true);
+      await tester.pump();
+      expect(written.last, const KeyEase(outSpeed: 10));
+      tester
+          .widget<DragValueField>(
+              find.byKey(const ValueKey('easing-key-speed-in')))
+          .onChanged(25);
+      await tester.pump();
+      expect(written.last, const KeyEase(inSpeed: 25, outSpeed: 25));
+
+      // An influence is its own number, as a fraction.
+      tester
+          .widget<DragValueField>(
+              find.byKey(const ValueKey('easing-key-influence-in')))
+          .onChanged(75);
+      await tester.pump();
+      expect(written.last, const KeyEase(inInfluence: 0.75));
+
+      // The claim withdrawn - several keys, or none - takes the section away.
+      m.ui.easingKey.value = null;
+      await tester.pump();
+      expect(section, findsNothing);
+    });
+
+    testWidgets('an end key shows the one side it has', (tester) async {
+      final m = await mount(tester, claimed: true);
+      m.ui.easingKey.value = KeyEaseClaim(
+        channelId: 'c',
+        index: 0,
+        frame: 0,
+        unit: null,
+        ease: const KeyEase(outSpeed: 0, outInfluence: 1 / 3),
+        apply: (_, __, ___) {},
+      );
+      await tester.pump();
+      expect(
+          find.byKey(const ValueKey('easing-key-speed-out')), findsOneWidget);
+      expect(find.byKey(const ValueKey('easing-key-speed-in')), findsNothing);
+      expect(find.byKey(const ValueKey('easing-key-continuous')), findsNothing,
+          reason: 'one side has nothing to be continuous with');
+    });
   }, skip: !engineAvailable);
 
   // Shapes of the user's own (item R): saved beside the settings, shown in the
@@ -219,7 +360,8 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('a saved shape joins the grid, applies, and outlives the store '
+    testWidgets(
+        'a saved shape joins the grid, applies, and outlives the store '
         'being read again', (tester) async {
       final m = await mount(tester, claimed: true);
       await saveAs(tester, 'Snap', 'My ease');
@@ -229,8 +371,8 @@ void main() {
       await tester.ensureVisible(find.text('My ease'));
       await tester.tap(find.text('My ease'));
       await tester.pump();
-      expect(m.applied.last,
-          easingPresets.firstWhere((p) => p.id == 'snap').curve,
+      expect(
+          m.applied.last, easingPresets.firstWhere((p) => p.id == 'snap').curve,
           reason: 'a custom eases the selection exactly as a stock preset '
               'does, and its tile applies in one click too');
 
@@ -262,8 +404,7 @@ void main() {
       expect(find.text('Delete'), findsNothing);
     });
 
-    testWidgets('rename keeps the shape, delete takes it away',
-        (tester) async {
+    testWidgets('rename keeps the shape, delete takes it away', (tester) async {
       await mount(tester, claimed: true);
       await saveAs(tester, 'Back out', 'First try');
 

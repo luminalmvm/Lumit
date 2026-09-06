@@ -366,6 +366,115 @@ double sideInfluence(BridgeSideInterp side) => switch (side) {
     };
 
 // ---------------------------------------------------------------------------
+// A key's two eases as four numbers.
+// ---------------------------------------------------------------------------
+
+/// One keyframe's two eases as numbers: speed in value units per second and
+/// influence as a fraction of the span, for the side the key arrives on and the
+/// side it leaves by.
+///
+/// The same shape does two jobs. Read off a key ([keyEaseOf]) a null number is
+/// a side the key has not got, which is the far side of an end key. Written
+/// onto one ([keyWithEase]) a null number is one left alone, so typing a speed
+/// into one side never quietly rewrites the other.
+class KeyEase {
+  final double? inSpeed;
+  final double? inInfluence;
+  final double? outSpeed;
+  final double? outInfluence;
+
+  const KeyEase({
+    this.inSpeed,
+    this.inInfluence,
+    this.outSpeed,
+    this.outInfluence,
+  });
+
+  bool get hasIn => inSpeed != null || inInfluence != null;
+  bool get hasOut => outSpeed != null || outInfluence != null;
+  bool get isEmpty => !hasIn && !hasOut;
+
+  /// This ease with [other]'s numbers laid over it, where [other] has any.
+  KeyEase merge(KeyEase other) => KeyEase(
+        inSpeed: other.inSpeed ?? inSpeed,
+        inInfluence: other.inInfluence ?? inInfluence,
+        outSpeed: other.outSpeed ?? outSpeed,
+        outInfluence: other.outInfluence ?? outInfluence,
+      );
+
+  /// Only the side named, the other side dropped.
+  KeyEase side({required bool isOut}) => isOut
+      ? KeyEase(outSpeed: outSpeed, outInfluence: outInfluence)
+      : KeyEase(inSpeed: inSpeed, inInfluence: inInfluence);
+
+  @override
+  bool operator ==(Object other) =>
+      other is KeyEase &&
+      other.inSpeed == inSpeed &&
+      other.inInfluence == inInfluence &&
+      other.outSpeed == outSpeed &&
+      other.outInfluence == outInfluence;
+
+  @override
+  int get hashCode => Object.hash(inSpeed, inInfluence, outSpeed, outInfluence);
+
+  @override
+  String toString() =>
+      'KeyEase(in: $inSpeed @ $inInfluence, out: $outSpeed @ $outInfluence)';
+}
+
+/// The eases `keys[index]` reads at: what its handles show, with an automatic
+/// side resolved against its neighbours. An end key has one side only.
+KeyEase keyEaseOf(List<BridgeKeyframe> keys, int index) {
+  final key = keys[index];
+  final hasIn = index > 0;
+  final hasOut = index + 1 < keys.length;
+  return KeyEase(
+    inSpeed: hasIn ? sideSpeedAtKey(keys, index, isOut: false) : null,
+    inInfluence: hasIn ? sideInfluence(key.interpIn) : null,
+    outSpeed: hasOut ? sideSpeedAtKey(keys, index, isOut: true) : null,
+    outInfluence: hasOut ? sideInfluence(key.interpOut) : null,
+  );
+}
+
+/// `keys[index]` with the numbers in [ease] written onto it.
+///
+/// A side given either number becomes a bezier at that speed and that
+/// influence, taking whichever of the two was not given from what the side
+/// reads now, so a straight side given a speed keeps the reach its handle
+/// already showed. A bezier is a Free side, which is what typing a number
+/// means: the hand has overruled the neighbours. A side given nothing is left
+/// exactly as it was.
+BridgeKeyframe keyWithEase(List<BridgeKeyframe> keys, int index, KeyEase ease) {
+  final key = keys[index];
+  BridgeSideInterp side(bool isOut, double? speed, double? influence) {
+    final was = isOut ? key.interpOut : key.interpIn;
+    if (speed == null && influence == null) return was;
+    return BridgeSideInterp.bezier(BridgeBezierSide(
+      speed: speed ?? sideSpeedAtKey(keys, index, isOut: isOut),
+      influence: (influence ?? sideInfluence(was))
+          .clamp(minTangentReach, 1.0)
+          .toDouble(),
+    ));
+  }
+
+  return BridgeKeyframe(
+    time: key.time,
+    value: key.value,
+    interpIn: side(false, ease.inSpeed, ease.inInfluence),
+    interpOut: side(true, ease.outSpeed, ease.outInfluence),
+  );
+}
+
+/// [keys] with [keyWithEase] applied to the one at [index].
+List<BridgeKeyframe> keysWithEase(
+        List<BridgeKeyframe> keys, int index, KeyEase ease) =>
+    [
+      for (var i = 0; i < keys.length; i++)
+        if (i == index) keyWithEase(keys, i, ease) else keys[i],
+    ];
+
+// ---------------------------------------------------------------------------
 // Tangent-handle geometry (value lens).
 // ---------------------------------------------------------------------------
 

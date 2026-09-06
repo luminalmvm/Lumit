@@ -498,10 +498,13 @@ middle of **every** key, same-shape pairs included.
     the same arithmetic, one extra drag, and every key keeps every gesture it answers.
     The edge strips are 10px and sit **below** the key glyphs for the same reason.
 - **Numeric entry** — **built in TI-7**: double-clicking a key opens a small popover
-  holding its exact **frame, value, In % and Out %** (docs/07 §5.3, whose "speed" is not
-  offered — a side's speed is what the tangent handle drags and what the influence field
-  writes at, and a fourth number that restates it would be a second way to say one thing).
-  Counted by timestamps (`DoubleTap`), never by an `onDoubleTap` recogniser, which would
+  holding its exact **frame, value, In % and Out %** (docs/07 §5.3). Speed is typed
+  elsewhere: the key menu's *Keyframe speed…* window and the readout pill's own popover
+  hold **speed and influence per side** (`key_ease_fields.dart`), because a cut is synced
+  to a number, not to a handle's angle. Only the numbers typed are written, so the two
+  sides come apart the moment one is typed into, and a typed number drops the pixel
+  length the pane remembered for that handle (§6.1), or the next joined drag would swing
+  the partner back to it. Counted by timestamps (`DoubleTap`), never by an `onDoubleTap` recogniser, which would
   hold every single click on a key back until its timer expired. The frame field is
   bounded by the key's two neighbours, because the popover holds an index into a list a
   re-sort would shuffle; the channel is looked up by id at each write, never held, because

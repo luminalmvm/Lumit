@@ -179,7 +179,8 @@ void main() {
 
       // The row now says the opposite, because it says what pressing it does.
       await settle(tester, p);
-      await choose(tester, 'Layer', 'Combine Position axes', under: 'Transform');
+      await choose(tester, 'Layer', 'Combine Position axes',
+          under: 'Transform');
       expect(layer.getInfo().axisModes.position, BridgeAxisMode.combined);
     });
 
@@ -289,8 +290,8 @@ void main() {
 
       final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.sharp);
       await open(tester, 'Layer');
-      expect(tester.widget<Text>(find.text('Flow')).style?.color,
-          t.textDisabled,
+      expect(
+          tester.widget<Text>(find.text('Flow')).style?.color, t.textDisabled,
           reason: 'a solid has no source frames to make in-betweens from');
       await dismiss(tester);
     });
@@ -334,7 +335,8 @@ void main() {
           reason: 'the playhead sat between the two, so a third lands there');
     });
 
-    testWidgets('Animation ▸ Toggle hold keyframe holds the key at the playhead',
+    testWidgets(
+        'Animation ▸ Toggle hold keyframe holds the key at the playhead',
         (tester) async {
       final p = withComp();
       final layer = p.comp.addSolidLayer();
@@ -442,6 +444,59 @@ void main() {
       final keys =
           (layer.getTransform().positionX as BridgeScalar_Keyframed).field0;
       expect(keys.first.interpOut, isA<BridgeSideInterp_Hold>());
+    });
+
+    testWidgets('Animation ▸ Keyframe speed… writes the typed numbers',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      layer.setTransform(
+        prop: BridgeTransformProp.positionX,
+        value: BridgeScalar.keyframed([
+          BridgeKeyframe(
+            time: p.comp.timeOfFrame(frame: 0),
+            value: 0,
+            interpIn: const BridgeSideInterp.linear(),
+            interpOut: const BridgeSideInterp.linear(),
+          ),
+          BridgeKeyframe(
+            time: p.comp.timeOfFrame(frame: 20),
+            value: 100,
+            interpIn: const BridgeSideInterp.linear(),
+            interpOut: const BridgeSideInterp.linear(),
+          ),
+        ]),
+      );
+      p.uiState.setSelection([layer]);
+      p.uiState.selectedProperties.value = [
+        '${layer.internallayerId}/transform/positionX',
+      ];
+      p.uiState.playheadFrame.value = 0;
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      await choose(tester, 'Animation', 'Keyframe speed…');
+      await tester.pumpAndSettle();
+      // The first key has an out side only.
+      expect(find.byKey(const ValueKey('key-speed-in')), findsNothing);
+      final well = find.byKey(const ValueKey('key-speed-out'));
+      await tester.tap(well);
+      await tester.pump();
+      await tester.enterText(
+          find.descendant(of: well, matching: find.byType(EditableText)), '40');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('keyframe-confirm')));
+      await tester.pumpAndSettle();
+
+      final keys =
+          (layer.getTransform().positionX as BridgeScalar_Keyframed).field0;
+      final out = keys.first.interpOut as BridgeSideInterp_Bezier;
+      expect(out.field0.speed, 40);
+      expect(out.field0.influence, closeTo(1 / 3, 1e-9),
+          reason: 'the reach a straight side already showed');
+      expect(keys.last.interpIn, isA<BridgeSideInterp_Linear>(),
+          reason: 'only the key on the playhead');
     });
 
     testWidgets('Animation ▸ Animate text gives a Type layer an animator',
@@ -652,7 +707,8 @@ void main() {
         final text = written.readAsStringSync();
         expect(text, contains('blur'));
         expect(text, contains('Soft edges'),
-            reason: 'the preset is named after its file, as the panel names it');
+            reason:
+                'the preset is named after its file, as the panel names it');
       });
 
       testWidgets('Apply lands the preset on every selected layer',
@@ -676,8 +732,8 @@ void main() {
 
         expect(a.getEffects().length, 1);
         expect(b.getEffects().length, 1);
-        expect(a.getInfo().effects.first.id,
-            isNot(b.getInfo().effects.first.id),
+        expect(
+            a.getInfo().effects.first.id, isNot(b.getInfo().effects.first.id),
             reason: 'each layer gets its own instance');
       });
 
@@ -693,8 +749,8 @@ void main() {
         ]) {
           expect(find.text(l10n.notImplemented(row)), findsNothing,
               reason: 'the row is built now, so it carries no mark');
-          expect(tester.widget<Text>(find.text(row)).style?.color,
-              t.textDisabled);
+          expect(
+              tester.widget<Text>(find.text(row)).style?.color, t.textDisabled);
         }
         await dismiss(tester);
       });

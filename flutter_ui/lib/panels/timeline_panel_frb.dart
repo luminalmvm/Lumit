@@ -76,6 +76,7 @@ import 'easing_editor.dart';
 import 'graph_editor_frb.dart';
 import 'graph_maths.dart';
 import 'graph_panel.dart' show DrivenParam, drivenParamsOf;
+import 'key_ease_fields.dart' show KeyEaseClaim;
 import 'timeline_extras_frb.dart';
 import 'timeline_navigator.dart';
 import 'sequence_view_frb.dart';
@@ -2226,6 +2227,63 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         _graph && _graphLens == GraphLens.speed ? null : _applyEasing;
   }
 
+  /// Publish the one selected key's speed and influence to the shell
+  /// ([LumitUiState.easingKey]), or null while the selection is not exactly
+  /// one key - what the Easing panel shows under its editor.
+  ///
+  /// Read off the build, because every road that changes the answer - a
+  /// click, a drag's commit, undo, the lens - ends in a build here, and the
+  /// numbers are on [channels] already. The write itself waits for the frame
+  /// to end: the panel is a sibling, not a descendant, and a listener woken
+  /// mid-build would be told off for building out of turn. A claim equal to
+  /// the one standing is not sent again.
+  void _publishKeyEase(LumitUiState ui, List<GraphChannel> channels) {
+    KeyEaseClaim? next;
+    final selection = _actionKeySelection(channels);
+    if (selection.length == 1) {
+      final id = selection.first;
+      final hash = id.lastIndexOf('#');
+      final index = hash < 0 ? null : int.tryParse(id.substring(hash + 1));
+      if (index != null) {
+        final channelId = id.substring(0, hash);
+        for (final channel in channels) {
+          if (channel.id != channelId || index >= channel.keys.length) {
+            continue;
+          }
+          next = KeyEaseClaim(
+            channelId: channelId,
+            index: index,
+            frame: keyFrame(channel.keys[index], ui.model.fps).round(),
+            unit: graphChannelUnit(channel),
+            ease: keyEaseOf(channel.keys, index),
+            apply: _applyKeyEase,
+          );
+          break;
+        }
+      }
+    }
+    if (next == ui.easingKey.value) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ui.easingKey.value = next;
+    });
+  }
+
+  /// The write behind [_publishKeyEase]'s claim: typed numbers onto one key,
+  /// the channel looked up afresh because the claim is a snapshot.
+  void _applyKeyEase(String channelId, int index, KeyEase edit) {
+    if (!mounted) return;
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    for (final channel in _channelsNow()) {
+      if (channel.id != channelId || index >= channel.keys.length) continue;
+      commitChannelEdits({
+        channel:
+            BridgeScalar.keyframed(keysWithEase(channel.keys, index, edit)),
+      });
+      ui.model.refresh();
+      return;
+    }
+  }
+
   /// The Timeline's keyboard commands: `Shift+F3` toggles the graph, the F9
   /// family sets easing, `Ctrl+Shift+D` cuts the selection at the playhead,
   /// `F` re-frames the graph, `Ctrl+C`/`Ctrl+V` copy and
@@ -2720,6 +2778,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     if (_ui?.copyClaim == _copySelectedKeys) _ui!.copyClaim = null;
     if (_ui?.pasteClaim == _pasteKeysIntoSelection) _ui!.pasteClaim = null;
     if (_ui?.easingApply.value == _applyEasing) _ui!.easingApply.value = null;
+    if (_ui?.easingKey.value?.apply == _applyKeyEase) {
+      _ui!.easingKey.value = null;
+    }
     _ui?.selectedEffects.removeListener(_onEffectSelectionChanged);
     _ui?.playheadFrame.removeListener(_edgeFollow);
     _boundTools?.removeListener(_onToolChanged);
@@ -3083,11 +3144,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // carrier layer draws, and the members a shut fold takes off the list —
     // both from one walk, so the two halves cannot disagree about how many
     // rows there are.
-    final folds =
-        groupFolds(
-            groups: ui.model.groups,
-            folded: _foldedGroups,
-            fxOpen: _openGroupFx);
+    final folds = groupFolds(
+        groups: ui.model.groups, folded: _foldedGroups, fxOpen: _openGroupFx);
     final layers = [
       for (final e in ui.model.layers)
         if ((needle.isEmpty || e.info.name.toLowerCase().contains(needle)) &&
@@ -3166,6 +3224,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     };
     final channels =
         graphChannels(layers: ui.model.layers, selected: _selectedProperties);
+    _publishKeyEase(ui, channels);
     // The work area, in frames, read once for the whole panel — and
     // once per document *revision*, not per rebuild: `workAreaFrames` is two
     // to four bridge calls, and only an edit can change its answer.
