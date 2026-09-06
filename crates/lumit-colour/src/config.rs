@@ -21,6 +21,8 @@
 //!   anything higher is refused by name rather than guessed at.
 //! - **`inactive_colorspaces` hides names from lists but keeps them
 //!   resolvable** — a hidden space is still a legal target.
+//! - **`aliases` are names too.** A transform may name a space by any of
+//!   them, and Blender's config reaches its XYZ spaces that way.
 //! - **Displays, views and colour spaces are three separate namespaces.** The
 //!   same word can mean three things in one file.
 //! - Config-supplied names are **user data, not engine strings**: they cross the
@@ -358,6 +360,8 @@ pub enum Allocation {
 pub struct ColourSpace {
     pub name: String,
     pub family: String,
+    /// Other names the space answers to, good anywhere the name itself is.
+    pub aliases: Vec<String>,
     /// A data space carries no colour and is never transformed.
     pub is_data: bool,
     pub to_reference: Option<TransformSpec>,
@@ -430,6 +434,8 @@ pub struct Config {
     pub spaces: BTreeMap<String, ColourSpace>,
     /// Declaration order, which is the order lists are shown in.
     pub space_order: Vec<String>,
+    /// Every alias a space declares, to the space's own name.
+    pub aliases: BTreeMap<String, String>,
     pub inactive: BTreeSet<String>,
     pub displays: Vec<Display>,
     pub active_displays: Vec<String>,
@@ -444,13 +450,12 @@ pub struct Config {
 
 /// Transform tags a config may legally carry that v1 does not implement. Named
 /// here so the refusal says the config's own word back to the user.
-const REFUSED_TRANSFORMS: [&str; 9] = [
+const REFUSED_TRANSFORMS: [&str; 8] = [
     "FixedFunctionTransform",
     "GradingPrimaryTransform",
     "GradingRGBCurveTransform",
     "GradingToneTransform",
     "ExposureContrastTransform",
-    "AllocationTransform",
     "LookTransform",
     "DisplayViewTransform",
     "CDLTransform:cccid",
@@ -536,24 +541,85 @@ fn parse_transform(what: &str, value: &Tagged) -> Result<TransformSpec> {
         },
         "LogAffineTransform" | "LogCameraTransform" => {
             let camera = tag == "LogCameraTransform";
+            // A config file writes these keys snake_case, `lin_side_break`,
+            // and the CLF grammar camelCase, so either spelling is read.
+            let key = |snake: &'static str, camel: &'static str| -> &'static str {
+                if value.get(snake).is_some() {
+                    snake
+                } else {
+                    camel
+                }
+            };
+            let lin_side_break = key("lin_side_break", "linSideBreak");
+            let linear_slope = key("linear_slope", "linearSlope");
             let params = crate::op::LogParams {
                 base: value.number("base").unwrap_or(2.0),
-                lin_side_slope: value.triple("linSideSlope", 1.0),
-                lin_side_offset: value.triple("linSideOffset", 0.0),
-                log_side_slope: value.triple("logSideSlope", 1.0),
-                log_side_offset: value.triple("logSideOffset", 0.0),
-                lin_side_break: camera.then(|| value.triple("linSideBreak", 0.0)),
+                lin_side_slope: value.triple(key("lin_side_slope", "linSideSlope"), 1.0),
+                lin_side_offset: value.triple(key("lin_side_offset", "linSideOffset"), 0.0),
+                log_side_slope: value.triple(key("log_side_slope", "logSideSlope"), 1.0),
+                log_side_offset: value.triple(key("log_side_offset", "logSideOffset"), 0.0),
+                lin_side_break: camera.then(|| value.triple(lin_side_break, 0.0)),
                 linear_slope: value
-                    .get("linearSlope")
-                    .map(|_| value.triple("linearSlope", 1.0)),
+                    .get(linear_slope)
+                    .map(|_| value.triple(linear_slope, 1.0)),
             };
-            if camera && value.get("linSideBreak").is_none() {
+            if camera && value.get(lin_side_break).is_none() {
                 return Err(ColourError::Parse {
                     what: what.to_string(),
-                    reason: "a LogCameraTransform must state its linSideBreak".to_string(),
+                    reason: "a LogCameraTransform must state its lin_side_break".to_string(),
                 });
             }
             TransformSpec::Log { params, dir }
+        }
+        // The `allocation` line as a transform, which is what the Filmic and
+        // AgX log spaces in Blender's configs are made of: a fit of [min, max]
+        // onto 0 to 1, with a log2 in front for `lg2` and the third var as its
+        // lin-side offset. Both are ops the chain already has.
+        "AllocationTransform" => {
+            let kind = value.string("allocation").unwrap_or_default();
+            let vars = value.floats("vars");
+            let (min, max) = match (kind.as_str(), vars.as_slice()) {
+                (_, [min, max, ..]) => (*min, *max),
+                ("lg2", _) => (-10.0, 6.0),
+                _ => (0.0, 1.0),
+            };
+            let span = max - min;
+            if span == 0.0 || !span.is_finite() {
+                return Err(ColourError::Parse {
+                    what: what.to_string(),
+                    reason: format!("an AllocationTransform whose vars {vars:?} span nothing"),
+                });
+            }
+            let (scale, shift) = (1.0 / span, -min / span);
+            match kind.as_str() {
+                "lg2" => TransformSpec::Log {
+                    params: crate::op::LogParams {
+                        base: 2.0,
+                        lin_side_slope: [1.0; 3],
+                        lin_side_offset: [vars.get(2).copied().unwrap_or(0.0); 3],
+                        log_side_slope: [scale; 3],
+                        log_side_offset: [shift; 3],
+                        lin_side_break: None,
+                        linear_slope: None,
+                    },
+                    dir,
+                },
+                "uniform" => TransformSpec::Matrix {
+                    matrix: [
+                        scale, 0.0, 0.0, 0.0, //
+                        0.0, scale, 0.0, 0.0, //
+                        0.0, 0.0, scale, 0.0, //
+                        0.0, 0.0, 0.0, 1.0,
+                    ],
+                    offset: [shift, shift, shift, 0.0],
+                    dir,
+                },
+                other => {
+                    return Err(ColourError::UnsupportedTransform {
+                        name: format!("AllocationTransform with allocation {other}"),
+                    })
+                }
+            }
         }
         "CDLTransform" => {
             if value.get("cccid").is_some() {
@@ -665,6 +731,7 @@ fn parse_space(what: &str, entry: &Tagged, display_referred: bool) -> Result<Col
     };
     Ok(ColourSpace {
         family: entry.string("family").unwrap_or_default(),
+        aliases: entry.string_list("aliases", &[',']),
         is_data: entry.bool("isdata"),
         to_reference: read(to_key, "to_reference")?,
         from_reference: read(from_key, "from_reference")?,
@@ -755,6 +822,9 @@ impl Config {
                     continue;
                 }
                 config.space_order.push(space.name.clone());
+                for alias in &space.aliases {
+                    config.aliases.insert(alias.clone(), space.name.clone());
+                }
                 config.spaces.insert(space.name.clone(), space);
             }
         }
@@ -869,6 +939,13 @@ impl Config {
     #[must_use]
     pub fn role(&self, name: &str) -> Option<&str> {
         self.roles.get(name).map(String::as_str)
+    }
+
+    /// The space an alias stands for, which is how Blender's config reaches
+    /// its XYZ spaces.
+    #[must_use]
+    pub fn alias(&self, name: &str) -> Option<&str> {
+        self.aliases.get(name).map(String::as_str)
     }
 
     #[must_use]
@@ -1103,6 +1180,85 @@ colorspaces:
         };
         assert_eq!(children.len(), 2);
         assert!(matches!(children.first(), Some(TransformSpec::Log { .. })));
+    }
+
+    #[test]
+    fn an_allocation_transform_is_the_log_or_the_fit_it_stands_for() {
+        let text = r#"
+ocio_profile_version: 1
+colorspaces:
+  - !<ColorSpace>
+    name: logged
+    from_reference: !<AllocationTransform> {allocation: lg2, vars: [-8, 5, 0.25]}
+  - !<ColorSpace>
+    name: fitted
+    from_reference: !<AllocationTransform> {allocation: uniform, vars: [0, 0.5], direction: inverse}
+"#;
+        let config = Config::parse(Path::new("."), text).expect("parses");
+        let spec = |name: &str| {
+            config.spaces[name]
+                .from_reference
+                .clone()
+                .expect("declared")
+        };
+        // lg2 [-8, 5] with an offset: log2(x + 0.25), then (y + 8) / 13.
+        match spec("logged") {
+            TransformSpec::Log { params, dir } => {
+                assert_eq!(params.base, 2.0);
+                assert_eq!(params.lin_side_offset, [0.25; 3]);
+                assert_eq!(params.log_side_slope, [1.0 / 13.0; 3]);
+                assert_eq!(params.log_side_offset, [8.0 / 13.0; 3]);
+                assert_eq!(dir, Direction::Forward);
+            }
+            other => panic!("expected a log, got {other:?}"),
+        }
+        // uniform [0, 0.5] is a scale by 2, and the direction travels with it.
+        match spec("fitted") {
+            TransformSpec::Matrix {
+                matrix,
+                offset,
+                dir,
+            } => {
+                assert_eq!(
+                    [matrix[0], matrix[5], matrix[10], matrix[15]],
+                    [2.0, 2.0, 2.0, 1.0]
+                );
+                assert_eq!(offset, [0.0; 4]);
+                assert_eq!(dir, Direction::Inverse);
+            }
+            other => panic!("expected a matrix, got {other:?}"),
+        }
+        // An allocation Lumit has not heard of still refuses by name.
+        let err = Config::parse(
+            Path::new("."),
+            "ocio_profile_version: 1\ncolorspaces:\n  - !<ColorSpace>\n    name: odd\n    to_reference: !<AllocationTransform> {allocation: lg10, vars: [0, 1]}\n",
+        );
+        assert!(
+            matches!(&err, Err(ColourError::UnsupportedTransform { name }) if name == "AllocationTransform with allocation lg10"),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn a_log_camera_transform_may_spell_its_keys_snake_case() {
+        // Blender's own config, one camera log space, as it writes it.
+        let text = r#"
+ocio_profile_version: 2
+colorspaces:
+  - !<ColorSpace>
+    name: camera
+    to_scene_reference: !<LogCameraTransform> {base: 2.71828182845905, log_side_slope: 0.0869287606549122, log_side_offset: 0.530013339229194, lin_side_offset: 0.00549407243225781, lin_side_break: 0.005, direction: inverse}
+"#;
+        let config = Config::parse(Path::new("."), text).expect("parses");
+        let Some(TransformSpec::Log { params, dir }) = config.spaces["camera"].to_reference else {
+            panic!("expected a log");
+        };
+        assert!((params.log_side_slope[0] - 0.086_928_76).abs() < 1e-7);
+        assert_eq!(params.lin_side_slope, [1.0; 3]);
+        assert!((params.lin_side_offset[0] - 0.005_494_072_4).abs() < 1e-8);
+        assert_eq!(params.lin_side_break, Some([0.005; 3]));
+        assert_eq!(params.linear_slope, None);
+        assert_eq!(dir, Direction::Inverse);
     }
 
     #[test]

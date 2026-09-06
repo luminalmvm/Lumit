@@ -280,8 +280,9 @@ impl LoadedConfig {
 
     fn space(&self, name: &str) -> Result<&crate::config::ColourSpace> {
         // A role is one indirection, resolved here so every caller may pass
-        // either a space name or a role name (§4.2).
-        let resolved = self.config.role(name).unwrap_or(name);
+        // either a space name or a role name (§4.2), and an alias is one more.
+        let named = self.config.role(name).unwrap_or(name);
+        let resolved = self.config.alias(named).unwrap_or(named);
         self.config
             .spaces
             .get(resolved)
@@ -844,6 +845,63 @@ colorspaces:
         let back = loaded.to_reference("out_srgb").expect("resolves");
         let c = [0.2, 0.5, 0.8];
         assert!(close(back.eval(there.eval(c)), c, 1e-4));
+    }
+
+    #[test]
+    fn an_allocation_transform_squeezes_as_the_reference_library_does() {
+        let loaded = load(
+            r#"
+ocio_profile_version: 1
+colorspaces:
+  - !<ColorSpace>
+    name: logged
+    from_reference: !<AllocationTransform> {allocation: lg2, vars: [-8, 5]}
+  - !<ColorSpace>
+    name: fitted
+    from_reference: !<AllocationTransform> {allocation: uniform, vars: [0, 2]}
+"#,
+        );
+        // lg2 [-8, 5]: 1 lands 8/13 of the way up, 2^5 on the top, 2^-4 at 4/13.
+        let logged = loaded.from_reference("logged").expect("resolves");
+        assert!(close(
+            logged.eval([1.0, 32.0, 0.0625]),
+            [8.0 / 13.0, 1.0, 4.0 / 13.0],
+            1e-5
+        ));
+        let fitted = loaded.from_reference("fitted").expect("resolves");
+        assert!(close(fitted.eval([1.0, 2.0, 0.5]), [0.5, 1.0, 0.25], 1e-6));
+        // The way back is the declared direction inverted, which is how a
+        // Filmic or AgX log space is walked to the reference.
+        for name in ["logged", "fitted"] {
+            let there = loaded.from_reference(name).expect("resolves");
+            let back = loaded.to_reference(name).expect("inverts");
+            let c = [0.5, 1.0, 4.0];
+            assert!(close(back.eval(there.eval(c)), c, 1e-5), "{name}");
+        }
+    }
+
+    #[test]
+    fn an_alias_is_a_name_too() {
+        let loaded = load(
+            r#"
+ocio_profile_version: 2
+colorspaces:
+  - !<ColorSpace>
+    name: Linear CIE-XYZ E
+    aliases: [xyz_e, Linear CIE-XYZ I-E]
+    from_scene_reference: !<MatrixTransform> {matrix: [2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1]}
+  - !<ColorSpace>
+    name: plain
+  - !<ColorSpace>
+    name: through
+    from_scene_reference: !<ColorSpaceTransform> {src: Linear CIE-XYZ I-E, dst: plain}
+"#,
+        );
+        // Asked for by alias, and reached by alias from another space.
+        let by_alias = loaded.from_reference("xyz_e").expect("resolves");
+        assert!(close(by_alias.eval([1.0, 1.0, 1.0]), [2.0, 2.0, 2.0], 1e-6));
+        let through = loaded.from_reference("through").expect("resolves");
+        assert!(close(through.eval([2.0, 2.0, 2.0]), [1.0, 1.0, 1.0], 1e-6));
     }
 
     #[test]

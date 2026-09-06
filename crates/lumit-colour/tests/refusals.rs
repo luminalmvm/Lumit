@@ -114,6 +114,14 @@ colorspaces:
     name: cubed
     to_scene_reference: !<FileTransform> {src: tiny.spi3d}
     from_scene_reference: !<FileTransform> {src: tiny.spi3d}
+  # The allocation transform Blender's configs build their log spaces from,
+  # both spellings, one of them backwards.
+  - !<ColorSpace>
+    name: allocated
+    from_scene_reference: !<GroupTransform>
+      children:
+        - !<AllocationTransform> {allocation: lg2, vars: [-12.47393, 12.5260688117]}
+        - !<AllocationTransform> {allocation: uniform, vars: [0, 0.66], direction: inverse}
 "#;
     let found = refusals(&corpus(), text);
     assert!(found.is_empty(), "a supported config refused: {found:#?}");

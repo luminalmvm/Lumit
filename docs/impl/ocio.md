@@ -253,6 +253,7 @@ The transforms real configs are made of, each with forward and (where noted) inv
 | Negatives | the `style` key on either exponent form: `mirror`, `pass_thru` | exact |
 | ST 2084 | the PQ display encodings' curve, `Op::Pq` | exact |
 | Log | `LogTransform` (base only), `LogAffineTransform`, `LogCameraTransform` (lin-side break) | exact |
+| Allocation | `AllocationTransform` (`lg2`, `uniform`): the log or the fit a space's `allocation` line stands for | exact |
 | CDL | `CDLTransform` (slope/offset/power + saturation, ASC ordering) | exact except clamp |
 | Range | `RangeTransform` (scale + clamp) | exact on the non-clamped part |
 | 1D LUT | `FileTransform` → `.spi1d`, `.cube` 1D, CLF `LUT1D` | by monotone bisection (§4.3) |
@@ -313,8 +314,8 @@ edge is measured and stated in §5.4** — 0.117 at the Rec.709 blue primary —
 it is the number the Rust ports exist to reduce.
 
 Everything else a config can name — `FixedFunctionTransform`, `GradingTone`-family,
-`ExposureContrastTransform`, `AllocationTransform`-as-op, context variables in file
-paths — is **refused by name** in v1 and listed in the refusal taxonomy test (§7).
+`ExposureContrastTransform`, context variables in file paths — is **refused by name**
+in v1 and listed in the refusal taxonomy test (§7).
 
 ### 4.2 Resolution
 
@@ -385,7 +386,8 @@ re-derived: YAML anchors/merge keys are legal and appear in real configs (the pa
 must resolve them, `yaml-rust2` does); `search_path` is colon- or list-separated and
 relative entries resolve against the config file's directory, in order, first hit
 wins; `ocio_profile_version` gates grammar (accept 1 and 2; refuse higher by name);
-`inactive_colorspaces` hides spaces from lists but keeps them resolvable; a
+`inactive_colorspaces` hides spaces from lists but keeps them resolvable; a space's
+`aliases` are names too, good wherever the name is; a
 `file_rules`/`default` block is v2-optional and ignored in v1 (assignment is manual);
 display names and view names are separate namespaces from colour space names.
 
