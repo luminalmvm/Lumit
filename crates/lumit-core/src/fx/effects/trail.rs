@@ -1,4 +1,4 @@
-//! Trail (K-601): where every point of a stream has been, drawn by asking the
+//! Trail: where every point of a stream has been, drawn by asking the
 //! producer again rather than by remembering.
 //!
 //! **In plain terms.** Wire a producer's teal Points socket into this effect and
@@ -8,7 +8,7 @@
 //! **Nothing is stored, ever.** A trail is the obvious place to keep a history —
 //! and keeping one would cost this engine everything it has: a frame that
 //! depended on the frame before it cannot be scrubbed to, cannot be rendered out
-//! of order, and cannot promise that two renders agree (K-474). So Trail does
+//! of order, and cannot promise that two renders agree. So Trail does
 //! what Streak does and does it further: it evaluates the producer's stream
 //! **again**, at `t − k·Spacing`, once per sample, and reads each point's older
 //! self out of the answer. Frame 500's trail costs the same as frame 3's, from a
@@ -22,10 +22,10 @@
 //!
 //! **Painter's order is oldest sample first**, then `id` inside each sample, so
 //! the near end of a tail lands on top of the far end and one point's tail lands
-//! on the next point's in a fixed order (K-031).
+//! on the next point's in a fixed order.
 //!
 //! **Nothing wired draws nothing** — the picture passes through, and the box
-//! wears the "no stream" mark K-509 gave the family.
+//! wears the family's "no stream" mark.
 
 use crate::fx::points::{self, PointsStream};
 use crate::fx::{
@@ -39,7 +39,7 @@ pub const POINTS_PORT: &str = "points";
 
 /// What this effect consumes. Not `three_d`: a trail is a line drawn on the
 /// layer's own flat picture, so what it wants of a point is where the camera
-/// puts it — which is what a 2D reading answers (K-561).
+/// puts it — which is what a 2D reading answers.
 const POINTS_IN: &[Port] = &[Port::new(POINTS_PORT, "Points", PortType::Points)];
 
 /// What a tail is drawn as.
@@ -59,7 +59,7 @@ impl TrailStyle {
     pub const OPTIONS: &'static [&'static str] = &["Dots", "Segments"];
 
     /// The style for a stored Choice index; anything unknown is Dots, the
-    /// declared default (a document from a newer build renders, K-065).
+    /// declared default (a document from a newer build renders).
     #[must_use]
     pub const fn from_code(code: u32) -> Self {
         match code {
@@ -153,7 +153,7 @@ pub struct Trail {
     )]
     pub fade: f32,
 
-    /// **The budget dial** (K-475), the family's row: the most **points** that
+    /// **The budget dial**, the family's row: the most **points** that
     /// may grow a tail. A stream longer than this is trimmed to its newest by
     /// birth index, the producer's own cap rule applied a second time. Not
     /// animatable — it is a capacity declaration.
@@ -181,9 +181,9 @@ pub struct Trail {
 }
 
 impl Trail {
-    /// The raster factor, for the one input the declaration cannot scale
-    /// (K-385): a stream read off a wire is in px@comp and has to be rearranged
-    /// into the pixels the frame is drawn at.
+    /// The raster factor, for the one input the declaration cannot scale: a
+    /// stream read off a wire is in px@comp and has to be rearranged into the
+    /// pixels the frame is drawn at.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
     /// This instance's raster factor, read back out of a resolved bag.
@@ -197,7 +197,7 @@ impl Trail {
     /// before any bag exists (points-stream.md §3.3).
     ///
     /// Named by their parameter ids rather than by this effect's name, the way
-    /// a producer's birth scan is found by its `emit_rate` row (K-598): a later
+    /// a producer's birth scan is found by its `emit_rate` row: a later
     /// consumer that wants the same back-samples declares the same two ids and
     /// needs no edit to the builder.
     pub const SAMPLES_PARAM: &'static str = "back_samples";
@@ -229,7 +229,7 @@ impl Trail {
             return (out, tails);
         };
         // The points that grow a tail at all: the newest by birth index, which
-        // is the cap rule the whole family applies (K-475).
+        // is the cap rule the whole family applies.
         let mut heads = head.clone();
         heads.keep_newest(self.max_trails.clamp(0, points::CAP_HARD as i32) as usize);
         let wanted =
@@ -287,7 +287,7 @@ impl Trail {
     }
 
     /// How the tail is drawn — dabs and capsules through the one kernel, and
-    /// the host Mix (K-425).
+    /// the host Mix.
     #[must_use]
     pub fn draw_style(self) -> points::DrawStyle {
         points::DrawStyle {
@@ -317,8 +317,7 @@ impl EffectDef for TrailDef {
         &<Trail as EffectMetadata>::SCHEMA
     }
 
-    /// A picture in, a picture out, and a **stream in** beside it (K-492,
-    /// K-601).
+    /// A picture in, a picture out, and a **stream in** beside it.
     fn signature(&self) -> Signature {
         Signature::Image {
             inputs: POINTS_IN,
@@ -327,7 +326,7 @@ impl EffectDef for TrailDef {
     }
 
     /// The raster factor, so a px@comp stream reaches the pixels this frame is
-    /// drawn at (K-385).
+    /// drawn at.
     fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
         push(Trail::DERIVED_PX_SCALE, Value::Float(cx.px_scale));
     }

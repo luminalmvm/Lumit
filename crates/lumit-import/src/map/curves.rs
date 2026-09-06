@@ -1,13 +1,13 @@
 //! After Effects' Curves blob, decoded
-//! ([docs/11-AE-IMPORT.md](../../../../docs/11-AE-IMPORT.md) §5, K-639 —
-//! K-410's honesty note answered for the direct route).
+//! ([docs/11-AE-IMPORT.md](../../../../docs/11-AE-IMPORT.md) §5 — the honesty
+//! note about the unreadable blob, answered for the direct route).
 //!
 //! # In plain terms
 //!
 //! After Effects stores the whole of a Curves effect — all five channels, all
 //! their control points — as one lump of bytes it calls *arbitrary data*. Its
 //! own scripting refuses to hand that lump over, which is why a Curves used to
-//! import as an empty placeholder (K-410). The direct `.aep` route reads the
+//! import as an empty placeholder. The direct `.aep` route reads the
 //! lump out of the file itself, and this module says what is inside it.
 //!
 //! The lump is 1,644 bytes and has three parts:
@@ -46,7 +46,7 @@
 //! (The same project also proved *how* After Effects draws the line between the
 //! points — a natural cubic spline, reproducing all 95 tables byte for byte —
 //! but that is the effect's business rather than the importer's, and Lumit's
-//! Curves draws a clamped one (K-412). The difference is a report row, not an
+//! Curves draws a clamped one. The difference is a report row, not an
 //! arithmetic here.)
 
 /// How long the blob is. Every part below is at a fixed offset inside it, so a
@@ -69,7 +69,7 @@ const TABLES_AT: usize = 4;
 const POINTS_AT: usize = TABLES_AT + CHANNELS * TABLE;
 
 /// The most control points a record has room for. The same sixteen Lumit's own
-/// curve carries (`lumit_core::fx::CURVE_MAX_POINTS`, K-412), which is why the
+/// curve carries (`lumit_core::fx::CURVE_MAX_POINTS`), which is why the
 /// point list needs no thinning on the way across.
 const MAX_POINTS: usize = 16;
 

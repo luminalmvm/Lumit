@@ -75,7 +75,7 @@ void main() {
       await mount(tester, p);
 
       expect(p.uiState.renderTimings.measuring, isTrue,
-          reason: 'numbers are what the column is for (K-276 revision)');
+          reason: 'numbers are what the column is for');
 
       p.uiState.renderTimings.report(BridgeFrameProfile(
         frame: BigInt.zero,

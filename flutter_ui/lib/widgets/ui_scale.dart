@@ -1,4 +1,4 @@
-// UI scale (Settings → Interface → UI scale, K-117): the whole interface draws
+// UI scale (Settings → Interface → UI scale): the whole interface draws
 // larger or smaller relative to the display's native scale, exactly as egui's
 // `ctx.set_pixels_per_point(scale)` does — layout AND hit-testing move together.
 //
@@ -22,7 +22,7 @@
 // Glyphs stay crisp: Transform is applied to the vector draw ops at
 // rasterisation, not to a pre-rendered bitmap, so text does not soften.
 //
-// Commit-on-release is handled upstream by the settings slider (K-117): this
+// Commit-on-release is handled upstream by the settings slider: this
 // widget just reflects whatever `scale` the workspace currently holds.
 
 import 'package:flutter/widgets.dart';
@@ -30,7 +30,7 @@ import 'package:lumit_flutter/state/settings.dart' show effectiveUiScale;
 
 class UiScaleView extends StatelessWidget {
   /// The user's own factor (Settings → Interface → Scale). What is drawn is
-  /// this over the presentation baseline — see [effectiveUiScale] (K-560).
+  /// this over the presentation baseline — see [effectiveUiScale].
   final double scale;
   final Widget child;
 
@@ -38,7 +38,7 @@ class UiScaleView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // The baseline (K-560) means the shipped 100% is a real scale of 1.1, so
+    // The baseline means the shipped 100% is a real scale of 1.1, so
     // the pass-through is now the rare case rather than the common one: it is
     // the *effective* scale that has to be 1 for there to be nothing to do.
     // A user who scales back down to the old size gets it, as does anything

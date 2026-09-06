@@ -1,4 +1,4 @@
-//! **A lost graphics device is survivable** (K-585, budget B9).
+//! **A lost graphics device is survivable** (budget B9).
 //!
 //! # In plain terms
 //!
@@ -16,7 +16,7 @@
 //!    raises the flag, and it is still raised on the next turn round the loop.
 //! 2. A renderer built afterwards **draws the same picture**, on the same
 //!    machine, with no ceremony in between. That is the whole of the worker's
-//!    recovery: `HeadlessRenderer::new` on the existing K-434 build road.
+//!    recovery: `HeadlessRenderer::new` on the existing build road.
 //!
 //! The loss here is real rather than a set boolean: `simulate_device_loss`
 //! destroys the device, so the second render is genuinely being served by a

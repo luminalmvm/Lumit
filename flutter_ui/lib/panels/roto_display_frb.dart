@@ -1,4 +1,4 @@
-// The Roto brush's status, in words (K-713, docs/08 §3.96).
+// The Roto brush's status, in words (docs/08 §3.96).
 //
 // **In plain terms.** Cutting a subject out of a whole shot takes a while, and
 // it happens somewhere else — on its own thread, over the media file, while you
@@ -11,7 +11,7 @@
 // [rotoFailureSentence] are free functions so what a status *says* can be
 // asserted directly: that is a decision about wording, and testing it through a
 // mounted widget would be testing the mounting. [RotoDisplayFrb] is the row
-// itself (K-717) — the span bar, the sentence, and the base frame with the one
+// itself — the span bar, the sentence, and the base frame with the one
 // button that moves it. The buttons above it are the effect's own Action rows
 // (`ParamKind::Action`), drawn by the ordinary parameter row; the scribbling is
 // the Viewer's (`panels/viewer_roto.dart`).
@@ -28,7 +28,7 @@ import 'status_poller.dart';
 
 /// The sentence for a refusal.
 ///
-/// The engine sends a **reason**, never these words (K-303): its own
+/// The engine sends a **reason**, never these words: its own
 /// `RotoFailure` carries English, and English crossing the bridge would ship
 /// untranslated inside a translated window. The switch is exhaustive over the
 /// generated enum, so a reason added to the engine is a compile error here
@@ -115,7 +115,7 @@ class RotoDisplayFrb extends StatefulWidget {
 
   /// The composition frame on screen — what "assign the base to here" means.
   /// Passed rather than read: the panel is rebuilt when it moves, and asking
-  /// the engine per rebuild is exactly the traffic K-681 forbids.
+  /// the engine per rebuild is exactly the traffic the budget gates forbid.
   final int playheadFrame;
 
   /// Something changed that the rest of the interface should re-read.
@@ -209,7 +209,7 @@ class _RotoDisplayFrbState extends State<RotoDisplayFrb>
         children: [
           // The same bar the two tracking displays draw, measuring the same
           // thing in the same two weights: how much of the shot the answer
-          // reaches, in the accent, against how much it does not (K-540).
+          // reaches, in the accent, against how much it does not.
           if (status != null && status.clipFrames > 0)
             TrackSpanBar(
               key: const ValueKey('fx-roto-span'),

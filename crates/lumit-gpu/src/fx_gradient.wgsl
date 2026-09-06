@@ -19,7 +19,7 @@ struct Params {
     mix_amt: f32,           // 0..1, blended against the unprocessed input
     seed: u32,
     radial: u32,            // 0 linear, 1 radial
-    clip_to_alpha: u32,     // 1 = clip to the layer's coverage, keep its alpha (K-706)
+    clip_to_alpha: u32,     // 1 = clip to the layer's coverage, keep its alpha
     _pad1: u32,
 };
 
@@ -73,7 +73,7 @@ fn gradient(@builtin(global_invocation_id) gid: vec3<u32>) {
         t = t + (hash01(0u, xy.x, xy.y, 0) - 0.5) * p.scatter;
     }
     let tc = clamp(t, 0.0, 1.0);
-    // Clipped to alpha (K-706, == cpu::gradient): `ramp · a` is the
+    // Clipped to alpha (== cpu::gradient): `ramp · a` is the
     // premultiplied form of "this ramp at this coverage", and the layer's own
     // alpha is then left exactly as it was — the whole difference between the
     // Gradient overlay style and the generator this kernel also serves.

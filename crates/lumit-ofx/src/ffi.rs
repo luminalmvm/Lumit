@@ -263,6 +263,40 @@ pub struct OfxMessageSuiteV1 {
 /// belongs to an instance, and no instance exists yet, so each of those answers
 /// `kOfxStatErrUnsupported` — a code the spec already requires plugins to cope
 /// with, and an honest one, because the feature genuinely is not here.
+/// `OfxInteractSuiteV1` — the suite an overlay would draw through. This
+/// host offers no overlays (`kOfxImageEffectPropSupportsOverlays` is nought),
+/// so no interact is ever made; the suite exists because the stock support
+/// library treats fetching it as mandatory and refuses to describe without
+/// it.
+#[repr(C)]
+pub struct OfxInteractSuiteV1 {
+    pub interact_swap_buffers: unsafe extern "C" fn(interact: *mut c_void) -> OfxStatus,
+    pub interact_redraw: unsafe extern "C" fn(interact: *mut c_void) -> OfxStatus,
+    pub interact_get_property_set: unsafe extern "C" fn(
+        interact: *mut c_void,
+        property: *mut OfxPropertySetHandle,
+    ) -> OfxStatus,
+}
+
+/// `OfxMessageSuiteV2` — V1's `message` plus a message that stays up until
+/// the plugin clears it. HitFilm refuses to load a host without it.
+#[repr(C)]
+pub struct OfxMessageSuiteV2 {
+    pub message: unsafe extern "C" fn(
+        handle: *mut c_void,
+        message_type: *const c_char,
+        message_id: *const c_char,
+        format: *const c_char,
+    ) -> OfxStatus,
+    pub set_persistent_message: unsafe extern "C" fn(
+        handle: *mut c_void,
+        message_type: *const c_char,
+        message_id: *const c_char,
+        format: *const c_char,
+    ) -> OfxStatus,
+    pub clear_persistent_message: unsafe extern "C" fn(handle: *mut c_void) -> OfxStatus,
+}
+
 #[repr(C)]
 pub struct OfxImageEffectSuiteV1 {
     pub get_property_set: unsafe extern "C" fn(
@@ -315,50 +349,30 @@ pub struct OfxImageEffectSuiteV1 {
     pub image_memory_unlock: unsafe extern "C" fn(memory_handle: OfxImageMemoryHandle) -> OfxStatus,
 }
 
-/// One trailing argument of `paramSetValue`, as the machine word the shim hands
-/// it over in.
-///
-/// **Why a word and not a type.** Writing a value is variadic in the header, and
-/// the argument is an `int`, a `double` or a `char *` depending on what the
-/// parameter was defined as — so unlike `paramGetValue`, where every trailing
-/// argument is a pointer, there is no one Rust type that serves all three. The
-/// C shim pulls each with the right `va_arg` type and passes the *bits* across
-/// in a word; the parameter's own declared type then says how to read them back
-/// ([`crate::suites::parameter`] does the reinterpreting).
-///
-/// This type therefore describes the boundary between the shim and the Rust
-/// half, both of which this repository compiles together. It says nothing about
-/// how the plugin passed its argument — that question is `va_arg`'s, and it is
-/// answered in `shim/ofx_varargs.c` (K-756). It used to say a great deal about
-/// it, on the strength of a Microsoft x64 rule that does not hold elsewhere;
-/// that is what K-756 replaced.
-pub type OfxParamSlot = u64;
-
 /// `OfxParameterSuiteV1` — eighteen entry points, in header order.
 ///
-/// Eight of them are **C-variadic** in the header: `paramGetValue` and its
-/// relatives take the out-parameters as trailing arguments, one per dimension,
-/// so a double passes one and an RGBA colour four.
+/// Six of them are **C-variadic** in the header: the four value entry points
+/// take one trailing argument per dimension of the parameter, and the
+/// derivative and integral take out-pointers the same way. Rust cannot
+/// *define* a C-variadic function on stable, and declaring one with a fixed
+/// number of arguments instead is only right where the ABI happens to put
+/// variadic and fixed arguments in the same place. It does on x86-64 Windows
+/// and it does not on Apple silicon, where variadic arguments go on the stack
+/// and a plugin's out-pointer would be read from the wrong register and
+/// written through. That was a recorded ceiling of the host until the shim.
 ///
-/// **The four that carry a value are declared here exactly as the header
-/// declares them** (K-756). Rust cannot *define* a C-variadic function on
-/// stable, but it can declare one, and declaring them honestly is what lets the
-/// test plugin call them the way a plugin nobody here wrote does — with as many
-/// arguments as the parameter has dimensions, and no more. The addresses these
-/// fields carry are the C shim's ([`lumit_ofx_shim_param_get_value`] and its
-/// three siblings), which pull the trailing arguments with `va_arg` and hand
-/// them to the fixed-arity Rust half.
+/// So the four that read or write a value are declared here **as the header
+/// declares them**, variadic, and are implemented in C
+/// (`suites/variadic.c`): the C pulls exactly as many arguments as the
+/// parameter has dimensions and hands them to a fixed-arity Rust function.
+/// Rust can *call* a variadic function pointer on stable, so the test plugin
+/// makes real variadic calls through these types and the same test proves the
+/// shim on every platform CI runs.
 ///
-/// This supersedes the fixed-arity-of-four declaration K-591 shipped and the
-/// ceiling it recorded. That arrangement read the arguments from where a
-/// *fixed* call would have left them, which is right on Windows x64, System V
-/// and standard AAPCS64 and wrong on Apple silicon, whose ABI puts every
-/// variadic argument on the stack — so on an M-series Mac the host read
-/// leftovers and, on a read, wrote the parameter's value through them. The
-/// declarations and the test plugin agreed with each other and with no real
-/// plugin, which is why the suite was green there while nothing worked.
-///
-/// The remaining six variadics stay stubs that read no trailing argument.
+/// The derivative and the integral stay fixed-arity stubs that read no
+/// trailing argument: a callee that ignores the variadic part is correct on
+/// every ABI, because the *named* arguments before the ellipsis are placed the
+/// same way whether or not the function is variadic.
 #[repr(C)]
 pub struct OfxParameterSuiteV1 {
     pub param_define: unsafe extern "C" fn(
@@ -388,10 +402,6 @@ pub struct OfxParameterSuiteV1 {
         unsafe extern "C" fn(param: OfxParamHandle, time: OfxTime) -> OfxStatus,
     pub param_get_integral:
         unsafe extern "C" fn(param: OfxParamHandle, time1: OfxTime, time2: OfxTime) -> OfxStatus,
-    /// Variadic as the header declares it. The trailing values are an `int`, a
-    /// `double` or a `char *` by the parameter's own type; the shim pulls each
-    /// with the matching `va_arg` and passes its bits on as an
-    /// [`OfxParamSlot`], which the parameter suite reads back.
     pub param_set_value: unsafe extern "C" fn(param: OfxParamHandle, ...) -> OfxStatus,
     pub param_set_value_at_time:
         unsafe extern "C" fn(param: OfxParamHandle, time: OfxTime, ...) -> OfxStatus,
@@ -419,33 +429,6 @@ pub struct OfxParameterSuiteV1 {
     pub param_edit_begin:
         unsafe extern "C" fn(param_set: OfxParamSetHandle, name: *const c_char) -> OfxStatus,
     pub param_edit_end: unsafe extern "C" fn(param_set: OfxParamSetHandle) -> OfxStatus,
-}
-
-// The C shim (`shim/ofx_varargs.c`, K-756). These four symbols are what the
-// parameter suite's table actually hands a plugin: each receives the variadic
-// call, pulls its trailing arguments with `va_arg` — the only construct that
-// knows where this platform's caller put them — and then calls straight back
-// into the fixed-arity Rust half, which is where every decision stays.
-//
-// Declaring them is legal on stable Rust; only *defining* one is not. That
-// asymmetry is the whole reason this arrangement works.
-extern "C" {
-    /// `paramGetValue`, as the plugin calls it.
-    pub fn lumit_ofx_shim_param_get_value(param: OfxParamHandle, ...) -> OfxStatus;
-    /// `paramGetValueAtTime`, as the plugin calls it.
-    pub fn lumit_ofx_shim_param_get_value_at_time(
-        param: OfxParamHandle,
-        time: OfxTime,
-        ...
-    ) -> OfxStatus;
-    /// `paramSetValue`, as the plugin calls it.
-    pub fn lumit_ofx_shim_param_set_value(param: OfxParamHandle, ...) -> OfxStatus;
-    /// `paramSetValueAtTime`, as the plugin calls it.
-    pub fn lumit_ofx_shim_param_set_value_at_time(
-        param: OfxParamHandle,
-        time: OfxTime,
-        ...
-    ) -> OfxStatus;
 }
 
 /// `OfxThreadFunctionV1` — the body a plugin asks `multiThread` to run once on
@@ -545,6 +528,37 @@ pub mod prop_keys {
 
     pub const HOST_IS_BACKGROUND: &str = "OfxImageEffectHostPropIsBackground";
     pub const SUPPORTS_OVERLAYS: &str = "OfxImageEffectPropSupportsOverlays";
+    /// `kOfxImageEffectHostPropNativeOrigin` (OFX 1.4)
+    pub const HOST_NATIVE_ORIGIN: &str = "OfxImageEffectHostPropNativeOrigin";
+    /// `kOfxPropHostOSHandle`
+    pub const HOST_OS_HANDLE: &str = "OfxPropHostOSHandle";
+    /// `kOfxParamHostPropSupportsStrChoiceAnimation` (OFX 1.5)
+    pub const PARAM_SUPPORTS_STR_CHOICE_ANIMATION: &str =
+        "OfxParamHostPropSupportsStrChoiceAnimation";
+    /// `kOfxImageEffectPropOpenGLRenderSupported` (OFX 1.3)
+    pub const OPENGL_RENDER_SUPPORTED: &str = "OfxImageEffectPropOpenGLRenderSupported";
+    /// `kOfxImageEffectPropCudaRenderSupported` (OFX 1.5)
+    pub const CUDA_RENDER_SUPPORTED: &str = "OfxImageEffectPropCudaRenderSupported";
+    /// `kOfxImageEffectPropCudaStreamSupported` (OFX 1.5)
+    pub const CUDA_STREAM_SUPPORTED: &str = "OfxImageEffectPropCudaStreamSupported";
+    /// `kOfxImageEffectPropMetalRenderSupported` (OFX 1.5)
+    pub const METAL_RENDER_SUPPORTED: &str = "OfxImageEffectPropMetalRenderSupported";
+    /// `kOfxImageEffectPropOpenCLRenderSupported` (OFX 1.5)
+    pub const OPENCL_RENDER_SUPPORTED: &str = "OfxImageEffectPropOpenCLRenderSupported";
+    /// `kOfxImageEffectPropOpenGLEnabled` — a render `inArgs` flag (OFX 1.3)
+    pub const OPENGL_ENABLED: &str = "OfxImageEffectPropOpenGLEnabled";
+    /// `kOfxImageEffectPropCudaEnabled` — a render `inArgs` flag (OFX 1.5)
+    pub const CUDA_ENABLED: &str = "OfxImageEffectPropCudaEnabled";
+    /// `kOfxImageEffectPropCudaStream` — a render `inArgs` pointer (OFX 1.5)
+    pub const CUDA_STREAM: &str = "OfxImageEffectPropCudaStream";
+    /// `kOfxImageEffectPropMetalEnabled` — a render `inArgs` flag (OFX 1.5)
+    pub const METAL_ENABLED: &str = "OfxImageEffectPropMetalEnabled";
+    /// `kOfxImageEffectPropMetalCommandQueue` — a render `inArgs` pointer (OFX 1.5)
+    pub const METAL_COMMAND_QUEUE: &str = "OfxImageEffectPropMetalCommandQueue";
+    /// `kOfxImageEffectPropOpenCLEnabled` — a render `inArgs` flag (OFX 1.5)
+    pub const OPENCL_ENABLED: &str = "OfxImageEffectPropOpenCLEnabled";
+    /// `kOfxImageEffectPropOpenCLCommandQueue` — a render `inArgs` pointer (OFX 1.5)
+    pub const OPENCL_COMMAND_QUEUE: &str = "OfxImageEffectPropOpenCLCommandQueue";
     pub const SUPPORTS_MULTI_RESOLUTION: &str = "OfxImageEffectPropSupportsMultiResolution";
     pub const SUPPORTS_TILES: &str = "OfxImageEffectPropSupportsTiles";
     pub const TEMPORAL_CLIP_ACCESS: &str = "OfxImageEffectPropTemporalClipAccess";
@@ -556,7 +570,7 @@ pub mod prop_keys {
     /// `OfxImageEffectPropMultipleClipDepths`, and a host that seeds the macro's
     /// own name has the property under a name no plugin ever asks for. ntsc-rs
     /// reads this one during `kOfxActionLoad` and refuses to load without it,
-    /// which is how it was found (K-595).
+    /// which is how it was found.
     pub const SUPPORTS_MULTIPLE_CLIP_DEPTHS: &str = "OfxImageEffectPropMultipleClipDepths";
     pub const SUPPORTS_MULTIPLE_CLIP_PARS: &str = "OfxImageEffectPropSupportsMultipleClipPARs";
     pub const SETABLE_FRAME_RATE: &str = "OfxImageEffectPropSetableFrameRate";
@@ -610,30 +624,6 @@ pub mod prop_keys {
     pub const SEQUENTIAL_RENDER_STATUS: &str = "OfxImageEffectPropSequentialRenderStatus";
     pub const INTERACTIVE_RENDER_STATUS: &str = "OfxImageEffectPropInteractiveRenderStatus";
     pub const RENDER_QUALITY_DRAFT: &str = "OfxImageEffectPropRenderQualityDraft";
-
-    // The GPU render extensions (OFX 1.5, and Resolve's before it). This host
-    // renders on the CPU side of the boundary and supports none of them — but
-    // "no" and "I have never heard of that property" are **different answers**,
-    // and a plugin built on a vendor framework takes the second one badly: it
-    // asks whether a GPU render is on, the fetch fails rather than answering
-    // nought, and the plugin returns success having drawn nothing. So they are
-    // declared, and declared false.
-    /// `kOfxImageEffectPropCudaRenderSupported` — host, `"false"` here.
-    pub const CUDA_RENDER_SUPPORTED: &str = "OfxImageEffectPropCudaRenderSupported";
-    /// `kOfxImageEffectPropCudaStreamSupported` — host, `"false"` here.
-    pub const CUDA_STREAM_SUPPORTED: &str = "OfxImageEffectPropCudaStreamSupported";
-    /// `kOfxImageEffectPropOpenCLRenderSupported` — host, `"false"` here.
-    pub const OPENCL_RENDER_SUPPORTED: &str = "OfxImageEffectPropOpenCLRenderSupported";
-    /// `kOfxImageEffectPropOpenCLSupported` — host, `"false"` here.
-    pub const OPENCL_SUPPORTED: &str = "OfxImageEffectPropOpenCLSupported";
-    /// `kOfxImageEffectPropMetalRenderSupported` — host, `"false"` here.
-    pub const METAL_RENDER_SUPPORTED: &str = "OfxImageEffectPropMetalRenderSupported";
-    /// `kOfxImageEffectPropCudaEnabled` — render `inArgs`, nought here.
-    pub const CUDA_ENABLED: &str = "OfxImageEffectPropCudaEnabled";
-    /// `kOfxImageEffectPropOpenCLEnabled` — render `inArgs`, nought here.
-    pub const OPENCL_ENABLED: &str = "OfxImageEffectPropOpenCLEnabled";
-    /// `kOfxImageEffectPropMetalEnabled` — render `inArgs`, nought here.
-    pub const METAL_ENABLED: &str = "OfxImageEffectPropMetalEnabled";
     pub const REGION_OF_DEFINITION: &str = "OfxImageEffectPropRegionOfDefinition";
     pub const REGION_OF_INTEREST: &str = "OfxImageEffectPropRegionOfInterest";
     pub const FRAME_RANGE: &str = "OfxImageEffectPropFrameRange";
@@ -644,7 +634,7 @@ pub mod prop_keys {
     pub const PROJECT_EXTENT: &str = "OfxImageEffectPropProjectExtent";
     /// How long the effect runs, in frames. An instance property, and one the
     /// OFX support library reads when a plugin is constructed — a plugin that
-    /// cannot find it does not exist (K-595).
+    /// cannot find it does not exist.
     pub const EFFECT_DURATION: &str = "OfxImageEffectInstancePropEffectDuration";
     /// As [`SUPPORTS_MULTIPLE_CLIP_DEPTHS`]: the macro is
     /// `kOfxImageEffectPropProjectPixelAspectRatio`, the string is not.
@@ -658,9 +648,11 @@ pub mod prop_keys {
     /// The clip instance's unmapped frame range. Spelled `OfxImageEffectProp…`
     /// rather than `OfxImageClipProp…` — it is a clip property with an effect
     /// property's name, which is what the header says and what the OFX support
-    /// library reads (K-595).
+    /// library reads.
     pub const CLIP_UNMAPPED_FRAME_RANGE: &str = "OfxImageEffectPropUnmappedFrameRange";
     pub const CLIP_UNMAPPED_COMPONENTS: &str = "OfxImageClipPropUnmappedComponents";
+    /// `kOfxImageClipPropUnmappedPixelDepth`
+    pub const CLIP_UNMAPPED_PIXEL_DEPTH: &str = "OfxImageClipPropUnmappedPixelDepth";
     pub const CLIP_FIELD_ORDER: &str = "OfxImageClipPropFieldOrder";
 
     pub const IMAGE_DATA: &str = "OfxImagePropData";
@@ -712,7 +704,7 @@ pub mod param_types {
     /// A curve a plugin evaluates itself. Accepted by `paramDefine` — refusing
     /// a type the spec defines is how a plugin fails to describe at all — but
     /// it has no schema row, because Lumit's own curve is its *control points*
-    /// (K-412) and a parametric parameter is a function, not points.
+    /// and a parametric parameter is a function, not points.
     pub const PARAMETRIC: &str = "OfxParamTypeParametric";
 
     /// Every type above, for the "is this a type at all" check.
@@ -766,6 +758,11 @@ pub mod prop_values {
     pub const TYPE_IMAGE_EFFECT_HOST: &str = "OfxTypeImageEffectHost";
     pub const COMPONENT_RGBA: &str = "OfxImageComponentRGBA";
     pub const BIT_DEPTH_FLOAT: &str = "OfxBitDepthFloat";
+    /// `kOfxImageEffectHostPropNativeOriginBottomLeft` — the way up the host
+    /// hands its pictures over.
+    pub const NATIVE_ORIGIN_BOTTOM_LEFT: &str = "OfxImageEffectHostPropNativeOriginBottomLeft";
+    /// The string OFX 1.5 spells a GPU render capability with when there is none.
+    pub const FALSE: &str = "false";
     pub const CONTEXT_FILTER: &str = "OfxImageEffectContextFilter";
     pub const CONTEXT_GENERAL: &str = "OfxImageEffectContextGeneral";
     pub const CONTEXT_GENERATOR: &str = "OfxImageEffectContextGenerator";
@@ -783,11 +780,11 @@ pub mod prop_values {
     pub const TYPE_CLIP: &str = "OfxTypeClip";
     pub const TYPE_IMAGE: &str = "OfxTypeImage";
     /// The only premultiplication state this host hands out (docs/12 §2.1).
-    /// The macro is `kOfxImagePreMultiplied`; the string is not (K-595).
+    /// The macro is `kOfxImagePreMultiplied`; the string is not.
     pub const IMAGE_PRE_MULTIPLIED: &str = "OfxImageAlphaPremultiplied";
-    /// Macro `kOfxImageFieldNone`, string `OfxFieldNone` (K-595).
+    /// Macro `kOfxImageFieldNone`, string `OfxFieldNone`.
     pub const IMAGE_FIELD_NONE: &str = "OfxFieldNone";
-    /// Macro `kOfxImageFieldBoth`, string `OfxFieldBoth` (K-595).
+    /// Macro `kOfxImageFieldBoth`, string `OfxFieldBoth`.
     pub const IMAGE_FIELD_BOTH: &str = "OfxFieldBoth";
     pub const CHANGE_USER_EDITED: &str = "OfxChangeUserEdited";
     pub const CHANGE_PLUGIN_EDITED: &str = "OfxChangePluginEdited";

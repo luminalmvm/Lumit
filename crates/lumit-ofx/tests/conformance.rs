@@ -19,8 +19,10 @@
 //!   even when the picture looked right. A plugin swallows those codes and
 //!   carries on; that is exactly how a host bug hides.
 //! * **The output is a picture**: the right number of pixels, every one of them
-//!   finite. A NaN in a plugin's output is the host's problem the moment it
-//!   reaches a composite.
+//!   finite, and not mostly transparent. A NaN in a plugin's output is the
+//!   host's problem the moment it reaches a composite; a frame that is mostly
+//!   alpha nought from an opaque fixture is one the plugin never wrote, and a
+//!   blank viewer with no error is exactly what that ships as.
 //! * **A rejection is not a failure.** This host is fp32 RGBA, full-frame, no
 //!   tiles, two contexts. A plugin that legitimately cannot work in it is
 //!   *rejected at describe* with a reason, and the reason is a row in the table
@@ -178,7 +180,7 @@ fn request_for(clips: &[String], source: &Frame16) -> RenderRequest {
     RenderRequest {
         time: 0.0,
         bounds: RectI::sized(width as i32, height as i32),
-        order: RowOrder::TopDown,
+        order: RowOrder::BottomUp,
         inputs,
     }
 }
@@ -235,6 +237,21 @@ fn drive(
     {
         return Err(Outcome::Failed(format!(
             "the frame carries a value that is not a number, at element {at}"
+        )));
+    }
+    // The fixture is opaque everywhere. A plugin that hands back a picture
+    // mostly without alpha did not write most of it: ntsc-rs handed a negative
+    // stride wrote past the block and left the rest as the zeros it was
+    // allocated with, which the checks above call a picture.
+    let pixels = width * height;
+    let without_alpha = frame
+        .pixels()
+        .chunks_exact(4)
+        .filter(|pixel| f32::from(pixel[3]) == 0.0)
+        .count();
+    if without_alpha * 2 > pixels {
+        return Err(Outcome::Failed(format!(
+            "the frame came back mostly transparent ({without_alpha} of {pixels} pixels have no alpha)"
         )));
     }
     let changed = frame.pixels() != source.pixels();
@@ -407,9 +424,9 @@ fn the_bench_describes_instances_and_renders_with_no_refused_suite_call() {
     // a host still missing features it needs is measured and printed, not
     // asserted: today the biggest shortfall is that openfx-misc writes
     // parameter values during `kOfxActionCreateInstance` and this host cannot
-    // accept a write (docs/impl/ofx-host.md §5, K-595), and a suite that went
+    // accept a write (docs/impl/ofx-host.md §5), and a suite that went
     // red for a feature nobody has built yet would block everything else
-    // (K-007) while proving nothing. `LUMIT_OFX_BENCH_STRICT` turns the third
+    // while proving nothing. `LUMIT_OFX_BENCH_STRICT` turns the third
     // column into an assertion, and it is set the day the host can carry it.
     assert_eq!(
         bad_handle, 0,

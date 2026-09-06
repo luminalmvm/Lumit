@@ -1,19 +1,19 @@
-//! Shake (docs/08 §3.4, FX-11/K-146): a seeded camera wobble, resampled once
+//! Shake (docs/08 §3.4, FX-11): a seeded camera wobble, resampled once
 //! through the Transform kernel — a transform-domain effect, never pixel noise.
 //!
 //! **In plain terms.** The wobble is a curve through seeded noise, read at
 //! "layer time × frequency". Two things about it will not fit in a slider, and
-//! K-388 is where each of them went:
+//! here is where each of them went:
 //!
 //! - **The noise itself** is a function of the clock and of a 64-bit integer
 //!   lattice the GPU has not got, so it is sampled here, at resolve time, and
-//!   handed over as plain numbers ([`EffectDef::resolve_derived`], K-385). It is
+//!   handed over as plain numbers ([`EffectDef::resolve_derived`]). It is
 //!   pushed **unit-free** — the raw −1..1 wobble, with no amplitude in it —
 //!   because a derived value carries no declared unit and so would never rescale
 //!   when a stack is reused at another raster size. The amplitude stays a
 //!   declared `Px` row, which does rescale, and the two are multiplied
 //!   together at dispatch in [`Shake::packed`].
-//! - **Its own motion blur** (T18, K-165) needs the same wobble at nine
+//! - **Its own motion blur** (T18) needs the same wobble at nine
 //!   sub-frame placements across the shutter. Each is four floats under one id
 //!   ([`Value::Vec4`]), which is what that kind exists for: forty flat
 //!   `derived.*` entries would have drowned the bag.
@@ -30,10 +30,10 @@ use crate::fx::{
 use crate::model::EffectValue;
 use lumit_fx_macros::Effect;
 
-/// Shake's twirls (P4): the per-axis wobble (FX-11, K-146) — the master
+/// Shake's twirls (P4): the per-axis wobble (FX-11) — the master
 /// Amplitude/Frequency drive x and y together while this group biases each axis
 /// and adds the z (depth/scale) shake that replaced the old Zoom pump — and the
-/// Motion blur group (T18, K-165), the shake's own inter-frame smear (toggle +
+/// Motion blur group (T18), the shake's own inter-frame smear (toggle +
 /// amount). Each group's ids are a contiguous run of the schema's `params`.
 pub const SHAKE_GROUPS: &[ParamGroup] = &[
     ParamGroup {
@@ -65,8 +65,8 @@ pub const SHAKE_GROUPS: &[ParamGroup] = &[
     // the frame key reads (lumit-eval).
     seeded = true,
     groups = SHAKE_GROUPS,
-    // K-427: the matte scales the displacement, inside the kernel (the
-    // owner's rule for mattes); the generic strength dissolve does not also run.
+    // The matte scales the displacement, inside the kernel (the owner's rule
+    // for mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales the shake's displacement per pixel, read where the pixel lands: \
@@ -80,7 +80,7 @@ pub struct Shake {
     /// [`ResolvedStack::rescale_spatial`](crate::fx::ResolvedStack::
     /// rescale_spatial) moves it again if the stack is reused at another size.
     /// The old arm scaled the *resolved offsets* by hand; declaring the unit
-    /// does it one multiply earlier (K-388).
+    /// does it one multiply earlier.
     #[slider(
         min = 0.0,
         max = 400.0,
@@ -92,7 +92,7 @@ pub struct Shake {
     pub amplitude: f32,
 
     /// Hz — how fast the wobble wanders; the noise samples at local time ×
-    /// frequency. Unbounded above (K-090): any positive rate is meaningful,
+    /// frequency. Unbounded above: any positive rate is meaningful,
     /// sampling handles it. Read by [`ShakeDef::resolve_derived`] rather than by
     /// [`Shake::packed`], because what it produces is the noise sample itself.
     #[slider(min = 0.1, max = 30.0, default = 8.0, hard_min = 0.0, unit = Raw)]
@@ -110,7 +110,7 @@ pub struct Shake {
     )]
     pub rotation: f32,
 
-    /// × the master Frequency, for the twist alone (K-541). The twist used to
+    /// × the master Frequency, for the twist alone. The twist used to
     /// be the one axis with an amount but no rate of its own, so a slow drift
     /// with a fast shudder in it — the handheld look — could not be dialled:
     /// raising the master Frequency sped the twist up with everything else.
@@ -197,7 +197,7 @@ pub struct Shake {
     )]
     pub z_freq: f32,
 
-    /// The shake's own motion blur (T18, K-165), smeared along the wobble's
+    /// The shake's own motion blur (T18), smeared along the wobble's
     /// inter-frame movement and applied to this effect alone.
     #[toggle(label = "Motion blur", default = false)]
     pub motion_blur: bool,
@@ -216,7 +216,7 @@ pub struct Shake {
     )]
     pub mb_amount: f32,
 
-    /// How the resample treats the border the wobble reveals (P3, K-145).
+    /// How the resample treats the border the wobble reveals (P3).
     /// Default Mirror (owner, 2026-07-19; was Repeat): the reflected border
     /// reads more naturally under the shake's own motion blur than a smeared
     /// repeat edge. What the kernel reads is [`Shake::DERIVED_EDGE`], not this
@@ -240,7 +240,7 @@ pub struct Shake {
     pub mix: f32,
 }
 
-/// What this frame's wobble is built from that no slider holds (K-388): the
+/// What this frame's wobble is built from that no slider holds: the
 /// unit-free noise, and the two rows whose stored form an old project spells
 /// differently. All of it comes out of the bag through [`Shake::derived_of`].
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -262,7 +262,7 @@ pub struct ShakeDerived {
 ///
 /// **Why `packed` returns this rather than a tuple.** The shake's own motion
 /// blur is not a dial but a different pass — the averaging kernel, fed one
-/// affine per sub-frame — exactly as RGB split's Wavelength is (K-090). One enum
+/// affine per sub-frame — exactly as RGB split's Wavelength is. One enum
 /// keeps the fork in one place, so the CPU reference and the GPU wrapper cannot
 /// disagree about which one an instance is in.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -276,7 +276,7 @@ pub enum Shaken {
         /// 0..1.
         mix: f32,
     },
-    /// The shake's own motion blur (T18, K-165): the wobble at
+    /// The shake's own motion blur (T18): the wobble at
     /// [`SHAKE_MB_SAMPLES`] sub-frame placements, resampled and averaged in
     /// premultiplied linear space. The centre sample is the frame itself.
     Blurred {
@@ -310,11 +310,10 @@ impl Shake {
     ];
 
     /// The depth (z) pump as a 0..1 magnitude, with an old project's
-    /// `zoom_pump` folded in (K-146).
+    /// `zoom_pump` folded in.
     pub const DERIVED_Z_AMP: ParamId = ParamId::new("derived.z_amp");
 
-    /// The edge policy, with an old project's `auto_scale` bool folded in
-    /// (K-145/K-146).
+    /// The edge policy, with an old project's `auto_scale` bool folded in.
     pub const DERIVED_EDGE: ParamId = ParamId::new("derived.edge");
 
     /// Everything [`Shake::packed`] needs that is not a declared row, out of a
@@ -343,7 +342,7 @@ impl Shake {
     /// from the pieces: `amp_px · axis amount · noise` for the offsets, `rotation
     /// amount · noise` for the twist, `1 + z · noise` for the zoom — the same
     /// association and the same `f64 → f32` cast points, so an untouched shake
-    /// is bit-for-bit itself (K-388). `amplitude` arrives already converted from
+    /// is bit-for-bit itself. `amplitude` arrives already converted from
     /// % diagonal by the resolve step, so this only floors it, as the old arm
     /// floored the same product. Both render paths read this one method, so the
     /// CPU reference and the WGSL kernel cannot drift apart.
@@ -382,7 +381,7 @@ impl EffectDef for ShakeDef {
     }
 
     /// The noise, and the two legacy folds — the whole of what the old resolve
-    /// arm did beyond reading its rows, moved unchanged (K-385, K-388).
+    /// arm did beyond reading its rows, moved unchanged.
     ///
     /// Everything here that feeds the noise stays `f64` to the last step: layer
     /// time, the master frequency and the per-axis multipliers, exactly as the
@@ -424,7 +423,7 @@ impl EffectDef for ShakeDef {
             Value::Float((z_pct / 100.0).clamp(0.0, 1.0)),
         );
 
-        // Edges (P3, K-145): the stored Choice, else the old Auto-scale bool
+        // Edges (P3): the stored Choice, else the old Auto-scale bool
         // (on → Repeat hides the border as the cover once did; off →
         // Transparent), else Repeat.
         let edge = match e.param("edge") {
@@ -438,7 +437,7 @@ impl EffectDef for ShakeDef {
         };
         push(Shake::DERIVED_EDGE, Value::Choice(edge.code()));
 
-        // The shake's own motion blur (T18, K-165): when the toggle is on and
+        // The shake's own motion blur (T18): when the toggle is on and
         // the amount is non-zero, sample the wobble across the shutter for the
         // dispatch to average; off is the plain single resample (the bit-exact
         // passthrough). The centre offset is 0, so the middle sample is the

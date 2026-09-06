@@ -1,15 +1,15 @@
 # Effects on a layer group
 
-Status: **BUILT** (owner feature ask, 2026-08-31; logged as **K-731** in
-docs/02-DECISIONS.md — the number the code comments cite). Amends one sentence
-of K-702's promise; reverses nothing else. One amendment against this note's
-own §4 text is recorded in the entry: the frame key feeds the drawn run by
-stack position and length, never by member id, because identity never feeds a
-key (a duplicated comp shares its original's cache).
+Status: **BUILT** (feature ask, 2026-08-31). Amends one sentence of the
+promise that grouped and ungrouped render alike; reverses nothing else. One
+amendment against this note's own §4 text is recorded in the entry: the frame
+key feeds the drawn run by stack position and length, never by member id,
+because identity never feeds a key (a duplicated comp shares its original's
+cache).
 
 **In plain terms.** A layer group today is a label: a named band over a run of
 layers with a triangle on it, and the render walk never reads it — grouped or
-ungrouped, the picture is identical (K-702). The owner's ask is to let the band
+ungrouped, the picture is identical. The owner's ask is to let the band
 *do* one thing: drop effects on the group's header and have them act like an
 adjustment layer for the members only. A blur on the header blurs the lower
 third; the background plates behind it stay sharp. An adjustment layer cannot
@@ -26,8 +26,8 @@ realise.rs's `realise_segment`). So an effected group renders as an **implicit,
 per-frame precompose**: the member run's draws are built exactly as today, then
 wrapped in one Nested draw whose `fx` is the header's stack. When the header
 carries no effects, nothing is wrapped and the walk stays group-blind — which
-is how K-702's promise survives, reworded: *the picture is identical grouped or
-ungrouped **when the header carries no effects***.
+is how the original promise survives, reworded: *the picture is identical
+grouped or ungrouped **when the header carries no effects***.
 
 Photoshop is the precedent, not After Effects. AE has nothing here — its users
 precompose and put an adjustment layer inside, which is this same machine
@@ -50,7 +50,7 @@ pub struct LayerGroup {
     pub label: u8,
     pub members: Vec<Uuid>,
     /// The header's effect stack (docs/impl/group-effects.md). Same shape as
-    /// Layer::effects. Empty = the K-702 group: invisible to the render walk,
+    /// Layer::effects. Empty = a plain group: invisible to the render walk,
     /// byte-identical picture, and every project saved before this field
     /// existed re-saves byte-identical (skipped while empty).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -65,7 +65,7 @@ pub struct LayerGroup {
   and each leak needs a "pretend it isn't there" patch. A field on the group
   touches only the paths that choose to read it. `EffectInstance` brings
   keyframeable, expression-drivable, schema-carrying parameters, serde
-  forward-compatibility (K-258's degrade rule for unknown match names), and
+  forward-compatibility (the degrade rule for unknown match names), and
   the whole existing effect catalogue for free.
 - **Resolve time is comp time.** A group has no in point, out point, start
   offset or Retime, so there is no layer clock to convert through: the header's
@@ -109,7 +109,7 @@ CompLayerDraw {
     rotation 0), opacity 100, blend Normal, three_d false,
     fx / fx_ids:  the header stack, resolved at t_comp, comp diagonal,
                   px_scale 1.0,
-    fx_ref_width: Some(comp.width),     // K-266 rescale under reduced preview,
+    fx_ref_width: Some(comp.width),     // px@comp rescale under reduced preview,
                                         // exactly the adjustment arm's setting
     mattes / dof_inputs / lut_files / mask_paths / points_schedules /
     flare_lens_files: built from group.effects by the same helpers the layer
@@ -119,7 +119,7 @@ CompLayerDraw {
 ```
 
 Nothing downstream is new. `realise_segment` already realises a Nested draw
-entire, runs its `fx` on the finished texture (K-266/K-268 rescale included)
+entire, runs its `fx` on the finished texture (rescale under preview included)
 and composites it as one picture — the group unit rides the Precomp layer's
 code path from the first line to the last. There is no new `DrawSource`, no
 new staging in `realise_at_depth`, and no change to `region_is_safe` (a Nested
@@ -137,11 +137,11 @@ with "the effects act on the members": no members, no act.
 
 ## 3. What holds, what changes — the honest list
 
-- **K-702's promise, reworded.** "Identical picture grouped or ungrouped"
+- **The grouping promise, reworded.** "Identical picture grouped or ungrouped"
   becomes "…when the header carries no effects". The build package edits
   group.rs's module comment, docs/03-DATA-MODEL.md §5.4 and docs/07-UI-SPEC.md
   §4.2a ("MUST never change the picture" gains the same clause) in the same
-  commit, and the decision entry below records the amendment against K-702.
+  commit, and the entry below records the amendment.
 - **Member blend modes against the backdrop: isolated, by design** (§0's
   Photoshop rule). Inside the unit, members blend against transparency and
   each other; the finished slab meets the layers below as one Normal-blended
@@ -158,11 +158,11 @@ with "the effects act on the members": no members, no act.
   a layer outside the group, and an outside layer matted by a member, both
   keep working because each MatteDraw is self-contained inside whichever draw
   list it sits in. The same argument covers layer inputs (depth passes, Light
-  wrap backgrounds) and K-710 propagated mattes.
+  wrap backgrounds) and propagated mattes.
 - **Solo, shy, lock, the header's broadcast switches: unchanged.** They gate
   *which member draws exist* (build-side), and the wrap collects whatever
-  exists. Shy is outline-only; lock touches no pixel; the K-702 broadcast ops
-  stay per-member.
+  exists. Shy is outline-only; lock touches no pixel; the header's broadcast
+  ops stay per-member.
 - **An adjustment layer inside the run changes scope — deliberately.** Today
   (group-blind walk) an adjustment inside a group processes everything below
   it, group boundary or not. Inside a live group's unit, `realise_at_depth`
@@ -179,13 +179,13 @@ with "the effects act on the members": no members, no act.
 - **The header stack cannot see time sideways in v1.** Posterize Time and
   accumulation motion blur resolve to no op and are only wired on the
   adjustment path (docs/08 §3.25–3.26, "adjustment-only capability"), so on a
-  header they are inert. Fast motion blur and Datamosh bind no field and pass
-  through (K-544's documented degrade), because nothing builds `flow_below`
+  header they are inert. Motion blur and Datamosh bind no field and pass
+  through (the documented degrade), because nothing builds `flow_below`
   for the unit. <!-- ponytail: temporal/flow effects on a header are
-  inert/passthrough; ceiling = a Fast motion blur on a group does nothing.
+  inert/passthrough; ceiling = a Motion blur on a group does nothing.
   Upgrade: build the member run's draws at each neighbour time into the
   unit's flow_below — realise_segment already measures a Nested draw's own
-  motion that way (K-565's Precomp arm) — and thread temporal_below the same
+  motion that way (the Precomp arm) — and thread temporal_below the same
   way. Trigger: the first project that puts one there. -->
 
 ## 4. The frame key and caching
@@ -200,17 +200,17 @@ after the layer walk, for each **live** group (same definition as §2):
   the header stack exactly the way a layer's effects feed — resolved values
   at `t_comp`, live instances only.
 - A group that is not live feeds **nothing**, so every key ever made — and
-  K-702's "grouping changes no key" tests — hold bit-for-bit.
+  the existing "grouping changes no key" tests — hold bit-for-bit.
 
 Caching of the unit itself: `key: None` in v1 — the unit re-realises every
-frame the comp renders, exactly the K-421 stance the adjustment path takes for
+frame the comp renders, exactly the stance the adjustment path takes for
 the composite below ("unnamed, so uncached"). Unlike that composite, the unit
 *could* be named — its content is the member run, which is a subset of the
 facts the frame key already hashes — so the upgrade is real and cheap.
 <!-- ponytail: unit uncached (key None); ceiling = the member run re-composites
-per frame while the header is live, the K-421 doubling. Upgrade: a sub-key
-hashed from the run's members alone (the §4 group-fx feed minus the header
-stack), handed to realise_nested the way K-422 names a Precomp's frame.
+per frame while the header is live, the adjustment path's doubling. Upgrade: a
+sub-key hashed from the run's members alone (the §4 group-fx feed minus the
+header stack), handed to realise_nested the way a Precomp's frame is named.
 Trigger: a docs/13 trace where the unit's re-composite is the missing budget. -->
 
 ## 5. Undo, ungroup, pre-compose
@@ -220,7 +220,7 @@ Trigger: a docs/13 trace where the unit's re-composite is the missing budget. --
   (the inverse carries the previous list). No graph pruning twin, because §1
   gives the group no graph. Add, remove, reorder, toggle and every param edit
   commit through it or through the existing property ops.
-- **The lock has nothing to say** about `SetGroupEffects`, matching K-702's
+- **The lock has nothing to say** about `SetGroupEffects`, matching the
   stance on the other four group ops: a group is not lockable, and its members'
   locks guard the members.
 - **Ungroup discards the header stack** — the band is gone, so is its wardrobe
@@ -229,28 +229,28 @@ Trigger: a docs/13 trace where the unit's re-composite is the missing budget. --
 - **Pre-compose group moves the stack onto the Precomp layer.** The semantics
   are literally identical (that is §2's whole argument), so the heavy fold
   inherits the light one's effects without changing the picture — the one-click
-  path K-702 built now carries the wardrobe across. One extra step in the
-  existing precompose command.
+  path now carries the wardrobe across. One extra step in the existing
+  precompose command.
 
 ## 6. The surface
 
 - **Bridge**: `BridgeLayerGroup` gains the same effects listing the layer
   crossing has (the `BridgeEffectInstanceInfo` shape), plus
   `get_group_effects` / the `SetGroupEffects` command on
-  `CompositionReference`. The one shared "find instance on layer" lookup that
-  K-706 built (effects, then styles) grows a third place to look — the comp's
-  groups — so **every existing param command** (set, keyframe, expression,
-  enable, remove, bypass) works on a group instance with no second code path,
-  exactly as styles did.
+  `CompositionReference`. The one shared "find instance on layer" lookup
+  (effects, then styles) grows a third place to look — the comp's groups — so
+  **every existing param command** (set, keyframe, expression, enable, remove,
+  bypass) works on a group instance with no second code path, exactly as
+  styles did.
 - **Effect controls panel**: clicking a group's header name makes the group
   the panel's subject, the way clicking a layer does; the panel draws the
   stack with the effect parameter row widgets it already has (stopwatches,
   scrub, expressions included) and its Add-effect search targets the group.
   This panel is the whole editing surface in v1.
-- **Timeline**: the header row (drawn inside its carrier's block, K-702) gains
+- **Timeline**: the header row (drawn inside its carrier's block) gains
   only an **fx tick** beside the member count when the stack is non-empty, so
   an effected group is visible in the outline. No fold rows under the header
-  in v1: K-702's row list is one entry per visible layer, and growing
+  in v1: the Timeline's row list is one entry per visible layer, and growing
   header-owned lanes bends that shape — the panel carries the parameters
   until it cannot. <!-- ponytail: no Timeline lanes for group effect
   keyframes; ceiling = diamonds on group params are edited in the panel and
@@ -259,7 +259,7 @@ Trigger: a docs/13 trace where the unit's re-composite is the missing budget. --
   the diamonds are. -->
 - **Strings**: the fx tick's tooltip and the panel's group-subject header are
   the only new user-facing strings — `app_en.arb` entries in the same commit,
-  named in it and in the PR for the translation page (K-005, K-303). Effect
+  named in it and in the PR for the translation page. Effect
   names and parameter labels already exist.
 - **AE import**: nothing. AE has no group, so no group ever arrives with
   effects on it.
@@ -270,8 +270,8 @@ Engine (lumit-core, lumit-eval, lumit-render):
 
 1. **Identity** — a group whose header stack is empty (and one wholly
    bypassed) builds byte-identical draws and an identical frame key to the
-   same comp ungrouped; K-702's existing regression stays green; a pre-groups
-   project re-saves byte-identical (serde skip).
+   same comp ungrouped; the existing grouping regression stays green; a
+   pre-groups project re-saves byte-identical (serde skip).
 2. **Scoping** — three layers, blur on the middle group of one: the member
    blurs, the layer below and the layer above do not (pixel test on all
    three bands).
@@ -291,9 +291,9 @@ Engine (lumit-core, lumit-eval, lumit-render):
 8. **Undo shapes** — SetGroupEffects round-trips; Ungroup discards and undo
    restores the stack; Pre-compose group lands the stack on the new Precomp
    layer and the picture does not change across the conversion.
-9. **K-266 under preview** — a px@comp radius on the header lands at the same
+9. **Rescale under preview** — a px@comp radius on the header lands at the same
    comp-relative size at half preview resolution (the `fx_ref_width` path).
-10. **Determinism and K-031** — same doc, same frame, same bytes; export and
+10. **Determinism and parity** — same doc, same frame, same bytes; export and
     preview agree on an effected group (both build through the same walk).
 
 UI (only the touched test files, per standing policy):
@@ -306,9 +306,8 @@ UI (only the touched test files, per standing policy):
 ## 8. Packages
 
 - **GE1 — the engine whole**: `LayerGroup::effects`, `Op::SetGroupEffects`,
-  the §2 wrap in `build_comp_draws`, the §4 key feed, the K-702 rewording in
-  group.rs/docs 03/07, the decision entry appended and numbered, GUIDE.md's
-  plain-English section, tests 1–10.
+  the §2 wrap in `build_comp_draws`, the §4 key feed, the promise rewording in
+  group.rs/docs 03/07, tests 1–10.
 - **GE2 — the surface**: bridge crossing and the third arm of the shared
   instance lookup, panel subject + Add-effect targeting, the header's fx
   tick, the two arb keys (named in commit and PR), test 11.
@@ -324,25 +323,25 @@ so they are requirements now, not questions:
 - **Group opacity and blend mode: no.** Effects only — the unit's own draw
   keeps its pinned 100/Normal, and no dial or mode row appears on the header.
 - **Timeline lanes: yes, in v1.** The group header twirls open like a layer
-  and its effects get real lanes — the K-702 row-shape change is accepted.
+  and its effects get real lanes — the row-shape change is accepted.
   §6's panel-only ponytail ceiling is therefore not a ceiling but a stop the
   build must pass through: GE2 ships the twirl and the lanes.
 
-## Proposed decision entry (for docs/02-DECISIONS.md — appended and numbered by GE1, not by this note)
+## The decision, as one entry
 
-> ## K-### — Effects on a layer group header scope to the members: an implicit per-frame precompose
+> ## Effects on a layer group header scope to the members: an implicit per-frame precompose
 >
 > **Status: PROPOSED (2026-08-31).** Owner ask: "apply effects onto the group
 > head itself, and it acts like an adjustment layer for the effects within it,
-> but not outside." Amends K-702's promise; design in
+> but not outside." Amends the grouping promise; design in
 > docs/impl/group-effects.md.
 >
 > `LayerGroup` gains an `effects: Vec<EffectInstance>` (serde-skipped while
 > empty). When the header stack is live and the drawn run non-empty, the build
 > walk wraps the run's draws in one comp-sized `DrawSource::Nested` unit whose
 > `fx` is the header's stack resolved at comp time — the Precomp layer's
-> existing render path, no new staging. K-702's "identical picture grouped or
-> ungrouped" is reworded **"…when the header carries no effects"** in
+> existing render path, no new staging. The promise "identical picture grouped
+> or ungrouped" is reworded **"…when the header carries no effects"** in
 > group.rs, docs/03 §5.4 and docs/07 §4.2a; on every frame where no header is
 > live, the walk stays group-blind and every existing key and cached frame
 > holds. Members inside a live unit composite in isolation (Photoshop's
@@ -353,7 +352,7 @@ so they are requirements now, not questions:
 > and the resolved header stack. One new op, `SetGroupEffects`, the
 > `SetLayerEffects` shape; Ungroup discards the stack (undo restores it);
 > Pre-compose group moves it onto the Precomp layer. v1 boundaries, each
-> named in the note with its upgrade: the unit is uncached (K-421 stance),
+> named in the note with its upgrade: the unit is uncached,
 > temporal/flow effects on a header are inert or passthrough, group params
 > take no node-graph wires, and the Timeline shows an fx tick but no lanes —
 > the Effect controls panel is the editing surface.

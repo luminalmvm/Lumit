@@ -1,4 +1,4 @@
-//! The Roto brush's surface across the seam (K-713, docs/impl/roto.md §5–§8):
+//! The Roto brush's surface across the seam (docs/impl/roto.md §5–§8):
 //! strokes down, the two buttons down, the span and the progress up.
 //!
 //! # In plain terms
@@ -13,9 +13,9 @@
 //! **Nothing here does arithmetic the interface could not check.** A stroke
 //! arrives already in **source raster pixels** — the viewer converts, because
 //! only it knows the chain of transforms the pointer came through — and is
-//! stored exactly as it arrives (K-248). A refusal comes back as a *reason*,
+//! stored exactly as it arrives. A refusal comes back as a *reason*,
 //! never as a sentence: the words are Dart's, from the arb, the way the camera
-//! track's are (K-303, tracking.md §5c deviation 3).
+//! track's are (tracking.md §5c deviation 3).
 //!
 //! **The strokes ride the ordinary effect-stack commit.** Adding a stroke stages
 //! it on the handle and `LayerReference::set_effects` commits, so a scribble is
@@ -92,16 +92,14 @@ fn stroke_of(
 
 impl LayerReference {
     /// The first scribble on a layer that carries no Roto brush: add the brush
-    /// **and** file the stroke, in one commit (K-723, superseding K-717's
-    /// refusal).
+    /// **and** file the stroke, in one commit.
     ///
     /// The stroke rides *inside* the new instance, so the whole gesture is one
     /// `SetLayerEffects` — one op, one journal entry, one undo step, exactly
-    /// what a scribble on a layer that already had the brush costs. K-717
-    /// refused this on the grounds that `add_effect` plus a stroke would be two
-    /// ops; landing the stroke in the instance before it is pushed is what
-    /// dissolves that. The stroke sets the base frame, as a first stroke always
-    /// does.
+    /// what a scribble on a layer that already had the brush costs. Landing the
+    /// stroke in the instance before it is pushed is what keeps it to one op,
+    /// where `add_effect` plus a stroke would be two. The stroke sets the base
+    /// frame, as a first stroke always does.
     ///
     /// Answers the new instance's id — what the release-time solve
     /// ([`roto_solve_frame`]) and the overlay's next read are addressed to.
@@ -139,12 +137,12 @@ impl LayerReference {
 }
 
 impl BridgeEffectInstance {
-    /// Add one stroke to this Roto brush, on the **staged** copy (K-713).
+    /// Add one stroke to this Roto brush, on the **staged** copy.
     ///
     /// `points` are `[x0, y0, x1, y1, …]` in **source raster pixels** on the
     /// unaltered footage — the viewer converts, because only it knows the chain
     /// of transforms the pointer came through, and the matte has to describe the
-    /// file's frames rather than this comp's (K-248). `frame` is the source
+    /// file's frames rather than this comp's. `frame` is the source
     /// frame the stroke was drawn on.
     ///
     /// **The first stroke sets the base frame**, which is what makes Propagate
@@ -201,11 +199,10 @@ impl BridgeEffectInstance {
         Ok(())
     }
 
-    /// Every stroke this instance holds, for the overlay to draw (K-713).
+    /// Every stroke this instance holds, for the overlay to draw.
     ///
     /// Read on the gesture that needs it and on a document revision moving —
-    /// never per rebuild, which is the contract every other panel read has
-    /// (K-681).
+    /// never per rebuild, which is the contract every other panel read has.
     #[frb(sync)]
     pub fn roto_strokes(&self) -> Vec<BridgeRotoStroke> {
         self.roto_block()
@@ -245,7 +242,7 @@ impl BridgeEffectInstance {
 #[derive(Debug, Clone, PartialEq)]
 pub struct BridgeRotoStroke {
     pub id: Uuid,
-    /// `[x0, y0, x1, y1, …]` in source raster pixels (K-248).
+    /// `[x0, y0, x1, y1, …]` in source raster pixels.
     pub points: Vec<f32>,
     pub radius: f32,
     pub kind: BridgeRotoStrokeKind,
@@ -270,7 +267,7 @@ pub enum BridgeRotoStage {
     Solving,
     /// There is a run in the store.
     Done,
-    /// Stopped between frames. **The finished prefix was kept** (K-540), so the
+    /// Stopped between frames. **The finished prefix was kept**, so the
     /// span below is real and a later Propagate resumes from it.
     Cancelled,
     /// Refused — see [`BridgeRotoStatus::failure`].
@@ -279,7 +276,7 @@ pub enum BridgeRotoStage {
 
 /// Why a propagation produced no mattes.
 ///
-/// A **reason, not a sentence** (K-303): the engine's own `RotoFailure` carries
+/// A **reason, not a sentence**: the engine's own `RotoFailure` carries
 /// English, and English crossing here would ship untranslated inside a
 /// translated window. Dart switches over this and picks the arb key, which is
 /// the shape `BridgeTrackFailure` already uses.
@@ -412,7 +409,7 @@ pub fn roto_status(layer: LayerReference, effect: Uuid) -> Result<BridgeRotoStat
 // ---------------------------------------------------------------------------
 
 /// Which frame of the **file** this layer is showing at composition frame
-/// `frame` (K-248, K-717).
+/// `frame`.
 ///
 /// A stroke's `frame` is a source frame index, and the viewer only knows the
 /// composition's ruler. Between the two sit the layer's start offset and its
@@ -423,7 +420,7 @@ pub fn roto_status(layer: LayerReference, effect: Uuid) -> Result<BridgeRotoStat
 /// against the wrong frame of a retimed layer would seed a frame the user never
 /// looked at and be silently, invisibly wrong.
 ///
-/// Read on a frame change and held, never per rebuild (K-681).
+/// Read on a frame change and held, never per rebuild.
 ///
 /// `NotFootage` for anything but a footage layer, and for media that will not
 /// probe: a Roto brush on a layer with no file behind it has no source frame to
@@ -498,7 +495,7 @@ fn media_rate(layer: &LayerReference, media: Uuid) -> Result<(f64, usize), Bridg
 const MAX_BOUNDARY_POINTS: usize = 12_000;
 
 /// Where the propagated matte's **edge** runs at `frame`, as
-/// `[x0, y0, x1, y1, …]` in source raster pixels (K-717).
+/// `[x0, y0, x1, y1, …]` in source raster pixels.
 ///
 /// The Roto brush's **Boundary** view keeps the picture and asks the viewer to
 /// draw the edge over it (`lumit_core::fx::effects::roto_brush::VIEW_OPTIONS`),
@@ -619,7 +616,7 @@ pub(crate) fn press(
 }
 
 /// Solve the scribbled frame's own matte, now — the release-time feedback a
-/// committed stroke asks for (K-723, docs/impl/roto.md §6 step 1).
+/// committed stroke asks for (docs/impl/roto.md §6 step 1).
 ///
 /// The same job a Propagate press builds, stopped after `frame`: the walk runs
 /// from the base toward it, lends back every cached frame whose strokes did not

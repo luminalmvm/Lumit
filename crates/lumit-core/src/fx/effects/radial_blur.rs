@@ -1,4 +1,4 @@
-//! Radial blur (docs/08 §3.8, K-137): arcs (Spin) or rays (Zoom) about a
+//! Radial blur (docs/08 §3.8): arcs (Spin) or rays (Zoom) about a
 //! centre.
 
 use crate::fx::{cpu, EdgesMode, EffectDef, EffectMetadata, EffectSchema, Params};
@@ -11,20 +11,20 @@ use lumit_fx_macros::Effect;
 /// its perpendicular (the tangent approximation to the true arc) — so neither
 /// needs a division or a runtime trig call, and every tap collapses to exactly
 /// the pixel at Centre with no epsilon guard. This is the one blur to keep the
-/// shared Edges control (P3, K-145); its taps run through the same
+/// shared Edges control (P3); its taps run through the same
 /// `bilinear_edge` sampler the others use.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "radial_blur",
     label = "Radial blur",
-    // 2: the centre pair crossed from a per cent of the frame to px@comp
-    // (K-558). `migrate_percent_to_px` converts a v1 instance on load.
+    // 2: the centre pair crossed from a per cent of the frame to px@comp.
+    // `migrate_percent_to_px` converts a v1 instance on load.
     version = 2,
     category = BlurSharpen,
     cost = Moderate,
     roi = FullFrame,
-    // K-395: the matte scales the amount, inside the kernel (the owner's
-    // rule for mattes); the generic strength dissolve does not also run.
+    // The matte scales the amount, inside the kernel (the owner's rule for
+    // mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales Amount per pixel: white sweeps the full Amount, grey a \
@@ -33,7 +33,7 @@ use lumit_fx_macros::Effect;
 )]
 pub struct RadialBlur {
     /// Peak tap spread, px@comp (§2.3), reached at the farthest corner from
-    /// Centre. Unbounded above (K-090); the tap count clamps in
+    /// Centre. Unbounded above; the tap count clamps in
     /// [`cpu::radial_blur_taps`], so cost stays bounded.
     #[slider(
         min = 0.0,
@@ -44,7 +44,7 @@ pub struct RadialBlur {
     )]
     pub amount: f32,
 
-    /// px@comp (K-558: no point is a per cent of the frame). The schema default
+    /// px@comp (no point is a per cent of the frame). The schema default
     /// is the nominal 1080p centre; `instantiate_for_raster` centres a fresh
     /// instance on the actual comp, and the resolve step scales the stored
     /// pixels to the raster being rendered, so a Half preview spins about the
@@ -60,7 +60,7 @@ pub struct RadialBlur {
     #[choice(label = "Type", options = ["Spin", "Zoom"], default = 0)]
     pub radial_type: u32,
 
-    /// The reusable Edges control (P3, K-145).
+    /// The reusable Edges control (P3).
     #[choice(
         label = "Edges",
         options = *crate::fx::EDGE_OPTIONS,

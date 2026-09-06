@@ -14,7 +14,7 @@
 //! has no arc length to count segments around — §3.76's second decision, and
 //! where AE's Segments becomes Lumit's Segment length.
 //!
-//! **AE's Mask/Path source is carried too**, since K-408: pick Mask/Path and the
+//! **AE's Mask/Path source is carried too**: pick Mask/Path and the
 //! dashes march round a mask you have drawn instead of round a contour the
 //! effect found. That half is a different kernel — the shared path drawing
 //! §3.78 and §3.79 also use — and on it Segment length means what AE's Segments
@@ -37,8 +37,8 @@ use lumit_fx_macros::Effect;
     roi = PaddedPx(1.0),
     premultiplied = true,
     enabled_when = VEGAS_ENABLED_WHEN,
-    // K-428: the matte scales the amount, inside the kernel (the owner's rule
-    // for mattes); the generic strength dissolve does not also run.
+    // The matte scales the amount, inside the kernel (the owner's rule for
+    // mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales Opacity per pixel: white draws the stroke in full, grey faintly,          black nothing at all",
@@ -47,7 +47,7 @@ use lumit_fx_macros::Effect;
 pub struct Vegas {
     /// Where the line comes from. Luminance is AE's Image Contours; Alpha
     /// outlines the layer's own shape, which is what a logo wants; **Mask/Path**
-    /// is AE's other half — a mask you have drawn (K-408).
+    /// is AE's other half — a mask you have drawn.
     #[choice(options = ["Luminance", "Alpha", "Mask/Path"], default = 0)]
     pub source: u32,
 
@@ -164,12 +164,12 @@ pub const VEGAS_ENABLED_WHEN: &[crate::fx::EnabledWhen] = &[
 
 impl Vegas {
     /// The [`source`](Self::source) option that reads a mask instead of the
-    /// picture (K-408). Named because three places test for it and a bare 2
+    /// picture. Named because three places test for it and a bare 2
     /// in any of them would be the one that went stale.
     pub const SOURCE_MASK_PATH: u32 = 2;
 
     /// Raster pixels per comp pixel (§2.3), pushed at resolve because the seam
-    /// hands its vertices over in px@comp (K-408). Never a panel row.
+    /// hands its vertices over in px@comp. Never a panel row.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
     /// This instance's raster factor, read back out of a resolved bag.
@@ -184,11 +184,11 @@ impl Vegas {
         self.source == Self::SOURCE_MASK_PATH
     }
 
-    /// The Mask/Path half's bundle: the same stroke, laid on a mask's own line
-    /// (K-408). Shares every control with the contour half — Width, Hardness,
-    /// Segment length, Length, Rotation, Colour, Opacity — because it is the
-    /// same stroke, and drops only Threshold, which has no meaning without a
-    /// picture to take a level of.
+    /// The Mask/Path half's bundle: the same stroke, laid on a mask's own line.
+    /// Shares every control with the contour half — Width, Hardness, Segment
+    /// length, Length, Rotation, Colour, Opacity — because it is the same
+    /// stroke, and drops only Threshold, which has no meaning without a picture
+    /// to take a level of.
     ///
     /// **Segment length is AE's Segments here.** The dashes are spaced by
     /// measured distance *round the path*, so they stay evenly spaced however

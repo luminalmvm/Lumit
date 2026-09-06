@@ -21,7 +21,7 @@ clap-sys = "0.5"
 # vtables; these are flat `#[repr(C)]` tables of exactly that shape — the plain
 # projection docs/impl/audio-plugins.md §1 asks for, arrived at by generation
 # rather than by hand. No SDK source is vendored here and none is needed to
-# build: the bindings ship pre-generated (K-702).
+# build: the bindings ship pre-generated.
 vst3 = "0.3"
 # A `.clap` is a plain DLL/dylib opened at run time; libloading is the portable
 # `LoadLibraryW`/`dlopen` wrapper and is already in the tree. A `.vst3` bundle's

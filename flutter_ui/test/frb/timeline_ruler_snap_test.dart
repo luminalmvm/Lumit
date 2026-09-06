@@ -285,7 +285,7 @@ void main() {
       await mount(tester, p);
       expect(workAreaFrames(p.comp).whole, isFalse);
 
-      // The band's own row — the whole ruler now (K-513) — half way along it.
+      // The band's own row — the whole ruler now — half way along it.
       final band = tester.getRect(find.byKey(const ValueKey('tl-work-area')));
       final at = Offset(band.center.dx, band.center.dy);
       await tester.tapAt(at);

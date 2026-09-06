@@ -62,7 +62,7 @@ If the API call fails or is rate-limited (60 requests/hour per IP, unauthenticat
 every button falls back to the releases page, which is a hard-coded `href` in the
 markup. The page is still fully usable with JavaScript disabled.
 
-> **Note.** Those three names are the whole release (K-304) - `release.yml` builds one
+> **Note.** Those three names are the whole release - `release.yml` builds one
 > artefact per platform and no others, and every job gates the tag, so a release that
 > publishes at all publishes all three. The Linux asset was a `.tar.gz` up to and
 > including v0.1.0.
@@ -94,7 +94,7 @@ motion) the markup is the finished lockup standing still. `web/public/lumit-word
 is the same lockup as a static file, and that is what the header shows.
 
 Its "umi" is outlined letterforms, not live text - they were traced from Schibsted
-Grotesk, which the site no longer sets its copy in (K-438: Hanken Grotesk for text,
+Grotesk, which the site no longer sets its copy in (Hanken Grotesk for text,
 Geist Mono for numbers and container labels). The logotype is fixed artwork now and
 does not follow the body face.
 

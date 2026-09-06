@@ -51,7 +51,7 @@ Dart is Java-shaped with type inference and null safety.
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Sweep up after an update before anything else happens (K-297): delete the
+  // Sweep up after an update before anything else happens: delete the
   // version we have just replaced, now that nothing is holding its files, and
   // put it back if a swap was cut in half. Never throws and never blocks — a
   // tidying problem is not a reason for an editor not to open.
@@ -393,7 +393,7 @@ handle keys when a text field has focus or a modal is open:
 // flutter_ui/lib/panels/timeline_panel_frb.dart — `_TimelinePanelFrbState._onKey`
   bool _onKey(KeyEvent event) {
     if (event is! KeyDownEvent || !mounted) return false;
-    // A dialogue is up: its keys are its own (K-243). These commands are
+    // A dialogue is up: its keys are its own. These commands are
     // registered on the hardware keyboard rather than on focus, so without
     // this the Pre-compose dialogue's `Enter` also renamed the layer behind it.
     if (lumitModalOpen) return false;
@@ -481,7 +481,7 @@ Widget tests pump a widget and assert on the tree. The `test/frb/` suites drive 
 
 ## The house rules that will surprise you
 
-- **Zero bridge calls in `build` or `paint`** (K-184). Read `CompModel`.
+- **Zero bridge calls in `build` or `paint`**. Read `CompModel`.
 - Every string goes through `app_en.arb` and is read as `l10n.someKey`.
 - No colour literal outside `lib/theme/`.
 - `lib/src/rust/**` and `lib/l10n/gen/**` are generated. Edit the source, regenerate.

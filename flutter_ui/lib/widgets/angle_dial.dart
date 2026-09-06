@@ -61,12 +61,14 @@ class AngleDial extends StatefulWidget {
 }
 
 class _AngleDialState extends State<AngleDial> {
-  /// The angle the drag started from, and the pointer angle it started at —
-  /// the drag applies the *difference* rather than jumping the hand to wherever
-  /// the pointer went down. Grabbing the hand a little off-centre should not
-  /// snap it.
-  double _startValue = 0;
-  double _startPointer = 0;
+  /// The value as the drag has wound it so far, and the pointer angle of the
+  /// last move. Each move adds the short way round from the last one, so the
+  /// hand follows the pointer rather than jumping to wherever it went down,
+  /// and a drag that keeps going round keeps counting turns in either
+  /// direction. Measuring against the start instead folded every move to
+  /// within half a turn, so one drag could never add a whole one.
+  double _value = 0;
+  double _lastPointer = 0;
   bool _shift = false;
 
   /// Degrees clockwise from twelve o'clock for a point in the dial's box.
@@ -79,19 +81,21 @@ class _AngleDialState extends State<AngleDial> {
   }
 
   void _begin(Offset local) {
-    _startValue = widget.degrees;
-    _startPointer = _pointerDegrees(local);
+    _value = widget.degrees;
+    _lastPointer = _pointerDegrees(local);
   }
 
   double _valueFor(Offset local) {
-    // The shortest way round from where the drag started, so crossing twelve
-    // o'clock counts as a small move rather than a 360° jump.
-    var delta = _pointerDegrees(local) - _startPointer;
+    // The shortest way round from the last move, so crossing twelve o'clock
+    // counts as a small move rather than a 360° jump.
+    final pointer = _pointerDegrees(local);
+    var delta = pointer - _lastPointer;
     if (delta > 180) delta -= 360;
     if (delta < -180) delta += 360;
-    final raw = _startValue + delta;
-    if (!_shift || widget.step <= 0) return raw;
-    return (raw / widget.step).roundToDouble() * widget.step;
+    _lastPointer = pointer;
+    _value += delta;
+    if (!_shift || widget.step <= 0) return _value;
+    return (_value / widget.step).roundToDouble() * widget.step;
   }
 
   @override
@@ -208,7 +212,7 @@ class _DialPainter extends CustomPainter {
 /// independently keyed halves could disagree about where the rotation is.
 /// Typing 400 into the degrees box therefore rolls over of its own accord — the
 /// value becomes 400 and redraws as `1x +40°`.
-class TurnsAndDegreesField extends StatelessWidget {
+class TurnsAndDegreesField extends StatefulWidget {
   /// The whole angle, turns included.
   final double degrees;
 
@@ -240,9 +244,23 @@ class TurnsAndDegreesField extends StatelessWidget {
   static double degreesOf(double value) => value - turnsOf(value) * 360;
 
   @override
+  State<TurnsAndDegreesField> createState() => _TurnsAndDegreesFieldState();
+}
+
+class _TurnsAndDegreesFieldState extends State<TurnsAndDegreesField> {
+  /// The turns when a drag on the degrees box began. The box runs on from its
+  /// own last tick, so past 360 it reports 361, 362 and so on, and adding the
+  /// turns of the moment put the turn it had just gained on top again every
+  /// tick. Null when the box is not being dragged.
+  double? _dragTurns;
+
+  @override
   Widget build(BuildContext context) {
-    final turns = turnsOf(degrees);
-    final rest = degreesOf(degrees);
+    final degrees = widget.degrees;
+    final onChanged = widget.onChanged;
+    final onCommit = widget.onCommit;
+    final turns = TurnsAndDegreesField.turnsOf(degrees);
+    final rest = TurnsAndDegreesField.degreesOf(degrees);
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -250,7 +268,7 @@ class TurnsAndDegreesField extends StatelessWidget {
         SizedBox(
           width: 30,
           child: DragValueField(
-            key: ValueKey<String>('angle-turns-$keyName'),
+            key: ValueKey<String>('angle-turns-${widget.keyName}'),
             value: turns,
             min: -10000,
             max: 10000,
@@ -260,7 +278,7 @@ class TurnsAndDegreesField extends StatelessWidget {
             onChanged: (v) => onCommit(v.toDouble() * 360 + rest),
             onChangeLive: onChanged == null
                 ? null
-                : (v) => onChanged!(v.toDouble() * 360 + rest),
+                : (v) => onChanged(v.toDouble() * 360 + rest),
             onChangeEnd: (v) => onCommit(v.toDouble() * 360 + rest),
           ),
         ),
@@ -268,7 +286,7 @@ class TurnsAndDegreesField extends StatelessWidget {
         SizedBox(
           width: 54,
           child: DragValueField(
-            key: ValueKey<String>('angle-degrees-$keyName'),
+            key: ValueKey<String>('angle-degrees-${widget.keyName}'),
             value: rest,
             // Open, not clamped to ±360: typing 400 here is a legitimate way to
             // say "one turn and forty", and it redraws as that.
@@ -278,10 +296,15 @@ class TurnsAndDegreesField extends StatelessWidget {
             decimals: 1,
             suffix: '°',
             onChanged: (v) => onCommit(turns * 360 + v.toDouble()),
+            onChangeStart: () => _dragTurns = turns,
             onChangeLive: onChanged == null
                 ? null
-                : (v) => onChanged!(turns * 360 + v.toDouble()),
-            onChangeEnd: (v) => onCommit(turns * 360 + v.toDouble()),
+                : (v) => onChanged((_dragTurns ?? turns) * 360 + v.toDouble()),
+            onChangeEnd: (v) {
+              onCommit((_dragTurns ?? turns) * 360 + v.toDouble());
+              _dragTurns = null;
+            },
+            onDragCancel: () => _dragTurns = null,
           ),
         ),
       ],

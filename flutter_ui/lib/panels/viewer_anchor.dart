@@ -1,5 +1,5 @@
-// The Anchor point tool — After Effects calls it Pan Behind (K-220,
-// docs/07 §1.7): drag a layer's anchor without the picture moving.
+// The Anchor point tool — After Effects calls it Pan Behind
+// (docs/07 §1.7): drag a layer's anchor without the picture moving.
 //
 // **In plain terms.** The anchor point is the spot a layer scales and rotates
 // about, and it is also the spot Position places. Move it naively and the layer
@@ -89,10 +89,10 @@ bool isPrimaryModifierHeld() => defaultTargetPlatform == TargetPlatform.macOS
     : HardwareKeyboard.instance.isControlPressed;
 
 /// Where the anchor should sit, in layer space, for a pointer at [screen] —
-/// with the two modifiers every pivot gesture shares (K-220): Shift locks the
+/// with the two modifiers every pivot gesture shares: Shift locks the
 /// drag to one screen axis measured from [lockFrom], Ctrl (Cmd) snaps to the
-/// layer's own key points. Shared by this tool and the gizmo's anchor handle
-/// (K-221), so the two cannot drift apart.
+/// layer's own key points. Shared by this tool and the gizmo's anchor handle,
+/// so the two cannot drift apart.
 Offset wantedAnchorAt(LayerBox box, Offset screen, {Offset? lockFrom}) {
   var at = screen;
   if (lockFrom != null && HardwareKeyboard.instance.isShiftPressed) {
@@ -151,7 +151,7 @@ class ViewerAnchorLayer extends StatefulWidget {
 class _ViewerAnchorLayerState extends State<ViewerAnchorLayer> {
   Offset? _pointer;
 
-  /// The press, for the same reason every other tool records it (K-217): a drag
+  /// The press, for the same reason every other tool records it: a drag
   /// is only recognised once the pointer has travelled its slop, and a pivot
   /// that jumped by that much on the first frame of every drag would be
   /// unusable.
@@ -223,7 +223,7 @@ class _ViewerAnchorLayerState extends State<ViewerAnchorLayer> {
     );
   }
 
-  /// A click **puts the pivot where you clicked** (K-232), on the layer it
+  /// A click **puts the pivot where you clicked**, on the layer it
   /// lands on — and picks that layer, as every tool's click does.
   ///
   /// Shift is the exception and stays a selection gesture: it adds to or takes
@@ -288,7 +288,7 @@ class _ViewerAnchorLayerState extends State<ViewerAnchorLayer> {
 
   /// Where the anchor should sit, in layer space, for the pointer at [at].
   ///
-  /// **The pointer's own position, not a nudge** (K-232). The tool used to
+  /// **The pointer's own position, not a nudge**. The tool used to
   /// measure the drag from the press and add it to the anchor the layer already
   /// had, so grabbing anywhere and pushing moved the pivot by that much. That
   /// makes placing a pivot a matter of aim-then-correct: you cannot put it
@@ -323,7 +323,7 @@ class _ViewerAnchorLayerState extends State<ViewerAnchorLayer> {
           ),
         );
       } catch (_) {
-        // A preview is a courtesy (K-217); the commit still lands.
+        // A preview is a courtesy; the commit still lands.
       }
     });
   }
@@ -380,7 +380,7 @@ class _AnchorCursorPainter extends CustomPainter {
     canvas.restore();
   }
 
-  /// A **reticle**, centred on the point it acts at (K-235).
+  /// A **reticle**, centred on the point it acts at.
   ///
   /// It used to carry a small arrow off its tail, down and to the right, so the
   /// mark would read as a pointer rather than as an overlay. That was a lie

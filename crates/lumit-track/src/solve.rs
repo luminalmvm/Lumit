@@ -133,7 +133,7 @@ impl Default for SolveSettings {
 
 /// Why a shot could not be solved. Each variant is a refusal, not a fault: the
 /// pictures did not carry the answer, and inventing one is the failure mode
-/// this crate exists to avoid (K-415).
+/// this crate exists to avoid.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum SolveError {
     /// The track set is empty or has no raster.

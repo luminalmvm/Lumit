@@ -56,15 +56,15 @@ pub fn cache_stats() -> BridgeCacheStats {
 }
 
 /// Where this process's memory has gone: what each tier admits to holding, and
-/// what the operating system says the process holds (K-294).
+/// what the operating system says the process holds.
 ///
 /// **The field that matters is [`Self::unaccounted_bytes`].** Every tier here
 /// is byte-budgeted and evicts to stay inside its budget, so a report where the
 /// tiers add up to their budgets and the process is a hundred times larger is
 /// not a cache problem at all — it is memory nobody in this list is counting,
 /// which is a different search entirely. Lumit has twice been reported holding
-/// tens of gigabytes (K-277 and after it), and both times that question took
-/// days to answer from the outside. It is one call from the inside.
+/// tens of gigabytes, and both times that question took days to answer from the
+/// outside. It is one call from the inside.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BridgeMemoryReport {
@@ -92,7 +92,7 @@ pub struct BridgeMemoryReport {
     /// bytes would be worse than an honest count.
     pub open_decoders: u64,
     /// How many frames are waiting to be written to disk — the write-behind
-    /// queue K-277 bounded at eight. A count rather than bytes on purpose: each
+    /// queue, bounded at eight. A count rather than bytes on purpose: each
     /// waiting frame shares its allocation with the frame cache above (one
     /// `Arc`, both tiers), so charging it twice would make the report lie in
     /// the one direction that matters.
@@ -187,7 +187,7 @@ pub fn clear_cache() -> BridgeCacheStats {
 impl crate::api::composition::CompositionReference {
     /// Which frames of this composition are held, one byte each — **two
     /// nibbles**, because the bar says not just "cached" but "cached at what
-    /// size" (K-441, docs/15 §6.3).
+    /// size" (docs/15 §6.3).
     ///
     /// The **low** nibble (`byte & 0x0F`) is the storage state the bar has
     /// always drawn:

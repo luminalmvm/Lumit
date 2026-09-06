@@ -1,6 +1,6 @@
-// The shared chrome primitives, held to docs/15-DESIGN.md's redesign rules
-// (K-438/K-439): the kicker every container label is set in, the inset well an
-// editable number sits in, and the one filled button a surface is allowed.
+// The shared chrome primitives, held to docs/15-DESIGN.md's redesign rules:
+// the kicker every container label is set in, the inset well an editable
+// number sits in, and the one filled button a surface is allowed.
 //
 // These are the pieces every panel inherits, so they are asserted here on the
 // primitives themselves rather than once per panel.
@@ -122,7 +122,7 @@ void main() {
 
       // A second move, so the drag actually ticks: the first is spent starting
       // the gesture, and a released drag that never ticked is treated as a
-      // click and opens the editor instead (K-319).
+      // click and opens the editor instead.
       await gesture.moveBy(const Offset(20, 0));
       await tester.pump();
 
@@ -292,8 +292,8 @@ void main() {
     }
   });
 
-  /// **What is selected is one colour, and it is not the accent** (K-439,
-  /// docs/impl/timeline-interaction.md P4). The marquee is shared by the
+  /// **What is selected is one colour, and it is not the accent**
+  /// (docs/impl/timeline-interaction.md P4). The marquee is shared by the
   /// Timeline's lanes and the graph, and it drew its box in `accent` — where
   /// the closed list is the playhead, the one filled button and the active
   /// tab's tick, and a box in it read as a second playhead being dragged out.
@@ -327,7 +327,7 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  /// **A choice a list cannot honour is drawn dead, not dropped** (K-485). The
+  /// **A choice a list cannot honour is drawn dead, not dropped**. The
   /// export's colour dropdown lists every space the project's colour config
   /// names, and some of them the config cannot actually deliver; removing those
   /// rows would leave the reader hunting for a name they know is in their own

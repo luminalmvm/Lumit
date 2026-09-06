@@ -1,4 +1,4 @@
-// The toolbar as it is mounted in the shell (K-216, docs/07 §1.7).
+// The toolbar as it is mounted in the shell (docs/07 §1.7).
 //
 // It draws from `LumitUiState` — the armed tool, the keymap the tooltips quote,
 // the workspace it rearranges — so it runs against the real engine like every
@@ -47,7 +47,7 @@ void main() {
       return p;
     }
 
-    /// **The tool options fit the strip it was shrunk to** (K-230 made it 30px
+    /// **The tool options fit the strip it was shrunk to** (30px
     /// tall). They are the only things on the bar taller than an icon — a
     /// colour well and a number field — so they are what a shorter strip breaks
     /// first, and an overflow stripe is not a design.
@@ -123,13 +123,13 @@ void main() {
       expect(find.byKey(const ValueKey('tool-flyout-hand')), findsNothing);
     });
 
-    // The switch that used to sit here governed nothing (K-230), so it is not
+    // The switch that used to sit here governed nothing, so it is not
     // on the strip. This is the guard against it drifting back on before there
     // is snapping for it to govern.
-    /// **The magnet is back** (K-689, superseding K-230's removal of it): it
-    /// was taken off the strip when nothing in the application read it, and it
-    /// returned with the snapping it governs — the Viewer's layer drags reach
-    /// for the guides and the grid through exactly this switch.
+    /// **The magnet is back**: it was taken off the strip when nothing in the
+    /// application read it, and it returned with the snapping it governs — the
+    /// Viewer's layer drags reach for the guides and the grid through exactly
+    /// this switch.
     testWidgets('the snapping switch is on the strip', (tester) async {
       final p = await mount(tester);
       final magnet = find.byKey(const ValueKey('tool-snapping'));
@@ -141,7 +141,7 @@ void main() {
       expect(p.uiState.tools.snapping, isFalse);
     });
 
-    /// **A button you cannot read is a button you cannot use** (K-236). The
+    /// **A button you cannot read is a button you cannot use.** The
     /// strip lost 14px of height and the workspace names kept 24px of padding,
     /// which squeezed the words out of a 30px band and left four pressable
     /// blanks on the right of the bar.
@@ -170,8 +170,8 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    /// **The workspace strip belongs at the right-hand end** (docs/07 §1.4,
-    /// K-238), after a divider, not beside the last tool.
+    /// **The workspace strip belongs at the right-hand end** (docs/07 §1.4),
+    /// after a divider, not beside the last tool.
     ///
     /// It drifted left when the tool options arrived: the tools took a *loose*
     /// Flexible, which claims only the width it needs, so the free space was
@@ -181,7 +181,7 @@ void main() {
         (tester) async {
       final p = await mount(tester);
       final bar = tester.getRect(find.byType(LumitToolBarFrb));
-      // Whichever preset is last, not Audio by name: Retiming (K-349) took that
+      // Whichever preset is last, not Audio by name: Retiming took that
       // place, and a fifth preset must not be able to hang off the bar unnoticed
       // because the test was watching the fourth.
       final lastKey =
@@ -295,7 +295,7 @@ void main() {
       expect(p.uiState.workspace.activePreset, WorkspacePreset.effects);
     });
 
-    /// The Nodes tab (K-445, K-471) is generated from the enum like the rest —
+    /// The Nodes tab is generated from the enum like the rest —
     /// no strip of its own — and the arrangement it applies is the one with
     /// the Graph and Node panels in it.
     testWidgets('the Nodes tab is on the strip and switches to its workspace',
@@ -325,7 +325,7 @@ void main() {
       expect(tick, t.accent, reason: 'the workspace in force wears the tick');
     });
 
-    /// The tool options area (K-225): After Effects shows the settings the
+    /// The tool options area: After Effects shows the settings the
     /// armed tool draws with, and nothing at all for the tools that draw
     /// nothing.
     testWidgets('the options area follows the armed tool', (tester) async {
@@ -344,8 +344,8 @@ void main() {
       expect(find.text('Fill'), findsOneWidget);
       expect(find.text('Stroke'), findsOneWidget);
 
-      // A painting tool shows the brush's own three settings, all live
-      // (K-227) — no disabled stroke pair, because painting is built.
+      // A painting tool shows the brush's own three settings, all live — no
+      // disabled stroke pair, because painting is built.
       p.uiState.tools.select(ToolMode.brush);
       await tester.pump();
       expect(find.text('Fill'), findsOneWidget);
@@ -359,10 +359,10 @@ void main() {
       expect(find.text('Fill'), findsNothing);
     });
 
-    /// The Roto pair arms together (K-717, K-228's gate read from the other
-    /// side): the strip button, the flyout row and the chord all wake off one
-    /// flag, so pressing the button arms the brush and the flyout offers Refine
-    /// edge beside it.
+    /// The Roto pair arms together (one gate read from the other side): the
+    /// strip button, the flyout row and the chord all wake off one flag, so
+    /// pressing the button arms the brush and the flyout offers Refine edge
+    /// beside it.
     testWidgets('the roto group arms and opens its flyout', (tester) async {
       final p = await mount(tester);
 
@@ -379,14 +379,14 @@ void main() {
       );
       await tester.pumpAndSettle();
       final refine = find.byKey(const ValueKey('tool-flyout-refineEdge'));
-      expect(refine, findsOneWidget, reason: 'both are built (K-717)');
+      expect(refine, findsOneWidget, reason: 'both are built');
 
       await tester.tap(refine);
       await tester.pumpAndSettle();
       expect(p.uiState.tools.tool, ToolMode.refineEdge);
     });
 
-    /// The other side of the same rule (K-704): the four Puppet pins have an
+    /// The other side of the same rule: the four Puppet pins have an
     /// engine behind them now, so the button arms and the flyout lists them.
     testWidgets('the puppet group arms and opens its flyout', (tester) async {
       final p = await mount(tester);
@@ -403,7 +403,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       final bend = find.byKey(const ValueKey('tool-flyout-puppetBend'));
-      expect(bend, findsOneWidget, reason: 'all four are built (K-704)');
+      expect(bend, findsOneWidget, reason: 'all four are built');
 
       await tester.tap(bend);
       await tester.pumpAndSettle();

@@ -3,9 +3,9 @@
 // A toolbar under the picture: magnification, channel view, the transparency
 // grid, the transport and the timecode. Sharp welds it to the panel's bottom
 // edge; Round parts it from the picture by a tile gap and draws it as a tile
-// of its own (K-394). The picture itself is whatever the
+// of its own. The picture itself is whatever the
 // render worker last published — always a platform `Texture` on a zero-copy
-// path (K-183) — drawn at the chosen zoom over a checkerboard, pannable when
+// path — drawn at the chosen zoom over a checkerboard, pannable when
 // it is larger than the panel.
 //
 // **What the overlay does.** The selected layer gets a bounding box with a
@@ -19,7 +19,7 @@
 // and it draws whichever frame last arrived. It runs no clock and schedules
 // nothing: the engine chooses frames, paces them against the audio, and stops
 // itself at the end, and every frame it publishes says which frame it is — so
-// the playhead follows the picture rather than predicting it (K-181). This panel
+// the playhead follows the picture rather than predicting it. This panel
 // used to hold a `Ticker` polling the audio clock, an every-frame pump two deep,
 // an in-flight counter and a staleness flag, which is a scheduler sitting on the
 // far side of an FFI boundary from everything it had to schedule against.
@@ -27,10 +27,10 @@
 // **What is not here.** The scale and rotate gizmo handles, motion paths and
 // masks; rulers and draggable guides, and the wireframe/overlay menu. Recorded
 // in docs/TODO.md — none is blocked on the engine. The grid and the safe areas
-// *are* here (K-416, `viewer_overlays.dart`), as is the region of interest.
+// *are* here (`viewer_overlays.dart`), as is the region of interest.
 
 // **Where the rest of it is.** The Viewer is four files, split along the seams
-// it already had (K-007): this one holds the panel — the magnification, the
+// it already had: this one holds the panel — the magnification, the
 // pan, the snapshot slot and the transport's two calls — and hands the rest
 // down. `viewer_stage.dart` is the picture and everything drawn over it,
 // `viewer_strips.dart` the header strip and the vocabulary both strips are made
@@ -82,7 +82,7 @@ export 'viewer_dropper_layer.dart';
 export 'viewer_stage.dart';
 export 'viewer_strips.dart';
 
-// --- The project's own picture (K-468) --------------------------------------
+// --- The project's own picture ----------------------------------------------
 //
 // In plain terms: when a project is saved, the welcome screen wants a small
 // picture of it to show on its recent row next time. The picture it wants is
@@ -92,15 +92,15 @@ export 'viewer_strips.dart';
 //
 // **It is the first road, and no longer the only one.** A composition frame
 // never crosses the bridge as pixels on the Viewer's own path: zero-copy is the
-// only transport there (K-183), so a rendered frame reaches Dart as a texture
+// only transport there, so a rendered frame reaches Dart as a texture
 // handle and the read-back was deleted. That is why photographing the boundary
 // came first — for a while it was the only place in the process where those
-// pixels were addressable at all. K-468 named what would replace it, and the
-// engine has since grown it: `CompositionReference.thumbnail` draws a still off
-// the playback path at a size that is a reading rather than a picture
-// transport. The photograph stays because it is free when the Viewer is up —
-// already painted, already the frame the user is looking at — and
-// `Workspace.compThumbnailPng` is what every save falls back to when it is not.
+// pixels were addressable at all. The engine has since grown a replacement:
+// `CompositionReference.thumbnail` draws a still off the playback path at a
+// size that is a reading rather than a picture transport. The photograph stays
+// because it is free when the Viewer is up — already painted, already the frame
+// the user is looking at — and `Workspace.compThumbnailPng` is what every save
+// falls back to when it is not.
 
 /// The picture boundary of the Viewer currently on screen, or null when there
 /// is no Viewer up — the welcome screen's window, or a workspace with the panel
@@ -108,7 +108,7 @@ export 'viewer_strips.dart';
 GlobalKey? viewerPictureKey;
 
 /// Photograph the composition on screen as a small PNG, for the welcome
-/// screen's recent rows (K-468).
+/// screen's recent rows.
 ///
 /// Null whenever there is nothing honest to hand back: no Viewer up, a boundary
 /// that has not painted yet, or a driver that will not read the picture back.
@@ -133,7 +133,7 @@ Future<Uint8List?> captureViewerPicturePng() async {
 }
 
 /// Which part of [picture] the [panel] around it can actually show, in the
-/// picture's own coordinates (K-612).
+/// picture's own coordinates.
 ///
 /// The whole of it while the picture fits; the panel's own rectangle, slid onto
 /// the picture, once magnification has taken the rest off screen. Empty when the
@@ -165,7 +165,7 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
   ViewerChannel _channel = ViewerChannel.rgb;
 
   /// Whether the layer controls — the wireframe boxes, the handles and the
-  /// hover highlight — are drawn over the picture (K-217). On by default,
+  /// hover highlight — are drawn over the picture. On by default,
   /// because a selected layer with no box is a layer you cannot see the extent
   /// of; the switch exists for judging the picture itself, where any mark over
   /// it is in the way.
@@ -179,7 +179,7 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
   /// picture has to be asked for again.
   StreamSubscription<ScopedChange>? _changes;
 
-  /// The zoom's own motion (K-218).
+  /// The zoom's own motion.
   ///
   /// A magnification change is a *place* changing, not a value being nudged, so
   /// it is worth animating: jumping the picture from one magnification to
@@ -217,7 +217,7 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
   /// where the theme scope is in reach.
   AnimationLevel _animationLevel = AnimationLevel.all;
 
-  // --- Snapshots (K-416, docs/07 §2.2 item 14) ------------------------------
+  // --- Snapshots (docs/07 §2.2 item 14) -------------------------------------
   //
   // A snapshot is a *display* affordance: the picture on screen, kept, and put
   // back over the picture while a button is held, for the before/after read
@@ -243,7 +243,7 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
   }
 
   /// The one slot. AE's four-slot family can follow on this same mechanism if
-  /// it is ever asked for (K-416); one is what a before/after actually needs.
+  /// it is ever asked for; one is what a before/after actually needs.
   dartui.Image? _snapshot;
 
   /// Which slice of the picture that snapshot is, as fractions of the picture's
@@ -265,17 +265,17 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
     super.dispose();
   }
 
-  /// Photograph the picture as it stands — the part of it on screen (K-612).
+  /// Photograph the picture as it stands — the part of it on screen.
   ///
   /// At the device's own pixel ratio, so a snapshot held against the live
   /// picture is the same sharpness rather than a softer copy of it, and **never
   /// more pixels than the panel itself has**, because the bounds are the panel's
   /// and not the picture's. The boundary is the picture's rectangle, which is
   /// the *comp* at this magnification and not the panel: at 800 % on an HD comp
-  /// it is 15360 pixels across (K-230's number), and photographing that whole
-  /// would ask for gigabytes of pixels nobody can see, on a button that must
-  /// never be a risk to press. What is off screen is what is dropped; what is on
-  /// screen keeps every pixel it is drawn with.
+  /// it is 15360 pixels across, and photographing that whole would ask for
+  /// gigabytes of pixels nobody can see, on a button that must never be a risk
+  /// to press. What is off screen is what is dropped; what is on screen keeps
+  /// every pixel it is drawn with.
   Future<void> _takeSnapshot() async {
     final boundary = _pictureKey.currentContext?.findRenderObject();
     final panel = context.findRenderObject();
@@ -320,7 +320,7 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
   }
 
   /// Show the stored picture while the button is down, and stop the moment it
-  /// is up. Releasing the button is the whole of its lifecycle (K-416).
+  /// is up. Releasing the button is the whole of its lifecycle.
   void _holdSnapshot(bool held) {
     if (_snapshot == null && held) return;
     if (_showingSnapshot == held) return;
@@ -361,13 +361,13 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
   /// What this panel has to ask the *engine* about the composition, as against
   /// what it reads from the model: its settings and its pixel size.
   ///
-  /// Asked once and held until an edit lands (K-230). Neither can change
+  /// Asked once and held until an edit lands. Neither can change
   /// without one, and they were being re-asked on every rebuild — which meant
   /// every pointer movement of a Hand-tool pan crossed the bridge four times
   /// and more. A pan changes where the picture is drawn and nothing else; it
   /// must ask the engine nothing at all.
   ///
-  /// **The third fact used to live here and no longer does** (K-680): which
+  /// **The third fact used to live here and no longer does**: which
   /// layers have a file behind them was a `get_layers` plus a
   /// `get_source_item` per layer, and while a *rebuild* never paid it, every
   /// committed edit did — 65 sync crossings on the owner's project each time
@@ -454,7 +454,7 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
     }
     final comp = ui.selectedComp;
     // Nothing to show: the ways to start work, or this panel's ordinary empty
-    // line when the project does have compositions (K-481, shell/welcome_frb).
+    // line when the project does have compositions (shell/welcome_frb).
     if (comp == null) return const EmptyStageFrb();
     // A newly fronted composition is a new picture to ask for. Nothing else
     // asks: the playhead has not moved and no edit has landed, so without this
@@ -482,19 +482,19 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
     _animationLevel = scope.animationLevel;
     final round = t.shape == ThemeShape.round;
 
-    // How the chrome is arranged round the picture (K-448's setting, K-466's
-    // drawing): the drawing's split by default, or everything gathered into
-    // one strip at whichever end is asked for.
+    // How the chrome is arranged round the picture, from the setting: the
+    // drawing's split by default, or everything gathered into one strip at
+    // whichever end is asked for.
     final arrangement = ui.workspace.interface.viewerBars;
     final split = arrangement == ViewerBars.split;
 
-    // The panel's own header strip (K-466): the Viewer's kicker, and the three
+    // The panel's own header strip: the Viewer's kicker, and the three
     // pickers the drawing puts at its right — the magnification, the preview
     // quality and the colour pipeline. The Viewer docks as a pane of its own,
     // so the dock draws no strip above it and this is the panel's only title.
     //
     // The magnification menu is a jump to a named place, so it flies there
-    // like every other zoom (K-218) — from whatever is on screen, which is
+    // like every other zoom — from whatever is on screen, which is
     // what the measured rectangle in the layout builder knows.
     void goToNamedZoom(double? z) =>
         _goToZoom(z, Offset.zero, from: _shownScale);
@@ -520,7 +520,7 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
           valueListenable: ui.previewTier,
           builder: (context, tier, _) => ViewerBar(
             channel: _channel,
-            // Session state rather than panel state (K-352): the engine has to
+            // Session state rather than panel state: the engine has to
             // be told when it flips, and [LumitUiState] is what talks to it.
             grid: ui.viewerGrid,
             wireframes: ui.viewerLayerControls,
@@ -566,7 +566,7 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
     );
 
     // The picture. The preview progress bar used to float over the bottom of
-    // it; it now rides on the right of the transport instead (K-287), where it
+    // it; it now rides on the right of the transport instead, where it
     // covers nothing and has a place of its own that is always the same size.
     final stage = LayoutBuilder(
       key: const ValueKey('viewer-stage'),
@@ -591,6 +591,13 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
             );
 
         return Listener(
+          // The middle button pans, like in other software.
+          onPointerMove: (event) {
+            if (event.buttons == kMiddleMouseButton &&
+                ui.dropper.value == null) {
+              _panBy(event.delta);
+            }
+          },
           // The wheel zooms about the cursor (docs/07 §2.2): the comp point
           // under the pointer stays under the pointer, which is what makes
           // zooming feel like leaning in rather than teleporting.
@@ -622,15 +629,9 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
               channel: _channel,
               compSize: size,
               footage: footage,
-              onPan: (delta) => setState(() {
-                // A pan during a zoom flight would be fighting it, so the
-                // flight ends where it is and the drag takes over.
-                _zoomFrom = null;
-                _zoomMotion.value = 1;
-                _pan += delta;
-              }),
+              onPan: _panBy,
               // The model is *told* an edit landed, rather than the boxes
-              // checking for themselves as they draw (K-230): the Viewer
+              // checking for themselves as they draw: the Viewer
               // commits its own edits, and the drawing path reads the held
               // copy now, so this is what puts the new document on screen
               // without waiting for the change stream's round trip. The same
@@ -639,7 +640,7 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
                 ui.model.refresh();
                 setState(() {});
               },
-              // Both in the picture area's frame (K-689), for [_scrollZoom]'s
+              // Both in the picture area's frame, for [_scrollZoom]'s
               // reason: the pan that comes back is measured from the middle of
               // what the rulers have left.
               onZoomAt: (at, {required bool out}) => applyZoom(zoomAboutPoint(
@@ -663,9 +664,9 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
     );
 
     // The transport belongs under the picture, where a transport goes. Round
-    // makes that literal (K-394, docs/15 §12.1): the picture is one tile and
+    // makes that literal (docs/15 §12.1): the picture is one tile and
     // the transport another, parted by the same tile gap that parts the panes
-    // themselves (K-092) with the canvas showing through, so the bar sits
+    // themselves with the canvas showing through, so the bar sits
     // *below* the picture instead of over it. It is still a child of this
     // panel's own column, so docking or dragging the Viewer carries the
     // transport with it. Sharp keeps the strip welded to the panel edge, and
@@ -742,7 +743,7 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
       pan = Offset.lerp(_panFrom, _pan, t) ?? _pan;
     }
     final drawn = Size(w * scale, h * scale);
-    // Centred in what the rulers have left, and pushed past them (K-689).
+    // Centred in what the rulers have left, and pushed past them.
     final area = _pictureArea(constraints);
     final centre = Offset(
       _band + (area.width - drawn.width) / 2,
@@ -787,6 +788,16 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
     });
   }
 
+  /// Move the picture by a drag's worth, whether that drag came from the Hand
+  /// tool, a press on empty space or the middle button.
+  void _panBy(Offset delta) => setState(() {
+        // A pan during a zoom flight would be fighting it, so the flight ends
+        // where it is and the drag takes over.
+        _zoomFrom = null;
+        _zoomMotion.value = 1;
+        _pan += delta;
+      });
+
   /// The magnification "Fit" means here: the whole picture in the panel.
   double _fitScale(BoxConstraints constraints, BridgeCompSize size) {
     final w = size.width.toDouble();
@@ -799,7 +810,7 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
   /// Tell the engine what fraction of comp resolution the next render should be
   /// made at.
   ///
-  /// **Not simply what is on screen** (K-230). The magnification the *panel*
+  /// **Not simply what is on screen**. The magnification the *panel*
   /// implies is what governs it — a Viewer docked small is cheap, which is the
   /// whole point of reporting anything — but zooming inside that panel does
   /// not: zooming out used to lower the preview resolution, which threw away
@@ -826,8 +837,8 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
     state.reportViewerScale(
       _shownScale > fit ? _shownScale : fit,
       // A zoom in flight lays out on every tick of it. The scale it passes
-      // through on the way is not one to ask the engine for a frame at
-      // (K-430); the one it lands on is.
+      // through on the way is not one to ask the engine for a frame at;
+      // the one it lands on is.
       settled: !_zoomMotion.isAnimating,
     );
   }
@@ -839,8 +850,7 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
   double _shownScale = 1;
 
   /// How much of the stage the rulers are standing on: [viewerRulerBand] down
-  /// the top and left edges while they are up, nothing at all otherwise
-  /// (K-689).
+  /// the top and left edges while they are up, nothing at all otherwise.
   ///
   /// **Every measurement below is taken against what is left.** The picture is
   /// fitted, centred, panned and zoomed inside that smaller rectangle, so
@@ -875,7 +885,7 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
 
   /// Start or stop playback. Two calls, because that is all a transport is:
   /// the clock, the frame choice, the sound and the end of the composition are
-  /// all the engine's (K-181).
+  /// all the engine's.
   void _togglePlay() {
     final ui = _boundUi;
     if (ui == null) return;
@@ -883,7 +893,7 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
   }
 }
 
-/// **The composition's background colour** (docs/07 §2.2 item 10, K-357), and
+/// **The composition's background colour** (docs/07 §2.2 item 10), and
 /// the picker that changes it.
 ///
 /// **A document edit, unlike every other way of looking the Viewer offers.**
@@ -891,13 +901,13 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
 /// this is what the comp is actually drawn onto and what an export writes
 /// there, so it goes through an op and Ctrl+Z undoes it.
 ///
-/// The drawing gives it no seat on the bar, so it is a row in the view menu
-/// (K-466) — beside the transparency board, because the two answer the same
-/// question from opposite sides and finding one without the other is what makes
-/// a black comp confusing.
+/// The drawing gives it no seat on the bar, so it is a row in the view menu,
+/// beside the transparency board, because the two answer the same question
+/// from opposite sides and finding one without the other is what makes a black
+/// comp confusing.
 ///
 /// [background] is the colour to show, off the held read model and never asked
-/// for here (K-184).
+/// for here.
 Color viewerBackgroundColour(F32Array4? background) {
   final List<double> rgba = background ?? const [0.0, 0.0, 0.0, 1.0];
   int byte(double v) => (v.clamp(0.0, 1.0) * 255).round();

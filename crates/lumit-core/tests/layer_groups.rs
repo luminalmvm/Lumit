@@ -1,4 +1,4 @@
-//! Layer groups end to end (K-702): grouping, ungrouping, undo, the refusals,
+//! Layer groups end to end: grouping, ungrouping, undo, the refusals,
 //! and the promise that a project saved before groups existed re-saves
 //! byte-identical.
 //!
@@ -291,7 +291,7 @@ fn a_project_with_no_groups_round_trips_byte_identical() {
         .is_empty());
 }
 
-/// **Effects on the header** (docs/impl/group-effects.md §5, K-731):
+/// **Effects on the header** (docs/impl/group-effects.md §5):
 /// `SetGroupEffects` round-trips exactly; Ungroup discards the stack with the
 /// band and one undo restores both, because the inverse carries the whole
 /// group and the group now carries its effects.

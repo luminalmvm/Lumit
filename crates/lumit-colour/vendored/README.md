@@ -24,7 +24,7 @@ produced `../tests/fixtures/aces-cg.fixture`:
 Each is 65³ samples at nine significant digits, which is what an `f32` needs to
 round-trip and about a third of the size of Python's own `repr`. They are **not**
 compiled into the binary — 47 MiB riding in every build was the cost of the
-first cut, and K-527 removed it. `src/builtin.rs` reads them at runtime, style
+first cut, and it was removed. `src/builtin.rs` reads them at runtime, style
 name as file name, from the first directory that exists: `data/colour/` beside
 the executable (a shipped Windows or Linux build), `Contents/Resources/colour/`
 (a shipped macOS bundle), then this directory (a development checkout, which is
@@ -41,7 +41,7 @@ the same shaper, so the samples land back on the points they came from.
 
 **What a bake costs at the gamut edge is measured, stated and gated**: 0.117 at
 the Rec.709 blue primary through the Rec.709 SDR output transform, against better
-than 2 × 10⁻³ inside the gamut. K-518 and §5.4 carry the number and the reason;
+than 2 × 10⁻³ inside the gamut. §5.4 carries the number and the reason;
 `aces-cg.fixture` carries the rows. Porting a style to tier one is what tightens
 it, and those rows are what a port will be measured against.
 
@@ -68,7 +68,7 @@ A file without those lines is not a golden, it is a table somebody found —
 and `builtin::tests::every_vendored_style_has_an_artefact_with_its_provenance`
 says so out loud rather than letting a truncated file surface as a wrong picture.
 
-## The bake-generation recipe (K-489)
+## The bake-generation recipe
 
 Same session, same library version, same day as
 `../tests/fixtures/aces-cg.fixture` — see that directory's README for the
@@ -118,7 +118,7 @@ eighteen are now answered**, so that config resolves end to end.
 - all eight display encodings. Each is a primaries matrix derived from its own
   chromaticities plus a documented transfer function run backwards, which is
   literally the reference library's own decomposition of them. Six use the
-  mirrored curve `Op::Negatives` now expresses (K-517) — including
+  mirrored curve `Op::Negatives` now expresses — including
   `DisplayP3` and `DisplayP3-HDR`, whose names do not say MIRROR NEGS but whose
   decomposition does — and the two PQ ones use `Op::Pq`, SMPTE ST 2084 as a
   tier-one curve rather than a 65536-entry table.

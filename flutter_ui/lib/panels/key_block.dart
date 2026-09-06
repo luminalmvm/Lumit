@@ -1,6 +1,6 @@
 // The block tools' arithmetic: what a marquee's catch of keyframes measures,
 // where a stretch handle puts each of them, and where Reverse and Stagger do
-// (K-458, docs/15 §12A.1a).
+// (docs/15 §12A.1a).
 //
 // In plain terms: select several keyframes and they become one *block* — a box
 // with a handle at each end and a badge saying how many keys it holds and how
@@ -24,7 +24,7 @@
 /// block that can still be written on any row, whatever the magnet says.
 const double minBlockSpan = 1.0;
 
-/// A block of selected keyframes, measured (K-458).
+/// A block of selected keyframes, measured.
 ///
 /// [first] and [last] are the earliest and latest frames the selection reaches;
 /// [count] is how many keys it holds. The badge reads these two numbers, and
@@ -57,7 +57,7 @@ class KeyBlock {
 /// a **stretch** about an anchor, or a **move** that carries the whole
 /// selection the same distance.
 ///
-/// Held by the panel and read by every lane, the way a bar drag is (K-208): the
+/// Held by the panel and read by every lane, the way a bar drag is: the
 /// keys are spread across rows in two scroll views, and a stretch that only the
 /// handle knew about would move the box while the diamonds sat still. A lane
 /// key's drag on a multi-key selection is the same broadcast for the same
@@ -199,7 +199,7 @@ List<double> reversedFrames(List<double> frames) {
   return [for (final f in frames) sum - f];
 }
 
-/// Which way a stagger fans a block out (K-458, the Ease popover's own control).
+/// Which way a stagger fans a block out (the Ease popover's own control).
 enum StaggerOrder {
   /// The first row's keys stay put and each row below is pushed later.
   topDown,

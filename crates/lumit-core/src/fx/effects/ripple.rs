@@ -27,8 +27,8 @@ use lumit_fx_macros::Effect;
     // The rings can span the whole frame.
     roi = FullFrame,
     premultiplied = true,
-    // K-427: the matte scales the displacement, inside the kernel (the
-    // owner's rule for mattes); the generic strength dissolve does not also run.
+    // The matte scales the displacement, inside the kernel (the owner's rule
+    // for mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales Wave height per pixel: white ripples the full height, grey \
@@ -47,7 +47,7 @@ pub struct Ripple {
     )]
     pub radius: f32,
 
-    /// px@comp: where the stone landed (K-260 — point parameters are pixels).
+    /// px@comp: where the stone landed (point parameters are pixels).
     /// The schema default is a nominal 1080p centre;
     /// [`instantiate_for_raster`](crate::fx::instantiate_for_raster) centres a
     /// fresh instance on the actual comp.

@@ -1,4 +1,4 @@
-// The zoom's anchored scroll (docs/07-UI-SPEC.md §4.6, K-293): the arithmetic
+// The zoom's anchored scroll (docs/07-UI-SPEC.md §4.6): the arithmetic
 // on its own, and the correction happening inside layout rather than beside it.
 
 import 'package:flutter/widgets.dart';

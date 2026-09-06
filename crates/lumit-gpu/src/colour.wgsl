@@ -30,13 +30,13 @@ fn vs_fullscreen(@builtin(vertex_index) i: u32) -> VsOut {
 @group(0) @binding(1) var samp: sampler;
 @group(0) @binding(2) var<uniform> view: ViewParams;
 
-// The two viewer-only controls (docs/07-UI-SPEC.md §2.2, docs/06 §3.3, K-314).
+// The two viewer-only controls (docs/07-UI-SPEC.md §2.2, docs/06 §3.3).
 // Neither may ever reach an export: every export path passes the neutral value,
 // which this shader short-circuits on so a neutral pass is bit-identical to the
 // plain copy it used to be.
 struct ViewParams {
     /// 2^stops, computed host-side so the Viewer's number and the Exposure
-    /// effect's multiply by the identical float (K-106). 1.0 is neutral.
+    /// effect's multiply by the identical float. 1.0 is neutral.
     gain: f32,
     /// 0 off, 1 on. A fixed curve, no measurement, no carried state — the
     /// picture at a frame never depends on which frame preceded it.
@@ -89,7 +89,7 @@ fn fs_copy(in: VsOut) -> @location(0) vec4<f32> {
 //
 // The formulation is COPIED from `lumit-colour`'s `sample.rs` and `bake.rs` and
 // must stay copied: six tetrahedra in the written order, `>=` as written, ties
-// breaking top-first (K-031, ocio.md §4.3 — binding).
+// breaking top-first (ocio.md §4.3 — binding).
 // ---------------------------------------------------------------------------
 
 /// The curve table, `CURVE_WIDTH` samples per row, `p.curve_rows` rows per
@@ -360,7 +360,7 @@ fn shade(in: VsOut) -> vec4<f32> {
         return s;
     }
     // A scene-linear gain is a scalar, so premultiplied alpha rides through it
-    // untouched (K-106). The curve is not linear, so it has to see the colour
+    // untouched. The curve is not linear, so it has to see the colour
     // the author authored: unpremultiply, map, put it back.
     var rgb = s.rgb * view.gain;
     if (view.tone_map != 0u && s.a > 0.0) {

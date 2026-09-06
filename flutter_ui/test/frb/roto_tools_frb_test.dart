@@ -1,5 +1,5 @@
 // The Roto tools over the picture, and the Roto brush's status row
-// (K-717, docs/impl/roto.md §10 item 9, docs/07 §2.3.7).
+// (docs/impl/roto.md §10 item 9, docs/07 §2.3.7).
 //
 // Every document operation here is genuine — the strokes really land in a real
 // project through the real bridge. What is handed in are the two answers a test
@@ -32,7 +32,7 @@ void main() {
   setUpAll(initEngineForTests);
 
   /// A project with one footage layer, selected — carrying an enabled Roto
-  /// brush unless [brush] says it starts bare (the K-723 first-touch case).
+  /// brush unless [brush] says it starts bare (the first-touch case).
   ({
     LumitState state,
     LumitUiState uiState,
@@ -65,7 +65,7 @@ void main() {
   ///
   /// Half deliberately: an identity map would pass whether the gesture went
   /// through the comp→layer chain or straight through, and going straight
-  /// through is exactly the mistake K-248 exists to stop. At this scale a point
+  /// through is exactly the mistake this exists to stop. At this scale a point
   /// on the panel is twice as far into the file.
   LayerBox boxFor(LayerReference layer) => LayerBox(
         layer: layer,
@@ -180,7 +180,7 @@ void main() {
           reason: 'the path the pointer took, thinned, not one dab');
       expect(stroke.points.length.isEven, isTrue, reason: 'x, y pairs');
       // Half magnification, so the panel's (100, 80) is the file's (200, 160).
-      // This is the whole of K-248 in one assertion: the number stored is the
+      // This is the whole rule in one assertion: the number stored is the
       // file's own pixel, not the panel's and not the composition's.
       expect(stroke.points[0], closeTo(200, 1));
       expect(stroke.points[1], closeTo(160, 1));
@@ -248,9 +248,9 @@ void main() {
       expect(strokesOf(w.layer).last.frame, 80);
     });
 
-    /// K-681, and `bridge_call_budget_test` is the gate: the overlay's answers
-    /// are held against the frame, the document and a propagation landing, so a
-    /// rebuild draws them again and asks nothing.
+    /// No bridge call per rebuild, and `bridge_call_budget_test` is the gate:
+    /// the overlay's answers are held against the frame, the document and a
+    /// propagation landing, so a rebuild draws them again and asks nothing.
     testWidgets('the edge is read once per frame and not once per rebuild',
         (tester) async {
       final w = withBrush();
@@ -324,11 +324,11 @@ void main() {
       expect(w.state.notice.value!.message.trim(), isNotEmpty);
     });
 
-    /// K-723, superseding K-717's refusal: a first scribble on a layer with no
-    /// Roto brush adds the brush **and** files the stroke — one op, one undo
-    /// step — because the stroke rides inside the new instance. This failed
-    /// before the fix: the gesture was refused with a notice, which the owner
-    /// judged to read as the tool being broken.
+    /// A first scribble on a layer with no Roto brush adds the brush **and**
+    /// files the stroke — one op, one undo step — because the stroke rides
+    /// inside the new instance. This failed before the fix: the gesture was
+    /// refused with a notice, which the owner judged to read as the tool
+    /// being broken.
     testWidgets('a first scribble on a bare layer is brush and stroke, '
         'one undo step', (tester) async {
       final w = withBrush(brush: false);
@@ -366,9 +366,9 @@ void main() {
               'one step');
     });
 
-    /// The refine tool keeps K-717's sentence: a refine stroke widens the band
-    /// around an answer, and a bare layer has no answer to widen — bringing a
-    /// brush with it would claim a subject nobody has named.
+    /// The refine tool still refuses: a refine stroke widens the band around
+    /// an answer, and a bare layer has no answer to widen — bringing a brush
+    /// with it would claim a subject nobody has named.
     testWidgets('a refine stroke on a bare layer still says so',
         (tester) async {
       final w = withBrush(brush: false);
@@ -384,8 +384,8 @@ void main() {
       expect(w.state.notice.value, isNotNull);
     });
 
-    /// K-723's second half: committing a stroke asks the engine to solve that
-    /// one frame's matte now, through the same job Propagate runs — asserted
+    /// The other half: committing a stroke asks the engine to solve that one
+    /// frame's matte now, through the same job Propagate runs — asserted
     /// through the seam, with the **source** frame the stroke was filed
     /// against (the handed-in mapping doubles the composition frame).
     testWidgets('release asks for the scribbled frame\'s own solve',
@@ -410,9 +410,9 @@ void main() {
               'composition\'s');
     });
 
-    /// K-724: the hardware crosshair leads. The overlay asks the platform for
-    /// the precise pointer instead of hiding it, so aiming happens at input
-    /// rate however slowly the application is repainting.
+    /// The hardware crosshair leads. The overlay asks the platform for the
+    /// precise pointer instead of hiding it, so aiming happens at input rate
+    /// however slowly the application is repainting.
     testWidgets('the overlay wears the system precise pointer',
         (tester) async {
       final w = withBrush();
@@ -475,7 +475,7 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    /// The K-540 bar: the span the matte covers against the length of the clip,
+    /// The span bar: the span the matte covers against the length of the clip,
     /// which is two frame counts and nothing else.
     testWidgets('the span bar weighs the two frame counts', (tester) async {
       final w = withBrush();

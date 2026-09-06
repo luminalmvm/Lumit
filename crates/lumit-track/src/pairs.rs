@@ -22,8 +22,7 @@
 //! "At random" would be the end of determinism, so the random numbers are not
 //! random: the sequence is seeded from the two frame numbers and the track
 //! count, so the same pair of frames always draws the same samples in the same
-//! order and the same clip solves to the same answer twice (K-415's
-//! determinism ruling).
+//! order and the same clip solves to the same answer twice.
 //!
 //! One more question has to be settled per pair, and it is the one that decides
 //! whether the pair is usable at all. If the camera only turned on the spot, or
@@ -102,7 +101,7 @@ pub enum PairVerdict {
     Degenerate,
 }
 
-/// One frame pair's geometry, in **source raster pixels** (K-248) — the same
+/// One frame pair's geometry, in **source raster pixels** — the same
 /// coordinates the tracks live in, so a caller never converts.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PairGeometry {
@@ -485,8 +484,7 @@ where
             let count = improved.inliers.len();
             best = Some(improved);
             // Recomputed from the best-so-far count alone, so the exit point is
-            // a function of the data and not of when the loop happened to look
-            // (K-415's determinism ruling).
+            // a function of the data and not of when the loop happened to look.
             cap = required_iterations(
                 count,
                 n,

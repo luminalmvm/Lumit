@@ -1,4 +1,4 @@
-//! Remap (K-471 §1.3): one range of numbers into another.
+//! Remap (node-graph.md §1.3): one range of numbers into another.
 //!
 //! **In plain terms.** A loudness that arrives as 0 to 1 and a blur radius that
 //! wants 0 to 40 do not speak the same language. Remap is the translator: say

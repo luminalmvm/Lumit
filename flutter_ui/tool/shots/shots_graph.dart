@@ -1,5 +1,5 @@
 // Manual screenshots, sweep: the Node graph panel, and the workspace built
-// around it (phase 3, K-471..473).
+// around it (phase 3).
 //
 // nodes-workspace.png — the Nodes workspace as its own tab in the toolbar sets
 // it up: the graph across most of the window, the Viewer beside it, the

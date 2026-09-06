@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 
 import 'base.dart';
 
-/// A thin themed slider. `commitOnRelease` reproduces the UI-scale rule
-/// (K-117): the dragged value shows live but `onChanged` fires on release.
+/// A thin themed slider. `commitOnRelease` reproduces the UI-scale rule: the
+/// dragged value shows live but `onChanged` fires on release.
 class HouseSlider extends StatefulWidget {
   final double value;
   final double min;
@@ -29,14 +29,14 @@ class HouseSlider extends StatefulWidget {
 
   /// Called instead of [onChanged] while the handle is being **dragged**, for
   /// a control whose live value costs something the committed one does not —
-  /// the Timeline's zoom applies a drag at once and only flies for a tap
-  /// (K-293). Unset, a drag reports through [onChanged] as it always did.
+  /// the Timeline's zoom applies a drag at once and only flies for a tap.
+  /// Unset, a drag reports through [onChanged] as it always did.
   final ValueChanged<double>? onChangeLive;
 
   /// Fired once when a drag begins, before the first [onChangeLive] — for a
   /// caller that fixes something at the start of the gesture and holds it to
-  /// the end (the Timeline's zoom anchors on the playhead *once* per drag,
-  /// K-319). Omitted by callers with nothing to fix.
+  /// the end (the Timeline's zoom anchors on the playhead *once* per drag).
+  /// Omitted by callers with nothing to fix.
   final VoidCallback? onChangeStart;
 
   /// Fired once when a drag ends, after the last tick.

@@ -1,5 +1,5 @@
 //! `lumit-colour` — OCIO colour management, implemented rather than linked
-//! (K-489, K-490; the *how* is [docs/impl/ocio.md](../../../docs/impl/ocio.md)).
+//! (the *how* is [docs/impl/ocio.md](../../../docs/impl/ocio.md)).
 //!
 //! ## In plain terms
 //!
@@ -11,7 +11,7 @@
 //!
 //! The official implementation is a C++ library that deliberately computes
 //! differently on the processor and on the graphics card. Lumit's foundational
-//! promise is that the preview **is** the export, bit for bit (K-031), and a
+//! promise is that the preview **is** the export, bit for bit, and a
 //! library with two answers cannot keep that promise — so Lumit implements the
 //! format itself, the same way it hosts OpenFX itself and parses `.cube` files
 //! itself. Everything a config describes is resolved once, on the processor,

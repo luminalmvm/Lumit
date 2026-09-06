@@ -5,9 +5,9 @@
     remembers the English each line was translated from.
 
 .DESCRIPTION
-    This is the second half of K-653. A translator fills in https://lumitlab.com/translate,
-    the page hands them a .json, they send it back as a GitHub issue, and this reads it in.
-    Nothing else writes an app_<locale>.arb.
+    This is the second half of the translation round trip. A translator fills in
+    https://lumitlab.com/translate, the page hands them a .json, they send it back as a
+    GitHub issue, and this reads it in. Nothing else writes an app_<locale>.arb.
 
     The sidecar, flutter_ui/lib/l10n/translation-state.json, is the whole point. An .arb
     file says what the German for a string is; it does not say what the English was when
@@ -25,7 +25,7 @@
       status                  Per locale: translated, missing, stale, orphaned.
       ingest <file.json>      Validate a translator's file and merge it.
       prune                   Drop translations of keys English no longer has, and expire
-                              the stale ones (K-653: a translation whose English moved on
+                              the stale ones (a translation whose English moved on
                               is deleted, not served).
 
     A locale entry counts as translated when the key is present and either differs from the
@@ -75,7 +75,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$script:Locales = @('de', 'kk', 'uk', 'zh', 'zh_Hant')
+$script:Locales = @('de', 'es', 'kk', 'pl', 'uk', 'zh', 'zh_Hant')
 $script:StateName = 'translation-state.json'
 $script:Dir = $null
 
@@ -445,7 +445,7 @@ function Invoke-SelfTest {
         $s = (Get-Status | Where-Object { $_.Locale -eq 'de' })
         Assert ($s.Stale -eq 1 -and $s.Translated -eq 2) 'a reworded English string makes its translation stale'
         $p = Invoke-Prune
-        Assert ($p.Expired -eq 5 -and $p.Dropped -eq 5) 'prune expires the stale ones and drops the orphans'
+        Assert ($p.Expired -eq $script:Locales.Count -and $p.Dropped -eq $script:Locales.Count) 'prune expires the stale ones and drops the orphans'
         $de = Read-JsonMap (Join-Path $tmp 'app_de.arb')
         Assert (-not $de.Contains('zoom') -and -not $de.Contains('gone')) 'both left the .arb'
         Assert (-not (Read-State)['de'].Contains('zoom')) 'and the sidecar line went with it'

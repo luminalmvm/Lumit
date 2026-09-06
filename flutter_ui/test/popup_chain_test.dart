@@ -1,4 +1,4 @@
-// One active menu chain at a time (K-519).
+// One active menu chain at a time.
 //
 // The bug this pins: every menu, dropdown and picker used to push an overlay
 // entry of its own, with a click-away barrier of its own and no knowledge of

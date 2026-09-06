@@ -1,4 +1,4 @@
-//! Audio level (K-471 §1.3): how loud the music is, as a number.
+//! Audio level (node-graph.md §1.3): how loud the music is, as a number.
 //!
 //! **In plain terms.** It gives you the loudness at the moment being drawn —
 //! one number for the whole sound, and a second for the low end alone, which
@@ -47,7 +47,7 @@ pub struct AudioLevel {
     /// the picker reads *This comp* — so the driver as dropped already follows
     /// the track. A named layer somebody then deletes still degrades to
     /// silence: it says which layer it wanted, and the comp mix is not it.
-    /// **Edges never cross layers** (K-471): the canvas draws the
+    /// **Edges never cross layers**: the canvas draws the
     /// referenced layer as a derived source node and the wire from it renders
     /// this parameter, exactly as the image chain's wires render the stack.
     #[layer(label = "Audio", self_default = false)]
@@ -137,7 +137,7 @@ fn level(cx: &DriverCx<'_>, window: f64) -> (f32, f32) {
     // mono audio; give the tap a reusable buffer if a profile ever shows it.
     let mut samples = Vec::new();
     // Unset is the comp's mix, and the tap centres that window itself: the
-    // comp's clock is the host's, not this layer's (K-657).
+    // comp's clock is the host's, not this layer's.
     let read = match cx.inst.layer_ref("audio") {
         Some(layer) => tap.samples(
             layer,

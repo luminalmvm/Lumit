@@ -1,4 +1,4 @@
-//! Colour management across the seam (K-489, K-490, docs/impl/ocio.md §6.1).
+//! Colour management across the seam (docs/impl/ocio.md §6.1).
 //!
 //! **In plain terms.** An OCIO config is a folder of colour recipes that the
 //! whole industry shares: it names the colour spaces footage arrives in, and
@@ -12,21 +12,21 @@
 //!
 //! **The names are not translated.** `spaces` and `displays` are the config's
 //! own words — someone else's file, on this machine — so they cross verbatim
-//! and are shown as they arrived, exactly as a codec name is (K-303).
+//! and are shown as they arrived, exactly as a codec name is.
 //!
 //! **The refusal is not a sentence.** Every reason a config can be unusable
 //! names something in the middle of it ("this config needs
 //! `FixedFunctionTransform`", "the look-up table `shot.spi3d` was not found"),
 //! so a whole-text lookup could never translate one. It crosses as a stable id
 //! plus its facts by name, exactly as the After Effects import report's rows do
-//! (K-005, docs/17); `problem_english` is the engine's own words, for a
+//! (docs/17); `problem_english` is the engine's own words, for a
 //! frontend with no sentence for the id.
 //!
 //! **The colour state is synced from the document on every read**, which is one
 //! file read and a hash comparison when nothing has changed, and a reparse when
 //! the config on disk has been edited. That is why a config edited underneath a
 //! running Lumit is picked up without anyone having to press anything — and why
-//! none of these calls belongs in a widget's `build()` (K-183). The frontend
+//! none of these calls belongs in a widget's `build()`. The frontend
 //! fetches on a document change and holds the answer.
 
 use std::path::PathBuf;
@@ -59,7 +59,7 @@ pub struct BridgeColourDisplay {
 }
 
 /// Everything the frontend needs to know about the project's colour config, in
-/// one read (K-451's one-call-per-structure rule).
+/// one read (the one-call-per-structure rule).
 ///
 /// The four states it describes, and how to tell them apart:
 ///
@@ -72,7 +72,7 @@ pub struct BridgeColourDisplay {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct BridgeColourSummary {
     /// The path the project names, as it would be shown — the relative one a
-    /// saved `.lum` actually carries (K-173). Empty when no config is named.
+    /// saved `.lum` actually carries. Empty when no config is named.
     pub path: String,
     /// A config is named, was read, and can do colour.
     pub loaded: bool,
@@ -113,7 +113,7 @@ impl ProjectReference {
     ///
     /// **Not for a rebuild path.** It reads the config file to see whether it
     /// has changed; the frontend asks on a document change and holds the
-    /// answer, which is what the bridge-call budget test enforces (K-183).
+    /// answer, which is what the bridge-call budget test enforces.
     #[frb(sync)]
     pub fn colour_summary(&self) -> Result<BridgeColourSummary, BridgeError> {
         let state = self.state()?;
@@ -172,9 +172,9 @@ impl ProjectReference {
     ///
     /// An ordinary op, so it is undoable, journalled, and travels in the `.lum`
     /// — colour management changes what a comp looks like, so it is the
-    /// project's property and not the machine's (K-490). The path is stored as
+    /// project's property and not the machine's. The path is stored as
     /// a `MediaRef` for the same reason footage is: the relative path is what a
-    /// saved project carries, the absolute one is never serialised (K-173), and
+    /// saved project carries, the absolute one is never serialised, and
     /// a config that moved relinks by fingerprint like any other file.
     #[frb(sync)]
     pub fn set_colour_config(&self, path: Option<String>) -> Result<(), BridgeError> {
@@ -197,15 +197,15 @@ impl ProjectReference {
     }
 
     /// Whether a named colour space can actually be delivered right now — what
-    /// the export dialogue's colour dropdown enables a row on (K-485's
+    /// the export dialogue's colour dropdown enables a row on (the
     /// disabled-not-hidden rule), and the question the export itself refuses on.
     ///
     /// `false` for a config that is missing or refused and for a name it does
-    /// not have, which is the half of K-490's asymmetry that says no: a preview
-    /// degrades to the built-in transform, a delivery does not. The built-in
-    /// space names are not asked about here — they are always deliverable, and
-    /// `BridgeFormatCaps::colour_spaces` is what decides whether the *format*
-    /// can state one.
+    /// not have, which is the half of the preview/delivery asymmetry that says
+    /// no: a preview degrades to the built-in transform, a delivery does not.
+    /// The built-in space names are not asked about here — they are always
+    /// deliverable, and `BridgeFormatCaps::colour_spaces` is what decides
+    /// whether the *format* can state one.
     #[frb(sync)]
     pub fn can_deliver_colour_space(&self, name: String) -> Result<bool, BridgeError> {
         let state = self.state()?;

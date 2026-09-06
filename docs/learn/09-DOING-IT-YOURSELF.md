@@ -97,7 +97,7 @@ cargo build --workspace --release
 **The workspace has two products, not one.** `lumit_bridge.dll` is the engine the
 app loads; `target\debug\lumit-ofx-broker.exe` is a small separate program that
 opens one OFX plugin bundle in a process of its own, so a third-party plugin that
-crashes takes nothing with it (K-592). `cargo build --workspace` makes both.
+crashes takes nothing with it. `cargo build --workspace` makes both.
 `-BridgeOnly` stops at the library, which is all `flutter test` needs and not
 enough to open an OFX plugin.
 
@@ -219,19 +219,14 @@ The engine, one crate at a time — this is the normal case while working:
 ```powershell
 cargo test -p lumit-core
 cargo test -p lumit-render
-cargo test -p lumit-gpu -- --test-threads=1
+cargo test -p lumit-gpu
 ```
 
-The GPU crate is always single-threaded. Its tests share one graphics device and
-tread on each other when run in parallel.
-
-**That is why a bare `check.ps1` is not a before-every-commit command.**
-Formatting, clippy and every crate but `lumit-gpu` take minutes. The
-single-threaded GPU run after them takes hours on this machine: close to a
-hundred WGSL kernels, each rendered and compared against a CPU oracle, one at a
-time, on top of everything else that crate tests.
-Use `-Crate` while you work, let CI do the whole pass, and run the bare version
-on a machine you are not otherwise using.
+The GPU tests need no special treatment. They share one graphics device and
+one set of compiled shaders per test process, taking turns on it, so the
+`lumit-gpu` crate runs in under a minute and `lumit-render` in a few
+([GUIDE.md](../GUIDE.md) covers the arrangement). It used to be hours,
+because every test opened the card and compiled every shader for itself.
 
 Everything, the way CI does it:
 
@@ -243,8 +238,7 @@ Everything, the way CI does it:
 Raw:
 
 ```powershell
-cargo test --workspace --exclude lumit-gpu
-cargo test -p lumit-gpu -- --test-threads=1
+cargo test --workspace
 ```
 
 To run a single test by name, give cargo part of the name:
@@ -475,7 +469,7 @@ The macOS **application** icon is not made there. It is the layered Icon
 Composer document `assets/brand/lumit-icon.icon`, which Xcode compiles during
 `flutter build macos`, and `check-icon.py` exists because Icon Composer can
 write two settings into it that make Apple's `actool` crash part-way through
-with a message that says nothing about the cause (K-312). CI runs that check;
+with a message that says nothing about the cause. CI runs that check;
 run it yourself after opening the document in Icon Composer.
 
 ## The app's screenshots
@@ -616,8 +610,8 @@ build, regenerates the Dart from the file.
    the repository is offered the next time the site is deployed. What a translator
    sends back is read in by `scripts/translations.ps1`, which is the only thing
    that writes a translation file.
-3. **Never hand-edit `app_de.arb`, `app_uk.arb`, `app_zh.arb`, `app_zh_Hant.arb`
-   or `app_kk.arb`.** Those belong to the ingest tool. A fix typed here is
+3. **Never hand-edit `app_de.arb`, `app_es.arb`, `app_kk.arb`, `app_pl.arb`, `app_uk.arb`,
+   `app_zh.arb` or `app_zh_Hant.arb`.** Those belong to the ingest tool. A fix typed here is
    overwritten by the next run; make it on the translation page instead.
 
 **When a translation arrives.** Somebody opens an issue with a `.json` from
@@ -639,7 +633,7 @@ say in the message which language gained how many strings.
 Two more, run rarely. `seed` records today's English for translations already in
 the files and is safe to run again — it only fills in what the sidecar is missing.
 `prune` deletes translations of keys English no longer has, and expires the stale
-ones (K-653: a translation whose English moved on falls back to English rather
+ones (a translation whose English moved on falls back to English rather
 than answering the old question), so run it after a sweep that rewords strings.
 `.\scripts\translations.ps1 -SelfTest` runs the whole round trip against a
 throwaway folder in `%TEMP%` and touches nothing here.

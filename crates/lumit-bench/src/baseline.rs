@@ -1,4 +1,4 @@
-//! The baseline file and the ratio gate (K-389).
+//! The baseline file and the ratio gate.
 //!
 //! # In plain terms
 //!
@@ -39,7 +39,7 @@ pub const NOISE_FLOOR_MS: f64 = 1.0;
 /// docs/13 §2's reference-desktop column, in the units [`Measurement::value_ms`]
 /// reports: a latency for B3/B4, milliseconds per frame for B5–B7 (60 fps is
 /// 16.67, 24 fps is 41.67), the whole fill for B11, and one evaluate-and-draw
-/// **above the pass floor** for B12–B14 (K-475; see
+/// **above the pass floor** for B12–B14 (see
 /// [`crate::scenarios::particulate`] for what the floor is and why it is
 /// subtracted).
 ///
@@ -55,7 +55,7 @@ pub const DESKTOP_BUDGET_MS: [(&str, f64); 12] = [
     ("B12", 0.2),
     ("B13", 1.0),
     ("B14", 16.0),
-    // The puppet's three (K-704, K-712). B15 and B17 are looser than
+    // The puppet's three. B15 and B17 are looser than
     // docs/impl/puppet.md first estimated, for the arithmetic reason docs/13 §2
     // records: a CPU warp is one bilinear resample a pixel, and a dense
     // factorisation at the vertex cap is millions of multiply-adds a frame.

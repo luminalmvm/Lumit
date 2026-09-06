@@ -1,4 +1,4 @@
-//! **Layer styles, end to end** (docs/impl/layer-styles.md §9, K-706).
+//! **Layer styles, end to end** (docs/impl/layer-styles.md §9).
 //!
 //! # In plain terms
 //!
@@ -24,8 +24,8 @@
 //!   the cache serves the undressed frame for the dressed layer.
 //! - **The two paths agreeing.** The CPU reference is the oracle (docs/08 §1.6),
 //!   and a style is only shipped when the kernel matches it.
-//! - **Nothing at all, for a layer with no styles.** The K-258 regression: the
-//!   field's serde default must leave the file and the picture as they were.
+//! - **Nothing at all, for a layer with no styles.** The field's serde default
+//!   must leave the file and the picture as they were.
 
 // A test binary: a failed setup step should stop this test, loudly, and the
 // no-panic rule of docs/14 is about the engine's own paths.
@@ -132,7 +132,7 @@ fn style(name: &str, edits: &[(&str, f64)]) -> EffectInstance {
 /// *effect* has always behaved the same way, and the note names the shared
 /// padding path as the place that changes when one arrives.) Wrapping the square
 /// in a full-size comp gives the layer a 64 × 64 raster with real geometry on
-/// it, which is the authoring route K-266 already describes.
+/// it, which is how a layer like this is authored anyway.
 fn project(styles: Vec<EffectInstance>) -> (Arc<Document>, Uuid) {
     let def = Uuid::now_v7();
     let mut doc = Document::new();
@@ -174,8 +174,9 @@ fn tint(inst: &mut EffectInstance, id: &str, colour: [f64; 4]) {
     }
 }
 
-/// **K-258.** A layer that wears no styles saves without the key and renders the
-/// frame it always rendered — the whole cost of the new field, measured.
+/// **Nothing at all.** A layer that wears no styles saves without the key and
+/// renders the frame it always rendered — the whole cost of the new field,
+/// measured.
 #[test]
 fn a_layer_with_no_styles_is_the_file_and_the_frame_it_always_was() {
     let (doc, comp) = project(Vec::new());
@@ -188,7 +189,7 @@ fn a_layer_with_no_styles_is_the_file_and_the_frame_it_always_was() {
     let older: Document = serde_json::from_str(&json).unwrap();
     assert_eq!(&older, &*doc);
 
-    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::new() else {
+    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };
@@ -205,7 +206,7 @@ fn a_layer_with_no_styles_is_the_file_and_the_frame_it_always_was() {
 /// resolve walk ran and its ops were appended to the (empty) effect stack.
 #[test]
 fn a_drop_shadow_style_paints_outside_the_layer() {
-    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::new() else {
+    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };
@@ -261,7 +262,7 @@ fn red_shadow() -> EffectInstance {
 /// this asserts against.
 #[test]
 fn an_interior_style_does_not_paint_the_outer_style_it_sits_above() {
-    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::new() else {
+    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };
@@ -338,11 +339,11 @@ fn a_style_edit_renames_the_frame_and_removing_it_restores_the_name() {
 /// working format's own tolerance.
 #[test]
 fn cpu_and_gpu_agree_on_every_shipped_style() {
-    let Ok(ctx) = lumit_gpu::GpuContext::headless() else {
+    let Some(ctx) = lumit_gpu::test_support::lease() else {
         lumit_gpu::no_adapter();
         return;
     };
-    let fx = lumit_gpu::fx::FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 32u32);
     // A premultiplied grey square on empty ground, so there is an alpha edge for
     // the shadow to be cast from and empty ground for it to fall on.
@@ -408,7 +409,7 @@ fn cpu_and_gpu_agree_on_every_shipped_style() {
 
         let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
         let out = lumit_render::fxops::run_ops(
-            &fx,
+            fx,
             &ctx,
             tex,
             w,
@@ -504,7 +505,7 @@ fn choose(inst: &mut EffectInstance, id: &str, value: u32) {
 /// still be graded.
 #[test]
 fn a_colour_overlay_covers_the_gradient_overlay_beneath_it() {
-    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::new() else {
+    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };
@@ -555,7 +556,7 @@ fn a_colour_overlay_covers_the_gradient_overlay_beneath_it() {
 /// decides. Moving this sample outward is how the test stops meaning anything.
 #[test]
 fn the_drop_shadow_sits_under_the_outer_glow() {
-    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::new() else {
+    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };
@@ -604,7 +605,7 @@ fn red_shadow_at_zero_throw() -> EffectInstance {
 /// layer already flooded by a Colour overlay is still visible.
 #[test]
 fn the_stroke_draws_over_the_interior_styles() {
-    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::new() else {
+    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };
@@ -640,7 +641,7 @@ fn the_stroke_draws_over_the_interior_styles() {
 /// every raster pixel is two of them.
 #[test]
 fn an_outer_styles_reach_survives_a_reduced_preview_resolution() {
-    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::new() else {
+    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };
@@ -671,7 +672,7 @@ fn an_outer_styles_reach_survives_a_reduced_preview_resolution() {
 /// seam and on the GPU path — no pass, no fault, no black frame.
 #[test]
 fn the_two_unrendered_styles_change_no_pixel_of_a_real_frame() {
-    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::new() else {
+    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };

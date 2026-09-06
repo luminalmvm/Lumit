@@ -1,4 +1,4 @@
-//! Directional blur (docs/08 §3.8, K-137): a line-integral streak along an
+//! Directional blur (docs/08 §3.8): a line-integral streak along an
 //! angle.
 
 use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
@@ -8,7 +8,7 @@ use lumit_fx_macros::Effect;
 ///
 /// Length/Angle only, fixed Repeat edge (the Edges control is Radial's alone
 /// now). Length may exceed the frame (slider to 2000 px@comp,
-/// hard-unbounded above per K-090); the kernel's tap count still clamps
+/// hard-unbounded above); the kernel's tap count still clamps
 /// ([`cpu::dir_blur_taps`]), so a long streak stays bounded in cost. ROI is
 /// full-frame: an unbounded Length cannot be padded statically.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
@@ -19,7 +19,7 @@ use lumit_fx_macros::Effect;
     category = BlurSharpen,
     cost = Moderate,
     roi = FullFrame,
-    // K-395: the matte scales the amount, inside the kernel (the owner's
+    // The matte scales the amount, inside the kernel (the owner's
     // rule for mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
@@ -28,7 +28,7 @@ use lumit_fx_macros::Effect;
     ),
 )]
 pub struct DirectionalBlur {
-    /// The full streak length, px@comp (§2.3). Unbounded above (K-090); the
+    /// The full streak length, px@comp (§2.3). Unbounded above; the
     /// slider reaches 2000 and typing goes further.
     #[slider(
         min = 0.0,

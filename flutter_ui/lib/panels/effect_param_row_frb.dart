@@ -57,8 +57,8 @@ const double effectCellWidth = 78;
 /// own 6 (§12A.3).
 const double effectRiderGap = 6;
 
-/// What a parameter's declared unit reads as beside its value (K-443,
-/// §12A.3), or `null` for a number that genuinely has none.
+/// What a parameter's declared unit reads as beside its value (§12A.3),
+/// or `null` for a number that genuinely has none.
 ///
 /// Read off the *declaration*, never off the parameter's id: `centre_x` is a
 /// per cent of the frame on Radial blur and pixels at composition size on a
@@ -101,7 +101,7 @@ Widget withUnitRider(LumitTheme t, BridgeUnit unit, Widget control) {
 ///
 /// Takes the effect's *id* and this parameter's *value* rather than the opaque
 /// instance handle: every read through a handle is a bridge crossing, and the
-/// owner already fetched everything in one `getInfo` (K-183).
+/// owner already fetched everything in one `getInfo`.
 class EffectParamRowFrb extends StatelessWidget {
   final UuidValue effectId;
   final BridgeParamInfo param;
@@ -139,8 +139,8 @@ class EffectParamRowFrb extends StatelessWidget {
   final bool twoColumn;
 
   /// The layer this effect sits on, and every layer in the comp — what a
-  /// layer-valued parameter picks from (K-194). The owner is offered too
-  /// (K-288): picking it means "this layer", the effect's own input. Both
+  /// layer-valued parameter picks from. The owner is offered too:
+  /// picking it means "this layer", the effect's own input. Both
   /// ride in from the read model, so the closed picker costs nothing.
   final UuidValue ownerLayerId;
   final List<BridgeLayerEntry> ownerLayers;
@@ -162,7 +162,7 @@ class EffectParamRowFrb extends StatelessWidget {
   final Color? graphColour;
 
   /// The group this row came out of, drawn before its name on a **flat
-  /// sheet** (K-499): the dope sheet lists `Glow · Intensity`, where the
+  /// sheet**: the dope sheet lists `Glow · Intensity`, where the
   /// fold-out draws `Intensity` under the effect's own heading. Null wherever
   /// the row sits inside that heading.
   final String? nameGroup;
@@ -177,8 +177,8 @@ class EffectParamRowFrb extends StatelessWidget {
 
   /// Parameters that ride beside this row's control on the **same row**, in
   /// drawing order, each with its current value (staged drag included): the
-  /// Matte row's Channel choice and Invert switch (K-395, K-425), the Mix
-  /// row's Blend choice (K-425). Empty on every other row.
+  /// Matte row's Channel choice and Invert switch, the Mix
+  /// row's Blend choice. Empty on every other row.
   ///
   /// The matte row is one row everywhere — picker, then what to read from it
   /// and whether to flip it — so it is one widget rather than rows that
@@ -186,18 +186,18 @@ class EffectParamRowFrb extends StatelessWidget {
   /// draws under and the value it writes are the ones a separate row would
   /// have used; only the layout is shared. A null value draws a switch off
   /// and a choice at its first option, the reading an absent parameter gets
-  /// everywhere else (K-258: a project saved before the rider simply has none).
+  /// everywhere else (a project saved before the rider simply has none).
   final List<(BridgeParamInfo, BridgeEffectValue?)> riders;
 
-  /// An **Action** row's press (K-417): a button, so an event rather than a
+  /// An **Action** row's press: a button, so an event rather than a
   /// value. Null leaves the button drawn but dead, which is what a row shown
   /// somewhere that cannot fire one (the Timeline's twirl-down) should do.
   final void Function(UuidValue effect, String param)? onAction;
 
-  /// A **driver** is wired to this parameter in the Graph panel (K-471): the
+  /// A **driver** is wired to this parameter in the Graph panel: the
   /// name it draws under, and what its wire carries.
   ///
-  /// **The mark sits on the left, where the stopwatch was** (K-627). A driven
+  /// **The mark sits on the left, where the stopwatch was**. A driven
   /// parameter has no keyframes of its own to step between or key — the wire
   /// decides the value — so the stopwatch and the key navigator are meaningless
   /// on it, and their column is exactly the room the *driven* mark needs. The
@@ -205,7 +205,7 @@ class EffectParamRowFrb extends StatelessWidget {
   /// holds, but takes no gesture: a spinner you could drag would be a lie about
   /// what is in charge, the same reasoning `enabled` follows.
   ///
-  /// `noStream` is the hazard mark (K-509): the box at the other end reads a
+  /// `noStream` is the hazard mark: the box at the other end reads a
   /// points stream and has none wired into it, so what arrives along this wire
   /// is the documented empty-stream answer rather than anything the picture
   /// contains. It is a fact about the *wiring*, not a value — the panel never
@@ -268,7 +268,7 @@ class EffectParamRowFrb extends StatelessWidget {
     final scalars = _animatableScalarsOf(value);
     // Only the interpolatable kinds animate; a choice or a file has nothing to
     // blend between, so those rows carry no stopwatch at all. **A driven row
-    // has none either** (K-627): the wire decides its value, so there is no key
+    // has none either**: the wire decides its value, so there is no key
     // to add and no neighbour to step to, and the mark takes the column.
     final keyframes = driven != null
         ? _drivenMark(t, id)
@@ -282,7 +282,7 @@ class EffectParamRowFrb extends StatelessWidget {
                 playheadFrame: playheadFrame,
                 onSeek: onSeek,
                 rowKey: '$id-${param.id}',
-                // The panel's fixed columns (K-443); the Timeline's fold-out takes
+                // The panel's fixed columns; the Timeline's fold-out takes
                 // the other branch and keeps its narrow gutter.
                 fixedColumns: twoColumn && valueColumn == null,
                 onWrite: (next) => _set(next.length == 4
@@ -326,7 +326,7 @@ class EffectParamRowFrb extends StatelessWidget {
     final control = _greyed(_withRiders(t, id,
         withUnitRider(t, param.unit, _control(context, t, id, value, frame))));
 
-    // **An Action is a button, and a button says its own name** (K-417). Drawn
+    // **An Action is a button, and a button says its own name**. Drawn
     // in the value column with the name column left empty, rather than as a
     // label beside a button repeating it: the row is one statement, and the
     // house style is that a control carrying words does not need them twice.
@@ -388,13 +388,13 @@ class EffectParamRowFrb extends StatelessWidget {
   /// is worse than one that never changed. The dimming is gone — the label
   /// already carries `text_disabled`, and the value stays fully legible, so you
   /// can read what Focus distance *would* be. Being off is not being gone.
-  /// **A driven row is off for the same reason** (K-627): the wire decides the
+  /// **A driven row is off for the same reason**: the wire decides the
   /// value, so the field draws what the row holds and answers nothing.
   bool get _off => !enabled || driven != null;
 
   Widget _greyed(Widget child) => _off ? IgnorePointer(child: child) : child;
 
-  /// What a driven row shows **in the stopwatch's column** (K-627): a hollow
+  /// What a driven row shows **in the stopwatch's column**: a hollow
   /// ring in the wire's own colour with the word *driven* beside it, and the
   /// driver's name in its tooltip.
   ///
@@ -407,7 +407,7 @@ class EffectParamRowFrb extends StatelessWidget {
     final it = driven!;
     // The wire is honest about its type until it is dry: a source with no
     // stream behind it draws in the warning family, because what this row is
-    // following is a no-op and not a measurement (K-509).
+    // following is a no-op and not a measurement.
     final colour = it.noStream ? t.warning : portColour(t, it.type);
     return LumitTooltip(
       message: l10n.tipDrivenBy(it.driver),
@@ -453,7 +453,7 @@ class EffectParamRowFrb extends StatelessWidget {
   /// The animations this row's stopwatch covers, or null for a kind with
   /// nothing to interpolate.
   ///
-  /// **A colour is four of them under one stopwatch** (K-535). The engine has
+  /// **A colour is four of them under one stopwatch**. The engine has
   /// always stored a colour as four independent properties and sampled them
   /// one by one (`EffectParams::colour_at`, "channels animate independently"),
   /// and [KeyframeControlsFrb] has always taken a list — Position's x and y are
@@ -463,7 +463,7 @@ class EffectParamRowFrb extends StatelessWidget {
   /// that could not.
   List<BridgeScalar>? _animatableScalarsOf(BridgeEffectValue? value) {
     // Int is a Float value with integer display (docs/08 §1.2), and a Slider is
-    // a Float value inside a closed range (K-414), so both animate exactly like
+    // a Float value inside a closed range, so both animate exactly like
     // Float — the kind is the control, not the storage.
     if (param.kind is BridgeParamKind_Float ||
         param.kind is BridgeParamKind_Int ||
@@ -664,8 +664,8 @@ class EffectParamRowFrb extends StatelessWidget {
             width: effectCellWidth + 40,
             // A long list gets the searchable, lazily-built picker: a
             // plain dropdown builds every row eagerly, and at 1299 options
-            // (the K-262 lens library) that took the app down in layout.
-            // No shipped list is that long since the K-264 curation, but
+            // (the lens library) that took the app down in layout.
+            // No shipped list is that long since the lists were curated, but
             // the guard stays for the next one.
             child: options.length >= searchableOptionThreshold
                 ? BareSearchDropdown(
@@ -724,9 +724,9 @@ class EffectParamRowFrb extends StatelessWidget {
       case BridgeParamKind_File(:final filter, :final filterName):
         if (value case BridgeEffectValue_File(:final field0)) {
           final paths = field0.paths;
-          // The row is the picker (K-265): click to choose a file through
+          // The row is the picker: click to choose a file through
           // the schema's own filter, and an unset row says so. It was a
-          // bare label through K-264 — the parameter existed and nothing
+          // bare label for a while — the parameter existed and nothing
           // in the panel could set it, which the owner found within the
           // hour. A set row grows a clear button, because a File value's
           // neutral state is "none" and there was no way back to it.
@@ -828,7 +828,7 @@ class EffectParamRowFrb extends StatelessWidget {
             rowValueDrag.value = null;
             write(scalarWithValueAt(scalar, snap(v), comp, frame));
           },
-          // A key under the playhead the moment the drag starts (K-333): it
+          // A key under the playhead the moment the drag starts: it
           // holds the value already there, so nothing moves — and the drag
           // then has a key to carry in the graph.
           onStart: () {
@@ -839,7 +839,7 @@ class EffectParamRowFrb extends StatelessWidget {
             write(scalarWithValueAt(scalar, sampled, comp, frame));
           },
           // Each tick: the picture through the staged effect stack, and the
-          // curve through the published drag (K-333/K-334) — the same pair a
+          // curve through the published drag — the same pair a
           // transform row's drag feeds.
           onLive: (v) {
             rowValueDrag.value = RowValueDrag(
@@ -886,7 +886,7 @@ class EffectParamRowFrb extends StatelessWidget {
   /// written is the one the parameter means; the caption and the committed
   /// number can never disagree.
   ///
-  /// **A pick is a typed value, not a reset** (K-621). It takes `scalar` and
+  /// **A pick is a typed value, not a reset**. It takes `scalar` and
   /// writes through `scalarWithValueAt` for the same reason the colour swatch
   /// beside it does: a keyed Focus takes a key at the playhead, and a static one
   /// stays static. Writing a bare static here flattened the curve — every
@@ -936,8 +936,8 @@ class EffectParamRowFrb extends StatelessWidget {
     return null;
   }
 
-  /// A closed range: the track and thumb, with the number beside it (K-414,
-  /// docs/08 §1.2).
+  /// A closed range: the track and thumb, with the number beside it
+  /// (docs/08 §1.2).
   ///
   /// The same shape the angle row has, and for the same reason — the track is a
   /// second grip on one value, not a second control, so it sits beside the
@@ -992,7 +992,7 @@ class EffectParamRowFrb extends StatelessWidget {
           keyName: keyName,
           write: (s) => _set(BridgeEffectValue.float(s)),
           // The same seed the Float row offers: a closed range keeps every
-          // float affordance (K-414), and turning an expression on must not
+          // float affordance, and turning an expression on must not
           // move the picture until it is edited.
           setExpression: () {
             final sampled = sampleScalarWithContext(
@@ -1096,7 +1096,7 @@ class EffectParamRowFrb extends StatelessWidget {
   /// alone for the same reason a scalar is.
   Widget _colourSwatch(BuildContext context, UuidValue id, BridgeColour colour,
       double min, double max, int frame) {
-    // **The channel as it reads under the playhead**, keyed or not (K-535).
+    // **The channel as it reads under the playhead**, keyed or not.
     // The swatch used to say the word `animated` and stand down, the way a
     // number field never did — so a colour with keys on it could be looked at
     // and not changed, which is half of "keyframe a colour" missing.
@@ -1175,7 +1175,7 @@ class EffectParamRowFrb extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           // The dropper: lift this colour off the picture instead of choosing
-          // it (docs/07 §6.1). **Dragging sweeps it** (K-532): the parameter
+          // it (docs/07 §6.1). **Dragging sweeps it**: the parameter
           // takes the colour under the pointer as it travels, previewed the
           // whole way, and the release is the one edit.
           _DropperButton(
@@ -1207,16 +1207,16 @@ class EffectParamRowFrb extends StatelessWidget {
   /// reference is a labelled no-op engine-side, never a fault, so None is a
   /// first-class choice rather than an error state.
   ///
-  /// **On a sound row the empty entry means something** (K-657). A parameter
+  /// **On a sound row the empty entry means something**. A parameter
   /// named `audio` is measuring sound, not sampling a picture, and unset is
   /// the composition's own mix — so it reads *This comp* rather than None, and
   /// the list offers every layer instead of only the ones that draw. A music
   /// clip is audio-only: the picture filter left it out of the one picker in
   /// the catalogue that exists to point at it.
   ///
-  /// **Lazy, and it has to be** (K-194): the options are built when the menu
+  /// **Lazy, and it has to be**: the options are built when the menu
   /// opens, so they can name every layer and ask which of them has a picture
-  /// without either crossing the bridge on a rebuild (K-184) or probing a
+  /// without either crossing the bridge on a rebuild or probing a
   /// container with FFmpeg while drawing a row.
   Widget _layerPicker(BuildContext context, UuidValue id, UuidValue? current) {
     final chosen = current?.toString();
@@ -1251,8 +1251,8 @@ class EffectParamRowFrb extends StatelessWidget {
             // A layer-valued parameter samples a *picture*, so a layer with
             // none (a camera, an audio-only clip) is not offered.
             //
-            // The layer the effect is ON is always offered, picture or not
-            // (K-288): picking it does not re-render that layer, it reads
+            // The layer the effect is ON is always offered, picture or not:
+            // picking it does not re-render that layer, it reads
             // the effect's own input at its point in the stack. That is the
             // whole point on an **adjustment layer** — which has no picture
             // of its own, and whose input is the composite of everything
@@ -1271,7 +1271,7 @@ class EffectParamRowFrb extends StatelessWidget {
     );
   }
 
-  /// The masks of the layer this effect sits on, by name (K-408).
+  /// The masks of the layer this effect sits on, by name.
   ///
   /// An effect that walks a shape reads one of *this layer's* masks — a mask
   /// belongs to the layer it was drawn on — so the list comes from the owner's
@@ -1314,9 +1314,9 @@ class EffectParamRowFrb extends StatelessWidget {
   }
 
   /// The row's control with its [riders] beside it — the uniform Matte row
-  /// (K-395, K-425: picker, Channel, Invert), which every effect has and which
+  /// (picker, Channel, Invert), which every effect has and which
   /// the two that owned the idea first (Depth of field's depth pass, the Lens
-  /// flare's source matte) share, and the Mix row with its Blend (K-425).
+  /// flare's source matte) share, and the Mix row with its Blend.
   /// Without riders this is the control alone.
   ///
   /// A switch's word is drawn here rather than in the name column because the
@@ -1464,7 +1464,7 @@ class EffectPointRowFrb extends StatelessWidget {
   /// carry two parameters.
   final bool enabled;
 
-  /// Whether the two are **chained** (K-443): dragging or typing one scales
+  /// Whether the two are **chained**: dragging or typing one scales
   /// the other by the same factor. The document holds which pairs are tied
   /// ([BridgeEffectInstanceInfo.linkedPairs]); the scaling itself is done here
   /// while the gesture is live, and deliberately not in the model.
@@ -1494,10 +1494,10 @@ class EffectPointRowFrb extends StatelessWidget {
   });
 
   /// Whether the pair takes the **position dropper**, and in what unit a pick
-  /// writes — read off the declaration (K-443), never off the parameter's id.
+  /// writes — read off the declaration, never off the parameter's id.
   ///
   /// `null` is no dropper. `Px` writes comp PIXELS (fraction × comp size, read
-  /// at CLICK time, never in a rebuild — K-184, K-260), and `Percent` writes
+  /// at CLICK time, never in a rebuild), and `Percent` writes
   /// fraction × 100, which is what Radial blur's Centre has always been. Every
   /// other unit gets no crosshair: a point picked off the picture is a
   /// *position*, and no arrangement of degrees or seconds is one.
@@ -1576,7 +1576,7 @@ class EffectPointRowFrb extends StatelessWidget {
 
     // **The chain, while it is on.** Scaling the sibling is UI-time
     // arithmetic for the life of the gesture — the document's business is only
-    // *which* pairs are tied (K-443), so nothing below reaches the engine
+    // *which* pairs are tied, so nothing below reaches the engine
     // except the two writes it would have made anyway.
     //
     // The factor comes off the well being dragged: `next / before`, where
@@ -1585,7 +1585,7 @@ class EffectPointRowFrb extends StatelessWidget {
     // all — every number is nought times something — so a pair dragged off
     // zero separates instead of staying stuck there.
     //
-    // A **keyed** sibling scales whole (K-610): every keyframe's value times
+    // A **keyed** sibling scales whole: every keyframe's value times
     // the factor, each key keeping its time, its interpolation and its eased
     // shape, which is the same arithmetic `scale_property` does engine-side
     // ([scaledScalar]). Scaling only the value under the playhead would plant
@@ -1705,12 +1705,12 @@ class EffectPointRowFrb extends StatelessWidget {
             tip: l10n.tipPickOnViewer,
             arm: (ui) {
               // What one unit of the fraction is worth. A `Px` pair writes
-              // fraction × comp size (K-260); a `Percent` pair writes
+              // fraction × comp size; a `Percent` pair writes
               // fraction × 100 — which is the same sum with the comp's size
               // set to a hundred, so there is one arithmetic here and not two.
               //
               // The size is read **once, when the tool is armed** — a tap, and
-              // so an edit rather than a rebuild (K-184). It used to be read
+              // so an edit rather than a rebuild. It used to be read
               // at the pick, which was also once; now that a pick previews per
               // pointer move, reading it there would be a bridge call per
               // move, which the budget forbids outright.
@@ -1727,7 +1727,7 @@ class EffectPointRowFrb extends StatelessWidget {
               // Both halves at once, so a pick is never scaled by the chain:
               // it is a position, and a position is stated rather than nudged.
               //
-              // **A pick is a typed value, not a reset** (K-621): a keyed axis
+              // **A pick is a typed value, not a reset**: a keyed axis
               // takes a key at the playhead through the same `scalarWithValueAt`
               // the well beside it writes through, and a static one stays
               // static. It used to state both halves as bare statics, which is
@@ -1750,7 +1750,7 @@ class EffectPointRowFrb extends StatelessWidget {
                 id: 'fx-$id-${xParam.id}',
                 reads: DropperReads.position,
                 label: stem,
-                // **The drag is the pick** (K-532): the point follows the
+                // **The drag is the pick**: the point follows the
                 // pointer through the preview, and the release states it once.
                 onPreview: (sample) => put(onLive, sample),
                 onPick: (sample) => put(onWrite, sample),
@@ -1777,7 +1777,7 @@ class EffectPointRowFrb extends StatelessWidget {
         control: greyed(control),
       );
     }
-    // No padding of its own: the Timeline's fold-out row is 22 (K-451) and a
+    // No padding of its own: the Timeline's fold-out row is 22 and a
     // 20px value well fills all but its hairline, so two pixels either side
     // pushed the wells out of the row.
     return Row(
@@ -1801,7 +1801,7 @@ class EffectPointRowFrb extends StatelessWidget {
 List<BridgeEffectInfo>? _effectSchema;
 List<BridgeEffectInfo> cachedListEffects() => _effectSchema ??= listEffects();
 
-/// All nine layer styles (K-706), memoised for exactly [cachedListEffects]'
+/// All nine layer styles, memoised for exactly [cachedListEffects]'
 /// reason: a fixed table that was crossing the bridge every time a menu tree or
 /// a panel heading was rebuilt.
 ///
@@ -1821,7 +1821,7 @@ List<BridgeParamInfo> cachedListParameters(String effect) =>
 
 final Map<String, List<BridgeParamGroup>> _groupSchema = {};
 
-/// An effect's parameter groups (docs/08 §1.2, K-145/K-257), memoised like
+/// An effect's parameter groups (docs/08 §1.2), memoised like
 /// the parameters: the twirls and conditional runs the panel folds the flat
 /// parameter list into.
 List<BridgeParamGroup> cachedListParameterGroups(String effect) =>
@@ -1836,7 +1836,7 @@ List<BridgeEnabledWhen> cachedListEnabledWhen(String effect) =>
 
 final Map<String, List<BridgeParamPair>> _pairSchema = {};
 
-/// An effect's **vector pairs** (K-443) — the `_x`/`_y` runs the panel folds
+/// An effect's **vector pairs** — the `_x`/`_y` runs the panel folds
 /// into one point row — memoised like the rest of the schema, and for the same
 /// reason: it never changes, and a fetch per card per rebuild is the traffic
 /// the budget test forbids.
@@ -1912,7 +1912,7 @@ Set<String> disabledParams(
 /// An effect's display label from the schema, falling back to its match name
 /// for an effect this build does not know.
 ///
-/// **The layer styles answer here too** (K-706). They are deliberately not in
+/// **The layer styles answer here too**. They are deliberately not in
 /// the effect catalogue — the Add-effect menu must never offer "Drop shadow
 /// (style)" beside the Drop shadow effect — but a style's card, its Timeline
 /// heading and the dope sheet's flat list all ask this one question, and a
@@ -1935,7 +1935,7 @@ String effectLabelOf(String name) {
 /// to write. Seed, file and layer declare none: a seed's default is zero, an
 /// unset file is no paths, and an unset layer reference is None — each of which
 /// is the identity the effect treats as "not configured".
-/// **An Action has no value**, so it has no default either (K-417): Reset
+/// **An Action has no value**, so it has no default either: Reset
 /// walks every parameter and this answers `null` for the one kind that is a
 /// button, which the caller skips.
 BridgeEffectValue? defaultEffectValue(BridgeParamKind kind) => switch (kind) {
@@ -1961,14 +1961,14 @@ BridgeEffectValue? defaultEffectValue(BridgeParamKind kind) => switch (kind) {
       BridgeParamKind_File() => BridgeEffectValue.file(
           const BridgeFileParam(paths: [], index: BridgeScalar.static_(0))),
       BridgeParamKind_Layer() => const BridgeEffectValue.layer(),
-      // Unset is "First mask" (K-408), not "no mask" — what it comes to is
+      // Unset is "First mask", not "no mask" — what it comes to is
       // the engine's answer, not a value written here.
       BridgeParamKind_MaskPath() => const BridgeEffectValue.maskPath(),
-      // A closed range stores an ordinary float (K-414): the kind is the
+      // A closed range stores an ordinary float: the kind is the
       // control, not the storage.
       BridgeParamKind_Slider(:final default_) =>
         BridgeEffectValue.float(BridgeScalar.static_(default_)),
-      // Every curve's default is the identity diagonal (K-412) — there is
+      // Every curve's default is the identity diagonal — there is
       // nothing per-parameter to declare, which is why the kind carries no
       // fields.
       BridgeParamKind_Curve() => curveValue(curveIdentity),
@@ -2012,8 +2012,8 @@ String _basename(String path) {
 /// value), and every call that consumes a stack gets a freshly read one with
 /// that edit written into it.
 class EffectStackEditor {
-  /// Where a **group header's** stack is read from (K-731,
-  /// docs/impl/group-effects.md §6), set by whichever panel is showing a
+  /// Where a **group header's** stack is read from
+  /// (docs/impl/group-effects.md §6), set by whichever panel is showing a
   /// header's rows — the third place [stackWith] can look, after the layer's
   /// effects and its styles, exactly as the engine's own shared instance
   /// lookup does. Null for every ordinary editor.
@@ -2041,7 +2041,7 @@ class EffectStackEditor {
 
   /// The layer's stack with the drag in progress written into it, freshly read
   /// — **or its style list**, when that is where the staged parameter lives
-  /// (K-706, docs/impl/layer-styles.md §5).
+  /// (docs/impl/layer-styles.md §5).
   ///
   /// Which one is read off the ids, here and only here, so a style row's drag,
   /// its typed value, its keyframe and its preview are the effect row's code
@@ -2053,7 +2053,7 @@ class EffectStackEditor {
     var stack = effects;
     if (!_staged.keys.every((key) => ids.contains(key.$1))) {
       // Styles next, then — for an editor showing a group header's rows —
-      // the header's own list (K-731): the same order the engine's shared
+      // the header's own list: the same order the engine's shared
       // lookup searches, so the commit lands on the list the id lives in.
       final styles = layer.getStyles();
       final styleIds = {for (final s in styles) s.id()};
@@ -2084,7 +2084,7 @@ class EffectStackEditor {
     required double scale,
   }) {
     _staged[(effect, param)] = value;
-    // A group header's drag stages without a live preview render (K-731): the
+    // A group header's drag stages without a live preview render: the
     // preview overlay stands a stack in for the LAYER's own, and a header's
     // stack is not that — the picture would blur the carrier alone. The row
     // still shows the staged value, and the real picture follows on commit.
@@ -2116,7 +2116,7 @@ class EffectStackEditor {
       writeAll(layer, effect, {param: value});
 
   /// Several parameters of one effect as **one** op, and so one undo step —
-  /// what a chained pair's proportional write is (K-610), where two [write]
+  /// what a chained pair's proportional write is, where two [write]
   /// calls would undo half a gesture at a time.
   void writeAll(
     LayerReference layer,

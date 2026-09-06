@@ -192,7 +192,7 @@ void main() {
   ///
   /// Measured against the arrangement's *own* inventory rather than
   /// `Panel.values`: the default layout no longer holds every panel (Easing is
-  /// Retiming's — K-349), and what this test is actually about is that a move
+  /// Retiming's), and what this test is actually about is that a move
   /// conserves whatever was there. Seeded with the Easing panel present, so the
   /// newest panel is one of the ones being thrown around.
   test('every panel appears once across a randomised sequence of moves', () {

@@ -1,4 +1,4 @@
-// Matte key (docs/08-EFFECTS.md §3.21, K-121/K-154): a Keylight-style
+// Matte key (docs/08-EFFECTS.md §3.21): a Keylight-style
 // colour-difference keyer. Mirrors lumit_core::fx::cpu::matte_key op-for-op
 // (§1.6: the CPU is the oracle). Straight (unpremultiplied) colour (§2.2, the
 // wrap fused into the kernel): unpremultiply -> key + despill -> re-premultiply.
@@ -172,7 +172,7 @@ fn matte_key(@builtin(global_invocation_id) gid: vec3<u32>) {
     textureStore(dst, xy, shade(o, u, screen_matte(u)));
 }
 
-// STAGE 2 of the spatial pipeline (K-546): the screen matte on its own, written
+// STAGE 2 of the spatial pipeline: the screen matte on its own, written
 // out as an ordinary picture with the same number in every channel -- which is
 // what lets the Softness stage be the shared Gaussian blur rather than a second
 // blur written for one channel. `src` is the picture the key is judged from
@@ -188,7 +188,7 @@ fn matte_key_screen(@builtin(global_invocation_id) gid: vec3<u32>) {
     textureStore(dst, xy, vec4<f32>(screen_matte(unpremult(o))));
 }
 
-// STAGE 7 (K-546): spend the finished matte on the original colour. `src` is the
+// STAGE 7: spend the finished matte on the original colour. `src` is the
 // picture that arrived -- sharp, never the pre-blurred one -- and `orig` carries
 // the matte the tidying stages produced.
 @compute @workgroup_size(8, 8)

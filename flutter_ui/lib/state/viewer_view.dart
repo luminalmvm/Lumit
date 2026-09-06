@@ -6,11 +6,11 @@
 // words are kept apart.
 //
 // **Magnification** is how big the picture is drawn in the panel. It changes
-// nothing about what the engine renders (K-230) — it is display scaling, and
-// the arithmetic behind it lives in `panels/viewer_zoom.dart`. The three
-// commands here are the named jumps a menu row or a chord can ask for; the
-// Viewer panel holds the actual magnification, so the shell *asks* rather than
-// reaching into a panel that may not even be mounted.
+// nothing about what the engine renders — it is display scaling, and the
+// arithmetic behind it lives in `panels/viewer_zoom.dart`. The three commands
+// here are the named jumps a menu row or a chord can ask for; the Viewer panel
+// holds the actual magnification, so the shell *asks* rather than reaching into
+// a panel that may not even be mounted.
 //
 // **Preview resolution** is how many pixels the engine is asked to make. Half
 // renders a quarter of them, so a heavy composition previews in a quarter of
@@ -29,7 +29,7 @@ enum ViewerZoomCommand {
   zoomOut,
   fit;
 
-  /// The keymap action id this command answers (K-199, docs/07 §15).
+  /// The keymap action id this command answers (docs/07 §15).
   String get action => switch (this) {
         ViewerZoomCommand.zoomIn => 'viewer.zoom.in',
         ViewerZoomCommand.zoomOut => 'viewer.zoom.out',
@@ -51,12 +51,12 @@ enum ViewerZoomCommand {
 /// Auto renders only the pixels the current magnification can actually
 /// display — a Viewer in a small panel decodes and composites small — while
 /// Full means composition resolution whatever the panel is showing, which is
-/// what you want when judging detail at 100 %. Before K-357 the tier called
-/// "Full" was silently Auto, and there was no way to ask for the real thing.
+/// what you want when judging detail at 100 %. Earlier the tier called "Full"
+/// was silently Auto, and there was no way to ask for the real thing.
 ///
-/// **Full is the default** (K-670): what the picture is made of should not
-/// depend on how wide the panel happens to be, and a soft first look at a shot
-/// is soft for a reason the user cannot see. Auto is one dropdown away.
+/// **Full is the default**: what the picture is made of should not depend on
+/// how wide the panel happens to be, and a soft first look at a shot is soft
+/// for a reason the user cannot see. Auto is one dropdown away.
 enum PreviewResolution {
   auto,
   full,

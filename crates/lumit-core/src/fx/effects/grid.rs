@@ -1,9 +1,9 @@
-//! Grid (K-598): a points stream on a regular lattice, and the discs that make
+//! Grid: a points stream on a regular lattice, and the discs that make
 //! it visible.
 //!
 //! **In plain terms.** Particulate makes points that are *born* and drift;
 //! Grid makes points that simply *are*. Rows, columns and — since the stream
-//! has three axes (K-561) — planes receding into depth, spaced by a distance
+//! has three axes — planes receding into depth, spaced by a distance
 //! you type, with a jitter dial per axis so a lattice can be nudged off its
 //! own perfection. There is no time in it at all: frame 500's grid and frame
 //! 3's grid are the same arithmetic, and neither reads the other.
@@ -23,8 +23,8 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Grid's declared **data** output — the same port Particulate declares
-/// (K-472, K-492), so a wire does not know which generator it came from.
+/// Grid's declared **data** output — the same port Particulate declares, so a
+/// wire does not know which generator it came from.
 const POINTS_OUT: &[Port] = &[Port::new("points", "Points", PortType::Points)];
 
 const fn group(label: &'static str, params: &'static [&'static str]) -> ParamGroup {
@@ -113,7 +113,7 @@ pub struct Grid {
     )]
     pub rows: i32,
 
-    /// Cells **through** the layer's plane (K-561): copies of the lattice
+    /// Cells **through** the layer's plane: copies of the lattice
     /// receding from the camera. One is flat, which is what a 2D layer draws.
     #[counter(
         label = "Planes",
@@ -148,7 +148,7 @@ pub struct Grid {
     )]
     pub spacing_y: f32,
 
-    /// The gap between planes, px@comp (K-561).
+    /// The gap between planes, px@comp.
     #[slider(
         label = "Spacing z",
         min = 0.0,
@@ -159,7 +159,7 @@ pub struct Grid {
     )]
     pub spacing_z: f32,
 
-    /// The lattice's centre, px@comp (K-260: point parameters are PIXELS).
+    /// The lattice's centre, px@comp (point parameters are PIXELS).
     #[slider(label = "Position x", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
     pub position_x: f32,
 
@@ -168,7 +168,7 @@ pub struct Grid {
     pub position_y: f32,
 
     /// How far in front of or behind the layer's own plane the lattice sits,
-    /// px@comp (K-561). Nought is the plane.
+    /// px@comp. Nought is the plane.
     #[slider(label = "Position z", min = -2000.0, max = 2000.0, default = 0.0, unit = Px)]
     pub position_z: f32,
 
@@ -195,7 +195,7 @@ pub struct Grid {
     )]
     pub jitter_y: f32,
 
-    /// px@comp, through the plane (K-561); see [`jitter_x`](Self::jitter_x).
+    /// px@comp, through the plane; see [`jitter_x`](Self::jitter_x).
     #[slider(
         label = "Jitter z",
         min = 0.0,
@@ -230,7 +230,7 @@ pub struct Grid {
     #[colour(default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
     pub colour: [f32; 4],
 
-    /// **The budget dial** (K-475), the same rule Particulate's Max particles
+    /// **The budget dial**, the same rule Particulate's Max particles
     /// carries: the most points that may exist at once, and the peak scratch
     /// the governor grants against. A lattice past it is trimmed from the
     /// **end** of the walk — see [`Grid::stream`]. Deliberately not animatable:
@@ -261,10 +261,10 @@ pub struct Grid {
 }
 
 impl Grid {
-    /// The raster factor, for the one input the declaration cannot scale
-    /// (K-385): the composition's camera arrives in px@comp, like a mask path,
-    /// and has to be rearranged into the pixels the frame is drawn at.
-    /// Particulate's row, for its reason.
+    /// The raster factor, for the one input the declaration cannot scale: the
+    /// composition's camera arrives in px@comp, like a mask path, and has to be
+    /// rearranged into the pixels the frame is drawn at. Particulate's row, for
+    /// its reason.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
     /// This instance's raster factor, read back out of a resolved bag.
@@ -273,7 +273,7 @@ impl Grid {
         p.float(Self::DERIVED_PX_SCALE, 1.0)
     }
 
-    /// The lattice at this frame, as a points stream (K-598).
+    /// The lattice at this frame, as a points stream.
     ///
     /// **Closed form, no walk.** Point *i* is
     /// `((plane · rows) + row) · columns + column`, and its place is that
@@ -285,7 +285,7 @@ impl Grid {
     /// px@comp bag and the stream is px@comp, which is what a wire reads; hand
     /// it the raster-scaled bag and the stream is in the pixels being drawn.
     ///
-    /// **The cap rule** (K-475) keeps the **first** `cap` by index. Particulate
+    /// **The cap rule** keeps the **first** `cap` by index. Particulate
     /// keeps the newest, because a particle set has a birth order and the
     /// newest are the ones the eye is following; a lattice has no birth order
     /// at all, so the rule that is the same *shape* — deterministic, a prefix
@@ -364,7 +364,7 @@ impl Grid {
 ///
 /// **No CPU reference through the trait**, the same shape Particulate,
 /// Scribble and Stroke have and for the same reason: what this effect draws
-/// depends on the composition's camera (K-561), which is not a parameter and so
+/// depends on the composition's camera, which is not a parameter and so
 /// is not in the bag [`apply_cpu`](EffectDef::apply_cpu) is handed. It rides
 /// beside the op instead, on the carriage the birth schedule already uses. The
 /// §1.6 oracle is [`Grid::stream`] with [`points::draw_stream`], exercised
@@ -377,7 +377,7 @@ impl EffectDef for GridDef {
         &<Grid as EffectMetadata>::SCHEMA
     }
 
-    /// The picture *and* the data (K-472), exactly as Particulate declares it.
+    /// The picture *and* the data, exactly as Particulate declares it.
     fn signature(&self) -> Signature {
         Signature::Image {
             inputs: &[],
@@ -386,7 +386,7 @@ impl EffectDef for GridDef {
     }
 
     /// The raster factor, so the composition's camera reaches the pixels this
-    /// frame is drawn at (K-385).
+    /// frame is drawn at.
     fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
         push(Grid::DERIVED_PX_SCALE, Value::Float(cx.px_scale));
     }

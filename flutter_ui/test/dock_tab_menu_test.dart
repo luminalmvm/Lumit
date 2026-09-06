@@ -1,6 +1,6 @@
-// The right-click menu on a panel's tab (K-521): Close panel, and the pop-out
+// The right-click menu on a panel's tab: Close panel, and the pop-out
 // that is honestly greyed out because real operating-system windows are not
-// available to us yet (K-449, docs/impl/multi-window.md).
+// available to us yet (docs/impl/multi-window.md).
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';

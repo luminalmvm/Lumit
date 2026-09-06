@@ -1,4 +1,4 @@
-// The Rotation tool's pointer (K-219): which way the curved arrow leans, and
+// The Rotation tool's pointer: which way the curved arrow leans, and
 // how tight its curve is.
 //
 // Both are pure functions of where the pointer is over the layer, so both are
@@ -54,7 +54,7 @@ void main() {
 
       // Up and to the left: it settles on the layer's own top-left corner, so
       // it faces where that corner actually is on screen — which on a 2:1 box
-      // is not 45°, and should not be (K-230).
+      // is not 45°, and should not be.
       final upLeft = rotateCursorFor(pointer: const Offset(200, 100), box: b);
       final corner = b.map.toScreen(0, 0) - b.map.toScreen(100, 50);
       expect(upLeft.angle, closeTo(math.atan2(corner.dy, corner.dx), 1e-9));
@@ -110,7 +110,7 @@ void main() {
     });
 
     // It used to slide between the two, which was true to the geometry and
-    // harder to read than eight settled shapes (K-230).
+    // harder to read than eight settled shapes.
     test('between the two it is still one of the two', () {
       final b = box();
       final between = rotateCursorFor(pointer: const Offset(500, 225), box: b);

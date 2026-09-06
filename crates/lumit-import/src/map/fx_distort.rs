@@ -16,10 +16,10 @@
 //! - **Nothing.** An angle is an angle and a per cent is a per cent, so it
 //!   carries across untouched.
 //! - **A change of base.** After Effects measures Twirl's radius as a per cent
-//!   of the layer; Lumit measures every distance in px@comp (docs/08 §2.3,
-//!   K-419), and scales it to the preview raster itself so that a
-//!   half-resolution preview looks like the export. Same length, different
-//!   spelling — the import multiplies through, and the report says it did.
+//!   of the layer; Lumit measures every distance in px@comp (docs/08 §2.3),
+//!   and scales it to the preview raster itself so that a half-resolution
+//!   preview looks like the export. Same length, different spelling — the
+//!   import multiplies through, and the report says it did.
 //! - **A split, a collapse or a refusal.** After Effects' Spherize has one
 //!   signed radius where Lumit has a size and a direction; its Warp has fifteen
 //!   styles where Lumit has thirteen; its Card Wipe has a whole camera rig that
@@ -91,7 +91,7 @@ fn conversion(key: &str) -> Option<Build> {
         "iris_wipe" => iris_wipe,
         "venetian_blinds" => venetian_blinds,
         "card_wipe" => card_wipe,
-        // --- Controls (K-414) ---
+        // --- Controls ---
         "slider_control" => slider_control,
         "angle_control" => angle_control,
         "checkbox_control" => checkbox_control,
@@ -132,9 +132,9 @@ fn transform(fx: &mut Fx<'_, '_>) {
     let uniform = fx.still(11).unwrap_or(1.0) != 0.0;
     fx.carry(3, "scale_y", Unit::Direct);
     fx.carry(if uniform { 3 } else { 4 }, "scale_x", Unit::Direct);
-    // Skew and Skew Axis are the pair Lumit grew in K-666, built to After
-    // Effects' own shear and its own order (anchor, scale, skew, rotation,
-    // position), so both numbers carry unchanged.
+    // Skew and Skew Axis are the pair Lumit grew to match After Effects' own
+    // shear and its own order (anchor, scale, skew, rotation, position), so
+    // both numbers carry unchanged.
     fx.carry(5, "skew", Unit::Direct);
     fx.carry(6, "skew_axis", Unit::Direct);
     fx.carry(7, "rotation", Unit::Direct);
@@ -250,8 +250,8 @@ fn set_channels(fx: &mut Fx<'_, '_>) {
 }
 
 /// AE `ADBE Tile` → Tile (docs/11 §5): every control carries, and the four
-/// sizes convert — AE keeps them as per cents of the frame, Lumit as px@comp
-/// (K-558), so each axis is scaled by the comp's own extent.
+/// sizes convert — AE keeps them as per cents of the frame, Lumit as px@comp,
+/// so each axis is scaled by the comp's own extent.
 fn motion_tile(fx: &mut Fx<'_, '_>) {
     let (comp_w, comp_h) = fx.conv.size;
     fx.point(1, "tile_centre_x", "tile_centre_y", Unit::Px);
@@ -619,7 +619,7 @@ fn venetian_blinds(fx: &mut Fx<'_, '_>) {
 fn card_wipe(fx: &mut Fx<'_, '_>) {
     fx.carry(2, "completion", Unit::Direct);
     // Transition width is a per cent of the frame in After Effects and px@comp
-    // in Lumit (K-558), measured along whichever axis the flip order runs — so
+    // in Lumit, measured along whichever axis the flip order runs — so
     // the order has to be read before the width is converted. AE's 3 and 4 are
     // its two vertical orders.
     let (comp_w, comp_h) = fx.conv.size;
@@ -653,7 +653,7 @@ fn card_wipe(fx: &mut Fx<'_, '_>) {
     }
 }
 
-// The Expression Controls (K-414, docs/11 §5's five pending rows). Each is one
+// The Expression Controls (docs/11 §5's five pending rows). Each is one
 // property onto one row, in the same units, with nothing to convert and nothing
 // left behind — the only rows in this file with no report of any kind. What
 // makes them worth writing down at all is what they carry: the keyframes and
@@ -1470,7 +1470,7 @@ mod tests {
             keys_of(&r, "rotation"),
             vec![(0.0, 0.0, 0.0), (2.0, 90.0, 45.0)]
         );
-        // The skew pair carries unchanged (K-666): same shear, same order.
+        // The skew pair carries unchanged: same shear, same order.
         assert_eq!((f(&r, "skew"), f(&r, "skew_axis")), (15.0, 45.0));
         assert!(dropped(&r, "Sampling"));
     }
@@ -1519,7 +1519,7 @@ mod tests {
             (480.0, 270.0)
         );
         // AE keeps the four sizes as per cents of the frame and Lumit as
-        // px@comp (K-558), so each axis converts against the comp's own extent
+        // px@comp, so each axis converts against the comp's own extent
         // — keyframes and their speeds with it.
         assert_eq!(
             keys_of(&r, "tile_width"),
@@ -1998,7 +1998,7 @@ mod tests {
         ));
         assert_eq!(keys_of(&r, "completion")[1], (2.0, 100.0, 50.0));
         // Flip Order 3 is Top to bottom, so AE's 30 % of the frame is 30 % of
-        // its *height* in px@comp (K-558).
+        // its *height* in px@comp.
         assert_eq!(f(&r, "transition_width"), 0.30 * H);
         assert_eq!((f(&r, "rows"), f(&r, "columns")), (4.0, 9.0));
         assert_eq!(choice(&r, "flip_axis"), 1);
@@ -2551,7 +2551,7 @@ mod tests {
     }
 
     /// The five Expression Controls carry their one property, keyframes and
-    /// all, and report nothing — there is nothing to convert (K-414). The
+    /// all, and report nothing — there is nothing to convert. The
     /// keyframed slider is the case that matters: a CC-pack rig is an animated
     /// Slider Control and a page of expressions reading it.
     #[test]

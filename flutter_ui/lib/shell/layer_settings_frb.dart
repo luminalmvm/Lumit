@@ -1,4 +1,4 @@
-// Layer ▸ Layer settings… (K-244, on the K-444 dialogue pattern).
+// Layer ▸ Layer settings… (on the shared dialogue pattern).
 //
 // In plain terms: what a layer *is*, as opposed to what it is doing. Its name,
 // and — on a Solid, the one kind whose picture Lumit makes rather than reads —
@@ -10,7 +10,7 @@
 // footage layer's size belongs to its file, and a text layer's to its words:
 // neither is a number this dialogue has any business writing.
 //
-// It edits **one** layer — the primary selection. Renaming is K-523's standing
+// It edits **one** layer — the primary selection. Renaming is the standing
 // exception to "an action runs on all of them", and every other field here is
 // that layer's own identity too.
 
@@ -232,7 +232,7 @@ class _LayerSettingsBodyState extends State<_LayerSettingsBody> {
     );
   }
 
-  /// Label left, control right — the dialogue pattern's row (K-444).
+  /// Label left, control right — the dialogue pattern's row.
   Widget _row(LumitTheme t, {required String label, required Widget child}) =>
       Row(
         children: [

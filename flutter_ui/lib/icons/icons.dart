@@ -1,17 +1,17 @@
 // Lumit's icons, as the rest of the app still asks for them: a [LumitIcon]
 // enum with a size and a colour.
 //
-// **What it draws is now Lumit's own set** (docs/15-DESIGN.md §5, K-440):
+// **What it draws is now Lumit's own set** (docs/15-DESIGN.md §5):
 // every member that has a glyph in `lumit_icons.dart` renders that glyph
 // through [glyph.LumitIcon], exactly as a call site of the new set would. The
 // enum stays so the twenty-odd call sites need not change while the panels are
 // rebuilt one at a time — it is a name for a glyph, no longer a lookup into a
 // second icon family.
 //
-// **The set owes nothing now** (K-440's list, closed): the deep tools (puppet,
-// roto, vertex, camera navigation), the star and solid marks, the label tag,
-// the snap magnet, tone map, the node panel's mark and the filled key were the
-// last stand-ins, and each is drawn. Iconoir is gone from the app with them.
+// **The set owes nothing now**: the deep tools (puppet, roto, vertex, camera
+// navigation), the star and solid marks, the label tag, the snap magnet, tone
+// map, the node panel's mark and the filled key were the last stand-ins, and
+// each is drawn. Iconoir is gone from the app with them.
 // Four marks stay painter-drawn on purpose — the Null layer, the rounded
 // rectangle, the Viewer's layer-controls box and the zoom slider's hills — and
 // each says below why a glyph would be the worse drawing.
@@ -26,7 +26,7 @@ import 'lumit_icons.dart';
 /// One icon.
 ///
 /// The first 44 variants are the Rust `Icon` enum's, name for name. The tool
-/// marks after them (K-216) are this frontend's own: the archived egui shell has
+/// marks after them are this frontend's own: the archived egui shell has
 /// no toolbar to draw them, so there is no Rust counterpart to keep in step.
 enum LumitIcon {
   pointer,
@@ -77,7 +77,7 @@ enum LumitIcon {
   text,
   camera,
 
-  /// The still camera on the Ctrl+Space console's snapshot button (K-324) —
+  /// The still camera on the Ctrl+Space console's snapshot button —
   /// a *photo*, distinct from [camera], which is the camera layer.
   snapshot,
   eye,
@@ -144,14 +144,14 @@ enum LumitIcon {
   /// on its own zoom slider (owner, 2026-08-06). One shape at two sizes says
   /// "less of this / more of this" without needing a word.
   ///
-  /// **Painter-drawn on purpose** (docs/15 §5 allows it, and K-209 requires
-  /// it): the small end wants to be well under 16px, and a stroked glyph below
-  /// 16px puts its 1.5-unit stroke on less than a whole pixel — the crunch a
-  /// magnifying glass at 13px showed. A filled shape has no stroke to lose, so
-  /// it stays clean at any size the bar has room for.
+  /// **Painter-drawn on purpose** (docs/15 §5 allows it): the small end wants
+  /// to be well under 16px, and a stroked glyph below 16px puts its 1.5-unit
+  /// stroke on less than a whole pixel — the crunch a magnifying glass at 13px
+  /// showed. A filled shape has no stroke to lose, so it stays clean at any
+  /// size the bar has room for.
   zoomExtent,
 
-  // --- The toolbar's tools (K-216, docs/07 §1.7). ---
+  // --- The toolbar's tools (docs/07 §1.7). ---
   zoomIn,
 
   /// The rotate tool: a box with a turn over it. Deliberately not a bare
@@ -210,7 +210,7 @@ enum LumitIcon {
   cameraPan,
   cameraDolly,
 
-  /// The Viewer bar's layer-controls switch (K-217): a box with a handle on
+  /// The Viewer bar's layer-controls switch: a box with a handle on
   /// each corner — the mark it governs, drawn small.
   ///
   /// **Painter-drawn on purpose**: the handles are filled squares whose size is
@@ -220,26 +220,26 @@ enum LumitIcon {
   /// read as a grid.
   wireframe,
 
-  /// The Viewer bar's exposure box (K-314).
+  /// The Viewer bar's exposure box.
   aperture,
 
-  /// The Viewer bar's tone-map switch (K-314): the transfer curve against the
+  /// The Viewer bar's tone-map switch: the transfer curve against the
   /// dashed line of doing nothing. The gap between them is the whole of what
   /// the switch is for — the values above 1 an ordinary display cannot show.
   toneMap,
 
-  /// The Viewer bar's transparency-grid switch (K-411): the checkerboard
+  /// The Viewer bar's transparency-grid switch: the checkerboard
   /// itself, at icon size.
   checkerboard,
 
-  /// The Viewer bar's grid-and-guides menu (K-416): a wire lattice. It is
+  /// The Viewer bar's grid-and-guides menu: a wire lattice. It is
   /// deliberately the mark [checkerboard] declined — an overlay grid is
   /// outlined cells, where the transparency board is filled squares in
   /// alternation. The two sit beside each other on the bar and must not read as
   /// the same switch twice.
   grid,
 
-  /// The Viewer bar's channel picker (K-411): three overlapping circles, the
+  /// The Viewer bar's channel picker: three overlapping circles, the
   /// mark for a picture separated into its channels. Tinted by whichever one
   /// is being shown.
   channels,
@@ -248,7 +248,7 @@ enum LumitIcon {
   /// alpha is not a colour, so it gets a mark rather than a tint.
   matte,
 
-  /// The transport's four steps beside [play] and [pause] (K-466). They had
+  /// The transport's four steps beside [play] and [pause]. They had
   /// been the characters `|◀ ◀ ▶ ▶|`, drawn in the body face at whatever size
   /// the font happened to give them; the approved drawing puts a glyph on each
   /// one and the set has carried all four since the icon pass.
@@ -278,11 +278,10 @@ enum LumitIcon {
 /// it. The cure is drawing at a size whose stroke a pixel can hold. Lumit's own
 /// set is drawn on a 16-unit grid instead, which is why this is the default.
 ///
-/// **It is a default, not a law** (K-456, superseding K-209's fixed 16): a
-/// panel whose approved mockup computes a smaller glyph renders it at the
-/// mockup's size and passes that size here — the Project panel's 13 in a row
-/// and 14 on its bottom bar. The stroke softens a little there, and that is
-/// the mockups' own look.
+/// **It is a default, not a law**: a panel whose approved mockup computes a
+/// smaller glyph renders it at the mockup's size and passes that size here —
+/// the Project panel's 13 in a row and 14 on its bottom bar. The stroke
+/// softens a little there, and that is the mockups' own look.
 const double iconSize = 16;
 const double iconSizeTransport = 20;
 
@@ -449,7 +448,7 @@ class _GridIconPainter extends CustomPainter {
 /// **Filled, and drawn rather than looked up.** The pair only says "less / more"
 /// if the two are plainly different sizes, and the small one has to be well
 /// under 16px for that; a stroked glyph there would put its 1.5-unit stroke on
-/// a fraction of a pixel and crunch (docs/15 §5, K-209). A filled silhouette has
+/// a fraction of a pixel and crunch (docs/15 §5). A filled silhouette has
 /// no stroke to lose, so it reads at 9px as cleanly as at 14.
 void _drawZoomExtent(Canvas canvas, Size size, double s, Color color) {
   Offset at(double x, double y) => Offset(x * s, y * s);

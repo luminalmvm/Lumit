@@ -1,4 +1,4 @@
-//! Math (K-471 §1.3): an expression you can see.
+//! Math (node-graph.md §1.3): an expression you can see.
 //!
 //! **In plain terms.** Two numbers and one arithmetic sign. Wire something into
 //! A, something into B, pick Multiply, and out comes the product — the same
@@ -111,7 +111,7 @@ pub fn apply(operation: u32, a: f32, b: f32) -> f32 {
         }
         7 => a.powf(b),
         // Multiply is the default, and is what an option index this build does
-        // not know falls back to (K-065: an unknown choice renders).
+        // not know falls back to, so an unknown choice still renders.
         _ => a * b,
     };
     if v.is_finite() {

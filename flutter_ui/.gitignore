@@ -44,7 +44,7 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
-# Localisation (K-298). The .arb files are the source and the translations, and
+# Localisation. The .arb files are the source and the translations, and
 # they are committed; what the Flutter generator makes from them is not — it is
 # rebuilt by `flutter pub get` and on every build, so a committed copy would only
 # ever be a stale duplicate of app_en.arb.

@@ -37,20 +37,20 @@ const double _badgeTextSize = 9;
 /// resolves to that colour at 28% over the panel, on both badges.
 const double _badgeBorderAlpha = 0.28;
 
-/// The row's label square (K-727): an 8px hue-quartered mark in a 14px slot —
-/// the slot is the hit target (K-452), and its width is fixed so the squares
+/// The row's label square: an 8px hue-quartered mark in a 14px slot —
+/// the slot is the hit target, and its width is fixed so the squares
 /// stand in a column however deep the rows are indented.
 const double _labelSquareSize = 8;
 const double _labelSquareHit = 14;
 
 /// The label chip an untagged item's kind wears by default — the mockup's own
-/// per-type tints, which are the label palette's chips (K-188): azure for
+/// per-type tints, which are the label palette's chips: azure for
 /// picture footage, indigo for sound, amber for solids. Folders and
 /// compositions stay muted, so they wear no chip at all (`0`).
 ///
 /// One function because two places must agree on it: the row's glyph draws
 /// this colour, and the panel's swatch filter matches on it — the colour a
-/// fresh item is *wearing* is an answer the filter has to honour (K-634), and
+/// fresh item is *wearing* is an answer the filter has to honour, and
 /// the two used to disagree, which made a just-imported clip invisible to the
 /// very colour it was showing.
 int projectDefaultLabel(ItemReference item, {required bool audio}) =>
@@ -146,7 +146,7 @@ class ProjectRowFrb extends StatefulWidget {
   /// Whether any composition places this item — the `in use` badge.
   final bool inUse;
 
-  /// This item's proxy (K-501), or null where it has none. Null on every kind
+  /// This item's proxy, or null where it has none. Null on every kind
   /// but footage — nothing else has a media reference to stand in for.
   final BridgeProxy? proxy;
   final bool selected;
@@ -171,7 +171,7 @@ class ProjectRowFrb extends StatefulWidget {
 
   /// Make a comp from these items — the panel's own New composition, so a
   /// double-clicked footage item goes through the one funnel every other route
-  /// does (K-243).
+  /// does.
   final void Function(List<FootageReference>) onNewComposition;
 
   /// Whether this row's folder is showing its children, and the toggle that
@@ -200,7 +200,7 @@ class ProjectRowFrb extends StatefulWidget {
   /// tree per rebuild is exactly the chatter the budget test guards against.
   final List<(String, ItemReference)> Function() folderChoices;
 
-  /// What a command from this row's menu acts on (K-523) — the panel's own
+  /// What a command from this row's menu acts on — the panel's own
   /// `_targets`, which is the whole selection when this row is in it and this
   /// row alone when it is not. A function for the same reason
   /// [folderChoices] is: it is read when the menu is raised, never in build.
@@ -247,7 +247,7 @@ class ProjectRowFrb extends StatefulWidget {
 class _ProjectRowFrbState extends State<ProjectRowFrb> {
   bool _hover = false;
   TextEditingController? _rename;
-  // Escape on the field's own node, ahead of the shortcut system (K-323): the
+  // Escape on the field's own node, ahead of the shortcut system: the
   // row's editor is a bare EditableText rather than a HouseTextField, so it
   // wires the same key itself instead of inheriting it.
   late final FocusNode _renameFocus = FocusNode(onKeyEvent: _onRenameKey);
@@ -279,7 +279,7 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
     }
   }
 
-  /// Escape: shut the editor, rename nothing (K-323).
+  /// Escape: shut the editor, rename nothing.
   void _cancelRename() {
     _rename?.dispose();
     _rename = null;
@@ -335,11 +335,11 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
   /// click on one row of a multi-selection collapses the selection to it**.
   /// A click on a row that is already the only one selected does nothing at
   /// all, which is what clicking something already chosen means everywhere
-  /// else in the application (K-534). It used to *open* the row — and because
+  /// else in the application. It used to *open* the row — and because
   /// this is the raw pointer-up, "the second click of a double-click" and "a
   /// click on a row selected a minute ago" were the same event: selecting a
   /// clip and clicking it again raised New composition. That is exactly the
-  /// mistake K-191 took click-to-rename out for, made a second time under
+  /// mistake click-to-rename was taken out for, made a second time under
   /// another name. Opening is [_open], on the double-tap.
   void _handlePointerUp(PointerUpEvent event) {
     if (!_primaryDown) return;
@@ -349,9 +349,9 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
     if (widget.selectionCount > 1) widget.onSelect(SelectMode.replace);
   }
 
-  /// **Opening a row**, and what opening means is the item's own answer
-  /// (K-243): a composition fronts in the Timeline, footage raises New
-  /// composition sized and timed to it, a folder opens and shuts.
+  /// **Opening a row**, and what opening means is the item's own answer: a
+  /// composition fronts in the Timeline, footage raises New composition
+  /// sized and timed to it, a folder opens and shuts.
   ///
   /// On the double-tap, which is the gesture it always meant — the row's own
   /// recogniser, which fires on the second click's *up* rather than waiting a
@@ -374,8 +374,8 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
       return;
     }
     if (item is ItemReference_Folder) widget.onToggleFolder();
-    // Nothing for the other kinds. Renaming is `Enter` on the selection
-    // (K-321), with the row menu's Rename as the mouse path.
+    // Nothing for the other kinds. Renaming is `Enter` on the selection, with
+    // the row menu's Rename as the mouse path.
   }
 
   Future<void> _doRelink(FootageReference footage) async {
@@ -403,7 +403,7 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
         onPointerUp: _handlePointerUp,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          // **This is where opening a row happens** (K-534). It also claims
+          // **This is where opening a row happens**. It also claims
           // double-clicks on the row in the gesture arena, so the panel's
           // empty-area double-tap (import) never fires for a double-click on
           // an item — which is why it was registered even while it did
@@ -441,7 +441,7 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
           },
           child: Container(
             height: projectRowHeight,
-            // Three greys at rest (§2.1, K-439): the row's own selected fill is
+            // Three greys at rest (§2.1): the row's own selected fill is
             // the header grey, and `surface_3` appears only under the pointer.
             color: widget.selected
                 ? t.surface2
@@ -477,7 +477,7 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                     colour: t.success,
                   ),
                 ],
-                // Reading from a stand-in (K-501). **Quiet on purpose**: the
+                // Reading from a stand-in. **Quiet on purpose**: the
                 // other two badges wear a state colour because they report
                 // something that wants acting on — placed, or lost. A proxy is
                 // neither; it is a fact about which file the item is being
@@ -514,7 +514,7 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                     ),
                   ),
                 ],
-                // **The row's own label square** (K-727, the owner's ask): a
+                // **The row's own label square** (the owner's ask): a
                 // hue-quartered mark that opens the eight-colour picker to
                 // tag this row — and the rest of the selection when the row
                 // is part of one, the same reach the menu's chip strip has.
@@ -573,7 +573,7 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
       );
     }
     // A folder row takes what the other rows drag: dropping on it files the
-    // items there (K-451). Two nested targets rather than one, because a
+    // items there. Two nested targets rather than one, because a
     // `DragTarget` is typed and the panel's rows carry two payload types — the
     // same two the Timeline consumes.
     final drop = widget.onDropItems;
@@ -625,7 +625,7 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
       );
 
   /// The row's type glyph, tinted by what the item *is* — the mockup's own
-  /// per-type tints, which are the label palette's own chips (K-188): azure for
+  /// per-type tints, which are the label palette's own chips: azure for
   /// picture footage, indigo for sound, amber for solids. A folder and a
   /// composition stay muted, as the mockup draws them, and missing footage
   /// wears the warning-tinted unlink glyph. No thumbnail here — the preview

@@ -1,4 +1,4 @@
-// The Viewer's zoom arithmetic (K-218): what a click, a wheel notch and a
+// The Viewer's zoom arithmetic: what a click, a wheel notch and a
 // dragged box each mean in magnification and pan.
 //
 // The property that matters in all three is the same and is what these pin: the

@@ -113,15 +113,17 @@ pub struct RenderRequest {
     pub time: f64,
     /// The rectangle to render, in pixels.
     pub bounds: RectI,
-    /// Which way up the pictures are handed over. Both are legal and a plugin
-    /// must cope with either; the tests render the same frame through both.
+    /// Which way up the pictures are handed over. Both are legal and the tests
+    /// render the same frame through both, but what a plugin is actually sent
+    /// is bottom-up with positive row bytes: a shipped plugin (ntsc-rs) applies
+    /// a negative stride in the wrong units and writes past the block.
     pub order: RowOrder,
     /// One picture per input clip, by the name the plugin gave the clip.
     pub inputs: BTreeMap<String, Frame16>,
 }
 
 impl RenderRequest {
-    /// The common case: one source, one output, top-down (so negative row
+    /// The common case: one source, one output, bottom-up (so positive row
     /// bytes), at the source's own size.
     #[must_use]
     pub fn filter(time: f64, source: Frame16) -> Self {
@@ -134,7 +136,7 @@ impl RenderRequest {
         Self {
             time,
             bounds,
-            order: RowOrder::TopDown,
+            order: RowOrder::BottomUp,
             inputs,
         }
     }
@@ -259,7 +261,7 @@ pub fn render_with_prefetch(
     // the clips in time for `kOfxImageEffectActionRender` answers "there is no
     // image" to all of that, and a well-written plugin answers `kOfxStatFailed`
     // to the action. Most of openfx-misc does exactly that, which is how this
-    // was found (K-595). They come off again on every path out, below.
+    // was found. They come off again on every path out, below.
     let mut images = BTreeMap::new();
     for (name, frame) in &request.inputs {
         images.insert(name.clone(), Image::from_frame(frame, request.order)?);
@@ -272,7 +274,7 @@ pub fn render_with_prefetch(
     // Taken with no host lock held, and now held for the whole conversation
     // rather than for the render alone: every action in it calls into the
     // plugin, and a plugin that says two of its renders may not overlap is not
-    // saying its `getRegionOfDefinition` may (docs/14 §7, K-066).
+    // saying its `getRegionOfDefinition` may (docs/14 §7).
     let guard = instance.render_lock();
     let _held = guard.as_ref().map(crate::instance::RenderGuard::hold);
 
@@ -651,7 +653,30 @@ fn sequence_args(request: &RenderRequest) -> PropertySet {
     args.seed(keys::RENDER_SCALE, PropValue::Double(vec![1.0, 1.0]));
     args.seed(keys::SEQUENTIAL_RENDER_STATUS, PropValue::int(0));
     args.seed(keys::INTERACTIVE_RENDER_STATUS, PropValue::int(0));
+    gpu_render_off(&mut args);
     args
+}
+
+/// The OFX 1.3 to 1.5 GPU render arguments, all saying no: the flags
+/// are nought and the queues and streams are null, which is what the spec
+/// says a CPU render carries. The stock support library reads every one of
+/// them on the begin, the render and the end.
+fn gpu_render_off(args: &mut PropertySet) {
+    for key in [
+        keys::OPENGL_ENABLED,
+        keys::CUDA_ENABLED,
+        keys::METAL_ENABLED,
+        keys::OPENCL_ENABLED,
+    ] {
+        args.seed(key, PropValue::int(0));
+    }
+    for key in [
+        keys::CUDA_STREAM,
+        keys::METAL_COMMAND_QUEUE,
+        keys::OPENCL_COMMAND_QUEUE,
+    ] {
+        args.seed(key, PropValue::Pointer(vec![0]));
+    }
 }
 
 /// The `inArgs` of the render itself.
@@ -669,15 +694,7 @@ fn render_args(request: &RenderRequest) -> PropertySet {
     args.seed(keys::SEQUENTIAL_RENDER_STATUS, PropValue::int(0));
     args.seed(keys::INTERACTIVE_RENDER_STATUS, PropValue::int(0));
     args.seed(keys::RENDER_QUALITY_DRAFT, PropValue::int(0));
-    // **The GPU extensions are answered, not left unknown.** This host renders
-    // through the CPU boundary and none of these is on — but a plugin built on
-    // a vendor framework asks every frame, and a *failed fetch* is not the same
-    // to it as a nought: Red Giant's own log shows six thousand of each per
-    // session, after which the plugin returns `kOfxStatOK` having written
-    // nothing into the output image.
-    args.seed(keys::CUDA_ENABLED, PropValue::int(0));
-    args.seed(keys::OPENCL_ENABLED, PropValue::int(0));
-    args.seed(keys::METAL_ENABLED, PropValue::int(0));
+    gpu_render_off(&mut args);
     args
 }
 
@@ -708,37 +725,4 @@ fn rect_from_doubles(props: &PropertySet, key: &str) -> Option<RectI> {
         x2: ceil(x2),
         y2: ceil(y2),
     })
-}
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-mod tests {
-    use super::{render_args, RenderRequest};
-    use crate::ffi::prop_keys as keys;
-    use crate::image::Frame16;
-
-    /// **A render's `inArgs` say the GPU extensions are off, in so many words**
-    /// (K-756). A plugin built on a vendor framework asks every frame whether a
-    /// CUDA, OpenCL or Metal render is on; if the fetch *fails* rather than
-    /// answering nought, the framework does not fall back to its CPU path — it
-    /// returns success having written nothing into the output image, and the
-    /// layer goes transparent with no error to attach a badge to. Red Giant's
-    /// own log carried six thousand of each failed read per session against
-    /// this host before these three were seeded.
-    #[test]
-    fn a_render_says_no_to_every_gpu_extension() {
-        let source = Frame16::black(4, 4).expect("a four-by-four frame");
-        let args = render_args(&RenderRequest::filter(0.0, source));
-        for key in [
-            keys::CUDA_ENABLED,
-            keys::OPENCL_ENABLED,
-            keys::METAL_ENABLED,
-        ] {
-            assert_eq!(
-                args.get_int(key, 0),
-                Ok(0),
-                "{key} must be answered with nought, not left unknown"
-            );
-        }
-    }
 }

@@ -13,7 +13,7 @@ use crate::{GpuContext, WORKING_FORMAT};
 mod blur;
 mod colour;
 mod common;
-/// The Custom shader's GPU half (K-650): validate, compile, cache, dispatch.
+/// The Custom shader's GPU half: validate, compile, cache, dispatch.
 mod custom_shader;
 mod distort;
 mod dof;
@@ -54,7 +54,7 @@ mod tests;
 /// The effect-pass engine: compiled kernels plus their layouts, one per
 /// device (owned alongside the Compositor by whoever renders).
 pub struct FxEngine {
-    /// The Custom shader (docs/08 §3.95, K-650): its own seven-entry bind group
+    /// The Custom shader (docs/08 §3.95): its own seven-entry bind group
     /// layout, and one compiled pipeline per distinct source. Its own layout
     /// rather than the shared fx five, exactly as the LUT's is — the two extra
     /// pictures and the user's own uniform have nowhere to go on that one.
@@ -64,14 +64,14 @@ pub struct FxEngine {
     radial_blur: wgpu::ComputePipeline,
     sharpen_unpremultiply: wgpu::ComputePipeline,
     sharpen_combine: wgpu::ComputePipeline,
-    /// Plain 3×3 sharpen (docs/08 §3.9, K-138): a single-pass high-pass
+    /// Plain 3×3 sharpen (docs/08 §3.9): a single-pass high-pass
     /// convolution, the radius-free sibling of the Unsharp mask's two-entry
     /// kernel above.
     sharpen_simple: wgpu::ComputePipeline,
-    /// Sprite flare (docs/08 §3.29, K-359): one procedural pass, placed from
+    /// Sprite flare (docs/08 §3.29): one procedural pass, placed from
     /// a light position rather than from the picture's bright pixels.
     sprite_flare: wgpu::ComputePipeline,
-    /// Light wrap (docs/08 §3.28, K-358): the two passes that fold the
+    /// Light wrap (docs/08 §3.28): the two passes that fold the
     /// background's blur and the foreground's softened matte into the edge.
     light_wrap_pack: wgpu::ComputePipeline,
     light_wrap_combine: wgpu::ComputePipeline,
@@ -83,14 +83,14 @@ pub struct FxEngine {
     saturation: wgpu::ComputePipeline,
     vibrancy: wgpu::ComputePipeline,
     matte_key: wgpu::ComputePipeline,
-    /// The spatial keyer's stages (K-546): the screen matte on its own, the
+    /// The spatial keyer's stages: the screen matte on its own, the
     /// separable shrink/grow, the despot, one garbage mask, and the pass that
     /// spends the finished matte on the original colour.
     matte_key_screen: wgpu::ComputePipeline,
     matte_key_combine: wgpu::ComputePipeline,
     matte_morph: wgpu::ComputePipeline,
     matte_despot: wgpu::ComputePipeline,
-    /// Stroke (**style**, K-706): the separable pass that carries the fattened
+    /// Stroke (**style**): the separable pass that carries the fattened
     /// and thinned copies of the layer's alpha together, and the combine that
     /// cuts the band between them.
     stroke_morph: wgpu::ComputePipeline,
@@ -98,7 +98,7 @@ pub struct FxEngine {
     matte_mask: wgpu::ComputePipeline,
     vignette: wgpu::ComputePipeline,
     exposure: wgpu::ComputePipeline,
-    /// The lighting pass (docs/06, K-361). Not an effect — the realiser calls
+    /// The lighting pass (docs/06). Not an effect — the realiser calls
     /// it directly, between a layer's effect stack and its composite.
     lighting: wgpu::ComputePipeline,
     temperature: wgpu::ComputePipeline,
@@ -107,20 +107,20 @@ pub struct FxEngine {
     hue_shift: wgpu::ComputePipeline,
     contrast: wgpu::ComputePipeline,
     gamma: wgpu::ComputePipeline,
-    /// Curves (docs/08 §3.30, K-396): the per-channel monotone-cubic tone
+    /// Curves (docs/08 §3.30): the per-channel monotone-cubic tone
     /// curve. Shares the ordinary pointwise layout — the knots and their
     /// tangents arrive in the uniform, already fitted host-side.
     curves: wgpu::ComputePipeline,
     /// Levels (docs/08 §3.31): per-channel input/output black and white with
     /// gamma, both reciprocals precomputed host-side.
     levels: wgpu::ComputePipeline,
-    /// Brightness (docs/08 §3.32, K-397): AE's Brightness & Contrast pair as
+    /// Brightness (docs/08 §3.32): AE's Brightness & Contrast pair as
     /// one affine grade about the mid-grey pivot Contrast uses.
     brightness: wgpu::ComputePipeline,
     /// Hue and saturation (docs/08 §3.33): the master adjustment and six
     /// weighted colour ranges, through an HSV round trip.
     hue_saturation: wgpu::ComputePipeline,
-    /// Posterize (docs/08 §3.58, K-404): the tone ladder cut into steps, the
+    /// Posterize (docs/08 §3.58): the tone ladder cut into steps, the
     /// rungs spaced in a square root of the light so they land where a person
     /// sees them.
     posterize: wgpu::ComputePipeline,
@@ -140,7 +140,7 @@ pub struct FxEngine {
     /// [`Self::blur`], reused for the third time — after §3.43's softening and
     /// §3.57's distance field — and here it is a *question*, never a colour.
     shadow_highlight: wgpu::ComputePipeline,
-    /// Fill (docs/08 §3.34, K-398): the layer's own coverage flooded with one
+    /// Fill (docs/08 §3.34): the layer's own coverage flooded with one
     /// colour.
     fill: wgpu::ComputePipeline,
     /// Gradient (docs/08 §3.35): the linear or radial two-colour ramp.
@@ -171,14 +171,14 @@ pub struct FxEngine {
     /// displaces the paper rather than the geometry.
     ///
     /// One pipeline for three effects, because what differs between them is
-    /// where the line goes and that is decided on the CPU (K-408).
+    /// where the line goes and that is decided on the CPU.
     path_draw: wgpu::ComputePipeline,
     /// Add grain (docs/08 §3.77): film grain laid on by tone. The fourth reader
     /// of the shared `fx_noise_core.wgsl`.
     add_grain: wgpu::ComputePipeline,
     /// Turbulent displace (docs/08 §3.38): the fractal-driven warp, and the
     /// second reader of the shared `fx_noise_core.wgsl`. One of the kernels that
-    /// claim the K-395 matte inside their own maths — it scales the
+    /// claim the matte inside their own maths — it scales the
     /// displacement.
     turbulent_displace: wgpu::ComputePipeline,
     /// Tile (docs/08 §3.39): one rectangle of the picture stamped across the
@@ -194,7 +194,7 @@ pub struct FxEngine {
     /// the inverse of the homography they define.
     corner_pin: wgpu::ComputePipeline,
     /// Displacement map (docs/08 §3.49): another layer's channels push this one.
-    /// The seventh kernel to claim the K-395 matte inside its own maths, and the
+    /// The seventh kernel to claim the matte inside its own maths, and the
     /// second (after Set matte) for which the matte is the effect's subject.
     displacement_map: wgpu::ComputePipeline,
     /// Polar coordinates (docs/08 §3.50): the frame bent into a circle, and the
@@ -220,7 +220,7 @@ pub struct FxEngine {
     /// blurred alpha *is* the distance field. The fourth reader of
     /// `fx_noise_core.wgsl`.
     roughen_edges: wgpu::ComputePipeline,
-    /// Median (docs/08 §3.64, K-405): the true middle value of a neighbourhood,
+    /// Median (docs/08 §3.64): the true middle value of a neighbourhood,
     /// selected by a compare-exchange network so that nothing branches on a
     /// value and the four channels come out of one sweep. The catalogue's only
     /// `heavy` single-pass kernel.
@@ -251,7 +251,7 @@ pub struct FxEngine {
     /// reuse it.
     drop_shadow: wgpu::ComputePipeline,
     /// Set matte (docs/08 §3.44): another layer's channel becomes this layer's
-    /// alpha. The sixth kernel to claim the K-395 matte inside its own maths,
+    /// alpha. The sixth kernel to claim the matte inside its own maths,
     /// and the only one for which the matte *is* the output rather than a
     /// modifier of it.
     set_matte: wgpu::ComputePipeline,
@@ -272,7 +272,7 @@ pub struct FxEngine {
     /// the projection rather than drawing it — Lumit's effects gather.
     card_wipe: wgpu::ComputePipeline,
     transform: wgpu::ComputePipeline,
-    /// The shake's own motion blur (docs/08 §3.4, T18/K-165): averages the
+    /// The shake's own motion blur (docs/08 §3.4, T18): averages the
     /// shake resampled at its motion-blur sub-frames. Its own kernel rather
     /// than the Transform kernel because it reads the input at several affines
     /// in one pass; it uses the shared two-input layout all the same.
@@ -282,41 +282,41 @@ pub struct FxEngine {
     block_glitch: wgpu::ComputePipeline,
     scanlines: wgpu::ComputePipeline,
     echo_accumulate: wgpu::ComputePipeline,
-    /// Accumulation motion blur's per-pixel shutter (docs/08 §3.26,
-    /// K-429): one dispatch per sub-frame render, folding it into the
+    /// Accumulation motion blur's per-pixel shutter (docs/08 §3.26):
+    /// one dispatch per sub-frame render, folding it into the
     /// average at a weight the Matte decides. On the shared fx layout,
     /// because it is the ordinary shape — two pictures in, one out, and
     /// a matte.
     accum_shutter: wgpu::ComputePipeline,
     echo_mix: wgpu::ComputePipeline,
     motion_blur: wgpu::ComputePipeline,
-    /// The dominant-motion tile reduction Motion blur runs first (K-390,
-    /// docs/impl/optical-flow.md §4.5 item 3): one thread per tile, reducing
+    /// The dominant-motion tile reduction Motion blur runs first
+    /// (docs/impl/optical-flow.md §4.5 item 3): one thread per tile, reducing
     /// the flow field to the confidence-weighted longest vector per tile. Its
     /// own [`Self::mb_tile_layout`] because the tile texture is rgba32float —
     /// those vectors are judged bit-for-bit against an f32 oracle.
     mb_tilemax: wgpu::ComputePipeline,
     /// A supplied **Motion vectors** layer turned into a flow field
-    /// (K-429, docs/08 §3.2): the same layout as the reduction above,
+    /// (docs/08 §3.2): the same layout as the reduction above,
     /// because it is the same shape of pass — a picture in, an
     /// rgba32float field out. Everything downstream then reads one kind
     /// of field and knows nothing about where it came from.
     mb_vectors: wgpu::ComputePipeline,
-    /// Datamosh (docs/08 §3.12, K-104): shares [`Self::mb_layout`]/`mb_pl`
+    /// Datamosh (docs/08 §3.12): shares [`Self::mb_layout`]/`mb_pl`
     /// with Motion blur — both need exactly three sampled inputs (the
     /// current frame, one extra neighbour-derived texture, and a flow
     /// field) plus a storage output and a uniform.
     datamosh: wgpu::ComputePipeline,
     adjust: wgpu::ComputePipeline,
-    /// The generic Matte dissolve (K-395, docs/08 §2.6): one pass after any
+    /// The generic Matte dissolve (docs/08 §2.6): one pass after any
     /// effect that was handed a matte, lerping its output back towards its
     /// input by the matte's luma. Shares [`Self::adjust_layout`] — three
     /// sampled inputs, a storage output, one uniform.
     matte_mix: wgpu::ComputePipeline,
-    /// The matte's Channel pick and Invert (K-425), once before any kernel or
+    /// The matte's Channel pick and Invert, once before any kernel or
     /// the dissolve reads it. Shares [`Self::adjust_layout`].
     matte_prepare: wgpu::ComputePipeline,
-    /// The effect Blend and Mix (K-425): one pass after a kernel run at Mix
+    /// The effect Blend and Mix: one pass after a kernel run at Mix
     /// 100, blending its result onto its input by a layer mode and then
     /// applying the effect's own Mix. Shares [`Self::adjust_layout`].
     blend_mix: wgpu::ComputePipeline,
@@ -330,11 +330,11 @@ pub struct FxEngine {
     /// its three sampled inputs (source, unprocessed original, depth field)
     /// plus a storage output and a uniform fit the same shape.
     dof: wgpu::ComputePipeline,
-    /// Lens flare (docs/08 §3.27, K-256): the one effect that owns a render
+    /// Lens flare (docs/08 §3.27): the one effect that owns a render
     /// pass — its pipelines, layouts and bake cache live in their own
     /// sub-struct rather than six more fields here.
     lens_flare: lens_flare::LazyFlare,
-    /// Particulate (docs/08 §3.86, K-446): the second effect to own a render
+    /// Particulate (docs/08 §3.86): the second effect to own a render
     /// pass, and the first to own a compute pipeline that writes a buffer
     /// rather than a picture. Its four passes and two layouts are built with
     /// the rest — there is nothing lazy about it, because a particle system
@@ -367,7 +367,7 @@ pub struct FxEngine {
 
 impl FxEngine {
     /// Let this engine make a Lens flare's bake **beside** the frame rather
-    /// than inside it (K-350).
+    /// than inside it.
     ///
     /// Off by default, and that default is the safe one: an engine nobody has
     /// told otherwise bakes inside the frame exactly as it always did, so a
@@ -378,6 +378,16 @@ impl FxEngine {
     /// yet, no flare) instead of stopping for half a second of optics.
     pub fn set_deferred_flare_bakes(&self, deferred: bool) {
         self.lens_flare.set_deferred(deferred);
+    }
+
+    /// Forget everything this engine remembers between frames — flare bakes,
+    /// compiled custom shaders, their counts — so one engine shared by every
+    /// test in a process (`crate::test_support`) hands each test what a new
+    /// engine would. Test-only: nothing shipped shares an engine this way.
+    #[cfg(any(test, feature = "test-fixtures"))]
+    pub fn reset_for_tests(&self) {
+        self.lens_flare.reset_for_tests();
+        self.custom_shader.reset_for_tests();
     }
 
     /// Whether a flare bake is being made right now.
@@ -398,7 +408,7 @@ impl FxEngine {
     /// question deferring the bake raises: *did this frame draw the lens its
     /// parameters name?* If the number moved, it may not have, and the frame
     /// must not be filed under a name that says it did — the frame caches are
-    /// keyed by what is *in* a frame (K-178), and an entry that lies about
+    /// keyed by what is *in* a frame, and an entry that lies about
     /// that outlives every edit and undo that might have fixed it.
     #[must_use]
     pub fn flare_bake_generation(&self) -> u64 {
@@ -410,15 +420,14 @@ impl FxEngine {
     }
 
     /// How many times a frame has drawn a lens flare with **other** optics
-    /// than its parameters name (K-431) — the deferred fallback to the lens
+    /// than its parameters name — the deferred fallback to the lens
     /// the last frame drew, or no flare at all with none drawn yet.
     ///
     /// Read either side of a render, this is the exact answer to *may this
     /// frame be filed under the name taken before it?* If the number did not
     /// move, every flare in the frame drew the bake its parameters name and
     /// the name describes the pixels; if it moved, it does not, and the frame
-    /// is made but not kept (the tiers are keyed by what is *in* a frame,
-    /// K-178).
+    /// is made but not kept (the tiers are keyed by what is *in* a frame).
     ///
     /// It replaces [`Self::flare_bake_generation`] for that job. The
     /// generation moves whenever any bake is *queued* — a keyframed aperture
@@ -465,10 +474,10 @@ impl FxEngine {
         self.dispatch_matted(ctx, pipeline, src, orig, None, dst, w, h, params)
     }
 
-    /// [`Self::dispatch`] with a **Matte** bound (K-395, docs/08 §2.6) — for
+    /// [`Self::dispatch`] with a **Matte** bound (docs/08 §2.6) — for
     /// the kernels that claim the matte inside their own maths, scaling the
     /// control the effect names (a blur's radius, a colour amount, a
-    /// distortion's displacement: K-426, K-427) instead of taking the generic
+    /// distortion's displacement) instead of taking the generic
     /// dissolve.
     ///
     /// `None` binds `src` in the matte's place. A texture binding cannot be left
@@ -548,7 +557,7 @@ impl FxEngine {
 /// Fit a working texture into an `nw × nh` raster, centred: a larger target is
 /// padded with transparent, a smaller one takes the middle out.
 ///
-/// **In plain terms.** One effect — Tile (docs/08 §3.39, K-542) — can hand back
+/// **In plain terms.** One effect — Tile (docs/08 §3.39) — can hand back
 /// a bigger picture than it was given. Everything downstream of it works texel
 /// by texel against pictures that must agree on their size, and a few places
 /// cannot take a bigger picture at all (an adjustment layer blends against the

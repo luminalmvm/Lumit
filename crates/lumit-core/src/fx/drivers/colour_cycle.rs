@@ -1,4 +1,5 @@
-//! Colour cycle (K-471 §1.3): a colour that turns through the hue wheel.
+//! Colour cycle (node-graph.md §1.3): a colour that turns through the hue
+//! wheel.
 //!
 //! **In plain terms.** A colour that keeps changing — red, orange, yellow, and
 //! round again — at whatever rate you set. Wire it into a Fill, a Glow's tint

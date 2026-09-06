@@ -1,5 +1,5 @@
 // The Graph panel — a layer's effect stack drawn as nodes and wires, plus the
-// drivers wired into its parameters (K-471, K-472, K-473).
+// drivers wired into its parameters.
 //
 // **In plain terms.** A layer's effects are a list: the picture goes in at the
 // top, each effect changes it, the result comes out at the bottom. This panel
@@ -18,12 +18,12 @@
 // and which boxes are twirled open, all committed by one `setGraph` per
 // gesture and therefore one undo step apiece.
 //
-// **One read, never in a rebuild** (K-183). `getGraph` is asked when the
+// **One read, never in a rebuild**. `getGraph` is asked when the
 // selection or the document changes and held here; `bridge_call_budget_test`
 // expects a hover over this canvas to cost nothing at all. Everything the
 // canvas draws and every hit test it makes is arithmetic over that held copy.
 //
-// **Colour is the legend** (K-472). A wire and its sockets take the port's type
+// **Colour is the legend**. A wire and its sockets take the port's type
 // colour from `theme.port`; no other colour coding appears on the canvas, and
 // no colour crosses the bridge — the engine sends the type, the frontend maps
 // it to the token.
@@ -91,7 +91,7 @@ const double graphSocketSize = 9;
 /// steps evenly whatever each of them is.
 const double graphBadgeSize = 14;
 
-/// The enable tick's cell. The Effect controls heading draws K-450's 14px
+/// The enable tick's cell. The Effect controls heading draws the 14px
 /// checkbox [fxEnableMarkScale] larger, and the node header wears that same
 /// mark at that same size, so the cell that holds it is that much larger than
 /// the marks beside it — the tick is one control on two surfaces, not two
@@ -100,7 +100,7 @@ const double graphEnableSize = graphBadgeSize * fxEnableMarkScale;
 
 /// The twirl glyph on a node header, smaller than the house default because
 /// the header is 21px rather than the 24 an Effect controls heading has
-/// (K-456: the default is a default, not a law).
+/// (the default is a default, not a law).
 const double graphTwirlSize = 12;
 
 /// The dot grid's pitch on the canvas ground.
@@ -135,14 +135,14 @@ Path graphWirePath(Offset a, Offset b, {double zoom = 1}) {
 }
 
 /// The glyphs in the toolbar. A size down from the
-/// row glyphs' 16 (K-456: the manifest's number, not a preference).
+/// row glyphs' 16 (the manifest's number, not a preference).
 const double graphIconSize = 13;
 
-// The graph adds through the Ctrl+Space console (K-645, K-673): one search
+// The graph adds through the Ctrl+Space console: one search
 // surface, one key. `shell/fx_console_frb.dart` owns its shape.
 
 /// A group's wash: the air it leaves round its members, and the band its name
-/// sits in above them (K-651, the NodeGraph drawing's own numbers).
+/// sits in above them (the NodeGraph drawing's own numbers).
 const double graphGroupPad = 12;
 const double graphGroupHead = 18;
 
@@ -165,14 +165,14 @@ const double _socketGrab = 7;
 const double _dragSlop = 3;
 
 /// The header tint a **Custom shader** box wears, in the outer graph and on
-/// every box of its inner graph alike (K-675, owner item 13b): the theme's
+/// every box of its inner graph alike (owner item 13b): the theme's
 /// own viz family — `curve[0]`, the household ramp's lead — washed over the
 /// ordinary header ground, so a programmable box reads at a glance without a
 /// third colour system beside the port legend and the label palette.
 Color graphShaderHeader(LumitTheme t) =>
     Color.alphaBlend(t.curve.first.withValues(alpha: 0.14), t.surface2);
 
-/// Which theme token a port type draws in (K-472 §6.1): seven types, five
+/// Which theme token a port type draws in: seven types, five
 /// colours, grouped as the drawing's legend groups them.
 Color portColour(LumitTheme t, BridgePortType type) => switch (type) {
       BridgePortType.image || BridgePortType.matte => t.port.image,
@@ -191,9 +191,9 @@ String graphNodeKey(BridgeNodeRef node) => switch (node) {
       BridgeNodeRef_Driver(:final field0) => 'driver:$field0',
     };
 
-/// What a parameter row needs to know about the wire feeding it (K-471): the
+/// What a parameter row needs to know about the wire feeding it: the
 /// driver's name, the type the wire carries, and whether the source is a box
-/// reading a points stream that has none (K-509).
+/// reading a points stream that has none.
 typedef DrivenParam = ({String driver, BridgePortType type, bool noStream});
 
 /// Which of [layer]'s effect parameters a driver is wired to, by
@@ -204,7 +204,7 @@ typedef DrivenParam = ({String driver, BridgePortType type, bool noStream});
 /// the Node panel, the Timeline's fold-out — asks this at the moments the graph
 /// can change (the selection moves, the document commits) and keeps the answer;
 /// asking it from a build is exactly the traffic `bridge_call_budget_test`
-/// guards against (K-183). Empty for every layer that has never been wired,
+/// guards against. Empty for every layer that has never been wired,
 /// which is nearly all of them.
 Map<String, DrivenParam> drivenParamsOf(LayerReference layer) {
   final out = <String, DrivenParam>{};
@@ -225,7 +225,7 @@ Map<String, DrivenParam> drivenParamsOf(LayerReference layer) {
             p
           ),
         BridgeOutputRef_SourceMatte() => ('source', 'matte'),
-        // A points wire's source is a *stack effect* (K-492), so the row names
+        // A points wire's source is a *stack effect*, so the row names
         // the effect that hands the data over.
         BridgeOutputRef_EffectData(:final effect, :final port) => (
             graphNodeKey(BridgeNodeRef.effect(effect)),
@@ -294,7 +294,7 @@ class _Box {
 /// The rectangle a group's wash covers, in canvas units: its members' own
 /// bounds, plus air all round and a band above for its name.
 ///
-/// **Derived, never stored** (K-651). A group holds names, not geometry, so the
+/// **Derived, never stored**. A group holds names, not geometry, so the
 /// wash follows a member the moment it is dragged and cannot go stale. Null
 /// where the canvas is drawing none of the members — a group whose boxes have
 /// all gone draws nothing rather than a rectangle round the origin.
@@ -422,8 +422,8 @@ bool _alwaysDrawn(BridgePortType type) =>
 /// Structural, not per-frame: the read model says whether the socket carries a
 /// wire, and the engine's contract says what an empty stream answers — Count
 /// nought and Nearest distance "nothing is anywhere near" (points-stream.md
-/// §2.2). So the panel can say so without asking for a value, which is what
-/// K-509 asks of it and what keeps this off the rebuild path (K-183).
+/// §2.2). So the panel can say so without asking for a value, which keeps
+/// this off the rebuild path.
 bool graphNoStream(BridgeGraphNode node) =>
     node.inputs.any((p) => p.portType == BridgePortType.points && !p.wired);
 
@@ -496,7 +496,7 @@ class _InFlight {
   /// for a wire being drawn afresh.
   final BridgeGraphEdge? detached;
 
-  /// An **image-chain** wire in hand (K-674): the chain index of the box the
+  /// An **image-chain** wire in hand: the chain index of the box the
   /// grabbed wire feeds. The chain's wires are not stored anywhere — they are
   /// the effect list — so the drag carries the index rather than an edge, and
   /// the drop lowers to the stack's own ops. Null for every stored wire.
@@ -572,11 +572,10 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   String _layerName = '';
 
   /// Canvas positions, staged: a drag moves this map and the release commits
-  /// it, the K-344 pattern. Seeded from the document on each read.
+  /// it. Seeded from the document on each read.
   Map<String, Offset> _positions = {};
 
-  /// **The picked boxes**, by node key, in the order they were picked
-  /// (K-533, K-523).
+  /// **The picked boxes**, by node key, in the order they were picked.
   ///
   /// A set rather than one box, which is what Delete, Bypass, Expose and
   /// `Ctrl+A` were all waiting for: they were singular because the selection
@@ -590,7 +589,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   /// because the Node panel draws one box's rows and that is singular the way
   /// a rename is; and [LumitUiState.setEffectSelection] carries every picked
   /// effect, because the graph's box and the Effect controls heading are one
-  /// selection (K-300).
+  /// selection.
   final Map<String, BridgeNodeRef> _selection = {};
 
   /// The anchor: the box picked last, or null with nothing picked.
@@ -628,7 +627,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     ]);
   }
 
-  /// The box whose name is an inline editor, by node key (K-321). A
+  /// The box whose name is an inline editor, by node key. A
   /// double-click on a card's name opens it — the canvas reads its pointers
   /// through a raw `Listener`, so the card's own double-tap costs the
   /// selection nothing: a press still picks the box the instant it lands.
@@ -639,20 +638,20 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
 
   /// Adding a node wires it up in the same commit; deleting one takes its
   /// wires with it. Both on, both the drawing's state, and both `animated`
-  /// while on because that is what a pill switch is everywhere (K-465).
+  /// while on because that is what a pill switch is everywhere.
   bool _autoWire = true;
   bool _heal = true;
 
-  /// The snap magnet (K-659): while on — and it starts on, drawn
-  /// lit in the toolbar — a node drag lands on the dot grid's own pitch
-  /// (K-626), so boxes line up without nudging. Session view state, exactly
+  /// The snap magnet: while on — and it starts on, drawn
+  /// lit in the toolbar — a node drag lands on the dot grid's own pitch,
+  /// so boxes line up without nudging. Session view state, exactly
   /// as Auto-wire and Heal are.
   bool _snapToGrid = true;
 
   _InFlight? _flight;
   _NodeDrag? _nodeDrag;
 
-  /// The double-click that enters a Custom shader's inner graph (K-642), and
+  /// The double-click that enters a Custom shader's inner graph, and
   /// which box the last press landed on so two clicks on two boxes are not one
   /// double-click.
   final DoubleTap _boxTaps = DoubleTap();
@@ -694,24 +693,24 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     ui.selectedLayer.addListener(_reload);
     ui.model.addListener(_reload);
     // Entering (or leaving) a Custom shader's inner graph swaps this panel's
-    // whole face (K-642 §4.2), from either surface the double-click lives on.
+    // whole face, from either surface the double-click lives on.
     ui.shaderGraphEntry.addListener(_onShaderEntry);
-    // `Ctrl+A` here means every box on this canvas (K-522), which it can only
+    // `Ctrl+A` here means every box on this canvas, which it can only
     // mean now the pick is a set.
     ui.selectAllRequest.addListener(_onSelectAllRequested);
-    // **Ctrl+Space with this panel focused adds to the graph** (K-673). The
+    // **Ctrl+Space with this panel focused adds to the graph**. The
     // shell's console applies to the selected layers; the same key over this
     // canvas opens the same popover wearing the canvas's own list. Chained the
     // way the Delete claim is, because there is one claim and the inner shader
     // graph wants it too when it is the panel's face.
     if (ui.consoleClaim != _consoleClaim) _priorConsoleClaim = ui.consoleClaim;
     ui.consoleClaim = _consoleClaim;
-    // **Delete means the picked boxes while this panel is the focused one**
-    // (K-234's mechanism). Claimed rather than left to the canvas's own focus
-    // handler: the shell answers Delete on the hardware keyboard, which runs
-    // *before* the focus tree and swallows the key, so a picked node had its
-    // layer deleted out from under it instead. The shell asks this claim first
-    // and stands down when it says yes.
+    // **Delete means the picked boxes while this panel is the focused one**,
+    // claimed rather than left to the canvas's own focus handler: the shell
+    // answers Delete on the hardware keyboard, which runs *before* the focus
+    // tree and swallows the key, so a picked node had its layer deleted out
+    // from under it instead. The shell asks this claim first and stands down
+    // when it says yes.
     //
     // Chained onto whatever held the claim before — the Timeline, for its mask
     // rows — because there is one claim and more than one panel that wants it.
@@ -906,7 +905,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     ]));
   }
 
-  // --- The image chain's own wires (K-674) --------------------------------
+  // --- The image chain's own wires ----------------------------------------
 
   /// A chain wire let go (owner item 10). The chain **is** the effect list
   /// (§1.1), so both answers lower to the stack's own ops, each one op and so
@@ -937,7 +936,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
       // A wire drawn out of an output and let go of on the ground is a
       // change of mind. Only a wire pulled off an input disconnects.
       if (drawn) return;
-      // **Disconnecting is bypassing** (K-738). The effect keeps its slot in
+      // **Disconnecting is bypassing**. The effect keeps its slot in
       // the stack and stops drawing - which is the state its own enable tick
       // sets, reached from the other side. The Layer out has no effect to
       // bypass: unplugging *it* is the layer itself drawing nothing, which is
@@ -950,7 +949,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     final j = chain.indexWhere(
         (b) => graphNodeKey(b.node.node) == graphNodeKey(landed.node));
     if (j < 0) return;
-    // **The box the wire lands on comes back on** (owner's rule, K-738), and
+    // **The box the wire lands on comes back on** (owner's rule), and
     // if the wire also says it belongs somewhere else, it moves. A drop back
     // onto the socket the wire came off (`j == held`) is the plain reconnect:
     // no reorder, but the box goes back in the chain.
@@ -975,7 +974,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   }
 
   /// Take [box] out of the image chain: an effect is bypassed, the Layer out
-  /// is unplugged. One commit either way, so one undo step (K-738).
+  /// is unplugged. One commit either way, so one undo step.
   void _disconnect(LayerReference layer, _Box box) {
     if (_effectIdOf(box.node.node) case final victim?) {
       // Already bypassed: a second drop is not a second undo step.
@@ -1095,7 +1094,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
       return BridgeOutputRef.driver(node: driver, port: socket.port.id);
     }
     // A **stack effect's** declared data output — the first wire whose source
-    // is the effect list itself (K-492). The picture's own `output` port never
+    // is the effect list itself. The picture's own `output` port never
     // reaches here: a chain socket takes no drag at all.
     if (_effectIdOf(socket.node) case final effect?) {
       return BridgeOutputRef.effectData(effect: effect, port: socket.port.id);
@@ -1126,8 +1125,8 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
       return false;
     }
     // The Layer out box's Audio socket is drawn, unfilled and honest: audio
-    // comes only from a footage layer's own stream in this phase (K-435). Its
-    // Volume socket is the one exception (K-697): a number wired there drives
+    // comes only from a footage layer's own stream in this phase. Its
+    // Volume socket is the one exception: a number wired there drives
     // the layer's own Volume — the Duck under landing.
     if (into.node is BridgeNodeRef_Out && into.port.id != 'volume') return false;
     if (out.port.portType != into.port.portType) return false;
@@ -1178,7 +1177,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
 
   // --- Node gestures ------------------------------------------------------
 
-  /// The boxes a command pressed on [node] acts on (K-523): the whole pick
+  /// The boxes a command pressed on [node] acts on: the whole pick
   /// when this box is part of it, and this box alone when it is not — the rule
   /// every other surface here follows.
   List<BridgeNodeRef> _targets(BridgeNodeRef node) =>
@@ -1203,7 +1202,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   void _toggleBypass(BridgeGraphNode node) {
     final layer = _layer;
     if (layer == null) return;
-    // The pressed box's new state, for every box the press acts on (K-523), so
+    // The pressed box's new state, for every box the press acts on, so
     // a pick of mixed bypasses comes out even.
     final on = !node.enabled;
     final targets = {for (final n in _targets(node.node)) graphNodeKey(n)};
@@ -1242,7 +1241,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     _reload();
   }
 
-  /// The user's own name for a box (K-321), committed the way its bypass is:
+  /// The user's own name for a box, committed the way its bypass is:
   /// a driver stages on the graph's driver list and commits `setGraph`, an
   /// effect stages on the stack and commits `setEffects`. One op, one undo
   /// step, either way — and no new call across the bridge: `set_custom_name`
@@ -1383,8 +1382,8 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
 
   // --- The console --------------------------------------------------------
 
-  /// Ctrl+Space, and a wire let go over empty canvas, open **the console**
-  /// (K-645, K-673) — the same popover the shell opens, with a foot line
+  /// Ctrl+Space, and a wire let go over empty canvas, open **the console** —
+  /// the same popover the shell opens, with a foot line
   /// saying what a row will do. One search surface, two doors: what the
   /// canvas contributes is the list, the spot the box lands on, and the
   /// sentence.
@@ -1392,7 +1391,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     if (_searching) return;
     setState(() => _searching = true);
     final all = (widget.driversLister ?? listDrivers)();
-    // `listEffects` carries the drivers too (K-645); here they come from the
+    // `listEffects` carries the drivers too; here they come from the
     // drivers listing instead, because the canvas's own add places the box on
     // the drop spot and rides the wire in one commit.
     final driverNames = {for (final driver in all) driver.name};
@@ -1417,9 +1416,9 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
                   group: engineLabel(driver.categoryLabel),
                   run: () => _addDriver(driver, at, wire),
                 ),
-            // Then every effect (K-673): chosen, it joins the layer's stack,
+            // Then every effect: chosen, it joins the layer's stack,
             // and the stack is the chain — so the box appears wired into the
-            // picture's own path, K-445's auto-wire by construction. Only
+            // picture's own path, auto-wired by construction. Only
             // with no wire in hand: a dragged wire is a value looking for a
             // socket, and the chain's sockets take no wire.
             if (wire == null)
@@ -1431,7 +1430,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
                     group: engineLabel(effect.categoryLabel),
                     run: () => _addEffect(effect),
                   ),
-            // The saved groups, beside the drivers they are made of (K-651).
+            // The saved groups, beside the drivers they are made of.
             // Only with no wire in hand: a group is a rig, not a socket, so
             // there is nothing for the wire to land on.
             if (wire == null)
@@ -1466,7 +1465,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     _reload();
   }
 
-  // --- Named groups (K-651) -----------------------------------------------
+  // --- Named groups -------------------------------------------------------
 
   /// The picked driver boxes — what a group can hold. The Source, the Layer
   /// out and the stack's effects are derived from the layer, so a group naming
@@ -1477,7 +1476,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
       ];
 
   /// Name the picked boxes and write them to the library — **one gesture, two
-  /// halves** (K-651). Naming a set is what draws its wash, and the same name
+  /// halves**. Naming a set is what draws its wash, and the same name
   /// is what the file is called, exactly as an effect preset takes its display
   /// name from the file it was saved as.
   Future<void> _saveGroup() async {
@@ -1695,7 +1694,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
 
     final socket = layout.socketAt(at);
     if (socket != null && _isChainType(socket.port.portType)) {
-      // **The image chain's wires can be picked up too** (K-674, owner item
+      // **The image chain's wires can be picked up too** (owner item
       // 10: "connections between effect boxes can't be removed"). Pressing a
       // chain *input* takes hold of the wire feeding it, by its far end,
       // exactly as a stored wire is grabbed — drop it on another chain input
@@ -1757,8 +1756,8 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     final box = layout.boxAt(at);
     if (box != null) {
       final key = graphNodeKey(box.node.node);
-      // **Double-clicking a Custom shader box enters its inner graph** (K-642
-      // — "entering a shader node works like entering a precomp"). Counted
+      // **Double-clicking a Custom shader box enters its inner graph**:
+      // entering a shader node works like entering a precomp. Counted
       // with [DoubleTap] because the canvas reads raw pointers; the first
       // press still picks the box, exactly as a precomp's first click selects.
       final again = _boxTaps.tap(at: event.localPosition, slop: 6) &&
@@ -1813,7 +1812,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
 
     // **Empty canvas.** The primary button sweeps a selection box; the middle
     // button pans, which is where panning went when the box took the drag it
-    // used to have (K-533). A press with no modifier clears, exactly as it always did;
+    // used to have. A press with no modifier clears, exactly as it always did;
     // an additive one keeps what is picked and adds the catch to it.
     if (event.buttons == kMiddleMouseButton) {
       setState(() => _panFrom = _pan - event.localPosition);
@@ -2006,7 +2005,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    // Inside a Custom shader (K-642 §4.2): the panel's whole face is the
+    // Inside a Custom shader: the panel's whole face is the
     // inner graph, breadcrumb and all, until Escape or a crumb brings the
     // layer's own graph back.
     if (_ui?.shaderGraphEntry.value case final entry?) {
@@ -2057,8 +2056,8 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
                   overflow: TextOverflow.ellipsis),
             ),
             // Named regions of the canvas: what is picked becomes a group with
-            // a wash of its own, and the same act writes it to the library
-            // (K-651). Greyed until at least one driver box is picked, since a
+            // a wash of its own, and the same act writes it to the library.
+            // Greyed until at least one driver box is picked, since a
             // group of derived boxes is a group nothing could re-insert.
             HouseButton(
               key: const ValueKey('graph-save-group'),
@@ -2130,7 +2129,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
       focusNode: _canvasFocus,
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        // No Tab door (K-673): Ctrl+Space is the console's one key, answered
+        // No Tab door: Ctrl+Space is the console's one key, answered
         // through [_consoleClaim] so it works with focus anywhere in the app.
         if (event.logicalKey == LogicalKeyboardKey.delete ||
             event.logicalKey == LogicalKeyboardKey.backspace) {
@@ -2139,7 +2138,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
         }
         return KeyEventResult.ignored;
       },
-      // The search floats in the overlay rather than here (K-645): the canvas
+      // The search floats in the overlay rather than here: the canvas
       // takes every pointer that lands on it — that is how a socket is grabbed
       // without a gesture detector per socket — so a popover drawn inside it
       // would have its presses read as presses on the ground behind it.
@@ -2201,7 +2200,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
                           children: [
                             // The named regions, under every box and taking no
                             // pointer: a wash is something to read, never
-                            // something to press (K-651).
+                            // something to press.
                             for (final group in _graph!.wiring.groups)
                               if (graphGroupRect([
                                 for (final member in group.members)
@@ -2234,8 +2233,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
                                           graphNodeKey(box.node.node)),
                                   onRenamed: (name) =>
                                       _renameNode(box.node, name),
-                                  // Escape: shut the editor, rename nothing
-                                  // (K-323).
+                                  // Escape: shut the editor, rename nothing.
                                   onRenameCancelled: () =>
                                       setState(() => _renamingNode = null),
                                 ),
@@ -2266,7 +2264,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   }
 
   /// One group's tinted wash and its name. The colour is a **label chip**
-  /// (K-188's palette, indexed) — the graph's own colour coding is the port
+  /// (the label palette, indexed) — the graph's own colour coding is the port
   /// types and nothing else, so a region borrows the application's other
   /// palette rather than inventing a third.
   Widget _groupWash(LumitTheme t, BridgeNodeGroup group, Rect rect) {
@@ -2293,7 +2291,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   }
 
   /// The legend along the canvas's bottom edge: colour *is* the type, and this
-  /// strip is what says so (K-445).
+  /// strip is what says so.
   Widget _legend(LumitTheme t) => Positioned(
         left: 10,
         bottom: 8,
@@ -2337,9 +2335,9 @@ class _NodeCard extends StatelessWidget {
   /// leaves the pick alone.
   final VoidCallback onOwnPress;
 
-  /// The name is an inline editor rather than a label (K-321), its commit —
+  /// The name is an inline editor rather than a label, its commit —
   /// empty clears back to the box's own label — and the Escape that throws the
-  /// edit away instead (K-323). The same contract the Effect controls heading
+  /// edit away instead. The same contract the Effect controls heading
   /// has, because it is the same rename.
   final bool renaming;
   final VoidCallback onStartRename;
@@ -2384,7 +2382,7 @@ class _NodeCard extends StatelessWidget {
           Positioned.fill(
             child: GraphNodeFrame(
               // A bypassed box draws its border dashed, both drawings; the
-              // selected one draws it in `animated` (K-473).
+              // selected one draws it in `animated`.
               colour: selected ? t.animated : t.hairline,
               dashed: !box.node.enabled,
               fill: t.surface1,
@@ -2414,7 +2412,7 @@ class _NodeCard extends StatelessWidget {
         height: graphNodeHeaderHeight,
         padding: const EdgeInsets.symmetric(horizontal: 8),
         decoration: BoxDecoration(
-          // A Custom shader box wears the viz tint (K-675) so the one box
+          // A Custom shader box wears the viz tint so the one box
           // with an inside reads at a glance.
           color: box.node.matchName == 'custom_shader'
               ? graphShaderHeader(t)
@@ -2424,7 +2422,7 @@ class _NodeCard extends StatelessWidget {
         child: Row(
           children: [
             // **Enable tick, twirl, name** — the order an Effect controls
-            // heading reads in (K-443), because on a node card it is the same
+            // heading reads in, because on a node card it is the same
             // grammar and, for the tick, the same control. What the box *is
             // doing* comes before what the header does to what is under it.
             if (!_derived) ...[
@@ -2444,7 +2442,7 @@ class _NodeCard extends StatelessWidget {
             // fixed-width — so a name cuts only when it is genuinely out of
             // room.
             Expanded(child: renaming ? _editor(t) : _names(t)),
-            // **Nothing wired in** (K-509). A driver that reads a stream and
+            // **Nothing wired in**. A driver that reads a stream and
             // has none answers its documented no-op — a distance so large it
             // pins whatever it drives at the far end of the range — and the
             // box is the one place that can say so before the wire is drawn.
@@ -2507,7 +2505,7 @@ class _NodeCard extends StatelessWidget {
 
   /// The inline rename, opened with the current name selected and committing
   /// on Enter or on clicking away — the contract every inline rename in the
-  /// application has (K-243), and the one the Effect controls heading's own
+  /// application has, and the one the Effect controls heading's own
   /// editor keeps.
   Widget _editor(LumitTheme t) => _NodeNameField(
         key: ValueKey<String>(
@@ -2518,7 +2516,7 @@ class _NodeCard extends StatelessWidget {
       );
 
   /// **Pressing a control on the header is not picking the box** (the
-  /// Timeline's rule for its switch cells, K-452). The canvas reads its
+  /// Timeline's rule for its switch cells). The canvas reads its
   /// pointers through one `Listener` above this card, and a child listener is
   /// dispatched first — so the flag is set before the canvas decides what the
   /// press meant. Without it, switching one of four picked boxes off collapsed
@@ -2638,7 +2636,7 @@ class _NodeCard extends StatelessWidget {
 /// A node's frame, drawn rather than decorated so that a bypassed one can be
 /// dashed — Flutter's `Border` has no dash.
 /// Public because the inner shader graph's cards wear the identical frame
-/// (K-642 §4.2 — the canvas is shared, the model is not).
+/// (the canvas is shared, the model is not).
 class GraphNodeFrame extends StatelessWidget {
   final Color colour;
   final Color fill;
@@ -2795,7 +2793,7 @@ class _GraphPainter extends CustomPainter {
   final LumitTheme theme;
 
   /// Nothing is plugged into the Layer out, so the layer draws nothing
-  /// (K-738) and the last wire is not drawn either.
+  /// and the last wire is not drawn either.
   final bool outUnwired;
 
   const _GraphPainter({
@@ -2818,7 +2816,7 @@ class _GraphPainter extends CustomPainter {
     // list, read left to right. Drawing them from the box order is what makes
     // the stack view impossible to contradict.
     //
-    // **A bypassed effect is not in the chain** (K-738), so the wire steps
+    // **A bypassed effect is not in the chain**, so the wire steps
     // over it: from the last box still in to the next one, leaving the
     // bypassed box floating with hollow sockets. That is the same picture the
     // engine renders - the effect is skipped - and it is why switching a box
@@ -2841,7 +2839,7 @@ class _GraphPainter extends CustomPainter {
     for (var k = 0; k + 1 < inChain.length; k++) {
       final i = inChain[k];
       final j = inChain[k + 1];
-      // The wire in the hand (K-674) is the dashed flight, not a drawn
+      // The wire in the hand is the dashed flight, not a drawn
       // segment: it has visibly left its input. The flight names the box it
       // feeds, which after a skip is anywhere in (i, j].
       if (flight?.chain case final held? when held > i && held <= j) continue;
@@ -2859,7 +2857,7 @@ class _GraphPainter extends CustomPainter {
       final ends = _edgeEnds(layout, edge);
       if (ends == null) continue;
       // The wire a box is being dropped into wears the canvas's own picked
-      // colour while it is under one (N7, K-473) — the same mark a picked box
+      // colour while it is under one (N7) — the same mark a picked box
       // wears, because both say "this is what the release will act on".
       final into = edge == dropWire;
       _wire(canvas, ends.$1, ends.$2,
@@ -2891,7 +2889,7 @@ class _GraphPainter extends CustomPainter {
 
 /// A node card's inline rename field: the box's current custom name, selected
 /// on open because a name is retyped far more often than amended, committed on
-/// Enter or on clicking away (K-243) and thrown away on Escape (K-323).
+/// Enter or on clicking away and thrown away on Escape.
 ///
 /// Empty is a real answer — it clears the custom name and the card goes back to
 /// showing the box's own label — so an empty field is committed like any other.

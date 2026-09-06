@@ -1,5 +1,5 @@
-// Manual screenshots, sweep: the Audio workspace (K-574, K-690/K-691,
-// K-697/K-698/K-699), photographed on a real project rather than a staged one.
+// Manual screenshots, sweep: the Audio workspace, photographed on a real
+// project rather than a staged one.
 //
 // audio-workspace · audio-mixer · audio-panel · audio-timeline-spectrogram ·
 // audio-graph-duck · audio-playback…
@@ -185,7 +185,7 @@ Future<void> main() async {
     await pause(4);
   }
 
-  // The beat grid, so the ruler wears its band (K-698). The source is pinned
+  // The beat grid, so the ruler wears its band. The source is pinned
   // to the music rather than left on the whole comp — a mixdown of sixty
   // mostly-silent picture layers is a poor thing to look for a tempo in.
   await tapKey('beats-source', settle: 1);
@@ -244,7 +244,7 @@ Future<void> main() async {
   await captureUi('audio-panel.png', crop: panelCrop(AudioPanelFrb));
   await captureUi('audio-timeline.png', crop: panelCrop(TimelinePanelFrb));
 
-  // The same lane as a spectrogram — one press of the chip (K-699), since a
+  // The same lane as a spectrogram — one press of the chip, since a
   // fresh lane starts on the multiwave stack and the cycle is
   // wave → stack → spectral.
   if (lane != null) {
@@ -259,7 +259,7 @@ Future<void> main() async {
     await captureUi('audio-workspace-spectrogram.png');
   }
 
-  // Duck under… (K-697), in the smallest comp whose *top* row is the music:
+  // Duck under…, in the smallest comp whose *top* row is the music:
   // the template's menu lists the other rows in comp order, so the music is
   // then the row a first-row press picks.
   (CompositionReference, String)? duck;

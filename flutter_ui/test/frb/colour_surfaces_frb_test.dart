@@ -1,5 +1,5 @@
-// The four places a colour config reaches the interface (K-489, K-490,
-// docs/impl/ocio.md §6.2–§6.5).
+// The four places a colour config reaches the interface (docs/impl/ocio.md
+// §6.2–§6.5).
 //
 // `colour_seam_frb_test` proves the seam: the summary arrives whole, the two
 // edits are ordinary ops, a refusal crosses as an id. This file is about the
@@ -13,9 +13,9 @@
 //
 // * **The config's names cross verbatim.** They are the user's own words, out
 //   of the user's own file, and no surface may put them through the label
-//   table (K-303).
+//   table.
 // * **Nothing here asks the engine during a build.** The summary reads a file
-//   off disk; it is fetched when the document changes and held (K-183). The
+//   off disk; it is fetched when the document changes and held. The
 //   bridge-call budget test is the gate; these tests keep the wiring that makes
 //   it possible honest.
 
@@ -464,7 +464,7 @@ void main() {
                   find.byKey(const ValueKey('project-colour-working-space')))
               .data,
           'Linear Rec. 709',
-          reason: 'the working space is fixed in v1 and said outright (K-490)');
+          reason: 'the working space is fixed in v1 and said outright');
 
       await tester
           .tap(find.byKey(const ValueKey('project-colour-config-choose')));

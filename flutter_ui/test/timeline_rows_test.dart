@@ -106,7 +106,7 @@ void main() {
       expect(keyShiftOf(barDragPreview('b', BarGrab.move, 12), 'a'), 0);
     });
 
-    test('a selection move carries every layer it lists (K-720)', () {
+    test('a selection move carries every layer it lists', () {
       final move = barDragPreview('b', BarGrab.move, 12, moving: {'a', 'b'});
       expect(keyShiftOf(move, 'a'), 12,
           reason: 'a selection-mate\'s keys travel with the drag');
@@ -183,10 +183,10 @@ void main() {
   });
 
   /// **Animation ▸ Reveal properties with keyframes / with animation / all
-  /// modified properties** (K-684). Three rules over one fold-out, each a
+  /// modified properties**. Three rules over one fold-out, each a
   /// superset of the one before it: the diamonds, then the rows that move
   /// without diamonds, then everything a fresh layer would not carry.
-  group('The three Reveal rules widen one at a time (K-684)', () {
+  group('The three Reveal rules widen one at a time', () {
     const centre = 960.0, middle = 540.0;
     BridgeScalar st(double v) => BridgeScalar.static_(v);
 
@@ -255,8 +255,8 @@ void main() {
         values: const [],
         linkedPairs: const [],
         derivedParams: const []);
-    // A parameter at its default, with a wire from the node graph on it
-    // (K-471): nothing has been typed into it and it is not the same at every
+    // A parameter at its default, with a wire from the node graph on it:
+    // nothing has been typed into it and it is not the same at every
     // frame either.
     final driven = FoldEffectParamRow(
         info, param, const BridgeEffectValue.float(BridgeScalar.static_(1)),

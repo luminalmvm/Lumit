@@ -1,6 +1,6 @@
 // The Mixer panel against the real engine: the Master strip that is always
-// there, the fader that writes the master gain (K-691), and the K-681 gate —
-// a meter tick repaints the meter band and nothing else.
+// there, the fader that writes the master gain, and the repaint gate — a
+// meter tick repaints the meter band and nothing else.
 
 import 'dart:io';
 import 'dart:typed_data';
@@ -48,7 +48,7 @@ void main() {
   }
 
   group('Mixer (frb)', () {
-    /// The Master strip stands whatever the comp holds (K-691): fader, meter
+    /// The Master strip stands whatever the comp holds: fader, meter
     /// band, the limiter lamp and the muted LUFS placeholder — and a comp of
     /// silent layers says so where the strips would be.
     testWidgets('the Master strip is always on the desk', (tester) async {
@@ -94,7 +94,7 @@ void main() {
       await tester.pump(kDoubleTapTimeout);
     });
 
-    /// The K-681 gate this panel ships with: a meter tick repaints the meter
+    /// The repaint gate this panel ships with: a meter tick repaints the meter
     /// band inside its own boundary and repaints **nothing else** — the strips,
     /// wells and faders never hear the timer.
     testWidgets('a meter tick repaints only the meter band', (tester) async {

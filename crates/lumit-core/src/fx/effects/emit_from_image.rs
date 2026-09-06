@@ -6,7 +6,7 @@
 //! pattern, a luma matte somebody painted — and its highlights become a cloud
 //! of points in the shape of themselves. Threshold is where "bright" starts.
 //!
-//! **The acceptance is rejection sampling**, exactly as Scatter's is (K-599):
+//! **The acceptance is rejection sampling**, exactly as Scatter's is:
 //! candidate *i* falls at a place its own seeded dice chose, and stands if the
 //! field under it beats a second die. Where the field is 1 every candidate
 //! stands; where it is a half, half of them do; where it is nothing, none. That
@@ -21,8 +21,8 @@
 //! and full white the ceiling, so the field is a proper chance again.
 //!
 //! **Its stream cannot be sampled by a driver or by a stack consumer**, which
-//! is points-stream.md §2.2's recorded constraint answered the same way K-599
-//! answered it for Scatter: the stream is a function of a picture, and at
+//! is points-stream.md §2.2's recorded constraint answered the same way
+//! Scatter answers it: the stream is a function of a picture, and at
 //! resolve time — when the driver walk runs, and when the draw builder fills a
 //! consumer's carriage — no picture exists. Both read the documented empty
 //! stream rather than a guess.
@@ -36,7 +36,7 @@ use crate::fx::{
 use lumit_fx_macros::Effect;
 
 /// The declared **data** output — the same port Particulate, Grid and Scatter
-/// declare (K-472, K-492), so a wire does not know which producer it came from.
+/// declare, so a wire does not know which producer it came from.
 const POINTS_OUT: &[Port] = &[Port::new("points", "Points", PortType::Points)];
 
 const fn group(label: &'static str, params: &'static [&'static str]) -> ParamGroup {
@@ -79,14 +79,14 @@ mod attr {
     cost = Moderate,
     roi = FullFrame,
     premultiplied = true,
-    // Not seeded, for Scatter's reason (K-599): `seeded` says the pixels are a
+    // Not seeded, for Scatter's reason: `seeded` says the pixels are a
     // function of *time* under constant parameters. These are a function of a
     // picture, which the frame key already covers.
     seeded = false,
     groups = EMIT_FROM_IMAGE_GROUPS,
 )]
 pub struct EmitFromImage {
-    /// The layer whose brightness the points land in (K-123, K-142). **Unset
+    /// The layer whose brightness the points land in. **Unset
     /// reads this effect's own input picture**, which is the documented
     /// default and the same reading an unset Matte gives Scatter.
     #[layer(label = "Source layer")]
@@ -138,7 +138,7 @@ pub struct EmitFromImage {
     #[colour(default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
     pub colour: [f32; 4],
 
-    /// **The budget dial** (K-475), as Scatter's is: the most **candidates**
+    /// **The budget dial**, as Scatter's is: the most **candidates**
     /// that may be thrown, and the peak scratch the governor grants against.
     /// What stands is a subset of that, so the cap is a ceiling on the work and
     /// not on the look. Not animatable — it is a capacity declaration.
@@ -168,10 +168,10 @@ pub struct EmitFromImage {
 }
 
 impl EmitFromImage {
-    /// The raster factor, for the two things the declaration cannot scale
-    /// (K-385): the composition's camera, and the **count** — Density is per
-    /// area of the composition, so it is measured against the comp's own size
-    /// and not against whatever raster is previewing.
+    /// The raster factor, for the two things the declaration cannot scale: the
+    /// composition's camera, and the **count** — Density is per area of the
+    /// composition, so it is measured against the comp's own size and not
+    /// against whatever raster is previewing.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
     /// This instance's raster factor, read back out of a resolved bag.
@@ -196,7 +196,7 @@ impl EmitFromImage {
     /// Every candidate, accepted or not — where each falls, and how it would be
     /// drawn.
     ///
-    /// **The candidate set is what the card is given** (K-599's shape): the
+    /// **The candidate set is what the card is given** (Scatter's shape): the
     /// rejection happens in the vertex stage, because that is the only place a
     /// host-built set can meet a picture that exists only on the card. The
     /// accepted subset — the *stream* — is [`stream`](Self::stream).
@@ -338,7 +338,7 @@ impl EffectDef for EmitFromImageDef {
         &<EmitFromImage as EffectMetadata>::SCHEMA
     }
 
-    /// The picture *and* the data (K-472), exactly as the other three producers
+    /// The picture *and* the data, exactly as the other three producers
     /// declare it — and see this file's header on why a **driver** and a stack
     /// consumer may not sample it.
     fn signature(&self) -> Signature {
@@ -349,7 +349,7 @@ impl EffectDef for EmitFromImageDef {
     }
 
     /// The raster factor: the camera, and the count Density means per
-    /// composition area (K-385).
+    /// composition area.
     fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
         push(EmitFromImage::DERIVED_PX_SCALE, Value::Float(cx.px_scale));
     }

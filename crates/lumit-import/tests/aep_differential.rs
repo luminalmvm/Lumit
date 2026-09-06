@@ -1,6 +1,6 @@
 //! The differential test: parse `fixture.aep`, and check every structural
 //! field against what After Effects itself said about the same project
-//! (K-418, docs/impl/ae-import.md §7).
+//! (docs/impl/ae-import.md §7).
 //!
 //! In plain terms: `tools/ae-bridge/fixtures/` holds one real After Effects
 //! project **and** the folder of JSON that After Effects' own scripting wrote
@@ -82,10 +82,10 @@
 //!    animation. The followers themselves are recovered with their keys.
 //! 9. **The `CUSTOM_VALUE` blobs** — the DOM could not read them at all, so
 //!    there is no value to compare against. This route recovers the raw bytes,
-//!    which is the one place it beats the Bridge outright (K-412's stretch).
-//!    Curves' is decoded from those bytes and checked against After Effects'
-//!    own baked table, which is a proof of its own rather than a comparison
-//!    with the golden capture (K-639, and the Curves test below).
+//!    which is the one place it beats the Bridge outright. Curves' is decoded
+//!    from those bytes and checked against After Effects' own baked table,
+//!    which is a proof of its own rather than a comparison with the golden
+//!    capture (see the Curves test below).
 //! 10. **A layer's start on the comp's timeline** — every layer in the golden
 //!     project starts at zero, so `ldta`'s start offset is compared against
 //!     After Effects at that one value and the layer-local arithmetic the whole
@@ -673,12 +673,12 @@ fn every_stored_property_value_matches_after_effects() {
 
 /// **The blobs After Effects itself cannot read come through as bytes.**
 ///
-/// The one place the direct route beats the Bridge outright (K-410's honesty
-/// note, K-412's stretch goal): Curves' point list, Levels' histogram and
-/// Hue/Saturation's channel ranges are `CUSTOM_VALUE` properties the scripting
-/// DOM refuses, and they are sitting in the file in an `aRbs` block. They are
-/// carried undecoded — decoding is a separate job — but they are *carried*, so
-/// the day a decoder exists there is something for it to decode.
+/// The one place the direct route beats the Bridge outright: Curves' point
+/// list, Levels' histogram and Hue/Saturation's channel ranges are
+/// `CUSTOM_VALUE` properties the scripting DOM refuses, and they are sitting in
+/// the file in an `aRbs` block. They are carried undecoded — decoding is a
+/// separate job — but they are *carried*, so the day a decoder exists there is
+/// something for it to decode.
 #[test]
 fn the_custom_value_blobs_the_dom_cannot_read_arrive_as_raw_bytes() {
     let mut blobs = Vec::new();
@@ -729,10 +729,10 @@ fn the_custom_value_blobs_the_dom_cannot_read_arrive_as_raw_bytes() {
 /// **The Curves blob's layout holds against the file's own bytes, and the
 /// effect maps.**
 ///
-/// K-410 recorded Curves as the effect that could not come across: its five
-/// channels' control points are `CUSTOM_VALUE` data After Effects' own
-/// scripting refuses. The direct route has always recovered the bytes; this
-/// asserts what is *in* them, twice over and from two directions.
+/// Curves is the effect that could not come across: its five channels' control
+/// points are `CUSTOM_VALUE` data After Effects' own scripting refuses. The
+/// direct route has always recovered the bytes; this asserts what is *in*
+/// them, twice over and from two directions.
 ///
 /// **First, the layout, re-derived here rather than borrowed.** The offsets are
 /// written out longhand — four bytes of header, five 256-byte lookup tables,
@@ -852,7 +852,7 @@ fn the_curves_blob_decodes_to_the_curve_after_effects_baked() {
     assert_eq!(
         curves.effect.namespace,
         lumit_core::model::EffectNamespace::Builtin,
-        "not the placeholder K-410 left it as"
+        "not the placeholder it used to be"
     );
     for channel in ["master", "red", "green", "blue", "alpha"] {
         assert_eq!(
@@ -1103,7 +1103,7 @@ fn expressions_effects_masks_and_separated_dimensions_match() {
 /// **The document the parser produces counts the same as the document the
 /// bundle produces.**
 ///
-/// The end of the funnel (K-418): both front ends feed one `map_capture`, so
+/// The end of the funnel: both front ends feed one `map_capture`, so
 /// the only honest measure of the parse is the *engine-side* document beside
 /// the one After Effects' own export makes. Every count matches exactly; the
 /// import report is the one place they differ, and only because the Bridge
@@ -1163,7 +1163,7 @@ fn the_same_file_parses_to_the_same_capture_every_time() {
 /// shape.**
 ///
 /// Not a fidelity claim — phase A has no properties to map — but the point of
-/// K-418's one-funnel architecture: the capture the parser produces goes into
+/// the one-funnel architecture: the capture the parser produces goes into
 /// the *same* `map_capture` the Bridge's does, and comes out a document with
 /// the same comps and layers rather than falling over on a shape the mapper has
 /// never seen.
@@ -1289,7 +1289,7 @@ fn a_precomp_layer_reaches_its_comp_through_the_item_id() {
     }
 }
 
-/// **The real project, renamed `.zip`, still opens as a project (K-418).**
+/// **The real project, renamed `.zip`, still opens as a project.**
 ///
 /// The picker offers `.aep` and `.zip` in one filter, so `open_ae` routes on
 /// the file's first four bytes and never on its name. The lib's own unit test

@@ -1,4 +1,4 @@
-//! Light wrap (docs/08 §3.28, K-358): the oldest trick in compositing.
+//! Light wrap (docs/08 §3.28): the oldest trick in compositing.
 //!
 //! **In plain terms.** A keyed subject reads as pasted on because in a real
 //! camera the light behind it spills round its edges. This takes the referenced
@@ -7,7 +7,7 @@
 //! foreground's alpha, so the effect needs no mask of its own.
 //!
 //! The background is a whole picture, not a number, so it arrives beside the
-//! resolved op as this effect's aux slot (K-387): the render enumerates every
+//! resolved op as this effect's aux slot: the render enumerates every
 //! layer-input-taking effect in stack order and `run_ops` counts along the same
 //! list, which is why Light wrap and Depth of field share one counter. An unset,
 //! missing or cyclic Background leaves the slot empty and the effect is the
@@ -40,19 +40,19 @@ use lumit_fx_macros::Effect;
 )]
 pub struct LightWrap {
     /// The plate whose light spills round the foreground's edge. Unset until the
-    /// owner picks one — a labelled no-op. No `self_default` (K-288): a layer is
+    /// owner picks one — a labelled no-op. No `self_default`: a layer is
     /// never its own background, so starting pointed at itself would be a wrap of
     /// nothing.
     ///
     /// **Always `false` here, by design.** A Layer binding is decided by the
     /// caller — only the render knows which layer was actually rendered — so
     /// `resolve_into_arena` carries no `Value::Layer`, and the picture arrives at
-    /// the GPU pass as its aux slot instead (K-387). The row exists because the
+    /// the GPU pass as its aux slot instead. The row exists because the
     /// panel needs it.
     #[layer(self_default = false)]
     pub background: bool,
 
-    /// px@comp (K-260), and the same distance twice: how far the wrap reaches
+    /// px@comp, and the same distance twice: how far the wrap reaches
     /// inside the edge, and the radius the background is softened by. Declared
     /// `Px`, so the resolve step scales it by the §2.3 preview factor and
     /// [`ResolvedStack::rescale_spatial`](crate::fx::ResolvedStack::
@@ -61,7 +61,7 @@ pub struct LightWrap {
     #[slider(min = 0.0, max = 200.0, default = 0.0, hard_min = 0.0, unit = Px)]
     pub width: f32,
 
-    /// Gain on the spill before it is screened on. Open above (K-090) for a
+    /// Gain on the spill before it is screened on. Open above for a
     /// deliberately hot wrap.
     #[slider(min = 0.0, max = 3.0, default = 1.0, hard_min = 0.0, unit = Raw)]
     pub intensity: f32,

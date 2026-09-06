@@ -20,7 +20,7 @@ import 'timeline_snap.dart';
 import 'timeline_metrics_frb.dart';
 import 'timeline_lane_area_frb.dart';
 
-/// The block-selection box's metrics, from the approved Keys drawing (K-458).
+/// The block-selection box's metrics, from the approved Keys drawing.
 ///
 /// The box stands 4px inside its lane top and bottom — 14 of the drawing's
 /// 22px row — so a block that covers three rows reads as one region with the
@@ -33,13 +33,14 @@ const double _blockBadgeGap = 6;
 
 /// How wide a stretch handle's *hit target* is, against the 3px it draws.
 ///
-/// K-452's floor bends inside an 18px row but never to three pixels: a mark
-/// that thin is a thing to see, not a thing to aim at. Eleven is the width of
-/// the key it sits beside, so the two are grabbed with the same accuracy.
+/// The hit-target floor bends inside an 18px row but never to three pixels: a
+/// mark that thin is a thing to see, not a thing to aim at. Eleven is the
+/// width of the key it sits beside, so the two are grabbed with the same
+/// accuracy.
 const double _blockHandleGrab = 11;
 /// The **block-selection box**: the box round everything the marquee caught, a
 /// stretch handle at each end, and the badge saying how much it holds
-/// (K-458, the approved Keys drawing).
+/// (the approved Keys drawing).
 ///
 /// In plain terms: pick several keyframes and they stop being several things
 /// and become one. The box says where they reach, the badge counts them and
@@ -51,7 +52,7 @@ const double _blockHandleGrab = 11;
 ///
 /// **Shared, not Keys-only.** It is drawn by the lane area, which is the same
 /// widget in Layers mode and in Keys mode, so Layers gains the block tools by
-/// the same code rather than by a second copy of it (K-441, K-458).
+/// the same code rather than by a second copy of it.
 class KeyBlockOverlay extends StatefulWidget {
   /// The selected keys, top to bottom, from the area's one walk.
   final List<SelectedKey> places;
@@ -68,7 +69,7 @@ class KeyBlockOverlay extends StatefulWidget {
   final int fpsDen;
   final ProjectReference? project;
 
-  /// For a group header's rows (K-731), whose stack lives on the comp.
+  /// For a group header's rows, whose stack lives on the comp.
   final CompositionReference? comp;
   final ValueChanged<Offset> onEase;
   final VoidCallback onChanged;
@@ -152,7 +153,7 @@ class _KeyBlockOverlayState extends State<KeyBlockOverlay> {
           controlPressed: HardwareKeyboard.instance.isControlPressed);
 
   /// Commit a finished stretch: every touched row re-timed, the whole set one
-  /// undo step (K-458).
+  /// undo step.
   ///
   /// Grouped by row before anything is written, so a row's keys move together
   /// and the strictly-ascending check inside [moveLaneKeys] sees the finished
@@ -280,7 +281,7 @@ class _KeyBlockOverlayState extends State<KeyBlockOverlay> {
   }
 
   /// One end of the box: the drawing's 3x6 mark, inside a hit target wide
-  /// enough to aim at (K-452).
+  /// enough to aim at.
   ///
   /// [start] is the earlier end, and dragging it anchors the *later* one — the
   /// end you are not holding is the end that stays put, which is the whole of
@@ -401,7 +402,7 @@ class _KeyBlockOverlayState extends State<KeyBlockOverlay> {
       );
 
   /// The badge: how many keys the block holds and how many frames it spans,
-  /// and — pressed — the way into the Ease popover (K-458).
+  /// and — pressed — the way into the Ease popover.
   Widget _badge(
     LumitTheme t,
     KeyBlock block, {
@@ -490,14 +491,14 @@ class LaneKeysPainter extends CustomPainter {
   final double half;
 
   /// Each key's two halves — the shape of the interpolation coming in and the
-  /// one going out (K-457) — or null on a shut layer's summary row, where a
+  /// one going out — or null on a shut layer's summary row, where a
   /// plain diamond is all a mark that cannot be aimed at has to say.
   final List<(KeyShape, KeyShape)>? shapes;
 
   /// The key under the pointer, drawn **half way** from [colour] to [chosen]
   /// (§4.2): far enough to answer the hand, short of the mark a selected key
   /// carries, so a hovered key is never mistaken for a caught one. Null on a
-  /// summary row, whose marks are a statement rather than a target (K-441).
+  /// summary row, whose marks are a statement rather than a target.
   final int? hovered;
 
   /// The hovered index as a listenable, for a dense lane whose hover must not

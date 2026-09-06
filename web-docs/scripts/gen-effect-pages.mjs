@@ -49,7 +49,7 @@ const n = (v) => String(v);
 
 const CONTROL = {
   float: "Slider",
-  // A closed range (K-414). It reads as a Float here on purpose: the row is a
+  // A closed range. It reads as a Float here on purpose: the row is a
   // slider either way, and the difference - that there is nothing past the ends
   // to type - is already what the Range column says.
   slider: "Slider",
@@ -245,7 +245,7 @@ function panelNotes(effect) {
     out.push(`- **${label(e.param)}** is editable while ${when}.`);
   }
 
-  // What this effect's Matte row means (K-395). Every effect has the row, so
+  // What this effect's Matte row means. Every effect has the row, so
   // every page says what it does: the standard strength sentence unless the
   // effect claims the matte inside its own maths, in which case the sentence
   // comes from the effect's own declaration and a page cannot describe a matte

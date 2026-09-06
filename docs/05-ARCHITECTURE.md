@@ -1,8 +1,7 @@
 # Lumit system architecture
 
 **Status: canonical.** This document defines how Lumit is structured as a codebase and a
-running process. It implements decisions K-010 through K-019 in [02-DECISIONS.md](02-DECISIONS.md).
-Terminology follows [01-GLOSSARY.md](01-GLOSSARY.md) exactly. RFC-2119 keywords (MUST, SHOULD,
+running process. Terminology follows [01-GLOSSARY.md](01-GLOSSARY.md) exactly. RFC-2119 keywords (MUST, SHOULD,
 MAY) are binding. The companion rulebook is [14-ENGINEERING-RULES.md](14-ENGINEERING-RULES.md);
 runtime degradation policy lives in [13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md).
 
@@ -24,24 +23,24 @@ The crates that exist today (v1), then the ones the doc reserves for later:
 | `lumit-core` | The document model (project, comps, layers, clips, properties, keyframes, Retime segments, markers) **and the rational time types** (`SourceTime`/`ClipTime`/`LayerTime`/`CompTime`/`FrameRate`). Pure data + command application. No IO, no GPU, no threads. |
 | `lumit-eval` | Internal codename **Nova**. Content-hash frame keys, the evaluation-graph *compiler* (structure + identity folding + source dedup), cancellation epochs, and the pure playback-scheduler decision core. NB: the graph's **pixel pass is not here yet** — v1 renders through `lumit-render` (see below). |
 | `lumit-gpu` | The one wgpu device, WGSL effect kernels, the compositor, the colour engine, readback. |
-| `lumit-flow` | Optical flow (**DIS**, K-169) — a CPU oracle plus WGSL twin — for Retime flow interpolation and flow motion blur. |
+| `lumit-flow` | Optical flow (**DIS**) — a CPU oracle plus WGSL twin — for Retime flow interpolation and flow motion blur. |
 | `lumit-media` | rsmpeg demux/decode/encode and the frame index. |
 | `lumit-audio` | **Pulsar**: cpal output, the audio clock everything syncs to, multi-source mixing, live waveform, spectral-flux beat detection. |
 | `lumit-cache` | **Nebula**: the frame cache — RAM + disk tiers, content-hash keys, byte-budget eviction. |
 | `lumit-text` | Text rasterisation (v1: single run, embedded Inter). |
 | `lumit-project` | Serialisation: `.lum` container read/write, the operation journal, autosave. Spec: [10-FILE-FORMAT.md](10-FILE-FORMAT.md). |
-| `lumit-import` | After Effects import (K-410): reads a Lumit Bridge bundle's AE-shaped capture, maps it to a `Document` (keyframes, mattes, retime, the effect table, placeholders), and produces the import report. Spec: [11-AE-IMPORT.md](11-AE-IMPORT.md); how: [impl/ae-import.md](impl/ae-import.md). |
-| `lumit-track` | Camera and object tracking (K-415): the affine-KLT track substrate, two-view geometry with dynamic-track rejection, and the global zoom-aware camera solve. How: [impl/tracking.md](impl/tracking.md). |
-| `lumit-roto` | Rotoscoping arithmetic (K-705): stroke seeding, the geodesic distance transform that turns seeds into a matte, the guided-filter refine band, and the warp-and-seed step that carries a matte to the next frame. Pure CPU, no GPU and no `lumit-flow` dependency — flow arrives as plain slices. How: [impl/roto.md](impl/roto.md). |
-| `lumit-keymap` | The shortcut model: chords, contexts, actions, bindings, and clash resolution. No windowing code — the engine decides what a chord means (K-199). |
-| `lumit-colour` | OCIO colour management, hosted natively rather than linked (K-489, K-490): the transform op set, the tetrahedral and curve samplers, the deterministic bake to one artefact both the Viewer and the export sample, the `.spi1d`/`.spi3d`/CLF readers, the `config.ocio` grammar and its resolution. No GPU, no I/O beyond the files it is handed paths to. How: [impl/ocio.md](impl/ocio.md). |
-| `lumit-render` | **The pixel pass** the eval graph will eventually own (K-178): media probing abstraction, decode planning, the decode worker and its decoded-frame cache, draw-list building, the GPU compositor, effect dispatch, frame naming and the cache tiers, export, and the headless renderer both frontends drive frame by frame. An engine crate — it names no frontend. |
-| `lumit-bridge` | The Flutter/Rust seam (K-174): a cdylib whose `api` module is the whole surface the Flutter frontend calls through `flutter_rust_bridge`. A frontend leaf, not an engine crate; since K-178 it depends on `lumit-render` and on **no frontend**. Spec: [17-BRIDGE-CONTRACT.md](17-BRIDGE-CONTRACT.md). |
+| `lumit-import` | After Effects import: reads a Lumit Bridge bundle's AE-shaped capture, maps it to a `Document` (keyframes, mattes, retime, the effect table, placeholders), and produces the import report. Spec: [11-AE-IMPORT.md](11-AE-IMPORT.md); how: [impl/ae-import.md](impl/ae-import.md). |
+| `lumit-track` | Camera and object tracking: the affine-KLT track substrate, two-view geometry with dynamic-track rejection, and the global zoom-aware camera solve. How: [impl/tracking.md](impl/tracking.md). |
+| `lumit-roto` | Rotoscoping arithmetic: stroke seeding, the geodesic distance transform that turns seeds into a matte, the guided-filter refine band, and the warp-and-seed step that carries a matte to the next frame. Pure CPU, no GPU and no `lumit-flow` dependency — flow arrives as plain slices. How: [impl/roto.md](impl/roto.md). |
+| `lumit-keymap` | The shortcut model: chords, contexts, actions, bindings, and clash resolution. No windowing code — the engine decides what a chord means. |
+| `lumit-colour` | OCIO colour management, hosted natively rather than linked: the transform op set, the tetrahedral and curve samplers, the deterministic bake to one artefact both the Viewer and the export sample, the `.spi1d`/`.spi3d`/CLF readers, the `config.ocio` grammar and its resolution. No GPU, no I/O beyond the files it is handed paths to. How: [impl/ocio.md](impl/ocio.md). |
+| `lumit-render` | **The pixel pass** the eval graph will eventually own: media probing abstraction, decode planning, the decode worker and its decoded-frame cache, draw-list building, the GPU compositor, effect dispatch, frame naming and the cache tiers, export, and the headless renderer both frontends drive frame by frame. An engine crate — it names no frontend. |
+| `lumit-bridge` | The Flutter/Rust seam: a cdylib whose `api` module is the whole surface the Flutter frontend calls through `flutter_rust_bridge`. A frontend leaf, not an engine crate; it depends on `lumit-render` and on **no frontend**. Spec: [17-BRIDGE-CONTRACT.md](17-BRIDGE-CONTRACT.md). |
 
-The original egui shell (`lumit-ui`, launched by `lumit-app`) was deleted in K-182; git
-history (pre-K-182) is the parity reference for anything the Flutter frontend has not
-rebuilt yet. `lumit-keymap` went with it as unused at the time and came back unchanged in
-K-199, when the shortcut editor was actually built.
+The original egui shell (`lumit-ui`, launched by `lumit-app`) has been deleted; the git
+history before its removal is the parity reference for anything the Flutter frontend has
+not rebuilt yet. `lumit-keymap` went with it as unused at the time and came back unchanged
+when the shortcut editor was actually built.
 
 Reserved for later (no crate exists yet):
 
@@ -49,20 +48,20 @@ Reserved for later (no crate exists yet):
 |---|---|
 | `lumit-time` | The rational time types — **v1 keeps these inside `lumit-core`**, not a separate crate. |
 | `lumit-gpu` (extras) | Texture pool, device-lost recovery, optional CUDA interop — future additions to the existing crate. |
-| `lumit-media` (extras) | Persistent decoder instances, hardware decode and image sequences (`sequence.rs`, K-539) are built; proxy generation is future. |
+| `lumit-media` (extras) | Persistent decoder instances, hardware decode and image sequences (`sequence.rs`) are built; proxy generation is future. |
 | `lumit-cache` (extras) | The VRAM tier, `index.db`, and the resource governor — future. |
-| *(no crate)* | Expressions live in `lumit-core` (`src/expression/`), not a crate of their own: a driven property is resolved by the same code that resolves a keyframed one, so splitting them would put the seam through the middle of `Property`. Rhai, per K-305. |
+| *(no crate)* | Expressions live in `lumit-core` (`src/expression/`), not a crate of their own: a driven property is resolved by the same code that resolves a keyframed one, so splitting them would put the seam through the middle of `Property`. The expression engine is Rhai. |
 | `lumit-ofx` | OFX host: out-of-process plugin server, C ABI, shared-memory frame transport. |
-| `lumit-lfx` | LFX host (K-062). Shares the sandbox/IPC substrate with `lumit-ofx`. |
+| `lumit-lfx` | LFX host. Shares the sandbox/IPC substrate with `lumit-ofx`. |
 
 ### 1.1 Dependency direction rules
 
 - Dependencies point **downward only**: `lumit-bridge` → engine crates →
   `lumit-core` (which holds the rational time types). No engine crate may depend on
-  the bridge or on any UI crate. This is the K-012 escape hatch: the UI
-  layer MUST be replaceable without touching the engine - which is exactly what K-174 did,
-  swapping the egui shell for a Flutter frontend (the egui crates themselves were deleted
-  in K-182). The frontend is a leaf: `lumit-bridge` depends on `lumit-render` and no
+  the bridge or on any UI crate. This is the escape hatch: the UI layer MUST be
+  replaceable without touching the engine - which is exactly what happened when the
+  egui shell was swapped for a Flutter frontend (the egui crates themselves have since
+  been deleted). The frontend is a leaf: `lumit-bridge` depends on `lumit-render` and no
   engine crate depends on it, so the engine never knows a UI exists.
 - `lumit-core` MUST have no dependency on wgpu, rsmpeg, cpal, or QuickJS. The document model
   (and the time types folded into it) is testable on any machine with no GPU and no codecs.
@@ -88,11 +87,11 @@ Inside the main process, threads have fixed roles:
 
 | Thread | Role |
 |---|---|
-| **UI thread** | Frontend input events, document edits, painting. Per K-017 it MUST NOT evaluate any node, decode any frame, run any expression, or block on any render. It reads results from latest-wins mailboxes and cache-status snapshots. |
+| **UI thread** | Frontend input events, document edits, painting. It MUST NOT evaluate any node, decode any frame, run any expression, or block on any render. It reads results from latest-wins mailboxes and cache-status snapshots. |
 | **Worker pool** | Work-stealing pool (`cores − 3` threads, min 2, per the pinned sizing in [impl/playback-scheduler.md](impl/playback-scheduler.md) §2), running evaluation-graph jobs. Two priority classes: *interactive* (current Viewer frame, scrub, audio-adjacent) and *background* (cache warming, thumbnails, proxy checks). Interactive always pre-empts at job boundaries. **Built:** `lumit-eval::pool` — a dedicated rayon pool behind bounded two-class queues, tested; the shell's per-job `thread::spawn`s migrate onto it as the pixel pass is wired. |
 | **Decode threads** | One per active media stream, owned by `lumit-media`, feeding bounded frame queues. Decode never runs on pool workers: long-GOP seeks stall unpredictably and would starve the pool. |
 | **IO threads** | Disk-cache read/write, project autosave journal appends, proxy/export file IO. |
-| **Analysis thread** | Camera tracking (K-417): one at a time, spawned per analysis and named `lumit-track`, decoding a whole clip and solving it. Never a pool worker — for the decode rule's reason, since it *is* a decode that runs for minutes. Cancellable between frames and inside the solve; progress is a value the interface samples. **Built:** `lumit-render::track`. |
+| **Analysis thread** | Camera tracking: one at a time, spawned per analysis and named `lumit-track`, decoding a whole clip and solving it. Never a pool worker — for the decode rule's reason, since it *is* a decode that runs for minutes. Cancellable between frames and inside the solve; progress is a value the interface samples. **Built:** `lumit-render::track`. |
 | **Audio thread pair** | The cpal callback (real-time, lock-free ring-buffer reads only) plus an audio-render thread that evaluates the audio graph ahead of the callback, sample-accurately. |
 | **GPU-submit thread** | Sole owner of wgpu queue submission. Interactive work and background work submit through it in separate batches so a scrub pre-empts cache warming. |
 
@@ -141,18 +140,19 @@ for pixels.
   paste), and AE import. Nothing in the engine, cache, or file format identifies an entity by
   index or position.
 
-**Snapshot isolation** is what makes K-017 workable: the UI thread edits the document and
-publishes a new snapshot; renders in flight keep the snapshot (and compiled graph) they
-started with. Workers never observe a half-applied edit, so there is no locking between edit
-and render paths — publication is a single atomic pointer swap (`arc-swap`). The UI reads its
-own latest snapshot; workers read theirs; both are complete, consistent worlds.
+**Snapshot isolation** is what makes the UI-thread rule (§2) workable: the UI thread edits
+the document and publishes a new snapshot; renders in flight keep the snapshot (and compiled
+graph) they started with. Workers never observe a half-applied edit, so there is no locking
+between edit and render paths — publication is a single atomic pointer swap (`arc-swap`).
+The UI reads its own latest snapshot; workers read theirs; both are complete, consistent
+worlds.
 
 ---
 
 ## 4. Compiling the layer stack to the evaluation graph
 
-Per K-015: **layers in the UI, DAG underneath**. Users never see the evaluation graph —
-the Graph panel (K-471) draws the *document's* stack and wiring, never these compiled
+**Layers in the UI, DAG underneath.** Users never see the evaluation graph —
+the Graph panel draws the *document's* stack and wiring, never these compiled
 nodes. A layer's driver graph ([03-DATA-MODEL.md](03-DATA-MODEL.md) §8.1) does not lower
 to pixel nodes at all: driver evaluation is parameter evaluation, resolved before an
 effect's parameters pack, so the graph below keeps its shape.
@@ -189,7 +189,7 @@ On every document edit, `lumit-eval` incrementally recompiles the affected comp:
 ### 4.2 Content hashing
 
 Every node computes a content hash over its type, algorithm version, evaluated parameters,
-local time, quality and its inputs' hashes. Hashes key the cache (K-016) — never timeline
+local time, quality and its inputs' hashes. Hashes key the cache — never timeline
 position. The architectural consequence is that reuse needs no invalidation logic: identical
 subgraphs deduplicate and a static subgraph hashes identically every frame. Effects sampling
 other frames MUST declare their temporal dependencies in the metadata pass so the sampled
@@ -200,14 +200,14 @@ frames' hashes fold in. The formula and its normative consequences are
 
 ## 5. GPU architecture
 
-- **One wgpu device** for the whole application (K-011). By default `lumit-gpu` lets wgpu pick
+- **One wgpu device** for the whole application. By default `lumit-gpu` lets wgpu pick
   the backend (DX12 on Windows, Metal on macOS). The zero-copy Viewer features pin a backend
-  for shared-texture interop: `shared-texture` pins **DX12** on Windows (K-177), and
+  for shared-texture interop: `shared-texture` pins **DX12** on Windows, and
   `shared-texture-linux` pins **Vulkan** on Linux (DMA-BUF). CUDA interop (below) is an
   optional per-node accelerator, not a backend selector. `lumit-gpu` owns the device; nothing
   else holds raw device handles.
 - **All first-party effects are WGSL compute kernels.** The working format is **fp16
-  scene-linear premultiplied RGBA** (fp32 per-comp opt-in, K-026). Unpremultiply happens only
+  scene-linear premultiplied RGBA** (fp32 per-comp opt-in). Unpremultiply happens only
   transiently inside colour ops that must not tint transparent regions.
 - **Texture pool**: node outputs are pooled, DoD-sized textures with refcounted lifetimes
   derived from the compiled graph; the pool allocates through the resource governor's VRAM
@@ -221,13 +221,13 @@ frames' hashes fold in. The formula and its normative consequences are
   never the only copy of anything the user would miss. The TDR window, the macro-tiling
   obligation and the repeated-loss ladder are
   [13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md) §5.
-- **CUDA per K-014**: optional per-node accelerators (optical flow first) via
+- **CUDA**: optional per-node accelerators (optical flow first) via
   `wgpu as_hal` → `VK_KHR_external_memory/semaphore` → cudarc. CUDA is never a pipeline;
   **every CUDA-accelerated node MUST have a WGSL or CPU implementation** that produces
   acceptably close output, selected automatically when CUDA is absent or misbehaving.
 - **CPU fallback** is per-node, not per-app: the scheduler inserts readback → CPU node →
   upload bridges, batching adjacent CPU nodes to avoid bus ping-pong. Every WGSL effect ships
-  a CPU reference implementation (K-019), which is also its test oracle.
+  a CPU reference implementation, which is also its test oracle.
 
 ---
 
@@ -265,10 +265,10 @@ Architecture level (full protocol in [12-PLUGINS.md](12-PLUGINS.md)):
   temporal needs, and a thread-safety capability flag; non-reentrant plugins serialise on
   their own server without stalling the rest of the graph.
 
-Expressions (`lumit-core::expression`) are in-process and hermetic per K-305: no IO, no
+Expressions (`lumit-core::expression`) are in-process and hermetic: no IO, no
 wall clock, seeded random only. An expression can be wrong, never non-deterministic on a
 given machine, and never fatal to a frame. Two caveats the earlier wording did not carry:
-results are reproducible per machine rather than bit-identical across platforms (K-305),
+results are reproducible per machine rather than bit-identical across platforms,
 and there is no evaluation time budget yet, so a runaway expression can still stall a
 render thread ([12-PLUGINS.md](12-PLUGINS.md) §4.4).
 
@@ -280,8 +280,8 @@ Each failure below is somebody else's decade; each maps to a binding Lumit rule.
 
 | Anti-lesson | What happened | Lumit rule |
 |---|---|---|
-| **Olive's unshipped rewrite** | The 0.2 ground-up rewrite (nodes-as-document, float, OCIO, disk cache — the right shopping list) consumed six-plus years and never shipped stable; development halted, then restarted again in another stack. | Ship a usable editing loop early and grow the engine underneath it. No big-bang rewrites: the crate seams (§1) exist so any layer is replaced incrementally. Nodes stay internal; layers are the document (K-015, K-020). |
-| **Natron's CPU-only stall** | A credible Nuke-alike whose performance reputation died on CPU-only rendering, with GPU retrofit never achieved before the maintainers left. | GPU-first from day one: every first-party effect is WGSL compute (K-011); CPU is the fallback and oracle, never the plan (K-019). |
+| **Olive's unshipped rewrite** | The 0.2 ground-up rewrite (nodes-as-document, float, OCIO, disk cache — the right shopping list) consumed six-plus years and never shipped stable; development halted, then restarted again in another stack. | Ship a usable editing loop early and grow the engine underneath it. No big-bang rewrites: the crate seams (§1) exist so any layer is replaced incrementally. Nodes stay internal; layers are the document. |
+| **Natron's CPU-only stall** | A credible Nuke-alike whose performance reputation died on CPU-only rendering, with GPU retrofit never achieved before the maintainers left. | GPU-first from day one: every first-party effect is WGSL compute; CPU is the fallback and oracle, never the plan. |
 | **Natron's deadlocks** | Their own docs: render-path deadlocks were the hardest bugs they had. Fine-grained locking between edit, cache, and render paths. | No shared mutable state between edit and render: immutable snapshots, atomic publication, message passing, bounded queues, epoch cancellation (§2, §3). The lock-across-boundary rules in [14-ENGINEERING-RULES.md](14-ENGINEERING-RULES.md) §2 are load-bearing. |
 | **AE's thread-safety retrofit** | A 1993 single-threaded codebase took Adobe a multi-year campaign to make Multi-Frame Rendering possible, including retrofitting a plugin thread-safety flag. | Concurrency contracts are day-one architecture: what runs where is fixed (§2), and the effect/plugin API carries a thread-safety capability flag from its first version (§7). |
 | **MLT's GPU afterthought** | An elegant CPU frame pipeline where GPU residency was bolted on and stayed fragile, forcing CPU↔GPU ping-pong. | Texture residency is the default frame contract; CPU excursions are explicit bridge nodes inserted by the scheduler (§5). |

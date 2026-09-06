@@ -1,4 +1,4 @@
-// The shape tools' geometry (K-222), and the Pen's draft (K-223): what each
+// The shape tools' geometry, and the Pen's draft: what each
 // tool draws between two corners, and how a path grows point by point.
 //
 // Pure arithmetic in layer space, so it is checked by arithmetic. The one thing
@@ -157,7 +157,7 @@ void main() {
     });
   });
 
-  /// The Pen's path builder (K-223). This gesture was briefly on the polygon
+  /// The Pen's path builder. This gesture was briefly on the polygon
   /// tool; it is After Effects' pen, and it belongs to the Pen.
   group('The Pen\'s draft', () {
     test('a click adds a corner', () {
@@ -229,7 +229,7 @@ void main() {
     });
   });
 
-  /// **What the Viewer's feather guide is drawn from** (K-545): half the soft
+  /// **What the Viewer's feather guide is drawn from**: half the soft
   /// edge's width at each point, and nothing at all when there is no width to
   /// show or the width is keyframed.
   group('The feather guide', () {

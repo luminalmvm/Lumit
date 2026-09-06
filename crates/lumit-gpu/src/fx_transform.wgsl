@@ -1,4 +1,4 @@
-// Transform (docs/08-EFFECTS.md §3.5, K-090): the layer transform group as
+// Transform (docs/08-EFFECTS.md §3.5): the layer transform group as
 // a stack effect — its point is adjustment layers, where it transforms the
 // composite of everything below (the montage punch-in/whip gesture). Shake
 // (§3.4) dispatches through this same kernel. Mirrors
@@ -18,7 +18,7 @@ struct Params {
     opacity: f32,     // 0..1, multiplied into premultiplied RGBA
     mix_amt: f32,     // 0..1, blended against the unprocessed input
     edge: u32,        // 0 transparent, 1 repeat, 2 mirror
-    matte_on: f32,    // 1 = the matte scales the displacement (K-427, Shake only)
+    matte_on: f32,    // 1 = the matte scales the displacement (Shake only)
     _pad1: f32,
     _pad2: f32,
 };
@@ -28,14 +28,14 @@ struct Params {
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
 
-// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// The Matte (docs/08 §2.6), bound for every kernel on this layout and
 // read only under `matte_on` — bound to `src` when there is none, since a
 // texture binding cannot be left empty.
 @group(0) @binding(4) var matte: texture_2d<f32>;
 
 // This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
 // luma, clamped. The Channel pick and Invert already happened, once, at the
-// seam (fx_matte_prepare.wgsl, K-425).
+// seam (fx_matte_prepare.wgsl).
 fn matte_k(xy: vec2<i32>) -> f32 {
     let m = textureLoad(matte, xy, 0);
     return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
@@ -112,7 +112,7 @@ fn transform(@builtin(global_invocation_id) gid: vec3<u32>) {
     var qx = p.m.x * pos.x + p.m.y * pos.y + p.off.x;
     var qy = p.m.z * pos.x + p.m.w * pos.y + p.off.y;
     // The matte scales the displacement toward none, read at the destination
-    // pixel (K-427, == cpu::transform_matted). Only the Shake binds one.
+    // pixel (== cpu::transform_matted). Only the Shake binds one.
     if (p.matte_on != 0.0) {
         let k = matte_k(xy);
         qx = matte_toward(qx, pos.x, k);

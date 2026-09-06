@@ -82,8 +82,8 @@ pub const HUE_SATURATION_GROUPS: &[ParamGroup] = &[
     // commute with premultiplied alpha.
     premultiplied = false,
     groups = HUE_SATURATION_GROUPS,
-    // K-395: the matte scales the amount, inside the kernel (the owner's
-    // rule for mattes); the generic strength dissolve does not also run.
+    // The matte scales the amount, inside the kernel (the owner's rule for
+    // mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales every range's Hue, Saturation and Lightness toward 0 per \

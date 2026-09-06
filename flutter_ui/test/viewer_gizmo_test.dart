@@ -1,4 +1,4 @@
-// The Viewer gizmo's arithmetic (K-217): which layer a point is inside, what a
+// The Viewer gizmo's arithmetic: which layer a point is inside, what a
 // marquee catches, where the handles sit once a layer is turned, and what a
 // handle drag means.
 //
@@ -18,7 +18,7 @@ import 'package:uuid/uuid.dart';
 
 void main() {
   /// A layer of [size] sitting at [at] in a comp drawn 1:1 from the origin,
-  /// anchored on its own middle — the arrangement a placed clip gets (K-150).
+  /// anchored on its own middle — the arrangement a placed clip gets.
   LayerBox box({
     Size size = const Size(200, 100),
     Offset at = const Offset(300, 200),
@@ -193,7 +193,7 @@ void main() {
     });
   });
 
-  /// A mask's own points (K-224): with the Selection tool and the wireframes
+  /// A mask's own points: with the Selection tool and the wireframes
   /// on, every vertex of every mask is a thing you can aim at, sweep up and
   /// drag. The arithmetic that decides *which* is here.
   group('A mask\'s points', () {
@@ -254,9 +254,9 @@ void main() {
   });
 
   /// A shape layer's own art is editable on the picture by the same gesture
-  /// (K-237's "the same gesture over shape contents is the next piece"). The
-  /// arithmetic is shared with masks; what these pin is that a shape item's
-  /// points are found, named apart from a mask's, and swept up the same way.
+  /// a mask's points take. The arithmetic is shared with masks; what these
+  /// pin is that a shape item's points are found, named apart from a mask's,
+  /// and swept up the same way.
   group("A shape layer's points", () {
     test('sit where a mask\'s would, because the path type is the same', () {
       final b = box(shapeContents: [squareShape()]);
@@ -310,7 +310,7 @@ void main() {
       expect(pathPointsOf(box()), isEmpty);
     });
 
-    /// **The art's coordinates are not the layer's pixels** (K-308). The engine
+    /// **The art's coordinates are not the layer's pixels**. The engine
     /// draws a shape layer's picture as exactly its art's bounding box, so the
     /// layer's pixel (0, 0) is that box's corner. Drawing the points straight
     /// through the layer's map put every one of them a whole bounding box away
@@ -363,9 +363,9 @@ void main() {
           reason: 'open ground inside the layer is not a handle');
     });
 
-    /// The anchor became a handle with K-221, and it sits where a body drag
-    /// begins — so it has to be *aimed at* rather than fallen into, or every
-    /// drag of a layer would pan behind instead of moving it.
+    /// The anchor is a handle now, and it sits where a body drag begins — so
+    /// it has to be *aimed at* rather than fallen into, or every drag of a
+    /// layer would pan behind instead of moving it.
     test('the anchor is a handle, but only within a tight radius', () {
       final b = box();
       expect(b.handleHit(const Offset(300, 200)), GizmoHandle.anchor,
@@ -501,7 +501,7 @@ void main() {
     });
   });
 
-  /// **A turn in flight (K-230).** The picture is previewed at the new angle
+  /// **A turn in flight.** The picture is previewed at the new angle
   /// while the drag is happening, so the box over it has to be drawn at that
   /// angle too — the document still holds the old one, and drawing from the
   /// document is what made the wireframe sit still until the button came up.
@@ -535,7 +535,7 @@ void main() {
     });
   });
 
-  /// **A scale in flight (K-230), and a scale that flips.** The same rule the
+  /// **A scale in flight, and a scale that flips.** The same rule the
   /// turn follows: the picture is previewed at the value being dragged towards,
   /// so the box has to be drawn there too. And a handle dragged *past* the
   /// anchor turns the layer over — which the map used to make impossible by

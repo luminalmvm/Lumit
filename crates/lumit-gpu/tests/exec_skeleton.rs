@@ -304,7 +304,7 @@ impl KernelExecutor for GpuKernels {
 }
 
 /// The document's `BlendMode` → the compositor's `Blend`. The two enums carry
-/// the same variants by design (K-162), so this is a plain 1:1 map. It mirrors
+/// the same variants by design, so this is a plain 1:1 map. It mirrors
 /// the shipped renderer's `blend_of` (lumit-ui) — the production pixel-pass
 /// adapter will own the identical map, since the model↔GPU bridge is an
 /// app-layer concern (lumit-gpu itself stays model-agnostic).

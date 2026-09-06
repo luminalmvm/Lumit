@@ -1,7 +1,7 @@
 /* Match the marketing site's ramp so lumitlab.com and docs.lumitlab.com read as
    one product. Values come from docs/15-DESIGN.md via web/src/styles/global.css -
    the same three grounds, the same four text tiers, the same two hairlines, the
-   same spruce accent (K-511), and the same two typefaces.
+   same spruce accent, and the same two typefaces.
 
    One ramp, dark, as web/ has: the site does not ship a light theme, so
    Starlight's picker is overridden away (src/components/ThemeSelect.astro) and

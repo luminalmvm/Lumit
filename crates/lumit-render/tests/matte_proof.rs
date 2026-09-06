@@ -1,4 +1,4 @@
-//! Visual proof for the K-395 deeper-meaning matte overrides (docs/08 §2.6):
+//! Visual proof for the deeper-meaning matte overrides (docs/08 §2.6):
 //! render the same real frame with the same matte three ways per effect, so the
 //! claim "the override is visibly a different picture from the generic
 //! dissolve" can be judged by eye rather than asserted.

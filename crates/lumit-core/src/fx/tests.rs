@@ -121,7 +121,7 @@ fn resolve_migrated<T: EffectMetadata>(
 
 /// The resolved bag of a one-effect migrated stack, in push order — for the
 /// assertions that are about the *bag* rather than about the declared struct: a
-/// derived value (K-385), or how many entries an effect resolves to at all.
+/// derived value, or how many entries an effect resolves to at all.
 fn resolve_bag(
     effects: &[EffectInstance],
     lt: f64,
@@ -143,7 +143,7 @@ fn resolve_bag(
 
 /// What a Shake instance hands its dispatch at `lt`: the wobble (or the whole
 /// motion-blur set) the old `Resolved::Shake` variant carried, now the declared
-/// rows and the resolve-time derivation (K-385, K-388) read back through the
+/// rows and the resolve-time derivation read back through the
 /// effect's own `packed`.
 fn shake_packed(e: &EffectInstance, lt: f64, diag_px: f32) -> effects::shake::Shaken {
     shake_packed_scaled(e, lt, diag_px, 1.0)
@@ -171,7 +171,7 @@ fn shake_packed_scaled(
 /// the motion-blur cases, exactly `mb`) — the hand-built bag the CPU-reference
 /// tests need, since a *resolved* wobble is whatever the noise says.
 ///
-/// The trick is K-388's own arithmetic: `packed` builds each offset as
+/// The trick is the effect's own arithmetic: `packed` builds each offset as
 /// `amplitude · axis amount · noise`, so amplitudes of exactly 1 make the
 /// unit-free noise vector *be* the wobble, and `zoom = 1 + z · noise` makes the
 /// z component `zoom - 1` (an exact f32 subtraction near 1, so it round-trips).
@@ -211,7 +211,7 @@ fn shake_stack(
 
 /// What a Flash instance hands its kernel at `lt`: the `(strength, colour, mix)`
 /// the old `Resolved::Flash` variant carried, now the resolve-time derivation
-/// (K-385) read back through the effect's own `packed`.
+/// read back through the effect's own `packed`.
 fn flash_packed(e: &EffectInstance, lt: f64, markers: &MarkerContext) -> (f32, [f32; 4], f32) {
     let bag = resolve_bag(std::slice::from_ref(e), lt, 1000.0, 1.0, markers);
     let p = Params::new(&bag);
@@ -222,7 +222,7 @@ fn flash_packed(e: &EffectInstance, lt: f64, markers: &MarkerContext) -> (f32, [
 /// [`LensFlareParams`](crate::fx::lens_flare::LensFlareParams) bundle the old
 /// `Resolved::LensFlare` variant carried, read back out of the resolved arena
 /// through the effect's own `packed` — Lights mode's sources included, since they
-/// are a resolve-time derivation (K-360, K-385) rather than a row.
+/// are a resolve-time derivation rather than a row.
 fn flare_packed(ops: &super::ResolvedStack) -> crate::fx::lens_flare::LensFlareParams {
     let fx = ops.get(0).expect("the flare op");
     let (lights, count) = effects::lens_flare::LensFlare::lights_of(fx.params);
@@ -231,7 +231,7 @@ fn flare_packed(ops: &super::ResolvedStack) -> crate::fx::lens_flare::LensFlareP
 
 /// What a Scanlines instance hands its kernel: the fields the old
 /// `Resolved::Scanlines` variant carried, with the folded intensity and the roll
-/// offset coming out of the resolve-time derivation (K-385).
+/// offset coming out of the resolve-time derivation.
 fn scanlines_packed(
     e: &EffectInstance,
     lt: f64,
@@ -252,9 +252,9 @@ fn scanlines_packed(
 
 /// What a Depth of field instance hands its kernel: the [`cpu::DofParams`] the
 /// old `Resolved::Dof` variant carried, with the floored blade count coming out
-/// of the resolve-time derivation (K-385) and `depth_bound` — the fact a Layer
+/// of the resolve-time derivation and `depth_bound` — the fact a Layer
 /// row cannot put in the bag — supplied by the caller, as the render supplies it
-/// from the aux slot (K-387).
+/// from the aux slot.
 fn dof_packed(e: &EffectInstance, px_scale: f32, depth_bound: bool) -> cpu::DofParams {
     let bag = resolve_bag(
         std::slice::from_ref(e),
@@ -269,7 +269,7 @@ fn dof_packed(e: &EffectInstance, px_scale: f32, depth_bound: bool) -> cpu::DofP
 
 /// What a Datamosh instance hands its kernel at `lt`: the fields the old
 /// `Resolved::Datamosh` variant carried, with the reset ramp and the migrated
-/// reach coming out of the resolve-time derivation (K-385).
+/// reach coming out of the resolve-time derivation.
 fn datamosh_packed(e: &EffectInstance, lt: f64) -> (f32, f32, f32, i32, f32) {
     let bag = resolve_bag(
         std::slice::from_ref(e),
@@ -285,7 +285,7 @@ fn datamosh_packed(e: &EffectInstance, lt: f64) -> (f32, f32, f32, i32, f32) {
 
 /// What a Block glitch instance hands its kernel: the fields the old
 /// `Resolved::BlockGlitch` variant carried, with the discretised tick coming out
-/// of the resolve-time derivation (K-385).
+/// of the resolve-time derivation.
 #[allow(clippy::type_complexity)]
 fn block_glitch_packed(
     e: &EffectInstance,
@@ -332,11 +332,11 @@ fn posterize_held_time_snaps_to_the_grid() {
 
 // stack_posterize finds the effect, resolves its grid, and reports nothing for
 // a bypassed stack or a plain one — so a layer with no Posterize pays nothing.
-// The Scope choice is gone (K-166): the reach is implied by the carrier.
+// The Scope choice is gone: the reach is implied by the carrier.
 #[test]
 fn stack_posterize_detects_and_resolves() {
     let mut e = instantiate("posterize_time").unwrap();
-    // No scope parameter any more (K-166); default rate 12, phase 0.
+    // No scope parameter any more; default rate 12, phase 0.
     assert!(e.params.iter().all(|p| p.id != "scope"));
     let p = stack_posterize(std::slice::from_ref(&e), true, 0.0).unwrap();
     assert_eq!(p.rate, 12.0);
@@ -357,7 +357,7 @@ fn stack_posterize_detects_and_resolves() {
     assert!(stack_posterize(std::slice::from_ref(&blur), true, 0.0).is_none());
 }
 
-// this_layer_effect_time (docs/08 §3.25, K-166): any live Posterize holds this
+// this_layer_effect_time (docs/08 §3.25): any live Posterize holds this
 // layer's own stack on the coarse grid; a plain or bypassed stack leaves the
 // layer time untouched.
 #[test]
@@ -466,7 +466,7 @@ fn posterize_sample_times_snap_covered_layers_to_the_grid() {
     );
     assert!((st[2] - 0.3).abs() < 1e-9);
 
-    // K-166: a Posterize on a plain (footage) layer holds ONLY that layer's own
+    // A Posterize on a plain (footage) layer holds ONLY that layer's own
     // sampling — the reach is implied by the carrier, so a non-adjustment
     // carrier never holds the layers beneath it.
     let on_footage = vec![footage(vec![post.clone()]), footage(vec![])];
@@ -474,12 +474,138 @@ fn posterize_sample_times_snap_covered_layers_to_the_grid() {
     assert!((stf[0] - 0.3).abs() < 1e-9, "the posterised footage snaps");
     assert!(
         (stf[1] - 0.37).abs() < 1e-9,
-        "a layer below a plain-layer Posterize stays live (K-166)"
+        "a layer below a plain-layer Posterize stays live"
     );
 
     // No live Posterize → every layer stays at the live playhead.
     let st = posterize_sample_times(&[footage(vec![]), footage(vec![])], 0.37);
     assert!(st.iter().all(|&s| (s - 0.37).abs() < 1e-9));
+}
+
+// accumulation_shutter_offsets (docs/08 §3.26): the decode planner's per-layer
+// list of shutter moments — the piece that makes accumulation motion blur
+// sample *footage* between frames, not only transforms. An adjustment's
+// offsets reach every layer beneath it and none above; two stacked ones give
+// the layers under both the union; a bypassed, hidden or out-of-span
+// adjustment gives nothing.
+#[test]
+fn accumulation_shutter_offsets_cover_the_layers_beneath() {
+    use crate::model::{LayerKind, Switches, TransformGroup};
+    use crate::time::{CompTime, Rational};
+    let secs = |n: i64, d: i64| CompTime(Rational::new(n, d).unwrap());
+    let layer = |kind: LayerKind, effects: Vec<EffectInstance>| Layer {
+        graph: Default::default(),
+        markers: Vec::new(),
+        id: uuid::Uuid::now_v7(),
+        name: "l".into(),
+        kind,
+        in_point: secs(0, 1),
+        out_point: secs(10, 1),
+        start_offset: secs(0, 1),
+        transform: TransformGroup::default(),
+        matte: None,
+        parent: None,
+        label: 0,
+        volume_db: crate::anim::Property::zero(),
+        pan: crate::anim::Property::zero(),
+        audio_only: false,
+        adjustment: false,
+        retime: None,
+        interpolation: Default::default(),
+        parked_flow: None,
+        blend: Default::default(),
+        masks: Vec::new(),
+        paint: Vec::new(),
+        puppet: None,
+        effects,
+        styles: Vec::new(),
+        switches: Switches::default(),
+        extra: serde_json::Map::new(),
+    };
+    let footage = || {
+        layer(
+            LayerKind::Solid {
+                def: uuid::Uuid::now_v7(),
+            },
+            vec![],
+        )
+    };
+    let mb = |samples: f64| {
+        let mut e = instantiate("accumulation_mb").unwrap();
+        for p in &mut e.params {
+            if p.id == "samples" {
+                p.value = EffectValue::Float(Property::fixed(samples));
+            }
+        }
+        e
+    };
+    let offsets_of = |samples: f64| {
+        stack_accumulation_mb(&[mb(samples)], true, 0.0)
+            .unwrap()
+            .sample_offsets()
+    };
+
+    // One adjustment over two layers: both beneath get its moments, the
+    // adjustment itself and a layer above get none.
+    let layers = vec![
+        footage(),
+        layer(LayerKind::Adjustment, vec![mb(4.0)]),
+        footage(),
+        footage(),
+    ];
+    let got = accumulation_shutter_offsets(&layers, 0.5);
+    assert!(got[0].is_empty(), "a layer above is not covered");
+    assert!(got[1].is_empty(), "the adjustment does not cover itself");
+    assert_eq!(got[2], offsets_of(4.0));
+    assert_eq!(got[3], offsets_of(4.0));
+
+    // Two stacked: the layer between gets the outer's moments, the layer
+    // under both gets the union, sorted, with nothing twice.
+    let layers = vec![
+        layer(LayerKind::Adjustment, vec![mb(4.0)]),
+        footage(),
+        layer(LayerKind::Adjustment, vec![mb(2.0)]),
+        footage(),
+    ];
+    let got = accumulation_shutter_offsets(&layers, 0.5);
+    assert_eq!(got[1], offsets_of(4.0));
+    let mut union = offsets_of(4.0);
+    union.extend(offsets_of(2.0));
+    union.sort_by(f64::total_cmp);
+    union.dedup_by(|a, b| a.to_bits() == b.to_bits());
+    assert_eq!(got[3], union);
+    assert!(
+        got[3].len() > got[1].len(),
+        "the inner adjustment adds its own moments"
+    );
+
+    // Hidden, out of span, or with effects bypassed: nothing reaches below.
+    let mut hidden = layer(LayerKind::Adjustment, vec![mb(4.0)]);
+    hidden.switches.visible = false;
+    let mut early = layer(LayerKind::Adjustment, vec![mb(4.0)]);
+    early.out_point = secs(1, 4);
+    let mut bypassed = layer(LayerKind::Adjustment, vec![mb(4.0)]);
+    bypassed.switches.fx = false;
+    for off in [hidden, early, bypassed] {
+        let got = accumulation_shutter_offsets(&[off, footage()], 0.5);
+        assert!(got[1].is_empty());
+    }
+    // A plain layer carrying the effect wants its own moments, for itself
+    // alone: it averages its own clip, and nothing beneath it is covered.
+    let got = accumulation_shutter_offsets(
+        &[
+            layer(
+                LayerKind::Solid {
+                    def: uuid::Uuid::now_v7(),
+                },
+                vec![mb(4.0)],
+            ),
+            footage(),
+        ],
+        0.5,
+    );
+    assert_eq!(got[0], offsets_of(4.0), "the carrier samples itself");
+    assert!(got[1].is_empty(), "a plain carrier covers nothing beneath");
 }
 
 // stack_accumulation_mb (docs/08 §3.26) finds the effect, resolves its shutter
@@ -551,7 +677,7 @@ fn posterize_resolves_to_no_op() {
 
 #[test]
 fn instantiate_carries_declared_defaults() {
-    // Gaussian blur (match_name "blur", K-137): Radius + Mix only, no Edges
+    // Gaussian blur (match_name "blur"): Radius + Mix only, no Edges
     // control (that stayed on Radial alone).
     let e = instantiate("blur").unwrap();
     assert_eq!(e.effect.match_name, "blur");
@@ -572,7 +698,7 @@ fn instantiate_carries_declared_defaults() {
 #[test]
 fn resolve_stack_evaluates_converts_and_skips_dead_effects() {
     let mut e = instantiate("blur").unwrap();
-    // 30 px@comp at a px_scale of 1 is 30 raster px (K-419).
+    // 30 px@comp at a px_scale of 1 is 30 raster px.
     let b = resolve_migrated::<effects::blur::Blur>(
         &[e.clone()],
         0.0,
@@ -700,7 +826,7 @@ fn resolve_stack_temporal_pins_non_sampling_effects_to_the_frame_time() {
 
 /// A neutral Depth of field bundle with the given per-side radii: every control
 /// the aperture and highlight groups added at the value that makes the kernel
-/// take its historical path (K-313). Spelled once here because a twenty-field
+/// take its historical path. Spelled once here because a twenty-field
 /// struct is not something to write out twice.
 fn neutral_dof(near_aperture: f32, far_aperture: f32, focus_point: [f32; 2]) -> cpu::DofParams {
     let (blade_normals, apothem2) = crate::fx::aperture_blades(6, 0.0);
@@ -755,7 +881,7 @@ fn dof_instantiates_unset_and_resolves_its_floats() {
     assert!(matches!(e.param("display"), Some(EffectValue::Choice(0))));
 
     // The bag carries only the scalars; the depth is threaded beside the op as
-    // its aux slot (K-387). The default Aperture master (8) is unity, so each
+    // its aux slot. The default Aperture master (8) is unity, so each
     // side resolves to its Near/Far radius (8) scaled by the §2.3 preview factor
     // (here 0.5 → 4 raster px). A `dof` always resolves to exactly one op, so it
     // stays 1:1 and in order with the depth-input list even when the depth
@@ -871,7 +997,7 @@ fn motion_blur_window_reaches_the_next_frame_and_wants_flow() {
 #[test]
 fn datamosh_window_reaches_the_prior_frame_and_wants_flow() {
     // Datamosh's window is {-1, 0}: the current frame and one behind,
-    // read statically off the schema (K-107 — no per-instance toggle,
+    // read statically off the schema (no per-instance toggle,
     // unlike the old combined Glitch's dynamic special case).
     let dm = instantiate("datamosh").unwrap();
     let one = std::slice::from_ref(&dm);
@@ -901,7 +1027,7 @@ fn datamosh_window_reaches_the_prior_frame_and_wants_flow() {
 
 #[test]
 fn motion_blur_and_datamosh_together_ask_for_both_measurements() {
-    // K-544: a layer used to carry one flow field and the first consumer in
+    // A layer used to carry one flow field and the first consumer in
     // stack order took it, leaving the other silently doing nothing. The two
     // want opposite measurements — forward to the next frame, back to the
     // previous — so the stack asks for both, and stack order does not decide
@@ -953,7 +1079,7 @@ fn datamosh_instantiates_and_resolves() {
 
 #[test]
 fn datamosh_intensity_ceiling_is_open_and_displacement_migrates() {
-    // FX-14/K-148/K-161: the Intensity hard cap is lifted (K-135), so a typed
+    // FX-14: the Intensity hard cap is lifted, so a typed
     // value above 1 resolves through for a punchier tear; Displacement is
     // clamped at 1 below and open above.
     let mut e = instantiate("datamosh").unwrap();
@@ -967,7 +1093,7 @@ fn datamosh_intensity_ceiling_is_open_and_displacement_migrates() {
     }
     assert_eq!(datamosh_packed(&e, 0.0), (2.5, 9.0, 0.6, 9, 1.0));
 
-    // An old project (K-148) carries `streak_length`, not `displacement`: the
+    // An old project carries `streak_length`, not `displacement`: the
     // resolve reads it as the reach fallback, so the loaded look is unchanged.
     let mut legacy = instantiate("datamosh").unwrap();
     for p in &mut legacy.params {
@@ -988,7 +1114,7 @@ fn datamosh_reach(e: &EffectInstance, lt: f64) -> (f32, f32) {
 
 #[test]
 fn datamosh_reset_interval_ramps_the_melt() {
-    // K-164: a non-zero Reset interval ramps the melt from a clean frame just
+    // A non-zero Reset interval ramps the melt from a clean frame just
     // after each reset up to full by the next — a pure function of layer time.
     let mut e = instantiate("datamosh").unwrap();
     for p in &mut e.params {
@@ -1095,7 +1221,7 @@ fn resolve_motion_blur_converts_shutter_and_rounds_samples() {
     .packed();
     assert_eq!(view, MbView::Confidence);
     assert_eq!(quality, MbQuality::Normal);
-    // The Quality row resolves the reconstruction tier (K-390); an index no
+    // The Quality row resolves the reconstruction tier; an index no
     // menu can produce falls back to Normal, never to the expensive tier.
     for (stored, want) in [
         (1u32, MbQuality::High),
@@ -1209,7 +1335,7 @@ fn cpu_motion_blur_still_and_zero_shutter_are_passthrough() {
     );
 }
 
-/// The centrepiece of the K-390 reconstruction (docs/impl/optical-flow.md §4.5
+/// The centrepiece of the current reconstruction (docs/impl/optical-flow.md §4.5
 /// item 3), and a straight reversal of v1: **an unconfident pixel inside moving
 /// footage must still be blurred.** v1 scaled the streak by confidence, so a
 /// pixel the flow could not vouch for collapsed to no blur at all and read as a
@@ -1500,7 +1626,7 @@ fn cpu_datamosh_full_intensity_reads_the_shifted_previous_frame() {
 #[test]
 fn cpu_datamosh_displacement_scales_the_flow_reach() {
     // A single bright pixel at (6, 4). A flow of u = 1 reaches it only when
-    // Displacement doubles the one-step reach to 2 (K-161): the walk then
+    // Displacement doubles the one-step reach to 2: the walk then
     // predicts two frames of motion from one frame's flow.
     let (w, h) = (9u32, 9u32);
     let n = (w * h) as usize;
@@ -1526,7 +1652,7 @@ fn cpu_datamosh_bloom_accumulates_the_far_trail() {
     // A constant rightward flow walks the streamline across four columns; a
     // bright pixel sits at the far end. Bloom 0 keeps only the nearest step
     // (missing it); Bloom 1 averages the whole walk (pulling it in). The dial
-    // is monotone between (K-161).
+    // is monotone between.
     let (w, h) = (12u32, 9u32);
     let n = (w * h) as usize;
     let current = vec![0.0f32; n * 4]; // black
@@ -1550,12 +1676,12 @@ fn cpu_datamosh_bloom_accumulates_the_far_trail() {
 
 #[test]
 fn echo_defaults_to_screen_caps_at_16_and_migrates_legacy_modes() {
-    // FX-17/K-149: the default blend mode is Screen (index 3), Echoes clamps
+    // FX-17: the default blend mode is Screen (index 3), Echoes clamps
     // to the raised 16-frame window, and every stored mode index survives the
     // trip so old projects load unchanged.
     //
     // The clamps read here now live in `Echo::packed` rather than in a resolve
-    // arm (K-387) — the bag carries the authored number and the effect converts
+    // arm — the bag carries the authored number and the effect converts
     // it, which is the shape every migrated effect has. The numbers pinned are
     // the ones the old arm produced.
     let e = instantiate("echo").unwrap();
@@ -1997,14 +2123,14 @@ fn rgb_split_wavelength_bool_selects_the_variant() {
 }
 
 /// The default channel tints — red / green / blue — that reproduce the
-/// classic R-outward / B-inward / G-anchor split (P2/K-143).
+/// classic R-outward / B-inward / G-anchor split (P2).
 const RGB_TINTS: [[f32; 3]; 3] = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
 
 #[test]
 fn chromatic_aberration_instantiates_and_resolves() {
     let e = instantiate("chromatic_aberration").unwrap();
     assert_eq!(e.float_at("amount", 0.0), Some(4.0));
-    // The three channel colours default to red / green / blue (P2/K-143).
+    // The three channel colours default to red / green / blue (P2).
     assert_eq!(
         e.colour_at("channel_colour_1", 0.0),
         Some([1.0, 0.0, 0.0, 1.0])
@@ -2062,7 +2188,7 @@ fn chromatic_aberration_amount_scales_with_the_preview_factor() {
 
 #[test]
 fn chromatic_aberration_wavelength_reuses_the_spectral_split() {
-    // Wavelength on (K-144): the effect reuses RGB split's spectral machinery
+    // Wavelength on: the effect reuses RGB split's spectral machinery
     // as a radial spectral split, carrying the Samples count.
     let mut e = instantiate("chromatic_aberration").unwrap();
     for p in &mut e.params {
@@ -2083,7 +2209,7 @@ fn chromatic_aberration_wavelength_reuses_the_spectral_split() {
     );
 }
 
-/// K-167: with the classic tints normalised per channel, a UNIFORM image passes
+/// With the classic tints normalised per channel, a UNIFORM image passes
 /// through the classic split unchanged whatever colours the picker holds — the
 /// picker tints only the misaligned fringes, never the whole picture (the
 /// owner's "only affect the parts that aren't aligned").
@@ -2111,7 +2237,7 @@ fn normalised_tints_leave_a_uniform_image_unchanged() {
 
 #[test]
 fn wavelength_mode_honours_the_channel_picker() {
-    // A1/K-163: the three-colour picker now drives the Wavelength dispersion,
+    // A1: the three-colour picker now drives the Wavelength dispersion,
     // so a custom set of colours arrives in the resolved SpectralSplit.
     let mut e = instantiate("rgb_split").unwrap();
     for p in &mut e.params {
@@ -2153,7 +2279,7 @@ fn wavelength_mode_honours_the_channel_picker() {
 
 #[test]
 fn chromatic_aberration_custom_channel_colours_resolve_as_tints() {
-    // The three-colour picker (P2/K-143): custom channel colours arrive as the
+    // The three-colour picker (P2): custom channel colours arrive as the
     // radial taps' tints. A legacy instance (no colour params) falls back to
     // red / green / blue.
     let mut e = instantiate("chromatic_aberration").unwrap();
@@ -2171,7 +2297,7 @@ fn chromatic_aberration_custom_channel_colours_resolve_as_tints() {
         chromatic_fringe(&e, 1.0),
         effects::chromatic_aberration::Fringe::Classic {
             amount_px: 4.0,
-            // Normalised per channel (K-167): r column 1 + 0.5 → 2/3, 1/3;
+            // Normalised per channel: r column 1 + 0.5 → 2/3, 1/3;
             // g column 0.25 alone → 1; b column 0.75 + 1 → 3/7, 4/7.
             tints: [
                 [1.0 / 1.5, 0.0, 0.0],
@@ -2245,7 +2371,7 @@ fn cpu_chromatic_aberration_shifts_channels_radially_and_keeps_alpha() {
 
 #[test]
 fn spectral_taps_span_the_offset_and_normalise() {
-    // The variable-sample tap builder (FX-9/K-144, picker-driven A1/K-163): for
+    // The variable-sample tap builder (FX-9, picker-driven A1): for
     // any count the taps span −1..+1 evenly, each colour column sums to 1
     // (uniform preservation), and the count is clamped to 3..=SPECTRAL_MAX_SAMPLES.
     let rgb = [[1.0f32, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
@@ -2293,7 +2419,7 @@ fn cpu_spectral_split_disperses_and_preserves_uniform() {
     let (w, h) = (17u32, 9u32);
     let at = |x: u32, y: u32| ((y * w + x) * 4) as usize;
 
-    // The default red/green/blue picker gradient (A1/K-163): red at the −1 end,
+    // The default red/green/blue picker gradient (A1): red at the −1 end,
     // green astride, blue at the +1 end — the same directional arrangement the
     // old physical basis had, so these assertions are unchanged.
     let rgb = [[1.0f32, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
@@ -2458,7 +2584,7 @@ fn saturation_instantiates_and_resolves_neutral() {
     );
     assert_eq!(v.packed(), (1.0, 1.0));
 
-    // K-135: the hard ceiling is open, so a heavy 400 % resolves to 4.0 —
+    // The hard ceiling is open, so a heavy 400 % resolves to 4.0 —
     // no clamp to 200 — and the schema declares the open range.
     let s = schema("saturation").unwrap();
     let sat = s.params.iter().find(|p| p.id == "saturation").unwrap();
@@ -2484,7 +2610,7 @@ fn saturation_instantiates_and_resolves_neutral() {
 #[test]
 fn vibrancy_instantiates_and_resolves_neutral() {
     let e = instantiate("vibrancy").unwrap();
-    // Default 0 = neutral (K-152): a fresh Vibrancy is the bit-exact identity.
+    // Default 0 = neutral: a fresh Vibrancy is the bit-exact identity.
     assert_eq!(e.float_at("amount", 0.0), Some(0.0));
     let v: effects::vibrancy::Vibrancy = resolve_migrated(
         std::slice::from_ref(&e),
@@ -2495,7 +2621,7 @@ fn vibrancy_instantiates_and_resolves_neutral() {
     );
     assert_eq!(v.packed(), (0.0, 1.0));
 
-    // K-135: the ceiling is open, so a heavy 250 % resolves to 2.5 — no clamp.
+    // The ceiling is open, so a heavy 250 % resolves to 2.5 — no clamp.
     let s = schema("vibrancy").unwrap();
     let amt = s.params.iter().find(|p| p.id == "amount").unwrap();
     assert!(matches!(
@@ -2566,7 +2692,7 @@ fn matte_key_instantiates_and_resolves_defaults() {
 
 #[test]
 fn matte_key_migrates_pre_k154_projects() {
-    // A project saved before K-154 stored only key / tolerance / softness /
+    // An older project stored only key / tolerance / softness /
     // spill / mix. It must still resolve (no crash): the Screen colour and Spill
     // carry over, tolerance/softness are ignored, and the new controls take
     // their Keylight defaults.
@@ -2638,7 +2764,7 @@ fn temperature_instantiates_resolves_and_warms_and_cools() {
         &MarkerContext::NONE,
     );
     assert_eq!(v.packed(), (1.0, 1.0, 1.0));
-    // K-135: the range widens to ±150 slider / ±200 hard, with the stronger
+    // The range widens to ±150 slider / ±200 hard, with the stronger
     // ±0.75·k gain. +100 packs to gains (1.75, 0.25): red boosted, blue
     // cut hard. −100 is the mirror (0.25, 1.75). The effect owns the gain
     // formula (`Temperature::gains`), so both render paths read one copy.
@@ -2787,7 +2913,7 @@ fn tint_instantiates_resolves_and_maps_luma() {
 fn hue_shift_is_neutral_at_zero_and_preserves_grey_and_luma() {
     let e = instantiate("hue_shift").unwrap();
     assert_eq!(e.float_at("angle", 0.0), Some(0.0));
-    // Preserve luminance is on by default (K-136).
+    // Preserve luminance is on by default.
     assert_eq!(
         e.param("preserve_luminance"),
         Some(&EffectValue::Bool(true))
@@ -2833,7 +2959,7 @@ fn hue_shift_is_neutral_at_zero_and_preserves_grey_and_luma() {
 
 #[test]
 fn hue_shift_preserve_luminance_toggle_picks_the_matrix_branch() {
-    // K-136: Preserve luminance off packs to the plain-RGB rotation
+    // Preserve luminance off packs to the plain-RGB rotation
     // (equal-weight spin about the grey axis); on keeps the Rec.709
     // constant-luminance one. The effect owns the branch (`HueShift::matrix`);
     // the kernel is matrix-general, so both modes share one pass.
@@ -2973,7 +3099,7 @@ fn contrast_answers_quadratically_to_its_slider() {
         .0
     };
 
-    // The ends are exactly where K-110 put them.
+    // The ends are exactly where they were.
     assert_eq!(k(0.0), 0.0, "0 % flattens to grey");
     assert_eq!(
         k(100.0),
@@ -2982,7 +3108,7 @@ fn contrast_answers_quadratically_to_its_slider() {
     );
     assert_eq!(k(200.0), 2.0, "200 % doubles");
 
-    // K-737: quadratic in the distance from neutral. One per cent moves a
+    // Quadratic in the distance from neutral. One per cent moves a
     // hundredth of what it used to, and the number that used to be 101 is 110 -
     // which is the whole of what the change was asked for.
     assert!(
@@ -3088,7 +3214,7 @@ fn vignette_instantiates_and_resolves() {
     };
     assert_eq!(packed(&e), (0.5, 0.75, 0.5, 1.0, 1.0, 1.0));
 
-    // K-135: Softness is open above, so 1.5 resolves un-clamped (Amount,
+    // Softness is open above, so 1.5 resolves un-clamped (Amount,
     // Radius and Roundness keep their 0..1 caps).
     let s = schema("vignette").unwrap();
     let soft = s.params.iter().find(|p| p.id == "softness").unwrap();
@@ -3137,7 +3263,7 @@ fn cpu_vignette_darkens_the_corners_and_is_neutral_at_zero_amount() {
     assert!(v[corner] < 0.05, "corner goes dark: {}", v[corner]);
     assert_eq!(v[corner + 3], 1.0, "alpha is never touched");
 
-    // K-135: Softness > 1 is a legal, wider feather (not clamped to 1). At
+    // Softness > 1 is a legal, wider feather (not clamped to 1). At
     // the same tight Radius, softness 1.5 spreads the falloff so the corner
     // is only partly darkened where the hard-edged case above was near
     // black, and every value stays finite and in gamut — no artefacts.
@@ -3208,7 +3334,7 @@ fn colour_quartet() -> Vec<f32> {
 fn cpu_colour_balance_stages_behave() {
     let img = colour_quartet();
 
-    // A neutral balance is the bit-exact identity (K-090 split: the
+    // A neutral balance is the bit-exact identity (the
     // whole effect short-circuits, no unpremultiply round trip).
     let mut n = img.clone();
     cpu::colour_balance(&mut n, [0.0; 3], [1.0; 3], [1.0; 3], 1.0);
@@ -3247,8 +3373,7 @@ fn cpu_colour_balance_stages_behave() {
 fn cpu_saturation_behaves() {
     let img = colour_quartet();
 
-    // Saturation 1 is the bit-exact identity (whole-effect
-    // short-circuit, K-090 split).
+    // Saturation 1 is the bit-exact identity (whole-effect short-circuit).
     let mut n = img.clone();
     cpu::saturate(&mut n, 1.0, 1.0);
     assert_eq!(n, img);
@@ -3292,7 +3417,7 @@ fn cpu_saturation_behaves() {
 fn cpu_vibrance_behaves() {
     let img = colour_quartet();
 
-    // Amount 0 is the bit-exact identity (whole-effect short-circuit, K-152).
+    // Amount 0 is the bit-exact identity (whole-effect short-circuit).
     let mut n = img.clone();
     cpu::vibrance(&mut n, 0.0, 1.0);
     assert_eq!(n, img);
@@ -3447,13 +3572,10 @@ fn cpu_matte_key_behaves() {
 
 #[test]
 fn blur_family_split_resolves_each_effect_and_loads_legacy_as_gaussian() {
-    // K-137: the old mode-driven blur is now three single-purpose effects.
+    // The old mode-driven blur is now three single-purpose effects.
     // Gaussian (match_name "blur") resolves at its Radius, fixed Repeat edge.
     let gaussian = instantiate("blur").unwrap();
-    assert!(
-        gaussian.param("mode").is_none(),
-        "the mode control is gone (K-137)"
-    );
+    assert!(gaussian.param("mode").is_none(), "the mode control is gone");
     let b = resolve_migrated::<effects::blur::Blur>(
         std::slice::from_ref(&gaussian),
         0.0,
@@ -3476,8 +3598,8 @@ fn blur_family_split_resolves_each_effect_and_loads_legacy_as_gaussian() {
     );
     assert_eq!(d.packed(), (200.0, 0.0, 1, 1.0));
 
-    // Radial blur reads Centre/Amount/Type/Edges: Centre is px@comp since
-    // K-558 and resolves like every other pixel row (px_scale 1 here), Amount
+    // Radial blur reads Centre/Amount/Type/Edges: Centre is px@comp and
+    // resolves like every other pixel row (px_scale 1 here), Amount
     // 150 px@comp = 150px, Type defaults to Spin, Edges to Repeat.
     let mut radial = instantiate("radial_blur").unwrap();
     for p in &mut radial.params {
@@ -3532,7 +3654,7 @@ fn blur_family_split_resolves_each_effect_and_loads_legacy_as_gaussian() {
 
     // A project saved with the old combined blur (a "blur" instance carrying
     // mode/length/angle/edge) loads as Gaussian at its Radius — the leftover
-    // params are simply ignored (K-137's "existing projects load as Gaussian").
+    // params are simply ignored — existing projects load as Gaussian.
     let mut legacy = instantiate("blur").unwrap();
     legacy.params.push(crate::model::EffectParam {
         id: "mode".into(),
@@ -3557,7 +3679,7 @@ fn blur_family_split_resolves_each_effect_and_loads_legacy_as_gaussian() {
 
 #[test]
 fn sharpen_simple_instantiates_and_resolves() {
-    // K-138: the plain 3×3 sharpen (match_name "sharpen_simple"), separate
+    // The plain 3×3 sharpen (match_name "sharpen_simple"), separate
     // from the Unsharp mask ("sharpen").
     let e = instantiate("sharpen_simple").unwrap();
     assert_eq!(e.effect.match_name, "sharpen_simple");
@@ -3670,7 +3792,7 @@ fn cpu_radial_blur_spins_and_zooms_from_centre() {
     let at = |x: u32, y: u32| ((y * w + x) * 4) as usize;
     let imp = at(12, 8);
     img[imp..imp + 4].copy_from_slice(&[1.0, 1.0, 1.0, 1.0]);
-    // px@comp, resolved onto this 17x17 raster (K-558): pixel 8's centre.
+    // px@comp, resolved onto this 17x17 raster: pixel 8's centre.
     let centre = [8.5f32, 8.5f32];
 
     // Amount 0 and mix 0 are both the exact identity, either type (the
@@ -3781,8 +3903,8 @@ fn transform_instantiates_and_resolves_with_the_preview_factor() {
 
 #[test]
 fn glow_instantiates_resolves_and_pins_the_one_sided_threshold() {
-    // The K-090 poster child: the Threshold hard range is clamped at
-    // zero below and unbounded above — HDR values glow harder.
+    // The Threshold hard range is clamped at zero below and unbounded
+    // above — HDR values glow harder.
     let s = schema("glow").unwrap();
     let threshold = s.params.iter().find(|p| p.id == "threshold").unwrap();
     assert!(matches!(
@@ -3794,7 +3916,7 @@ fn glow_instantiates_resolves_and_pins_the_one_sided_threshold() {
     ));
 
     let e = instantiate("glow").unwrap();
-    // K-135/FX-16: default threshold drops to 0.8, and Radius is now px@comp.
+    // FX-16: default threshold drops to 0.8, and Radius is now px@comp.
     assert_eq!(e.float_at("threshold", 0.0), Some(0.8));
     assert_eq!(e.float_at("knee", 0.0), Some(0.5));
     assert_eq!(e.float_at("radius", 0.0), Some(24.0));
@@ -3804,7 +3926,7 @@ fn glow_instantiates_resolves_and_pins_the_one_sided_threshold() {
     // (0.5) factor = 12 raster px; diag_px no longer feeds Radius.
     let g = resolve_migrated::<effects::glow::Glow>(&[e], 0.0, 1000.0, 0.5, &MarkerContext::NONE);
     assert_eq!(g.packed(), (12.0, 0.8, 0.5, 1.0, [1.0; 4], 1.0));
-    // The Radius schema is now open above (px@comp, K-135).
+    // The Radius schema is now open above (px@comp).
     let s = schema("glow").unwrap();
     let radius = s.params.iter().find(|p| p.id == "radius").unwrap();
     assert!(matches!(
@@ -4004,7 +4126,7 @@ fn shake_instantiates_with_a_per_instance_seed_and_resolves() {
     );
 }
 
-/// **Rotation frequency drives the twist and nothing else** (K-541).
+/// **Rotation frequency drives the twist and nothing else**.
 ///
 /// The twist was the one axis with an amount but no rate: x, y and z each
 /// multiplied the master Frequency, rotation read the noise at the master rate
@@ -4097,7 +4219,7 @@ fn cpu_shake_is_identity_at_zero_and_wobbles_through_the_affine() {
     assert_eq!(s, t);
     assert_ne!(s, img, "the wobble actually moves pixels");
 
-    // The Edges control governs the revealed border (P3, K-145). A big
+    // The Edges control governs the revealed border (P3). A big
     // offset drags an edge into view: Transparent leaves a fully clear
     // corner; Repeat and Mirror hold coverage there instead.
     let corner_alpha = |v: &[f32]| {
@@ -4161,7 +4283,7 @@ fn resolve_shake_motion_blur_samples_the_shutter_and_centres_on_the_frame() {
     use effects::shake::Shaken;
 
     // Off (the default) resolves to a single wobble — no sub-frame set, which
-    // is the *absence* of the derived vectors in the bag (K-388).
+    // is the *absence* of the derived vectors in the bag.
     let off = instantiate("shake").unwrap();
     assert!(
         matches!(shake_packed(&off, 0.4, 1000.0), Shaken::Plain { .. }),
@@ -4303,7 +4425,7 @@ fn edges_mode_codes_round_trip() {
 fn shake_migrates_old_zoom_pump_and_auto_scale_params() {
     // A project saved before FX-11 carries `zoom_pump` and `auto_scale`
     // instead of `z_amp` and `edge`. Resolve reads the old ids as
-    // fallbacks so the look migrates sensibly (K-146).
+    // fallbacks so the look migrates sensibly.
     let mut old = instantiate("shake").unwrap();
     // Rebuild the pre-FX-11 param set by id.
     old.params.retain(|p| {
@@ -4323,7 +4445,7 @@ fn shake_migrates_old_zoom_pump_and_auto_scale_params() {
         extra: Default::default(),
     });
 
-    // Both folds are resolve-time work (K-388): the old ids are not schema rows,
+    // Both folds are resolve-time work: the old ids are not schema rows,
     // so they cannot come out of the bag on their own.
     let effects::shake::Shaken::Plain { wobble, edge, .. } = shake_packed(&old, 0.4, 1000.0) else {
         panic!("a pre-FX-11 shake has no motion blur");
@@ -4348,7 +4470,7 @@ fn shake_migrates_old_zoom_pump_and_auto_scale_params() {
     assert_eq!(edge, 1, "Auto-scale on migrated to Repeat");
 }
 
-/// **The migration changed no maths** (K-388) — the claim the whole batch rests
+/// **The migration changed no maths** — the claim the whole batch rests
 /// on, stated as arithmetic rather than as prose.
 ///
 /// The old resolve arm built a [`ShakeWobble`] from the instance and called
@@ -4381,7 +4503,7 @@ fn shake_packs_the_wobble_the_old_arm_resolved() {
     let (lt, diag_px) = (0.4, 1000.0);
 
     // The old arm, transcribed: every read in f64, the amplitude already raster
-    // pixels at a px_scale of 1 (K-419), the sampler doing the rest.
+    // pixels at a px_scale of 1, the sampler doing the rest.
     let fl = |id: &str| e.float_at(id, lt);
     let wobble = ShakeWobble {
         seed: match e.param("seed") {
@@ -4429,15 +4551,15 @@ fn shake_packs_the_wobble_the_old_arm_resolved() {
     assert_eq!(packed, old(base), "the frame-time wobble");
 }
 
-/// **A shake reused at another raster wobbles by the right number of pixels**
-/// (K-266, K-386, K-388) — the unit flip under test.
+/// **A shake reused at another raster wobbles by the right number of pixels** —
+/// the unit flip under test.
 ///
 /// The old `rescale_px` arm scaled the *resolved offsets*: `(amp_px · x_amp ·
 /// noise) · f`, and every sub-frame's beside them. Declaring Amplitude
 /// `Px` scales the amplitude instead, one multiply earlier: `(amp_px · f) ·
 /// x_amp · noise`. The same product either way — but a different association, so
 /// the two can part company in the last bit or two of an f32. That is the
-/// accepted narrowing class K-388 names, which is why this asserts within an
+/// accepted narrowing the migration allows, which is why this asserts within an
 /// epsilon rather than bit-for-bit; a real regression here (a value that does
 /// not rescale at all, or rescales twice) is off by a factor of two, not by an
 /// ulp.
@@ -4537,16 +4659,16 @@ fn transform_inverse_is_exact_at_identity_and_none_at_zero_scale() {
     assert!(transform_inverse([0.0; 2], [0.0; 2], [1.0, 0.0], 0.0, NO_SKEW).is_none());
 }
 
-/// The Skew pair (K-666): the shear is After Effects' — between the scale and
+/// The Skew pair: the shear is After Effects' — between the scale and
 /// the rotation — a zero amount is the pre-skew road **to the bit** whatever
-/// the axis says (the K-258 gate: a stack saved before the pair existed
+/// the axis says (a stack saved before the pair existed
 /// backfills both at 0 and must render what it always did), and the shear
 /// preserves area, so a skewed frame is leaned rather than resized.
 #[test]
 fn transform_skew_leans_after_the_scale_and_is_free_at_zero() {
     let (a, p, s) = ([3.0, -2.0], [11.0, 5.0], [1.3f32, 0.7]);
 
-    // K-258. The axis is a dial with no neutral of its own, so the amount is
+    // The axis is a dial with no neutral of its own, so the amount is
     // the whole gate: at 0 the shear multiply is skipped entirely, and any
     // axis gives the identical bits.
     let plain = transform_inverse(a, p, s, 24.0, NO_SKEW).unwrap();
@@ -5015,7 +5137,7 @@ fn flash_mode_resolves_manual_trigger_strobe_and_legacy() {
     assert_eq!(flash_packed(&legacy, 1.0, &ctx), (0.4, [1.0; 4], 1.0));
 }
 
-/// The resolve-time hook (K-385) is opt-in: an effect that does not implement it
+/// The resolve-time hook is opt-in: an effect that does not implement it
 /// resolves to exactly its declared parameters and nothing more, and the one that
 /// does adds exactly its derived ids after them, in declaration order.
 #[test]
@@ -5091,7 +5213,7 @@ fn an_orchestration_only_effect_resolves_to_no_op_at_all() {
     );
 }
 
-/// A derived id shares the bag with the declared ones (K-385), so it is covered
+/// A derived id shares the bag with the declared ones, so it is covered
 /// by the same rule: two ids hashing alike would silently make two controls one.
 /// Checked on what actually resolves rather than on the schema alone, because
 /// that is where the two kinds of id meet.
@@ -5231,7 +5353,7 @@ fn scanlines_instantiates_and_resolves() {
     let e = instantiate("scanlines").unwrap();
     assert_eq!(e.float_at("intensity", 0.0), Some(0.35));
     assert_eq!(e.float_at("scanline_period", 0.0), Some(3.0));
-    // Darkness is gone (FX-13/K-147): Intensity is the single darken dial.
+    // Darkness is gone (FX-13): Intensity is the single darken dial.
     assert_eq!(e.float_at("scanline_darkness", 0.0), None);
     assert_eq!(e.float_at("scanline_roll", 0.0), Some(0.0));
     assert!(matches!(
@@ -5264,11 +5386,11 @@ fn scanlines_instantiates_and_resolves() {
 
 #[test]
 fn scanlines_migrates_old_darkness_into_intensity() {
-    // An old project (FX-13/K-147) carried a separate Darkness param
+    // An old project (FX-13) carried a separate Darkness param
     // (0..100). On load it folds into the single Intensity so the darken is
     // the old Intensity × Darkness product exactly.
     let mut e = instantiate("scanlines").unwrap();
-    // Restore the pre-K-147 shape: Intensity 0.5 plus a Darkness of 80%.
+    // Restore the old shape: Intensity 0.5 plus a Darkness of 80%.
     for p in &mut e.params {
         if p.id == "intensity" {
             p.value = EffectValue::Float(Property::fixed(0.5));
@@ -5280,7 +5402,7 @@ fn scanlines_migrates_old_darkness_into_intensity() {
         extra: serde_json::Map::new(),
     });
     // 0.5 × 0.80 = 0.40. The fold reads a parameter that is not a schema row at
-    // all, which is why it happens in the resolve-time hook (K-385) rather than
+    // all, which is why it happens in the resolve-time hook rather than
     // coming out of the bag with the declared ones.
     let intensity = scanlines_packed(&e, 0.0, 1000.0, 1.0).0;
     assert!(
@@ -5378,7 +5500,7 @@ fn cpu_scanlines_darken_a_periodic_band() {
 }
 
 // ---------------------------------------------------------------------------
-// Lens flare (docs/08 §3.27, docs/impl/lens-flare.md §8, K-256)
+// Lens flare (docs/08 §3.27, docs/impl/lens-flare.md §8)
 // ---------------------------------------------------------------------------
 
 // §8.1 — the in-house FFT: a forward-then-inverse round trip returns the
@@ -5421,7 +5543,7 @@ fn lens_flare_fft_round_trips_matches_dft_and_conserves_energy() {
 // §8.3 — optics units: the Cauchy fit reproduces n_d exactly and the Abbe
 // number within tolerance; refraction matches Snell; Fresnel at normal
 // incidence is the textbook ((n1-n2)/(n1+n2))²; the quarter-wave MgF₂
-// coating cuts the reflectance, and extra layers cut it further (K-261).
+// coating cuts the reflectance, and extra layers cut it further.
 #[test]
 fn lens_flare_optics_match_the_textbook() {
     use crate::fx::lens_flare::*;
@@ -5447,7 +5569,7 @@ fn lens_flare_optics_match_the_textbook() {
     let expect = ((1.0f32 - 1.5) / (1.0 + 1.5)).powi(2);
     assert!((r - expect).abs() < 1e-4, "{r} vs {expect}");
 
-    // Coatings, on ordinary crown glass (K-356). Note the glass: MgF₂ is
+    // Coatings, on ordinary crown glass. Note the glass: MgF₂ is
     // very nearly the IDEAL single layer for n ≈ 1.9, because 1.38² = 1.904,
     // so a stack comparison there measures a coincidence rather than a
     // coating. n = 1.5 is the honest case and the common one.
@@ -5501,8 +5623,8 @@ fn lens_flare_optics_match_the_textbook() {
     );
 }
 
-// §8.4 — the prescription library and pair ranking (K-261, curated to
-// twenty K-264): every bundled .lens file parses with a sane surface count,
+// §8.4 — the prescription library and pair ranking (curated to
+// twenty): every bundled .lens file parses with a sane surface count,
 // focal length and a stop surface; the bake's pair list is deterministic,
 // non-empty, and every pair joins two genuine glass interfaces.
 #[test]
@@ -5551,7 +5673,7 @@ fn lens_flare_library_parses_and_pairs_rank_deterministically() {
     let a = bake(&p);
     let b = bake(&p);
     assert_eq!(a.pairs, b.pairs);
-    // Bit-identical across runs INCLUDING the K-365 field slices, which are
+    // Bit-identical across runs INCLUDING the field slices, which are
     // baked in parallel: `collect` restores slice order, so the thread pool
     // cannot reach the pixels.
     assert_eq!(a.starburst, b.starburst);
@@ -5561,14 +5683,14 @@ fn lens_flare_library_parses_and_pairs_rank_deterministically() {
         "the sprite is the field slices concatenated, slice-major"
     );
     assert_eq!(a.energy_gain, b.energy_gain);
-    // The K-369 ring masks are baked in parallel the same way, and the slice
+    // The ring masks are baked in parallel the same way, and the slice
     // each path picks comes off the spreads — both must be bit-equal too, or
     // two identical projects would draw different ghost edges.
     assert!(!a.pairs.is_empty());
     for path in &a.pairs {
         assert!(path[0] < path[1]);
         assert!((path[1] as usize) < a.surfaces.len());
-        // Four-bounce paths (K-368) carry the same walk one leg further in:
+        // Four-bounce paths carry the same walk one leg further in:
         // the third bounce is past the second, the fourth before the third.
         if path[2] != NO_BOUNCE {
             assert!(path[0] < path[2] && path[3] < path[2]);
@@ -5580,7 +5702,7 @@ fn lens_flare_library_parses_and_pairs_rank_deterministically() {
     }
 }
 
-/// **An animated aperture reuses its bakes** (K-431): two f-stops inside one
+/// **An animated aperture reuses its bakes**: two f-stops inside one
 /// step key the same *and* bake bit-identically, while a step apart they key
 /// differently — and the frame's own stop scale stays continuous, so the
 /// ghosts still shrink smoothly as the iris closes.
@@ -5663,7 +5785,7 @@ fn lens_flare_bakes_are_shared_across_one_step_of_aperture() {
     );
 }
 
-/// **The auto-exposure gain belongs to the lens, not to the iris** (K-432):
+/// **The auto-exposure gain belongs to the lens, not to the iris**:
 /// the probe is shot at the prescription's native stop, so two working
 /// f-stops on one lens close the loop to bit-identically the same gain — and
 /// the frame that is stopped down is honestly dimmer for it, as a real lens
@@ -5708,7 +5830,7 @@ fn lens_flare_auto_exposure_reads_the_native_stop() {
     );
 }
 
-/// One splat through the full K-380 deposit — pyramid, then resolve — into a
+/// One splat through the full deposit — pyramid, then resolve — into a
 /// flat `w × h × 3` buffer, which is the shape every kernel test below reads.
 /// Splats small enough for level 0 land bit-exactly as they always did (the
 /// level-0 resolve is the identity); a splat past [`DEPOSIT_SPAN_PX`] takes
@@ -5730,8 +5852,8 @@ fn splat_flat(
     levels.resolve(out);
 }
 
-/// **A splat too big for full resolution keeps its flux and its place**
-/// (K-380). The pyramid is an optimisation: a coarse level's kernel is the
+/// **A splat too big for full resolution keeps its flux and its place**.
+/// The pyramid is an optimisation: a coarse level's kernel is the
 /// same kernel sampled at wider texels and read back through a bilinear
 /// upsample, so the deposited energy, its centre and its extent must all
 /// survive the trip — this is the test that fails if a level's offset,
@@ -5784,11 +5906,11 @@ fn lens_flare_a_large_splat_deposits_coarse_and_keeps_its_flux() {
     );
 }
 
-/// **The splat reconstruction is a partition of unity** (K-366, fixed K-373).
+/// **The splat reconstruction is a partition of unity**.
 ///
 /// A uniform sheet of rays on a regular grid, all with the same weight and the
 /// same footprint, must reconstruct a **flat** field — that is what "the ghost
-/// is smooth" means, and it is the property K-366 lacked. Its tent reached one
+/// is smooth" means, and it is the property the old tent lacked. It reached one
 /// half-axis while the rays sit a full step apart, so neighbouring tents met
 /// exactly where both had fallen to zero: a lattice of separate pyramids with
 /// a seam of zero along every cell boundary, which is a woven grid of dark
@@ -5860,8 +5982,8 @@ fn lens_flare_splats_reconstruct_a_flat_sheet_and_keep_their_flux() {
         100.0 * worst
     );
     // Said the other way round, because this is the number that was wrong: the
-    // peak-to-trough ripple across the sheet. K-366 reached zero at every cell
-    // boundary, which is 100%.
+    // peak-to-trough ripple across the sheet. The old tent reached zero at
+    // every cell boundary, which is 100%.
     let ripple = (ripple_max - ripple_min) / ripple_max.max(1e-9);
     assert!(
         ripple < 0.05,
@@ -5911,8 +6033,8 @@ fn lens_flare_splats_reconstruct_a_flat_sheet_and_keep_their_flux() {
     );
 }
 
-/// **The reconstruction must not print the ray grid on the picture** (K-366,
-/// K-373, K-376) — measured on a real frame, not a synthetic sheet.
+/// **The reconstruction must not print the ray grid on the picture** —
+/// measured on a real frame, not a synthetic sheet.
 ///
 /// `lens_flare_splats_reconstruct_a_flat_sheet_and_keep_their_flux` proves the
 /// kernel partitions unity on a *uniform* lattice, which is the case a tent
@@ -5927,9 +6049,9 @@ fn lens_flare_splats_reconstruct_a_flat_sheet_and_keep_their_flux() {
 ///
 /// | kernel | bright | dark |
 /// |---|---|---|
-/// | K-366, tent at half a step | 15.8% | — |
-/// | K-373, tent at a full step | 2.42% | 4.59% |
-/// | K-376, quadratic B-spline | **1.91%** | **3.81%** |
+/// | tent at half a step | 15.8% | — |
+/// | tent at a full step | 2.42% | 4.59% |
+/// | quadratic B-spline | **1.91%** | **3.81%** |
 ///
 /// The floor is not zero and must not be asserted to be: a flare genuinely has
 /// fine detail — iris rims, overlapping faint ghosts — and past about 3% in the
@@ -5983,7 +6105,7 @@ fn lens_flare_reconstruction_does_not_imprint_its_own_grid() {
         bright < 2.5,
         "the lit part of the frame is rippling at {bright:.2}% against the \
          1.91% the quadratic B-spline measures — the reconstruction has \
-         regressed towards printing its sampling grid (K-366 measured 15.8%)"
+         regressed towards printing its sampling grid (once measured at 15.8%)"
     );
     assert!(
         dark < 4.5,
@@ -5993,12 +6115,11 @@ fn lens_flare_reconstruction_does_not_imprint_its_own_grid() {
     );
 }
 
-/// **Ghost edges are Fresnel, and only their edges are** (K-369, re-derived
-/// K-370).
+/// **Ghost edges are Fresnel, and only their edges are**.
 ///
 /// The rim carries the knife-edge diffraction profile a real defocused
 /// aperture casts; the interior of a ghost is left exactly as flat as the
-/// plain iris mask. That second half is the regression: K-369's propagated
+/// plain iris mask. That second half is the regression: the earlier propagated
 /// masks ran at Fresnel numbers of 2 to 64, two to three orders below what a
 /// real ghost has, and at those the near field is a whole-aperture pattern —
 /// the bundled default measured 2.4× the flat mask's interior on the bottom
@@ -6064,7 +6185,7 @@ fn lens_flare_ghost_edges_ring_without_shading_their_interiors() {
 
     // **The interior is flat.** Along a radial line through the inner 60% of
     // the pupil, a ringed mask must not deviate from the plain one by more
-    // than a whisper — the check K-369 could not have passed.
+    // than a whisper — the check the earlier masks could not have passed.
     let f = ghost_fresnel_number(1.0, p.fstop);
     let grid = 2.0 / 63.0;
     let mut worst = 0.0_f32;
@@ -6128,8 +6249,8 @@ fn lens_flare_ghost_edges_ring_without_shading_their_interiors() {
     // effect and pretending otherwise would be the same lie in the other
     // direction — but its envelope decays as 2/(πv), so the outer tenth of
     // the radius must ripple several times harder than the inner half. This
-    // is the shape K-369's bottom rungs had exactly backwards: theirs peaked
-    // at the CENTRE.
+    // is the shape the earlier masks' bottom rungs had exactly backwards:
+    // theirs peaked at the CENTRE.
     let ripple = |lo: usize, hi: usize| {
         sharp[lo..hi]
             .iter()
@@ -6181,7 +6302,7 @@ fn lens_flare_ghost_edges_ring_without_shading_their_interiors() {
         .all(|&s| ghost_fresnel_number(s, baked.native_fstop) > 0.0));
 }
 
-/// **The element-coating rows name parameters that exist** (K-371).
+/// **The element-coating rows name parameters that exist**.
 ///
 /// Their visibility is resolved in the panel against a *sibling by id*, and a
 /// sibling that does not exist fails silently: the panel finds nothing, hides
@@ -6277,7 +6398,7 @@ fn lens_flare_element_rows_and_the_lens_pick_line_up() {
 }
 
 /// **A coating is per glass element, and different coatings make differently
-/// coloured ghosts** (K-371).
+/// coloured ghosts**.
 ///
 /// A real flare shows a blue ghost beside a purple one beside an amber one,
 /// because a lens's elements are not all coated alike and what a coated
@@ -6437,7 +6558,7 @@ fn lens_flare_coatings_are_per_element_and_colour_the_ghosts() {
     );
 }
 
-/// **Four-bounce ghosts** (K-368, entry C1): the path model walks, the
+/// **Four-bounce ghosts** (entry C1): the path model walks, the
 /// enumeration stays bounded, and old uncoated glass shows the doubled
 /// ghosts modern coatings suppress.
 #[test]
@@ -6588,8 +6709,8 @@ fn starburst_spikes(ring: &[f32]) -> usize {
         .count()
 }
 
-/// **The starburst still counts the blades** (K-256's physics, re-checked
-/// after the K-365 field slices): the sprite is the iris polygon's
+/// **The starburst still counts the blades**, re-checked after the field
+/// slices: the sprite is the iris polygon's
 /// Fraunhofer diffraction, and a polygon's spikes run perpendicular to its
 /// edges — so an EVEN blade count gives N spikes (opposite edges are
 /// parallel and share a spike) and an ODD one gives 2N. Slice 0 is the
@@ -6622,7 +6743,7 @@ fn starburst_slice_zero_counts_the_iris_blades() {
     }
 }
 
-/// **The cat's-eye is real** (K-365): at the sensor-corner field angle the
+/// **The cat's-eye is real**: at the sensor-corner field angle the
 /// front and rear mechanical stops clip the iris into a sliver, so the last
 /// field slice must differ from the on-axis one — and must still carry
 /// light, because a starburst that goes black in the corners is a worse
@@ -6665,7 +6786,7 @@ fn the_corner_field_slice_is_a_cats_eye_not_the_on_axis_sprite() {
     }
 }
 
-// The `lens_file` override (K-264): a custom .lens text replaces the
+// The `lens_file` override: a custom .lens text replaces the
 // picked lens entirely, its bake key never collides with the library's or
 // with a different file's, and an unparsable file degrades to the pick.
 #[test]
@@ -6698,7 +6819,7 @@ fn lens_flare_custom_lens_file_overrides_and_degrades() {
 }
 
 // Px-dimensioned resolved fields rescale when the stack runs on a raster
-// other than the one it resolved against (K-266) — the adjustment-layer
+// other than the one it resolved against — the adjustment-layer
 // preview bug: the flare's light hit the frame edge at 1500 of a 1920 comp
 // because the preview factor was applied to the raster and not the params.
 //
@@ -6772,8 +6893,8 @@ fn resolved_px_fields_rescale_for_a_different_raster() {
 
 // An anamorphic squeeze (or scale) below 1 asks the combine for flare
 // coordinates past the buffer. Up to the 2× padding cap the buffer now
-// renders wider and carries real flare there (K-267); past even the
-// padded extent there is still NO flare (K-266) — the clamp-addressed tap
+// renders wider and carries real flare there; past even the
+// padded extent there is still NO flare — the clamp-addressed tap
 // used to repeat the edge row outward as a smear.
 #[test]
 fn lens_flare_combine_does_not_repeat_the_flare_past_its_buffer() {
@@ -6797,7 +6918,7 @@ fn lens_flare_combine_does_not_repeat_the_flare_past_its_buffer() {
     let left_edge: f32 = (0..h).map(|y| out[((y * w) * 4) as usize]).sum();
     assert!(
         left_edge > 0.0,
-        "K-267: the padded buffer must reach the squeezed frame edge"
+        "the padded buffer must reach the squeezed frame edge"
     );
     // Squeeze 0.25 outruns even the 2× padding cap — and past the padded
     // buffer there must be nothing, never a repeated edge row.
@@ -6823,7 +6944,7 @@ fn lens_flare_combine_does_not_repeat_the_flare_past_its_buffer() {
     assert!(centre > 0.0, "the squeezed flare itself still lands");
 }
 
-// Area sources (K-267): a practical spanning many tiles weighs as its
+// Area sources: a practical spanning many tiles weighs as its
 // whole lit area — every gated tile's flux lands on its nearest anchor —
 // while a one-tile point source reads exactly as before (its own tile's
 // brightest pixel through the gate). This was the owner's white-circle
@@ -6849,7 +6970,7 @@ fn lens_flare_detects_area_sources_as_summed_flux() {
             }
         }
     }
-    // Threshold below the sources' luma: K-363's gate is "brighter than",
+    // Threshold below the sources' luma: the gate is "brighter than",
     // so a white (1.0) source at threshold 1.0 is at the line, not over it.
     let lights = detect_lights(&matte, w, h, 0.5, 0.25, true, [1.0, 1.0, 1.0], false);
     assert_eq!(lights.len(), 2, "one disc anchor, one dot anchor");
@@ -6939,7 +7060,7 @@ fn lens_flare_trace_lands_live_rays_with_sane_weights() {
     assert!(wide > 0);
     let _ = stopped; // the scaled spray always fits the scaled stop
 
-    // The iris mask (K-261): centre 1, far outside 0, deterministic, and a
+    // The iris mask: centre 1, far outside 0, deterministic, and a
     // hexagon carves more of the unit square away than the circle.
     assert_eq!(pupil_mask(0.0, 0.0, 6, 0.0, 0.0, 0.1), 1.0);
     assert_eq!(pupil_mask(2.0, 0.0, 6, 0.0, 0.0, 0.1), 0.0);
@@ -7015,7 +7136,7 @@ fn lens_flare_neutral_points_and_default_resolve() {
     );
     assert_eq!(ops.len(), 1, "expected one Lens flare op");
     let rp = flare_packed(&ops);
-    // px@comp defaults at the schema's nominal 1080p (K-260).
+    // px@comp defaults at the schema's nominal 1080p.
     assert!((rp.light[0] - 640.0).abs() < 1e-3);
     assert!((rp.light[1] - 360.0).abs() < 1e-3);
     assert_eq!(rp.intensity, 1.0);
@@ -7053,13 +7174,13 @@ fn lens_flare_cpu_reference_renders_energy_and_reacts_to_the_light() {
     assert_ne!(a, b, "the flare must follow the light");
 }
 
-// Forward migration (K-258): a built-in instance saved before its schema
+// Forward migration: a built-in instance saved before its schema
 // grew a parameter gains it at the default on load — the panel had been
 // drawing a dash and set_value refusing the id.
 #[test]
 fn lens_flare_backfill_restores_missing_params() {
     let mut inst = instantiate("lens_flare").unwrap();
-    // Simulate a pre-K-257 save: strip the params that pass added.
+    // Simulate an older save: strip the params that were added later.
     inst.params
         .retain(|p| !matches!(p.id.as_str(), "source_type" | "blend"));
     assert!(inst.params.iter().all(|p| p.id != "source_type"));
@@ -7078,7 +7199,7 @@ fn lens_flare_backfill_restores_missing_params() {
     assert_eq!(effects[0].params.len(), count);
 }
 
-// The Background → Blend migration (K-289, superseding K-258). A project
+// The Background → Blend migration. A project
 // saved with Transparent lands on Add — the same pixels it always rendered —
 // and one saved with Black lands on Normal, the flare on opaque black that
 // option existed to produce. The dead parameter goes, because the schema no
@@ -7112,9 +7233,9 @@ fn lens_flare_background_migrates_to_the_blend_menu() {
     }
 }
 
-// The share-of-the-frame → px@comp conversions (K-558) read old projects
-// forward, which is K-258's rule applied to a *unit* change rather than to a
-// missing row: what a saved file rendered, it still renders.
+// The share-of-the-frame → px@comp conversions read old projects
+// forward, which is the forward-migration rule applied to a *unit* change
+// rather than to a missing row: what a saved file rendered, it still renders.
 //
 // Radial blur's centre was a per cent of the frame, so 30 / 70 on a 1920x1080
 // comp is the pixel 576, 756 — and the same point either way, which is the
@@ -7202,7 +7323,7 @@ fn radial_blurs_percent_centre_converts_to_pixels_on_load() {
 }
 
 // Beam's Length was a per cent of the *run* between Start and End, so its
-// conversion (K-558) reads the instance's own points rather than the frame:
+// conversion reads the instance's own points rather than the frame:
 // 25 % of a 1560-pixel run is 390 pixels, and the beam that saved is the beam
 // that loads. The points are read at time zero — a keyframed pair means the
 // old percentage described a distance that moved, and no single pixel number
@@ -7233,7 +7354,7 @@ fn beams_percent_length_converts_against_its_own_run() {
 }
 
 // Card wipe's Transition width was a per cent of the frame measured along
-// whichever axis Flip order runs (K-558), so its conversion reads the
+// whichever axis Flip order runs, so its conversion reads the
 // instance's own order: 25 % is 480 pixels across a 1920 frame going left to
 // right, and 270 down a 1080 one going top to bottom.
 #[test]
@@ -7293,7 +7414,7 @@ fn card_wipes_width_is_a_band_across_the_frame() {
 }
 
 // A fresh Card wipe's band is half of the comp it landed on, not half of a
-// nominal 1080p frame (K-558).
+// nominal 1080p frame.
 #[test]
 fn a_fresh_card_wipe_bands_half_of_its_own_comp() {
     let inst = builtins::instantiate_for_raster("card_wipe", 3840.0, 2160.0).unwrap();
@@ -7303,7 +7424,7 @@ fn a_fresh_card_wipe_bands_half_of_its_own_comp() {
     assert!((p.value_at(0.0) - 1920.0).abs() < 1e-9);
 }
 
-// Tile's two sizes were per cents of the frame and are px@comp since K-558, so
+// Tile's two sizes were per cents of the frame and are px@comp now, so
 // a saved v1 instance converts each axis against its own extent: a 2x2 repeat
 // stamped over the whole frame is 960 x 540 out of 1920 x 1080. The centre was
 // pixels already and must not be touched twice.
@@ -7345,8 +7466,8 @@ fn tiles_percent_sizes_convert_axis_by_axis() {
     }
 }
 
-// Lens flare's Ghost softness was a per cent of the frame *diagonal* — K-419's
-// one surviving exception, closed by K-558 — so its conversion is the only one
+// Lens flare's Ghost softness was a per cent of the frame *diagonal* — the one
+// exception to the px@comp rule, now closed — so its conversion is the only one
 // in the sweep that reads a diagonal: 1 % of a 1080p frame's 2202.9 px is
 // 22.03 pixels of blur, and the flare that saved is the flare that loads.
 #[test]
@@ -7374,8 +7495,8 @@ fn lens_flares_percent_softness_converts_against_the_diagonal() {
 
 // And the arithmetic it now feeds: the radius is the number itself, over the
 // flare buffer's own divisor so Draft softens by the same distance as the tier
-// above it, capped where K-262 caps it. The declared default is under half a
-// pixel and rounds to no blur at all, which is the picture K-264 shipped.
+// above it, capped where the blur cap sits. The declared default is under half
+// a pixel and rounds to no blur at all, which is the picture that shipped.
 #[test]
 fn the_ghost_blur_radius_is_the_distance_it_is_given() {
     use crate::fx::lens_flare::{ghost_blur_radius, MAX_BLUR_RADIUS_PX};
@@ -7455,7 +7576,7 @@ fn beams_length_is_a_distance_back_from_the_head() {
 }
 
 // A fresh Radial blur spins about the middle of the comp it landed on, not
-// about the schema's nominal 1080p centre (K-558, the `instantiate_for_raster`
+// about the schema's nominal 1080p centre (the `instantiate_for_raster`
 // rule every other centre already follows).
 #[test]
 fn a_fresh_radial_blur_centres_on_its_own_comp() {
@@ -7468,7 +7589,7 @@ fn a_fresh_radial_blur_centres_on_its_own_comp() {
     assert!((read("centre_y") - 1080.0).abs() < 1e-9);
 }
 
-// "This layer" (K-288): a fresh Lens flare added to a layer points its Matte
+// "This layer": a fresh Lens flare added to a layer points its Matte
 // source at that layer, so switching Source to Matte flares the lights in
 // the picture the effect is already on — and on an adjustment layer, the
 // composite below. Plain `instantiate` (presets, tests) leaves it unset, the
@@ -7490,7 +7611,7 @@ fn lens_flare_matte_defaults_to_the_layer_it_is_added_to() {
     assert_eq!(dof.layer_ref("depth"), None);
 }
 
-// Blend (K-289, replacing K-258's Background pair): Normal shows the flare
+// Blend (replacing the old Background pair): Normal shows the flare
 // element alone on opaque black, Add is the historical behaviour bit for
 // bit, and every mode keeps the Intensity-0 passthrough exact.
 #[test]
@@ -7540,7 +7661,7 @@ fn lens_flare_blend_normal_is_the_element_on_opaque_black() {
 }
 
 // The default Blend is Add, and Add is exactly what the effect did before
-// the menu existed (K-289): `out = in + flare`, alpha saturating at 1. A
+// the menu existed: `out = in + flare`, alpha saturating at 1. A
 // regression here would silently move every flare anyone has already built.
 #[test]
 fn lens_flare_add_blend_is_the_historical_combine() {
@@ -7577,7 +7698,7 @@ fn lens_flare_add_blend_is_the_historical_combine() {
 }
 
 // Every Blend option is reachable, and the resolve clamps an index past the
-// menu rather than faulting (K-289).
+// menu rather than faulting.
 #[test]
 fn lens_flare_blend_options_all_resolve() {
     use crate::fx::lens_flare::*;
@@ -7631,7 +7752,7 @@ fn lens_flare_params_evaluate_expressions_in_context() {
     );
 }
 
-// The blend table itself (K-289), against the formulas written out by hand.
+// The blend table itself, against the formulas written out by hand.
 // The CPU twin is the oracle the WGSL `flare_blend` is pinned to, so it has
 // to be right on its own terms first.
 #[test]
@@ -7687,7 +7808,7 @@ fn flare_blend_matches_its_formulas() {
     assert!(z.iter().all(|v| v.is_finite()), "Divide must stay finite");
 }
 
-// Light tint and Use source colour (K-259): the tint multiplies every mode's
+// Light tint and Use source colour: the tint multiplies every mode's
 // light, and the toggle chooses whether a detected source's own colour rides
 // with it. Manual carries the tint as its whole colour.
 #[test]
@@ -7745,7 +7866,7 @@ fn lens_flare_light_tint_and_source_colour_toggle() {
     );
 }
 
-// The Matte row's Invert (K-395), the row's last missing half: with it on the
+// The Matte row's Invert, the row's last missing half: with it on the
 // flare detects the matte's DARK parts, which is exactly the flare the
 // complementary matte draws with it off. Asserted as that equality rather than
 // as a hand-computed position, because "inverted" has to mean `1 − rgb` at
@@ -7790,7 +7911,7 @@ fn lens_flare_matte_invert_reads_the_dark_parts_as_the_lights() {
     );
 }
 
-// K-258, for the switch above: a flare saved before v13 carries no
+// Forward migration, for the switch above: a flare saved before v13 carries no
 // `matte_invert`, gains it at the default on load, and detects exactly the
 // lights it always did — the default is off, so nothing anyone had built moves.
 #[test]
@@ -7825,10 +7946,10 @@ fn lens_flare_saved_before_the_matte_invert_detects_what_it_always_did() {
     assert_eq!(before, after);
 }
 
-// The thin-lens focus shift (K-260): zero at infinity, growing as focus
-// nears, never past one focal length. (The K-260 paraxial sensor
-// calibration is superseded by K-261: the FlareSim prescriptions carry
-// their own measured back-focal chains.)
+// The thin-lens focus shift: zero at infinity, growing as focus
+// nears, never past one focal length. (There is no paraxial sensor
+// calibration: the FlareSim prescriptions carry their own measured
+// back-focal chains.)
 #[test]
 fn lens_flare_focus_shift_follows_the_thin_lens() {
     use crate::fx::lens_flare::focus_shift_mm;
@@ -7839,9 +7960,9 @@ fn lens_flare_focus_shift_follows_the_thin_lens() {
     assert!(focus_shift_mm(0.2, 50.0) <= 50.0);
 }
 
-// The splat guard (K-366), tested where the old quad bugs lived. Quads
+// The splat guard, tested where the old quad bugs lived. Quads
 // connected rays across caustic folds, and the sliver/inflate rescue
-// machinery (K-261..K-264) existed to survive that; splats never connect
+// machinery existed to survive that; splats never connect
 // rays, so what needs pinning now is the deposit itself: flux is conserved
 // away from the density cap, a footprint never drops below the anti-alias
 // floor, and a fold (near-parallel axes) deposits a finite bright line
@@ -7948,7 +8069,7 @@ fn lens_flare_splats_conserve_flux_and_survive_folds() {
 fn lens_flare_grid_budget_follows_ghost_size() {
     use crate::fx::lens_flare::*;
     // Monotonic (non-strict) in spread, and never outside the clamp. A
-    // tight blob gets the FULL base since K-265 — the half rung starved
+    // tight blob gets the FULL base — the half rung starved
     // caustic rims into sunflower teeth on the owner's EF 70-200.
     let tight = pair_grid(64, 0.05);
     let mid = pair_grid(64, 0.3);
@@ -7960,12 +8081,12 @@ fn lens_flare_grid_budget_follows_ghost_size() {
     // Degenerate inputs stay in range rather than exploding a dispatch.
     assert!((8..=512).contains(&pair_grid(2, 0.0)));
     assert!((8..=512).contains(&pair_grid(512, 99.0)));
-    // The Detail dial scales the base through one shared helper (K-265).
+    // The Detail dial scales the base through one shared helper.
     assert_eq!(detail_base(64, 1.0), 64);
     assert_eq!(detail_base(64, 2.0), 128);
     assert_eq!(detail_base(64, 0.25), 16);
     assert_eq!(detail_base(64, 99.0), 256, "dial clamps at 4x");
-    // …and the wavelength axis scales with it (K-265): more rays barely
+    // …and the wavelength axis scales with it: more rays barely
     // touch spectral banding, so the dial must buy bands too.
     assert_eq!(detail_lambda(32, 1.0), 32);
     assert_eq!(detail_lambda(32, 2.0), 64);
@@ -7979,7 +8100,7 @@ fn lens_flare_grid_budget_follows_ghost_size() {
     assert!(baked.spreads.iter().all(|s| s.is_finite() && *s >= 0.0));
 }
 
-// Frame-time grid probe (K-267): the bake spread is a bounding-box measure
+// Frame-time grid probe: the bake spread is a bounding-box measure
 // and misses folds — a pair the same overall size can stretch several-fold
 // locally at a corner light, and those cells were the owner's choppy
 // polyline edges on the 7Artisans. The probe must see the local stretch
@@ -8001,7 +8122,7 @@ fn lens_flare_frame_probe_sees_corner_stretch() {
     assert_eq!(sp.len(), pair_count);
     assert!(sp.iter().all(|s| s.is_finite() && *s >= 1.0));
     // At least one renderable pair must outgrow its bake-floor grid at the
-    // Normal tier — the condition the K-267 budget raise exists for.
+    // Normal tier — the condition the budget raise exists for.
     let grew = sp
         .iter()
         .zip(&baked.spreads)
@@ -8074,11 +8195,11 @@ fn lens_flare_frame_probe_sees_corner_stretch() {
 /// The documented drop-on defaults, shared by the lens flare tests.
 fn default_flare_params() -> crate::fx::lens_flare::LensFlareParams {
     crate::fx::lens_flare::LensFlareParams {
-        // Every element left as the lens file describes it (K-371) — the
-        // drop-on default, and byte-for-byte the pre-K-371 picture.
+        // Every element left as the lens file describes it — the
+        // drop-on default, and byte-for-byte the picture it always drew.
         coating_elements: [crate::fx::lens_flare::COATING_AS_FILE;
             crate::fx::lens_flare::MAX_COATING_ELEMENTS],
-        // Raster pixels (K-260): tests divide by their own raster via
+        // Raster pixels: tests divide by their own raster via
         // manual_light, so any sane point works; this is 0.33/0.30 of 96×54.
         light: [31.7, 16.2],
         // A point source, as the effect has always defaulted to, and no
@@ -8095,7 +8216,7 @@ fn default_flare_params() -> crate::fx::lens_flare::LensFlareParams {
         roundness: 0.15,
         aperture_softness: 0.05,
         ghost_intensity: 1.0,
-        // px@comp since K-558. The old 0.05 % of a 96x54 diagonal was a
+        // px@comp now. The old 0.05 % of a 96x54 diagonal was a
         // twentieth of a pixel and rounded to no blur; half a pixel is the
         // same picture, said in the unit the dial now speaks.
         ghost_softness: 0.5,
@@ -8118,7 +8239,7 @@ fn default_flare_params() -> crate::fx::lens_flare::LensFlareParams {
     }
 }
 
-// Matte-mode source detection (impl note §6, K-257): the CPU reference finds
+// Matte-mode source detection (impl note §6): the CPU reference finds
 // the brightest sources deterministically — brightest first, gated by the
 // soft threshold, adjacent maxima suppressed — and the light carries the
 // source pixel's colour times its gate weight.
@@ -8146,7 +8267,7 @@ fn lens_flare_detects_matte_sources_deterministically() {
         2,
         "the neighbour must be suppressed: {lights:?}"
     );
-    // Brightest first — and since K-355 the light sits at the flux centre of
+    // Brightest first — and the light sits at the flux centre of
     // everything folded into it, not on its brightest pixel. Both pixels are
     // one lit region here, so the centre is between them weighted by
     // brightness: (20·4 + 28·3) / 7 = 164/7.
@@ -8164,7 +8285,7 @@ fn lens_flare_detects_matte_sources_deterministically() {
     assert!((lights[1].pos[0] - 100.5 / 128.0).abs() < 1e-6);
     assert_eq!(lights[1].rgb, [1.5, 1.0, 0.5]);
 
-    // The soft gate scales (K-363: luma 4 against a gate opening 3 → 5
+    // The soft gate scales (luma 4 against a gate opening 3 → 5
     // lands half-way, 0.5), and a threshold above every source finds none —
     // including one AT a source's luma, which "brighter than" excludes.
     let gated = detect_lights(&matte, w, h, 3.0, 2.0, true, [1.0; 3], false);
@@ -8182,7 +8303,7 @@ fn lens_flare_detects_matte_sources_deterministically() {
         detect_lights(&matte, w, h, 1.0, 0.0, true, [1.0; 3], false)
     );
 
-    // The gate itself (K-363, one-sided): closed at and below the threshold,
+    // The gate itself (one-sided): closed at and below the threshold,
     // open a softness above it. The two cases the owner asked for by name:
     // at threshold 1 only light brighter than 1 flares, and at threshold 0
     // anything brighter than black does — black itself never.
@@ -8208,7 +8329,7 @@ fn lens_flare_detects_matte_sources_deterministically() {
 }
 
 /// **A source spanning several tiles is found at the centre of its light, not
-/// at one arbitrary pixel of it** (K-354).
+/// at one arbitrary pixel of it**.
 ///
 /// The anchor used to be pinned to the brightest pixel of the brightest tile.
 /// For a point source that is exactly right, and this test pins that it still
@@ -8217,7 +8338,7 @@ fn lens_flare_detects_matte_sources_deterministically() {
 /// to reach first, so a flare fired from a large soft source came out of its
 /// edge rather than its middle.
 ///
-/// Since K-355 every tile carries its own flux moments rather than one pixel's,
+/// Every tile now carries its own flux moments rather than one pixel's,
 /// so the answer is the source's TRUE centre — and no single pixel, however
 /// hot, can move it. That is what stops a flare jumping about inside a
 /// practical as sensor noise shuffles which pixel happens to be brightest.
@@ -8251,7 +8372,7 @@ fn lens_flare_centres_an_area_source_on_its_light() {
 
     // **The jumping test.** One pixel of the source goes very hot, as sensor
     // sparkle does frame to frame. That pixel now owns the tile's `luma_max`,
-    // so before K-355 it would have become the light's position outright — a
+    // so it would once have become the light's position outright — a
     // 30-pixel jump for a source that has not moved. Weighing every pixel
     // leaves the centre where it was, to well under a pixel.
     let mut sparkle = matte.clone();
@@ -8269,21 +8390,21 @@ fn lens_flare_centres_an_area_source_on_its_light() {
     );
 
     // And the source knows how big it is, which is what lets it be sampled
-    // across rather than flared as a point (K-355).
+    // across rather than flared as a point.
     assert!(
         lights[0].extent[0] > 0.1,
         "a source 64 px wide in a 128 px frame must measure a real extent: \
          {:?}",
         lights[0].extent
     );
-    // …and that extent is what every ray integrates over (K-367): rays at
+    // …and that extent is what every ray integrates over: rays at
     // different pupil corners take their light from different points of it.
     assert_ne!(
         source_jitter(0, 0, 0, lights[0].extent),
         source_jitter(1, 1, 0, lights[0].extent),
         "an extent must move the rays' source positions apart"
     );
-    // …and each band samples it at its own phase (K-378), which is what
+    // …and each band samples it at its own phase, which is what
     // buries the one-band reconstruction ripple when the bands sum.
     assert_ne!(
         source_jitter(0, 0, 0, lights[0].extent),
@@ -8305,9 +8426,9 @@ fn lens_flare_centres_an_area_source_on_its_light() {
     assert!((point[0].pos[1] - 70.5 / h as f32).abs() < 1e-6);
 }
 
-/// **A point source did not move** (K-367).
+/// **A point source did not move**.
 ///
-/// The per-ray source integration replaced K-355's replication, and the one
+/// The per-ray source integration replaced the old replication, and the one
 /// thing it must not do is disturb the source every project already has. A
 /// zero extent has to offset every ray by exactly nothing — not nearly
 /// nothing — so a point light's picture is the same bits it always was. The
@@ -8362,16 +8483,16 @@ fn lens_flare_a_point_source_jitters_by_nothing() {
     );
 }
 
-/// **An area source flares as ONE shape, not as a grid of copies** (K-367).
+/// **An area source flares as ONE shape, not as a grid of copies**.
 ///
 /// This is the defect the owner reported: "bright areas of a matte using
-/// multiple points instead of an area". K-355 rendered a source by splitting
-/// it into up to 5×5 point lights, so wherever a ghost was smaller than the
-/// spacing between those samples you saw that many separate copies of the
-/// aperture strung out in a line — five little irises where there should have
-/// been one soft bar. Integrating the source per ray instead makes the copies
-/// impossible rather than merely rare: no two rays share a source position,
-/// and each one's splat footprint (K-366) inflates by the local
+/// multiple points instead of an area". The old code rendered a source by
+/// splitting it into up to 5×5 point lights, so wherever a ghost was smaller
+/// than the spacing between those samples you saw that many separate copies of
+/// the aperture strung out in a line — five little irises where there should
+/// have been one soft bar. Integrating the source per ray instead makes the
+/// copies impossible rather than merely rare: no two rays share a source
+/// position, and each one's splat footprint inflates by the local
 /// source-to-sensor stretch, which is exactly the gap a replica would have
 /// sat in.
 ///
@@ -8465,14 +8586,14 @@ fn lens_flare_an_area_source_does_not_replicate_its_ghosts() {
          nothing: {rp} peaks against a point's {pp}"
     );
     // **Measured against the replication, not against the point.** The
-    // comparison that matters is with the mechanism K-367 replaced, and it is
+    // comparison that matters is with the mechanism this replaced, and it is
     // the only one of the three that is like-for-like: the same source, the
     // same extent, rendered the old way. An area source must carry no more
     // structure through this window than 25 stamped copies do.
     //
     // It used to read `ap <= pp`, against the POINT render, and that held only
-    // while K-366's reconstruction was printing its sampling grid over
-    // everything (K-373). With the grid gone, a bar source's ghost is a bar,
+    // while the old reconstruction was printing its sampling grid over
+    // everything. With the grid gone, a bar source's ghost is a bar,
     // and a cut across a bar shows both of its rims where a point's small
     // ghost shows one summit — so the area render legitimately counts two
     // peaks to the point's one, and comparing the two was never comparing the
@@ -8484,7 +8605,7 @@ fn lens_flare_an_area_source_does_not_replicate_its_ghosts() {
     );
 }
 
-/// **The jitter integrates the source; it does not lose light** (K-367).
+/// **The jitter integrates the source; it does not lose light**.
 ///
 /// Every ray carries the light's FULL colour now — there are no per-sample
 /// flux shares, because the pupil grid already averages over the rays. The
@@ -8516,8 +8637,8 @@ fn lens_flare_an_area_source_keeps_its_flux() {
     let ratio = area / point;
     // The floor sits at 0.94, not 0.98: spreading is the point, and on this
     // deliberately tiny raster a few percent of the honestly-spread smear
-    // crosses the frame edge (K-378's wider footprints spread a little
-    // further than K-367's). Measured 0.972 here and 1.007 on a padded
+    // crosses the frame edge (the current footprints spread a little further
+    // than the earlier ones did). Measured 0.972 here and 1.007 on a padded
     // buffer that catches the spill — the flux is spread, not lost. The
     // window still fails the bugs it exists for: replication-style scaling
     // is off by whole factors, not percent.
@@ -8528,9 +8649,9 @@ fn lens_flare_an_area_source_keeps_its_flux() {
     );
 }
 
-/// **An area source renders as a smooth shape, not a woven grid** (K-378).
+/// **An area source renders as a smooth shape, not a woven grid**.
 ///
-/// K-367's per-ray source integration hops each ray's source point by more
+/// The per-ray source integration hops each ray's source point by more
 /// than the whole source between pupil neighbours — that is what
 /// equidistributes the samples — and three things in the reconstruction let
 /// that read as a quasi-periodic mesh stamped across every ghost, which is
@@ -8540,9 +8661,9 @@ fn lens_flare_an_area_source_keeps_its_flux() {
 /// slow-drifting combs that lined up into stripes; and every band re-traced
 /// the same source points, so the bands' summed ripple never averaged.
 ///
-/// The flux tests all passed throughout, exactly as K-376 records for the
-/// kernel's own version of this lesson: they measure how much light there
-/// is, never whether it is smooth. So this measures smoothness — the
+/// The flux tests all passed throughout, exactly as the imprint test records
+/// for the kernel's own version of this lesson: they measure how much light
+/// there is, never whether it is smooth. So this measures smoothness — the
 /// row-to-row and column-to-column ripple of the rendered disc against its
 /// own local mean — on the brightest ghost of an area render.
 #[test]
@@ -8565,12 +8686,12 @@ fn lens_flare_an_area_source_renders_without_stripes() {
         let i = (y * w as usize + x) * 3;
         buf[i] + buf[i + 1] + buf[i + 2]
     };
-    // K-376's grid-imprint metric with a WIDER neighbourhood: each pixel's
+    // The grid-imprint metric with a WIDER neighbourhood: each pixel's
     // departure from its own 9×9 mean, relative to that mean, over the lit
-    // region. K-376's 3×3 cannot see this artefact — the mesh's period is
-    // the ray spacing, several pixels, so every pixel sits close to a 3×3
-    // mean and a plainly striped ghost scores under that test's bound
-    // (measured; it is the same passed-while-visible trap K-376 itself
+    // region. A 3×3 neighbourhood cannot see this artefact — the mesh's
+    // period is the ray spacing, several pixels, so every pixel sits close to
+    // a 3×3 mean and a plainly striped ghost scores under that test's bound
+    // (measured; it is the same passed-while-visible trap that test itself
     // records). A 9×9 mean spans the mesh's period and reads it.
     let mx = (0..h as usize)
         .flat_map(|y| (0..w as usize).map(move |x| (x, y)))
@@ -8599,13 +8720,13 @@ fn lens_flare_an_area_source_renders_without_stripes() {
     assert!(
         ripple < 3.0,
         "an area source's ghosts are rippling at {ripple:.2}% against the \
-         ~4% the K-378 reconstruction measures — the woven mesh is coming \
-         back (the K-367 reconstruction measured ~13% here, and read as a \
+         ~4% the current reconstruction measures — the woven mesh is coming \
+         back (the earlier one measured ~13% here, and read as a \
          grid stamped across every ghost on screen)"
     );
 }
 
-/// **A wide source's starburst smears across it** (K-367).
+/// **A wide source's starburst smears across it**.
 ///
 /// The ghosts integrate their source per ray, but the starburst cannot: it is
 /// a baked sprite, not a traced path. It *is* shift-invariant, though — the
@@ -8691,13 +8812,13 @@ fn lens_flare_an_area_source_smears_its_starburst() {
     );
 }
 
-/// **Light layers resolve, and an area light keeps its size** (K-360).
+/// **Light layers resolve, and an area light keeps its size**.
 ///
 /// The whole reason the layer exists is the area kind: a light with a real
-/// width and height flares as its own shape through the machinery K-355 built,
+/// width and height flares as its own shape through the source machinery,
 /// where a point can only ever be a dot. This pins the resolve — including that
 /// only an area light reports extent, whatever the stored numbers say, and that
-/// a light switched off is not a light (K-230's rule for every layer).
+/// a light switched off is not a light (the rule for every layer).
 #[test]
 fn lens_flare_light_layers_resolve_with_their_extent() {
     use crate::anim::Property;
@@ -8797,7 +8918,7 @@ fn lens_flare_light_layers_resolve_with_their_extent() {
     // something rather than land as a black source nobody can see.
     assert_eq!(lights[1].colour, [1.0, 1.0, 1.0]);
 
-    // ---- and the whole way through to the trace (K-360, K-385) ----
+    // ---- and the whole way through to the trace ----
     //
     // Lights mode's sources are the one thing about this effect that is neither
     // a control nor a picture the render prepared, so they ride the resolve-time
@@ -8874,7 +8995,7 @@ fn lens_flare_light_layers_resolve_with_their_extent() {
     assert_eq!(crate::fx::lens_flare::manual_light(&p, 1920, 1080).len(), 1);
 }
 
-/// **A per-element coating choice reaches the trace** (K-371).
+/// **A per-element coating choice reaches the trace**.
 ///
 /// The regression: the resolve arm read all twenty rows through the *float*
 /// accessor, which answers `None` for a `Choice` value — so every element
@@ -9058,7 +9179,7 @@ fn every_enablement_rule_names_a_parameter_of_its_kind() {
             );
         }
 
-        // K-145 requires a group's members to be a contiguous run of `params`,
+        // A group's members must be a contiguous run of `params`,
         // because the twirl renders in place where its first member sits — a
         // gap would swallow whatever sat in it.
         for g in s.groups {
@@ -9091,7 +9212,7 @@ fn every_enablement_rule_names_a_parameter_of_its_kind() {
     }
 }
 
-// Depth of field's folded parameter surface (K-313): the aperture, highlight
+// Depth of field's folded parameter surface: the aperture, highlight
 // and depth-map controls landed *inside* the shipped effect rather than beside
 // it as a second one, so the surface itself is the thing under test — the order
 // rows appear in, which twirl each sits behind, and above all the factory
@@ -9116,9 +9237,9 @@ fn dof_declares_the_folded_aperture_surface() {
             // toggle three twirls away from the row it governs reads as
             // unrelated to it.
             "depth",
-            // K-395: the Invert that flips the matte sits beside the picker,
+            // The Invert that flips the matte sits beside the picker,
             // on the one uniform row every effect draws. It used to live in the
-            // Depth map twirl; the stored id is untouched (K-065).
+            // Depth map twirl; the stored id is untouched.
             "depth_invert",
             "focus",
             "use_focus_point",
@@ -9146,7 +9267,7 @@ fn dof_declares_the_folded_aperture_surface() {
             "repeat_edge_pixels",
             "display",
             "mix",
-            // K-425: the Blend injected beside every Mix.
+            // The Blend injected beside every Mix.
             "blend",
         ],
         "row order is what the panel draws"
@@ -9223,7 +9344,7 @@ fn dof_declares_the_folded_aperture_surface() {
     ));
     // The focus point is an `_x`/`_y` Float pair, which is the panel's point row
     // (docs/07 §6.1) — there is no Point schema kind and this is why one is not
-    // needed. px@comp, open on both sides (K-260).
+    // needed. px@comp, open on both sides.
     for id in ["focus_point_x", "focus_point_y"] {
         assert!(matches!(
             kind(id),
@@ -9370,7 +9491,7 @@ fn a_legacy_dof_resolves_to_the_neutral_aperture() {
         )
     });
     // The focus point reads its **declared default** rather than the old arm's
-    // separate `unwrap_or(0.0)` fallback — K-258's rule for a parameter a saved
+    // separate `unwrap_or(0.0)` fallback — the rule for a parameter a saved
     // project has never heard of, and the one the arena applies to every row.
     // Nothing renders differently for it: the point is read only when Use focus
     // point is on, which this instance does not carry either, so it stays false.
@@ -9380,8 +9501,8 @@ fn a_legacy_dof_resolves_to_the_neutral_aperture() {
     );
 }
 
-/// **Both diagnostic views answer to Gamma, and answer the same way** (K-615,
-/// docs/08 §3.22). The Focus map always did — the control scales the depth
+/// **Both diagnostic views answer to Gamma, and answer the same way**
+/// (docs/08 §3.22). The Focus map always did — the control scales the depth
 /// distance before the ramp — while the Depth map drew the raw depth and sat
 /// still however far the control was dragged, which is the bug this holds shut.
 ///
@@ -9468,7 +9589,7 @@ fn the_dof_depth_map_answers_to_gamma_as_the_focus_map_does() {
     }
 }
 
-// **The fold's load-bearing promise** (K-313): at the shipped defaults the
+// **The fold's load-bearing promise**: at the shipped defaults the
 // gather computes exactly the box-weighted disc average this effect computed
 // before it grew an aperture, a tonal mean or a weighting — to the bit, not to a
 // tolerance.
@@ -9965,7 +10086,7 @@ fn profile_reaches_a_depth_pass_squeezed_into_a_fifth_of_its_range() {
     assert!(((6.0f32).exp2() - 64.0).abs() < 1e-3);
 }
 
-/// K-321: an instance may carry the user's own name. `None` — every older
+/// An instance may carry the user's own name. `None` — every older
 /// project — serialises to nothing at all, so documents without the feature
 /// are byte-for-byte unchanged, and a named instance round-trips exactly.
 #[test]
@@ -10025,7 +10146,7 @@ fn bake_timing_probe() {
 }
 
 /// **Spectral radiometry preserves exposure and actually resolves the
-/// coating** (K-364, entry A2). Two halves:
+/// coating** (entry A2). Two halves:
 ///
 /// The bands' sub-weights sum to what `lambda_weights` gave each whole band
 /// — XYZ→RGB is linear, so splitting the CIE integral must split the RGB
@@ -10201,7 +10322,7 @@ fn a_registered_effect_is_found_by_its_own_name() {
 }
 
 /// A project saved before a parameter existed carries no entry for it, and must
-/// render — reading the declared default, never panicking (K-258).
+/// render — reading the declared default, never panicking.
 #[test]
 fn a_missing_parameter_reads_its_default() {
     let empty = Params::EMPTY;
@@ -10324,7 +10445,7 @@ fn only_spatial_values_rescale() {
 /// spatial parameter in the arena rescales under [`ResolvedStack::rescale_spatial`]
 /// **exactly** as the old `Resolved` op did.
 ///
-/// This is the one property the migration could silently lose. K-266's repair —
+/// This is the one property the migration could silently lose. The repair —
 /// a stack resolved against the comp raster and then run on a smaller preview
 /// target — reaches the arena through `ResolvedStack::rescale_spatial`, which calls
 /// both halves; if a blur declared `Unit::Raw` it would render at full-size
@@ -10364,7 +10485,7 @@ fn a_migrated_spatial_parameter_rescales_as_the_old_op_did() {
     );
 
     // Resolving directly against the smaller raster must land in the same
-    // place — which is the whole point of the correction (K-266).
+    // place — which is the whole point of the correction.
     let direct = super::resolve_stack(
         std::slice::from_ref(&e),
         0.0,
@@ -10389,8 +10510,8 @@ fn a_migrated_spatial_parameter_rescales_as_the_old_op_did() {
 }
 
 /// The stylise family's own half of the same property, for two effects that
-/// reached `Px` by different roads: RGB split's Amount (a `PctDiag` until
-/// K-419) and chromatic aberration's (`Px` from the start). Each is multiplied
+/// reached `Px` by different roads: RGB split's Amount (a `PctDiag` at first)
+/// and chromatic aberration's (`Px` from the start). Each is multiplied
 /// by the preview factor at resolve and must be scaled **exactly once** on the way
 /// in and exactly once again by [`ResolvedStack::rescale_spatial`] — which is what the
 /// old arms and `rescale_px` did between them.
@@ -10442,7 +10563,7 @@ fn the_stylise_family_rescales_once_in_each_unit() {
     full.rescale_spatial(0.5);
     assert_eq!(ca(&full), 2.0, "px@comp follows the preview raster");
     // Resolving directly against the smaller raster lands in the same place —
-    // the whole point of the K-266 correction.
+    // the whole point of the correction.
     assert_eq!(ca(&resolve("chromatic_aberration", 0.5)), ca(&full));
     let mut half = resolve("chromatic_aberration", 0.5);
     half.rescale_spatial(0.5);
@@ -10470,7 +10591,7 @@ fn every_parameter_declares_a_unit() {
         .map(|(name, p)| (name, p.id))
         .collect();
     // (The history below names some entries "% diag": that was their unit
-    // when they joined the list. Since K-419 every one of them is px@comp; the
+    // when they joined the list. Every one of them is px@comp now; the
     // list of *which* parameters follow the raster has not changed.)
     //
     // The blur family's lengths, the two flare/transform families'
@@ -10506,10 +10627,10 @@ fn every_parameter_declares_a_unit() {
     // Shake's **Amplitude** is the one entry the old match reached by another
     // road: the arm multiplied it by the diagonal by hand and `rescale_px`
     // scaled the *resolved offsets* instead. Declaring the unit puts the scaling
-    // one multiply earlier (K-388), which is the same wobble to within the
+    // one multiply earlier, which is the same wobble to within the
     // reassociation `shake_amplitude_rescales_as_the_old_offsets_did` bounds.
     //
-    // The Generate family (K-398) brings nine more px@comp entries and no % diag
+    // The Generate family brings nine more px@comp entries and no % diag
     // ones. Gradient's two **points** must travel together or the ramp slides
     // when the preview resolution changes; Fractal noise's three **cell sizes**
     // and its **offset** likewise, and its Scale being a length rather than AE's
@@ -10521,25 +10642,25 @@ fn every_parameter_declares_a_unit() {
     // ones. Turbulent displace's **Amount** and **Size** are both lengths, for
     // §3.37 decision 1's reason applied to a warp: a per cent of an unnamed base
     // does not survive a resize. Its **Offset** and every other effect's
-    // **centre** are the point pairs K-260 requires be pixels. Tile declares only
+    // **centre** are the point pairs that must be pixels. Tile declares only
     // its Tile centre — the four per cents beside it are fractions of the raster
     // and so do not follow it — and Lens distort only its Centre, since a field
     // of view is an angle.
     //
-    // The utility and transition batch (K-400) brings seven more, four % diag and
+    // The utility and transition batch brings seven more, four % diag and
     // three px@comp. **Channel blur's four radii** are % diag exactly as the
     // Gaussian blur's is, being the same kernel four times over. **Drop shadow's
     // Distance and Softness** are px@comp and must travel together, or a
     // half-resolution preview would move the shadow and not soften it (or the
     // reverse); its Direction is an angle and its Opacity a per cent, so neither
-    // is here. The **wipes' centres and feathers** are px@comp for K-260's reason
-    // and for the shadow's; their Completion is a per cent of the frame's own
-    // extent, which the kernel derives from the raster it is handed, so it needs
-    // no rescaling and gets none — Tile's four per cents again.
+    // is here. The **wipes' centres and feathers** are px@comp for the point-pair
+    // reason and for the shadow's; their Completion is a per cent of the frame's
+    // own extent, which the kernel derives from the raster it is handed, so it
+    // needs no rescaling and gets none — Tile's four per cents again.
     //
     // Wave 2's Distort I batch (docs/08 §3.48-§3.52) brings eighteen more: two
     // % diag and sixteen px@comp. **Corner pin's eight point coordinates** are
-    // pixels for K-260's reason and must travel together or a half-resolution
+    // pixels as point pairs and must travel together or a half-resolution
     // preview would pin three corners and stretch the fourth. **Displacement
     // map's two Amounts** are lengths for §3.38 decision 5's reason, a third
     // time. **Twirl's and Spherize's radii** are % diag exactly as the blur's
@@ -10554,7 +10675,7 @@ fn every_parameter_declares_a_unit() {
     // shape rather than its size; its centre is px@comp. **Wave warp's two
     // lengths** are px@comp (AE's are raster pixels), and its Direction and
     // Phase are angles. **Bezier warp's twenty-four point coordinates** are
-    // pixels for K-260's reason and must travel together, exactly as Corner
+    // pixels as point pairs and must travel together, exactly as Corner
     // pin's eight do. **Roughen edges' Border, Scale and Offset** are lengths
     // for §3.37 decision 1's reason a fourth time — its Edge sharpness and
     // Fractal influence are per cents and are not here. Warp declares none at
@@ -10580,7 +10701,7 @@ fn every_parameter_declares_a_unit() {
     // size in pixels is derived from the raster the kernel is handed (§3.39's
     // precedent). Find edges and Broadcast safe are pointwise.
     //
-    // The Matte key's spatial controls (K-546) bring three. **Screen pre-blur**
+    // The Matte key's spatial controls bring three. **Screen pre-blur**
     // is a blur radius like any other; **Screen shrink/grow** is how far the
     // matte's edge marches, which must be the same distance in the picture at
     // any preview resolution; **Screen softness** is a blur radius again. Its
@@ -10590,24 +10711,24 @@ fn every_parameter_declares_a_unit() {
     // cent and reach exactly one pixel by definition, so neither is a distance
     // a preview could get wrong.
     //
-    // K-408's two consumers (docs/08 §3.78-§3.79) bring four, all px@comp and
+    // The two path consumers (docs/08 §3.78-§3.79) bring four, all px@comp and
     // all pixel-scale looks. **Scribble's Stroke width, Spacing and Path
     // overlap** are the pencil's own dimensions and must travel together, or a
     // half-resolution preview would draw a hatch of a different density from
     // the export's. **Stroke's Brush size** is Vegas' Width under another name.
     // Neither declares one for the mask's own vertices, and that is the point of
-    // K-408's tolerance being a constant: the polyline is flattened once in
+    // the tolerance being a constant: the polyline is flattened once in
     // px@comp and each consumer takes it to its own raster, so the geometry
     // cannot acquire a second unit. Stroke's Spacing is a per cent *of the
     // brush*, so it rides on Brush size and is not here.
     //
-    // The Controls family (K-414) brings two more, and they are the first pair
+    // The Controls family brings two more, and they are the first pair
     // here that never *reaches* the rescale pass: a Point control draws
     // nothing, so it resolves to no op at all. They are declared px@comp all
-    // the same, because that is what the numbers mean (K-260) and because what
+    // the same, because that is what the numbers mean and because what
     // reads them through an expression is going to put them in a picture.
     //
-    // **Points sample's Position** (K-494) is the last pair, and the second
+    // **Points sample's Position** is the last pair, and the second
     // that never reaches the rescale: a driver resolves at px@comp always, so
     // its query point and the stream it searches are in the same units by
     // construction, whatever raster the preview is drawn at. Declared px@comp
@@ -10619,7 +10740,7 @@ fn every_parameter_declares_a_unit() {
             ("blur", "radius"),
             ("directional_blur", "length"),
             ("radial_blur", "amount"),
-            // K-558: Radial blur's centre is the last point to stop being a
+            // Radial blur's centre is the last point to stop being a
             // per cent of the frame, so it joins the pass that follows the
             // raster.
             ("radial_blur", "centre_x"),
@@ -10657,7 +10778,7 @@ fn every_parameter_declares_a_unit() {
             ("turbulent_displace", "offset_y"),
             ("tile", "tile_centre_x"),
             ("tile", "tile_centre_y"),
-            // K-558: the tile's own size and the output window's size are
+            // The tile's own size and the output window's size are
             // sizes, so they are distances and follow the raster too.
             ("tile", "tile_width"),
             ("tile", "tile_height"),
@@ -10749,7 +10870,7 @@ fn every_parameter_declares_a_unit() {
             ("scribble", "spacing"),
             ("scribble", "path_overlap"),
             ("stroke", "brush_size"),
-            // Particulate (K-419 through a particle system): eleven, all
+            // Particulate (px@comp through a particle system): eleven, all
             // px@comp, and every one of them has to follow the raster or a
             // half-resolution preview would show a different picture from the
             // export. The **emitter's** position and extents place the births;
@@ -10764,7 +10885,7 @@ fn every_parameter_declares_a_unit() {
             // any of them, and none is here.
             ("particulate", "position_x"),
             ("particulate", "position_y"),
-            // The third axis (K-561): a depth and an extent through the plane
+            // The third axis: a depth and an extent through the plane
             // are lengths like the two beside them, and rescale with the
             // raster for the same reason.
             ("particulate", "position_z"),
@@ -10779,7 +10900,7 @@ fn every_parameter_declares_a_unit() {
             ("particulate", "wind_z"),
             ("particulate", "turbulence_amount"),
             ("particulate", "turbulence_scale"),
-            // Grid (K-598): every length in a lattice — the gaps between
+            // Grid: every length in a lattice — the gaps between
             // cells, where its centre sits, how far a cell may wander, and the
             // disc a point is drawn as. The three counts and the per cents are
             // not lengths and are not here.
@@ -10793,15 +10914,15 @@ fn every_parameter_declares_a_unit() {
             ("grid", "jitter_y"),
             ("grid", "jitter_z"),
             ("grid", "size"),
-            // Scatter (K-599): the disc a point is drawn as. Density is a count
+            // Scatter: the disc a point is drawn as. Density is a count
             // per composition area and rescales nowhere — it is measured
             // against the comp, not against the raster.
             ("scatter", "size"),
-            // Emit from image (K-603): the disc a point is drawn as, Scatter's
+            // Emit from image: the disc a point is drawn as, Scatter's
             // row exactly. Threshold is a share of full white and Density a
             // count per composition area, so neither rescales.
             ("emit_from_image", "size"),
-            // Connect points (K-602): how far apart two points may be and
+            // Connect points: how far apart two points may be and
             // still be joined, and how thick the line between them is. Both
             // are distances in the picture and must travel with the stream —
             // which is rescaled beside them — or a half-resolution preview
@@ -10809,12 +10930,12 @@ fn every_parameter_declares_a_unit() {
             ("connect_points", "max_distance"),
             ("connect_points", "width"),
             // What a full channel of a Motion vectors layer means, in pixels
-            // of movement (K-429).
+            // of movement.
             ("motion_blur", "vector_scale"),
             ("matte_key", "pre_blur"),
             ("matte_key", "shrink_grow"),
             ("matte_key", "softness"),
-            // Planar track's quad (K-579) is four points in px@comp, exactly as
+            // Planar track's quad is four points in px@comp, exactly as
             // the Corner pin it writes is — and for the extra reason that they
             // are what the analysis is *given*: a quad measured against the
             // wrong raster would follow the wrong patch of picture.
@@ -10826,7 +10947,7 @@ fn every_parameter_declares_a_unit() {
             ("planar_track", "lower_left_y"),
             ("planar_track", "lower_right_x"),
             ("planar_track", "lower_right_y"),
-            // Its two search points and their box (K-735) are the same numbers
+            // Its two search points and their box are the same numbers
             // asked the same question, one patch at a time.
             ("planar_track", "point1_x"),
             ("planar_track", "point1_y"),
@@ -10838,8 +10959,8 @@ fn every_parameter_declares_a_unit() {
             ("lens_flare", "light_y"),
             ("lens_flare", "source_width"),
             ("lens_flare", "source_height"),
-            // K-558: the ghost blur's radius is a distance, and K-419's one
-            // remaining per cent of the diagonal was this one.
+            // The ghost blur's radius is a distance, and the one remaining
+            // per cent of the diagonal was this one.
             ("lens_flare", "ghost_softness"),
             ("drop_shadow", "distance"),
             ("drop_shadow", "softness"),
@@ -10863,7 +10984,7 @@ fn every_parameter_declares_a_unit() {
             ("iris_wipe", "outer_radius"),
             ("iris_wipe", "inner_radius"),
             ("iris_wipe", "feather"),
-            // K-558: the flipping wave's width is a distance across the frame,
+            // The flipping wave's width is a distance across the frame,
             // so it follows the raster like every other distance.
             ("card_wipe", "transition_width"),
             ("point_control", "point_x"),
@@ -10872,7 +10993,7 @@ fn every_parameter_declares_a_unit() {
             ("points_sample", "position_y"),
         ]
     );
-    // Both are px@comp, multiplied by the preview factor (K-419): RGB split's
+    // Both are px@comp, multiplied by the preview factor: RGB split's
     // Amount was a % diag until the owner's ruling and must not drift back.
     let unit_of = |name: &str, id: &str| {
         BUILTIN_DEFS
@@ -10884,7 +11005,7 @@ fn every_parameter_declares_a_unit() {
     assert_eq!(unit_of("chromatic_aberration", "amount"), Some(Unit::Px));
 }
 
-/// **No parameter is a percentage of the composition diagonal** (K-419, the
+/// **No parameter is a percentage of the composition diagonal** (the
 /// owner's rule: every distance, radius and displacement is px@comp, and the
 /// resolve step scales it to the raster in play). `Unit::PctDiag` stays in the
 /// enum for the ROI declarations and the reference format, but a parameter
@@ -10904,12 +11025,12 @@ fn no_parameter_is_a_per_cent_of_the_diagonal() {
         .collect();
     assert!(
         offenders.is_empty(),
-        "parameters declared PctDiag, which K-419 forbids: {offenders:?}"
+        "parameters declared PctDiag, which is forbidden: {offenders:?}"
     );
 }
 
 /// **The ROI tile padding is px@comp too, and resolves exactly as a `Px`
-/// parameter does** (K-433). Gaussian blur's Radius and Gaussian blur's padding
+/// parameter does**. Gaussian blur's Radius and Gaussian blur's padding
 /// are the same 2 000 px@comp; at Full and at Half preview they must still come
 /// out the same number of raster pixels, or the tile clips the radius on one of
 /// them.
@@ -10953,7 +11074,7 @@ fn the_roi_padding_follows_the_raster_like_a_px_radius() {
     );
 }
 
-/// **Every padding covers its effect's own hard maximum** (K-433). The old
+/// **Every padding covers its effect's own hard maximum**. The old
 /// declaration was 25 % of the comp diagonal — 551 pixels on a 1080p frame, a
 /// quarter of Gaussian blur's 2 000 px hard maximum — so a typed radius clipped
 /// at the tile edge. The last assertion is that figure, and fails against it.
@@ -11019,10 +11140,10 @@ fn the_frame_key_separates_a_value_from_its_number() {
     assert_ne!(hash(Value::Choice(1)), hash(Value::Bool(true)));
     assert_ne!(hash(Value::Float(1.0)), hash(Value::Int(1)));
     // And the same value hashes the same way twice: the determinism the frame
-    // key rests on (K-143).
+    // key rests on.
     assert_eq!(hash(Value::Float(0.25)), hash(Value::Float(0.25)));
     // The four-float kinds are the pair most at risk: same numbers, same
-    // length, different meaning (K-388). Only the tag separates them.
+    // length, different meaning. Only the tag separates them.
     let four = [0.25f32, 0.5, 0.75, 1.0];
     assert_ne!(hash(Value::Vec4(four)), hash(Value::Colour(four)));
     assert_eq!(hash(Value::Vec4(four)), hash(Value::Vec4(four)));
@@ -11033,7 +11154,7 @@ fn the_frame_key_separates_a_value_from_its_number() {
     );
 }
 
-/// [`Value::Vec4`] is a kind of its own (K-388): its tag is distinct from every
+/// [`Value::Vec4`] is a kind of its own: its tag is distinct from every
 /// other kind's, it is fed to the frame key as tag + four floats, and it reads
 /// back through [`Params::vec4`] — never through the Colour accessor, and never
 /// the other way about.
@@ -11074,7 +11195,7 @@ fn a_vec4_is_its_own_kind_and_reads_back_whole() {
     let p = Params::new(&entries);
     assert_eq!(p.vec4(id, [0.0; 4]), v);
     // Absent, and present-but-another-kind, both fall back to the default —
-    // the same rule every typed reader follows (K-258).
+    // the same rule every typed reader follows.
     assert_eq!(p.vec4(ParamId::new("nothing"), [9.0; 4]), [9.0; 4]);
     let wrong = [(id, Value::Colour(v))];
     assert_eq!(
@@ -11093,7 +11214,7 @@ fn payload_len(v: Value) -> usize {
         Value::Bool(_) | Value::Layer(_) | Value::MaskPath(_) => 1,
         Value::Float(_) | Value::Int(_) | Value::Choice(_) | Value::File(_) => 4,
         Value::Colour(_) | Value::Vec4(_) => 16,
-        // A length, then two floats a live point (K-412) — the unused tail of
+        // A length, then two floats a live point — the unused tail of
         // the fixed array is padding by another name and never feeds a key.
         Value::Curve(c) => 4 + 8 * c.points().len(),
     }
@@ -11157,7 +11278,7 @@ fn every_parameter_kind_reads_back_as_itself() {
     assert_eq!(v.matrix(), hue_matrix_rgb(90.0));
 
     // Absent on projects saved before the bool existed → true, the historical
-    // behaviour (K-136), and the constant-luminance matrix with it.
+    // behaviour, and the constant-luminance matrix with it.
     let v = effects::hue_shift::HueShift::read(Params::EMPTY);
     assert!(v.preserve_luminance);
     assert_eq!(v.matrix(), hue_matrix(0.0));
@@ -11247,7 +11368,7 @@ fn every_migrated_effect_renders_what_the_old_dispatch_rendered() {
     both(
         &effects::contrast::ContrastDef,
         &[(effects::contrast::Contrast::CONTRAST, Value::Float(160.0))],
-        // 1.36, not 1.6: K-737 made the factor quadratic in the distance from
+        // 1.36, not 1.6: the factor is quadratic in the distance from
         // neutral. The kernel this transcribes is untouched - only what the
         // effect resolves to before it moved.
         &|p| cpu::contrast(p, 1.36, 1.0),
@@ -11286,7 +11407,7 @@ fn every_migrated_effect_renders_what_the_old_dispatch_rendered() {
         &|p| cpu::tint(p, [0.05, 0.0, 0.1], [1.0, 0.9, 0.6], 1.0),
     );
     both(
-        // Flash's strength is derived rather than declared (K-385), so it goes
+        // Flash's strength is derived rather than declared, so it goes
         // into the bag here the way `resolve_derived` puts it there.
         &effects::flash::FlashDef,
         &[
@@ -11424,7 +11545,7 @@ fn every_migrated_effect_renders_what_the_old_dispatch_rendered() {
         },
     );
     both(
-        // Block glitch's tick is derived rather than declared (K-385), so it
+        // Block glitch's tick is derived rather than declared, so it
         // goes into the bag here the way `resolve_derived` puts it there.
         &effects::block_glitch::BlockGlitchDef,
         &[
@@ -11462,7 +11583,7 @@ fn every_migrated_effect_renders_what_the_old_dispatch_rendered() {
         &|p| cpu::block_glitch(p, 4, 4, 0.5, 7, 3, 3.0, 0.4, 2.0, 1.0, 0.3, 0.8),
     );
     both(
-        // Scanlines' folded intensity and roll offset are derived too (K-385).
+        // Scanlines' folded intensity and roll offset are derived too.
         &effects::scanlines::ScanlinesDef,
         &[
             (effects::scanlines::Scanlines::INTENSITY, Value::Float(0.9)),
@@ -11500,7 +11621,7 @@ fn every_migrated_effect_renders_what_the_old_dispatch_rendered() {
     both(
         // Matte key is the only one of the side-table batch with a CPU
         // reference to compare at all: the other four (Light wrap, Depth of
-        // field, Fast motion blur, Datamosh) need a second picture the
+        // field, Motion blur, Datamosh) need a second picture the
         // single-buffer dispatcher has not got, so their `apply_cpu` is the
         // identity by design — the same passthrough their `cpu::apply` arms
         // were, and pinned by `the_side_table_batch_stays_a_cpu_passthrough`.
@@ -11579,7 +11700,7 @@ fn every_migrated_effect_renders_what_the_old_dispatch_rendered() {
     );
 }
 
-/// The four side-table effects of the K-387 batch have **no** CPU reference
+/// The four side-table effects have **no** CPU reference
 /// through the arena dispatch, and that silence is deliberate: each needs a
 /// second picture — a background plate, a depth pass, a flow field, a neighbour
 /// frame — that no single-buffer dispatcher carries. Their `apply_cpu` keeps
@@ -11588,7 +11709,7 @@ fn every_migrated_effect_renders_what_the_old_dispatch_rendered() {
 ///
 /// Worth pinning rather than assuming, because the failure is invisible: an
 /// `apply_cpu` written for one of these would read a garbage second buffer or
-/// half-render, and the degradation rung (K-019) is the one path nobody looks
+/// half-render, and the degradation rung is the one path nobody looks
 /// at. Their §1.6 oracles run against `cpu::light_wrap` / `cpu::dof` /
 /// `cpu::motion_blur` / `cpu::datamosh` directly from the lumit-gpu tests, which
 /// can upload the second picture.
@@ -11629,16 +11750,15 @@ fn the_side_table_batch_stays_a_cpu_passthrough() {
 /// cube loaded or which layer was rendered. Reading one back out of a bag
 /// therefore always answers "unset", whatever the project stored.
 ///
-/// That is only safe because the real input arrives beside the op as an aux slot
-/// (K-387): the gate that an effect declaring one of these kinds also declares
+/// That is only safe because the real input arrives beside the op as an aux
+/// slot: the gate that an effect declaring one of these kinds also declares
 /// the list it consumes is `a_side_table_effect_declares_the_list_it_consumes`,
 /// in lumit-render, where both halves are visible. What is pinned here is the
 /// half lumit-core owns — that the bag stays silent, so nobody is tempted to
 /// read the grade out of it.
 /// How many of `name`'s declared parameters reach the resolved bag: every kind
 /// but the two the *caller* decides — a File slot and a Layer binding, which
-/// ride beside the op as aux slots (K-387, and the injected Matte row of K-395
-/// with them).
+/// ride beside the op as aux slots (the injected Matte row rides with them).
 fn bagged_params(name: &str) -> usize {
     BUILTIN_DEFS
         .get(name)
@@ -11688,14 +11808,14 @@ fn the_arena_carries_no_file_slot_or_layer_binding() {
     );
 }
 
-/// **Every effect has a Matte, and nobody had to write it down** (K-395).
+/// **Every effect has a Matte, and nobody had to write it down**.
 ///
 /// The declaration is what makes the row meaningful on all thirty-odd effects
 /// from day one, and the whole point of injecting it is that a new effect cannot
 /// forget it — so the gate is the catalogue itself, not a list kept beside it.
 ///
 /// The five that *claim* the matte are named here on purpose. Two of them owned
-/// the concept before K-395 and keep their stored ids (K-065): Depth of field's
+/// the concept first and keep their stored ids: Depth of field's
 /// `depth`, the Lens flare's `matte`. Three take the injected row and simply mean
 /// something deeper by it: the Gaussian blur scales its radius, the Glow gates
 /// its seed, Turbulent displace scales its displacement vector, Set matte makes
@@ -11706,9 +11826,9 @@ fn every_effect_carries_a_matte_row() {
     use crate::fx::MatteRole;
     for def in BUILTIN_DEFS.builtins() {
         let s = def.schema();
-        // The Controls family opts out entirely (K-414), the Drivers family with
-        // it (K-471), and so do the two tracking effects (K-417, K-579) —
-        // handles for a background analysis rather than image operations. They are the
+        // The Controls family opts out entirely, the Drivers family with it,
+        // and so do the two tracking effects — handles for a background
+        // analysis rather than image operations. They are the
         // answer to the question `MatteRole::None` was written for: an effect
         // that touches no pixel cannot be driven by a picture, so a Matte row on
         // one would be a control that could never do anything. Every *image*
@@ -11729,8 +11849,8 @@ fn every_effect_carries_a_matte_row() {
             );
             continue;
         }
-        // **Three image effects opt out** (K-425, K-429 and K-710, the owner's
-        // rule for mattes), and each has its own reason.
+        // **Three image effects opt out** (the owner's rule for mattes), and
+        // each has its own reason.
         //
         // The **Matte key**: a keyer's subject is the picture it keys, and a
         // strength matte over a key is a garbage matte, which is a mask's job.
@@ -11742,7 +11862,7 @@ fn every_effect_carries_a_matte_row() {
         // ordinary auxiliary-layer carriage that `layer_input` is the predicate
         // for.
         //
-        // **Roto brush** (K-710): the same answer as Set matte's, arrived at
+        // **Roto brush**: the same answer as Set matte's, arrived at
         // from the other side. What this effect applies IS a coverage — the
         // matte its propagation solved for this source frame — so a second
         // picture saying how much of it happens here would be a coverage laid
@@ -11779,25 +11899,25 @@ fn every_effect_carries_a_matte_row() {
             );
             continue;
         }
-        // The owner's rule for mattes (K-426): the matte scales the amount.
+        // The owner's rule for mattes: the matte scales the amount.
         // Every blur, sharpen and colour effect whose scaled amount is not
         // already a straight lerp of the input claims it; the rest (Tritone,
         // Black and white, Tint, Curves, Levels, Invert, LUT, Broadcast safe,
         // Contrast, Vignette) keep the strength dissolve because scaling
         // their amount IS that dissolve, and Threshold because it has no
-        // honest per-pixel form. The Distortion family claims it the same way
-        // (K-427): the matte scales the displacement, read at the destination
+        // honest per-pixel form. The Distortion family claims it the same way:
+        // the matte scales the displacement, read at the destination
         // pixel. Datamosh stays on the dissolve because scaling its Intensity
         // IS the dissolve to the bit; Tile, Mirror and Polar coordinates have
         // no amount to scale. The Transform effect shares the Shake's kernel
         // but never binds a matte. Generate and Stylise claim it the same way
-        // again (K-428): the grain's Intensity, the drawn thing's Opacity, the
+        // again: the grain's Intensity, the drawn thing's Opacity, the
         // shadow's Opacity, Border, Radius and Relief. Noise, Flash, Sprite
         // flare and Light wrap keep the dissolve there, because each adds a
         // linear amount to the picture and scaling it IS the dissolve; Fill,
         // Gradient, Fractal noise, Beam, Mosaic and Find edges have no amount
-        // of their own to scale. Temporal and Transition claim it once more
-        // (K-429): Echo's Decay, both motion blurs' Shutter angle, and every
+        // of their own to scale. Temporal and Transition claim it once more:
+        // Echo's Decay, both motion blurs' Shutter angle, and every
         // wipe's Completion — the Iris wipe scaling its radius instead, having
         // no Completion to scale (§3.71: the radius IS the transition).
         // Posterize time keeps the dissolve, holding a time rather than drawing
@@ -11862,7 +11982,7 @@ fn every_effect_carries_a_matte_row() {
                 | "venetian_blinds"
                 | "iris_wipe"
                 | "card_wipe"
-                // Scatter (K-599): the matte is *where the points go*, which is
+                // Scatter: the matte is *where the points go*, which is
                 // as deep inside an effect's own maths as a matte gets — it
                 // decides the set rather than fading the picture that set drew.
                 | "scatter"
@@ -11870,7 +11990,7 @@ fn every_effect_carries_a_matte_row() {
         assert_eq!(
             !s.matte.generic(),
             claims,
-            "{} — the effects that claim the matte inside their own maths are              listed here (K-395, K-426, K-427, K-559); anything else that wants a deeper meaning              must say so here too",
+            "{} — the effects that claim the matte inside their own maths are              listed here; anything else that wants a deeper meaning              must say so here too",
             s.match_name
         );
         // Every image effect takes one, whatever it means by it.
@@ -11882,7 +12002,7 @@ fn every_effect_carries_a_matte_row() {
             .param()
             .unwrap_or_else(|| panic!("{} declares no matte at all", s.match_name));
         // An override says what it means, in the schema, which is what the
-        // manual's tables print (K-395, `fx-reference.json`).
+        // manual's tables print (`fx-reference.json`).
         if let MatteRole::Own { meaning, .. } = s.matte {
             assert!(
                 meaning.len() > 40 && !meaning.ends_with('.'),
@@ -11900,11 +12020,11 @@ fn every_effect_carries_a_matte_row() {
             "{} — a matte is a layer",
             s.match_name
         );
-        // K-258's defaults: unset, and its Invert off. A `self_default = true`
+        // The defaults: unset, and its Invert off. A `self_default = true`
         // on the injected row would point every effect on every layer at its own
         // input on the day it was added, which is a picture change disguised as
-        // a default. The flare's own row predates that and keeps its `true`
-        // (K-288) — its stored id and its behaviour are both a save's business.
+        // a default. The flare's own row predates that and keeps its `true` —
+        // its stored id and its behaviour are both a save's business.
         if param == MATTE_PARAM && s.match_name != "lens_flare" {
             assert_eq!(
                 row.kind,
@@ -11933,13 +12053,13 @@ fn every_effect_carries_a_matte_row() {
             "{} — a fresh Invert starts off",
             s.match_name
         );
-        // The Channel choice (K-425) rides beside the injected pair on every
+        // The Channel choice rides beside the injected pair on every
         // effect that does not pick its matte's channels itself. The four that
         // do — Depth of field (`depth_channel`), Displacement map (its two
         // channel choices), the Lens flare (source detection) and Scatter,
-        // which reads **alpha and only alpha** (K-599) — carry none, and the
+        // which reads **alpha and only alpha** — carry none, and the
         // seam leaves their matte raw. Set matte used to be a fifth, and
-        // carries no Matte row at all now (K-429).
+        // carries no Matte row at all now.
         let owns_channel = matches!(
             s.match_name,
             "dof" | "displacement_map" | "lens_flare" | "scatter"
@@ -11961,7 +12081,7 @@ fn every_effect_carries_a_matte_row() {
                     default: 0,
                     dividers_after: CHOICE_UNGROUPED,
                 },
-                "{} — Luminance by default, the reading every kernel had (K-258)",
+                "{} — Luminance by default, the reading every kernel had",
                 s.match_name
             );
             // Beside the pair, in schema order: picker, Invert, Channel.
@@ -11976,7 +12096,7 @@ fn every_effect_carries_a_matte_row() {
     }
 }
 
-/// **Every Mix slider has a Blend beside it** (K-425): the layer blend modes,
+/// **Every Mix slider has a Blend beside it**: the layer blend modes,
 /// verbatim, Normal by default, injected right after `mix` in schema order so
 /// the panel can draw it on the Mix row. The Lens flare declares its own
 /// `blend` and keeps it; an effect with no Mix (the Controls, the Camera
@@ -11998,7 +12118,7 @@ fn every_mix_row_carries_a_blend() {
                 let at_blend = blend
                     .unwrap_or_else(|| panic!("{} has a Mix and no Blend beside it", s.match_name));
                 if s.match_name == "lens_flare" {
-                    // Its own, older row: a save is a save (K-065). And
+                    // Its own, older row: a save is a save. And
                     // therefore NOT the seam's — the flare's combine applies
                     // its own menu, and a second blend out at the seam reads
                     // that index into the layer modes and spends it against
@@ -12023,7 +12143,7 @@ fn every_mix_row_carries_a_blend() {
                         default: 0,
                         dividers_after: CHOICE_UNGROUPED,
                     },
-                    "{} — the layer modes, Normal by default (K-258)",
+                    "{} — the layer modes, Normal by default",
                     s.match_name
                 );
             }
@@ -12032,8 +12152,8 @@ fn every_mix_row_carries_a_blend() {
     assert_eq!(BlendMode::NAMES[0], "Normal");
 }
 
-/// **The seam forces Mix to 100 for the kernel, and only when it blends**
-/// (K-425). `blend_seam` is the one decision both render paths read: Normal
+/// **The seam forces Mix to 100 for the kernel, and only when it blends**.
+/// `blend_seam` is the one decision both render paths read: Normal
 /// is `None` (the kernel runs untouched), anything else hands back the mode,
 /// the op's own Mix as a fraction, and the op's parameters with Mix at 100.
 #[test]
@@ -12052,7 +12172,7 @@ fn the_blend_seam_forces_mix_to_full_only_when_it_blends() {
     let absent = [(other, Value::Float(1.0)), (mix, Value::Float(40.0))];
     assert!(
         cpu::blend_seam(blur, Params::new(&absent)).is_none(),
-        "a project saved before the row existed blends Normal (K-258)"
+        "a project saved before the row existed blends Normal"
     );
 
     let add = [
@@ -12073,7 +12193,7 @@ fn the_blend_seam_forces_mix_to_full_only_when_it_blends() {
     assert_eq!(forced.len(), 3);
 }
 
-/// **The blend maths, pinned at its end stops** (K-425): Add sums, Multiply
+/// **The blend maths, pinned at its end stops**: Add sums, Multiply
 /// multiplies, Normal is the effect's output, and the Mix lerp runs after the
 /// blend — so Mix 0 is the input on every mode and Mix 1 the blend alone.
 /// Alpha is always the effect's own.
@@ -12128,7 +12248,7 @@ fn the_blend_combines_the_effect_with_its_input_and_then_mixes() {
     assert_eq!(out, [0.5, 0.75, 1.0, 0.75], "Mix 0.5 is halfway");
 }
 
-/// **The stack applies the blend through the seam** (K-425): an Exposure at
+/// **The stack applies the blend through the seam**: an Exposure at
 /// Blend = Multiply and Mix 50 through `apply_stack` equals the kernel run at
 /// Mix 100, multiplied with its input, then lerped to half — and at Normal the
 /// kernel's own Mix does the whole job, untouched.
@@ -12199,7 +12319,7 @@ fn apply_stack_runs_the_kernel_at_full_mix_and_blends_once() {
     assert_ne!(multiplied, normal);
 }
 
-/// **The prepared matte is the chosen channel, inverted once** (K-425): a grey
+/// **The prepared matte is the chosen channel, inverted once**: a grey
 /// of R = G = B = channel, alpha 1 — so every kernel's luma read gets the
 /// channel back — and Luminance without Invert is declared a no-op by the
 /// predicate the seam gates on.
@@ -12225,13 +12345,13 @@ fn matte_prepare_picks_the_channel_and_inverts_once() {
     assert_eq!(m, [0.0, 0.0, 0.0, 1.0]);
     assert!(
         !cpu::matte_needs_prepare(0, false),
-        "Luminance, no Invert: no pass (K-258)"
+        "Luminance, no Invert: no pass"
     );
     assert!(cpu::matte_needs_prepare(0, true));
     assert!(cpu::matte_needs_prepare(2, false));
 }
 
-/// **Every new row defaults to yesterday's behaviour** (K-258): an instance
+/// **Every new row defaults to yesterday's behaviour**: an instance
 /// stripped of `matte_channel` and `blend` resolves to the same numbers as a
 /// fresh one reads through the typed accessors.
 #[test]
@@ -12253,7 +12373,7 @@ fn a_pre_k425_instance_reads_luminance_and_normal() {
     assert!(cpu::blend_seam(op.def.schema(), op.params).is_none());
 }
 
-/// **The two that opted out still say the same words** (K-395).
+/// **The two that opted out still say the same words**.
 ///
 /// "Their stored parameter ids do not change, only their presentation and
 /// prose": Depth of field's depth pass and the Lens flare's source matte keep
@@ -12271,7 +12391,7 @@ fn the_effects_that_owned_the_matte_first_use_the_uniform_labels() {
             .params
             .iter()
             .find(|p| p.id == id)
-            .unwrap_or_else(|| panic!("{effect} lost its {id} row — K-065 says a save is a save"))
+            .unwrap_or_else(|| panic!("{effect} lost its {id} row — a save is a save"))
             .label
     };
     assert_eq!(label("dof", "depth"), "Matte");
@@ -12287,8 +12407,8 @@ fn the_effects_that_owned_the_matte_first_use_the_uniform_labels() {
     );
 }
 
-/// **A project saved before K-395 renders identically** (K-258, the campaign's
-/// hardest invariant, on the resolve side).
+/// **A project saved before the Matte row existed renders identically** (the
+/// campaign's hardest invariant, on the resolve side).
 ///
 /// An instance stripped of both new parameters — which is exactly what every
 /// saved project is — must resolve to the same bag as a fresh one, bar the
@@ -12339,7 +12459,7 @@ fn a_pre_matte_instance_resolves_to_the_same_numbers() {
     }
 }
 
-/// The generic strength semantic itself (K-395, docs/08 §2.6), on the CPU side
+/// The generic strength semantic itself (docs/08 §2.6), on the CPU side
 /// where the maths are readable: white is the effect in full, black is the
 /// input untouched, grey is part way, and Invert swaps the ends.
 #[test]
@@ -12394,7 +12514,7 @@ fn the_matte_dissolves_the_effect_by_luma() {
     assert_eq!(out, input, "a negative matte clamps at none");
 }
 
-/// **The `#[mask_path]` attribute produces the row it claims to** (K-408).
+/// **The `#[mask_path]` attribute produces the row it claims to**.
 ///
 /// Declared here rather than on a shipped effect because the seam landed ahead
 /// of its consumers — Scribble, Stroke and Vegas's Mask/Path source. A derive
@@ -12463,11 +12583,11 @@ fn a_mask_path_row_declares_itself_and_defaults_to_the_first_mask() {
     assert!(WalksAPath::read(Params::new(&bound)).path);
     assert!(!WalksAPath::read(Params::EMPTY).path);
     // A value of another kind reads as unset rather than as anything else
-    // (K-258's rule, every typed reader).
+    // (the rule for every typed reader).
     let wrong = [(id, Value::Layer(true))];
     assert!(!WalksAPath::read(Params::new(&wrong)).path);
 
-    // The seam's consumers have landed (K-408, docs/08 §3.76 §3.78 §3.79), so
+    // The seam's consumers have landed (docs/08 §3.76 §3.78 §3.79), so
     // the "nothing declares one yet" line this test used to end on is gone; what
     // stands in its place is that every declared row is one the carriage knows
     // about, which is `the_mask_path_list_is_one_to_one_with_the_ops_that_
@@ -12482,7 +12602,7 @@ fn a_mask_path_row_declares_itself_and_defaults_to_the_first_mask() {
         vec!["vegas", "scribble", "stroke", "particulate", "matte_key"]
     );
 
-    // The Matte key declares **two** rows, not one (K-546), so the carriage
+    // The Matte key declares **two** rows, not one, so the carriage
     // counts rows rather than effects. Both opt out of the first-mask default:
     // a garbage matte nobody asked for would be a keyer that stopped keying.
     let keyer = BUILTINS
@@ -12505,7 +12625,7 @@ fn a_mask_path_row_declares_itself_and_defaults_to_the_first_mask() {
 
 /// A fresh instance's mask-path row is **unset**, which is the "First mask"
 /// entry — not an id written at instantiation the way a self-default layer
-/// reference is (K-408). An effect is usually added before the mask is drawn,
+/// reference is. An effect is usually added before the mask is drawn,
 /// so there is no id to write; resolving it late is also what keeps it pointing
 /// at the first mask when the masks are reordered.
 #[test]
@@ -12522,8 +12642,8 @@ fn a_fresh_mask_path_row_is_the_first_mask_entry() {
     );
 }
 
-/// **A chain is trimmed by distance along it, not by where it is** (K-408,
-/// docs/08 §3.78) — which is what makes Start and End behave like a pen drawing
+/// **A chain is trimmed by distance along it, not by where it is** (docs/08
+/// §3.78) — which is what makes Start and End behave like a pen drawing
 /// the thing, and is the whole reason the pieces carry an arc length.
 #[test]
 fn a_path_chain_is_trimmed_by_the_distance_along_it() {
@@ -12724,7 +12844,7 @@ fn a_brush_stroke_changes_shape_when_its_stamps_come_apart() {
 }
 
 /// **A path effect's numbers scale with the raster, and its geometry does not
-/// scale twice** (K-408, docs/08 §2.3): the seam flattens once in px@comp and
+/// scale twice** (docs/08 §2.3): the seam flattens once in px@comp and
 /// each consumer takes it to the raster it is drawing at.
 #[test]
 fn a_path_drawings_geometry_follows_the_preview_factor() {
@@ -12748,8 +12868,8 @@ fn a_path_drawings_geometry_follows_the_preview_factor() {
     );
 }
 
-/// **The point a distance along a path is a lookup, not a re-measurement**
-/// (K-408): every consumer asks the polyline and gets the same answer.
+/// **The point a distance along a path is a lookup, not a re-measurement**:
+/// every consumer asks the polyline and gets the same answer.
 #[test]
 fn a_polyline_answers_where_a_distance_along_it_lands() {
     let m = crate::mask::Mask::ellipse(0.0, 0.0, 50.0, 50.0);
@@ -12780,7 +12900,7 @@ fn a_polyline_answers_where_a_distance_along_it_lands() {
 }
 
 /// **Vegas' Mask/Path half greys the rows that stop meaning anything**, and its
-/// contour half greys the mask (docs/08 §3.76, K-408). The render reads the same
+/// contour half greys the mask (docs/08 §3.76). The render reads the same
 /// two predicates to decide whether to flatten a path at all, so this is not a
 /// cosmetic claim.
 #[test]
@@ -12802,7 +12922,7 @@ fn vegas_offers_a_mask_only_while_it_is_reading_one() {
     assert!(param_enabled(&on_a_contour, "threshold"));
 }
 
-/// **The raster factor and the waver's tick reach the bag** (K-408, K-409). The
+/// **The raster factor and the waver's tick reach the bag**. The
 /// three path effects each read a number at draw time that no row carries: how
 /// many raster pixels a comp pixel is, since the seam hands its vertices over in
 /// px@comp, and — for Scribble — where in the waver's evolution this frame sits.
@@ -12883,7 +13003,7 @@ fn a_path_effect_is_told_the_raster_and_the_clock_at_resolve() {
     );
 }
 
-/// **The identity diagonal bakes to the identity table, bit for bit** (K-412).
+/// **The identity diagonal bakes to the identity table, bit for bit**.
 ///
 /// This is the load-bearing one. A fresh Curves is the passthrough only
 /// because its table reads `t[i] == i / 256` exactly; the neutral
@@ -12908,7 +13028,7 @@ fn the_identity_curve_bakes_and_reads_back_exactly() {
     }
 }
 
-/// **A two-point curve is exactly its own straight line** (K-412): the clamped
+/// **A two-point curve is exactly its own straight line**: the clamped
 /// end condition sets both slopes to the secant, so the cubic degenerates to
 /// the line through the pair. If this drifts, every default curve drifts.
 #[test]
@@ -12929,7 +13049,7 @@ fn a_two_point_curve_is_a_straight_line() {
     }
 }
 
-/// **A monotone point set stays inside the unit square** (K-412). A cubic
+/// **A monotone point set stays inside the unit square**. A cubic
 /// through rising points can bulge past the highest of them; a tone curve that
 /// climbed above the white the user placed would ring a bright halo into a
 /// roll-off, which is what the bake's clamp exists to stop.
@@ -12970,7 +13090,7 @@ fn a_monotone_curve_stays_in_the_unit_square() {
     }
 }
 
-/// **A malformed point list is straightened, never refused** (K-412). Out of
+/// **A malformed point list is straightened, never refused**. Out of
 /// order, out of the square, repeated x, too many, too few: each reads to a
 /// curve, quietly, because the list comes off a document a hand or an importer
 /// wrote and 14-ENGINEERING-RULES §4 forbids a panic on it.
@@ -13042,7 +13162,7 @@ fn baking_a_curve_twice_gives_the_same_bytes() {
 }
 
 /// **A curve parameter resolves through the arena, straightened, and keys a
-/// frame** (K-412). Curve values are static, so this is the whole of their
+/// frame**. Curve values are static, so this is the whole of their
 /// resolve: the document's list arrives as a [`Value::Curve`], sanitised, and
 /// two different curves feed two different hashes.
 #[test]
@@ -13101,7 +13221,7 @@ fn a_curve_parameter_resolves_and_feeds_the_key() {
     );
 }
 
-/// **The Controls family holds a value and draws nothing** (K-414).
+/// **The Controls family holds a value and draws nothing**.
 ///
 /// Five effects whose whole purpose is a row for an expression to read. Three
 /// facts make that true rather than merely intended, and each fails silently
@@ -13152,7 +13272,7 @@ fn a_control_effect_holds_its_value_and_draws_nothing() {
     }
 }
 
-/// **A closed range is a Float wearing a different control** (K-414).
+/// **A closed range is a Float wearing a different control**.
 ///
 /// The Slider kind changes what the panel draws and nothing else: the stored
 /// value is an `EffectValue::Float`, the default is the declared one, and the
@@ -13207,7 +13327,7 @@ fn a_closed_range_resolves_exactly_as_the_float_it_is() {
     );
 }
 
-/// **A button is a row with no value** (K-417's fifth ruling).
+/// **A button is a row with no value**.
 ///
 /// `ParamKind::Action` makes three promises, and each of them fails silently
 /// without a test: an instance carries no stored value for it, so nothing
@@ -13247,7 +13367,7 @@ fn a_button_is_a_row_with_no_value() {
     }
 
     // And the backfill leaves it alone — the walk that exists to add missing
-    // rows must not add this one (K-258 meets K-417).
+    // rows must not add this one.
     let before = e.params.len();
     let mut list = vec![e.clone()];
     crate::fx::backfill_builtin_params(&mut list);
@@ -13274,9 +13394,9 @@ fn a_button_is_a_row_with_no_value() {
     );
 }
 
-/// The Camera track is the handle K-417 describes: it registers, it files under
-/// Utility, it renders identity, it takes no matte, and its quality knobs are
-/// the ones the ruling names. The status readout is deliberately **not** here —
+/// The Camera track is a handle: it registers, it files under Utility, it
+/// renders identity, it takes no matte, and its quality knobs are the ones
+/// the design names. The status readout is deliberately **not** here —
 /// it is live job state and crosses as job state in stage 2, and a string
 /// parameter pretending to be one would put a progress bar in the save file.
 #[test]
@@ -13312,7 +13432,7 @@ fn the_camera_track_declares_a_handle_not_a_look() {
     assert_eq!(
         s.params[4].kind,
         ParamKind::Bool { default: true },
-        "the cloud is on after a solve (K-417's fourth ruling)"
+        "the cloud is on after a solve"
     );
 
     // Normal is the tracker's own default, which is what makes the other two
@@ -13330,11 +13450,11 @@ fn the_camera_track_declares_a_handle_not_a_look() {
     }
 }
 
-/// **A project saved before an effect dropped a parameter still loads** (K-258,
-/// K-429). The Matte key gave its Matte row up when K-425 ruled a keyer needs
-/// none, and Set matte gave the universal row up when K-429 ruled the effect
-/// that *is* a matte carries none — so a save made before either carries three
-/// ids the schema no longer declares.
+/// **A project saved before an effect dropped a parameter still loads**. The
+/// Matte key gave its Matte row up once a keyer was ruled to need none, and
+/// Set matte gave the universal row up once the effect that *is* a matte was
+/// ruled to carry none — so a save made before either carries three ids the
+/// schema no longer declares.
 ///
 /// The forward-migration walk only ever *appends* what a schema has grown, and
 /// that is exactly what makes it tolerant here: it never asks whether a stored
@@ -13410,11 +13530,11 @@ fn the_two_keyers_still_load_a_save_that_holds_their_old_matte_rows() {
 }
 
 // ---------------------------------------------------------------------------
-// Units, vector pairs and the pair link flag (K-443)
+// Units, vector pairs and the pair link flag
 // ---------------------------------------------------------------------------
 
 /// **Every parameter says what its number means.** The panel draws the unit
-/// beside the value (K-443), so a parameter that never declared one would show a
+/// beside the value, so a parameter that never declared one would show a
 /// bare number and nobody would notice; the derive answers for the kinds that
 /// cannot carry a unit and for a dial, and leaves the numeric kinds to decide,
 /// which is what this catches when one forgets.
@@ -13467,7 +13587,7 @@ fn the_point_units_the_panel_hard_coded_are_declared_per_effect() {
     ] {
         assert_eq!(unit_of(effect, id), Some(Unit::Px), "{effect}.{id}");
     }
-    // Its one `false` entry is gone: since K-558 Radial blur's centre is
+    // Its one `false` entry is gone: Radial blur's centre is
     // px@comp like every other centre, so the map it encoded could now be
     // written on the id alone — which is exactly why the knowledge stays in
     // the declarations rather than in a Dart table.
@@ -13480,7 +13600,7 @@ fn the_point_units_the_panel_hard_coded_are_declared_per_effect() {
     }
 }
 
-/// **A per cent of the diagonal is still nobody's unit** — K-419's rule, now
+/// **A per cent of the diagonal is still nobody's unit**, now
 /// that there is a `Percent` beside it to be confused with. A share of the
 /// frame is not a distance; a distance is px@comp.
 #[test]
@@ -13560,7 +13680,7 @@ fn a_pair_is_its_stem_and_its_two_halves() {
 /// Unlinked is what every project written before the flag existed means, and
 /// what it did: two numbers that moved on their own. A document that has never
 /// been linked writes no field at all, so an untouched project saves back the
-/// same bytes (K-258), and a document from before the field loads with every
+/// same bytes, and a document from before the field loads with every
 /// pair unlinked rather than refusing.
 #[test]
 fn a_vector_pair_link_is_off_by_default_and_survives_the_file() {
@@ -13675,8 +13795,8 @@ fn linking_a_pair_is_one_undoable_op() {
 }
 
 // ---------------------------------------------------------------------------
-// Particulate and the points stream (K-474, K-475, K-495;
-// docs/impl/particulate.md §9 items 1-7 and 9-11, on the CPU path).
+// Particulate and the points stream
+// (docs/impl/particulate.md §9 items 1-7 and 9-11, on the CPU path).
 // ---------------------------------------------------------------------------
 
 use crate::fx::effects::particulate::Particulate;
@@ -13757,7 +13877,7 @@ fn a_particulate_frame_evaluates_the_same_twice() {
 
 /// **Random access** (§9 item 2): frames evaluated out of order equal the same
 /// frames evaluated in order. The scrub-safety property, as a test — and the
-/// whole reason the closed form was chosen over a simulation (K-474).
+/// whole reason the closed form was chosen over a simulation.
 #[test]
 fn particulate_scrubs_in_any_order() {
     let e = particulate(&[]);
@@ -13842,7 +13962,7 @@ fn the_birth_schedule_is_the_rate_curves_integral() {
 /// and wind with no drag as exactly motionless wind, which is the documented
 /// behaviour rather than an accident of the algebra.
 ///
-/// **All three axes** (K-561): the depth component is held to the same textbook
+/// **All three axes**: the depth component is held to the same textbook
 /// solution as the other two, with a wind of its own, which is what "the same
 /// drag and wind algebra" has to mean if it is to mean anything.
 #[test]
@@ -13869,7 +13989,7 @@ fn the_closed_forms_match_the_analytic_solutions() {
         let want = [
             p0[0] + v0[0] * age,
             p0[1] + v0[1] * age + 0.5 * 400.0 * age * age,
-            // Gravity stays down (K-561): the depth axis is unaccelerated.
+            // Gravity stays down: the depth axis is unaccelerated.
             p0[2] + v0[2] * age,
         ];
         assert!((pos[0] - want[0]).abs() < 1e-3, "x at {age}");
@@ -14052,7 +14172,7 @@ fn the_cap_keeps_the_newest_particles() {
         "the cap kept something other than the newest hundred"
     );
 
-    // The degradation rung (K-475): the newest half, by the same rule.
+    // The degradation rung: the newest half, by the same rule.
     let half = all.len() / 2;
     let mut halved = all.clone();
     halved.keep_newest(half);
@@ -14102,7 +14222,7 @@ fn a_mask_path_emitter_with_no_path_emits_nothing() {
     }
 }
 
-// --------------------------------------------------- Scatter (K-599)
+// --------------------------------------------------- Scatter
 
 /// A Scatter instance with its declared defaults, and `edits` applied.
 fn scatter(edits: &[(&str, EffectValue)]) -> EffectInstance {
@@ -14174,7 +14294,7 @@ fn scatter_keeps_the_points_that_land_on_alpha() {
     assert_eq!(kept.len(), left, "the opaque half refused somebody");
 }
 
-/// **Invert scatters outside the shape** — the row the K-395 override carries,
+/// **Invert scatters outside the shape** — the row the override carries,
 /// honoured by the effect rather than by the seam (there is no Channel row to
 /// prepare through).
 #[test]
@@ -14244,7 +14364,7 @@ fn scatter_is_the_same_crowd_twice_and_a_different_one_reseeded() {
     );
 }
 
-/// **The preview divisor never re-rolls the crowd** (K-031's neighbourhood):
+/// **The preview divisor never re-rolls the crowd**:
 /// Density is a count per *composition* area, so a half-resolution raster
 /// throws the same candidates at the same places in comp pixels. What may
 /// differ is which of them a **soft** edge admits, which is why this fixture
@@ -14263,8 +14383,8 @@ fn scatter_throws_the_same_candidates_at_every_raster() {
     }
 }
 
-/// **The cap is a ceiling on the work** (K-475's rule, a generator's shape of
-/// it): Max points bounds the *candidates*, and what stands is a subset.
+/// **The cap is a ceiling on the work** (a generator's shape of the rule):
+/// Max points bounds the *candidates*, and what stands is a subset.
 #[test]
 fn scatter_throws_no_more_candidates_than_its_cap() {
     let s = scatter_of(&scatter(&[
@@ -14279,7 +14399,7 @@ fn scatter_throws_no_more_candidates_than_its_cap() {
     assert_eq!(plenty.candidate_count(1000, 1000, 1.0), 1000);
 }
 
-// -------------------------------------------- Emit from image (K-603)
+// -------------------------------------------- Emit from image
 
 /// An Emit from image instance with its declared defaults, and `edits` applied.
 fn emit_from_image(edits: &[(&str, EffectValue)]) -> EffectInstance {
@@ -14356,7 +14476,7 @@ fn emit_from_image_keeps_the_points_that_land_on_light() {
     assert_eq!(kept.len(), left, "the bright half refused somebody");
 }
 
-/// **Threshold is the floor, and the field above it is a chance** (K-603): a
+/// **Threshold is the floor, and the field above it is a chance**: a
 /// flat grey picture keeps the share of candidates its remapped brightness
 /// comes to, so a gradient thins the crowd rather than cutting it.
 ///
@@ -14398,7 +14518,7 @@ fn emit_from_image_thins_by_how_far_above_the_threshold_a_pixel_is() {
         .is_empty());
 }
 
-/// **Brightness is measured on the light, not on the coverage** (K-603): the
+/// **Brightness is measured on the light, not on the coverage**: the
 /// picture is premultiplied, so a half-covered white pixel must read as white
 /// rather than as grey. Otherwise a soft-edged title would emit from its own
 /// antialiasing as if it were a shadow.
@@ -14439,7 +14559,7 @@ fn emit_from_image_is_the_same_crowd_twice_and_a_different_one_reseeded() {
     );
 }
 
-/// **The preview divisor never re-rolls the crowd** (K-031's neighbourhood):
+/// **The preview divisor never re-rolls the crowd**:
 /// Density is a count per *composition* area, so a half-resolution raster
 /// throws the same candidates at the same places in comp pixels.
 #[test]
@@ -14456,8 +14576,8 @@ fn emit_from_image_throws_the_same_candidates_at_every_raster() {
     }
 }
 
-/// **The cap is a ceiling on the work** (K-475's rule, a generator's shape of
-/// it): Max points bounds the *candidates*, and what stands is a subset.
+/// **The cap is a ceiling on the work** (a generator's shape of the rule):
+/// Max points bounds the *candidates*, and what stands is a subset.
 #[test]
 fn emit_from_image_throws_no_more_candidates_than_its_cap() {
     let e = emit_of(&emit_from_image(&[
@@ -14469,8 +14589,8 @@ fn emit_from_image_throws_no_more_candidates_than_its_cap() {
     assert_eq!(all.id, (0..500).collect::<Vec<u64>>());
 }
 
-/// **A producer declares a Points output the same way its three siblings do**
-/// (K-472, K-492, K-603), and a Source layer row the carriage fills.
+/// **A producer declares a Points output the same way its three siblings do**,
+/// and a Source layer row the carriage fills.
 #[test]
 fn emit_from_image_declares_a_points_output_and_a_source_layer() {
     let def = BUILTIN_DEFS
@@ -14487,7 +14607,7 @@ fn emit_from_image_declares_a_points_output_and_a_source_layer() {
     );
 }
 
-// ------------------------------------------------------ Grid (K-598)
+// ------------------------------------------------------ Grid
 
 /// A Grid instance with its declared defaults, and `edits` applied.
 fn grid(edits: &[(&str, EffectValue)]) -> EffectInstance {
@@ -14545,7 +14665,7 @@ fn a_grid_emits_one_point_per_cell_on_its_spacing() {
     }
 }
 
-/// **Depth is the third count** (K-561): planes recede from the layer's own
+/// **Depth is the third count**: planes recede from the layer's own
 /// plane, centred on it, and one plane is exactly flat.
 #[test]
 fn a_grids_planes_recede_from_the_layers_plane() {
@@ -14568,7 +14688,7 @@ fn a_grids_planes_recede_from_the_layers_plane() {
     );
 }
 
-/// **Determinism, and no clock in it** (K-474's property, applied to a
+/// **Determinism, and no clock in it** (the closed form's property in a
 /// generator): two evaluations of one frame agree bit for bit, and so do two
 /// different frames — a lattice has no time in it, which is why its schema
 /// declares itself unseeded.
@@ -14612,7 +14732,7 @@ fn a_grids_jitter_is_seeded_and_stays_inside_its_dial() {
     assert_ne!(jittered.position, reseeded.position, "the seed did nothing");
 }
 
-/// **The cap rule, a generator's shape of it** (K-475): a lattice past Max
+/// **The cap rule, a generator's shape of it**: a lattice past Max
 /// points keeps the **first** cap by index. A lattice has no birth order, so
 /// the rule is a prefix of the one fixed ordering rather than the newest —
 /// deterministic, and the same from any scrub direction.
@@ -14635,7 +14755,7 @@ fn a_grid_over_its_cap_keeps_the_first_cells_by_index() {
     assert_eq!(capped.position, whole.position[..100], "a different prefix");
 }
 
-/// The px@comp rule (K-419), through the resolve step every effect shares: at
+/// The px@comp rule, through the resolve step every effect shares: at
 /// half raster every length in the lattice is half of what it was, so the
 /// preview draws the picture the export draws.
 #[test]
@@ -14668,7 +14788,7 @@ fn a_grid_rescales_with_the_raster() {
     );
 }
 
-// --------------------------------------- Clone to points (K-600)
+// --------------------------------------- Clone to points
 
 /// A Clone to points instance with its declared defaults, and `edits` applied.
 fn clone_to_points(edits: &[(&str, EffectValue)]) -> EffectInstance {
@@ -14720,7 +14840,7 @@ fn flat_sprite(n: u32) -> Vec<f32> {
 }
 
 /// **One stamp per point**, with the point's own size and rotation and the
-/// effect's two dials on top (K-600).
+/// effect's two dials on top.
 #[test]
 fn clone_to_points_stamps_one_copy_per_point() {
     let stream = grid_stream(&grid(&[("columns", fixed(4.0)), ("rows", fixed(3.0))]), 0.0);
@@ -14742,7 +14862,7 @@ fn clone_to_points_stamps_one_copy_per_point() {
     }
 }
 
-/// **Painter's order is `id` order** (K-600), which is what makes the picture
+/// **Painter's order is `id` order**, which is what makes the picture
 /// the same on every machine: the stream arrives ordered by birth index
 /// ascending, and a later stamp lands on top of an earlier one.
 #[test]
@@ -14792,7 +14912,7 @@ fn clone_to_points_lays_its_stamps_in_id_order() {
     assert!(under[0] > under[1], "the order changed nothing: {under:?}");
 }
 
-/// **Nothing wired draws nothing** (K-509's calm, this effect's shape of it):
+/// **Nothing wired draws nothing** (this effect's shape of it):
 /// an empty stream stamps nothing at all, and the picture it was handed is the
 /// picture it passes on.
 #[test]
@@ -14826,7 +14946,7 @@ fn clone_to_points_with_no_stream_draws_nothing() {
     assert_eq!(rgba, before, "an empty stream touched the picture");
 }
 
-/// **The cap rule** (K-475), the family's row on a consumer: over Max clones
+/// **The cap rule**, the family's row on a consumer: over Max clones
 /// the **newest** by birth index survive, which is what a smaller cap on the
 /// producer would have left.
 #[test]
@@ -14864,7 +14984,7 @@ fn clone_to_points_tint_blends_towards_the_points_own_colour() {
     }
 }
 
-/// **Determinism** (K-031): the same stream and the same dials make the same
+/// **Determinism**: the same stream and the same dials make the same
 /// stamps, bit for bit. There is no state and no clock in this effect at all,
 /// so this is a property of the design — and a regression would betray it
 /// silently.
@@ -14875,10 +14995,10 @@ fn clone_to_points_makes_the_same_stamps_twice() {
     assert_eq!(clone_stamps(&e, &stream), clone_stamps(&e, &stream));
 }
 
-/// **The px@comp rule for a stream read off a wire** (K-419, K-385): a stream
+/// **The px@comp rule for a stream read off a wire**: a stream
 /// is data in composition pixels, and rearranging it into the raster a frame is
 /// drawn at is one multiplication per length. At full resolution nothing moves
-/// at all, which is what makes preview and export bit-identical (K-031).
+/// at all, which is what makes preview and export bit-identical.
 #[test]
 fn a_stream_rescales_into_the_raster_it_is_drawn_at() {
     let full = grid_stream(&grid(&[("spacing_x", fixed(100.0))]), 0.0);
@@ -14902,8 +15022,8 @@ fn a_stream_rescales_into_the_raster_it_is_drawn_at() {
     );
 }
 
-/// **A consumer declares its socket the same way a driver does** (K-492,
-/// K-600): the signature answers for it, which is what lets the seam, the
+/// **A consumer declares its socket the same way a driver does**: the
+/// signature answers for it, which is what lets the seam, the
 /// validator and the carriage all read one method.
 #[test]
 fn clone_to_points_declares_a_points_input_and_no_output() {
@@ -14918,7 +15038,7 @@ fn clone_to_points_declares_a_points_input_and_no_output() {
     assert!(sig.outputs().is_empty());
 }
 
-// -------------------------------------------------- Trail (K-601)
+// -------------------------------------------------- Trail
 
 /// A Trail instance with its declared defaults, and `edits` applied.
 fn trail(edits: &[(&str, EffectValue)]) -> EffectInstance {
@@ -14966,7 +15086,7 @@ fn moving_samples(n: usize, step: f64) -> Vec<PointsStream> {
         .collect()
 }
 
-/// **The tail is the closed form looked backwards** (K-601): a point's older
+/// **The tail is the closed form looked backwards**: a point's older
 /// self comes out of the producer evaluated at an earlier moment, matched by
 /// `id` — so a still point has a tail of no length and a moving one has a tail
 /// that runs back the way it came.
@@ -15141,7 +15261,7 @@ fn a_trails_segments_run_back_to_the_previous_sample() {
     assert!(joined > 0, "nothing in the fixture was ever joined up");
 }
 
-/// **Nothing wired draws nothing** (K-509's calm): no samples at all is an
+/// **Nothing wired draws nothing**: no samples at all is an
 /// empty tail, and one sample is the point itself with no tail behind it.
 #[test]
 fn a_trail_with_no_stream_draws_nothing() {
@@ -15176,7 +15296,7 @@ fn a_trail_stops_where_a_point_was_not_yet_born() {
     }
 }
 
-/// **The cap rule** (K-475): over Max trails the newest by birth index grow
+/// **The cap rule**: over Max trails the newest by birth index grow
 /// tails, and the rest do not.
 #[test]
 fn a_trail_over_its_cap_tails_the_newest_points() {
@@ -15193,7 +15313,7 @@ fn a_trail_over_its_cap_tails_the_newest_points() {
     assert!(drawn.len() <= 10, "more dabs than cap × samples");
 }
 
-/// **Determinism** (K-031): the same samples and the same dials make the same
+/// **Determinism**: the same samples and the same dials make the same
 /// tail, bit for bit. There is no state in this effect at all — the history is
 /// evaluated, never remembered — so this is a property of the design.
 #[test]
@@ -15207,8 +15327,8 @@ fn a_trail_draws_the_same_tail_twice() {
     assert_eq!(trail_tail(&e, &samples), trail_tail(&e, &samples));
 }
 
-/// **A consumer declares its socket the same way a driver does** (K-492,
-/// K-601), and the two rows the carriage reads before any bag exists.
+/// **A consumer declares its socket the same way a driver does**, and the two
+/// rows the carriage reads before any bag exists.
 #[test]
 fn trail_declares_a_points_input_and_its_back_sample_rows() {
     use crate::fx::effects::trail::Trail as T;
@@ -15228,7 +15348,7 @@ fn trail_declares_a_points_input_and_its_back_sample_rows() {
     }
 }
 
-// ----------------------------------------- Connect points (K-602)
+// ----------------------------------------- Connect points
 
 /// A Connect points instance with its declared defaults, and `edits` applied.
 fn connect_points(edits: &[(&str, EffectValue)]) -> EffectInstance {
@@ -15272,7 +15392,7 @@ fn pairs_within(stream: &PointsStream, reach: f32) -> usize {
     n
 }
 
-/// **A line per pair within reach, and no line to anything further** (K-602).
+/// **A line per pair within reach, and no line to anything further**.
 ///
 /// A lattice on a known spacing is the fixture that can say which pairs those
 /// are without measuring anything: at a reach between the spacing and its
@@ -15318,7 +15438,7 @@ fn connect_points_joins_the_pairs_within_reach_and_no_others() {
     assert_eq!(diagonal.len(), 17 + 2 * 3 * 2, "the diagonals did not join");
 }
 
-/// **The buckets find what a full comparison finds** (K-602) — the property the
+/// **The buckets find what a full comparison finds** — the property the
 /// whole optimisation rests on, and the one a regression would quietly break:
 /// cutting the plane into squares must change what the walk *costs*, never what
 /// it answers.
@@ -15355,7 +15475,7 @@ fn connect_points_pairs_exactly_as_a_full_comparison_would() {
     }
 }
 
-/// **Max connections is counted at both ends** (K-602): a point never grows
+/// **Max connections is counted at both ends**: a point never grows
 /// more lines than the dial allows, whichever end of the pair it is.
 #[test]
 fn connect_points_holds_every_point_to_its_connection_allowance() {
@@ -15392,7 +15512,7 @@ fn connect_points_holds_every_point_to_its_connection_allowance() {
     assert!(!web.is_empty(), "the allowance refused everything");
 }
 
-/// **Fade and Taper are the distance falloff** (K-602): a longer line is
+/// **Fade and Taper are the distance falloff**: a longer line is
 /// dimmer and thinner than a shorter one, and at nought both dials leave every
 /// line alike.
 #[test]
@@ -15442,7 +15562,7 @@ fn connect_points_fades_and_tapers_the_longer_lines() {
     }
 }
 
-/// **The cap rule** (K-475): over Max points the newest by birth index are the
+/// **The cap rule**: over Max points the newest by birth index are the
 /// ones that may be joined, and the rest are not considered at all.
 #[test]
 fn connect_points_over_its_cap_joins_the_newest_points() {
@@ -15471,7 +15591,7 @@ fn connect_points_over_its_cap_joins_the_newest_points() {
     }
 }
 
-/// **Determinism** (K-031): the same stream and the same dials make the same
+/// **Determinism**: the same stream and the same dials make the same
 /// web, bit for bit — which is what the `id`-ordered walk and the
 /// distance-then-`id` ordering of each point's candidates are for.
 #[test]
@@ -15509,8 +15629,8 @@ fn connect_points_with_nothing_to_join_draws_nothing() {
     }
 }
 
-/// **A consumer declares its socket the same way a driver does** (K-492,
-/// K-602) — the signature answers for it, so the seam, the validator and the
+/// **A consumer declares its socket the same way a driver does** — the
+/// signature answers for it, so the seam, the validator and the
 /// draw builder need no name of this effect anywhere.
 #[test]
 fn connect_points_declares_a_points_input() {
@@ -15524,7 +15644,7 @@ fn connect_points_declares_a_points_input() {
     assert_eq!(sig.input("points"), Some(PortType::Points));
 }
 
-// ------------------------------------------- border emission (K-597)
+// ------------------------------------------- border emission
 
 /// A still emitter of the given shape: nothing carries a particle off the
 /// outline, so where it is drawn is where it was born.
@@ -15629,7 +15749,7 @@ fn an_ellipse_outline_spreads_by_arc_length_and_not_by_angle() {
     }
 }
 
-/// **The filled shapes are untouched** (K-258): the two new codes are appended,
+/// **The filled shapes are untouched**: the two new codes are appended,
 /// so every shape a saved document can name emits exactly what it always did.
 #[test]
 fn adding_the_outline_shapes_moved_no_existing_code() {
@@ -15684,7 +15804,7 @@ fn an_outline_of_no_extent_emits_at_its_centre() {
     }
 }
 
-// ------------------------------------------------ the third axis (K-561)
+// ------------------------------------------------ the third axis
 
 /// A camera one `zoom` back from a layer whose plane is at `z = 0`, as the
 /// projection restricted to that plane comes out: a particle at depth `z`
@@ -15708,11 +15828,11 @@ fn head_on_camera(centre: [f32; 2], zoom: f32) -> points::Projection {
     }
 }
 
-/// **The flat projection is the identity, exactly** (K-561, K-258): the plane
+/// **The flat projection is the identity, exactly**: the plane
 /// comes back bit for bit, at any `z`, and nothing foreshortens.
 ///
 /// This is the arithmetic the whole 2D guarantee rests on — a projection that
-/// was *nearly* the identity would move every pre-K-561 picture by a least
+/// was *nearly* the identity would move every flat picture by a least
 /// significant bit and no test above would notice. The one bit it does **not**
 /// carry is the sign of a zero (`−0 · 1 + 0` is `+0`), which is a distinction
 /// no pixel can hold: every coverage the draw computes from it is the same
@@ -15740,7 +15860,7 @@ fn the_flat_projection_returns_the_bits_it_was_given() {
     assert!(flat.rescaled(1.0).is_flat());
 }
 
-/// **A camera foreshortens, and the plane does not move** (K-561): a particle
+/// **A camera foreshortens, and the plane does not move**: a particle
 /// at `z = 0` lands exactly where its x and y say, one further off is drawn
 /// smaller and pulled towards the centre, and one nearer is drawn larger.
 #[test]
@@ -15770,8 +15890,8 @@ fn the_camera_puts_depth_where_perspective_puts_it() {
     assert_eq!(proj.apply([160.0, 100.0, -1000.0]).1, 0.0);
 }
 
-/// **The K-258 gate** (K-561): a project saved with the 2D defaults draws the
-/// picture it always drew, bit for bit.
+/// **The forward-migration gate**: a project saved with the 2D defaults draws
+/// the picture it always drew, bit for bit.
 ///
 /// The five new rows all default to nought, so the stream's own x and y — and
 /// therefore every pixel — are the arithmetic they were before the axis
@@ -15811,7 +15931,7 @@ fn two_dimensional_defaults_draw_the_picture_they_always_drew() {
     //
     // The *stream's* z is not necessarily nought — the default look has
     // Turbulence at 40, and turbulence gained a third lattice like every other
-    // jitter with an x and a y (K-561). What the guarantee is about is the
+    // jitter with an x and a y. What the guarantee is about is the
     // **picture**: with no camera the projection drops the depth, so what is
     // drawn is exactly the pair it always was.
     assert!(fresh.projection.is_flat());
@@ -15835,7 +15955,7 @@ fn two_dimensional_defaults_draw_the_picture_they_always_drew() {
     assert_eq!(a, b, "an old file's picture moved");
 }
 
-/// **The depth rows do something, and only what they say** (K-561).
+/// **The depth rows do something, and only what they say**.
 ///
 /// Turbulence is the one row that gains a depth component without a control of
 /// its own — "a jitter gains z where x and y have one" — so it is checked
@@ -15907,7 +16027,7 @@ fn the_depth_rows_move_particles_off_the_plane() {
     );
 }
 
-/// **Determinism and random access hold in three axes** (K-561, §9 items 1–2):
+/// **Determinism and random access hold in three axes** (§9 items 1–2):
 /// the scrub-order property, re-run on a stream that is off the plane and seen
 /// through a camera.
 #[test]
@@ -15955,7 +16075,7 @@ fn a_three_dimensional_frame_is_the_same_from_any_scrub_direction() {
     assert_eq!(seen, draw(&scrubbed[1]), "one frame, two pictures");
 }
 
-/// **The cap rule is the cap rule in three axes** (K-561, §9 item 7): what
+/// **The cap rule is the cap rule in three axes** (§9 item 7): what
 /// survives an overload is still the newest by birth index, and halving still
 /// keeps the newest half of that. Depth does not get a vote.
 #[test]
@@ -16120,7 +16240,7 @@ fn a_streak_is_the_closed_form_looked_backwards() {
     assert_eq!(capsules, discs, "a streak of no length is not a disc");
 }
 
-/// **The rotation jitter** (K-507): every particle takes its own draw about
+/// **The rotation jitter**: every particle takes its own draw about
 /// Rotation, from the seed and from nothing else — so the spread is there, it
 /// is bounded by the dial, and it is the same spread on every machine.
 #[test]
@@ -16144,8 +16264,8 @@ fn particulate_rotations_spread_by_their_dial() {
     };
 
     // At zero the dial does nothing at all, and Rotation means exactly what it
-    // says — which is the half of K-507 that a full turn by default would have
-    // made unreachable.
+    // says — which is the half of the rule that a full turn by default would
+    // have made unreachable.
     let (lo, hi, _) = spread_of(0.0);
     assert!(
         lo.abs() < 1e-6 && hi.abs() < 1e-6,
@@ -16248,7 +16368,7 @@ fn particulates_frame_key_follows_its_seed_and_its_controls() {
 }
 
 /// **The points producers are exactly the ones that declare a data output**
-/// (K-472, K-492, points-stream.md §4.1; the generators, K-598): the signature
+/// (points-stream.md §4.1; the generators): the signature
 /// split leaves every other declaration exactly as it was, which is the
 /// property that made `Image { extra }` the shape rather than a third
 /// signature kind. A new producer belongs on this list and nowhere else.
@@ -16288,8 +16408,8 @@ fn the_points_producers_declare_a_data_output_beside_their_picture() {
     }
 }
 
-/// **An over-life curve starts on the shape it declared** (K-412 with
-/// particulate.md §2): a fresh Opacity over life is `1 → 0`, not the identity
+/// **An over-life curve starts on the shape it declared**
+/// (particulate.md §2): a fresh Opacity over life is `1 → 0`, not the identity
 /// diagonal, or every particle would be born invisible.
 #[test]
 fn an_over_life_curve_is_born_on_its_declared_shape() {
@@ -16308,11 +16428,11 @@ fn an_over_life_curve_is_born_on_its_declared_shape() {
     );
 }
 
-/// **The default look plays** (K-475's first number): the default parameter
+/// **The default look plays** (the first budget number): the default parameter
 /// set is a few hundred particles, and evaluating and drawing them is noise
 /// against a frame's budget.
 ///
-/// K-475's ≲ 0.2 ms is a **GPU** number, gated on the reference desktop in PS7.
+/// The ≲ 0.2 ms is a **GPU** number, gated on the reference desktop in PS7.
 /// This is its CPU reference, which is allowed to be slower and is not allowed
 /// to be a different *kind* of work: the bound is loose on purpose — a test
 /// that fails because a laptop was busy teaches nobody anything — and what it
@@ -16324,7 +16444,7 @@ fn the_default_particulate_look_is_a_few_hundred_particles() {
     let s = particulate_stream(&e, 4.0);
     assert!(
         (150..600).contains(&s.len()),
-        "the default look draws {} particles, not the ~300 K-475 budgeted for",
+        "the default look draws {} particles, not the ~300 budgeted for",
         s.len()
     );
     let mut rgba = vec![0.0f32; 1920 * 1080 * 4];
@@ -16335,8 +16455,8 @@ fn the_default_particulate_look_is_a_few_hundred_particles() {
     }
     let each = started.elapsed().as_secs_f64() / 10.0;
     // Printed, not only asserted: the number is the point, and `--nocapture`
-    // is how the next person checks it against K-475 rather than against this
-    // machine's mood.
+    // is how the next person checks it against the budget rather than against
+    // this machine's mood.
     println!(
         "the default look: {} particles, {:.3} ms an evaluation and draw at 1920x1080",
         s.len(),
@@ -16349,8 +16469,8 @@ fn the_default_particulate_look_is_a_few_hundred_particles() {
     );
 }
 
-/// **A fresh Tile changes nothing** (docs/08 §3.39, §1.2, K-542 — which reverses
-/// the earlier 2×2 default).
+/// **A fresh Tile changes nothing** (docs/08 §3.39, §1.2 — the earlier 2×2
+/// default is gone).
 ///
 /// AE's Motion Tile is the identity until it is set up, and so is Lumit's: one
 /// whole-frame tile, cut from the middle of the frame, stamped over exactly the
@@ -16391,9 +16511,9 @@ fn a_fresh_tile_changes_not_one_bit() {
                 (rw as f32 * 0.5, rh as f32 * 0.5),
                 "a fresh Tile must be cut from the middle of the comp it was dropped on"
             );
-            // And since K-558 the tile and the window are sizes in pixels, so
-            // the whole-frame default is the comp's own size (K-542's
-            // lands-as-identity, kept the way the centre keeps it).
+            // The tile and the window are sizes in pixels, so the whole-frame
+            // default is the comp's own size (it lands as the identity, kept
+            // the way the centre keeps it).
             assert_eq!(
                 (t.tile_width, t.tile_height, t.output_width, t.output_height),
                 (rw as f32, rh as f32, rw as f32, rh as f32),
@@ -16408,7 +16528,7 @@ fn a_fresh_tile_changes_not_one_bit() {
 }
 
 /// **Output width and height above 100 % grow the working raster** (docs/08
-/// §3.39, K-542): the copies land past the frame's edges, and the effects after
+/// §3.39): the copies land past the frame's edges, and the effects after
 /// Tile in the stack run on the wider picture so those copies are picture to
 /// them rather than transparency.
 ///
@@ -16424,7 +16544,7 @@ fn tile_grows_the_raster_only_above_a_hundred_per_cent() {
         t.tile_centre_y = 12.0;
         t.tile_width = w as f32 * 0.5;
         t.tile_height = h as f32 * 0.5;
-        // The window is px@comp since K-558, and the callers below say what
+        // The window is px@comp, and the callers below say what
         // they mean as a share of this raster.
         t.output_width = w as f32 * ow;
         t.output_height = h as f32 * oh;
@@ -16482,7 +16602,7 @@ fn tile_grows_the_raster_only_above_a_hundred_per_cent() {
     );
 }
 
-/// **The output window is centred on the tile centre** (K-613, docs/08 §3.39):
+/// **The output window is centred on the tile centre** (docs/08 §3.39):
 /// Output width and height above the tile's own spread half the extra to each
 /// side of the stamped rectangle, left *and* right, up *and* down — AE's Motion
 /// Tile.
@@ -16546,7 +16666,7 @@ fn tile_spreads_its_output_window_evenly_about_the_tile_centre() {
     );
 }
 
-/// The corpus the K-546 spatial tests key against: a `w × h` frame that is the
+/// The corpus the spatial tests key against: a `w × h` frame that is the
 /// screen colour everywhere except a foreground block, in premultiplied RGBA.
 #[cfg(test)]
 fn keyer_plate(w: u32, h: u32, block: (u32, u32, u32, u32)) -> Vec<f32> {
@@ -16592,7 +16712,7 @@ fn matte_view_params() -> MatteKeyParams {
     }
 }
 
-/// **The spatial controls change nothing until one is asked for** (K-546).
+/// **The spatial controls change nothing until one is asked for**.
 ///
 /// The promise the whole landing rests on: an existing project keys the bytes it
 /// always keyed. `matte_key_spatial` hands straight over to the pointwise keyer
@@ -16614,8 +16734,7 @@ fn the_keyers_defaults_are_the_pointwise_keyer_byte_for_byte() {
     assert_eq!(pointwise, staged, "the defaults took a different path");
 }
 
-/// **Screen pre-blur softens what the key is judged from, not what comes out**
-/// (K-546).
+/// **Screen pre-blur softens what the key is judged from, not what comes out**.
 ///
 /// Both halves matter. A pre-blur must move the matte — otherwise the control
 /// does nothing — and it must leave the *colour* alone, which is what separates
@@ -16686,7 +16805,7 @@ fn the_screen_pre_blur_judges_a_soft_picture_and_returns_a_sharp_one() {
     );
 }
 
-/// **Shrink and grow march the matte's edge, in opposite directions** (K-546).
+/// **Shrink and grow march the matte's edge, in opposite directions**.
 ///
 /// Counted rather than sampled: how much of the frame the matte keeps is the
 /// one number a morphological pass is supposed to move, and it must move up for
@@ -16737,7 +16856,7 @@ fn the_screen_shrink_and_grow_march_the_mattes_edge() {
     );
 }
 
-/// **Softness blurs the matte and only the matte** (K-546): a hard edge becomes
+/// **Softness blurs the matte and only the matte**: a hard edge becomes
 /// a ramp, and the amount of matte in the frame is roughly conserved.
 #[test]
 fn the_screen_softness_ramps_the_mattes_edge() {
@@ -16772,7 +16891,7 @@ fn the_screen_softness_ramps_the_mattes_edge() {
     );
 }
 
-/// **Despot removes a lone speck and leaves a real edge alone** (K-546).
+/// **Despot removes a lone speck and leaves a real edge alone**.
 ///
 /// The distinction is the whole control: a pixel that disagrees with all eight
 /// of its neighbours is a speck, and a pixel on an edge always has a neighbour
@@ -16829,7 +16948,7 @@ fn the_despots_take_specks_and_leave_edges() {
     );
 }
 
-/// **The garbage masks force opaque and force transparent** (K-546), and an
+/// **The garbage masks force opaque and force transparent**, and an
 /// unset one is the no-op.
 #[test]
 fn the_garbage_masks_hold_the_matte_open_and_shut() {
@@ -16874,7 +16993,7 @@ fn the_garbage_masks_hold_the_matte_open_and_shut() {
     assert_eq!(cpu::mask_fill_params(&open, 1.0).count, 0);
 }
 
-/// **A mask's own feather and expansion ride with its curve** (K-546): the
+/// **A mask's own feather and expansion ride with its curve**: the
 /// carriage hands them over so a garbage matte softens exactly where the mask
 /// it was drawn from softens.
 #[test]
@@ -16910,7 +17029,7 @@ fn a_mask_path_carries_its_own_feather_and_expansion() {
 
 // ------------------------------------------------- the run-time catalogue --
 
-/// A definition that arrived at run time, as a plugin's does (K-593). Declared
+/// A definition that arrived at run time, as a plugin's does. Declared
 /// here rather than driven by a real OFX bundle because what is under test is
 /// the *seam*: `lumit-core` cannot depend on the plugin host (docs/05), so what
 /// it can be shown is that an effect it never compiled in becomes an effect like
@@ -16973,7 +17092,7 @@ fn a_plugin_instance(match_name: &str) -> EffectInstance {
 
 /// The whole point of the widening: an effect nobody compiled in is found by
 /// the same lookup a built-in is found by, and the built-in menu order is
-/// untouched by its arrival (K-137, K-593).
+/// untouched by its arrival.
 #[test]
 fn a_registered_definition_joins_the_catalogue_behind_the_builtins() {
     let before: Vec<&str> = BUILTIN_DEFS.iter().map(|d| d.schema().match_name).collect();
@@ -17035,7 +17154,7 @@ fn a_registered_definition_joins_the_catalogue_behind_the_builtins() {
 }
 
 /// A retimer's declared frames reach the neighbour window, and therefore the
-/// frame key and the prefetch (docs/12 §2.1, K-593). The declaration on the
+/// frame key and the prefetch (docs/12 §2.1). The declaration on the
 /// schema is the fallback; the instance's own answer wins.
 #[test]
 fn a_retimers_declared_frames_land_in_the_temporal_window() {
@@ -17084,7 +17203,7 @@ fn a_retimers_declared_frames_land_in_the_temporal_window() {
 }
 
 /// A plugin instance resolves into the arena beside the built-ins, in stack
-/// order, carrying the layer time its parameters were read at (K-593).
+/// order, carrying the layer time its parameters were read at.
 #[test]
 fn a_plugin_instance_resolves_between_two_builtins() {
     let schema = a_registered_schema("ofx:test.core.stack", &[0]);

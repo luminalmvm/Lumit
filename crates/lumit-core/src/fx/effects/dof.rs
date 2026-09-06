@@ -1,4 +1,4 @@
-//! Depth of field (docs/08 §3.22, docs/impl/layer-input.md, K-288/K-313): a lens
+//! Depth of field (docs/08 §3.22, docs/impl/layer-input.md): a lens
 //! blur whose per-pixel circle of confusion comes from a depth pass.
 //!
 //! **In plain terms.** The largest declaration in the catalogue, and almost all
@@ -6,9 +6,9 @@
 //! it, what shape the iris is, how hard the highlights bloom, and how the depth
 //! pass is read. The one thing that is *not* a number is the depth pass itself —
 //! a whole picture, the referenced layer rendered alone at this raster — so it
-//! arrives beside the resolved op (K-387). **It is this effect's Matte** (K-395):
-//! the same row every effect has, under this effect's older stored id (`depth`,
-//! K-065) and with the deeper meaning this effect declares — a depth, not a
+//! arrives beside the resolved op. **It is this effect's Matte**:
+//! the same row every effect has, under this effect's older stored id (`depth`)
+//! and with the deeper meaning this effect declares — a depth, not a
 //! strength. It therefore rides the one matte carriage rather than a list of its
 //! own. An unset, missing or cyclic reference leaves the slot empty and the
 //! effect is the labelled no-op every layer-input effect follows.
@@ -32,8 +32,8 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// The panel's three twirls. Each is a contiguous run of the declared rows
-/// (K-145), collapsed by default: the effect must read as Focus + Aperture until
+/// The panel's three twirls. Each is a contiguous run of the declared rows,
+/// collapsed by default: the effect must read as Focus + Aperture until
 /// someone goes looking for the shaping.
 pub const DOF_GROUPS: &[ParamGroup] = &[
     ParamGroup {
@@ -55,9 +55,9 @@ pub const DOF_GROUPS: &[ParamGroup] = &[
         // round it runs, and how hard the blur answers to it. Where focus *is*
         // lives above, beside the rows that set it.
         label: "Depth map",
-        // `depth_invert` used to sit here. K-395 moved it up beside the picker,
-        // where every effect's Invert now lives; the group is a contiguous run
-        // of declared rows, so it leaves the list as well as the struct.
+        // `depth_invert` used to sit here. It moved up beside the picker, where
+        // every effect's Invert now lives; the group is a contiguous run of
+        // declared rows, so it leaves the list as well as the struct.
         params: &[
             "depth_channel",
             "gamma",
@@ -133,39 +133,39 @@ pub const DOF_ENABLED_WHEN: &[EnabledWhen] = &[
     premultiplied = true, // the aperture gathers premultiplied colour (fx_dof.wgsl)
     groups = DOF_GROUPS,
     enabled_when = DOF_ENABLED_WHEN,
-    // K-395: Depth of field claims the matte inside its own maths, under a
-    // deeper meaning — the matte is a *depth* pass, and it decides focus rather
-    // than strength. It keeps `depth` as its stored id (a save is a save,
-    // K-065), so nothing is injected; only its row treatment and prose adopt the
-    // uniform shape. Naming the id here is what puts it on the one matte
-    // carriage every effect uses, instead of a private list of its own.
+    // Depth of field claims the matte inside its own maths, under a deeper
+    // meaning — the matte is a *depth* pass, and it decides focus rather than
+    // strength. It keeps `depth` as its stored id (a save is a save), so
+    // nothing is injected; only its row treatment and prose adopt the uniform
+    // shape. Naming the id here is what puts it on the one matte carriage
+    // every effect uses, instead of a private list of its own.
     matte = (
         "depth",
         "a depth pass, not a strength: its luma is how far away each pixel is, \
          and the blur widens with the distance from the focus depth — so a \
          mid-grey matte can be perfectly sharp",
     ),
-    // K-425: `depth_channel` below is this effect's own channel pick.
+    // `depth_channel` below is this effect's own channel pick.
     matte_channel = false,
 )]
 pub struct Dof {
     /// The layer whose depth channel is the depth pass (0 = near, 1 = far by
     /// convention; the effect is symmetric about Focus). Unset until the owner
     /// picks one (a labelled no-op): a depth pass is never the picture itself, so
-    /// no `self_default` here (K-288) — though pointing it at this layer is still
+    /// no `self_default` here — though pointing it at this layer is still
     /// allowed, and reads the effect's own input.
     ///
     /// **Always `false` here, by design.** A Layer binding is decided by the
     /// caller — only the render knows which layer was actually rendered — so
     /// `resolve_into_arena` carries no `Value::Layer`, and the depth pass arrives
-    /// at the GPU pass as its aux slot instead (K-387). The row exists because the
+    /// at the GPU pass as its aux slot instead. The row exists because the
     /// panel needs it, and whether it is bound reaches [`Dof::packed`] as an
     /// argument.
     ///
-    /// **Labelled "Matte", not "Depth layer"** (K-395): every effect's matte row
+    /// **Labelled "Matte", not "Depth layer"**: every effect's matte row
     /// is one row with one word on it, and an effect that already owned the idea
     /// adopts the shared label rather than keeping a private synonym. The stored
-    /// id stays `depth` — a save is a save (K-065) — and the meaning stays the
+    /// id stays `depth` — a save is a save — and the meaning stays the
     /// deeper one this effect declares: focus, not strength.
     #[layer(label = "Matte", self_default = false)]
     pub depth: bool,
@@ -175,19 +175,19 @@ pub struct Dof {
     /// DOF PRO both offer it). Off (default) keeps the historical reading, so old
     /// projects are unchanged. Continuous, so the §1.6 ULP oracle still holds.
     ///
-    /// **This IS the uniform pair's Invert** (K-395), so it is labelled "Invert"
+    /// **This IS the uniform pair's Invert**, so it is labelled "Invert"
     /// and sits beside the picker on the Matte row rather than down in the Depth
     /// map twirl where it used to live. Presentation and prose only: the stored
     /// id is still `depth_invert`.
     #[toggle(label = "Invert", default = false)]
     pub depth_invert: bool,
 
-    // The depth Layer input's sampling mode (K-142) is not a schema parameter:
+    // The depth Layer input's sampling mode is not a schema parameter:
     // the inspector renders a source combobox beside the Layer picker (None /
     // Masks / Effects and masks) and stores it as a `depth_source` Choice on the
     // instance, read through `EffectInstance::layer_source("depth")`. A project
-    // saved with K-125's `depth_after_effects` bool still loads — `layer_source`
-    // falls back to it.
+    // saved with an older `depth_after_effects` bool still loads —
+    // `layer_source` falls back to it.
     /// The in-focus depth, 0..1. Mid-depth by default so a typical near-to-far
     /// pass has its middle sharp. Greys out while Use focus point is on, because
     /// then the point decides.
@@ -208,9 +208,9 @@ pub struct Dof {
     #[toggle(default = false)]
     pub use_focus_point: bool,
 
-    /// Where to read the focus depth, px@comp (K-260: point parameters are
-    /// PIXELS, never % of frame). Pairs with `focus_point_y` into one point row
-    /// with a crosshair pick (docs/07 §6.1) — the same row the Lens flare's Light
+    /// Where to read the focus depth, px@comp (point parameters are PIXELS,
+    /// never % of frame). Pairs with `focus_point_y` into one point row with a
+    /// crosshair pick (docs/07 §6.1) — the same row the Lens flare's Light
     /// uses, which is why this is a Float pair and not a schema kind of its own.
     /// The schema default is nominal 1080p centre; `instantiate_for_raster`
     /// centres a fresh instance on the actual comp.
@@ -441,7 +441,7 @@ pub struct Dof {
     /// transparency, so a bright edge does not darken. Off lets the frame edge
     /// fall away, which is what a flare element over black wants.
     ///
-    /// Not the shared EdgesMode enum (P3, K-145) on purpose — that is a three-way
+    /// Not the shared EdgesMode enum (P3) on purpose — that is a three-way
     /// choice, and this is a two-state switch.
     #[toggle(default = true)]
     pub repeat_edge_pixels: bool,
@@ -473,7 +473,7 @@ impl Dof {
     /// The blade count the aperture is actually built from — the Blades row
     /// **floored** to an integer and clamped to 3..=[`MAX_BLADES`], which is not
     /// what the arena's generic Int conversion does (it rounds), so it is derived
-    /// rather than read (K-385). Never a panel row.
+    /// rather than read. Never a panel row.
     pub const DERIVED_BLADES: ParamId = ParamId::new("derived.blades");
 
     /// The stops-to-power constant for [`Dof::exposure`] — **fitted, not
@@ -523,9 +523,9 @@ impl Dof {
 
         // Deform squeezes one axis and leaves the other alone, so the aperture
         // only ever shrinks inside the circle and the kernel's scan box stays a
-        // correct bound. The reciprocal is taken here, not per tap (K-137's
-        // host-side single division), and the magnitude is held below 1 so it
-        // cannot divide by zero at the range's ends.
+        // correct bound. The reciprocal is taken here, not per tap (a single
+        // host-side division), and the magnitude is held below 1 so it cannot
+        // divide by zero at the range's ends.
         let deform = self.aspect.clamp(-1.0, 1.0);
         let squeeze = 1.0 / (1.0 - deform.abs().min(0.95));
         let aspect_scale = if deform > 0.0 {
@@ -581,7 +581,7 @@ impl EffectDef for DofDef {
     }
 
     /// The blade count, **floored** — the one number the arena's generic Int
-    /// conversion would get differently, since it rounds (K-385).
+    /// conversion would get differently, since it rounds.
     ///
     /// A pentagon does not interpolate into a hexagon, so a keyframe sweeping
     /// 5 → 6 has to step; the floor is where that truth was enforced, and moving

@@ -1,4 +1,4 @@
-// Settings → Autosave (K-587): the page K-465 named and left unbuilt until the
+// Settings → Autosave: the page the drawings named and left unbuilt until the
 // engine had a timer to set.
 //
 // The page has only two numbers on it, and the interesting one is zero: turning

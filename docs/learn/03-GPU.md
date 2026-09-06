@@ -14,7 +14,7 @@ To learn the shader language itself, read [WGSL.md](WGSL.md).
 > **First pass:** `GpuContext` wraps the one wgpu device, and one `CommandEncoder`
 > carries every pass of a frame. Every `.wgsl` file is a complete standalone module.
 > The working format is `Rgba16Float`: scene-linear, premultiplied alpha. Every
-> kernel mirrors a CPU function in `lumit_core::fx::cpu`, the reference (K-019).
+> kernel mirrors a CPU function in `lumit_core::fx::cpu`, the reference.
 >
 > Skip to [Optical flow: lumit-flow](#optical-flow-lumit-flow) for motion measurement.
 
@@ -22,14 +22,13 @@ To learn the shader language itself, read [WGSL.md](WGSL.md).
 
 `GpuContext` (`src/lib.rs`) wraps one wgpu `Device` + `Queue`.
 
-- `headless()` pins the backend per OS (DX12 / Vulkan / Metal, K-205) so the
+- `headless()` pins the backend per OS (DX12 / Vulkan / Metal) so the
   zero-copy Viewer's low-level reach-through always finds the expected backend.
 - `begin_frame`/`end_frame` batch every pass into **one** `CommandEncoder`.
   `submits_so_far()` counts submissions, so "a frame submits once, not once per
   layer" is a test, not a hope.
 - `reclaim()` must run each worker-loop turn (`Maintain::Poll`). The driver frees
-  dropped textures only on a maintain. A missed maintain looks exactly like a leak
-  (K-277/K-294).
+  dropped textures only on a maintain. A missed maintain looks exactly like a leak.
 - The code asks for multisample support, never assumes it (`supported_sample_count`).
 
 ## How a kernel is built
@@ -39,7 +38,7 @@ complete standalone module, compiled at engine construction via `include_str!`
 (`src/fx/engine.rs`). Lumit deliberately duplicates shared helpers such as
 `bilinear` and `unpremult` in each file. Each copy carries an annotation that names
 the CPU function it mirrors. `tests/wgsl_validates.rs` runs naga over every shader,
-so a broken shader fails on a machine with no GPU (K-263).
+so a broken shader fails on a machine with no GPU.
 
 Four bind-group layouts cover the ~35 catalogue effects. The lens flare and the lighting
 pass build their own, because neither is a one-kernel image op:
@@ -56,7 +55,7 @@ Every dispatch is `div_ceil(w, 8) × div_ceil(h, 8)`. Parameters travel as
 hand-padded to 16-byte rows.
 
 Two passes in this crate are not effects at all, and it is worth knowing why. `fx/lighting.rs` and
-`fx_lighting.wgsl` shade a layer with the comp's Light layers (K-361): no `Resolved`
+`fx_lighting.wgsl` shade a layer with the comp's Light layers: no `Resolved`
 variant, no docs/08 entry, called directly by the realiser between a layer's stack and its
 composite. `scope.wgsl` is the same sort of thing for measurement. Both restate their types
 locally, because an engine GPU crate does not depend on the model crate — and for lighting
@@ -81,7 +80,7 @@ flowchart LR
 3. **Build splats** — each surviving ray becomes a footprint: a centre and two half-axes in
    flare-buffer pixels, with its peak colour.
 4. **Deposit** — each footprint is accumulated over the pixels it covers. Big splats deposit
-   into a **pyramid** of half-size levels (K-380) so that one enormous splat cannot cost
+   into a **pyramid** of half-size levels so that one enormous splat cannot cost
    more than a bounded number of writes.
 5. **Resolve** — the accumulator is written into the fp16 flare buffer, once.
 6. **Blur**, when Ghost softness asks for it — a separable box blur over the flare buffer,
@@ -94,11 +93,11 @@ Three of its choices explain most of the code:
   ghost-edge diffraction are baked on the CPU (`lumit_core::fx::lens_flare`) and arrive as
   textures, cached by parameter hash. `lumit-gpu` stays `lumit-core`-free in production, so
   the caller converts and hands over a `FlareBakeData`.
-- **The bake has its own thread** (K-350). `Baker` owns a queue and a finished channel; a key
+- **The bake has its own thread**. `Baker` owns a queue and a finished channel; a key
   already in flight is not queued twice, and a machine that will not give us a thread bakes
   inline instead. A frame whose bake has not landed renders live and banks nothing rather
   than caching an incomplete picture.
-- **The accumulator is fixed-point integers, not floats** (K-375/K-377). Until K-375 the
+- **The accumulator is fixed-point integers, not floats**. Before the switch the
   deposit was an additive hardware raster of one quad per ray, straight into the fp16 flare
   buffer — and adding a small increment to a large fp16 running sum systematically loses
   everything under half an ULP of the sum. Measured against the f32 CPU reference the middle
@@ -110,7 +109,7 @@ Three of its choices explain most of the code:
 
 The flare's long-running bit-stability failure was two separate versions of that same lesson,
 and both are worth carrying to any other scatter pass. **Hardware 4× multisampling was the
-first** (K-353): additively blending fp16 into a multisample target came back a few ULPs
+first**: additively blending fp16 into a multisample target came back a few ULPs
 different each run, in different places. The antialiasing was kept and the hardware dropped —
 barycentric coordinates are affine in screen position, so a fragment can evaluate its own
 coverage exactly instead of sampling it. That also deleted the effect's largest allocation, a
@@ -125,7 +124,7 @@ are we on — ask `ready()` rather than `get()`, so neither can be the thing tha
 compile.
 
 Two sibling effects share the neighbourhood without sharing the machinery:
-`fx_sprite_flare.wgsl` draws a flare where you put one (K-359 — a different question from
+`fx_sprite_flare.wgsl` draws a flare where you put one (a different question from
 "what would this lens do", deliberately a separate effect), and `fx_light_wrap.wgsl` screens
 a blurred background over the inside of a foreground's alpha edge.
 
@@ -134,14 +133,14 @@ a blurred background over the inside of a foreground's alpha edge.
 `WORKING_FORMAT = Rgba16Float`: scene-linear, premultiplied alpha. The only two sRGB
 crossings live in `ColourEngine`. Neither contains gamma arithmetic. The hardware
 does it. `linearise` samples an `Rgba8UnormSrgb` view into fp16. `display` renders
-fp16 into an sRGB target. A golden test proves the round trip within 1 LSB (K-031).
+fp16 into an sRGB target. A golden test proves the round trip within 1 LSB.
 
 Viewer gain and tone map (`DisplayParams`) are preview-only and short-circuit at
-neutral, so exports stay bit-identical (K-314). `oklab.rs` and `oklab.wgsl` are a
+neutral, so exports stay bit-identical. `oklab.rs` and `oklab.wgsl` are a
 CPU/GPU pair with identical constants. OkLCh shortest-arc interpolation is the
-gradient primitive (K-034). LUTs upload as `rgba32float` 3D textures, and the kernel
+gradient primitive. LUTs upload as `rgba32float` 3D textures, and the kernel
 does its **own** trilinear filter. The reason is that hardware 3D filtering is not
-bit-guaranteed across cards (K-271).
+bit-guaranteed across cards.
 
 ## The compositor
 
@@ -156,7 +155,7 @@ round **once** at the resolve, so a still scene averages back bit-for-bit.
 
 ## Scopes and readback
 
-Scopes are three compute passes (K-096): `bin` counts samples with `atomicAdd`,
+Scopes are three compute passes: `bin` counts samples with `atomicAdd`,
 `peak_reduce` takes an `atomicMax`, `colourise` paints a 256×256 trace. Only the
 trace reads back.
 
@@ -167,7 +166,7 @@ never stalls a render.
 ## Oracles: how correctness is defined
 
 Every kernel mirrors a `lumit_core::fx::cpu` function operation for operation. The
-CPU version is the reference (K-019). `fx/tests.rs` uploads a quantised corpus
+CPU version is the reference. `fx/tests.rs` uploads a quantised corpus
 (gradient, alpha edge, HDR spike), runs both paths, and asserts a per-class tolerance
 plus bit-stability across reruns. Tests skip without an adapter unless
 `LUMIT_REQUIRE_GPU` is set. CI sets it.
@@ -185,7 +184,7 @@ Given frames A and B, DIS (Dense Inverse Search) computes per-pixel motion:
 2. At each level, every 8×8 patch refines its vector by inverse-compositional
    Gauss–Newton — the template Hessian is fixed, only B is re-sampled.
 3. Densify: covering patches vote, weighted by photometric fit.
-4. One bilateral smooth, then variational refinement (K-332) over the whole field.
+4. One bilateral smooth, then variational refinement over the whole field.
 5. Forward–backward disagreement gives the occlusion mask and a confidence plane.
 
 `src/lib.rs` is the CPU oracle. `src/dis.wgsl` mirrors it line for line and must
@@ -210,8 +209,8 @@ motion blur, Datamosh.
   gives a black Viewer with no error anywhere.
 - **A long submission trips the OS watchdog** and kills the device. The lens flare splits
   command buffers on a cost model that counts the trace's ray–surface steps *and* the
-  deposit's pixels (K-379): a wide, soft flare is nearly all deposit, so pacing on the trace
+  deposit's pixels: a wide, soft flare is nearly all deposit, so pacing on the trace
   alone let exactly that case run long.
 - **No float atomics in WGSL**, and a CAS loop over an f32 sums in thread-race order. Any
   scatter that many threads add into needs integer atomics on a fixed-point accumulator if
-  the picture is to be the same twice (K-375).
+  the picture is to be the same twice.

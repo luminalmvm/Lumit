@@ -1,7 +1,7 @@
 //! Draw-building tests: layer geometry under reduced-resolution decode,
 //! collapsed Precomps, the live value patch, and adjustment staging.
 //!
-//! These moved out of the egui shell with the pixel pass (K-178) — they always
+//! These moved out of the egui shell with the pixel pass — they always
 //! tested the builder, not the interface, and they now guard it for both
 //! frontends at once.
 
@@ -78,6 +78,7 @@ fn footage_geometry_uses_native_size_not_decoded_size() {
         natural_h: 1080,
         temporal: Vec::new(),
         flow_fields: Vec::new(),
+        shutter: Vec::new(),
         source_key: 0,
         source_frame: 0,
     };
@@ -228,7 +229,7 @@ fn collapsed_precomp_splices_inner_draws_with_parent_placement() {
 
     // Switch off → the Nested intermediate as before, no pre. The
     // intermediate clears to nothing, never to the nested comp's own
-    // background colour (K-241): the nested comp here is opaque black, and a
+    // background colour: the nested comp here is opaque black, and a
     // Precomp that painted that black over the parent's stack would be the
     // "precomps go black where they should be see-through" bug.
     let mut off = parent.clone();
@@ -266,7 +267,7 @@ fn collapsed_precomp_splices_inner_draws_with_parent_placement() {
     assert!(matches!(draws[0].source, DrawSource::Nested { .. }));
 
     // Paint does the same, and the strokes ride the Nested draw so the
-    // realiser can stamp them into the picture it makes (K-547). Before
+    // realiser can stamp them into the picture it makes. Before
     // this they were built, carried nowhere, and dropped: the brush left a
     // Timeline row and no pixels.
     let mut painted = parent.clone();
@@ -358,6 +359,7 @@ fn patch_layer_prop_overrides_the_previewed_value() {
         natural_h: 1080,
         temporal: Vec::new(),
         flow_fields: Vec::new(),
+        shutter: Vec::new(),
         source_key: 0,
         source_frame: 0,
     };
@@ -492,9 +494,8 @@ fn a_live_adjustment_layer_emits_a_staging_draw() {
     }
 }
 
-/// **The adjustment switch and the Adjustment kind build the same draw**
-/// (K-537), and switching it off gives the layer its own picture back
-/// exactly.
+/// **The adjustment switch and the Adjustment kind build the same draw**, and
+/// switching it off gives the layer its own picture back exactly.
 ///
 /// The whole point of the flag is that it round-trips a layer with a
 /// source, which a kind flip could not: so the layer under test here is a
@@ -609,12 +610,12 @@ fn the_adjustment_flag_builds_the_same_draw_as_the_adjustment_kind() {
     );
 }
 
-/// **A Lens flare on an adjustment layer flares the picture below it**
-/// (K-288). The regression: the flare's Matte source could only name
-/// *another* layer, and an adjustment layer has no picture of its own, so
-/// putting the effect on one meant hunting for some other layer to point at
-/// — and whichever you picked was the wrong picture, since an adjustment
-/// layer is supposed to act on everything beneath it.
+/// **A Lens flare on an adjustment layer flares the picture below it**. The
+/// regression: the flare's Matte source could only name *another* layer, and
+/// an adjustment layer has no picture of its own, so putting the effect on one
+/// meant hunting for some other layer to point at — and whichever you picked
+/// was the wrong picture, since an adjustment layer is supposed to act on
+/// everything beneath it.
 ///
 /// The fix is a reference to the layer the effect is ON, which resolves to
 /// that effect's own input rather than a second render. This test checks the
@@ -747,8 +748,8 @@ fn a_flare_matte_pointed_at_its_own_layer_reads_this_layers_input() {
     //    unset — both still the labelled no-flare they always were.
     //
     //    The Manual case points at a layer that really is in the comp, on
-    //    purpose: since K-395 the flare's matte comes off the same carriage as
-    //    every other effect's, and nothing in that carriage knows what a Source
+    //    purpose: the flare's matte comes off the same carriage as every
+    //    other effect's, and nothing in that carriage knows what a Source
     //    type is. What keeps it absent is the general rule that a row the panel
     //    does not show fills no slot (`param_visible`) — and a test that let the
     //    reference dangle would pass without that rule ever running, while a
@@ -770,10 +771,10 @@ fn a_flare_matte_pointed_at_its_own_layer_reads_this_layers_input() {
     }
 }
 
-// --- K-119: Settings → Export filename template ------------------------
+// --- Settings → Export filename template -------------------------------
 
 /// A paint stroke is stamped into the layer's own pixels before its masks gate
-/// them (K-227) — the render side of the feature, checked where the pixels are
+/// them — the render side of the feature, checked where the pixels are
 /// actually made rather than through a GPU nobody has on CI.
 #[test]
 fn a_paint_stroke_reaches_the_layers_pixels() {
@@ -1002,8 +1003,8 @@ fn a_puppet_pin_carries_the_layers_pixels() {
     );
 }
 
-/// **The matte list is 1:1 with the ops that will consume it** (K-395, the
-/// K-387 one-predicate/one-order rule with its second predicate).
+/// **The matte list is 1:1 with the ops that will consume it** (the
+/// one-predicate/one-order rule with its second predicate).
 ///
 /// Two ways the build side can drift from `run_ops` and neither shows as an
 /// error — both show as a matte driving the wrong effect:
@@ -1017,7 +1018,7 @@ fn a_puppet_pin_carries_the_layers_pixels() {
 /// produces ops *that carry the pair* — which is the very rule `run_ops`
 /// advances its counter by, and the opted-out Depth of field below is here to
 /// hold both sides to it. A bound row lands as its own slot, an unset one as
-/// `Absent`, and "this layer" as `ThisLayer` (K-288).
+/// `Absent`, and "this layer" as `ThisLayer`.
 #[test]
 fn the_matte_list_is_one_slot_per_resolved_op() {
     let solid_def = Uuid::now_v7();
@@ -1077,7 +1078,7 @@ fn the_matte_list_is_one_slot_per_resolved_op() {
         // Orchestration-only: a Matte row, but no op to hang it on.
         lumit_core::fx::instantiate("posterize_time").unwrap(),
         pointed,
-        // Claims the matte under its own older id (K-395): still one slot on
+        // Claims the matte under its own older id: still one slot on
         // the one carriage, filled from `depth` rather than `matte`.
         lumit_core::fx::instantiate("dof").unwrap(),
     ];
@@ -1119,8 +1120,8 @@ fn the_matte_list_is_one_slot_per_resolved_op() {
     );
     // Blur (unset), Glow (this layer), Depth of field (unset `depth`): three
     // ops, three slots, and the DoF's comes off the SAME list even though its
-    // parameter is called something else — that is the K-395 consolidation, and
-    // a DoF that fell out of this list would shift the glow's slot onto it.
+    // parameter is called something else — that is the one carriage, and a
+    // DoF that fell out of this list would shift the glow's slot onto it.
     assert!(
         matches!(
             drawn.mattes.as_slice(),
@@ -1138,7 +1139,7 @@ fn the_matte_list_is_one_slot_per_resolved_op() {
     );
 }
 
-/// **One predicate, one order, for the mask paths too** (K-387, K-408).
+/// **One predicate, one order, for the mask paths too**.
 ///
 /// The list a layer's draw carries must be 1:1 and in stack order with the
 /// resolved ops whose effect declares a
@@ -1150,7 +1151,7 @@ fn the_matte_list_is_one_slot_per_resolved_op() {
 /// brush walking the wrong curve.
 ///
 /// Stated over the catalogue rather than over one effect on purpose. **No
-/// built-in declares a path row yet** (K-408 landed the seam ahead of its
+/// built-in declares a path row yet** (the seam landed ahead of its
 /// consumers), so both sides come to zero today and the assertion is that they
 /// agree; the day Scribble, Stroke or Vegas's Mask/Path source lands, the same
 /// test counts its slot without being touched.
@@ -1246,7 +1247,7 @@ fn the_mask_path_list_is_one_to_one_with_the_ops_that_declare_a_path() {
         .map(|op| op.def.schema().mask_path_count())
         .sum();
     // The catalogue really does declare more than one row somewhere, or the
-    // count below would agree for the trivial reason (K-546).
+    // count below would agree for the trivial reason.
     assert!(
         want > drawn
             .fx
@@ -1273,7 +1274,7 @@ fn the_mask_path_list_is_one_to_one_with_the_ops_that_declare_a_path() {
     );
 }
 
-/// **Text on a path** (K-607): the layer's picture is drawn into the box the
+/// **Text on a path**: the layer's picture is drawn into the box the
 /// curve asks for, and a row naming nothing — or a mask since deleted — lays
 /// the line straight rather than emptying the layer (docs/14 §4).
 #[test]
@@ -1362,7 +1363,7 @@ fn a_text_layer_on_a_path_draws_into_the_paths_own_box() {
     assert!(straight.0 > 0.0 && straight.0 < 368.0, "{straight:?}");
 }
 
-/// **A matte is image content** (K-490, docs/impl/ocio.md §5.2): a track matte
+/// **A matte is image content** (docs/impl/ocio.md §5.2): a track matte
 /// drawn from a footage layer carries that item's colour space to the realiser,
 /// exactly as the layer's own pixels do, so log footage used as a matte is
 /// interpreted rather than assumed. The layer being gated keeps its own space,
@@ -1454,6 +1455,7 @@ fn a_matte_from_tagged_footage_carries_its_own_colour_space() {
         natural_h: 360,
         temporal: Vec::new(),
         flow_fields: Vec::new(),
+        shutter: Vec::new(),
         source_key: 0,
         source_frame: 0,
     };
@@ -1492,7 +1494,7 @@ fn a_matte_from_tagged_footage_carries_its_own_colour_space() {
 }
 
 // ---------------------------------------------------------------------------
-// Effects on a layer group (docs/impl/group-effects.md §2, K-731): the wrap,
+// Effects on a layer group (docs/impl/group-effects.md §2): the wrap,
 // asserted on the draw list itself so it runs on CI machines with no GPU.
 // ---------------------------------------------------------------------------
 
@@ -1579,8 +1581,8 @@ fn draws_of(doc: &std::sync::Arc<Document>, comp: &Composition) -> Vec<crate::dr
     build_comp_draws(doc, comp, 0.0, &map, &mut visited)
 }
 
-// K-702, reworded: while the header carries no live effect the walk stays
-// group-blind — the same three plain draws, in the same order, no Nested unit.
+// While the header carries no live effect the walk stays group-blind — the
+// same three plain draws, in the same order, no Nested unit.
 #[test]
 fn a_group_with_no_live_header_builds_the_ungrouped_draws() {
     let (doc, comp) = grouped_scene(Vec::new(), true);
@@ -1642,7 +1644,7 @@ fn a_live_header_wraps_the_run_in_one_nested_draw() {
     assert_eq!(
         unit.fx_ref_width,
         Some(comp.width as f32),
-        "resolved at comp scale, rescaled by realise (K-266)"
+        "resolved at comp scale, rescaled by realise"
     );
 }
 

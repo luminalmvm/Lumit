@@ -1,4 +1,4 @@
-// The Dart-side read model (K-184): the fronted comp as the panels draw it.
+// The Dart-side read model: the fronted comp as the panels draw it.
 //
 // In plain terms: every question a panel used to ask the engine while drawing
 // — layer names, switches, bar positions, effect values — is answered from
@@ -42,7 +42,7 @@ class CompModel extends ChangeNotifier {
     return _model?.layers ?? const [];
   }
 
-  /// The comp's **layer groups** (K-702), already resolved by the engine to the
+  /// The comp's **layer groups**, already resolved by the engine to the
   /// run each one draws over, with its combined span and its switch faces.
   /// Empty for a comp nobody has grouped, which is every comp until Ctrl+G.
   List<BridgeLayerGroup> get groups {
@@ -73,7 +73,7 @@ class CompModel extends ChangeNotifier {
     return m == null ? (60, 1) : (m.fpsNum, m.fpsDen);
   }
 
-  /// Whether the comp's master motion-blur shutter is on (K-120) — what the
+  /// Whether the comp's master motion-blur shutter is on — what the
   /// Timeline's master button draws. Writes go through
   /// `CompositionReference.setMotionBlurEnabled`.
   bool get motionBlurEnabled {
@@ -94,12 +94,12 @@ class CompModel extends ChangeNotifier {
   /// The comp's background colour off the held copy, scene-linear RGBA, or
   /// null before the first read. For the Viewer bar's swatch, which rebuilds
   /// on every arriving frame: the colour rides in the model rather than being
-  /// asked for per rebuild (K-184). Writes go through
+  /// asked for per rebuild. Writes go through
   /// `CompositionReference.setBackground`; the change refreshes this model.
   F32Array4? get heldBackground => _model?.background;
 
   /// The copy in hand, and the revision it was read at, **without asking the
-  /// engine anything** (K-230).
+  /// engine anything**.
   ///
   /// For the paint path, and only for it. Every getter above checks with the
   /// engine that the document has not moved — once per frame while a frame is
@@ -118,7 +118,7 @@ class CompModel extends ChangeNotifier {
 
   /// The comp's rate from the copy in hand, on the same terms — what turns a
   /// playhead frame into seconds while a paint is running, which is where a
-  /// keyed shape modifier has to be read (K-553).
+  /// keyed shape modifier has to be read.
   double get heldFps {
     final fps = _model?.fps ?? 60.0;
     return fps > 0 ? fps : 60.0;
@@ -150,7 +150,7 @@ class CompModel extends ChangeNotifier {
   }
 
   /// Re-read **only if the document is actually somewhere this model has not
-  /// been**, and say nothing when it is not (K-680).
+  /// been**, and say nothing when it is not.
   ///
   /// What the engine's change stream calls. A panel that commits its own op
   /// calls [refresh] the moment it commits — that is the wave that puts the

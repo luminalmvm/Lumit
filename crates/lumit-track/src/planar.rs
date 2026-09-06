@@ -1,4 +1,4 @@
-//! Planar tracking (docs/impl/tracking.md §6, K-579): a flat patch of a shot
+//! Planar tracking (docs/impl/tracking.md §6): a flat patch of a shot
 //! followed frame by frame, as four corners.
 //!
 //! # In plain terms
@@ -344,7 +344,7 @@ pub fn quad_outline(quad: Quad) -> Vec<[f64; 2]> {
 }
 
 // ---------------------------------------------------------------------------
-// Point tracking (K-735)
+// Point tracking
 // ---------------------------------------------------------------------------
 
 /// What a point track was asked for.

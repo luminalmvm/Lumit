@@ -1,6 +1,7 @@
 //! The graphics card's colour samplers against the processor's oracle
 //! (docs/impl/ocio.md §7.4), the double-encode trap pinned (§5.2), and the
-//! K-031 parity row in every shipped colour configuration (§7.5, docs/06 §3.3).
+//! preview-equals-export parity row in every shipped colour configuration
+//! (§7.5, docs/06 §3.3).
 //!
 //! **In plain terms.** `lumit-colour` works a colour transform out on the
 //! processor and bakes the answers into a small table. The Viewer and the
@@ -102,8 +103,8 @@ fn cube_chain() -> Chain {
 /// into the fp16 working format so nothing is clamped on the way out and the
 /// comparison is against the oracle rather than against a unorm write.
 fn on_the_card(artefact: &Artefact, colours: &[[f32; 3]]) -> Option<Vec<[f32; 3]>> {
-    let ctx = lumit_gpu::GpuContext::headless().ok()?;
-    let engine = lumit_gpu::ColourEngine::new(&ctx);
+    let ctx = lumit_gpu::test_support::lease()?;
+    let engine = ctx.colour();
     let uploaded = engine.upload_ocio(&ctx, &tables(artefact));
 
     // One row of fp16 texels carrying the probe colours, alpha 1 so the
@@ -296,11 +297,11 @@ fn a_cube_with_no_symmetry_agrees_wedge_for_wedge() {
 /// produce the same bytes as the built-in pass, which encodes in hardware.
 #[test]
 fn a_baked_srgb_view_matches_the_built_in_pass_rather_than_encoding_twice() {
-    let Ok(ctx) = lumit_gpu::GpuContext::headless() else {
+    let Some(ctx) = lumit_gpu::test_support::lease() else {
         eprintln!("no adapter here");
         return;
     };
-    let engine = lumit_gpu::ColourEngine::new(&ctx);
+    let engine = ctx.colour();
 
     // Linear → sRGB, the transform the built-in display pass performs. As a
     // chain, so it bakes exactly as a config's view would.
@@ -368,19 +369,19 @@ fn a_baked_srgb_view_matches_the_built_in_pass_rather_than_encoding_twice() {
     }
 }
 
-/// **K-031, by construction.** The eight-bit display pass and the deep one are
-/// two targets of one transform, so a baked view must reach both as the same
-/// values — the deep one being wider, not different. This is the row the
-/// standing preview-equals-export matrix gains for OCIO: the export reads back
-/// from `display16_through`, the Viewer presents `display_through`, and both
-/// bind the artefact this test binds.
+/// **Preview equals export, by construction.** The eight-bit display pass and
+/// the deep one are two targets of one transform, so a baked view must reach
+/// both as the same values — the deep one being wider, not different. This is
+/// the row the standing preview-equals-export matrix gains for OCIO: the
+/// export reads back from `display16_through`, the Viewer presents
+/// `display_through`, and both bind the artefact this test binds.
 #[test]
 fn the_deep_display_carries_the_same_baked_view_as_the_eight_bit_one() {
-    let Ok(ctx) = lumit_gpu::GpuContext::headless() else {
+    let Some(ctx) = lumit_gpu::test_support::lease() else {
         eprintln!("no adapter here");
         return;
     };
-    let engine = lumit_gpu::ColourEngine::new(&ctx);
+    let engine = ctx.colour();
     let artefact = bake(&cube_chain(), Shaper::DEFAULT).expect("bakes");
     let uploaded = engine.upload_ocio(&ctx, &tables(&artefact));
 
@@ -436,7 +437,8 @@ fn the_deep_display_carries_the_same_baked_view_as_the_eight_bit_one() {
 }
 
 // ---------------------------------------------------------------------------
-// §7.5 — the K-031 parity row, in every shipped colour configuration.
+// §7.5 — the preview-equals-export parity row, in every shipped colour
+// configuration.
 //
 // The matrix in `headless.rs` walks constructions: a precomp, a matte, motion
 // blur, a driven parameter. This one walks the *colour* axis instead, which is
@@ -444,7 +446,7 @@ fn the_deep_display_carries_the_same_baked_view_as_the_eight_bit_one() {
 // configuration") and the one the OCIO work added rows to. Four of them:
 //
 //   1. no config at all — the built-in display transform, what every project
-//      before K-490 rendered through;
+//      rendered through before configs arrived;
 //   2. a built-in colour family named at export — which must reach the shared
 //      display pass as *nothing*, because the family is a pack-stage transform
 //      strictly downstream of the parity point;
@@ -603,7 +605,7 @@ fn parity_row(
         assert!(
             (i32::from(*eight) - deep_as_8).abs() <= 1,
             "{what}: at channel {i} the Viewer wrote {eight} and the export wrote \
-             {deep_as_8}. Preview and export are one colour path (K-031, docs/06 §3.3)."
+             {deep_as_8}. Preview and export are one colour path (docs/06 §3.3)."
         );
     }
     preview
@@ -611,7 +613,7 @@ fn parity_row(
 
 #[test]
 fn preview_equals_export_in_every_colour_configuration() {
-    let mut r = match HeadlessRenderer::new() {
+    let mut r = match HeadlessRenderer::shared() {
         Ok(r) => r,
         Err(_) => {
             eprintln!("no adapter here, skipping the colour parity matrix");
@@ -634,7 +636,7 @@ fn preview_equals_export_in_every_colour_configuration() {
     // 2 — a built-in colour family named at export. Every built-in space
     // answers `None` to `ocio_name`, which is what the export asks, so the
     // family reaches the display pass as nothing at all: it is a pack-stage
-    // transform, strictly downstream of the point K-031 is measured at. The row
+    // transform, strictly downstream of the point parity is measured at. The row
     // exists to hold that structure, because a built-in space that started
     // binding a table here would silently move the parity point.
     for space in lumit_render::export::BUILT_IN_COLOUR_SPACES {

@@ -1,5 +1,5 @@
 //! The VST3 host, against the same in-tree fixture wearing its other face
-//! (docs/impl/audio-plugins.md §7 plans 1, 2, 6 and 7; K-707).
+//! (docs/impl/audio-plugins.md §7 plans 1, 2, 6 and 7).
 //!
 //! These mirror [`crate::tests`] deliberately, assertion for assertion, because
 //! the promise AP4 makes is that **nothing downstream of describe knows which

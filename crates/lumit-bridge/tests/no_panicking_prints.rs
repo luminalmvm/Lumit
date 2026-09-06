@@ -19,7 +19,7 @@
 //! output, and the two brokers — `lumit-ofx-broker` and `lumit-aplug-broker`
 //! — whose few lines are usage and fatal-error text on their way out. A
 //! broker dying is already its designed failure mode (one dry block and a
-//! badge, K-696), so a print that panics costs nothing a fatal exit did not.
+//! badge), so a print that panics costs nothing a fatal exit did not.
 
 use std::path::{Path, PathBuf};
 

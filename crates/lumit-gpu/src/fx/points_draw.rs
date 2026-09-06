@@ -1,4 +1,4 @@
-//! The generic points draw (K-598, K-599): a host-built set of points through
+//! The generic points draw: a host-built set of points through
 //! Particulate's own instanced quad.
 //!
 //! **In plain terms.** Particulate works its particles out *on the card*,
@@ -20,7 +20,7 @@ use crate::GpuContext;
 use super::{particulate::ParticulateParams, particulate::STREAM_WORDS, work_texture, FxEngine};
 
 /// **Which picture-derived field a point is put to a vote against**, in the
-/// vertex stage (K-599, K-603).
+/// vertex stage.
 ///
 /// One rejection, two rules, because the two effects that want one differ only
 /// in what they read off the pixel under a point: Scatter asks how covered it
@@ -33,10 +33,10 @@ pub enum FieldTest {
     /// Every point stands. Particulate's were decided by the compaction, and a
     /// generator's set is its set.
     None,
-    /// **Scatter's** (K-599): the alpha under the point, optionally inverted so
+    /// **Scatter's**: the alpha under the point, optionally inverted so
     /// the points land where the alpha is *not*.
     Alpha { invert: bool },
-    /// **Emit from image's** (K-603): the unpremultiplied luminance under the
+    /// **Emit from image's**: the unpremultiplied luminance under the
     /// point, remapped so `threshold` is no chance at all and full white is
     /// every chance.
     Luma { threshold: f32 },
@@ -58,7 +58,7 @@ impl FieldTest {
 /// One point, as the generic draw reads it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DrawPoint {
-    /// px in the layer's three axes, **unprojected** (K-561) — the camera is
+    /// px in the layer's three axes, **unprojected** — the camera is
     /// applied in the vertex stage, as it is for a particle.
     pub position: [f32; 3],
     /// Diameter, px.
@@ -70,7 +70,7 @@ pub struct DrawPoint {
     /// The point's index in its generator's own ordering — the stream's `id`,
     /// and what Scatter's acceptance die is drawn against in the vertex stage.
     pub id: u32,
-    /// Where the capsule runs back to, px in the same three axes (K-601). The
+    /// Where the capsule runs back to, px in the same three axes. The
     /// **head** for a plain dot, which is what makes a disc a streak of no
     /// length and lets one kernel serve both without a branch.
     pub tail: [f32; 3],
@@ -82,13 +82,13 @@ pub struct PointsDrawOp<'a> {
     pub points: &'a [DrawPoint],
     /// Disc edge softness, `0..=1`.
     pub feather: f32,
-    /// The host Mix, `0..=1`, folded into the point's own coverage (K-425).
+    /// The host Mix, `0..=1`, folded into the point's own coverage.
     pub mix: f32,
-    /// The composition's camera, already scaled to this raster (K-561), or
+    /// The composition's camera, already scaled to this raster, or
     /// `None` on a 2D layer — where it is not the identity matrix but no
-    /// matrix at all, so the positions' bits are left alone (K-258).
+    /// matrix at all, so the positions' bits are left alone.
     pub projection: Option<[[f32; 4]; 3]>,
-    /// **The rejection** (K-599, K-603): which picture-derived field each point
+    /// **The rejection**: which picture-derived field each point
     /// is put to a vote against, and by what rule. The test happens in the
     /// vertex stage because that is the only place a host-built point set can
     /// meet a picture that exists only on the card.
@@ -100,7 +100,7 @@ pub struct PointsDrawOp<'a> {
     /// matching `lumit_core::fx::points::RenderMode`: 0 a feathered disc (or a
     /// capsule, when a point's tail is not its head), 1 a **sprite**.
     ///
-    /// Sprite mode is Clone to points' (K-600), and it is the same mode
+    /// Sprite mode is Clone to points', and it is the same mode
     /// Particulate's own draw runs — one rasteriser for the whole family, so a
     /// stamp laid by a consumer is the stamp Particulate lays.
     pub mode: u32,

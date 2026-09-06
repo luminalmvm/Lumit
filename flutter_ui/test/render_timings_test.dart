@@ -34,7 +34,7 @@ void main() {
     final timings = RenderTimings(askEngine: asked.add);
     expect(timings.measuring, isTrue,
         reason: 'numbers are what the column is for, and a switch nobody finds '
-            'is a feature that does not work (K-276)');
+            'is a feature that does not work');
     expect(asked, isEmpty,
         reason: 'the engine starts on too, so nothing is said at startup');
 

@@ -1,6 +1,6 @@
 # Paint — how a stroke becomes pixels
 
-**Status: built (K-227), first cut.** The model, the CPU rasteriser, the bridge, the tools and
+**Status: built, first cut.** The model, the CPU rasteriser, the bridge, the tools and
 the Timeline rows are in. What is not in is named at the end, and none of it changes what is
 stored.
 
@@ -30,7 +30,7 @@ than two screen pixels to the last one kept are dropped, and the first and last 
 A slow drag can raise several hundred pointer events a second; a thousand-point path costs the
 renderer for nothing anyone can see.
 
-**`pressures` is a list beside the path** (K-583), one 0..1 per point: how hard the stylus was
+**`pressures` is a list beside the path**, one 0..1 per point: how hard the stylus was
 pressed there. It is a parallel list rather than a third number inside each point because
 **empty has to mean something** — empty is the constant 1.0 everybody painted with, so a
 mouse-drawn stroke and every stroke drawn before there was a stylus to read write exactly the
@@ -50,7 +50,7 @@ this frame is being rendered at.
 1. **Scale.** The stroke is in layer coordinates; the buffer is `w × h` for a layer whose
    natural size is `natural_w × natural_h`. One scale factor per axis, and the *smaller* is
    used for the brush radius so a round brush stays round.
-2. **Trim** (K-549). `PaintStroke::drawn_at(t)` cuts the path down to the piece between `start`
+2. **Trim.** `PaintStroke::drawn_at(t)` cuts the path down to the piece between `start`
    and `end` per cent of its own **arc length** at this frame, and everything below works on
    that piece — the bounding box included, so a write-on reserves only what it has drawn. Per
    cent of *length*, not of the sample count: a gesture's samples bunch up wherever the hand
@@ -63,7 +63,7 @@ this frame is being rendered at.
    and a dab is stamped at each step, plus one at the far end so a stroke never falls short of
    where the pointer stopped. A one-point stroke is one dab.
 
-   **Pressure is a scale on the radius, per dab** (K-583), and nothing else: `radius ×
+   **Pressure is a scale on the radius, per dab**, and nothing else: `radius ×
    pressure`, never below half a pixel, with the hardness ramp worked out from *that* radius so
    a light dab softens in proportion rather than turning to fog. A pressure of 0 is no dab at
    all — the pen lifted. The dab spacing follows the pressure too, measured from the lighter of
@@ -83,7 +83,7 @@ this frame is being rendered at.
    `feather = radius × (1 − hardness)` and never less than half a pixel — a perfectly hard edge
    would stair-step otherwise.
 
-   **The shape is one substitution** (K-548). `Dab::distance` decides what "how far from the
+   **The shape is one substitution.** `Dab::distance` decides what "how far from the
    centre" means — the straight line for `BrushShape::Round`, the greater of the two axes for
    `Square` — and *every* number downstream is written in terms of it: the radius, the hardness
    ramp above, the bounding box, the dab spacing. So a square softens exactly as a round does,
@@ -98,7 +98,7 @@ this frame is being rendered at.
    * **Clone** — sample the layer at `pixel + clone_offset × scale`, source-over. Off the layer
      copies nothing (wrapping reads as a bug).
 
-**The blend is a colour, never a coverage** (K-550). `blend` is a
+**The blend is a colour, never a coverage.** `blend` is a
 `lumit_core::model::BlendMode` — the layer list, the same words in the same order — and it
 decides what colour the mark lays down, not how much of the pixel it lays it on. Per pixel,
 when the mode is anything but Normal: decode the destination and the mark's colour to linear
@@ -128,13 +128,13 @@ see it. Two knock-on effects worth knowing:
   splicing a collapsed precomp never produces the layer's own raster, and there would be nothing
   to stamp into.
 
-## Every kind of layer, and the one that needed help (K-547)
+## Every kind of layer, and the one that needed help
 
 `pixels_for` builds a layer's raster and then stamps into it, whatever made it: a decoded
 footage frame, a Sequence clip, a solid at its true size, a rasterised line of type, a shape
 layer's art. One shared tail, so a stroke behaves the same on all of them. Two consequences
 worth knowing: a shape layer's raster **is** its art's bounding box, so the layer's pixel
-(0, 0) is that box's corner (K-308) and re-drawing the art far enough to move the box moves
+(0, 0) is that box's corner and re-drawing the art far enough to move the box moves
 the paint with it; and a text layer's raster is the line as typed, so an expression-driven
 caption that grows re-lays its strokes against the new width.
 
@@ -144,7 +144,7 @@ dropped. `DrawSource::Nested` now carries the layer's `paint`, and `Realiser::pa
 stamps it once the nested comp has been realised:
 
 1. `ColourEngine::display` with `DisplayParams::NEUTRAL` — never the Viewer's exposure or tone
-   map, so the picture a preview paints on is the picture an export paints on (K-031);
+   map, so the picture a preview paints on is the picture an export paints on;
 2. `readback8`, giving the same 8-bit sRGB bytes every other layer is painted in;
 3. the **same** `apply_strokes`, with the nested comp's own width and height as the natural
    size, so a reduced-resolution preview scales the brush exactly as it does everywhere else;
@@ -157,7 +157,7 @@ bits. Both are named in "Not built" below as the GPU stamping pass's job.
 
 A Precomp used as a **track matte** or as an effect's layer input renders unpainted: those
 build a `NestedInputDraw`, not a layer draw, and take the same v1 boundary the source's own
-effects take (K-266).
+effects take.
 
 ## The seam
 
@@ -166,7 +166,7 @@ effects take (K-266).
 one undo step. The bridge carries `BridgeStroke` (with `BridgeStrokePoint`, named for the stroke
 because `BridgePoint` is already an animatable effect parameter), clamps every number that would
 render wrongly for ever after, and refuses a stroke with no points. Strokes ride the read model
-(K-184) beside the masks so the Timeline lists them without asking per row per frame.
+beside the masks so the Timeline lists them without asking per row per frame.
 
 ## The tools
 
@@ -230,14 +230,15 @@ is `source − first point`, so the whole stroke keeps the relationship the firs
 ## Not built
 
 **Tilt**, and here is why. Honouring it needs a brush tip that can *turn*, and there is
-deliberately no angle anywhere in `BrushShape`: K-548 refused the brush-tip system that would
-carry one. Angling a round dab is a no-op dressed as a feature, and angling the square one is
-that refused system arriving by the back door. So tilt is owed on a **shaped brush with an
-angle**, not on this rasteriser, and the stylus's tilt fields are read by nothing today.
+deliberately no angle anywhere in `BrushShape`: the two-shape rule refused the brush-tip
+system that would carry one. Angling a round dab is a no-op dressed as a feature, and angling
+the square one is that refused system arriving by the back door. So tilt is owed on a
+**shaped brush with an angle**, not on this rasteriser, and the stylus's tilt fields are read
+by nothing today.
 
 Also: spacing and scatter; painting in Layer view rather than on the composite; a stroke's Start/End **curve in the graph editor** (the lane
 draws its diamonds and they drag, but `graphChannels` walks transform, effect and mask paths
 only in v1); and a GPU stamping path. The last one is the only one that would change any code
 here rather than adding to it — and it changes the *rasteriser*, not the stored stroke, which is why the
 storage was decided first. It is also what would retire the 8-bit read-back a painted Precomp
-pays (K-547).
+pays.

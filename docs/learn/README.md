@@ -2,9 +2,8 @@
 
 Onboarding docs for a developer who is new to Rust, Flutter and GPU code but not new
 to programming. They teach the codebase **as built**, with real code excerpts. The
-numbered specs in `docs/` stay canonical for intent. [GUIDE.md](../GUIDE.md) stays
-the no-code-background companion. These docs sit between the two: enough code to
-change the code.
+numbered specs in `docs/` stay canonical for intent. [GUIDE.md](../GUIDE.md) is the
+short contributor guide. These docs go deeper: enough code to change the code.
 
 ## Reading order
 

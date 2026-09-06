@@ -1,4 +1,4 @@
-//! Colour balance (docs/08 §3.10 as amended by K-090): lift / gamma / gain.
+//! Colour balance (docs/08 §3.10, as amended): lift / gamma / gain.
 
 use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
 use lumit_fx_macros::Effect;
@@ -17,8 +17,8 @@ use lumit_fx_macros::Effect;
     roi = Exact,
     // §2.2: grading premult shifts matte edges.
     premultiplied = false,
-    // K-395: the matte scales the amount, inside the kernel (the owner's
-    // rule for mattes); the generic strength dissolve does not also run.
+    // The matte scales the amount, inside the kernel (the owner's rule for
+    // mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "pulls Lift toward 0 and Gamma and Gain toward 1 per pixel: white \

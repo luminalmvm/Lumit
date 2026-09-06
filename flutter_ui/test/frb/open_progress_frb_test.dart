@@ -1,4 +1,4 @@
-// The opening card tells the truth about how far the open has got (K-628).
+// The opening card tells the truth about how far the open has got.
 //
 // The bar used to sweep, because nothing reported anything: it said "working"
 // and nothing else, for however many seconds a project full of precomps took.

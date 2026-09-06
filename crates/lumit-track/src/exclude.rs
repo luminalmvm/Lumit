@@ -1,4 +1,4 @@
-//! Exclusion regions (docs/impl/tracking.md §2, K-408).
+//! Exclusion regions (docs/impl/tracking.md §2).
 //!
 //! In plain terms: the user draws a shape round the thing that moves by itself —
 //! an actor, a car, a flag — and the tracker refuses to put features there. A
@@ -6,16 +6,16 @@
 //! ended rather than followed, because a track on a moving object tells the
 //! camera solve a lie about where the camera was.
 //!
-//! The shape arrives as the flattened mask polyline K-408 already carries to the
-//! engine, so masks drawn for effects and masks drawn for the tracker are the
-//! same geometry through the same seam.
+//! The shape arrives as the flattened mask polyline the engine already takes
+//! for masks, so masks drawn for effects and masks drawn for the tracker are
+//! the same geometry through the same seam.
 
 use lumit_core::mask::{flatten_path, Mask, MaskPolyline, MASK_PATH_TOLERANCE_PX};
 
 /// One region the tracker must keep out of.
 ///
 /// Points are in **source raster pixels**, matching the coordinates a
-/// [`TrackSet`](crate::TrackSet) stores (K-248: the tracker runs on the full,
+/// [`TrackSet`](crate::TrackSet) stores (the tracker runs on the full,
 /// unaltered footage). `MaskPolyline` arrives in px@comp, so the constructors
 /// take the comp→source factor and apply it once here rather than per test.
 /// A region is **one or more closed contours**, tested even-odd across all of
@@ -63,7 +63,7 @@ impl ExclusionMask {
 
     /// Build from several outlines at once, in source raster pixels, tested
     /// even-odd together — a two-point track's two search boxes as **one**
-    /// region the tracker must stay inside (K-735).
+    /// region the tracker must stay inside.
     #[must_use]
     pub fn from_contours(contours: Vec<Vec<[f64; 2]>>, inverted: bool) -> Self {
         ExclusionMask { contours, inverted }
@@ -80,7 +80,7 @@ impl ExclusionMask {
     /// The outlines, in source raster pixels, and whether they are inverted.
     ///
     /// Exposed because the analysis cache is keyed by what an analysis was
-    /// *given* (K-417): the mask geometry decides which tracks exist, so it
+    /// *given*: the mask geometry decides which tracks exist, so it
     /// belongs in the key — and two masks that flatten to the same outline
     /// deserve the same cached answer, which hashing ids would not give.
     #[must_use]

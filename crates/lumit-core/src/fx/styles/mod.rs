@@ -1,4 +1,4 @@
-//! Layer styles (docs/impl/layer-styles.md, K-706): the nine named slots a
+//! Layer styles (docs/impl/layer-styles.md): the nine named slots a
 //! layer wears, in one pinned order.
 //!
 //! **In plain terms.** Photoshop lets you hang a wardrobe on a layer — a shadow
@@ -75,7 +75,7 @@ pub static STYLE_DEFS: Catalogue = Catalogue::new(&[
 /// not know.
 ///
 /// An unknown name is not an error: a file written by a newer Lumit may carry a
-/// tenth style, and K-258's degrade rule says it loads, reports and renders as
+/// tenth style, and the degrade rule says it loads, reports and renders as
 /// identity rather than being thrown away.
 #[must_use]
 pub fn style_index(match_name: &str) -> Option<usize> {
@@ -116,7 +116,7 @@ pub fn outer_prefix(styles: &[EffectInstance]) -> usize {
 /// file comes back in order rather than rendering in whatever order it was
 /// written in. Nothing is thrown away except a genuine duplicate — an unknown
 /// `style_*` name from a newer Lumit keeps its instance and sorts to the end,
-/// where it renders as identity (K-258).
+/// where it renders as identity.
 ///
 /// The sort is stable, so two unknown names keep the order the file had.
 pub fn normalise_styles(styles: &mut Vec<EffectInstance>) {

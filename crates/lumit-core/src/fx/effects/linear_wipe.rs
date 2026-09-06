@@ -23,8 +23,8 @@ use lumit_fx_macros::Effect;
     // "less of this pixel" — all four channels, no round trip (§3.34's
     // reasoning).
     premultiplied = true,
-    // K-429: the matte scales the amount, inside the kernel (the owner's rule
-    // for mattes); the generic strength dissolve does not also run.
+    // The matte scales the amount, inside the kernel (the owner's rule for
+    // mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales Completion per pixel: the wipe is further along where the \
@@ -33,7 +33,7 @@ use lumit_fx_macros::Effect;
     ),
 )]
 pub struct LinearWipe {
-    /// Where the wipe line pivots, px@comp (K-260: point parameters are PIXELS).
+    /// Where the wipe line pivots, px@comp (point parameters are PIXELS).
     /// The schema default is nominal 1080p centre; `instantiate_for_raster`
     /// centres a fresh instance on the actual comp.
     #[slider(label = "Wipe centre x", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
@@ -46,7 +46,7 @@ pub struct LinearWipe {
     /// How far the edge has travelled, per cent. **50 by default, where AE's is
     /// 0**, for docs/08 §3.39's reason: an effect whose default state has
     /// removed nothing is an effect that has not been applied (§1.2).
-    /// Closed 0..100 (K-414): a wipe cannot be less than begun or more than
+    /// Closed 0..100: a wipe cannot be less than begun or more than
     /// complete, so the range is the parameter, and typing past either end
     /// would offer a picture that does not exist.
     #[bounded(min = 0.0, max = 100.0, default = 50.0, unit = Percent)]

@@ -1,16 +1,16 @@
-# The Puppet tools (K-704)
+# The Puppet tools
 
 **Status: PU1, PU2 and PU3 built.** The engine (`lumit_core::puppet`), the seam in
 `lumit-render`'s `build.rs`, `Layer::puppet`, the frame-cache key, `lumit-bench`'s
-B15–B17, the bridge's calls, and — since K-716 — the four armed tools, the Density
+B15–B17, the bridge's calls, and — since PU3 — the four armed tools, the Density
 and Expansion options, the mesh ghost and pin overlay, the gestures and the Timeline
 rows. What §5 below still describes as coming is done; the two ceilings PU3 took are
 marked in the code with their triggers (a pin placed on an already-deformed puppet is
 stored at rest, and a pin drag deforms the picture on release rather than under the
 pointer).
 [07-UI-SPEC.md](../07-UI-SPEC.md) §1.7 names the four tools — Puppet position pin, Puppet
-starch pin, Puppet overlap pin, Puppet bend pin — which K-228 kept on the strip, disabled,
-until there was an engine behind them. This note is the binding *how* for that engine: the
+starch pin, Puppet overlap pin, Puppet bend pin — which sat on the strip, disabled, until
+there was an engine behind them. This note is the binding *how* for that engine: the
 mesh, the deformer, the storage, the render seam, the overlay, the refusals, the tests, and
 the ordered work packages PU1–PU3, all three of which have landed.
 
@@ -294,7 +294,7 @@ covered at default density): warp ≤ 120 ms, mesh build ≤ 100 ms, per-frame s
 at the vertex cap.
 
 Two of those three are **looser than this note first wrote them** (8 ms and 1 ms), and
-PU2's measurements are why — K-712 records the change and docs/13 §2 carries the reasoning.
+PU2's measurements are why, and docs/13 §2 carries the reasoning.
 The warp is one barycentric and one bilinear resample per pixel in f64; two million of them
 do not fit 8 ms on one thread, and 8 ms is what the GPU warp below is *for*. The solve at
 the cap is a forward and back substitution through a dense 3000×3000 factor plus two
@@ -356,9 +356,9 @@ indices.
 
 ## 5. The overlay, the tools, the panel
 
-- **The four strip tools come alive** (they exist, disabled, under K-228; the keymap's
-  `tool.puppet` actions exist). Tool options area, per K-225's table: **Density** and
-  **Expansion**, live; committing a change re-meshes.
+- **The four strip tools come alive** (they exist, disabled; the keymap's `tool.puppet`
+  actions exist). Tool options area: **Density** and **Expansion**, live; committing a
+  change re-meshes.
 - **Overlay** (Viewer, while a puppet tool is armed): the **mesh ghost** — the deformed
   mesh's wireframe, theme-coloured, thin — and the **pins**: position pins as filled dots,
   starch/overlap/bend each with their glyph per 15-DESIGN, inert pins hollow. Extent for
@@ -430,7 +430,7 @@ Synthetic alpha shapes with hand-checkable deformations, in `lumit-core`'s puppe
 14. **Budget** (PU2): the bench scenario of §3 inside its gates, wired into the docs/13
     harness.
 15. **Bridge/UI** (PU3): pin add/drag/delete round-trips through the document; undo
-    restores; the tools arm only once built (K-228 flips per tool as its behaviour lands).
+    restores; the tools arm only once built (each is enabled as its behaviour lands).
 
 ## 8. Ordered work packages
 
@@ -447,7 +447,7 @@ Synthetic alpha shapes with hand-checkable deformations, in `lumit-core`'s puppe
   `set_puppet` / `add_puppet_pin` / `set_puppet_pin` / `delete_puppet_pin` over one
   `Op::SetLayerPuppet`. Tests 13–14, plus an end-to-end one the plan did not name: a pinned
   solid whose painted mark the build closure carries eight pixels down.
-- **PU3 — tools, overlay, panel** — **built** (K-716): the four tools armed, Density and
+- **PU3 — tools, overlay, panel** — **built**: the four tools armed, Density and
   Expansion on the options strip, the mesh ghost and the pin overlay, the gestures and their
   document commands, the Timeline's Puppet group and its per-pin rows, and test 15.
 

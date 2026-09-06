@@ -52,7 +52,7 @@ flowchart LR
    a kernel call) → lighting → matte/mask/motion-blur → `Compositor::composite_seeded`.
 
 **Lighting sits between steps 4 and 5** of docs/06's numbering — step 4.5, after a layer's
-effects and before it is placed (K-361). It is deliberately *not* an effect: it has no
+effects and before it is placed. It is deliberately *not* an effect: it has no
 schema, no stack row and no place in the Add-effect menu, because a light is a layer
 elsewhere in the comp rather than a control on this one. `build.rs` resolves the comp's
 Light layers and hangs the relevant ones on each draw; `lighting_op` in `realise.rs` turns
@@ -63,12 +63,12 @@ the pass never runs, which is how a comp with no lights stays byte-for-byte what
 Two drivers call this. The bridge's worker thread owns a `HeadlessRenderer`
 (`headless.rs`) for preview. `export::start` spawns its own thread with its **own**
 renderer on its **own** GPU device. Both run the same walk at the same resolution
-rules. A test matrix pins preview == export bit-for-bit (K-031).
+rules. A test matrix pins preview == export bit-for-bit.
 
 ## A region of interest
 
 `Realiser::realise` is a thin call onto `realise_region` with no region.
-Given one (K-362), the composite writes only that window of the composition: the
+Given one, the composite writes only that window of the composition: the
 comp-pixels-to-NDC mapping shifts and the target is sized to the region, so the returned
 texture is the region's size. The camera matrix is untouched — it projects comp space, and
 a window on the result cannot change perspective — and pixel density is unchanged, so
@@ -173,7 +173,7 @@ banked frames or 150 ms).
   frame. The cache bar then drew empty over a fully cached comp.
 - **Parked disk writes need two questions**: `contains()` and `is_pending()`.
   Without the second, the idle backup re-offered the same frame forever (the 81 GB
-  incident, K-277).
+  incident).
 - **The parallel slot lists** (`lut_files`, `dof_inputs`, `mattes`,
   `flare_lens_files`) are 1:1 with the stack's `Resolved` ops. A second filter
   anywhere silently binds LUTs to the wrong ops.

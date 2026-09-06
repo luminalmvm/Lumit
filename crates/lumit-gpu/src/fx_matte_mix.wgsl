@@ -1,4 +1,4 @@
-// The generic Matte strength semantic (K-395, docs/08 §2.6): every effect can
+// The generic Matte strength semantic (docs/08 §2.6): every effect can
 // be driven by a second picture whose luma says how much of the effect each
 // pixel gets. The effect has already run into `processed`; this pass dissolves
 // it back towards the picture it was given, by the matte's premultiplied

@@ -21,6 +21,20 @@ Implement, minimum for real plugins (Twixtor/RSMB/Sapphire CPU): `OfxPropertySui
 `OfxMultiThreadSuiteV1`, `OfxMessageSuiteV1` (+V2), `OfxInteractSuiteV1` can stub-fail
 gracefully at first (overlays degrade to no overlay).
 
+What "minimum" turned out to mean against commercial bundles: **the stock OpenFX
+support library fetches `OfxInteractSuite` as mandatory** and refuses to describe without
+it, so the suite exists and every call answers `kOfxStatErrUnsupported` (not `BadHandle`,
+which the conformance tally counts as a refusal); **HitFilm requires `OfxMessageSuite` v2**,
+whose persistent message is filed like any other; **the OFX 1.3–1.5 host properties are
+seeded honestly** (`NativeOrigin` bottom-left, every GPU render flavour `"false"`, a null
+`HostOSHandle`, draft quality nought) because the support library reads each one during
+describe and an "unknown property" answer is thrown as "missing host feature"; the render
+`inArgs` carry the matching `*Enabled` noughts and null queues; and a clip instance carries
+`kOfxImageClipPropUnmappedPixelDepth`, which Red Giant reads and dereferences without
+checking — an access violation in the broker when it was absent. Beyond all of that, a
+plugin may still refuse the host **by name** (docs/12 §2.5); `quirks.json`'s `present_as`
+is the answer, applied in `Bundle::load` before `setHost`.
+
 **Handles are the whole game.** Every `OfxImageEffectHandle`, `OfxPropertySetHandle`,
 `OfxParamHandle` etc. is an opaque pointer *we* mint. Do it safely:
 
@@ -59,8 +73,8 @@ teardown:  kOfxActionDestroyInstance, kOfxActionUnload
 ```
 
 That listing is the whole render order and `lumit-ofx::render::RENDER_ACTIONS` is its
-transcription; a test records what the plugin observed and compares the two verbatim
-(K-591). `getClipPreferences` and `isIdentity` are here because
+transcription; a test records what the plugin observed and compares the two verbatim.
+`getClipPreferences` and `isIdentity` are here because
 [12-PLUGINS.md](../12-PLUGINS.md) §2.1 names them among the actions the host dispatches;
 earlier revisions of this note left them implicit.
 
@@ -68,11 +82,16 @@ Param changed actions (`kOfxActionInstanceChanged`) must fire between renders, w
 `kOfxActionBeginInstanceChanged/End...` — Sapphire relies on it.
 
 Images: `clipGetImage(clip, time)` returns a property set with data pointer, bounds, row
-bytes (**can be negative** — bottom-up; honour it), pixel depth, premultiplication state.
+bytes, pixel depth, premultiplication state. **Row bytes are always positive: the host hands
+every plugin a bottom-up block.** The spec allows a negative stride and `image::Image`
+still builds one, but a shipped plugin (ntsc-rs 0.9.4) applies a negative stride's first-row
+offset in the wrong units and writes most of a frame past the block — a heap corruption in
+the broker that reaches the viewer as a mostly transparent picture with no error. The flip
+costs one row-by-row copy the boundary conversion was already paying.
 We hand out fp32 RGBA premultiplied ([12-PLUGINS.md](../12-PLUGINS.md)); convert at the
 boundary from fp16. Pin the buffer until `clipReleaseImage`.
 
-**The clips are bound for the whole of that sequence, not for the render action** (K-595).
+**The clips are bound for the whole of that sequence, not for the render action.**
 A plugin asks its input how big it is inside `getRegionOfDefinition`, and often fetches the
 image itself in `isIdentity`; a host that binds its clips just before
 `kOfxImageEffectActionRender` answers "there is no image" to all of it, and a well-written
@@ -100,10 +119,10 @@ Watchdog: per-action deadline, three strikes → plugin disabled for the session
 badge. Broker crash = restart + replay describe/instance from our cached descriptor state;
 the render that died returns identity + badge. **The shipped deadline is
 [12-PLUGINS.md](../12-PLUGINS.md) §2.3's — 10 s for a render, 2 s for a control action —
-not the 30 s this note first sketched** (K-592); both live as named constants in
+not the 30 s this note first sketched**; both live as named constants in
 `quirks.rs` and the quirks table's `render_timeout_ms` is the per-plugin exception.
 
-What the built transport pins, beyond the sketch above (K-592):
+What the built transport pins, beyond the sketch above:
 
 - **The pipe is its own, not the child's stdout.** A third-party plugin's `printf` would
   otherwise land in the middle of a length-prefixed message and desynchronise the protocol
@@ -117,8 +136,8 @@ What the built transport pins, beyond the sketch above (K-592):
   that is fifteen slots; at 4K it is the floor of three, so a `t ± 5` prefetch at that
   size does not fit and is refused — a bigger budget, not a different design.
 - Frames cross the ring as fp32 RGBA, tightly packed top-down. The header's row bytes
-  describe *the ring*; OFX's negative row bytes are applied at the plugin boundary inside
-  the broker.
+  describe *the ring*; the flip to OFX's bottom-up layout happens at the plugin boundary
+  inside the broker.
 - The prefetch hook sits between `getFramesNeeded` and `isIdentity` — the only point in
   §3's order where a frame at another time may be asked for.
 
@@ -126,7 +145,7 @@ What the built transport pins, beyond the sketch above (K-592):
 
 A described plugin is turned into an `EffectDef` (`lumit-ofx::def::OfxEffectDef`) and
 registered into the same catalogue the built-ins live in — the seam
-[effect-registry.md](effect-registry.md) §2.6 was written for (K-593). What that pins here:
+[effect-registry.md](effect-registry.md) §2.6 was written for. What that pins here:
 
 - **`apply_cpu` is the render.** The bag arrives keyed by hashed ids; `schema::value_routes`
   is the way back to the plugin's own parameter names, built by the same `rows_of` that
@@ -145,9 +164,9 @@ registered into the same catalogue the built-ins live in — the seam
 - **Two hosts.** `LocalHost` drives a bundle in this process; `BrokerHost` drives §4's
   broker, which is the shipping arrangement. Both pool one live plugin instance per effect
   instance. Thread safety needs nothing new — `instance::render_lock` already turns the
-  plugin's declaration into no lock, the instance's, or the bundle's (K-066).
+  plugin's declaration into no lock, the instance's, or the bundle's.
 
-## 4b. Going looking (K-594)
+## 4b. Going looking
 
 `lumit-ofx::discover` is [12-PLUGINS.md](../12-PLUGINS.md) §2.6's scan: §1's search paths
 (already `bundle::search_paths`), a bundle apiece, §3's describe, §4a's `EffectDef`, and a
@@ -163,7 +182,7 @@ registered into the same catalogue the built-ins live in — the seam
 - **The switched-off list is read before describe, and again per render.** The stored one
   (`lumit_project::PluginPrefs`) keeps a plugin's code from running at all; the running one
   (`discover::set_enabled`) is what a plugin switched off mid-session is gated by, because
-  registration is additive and never removes (K-593).
+  registration is additive and never removes.
 - **A rescan is guarded by name before any work.** That is what keeps it idempotent and what
   stops the second scan re-leaking a schema — §4a's recorded ceiling, discharged.
 - **The ring is built for 1080p at scan time.** The scan runs before any composition is
@@ -178,7 +197,7 @@ registered into the same catalogue the built-ins live in — the seam
    available) then **ntsc-rs** — both free; run describe→render across contexts, assert no
    bad-handle returns, valid output. **Landed** as `crates/lumit-ofx/tests/conformance.rs`
    over a runner in `crates/lumit-bench` (`ofx::ensure`, its binary `ofx-bench`), and the
-   CI job `OFX conformance bench`. What running it pinned (K-595):
+   CI job `OFX conformance bench`. What running it pinned:
 
    - **The bench is fetched and built, never committed.** Same trade as the reference
      media: a runner clones each project and builds it into one folder, is idempotent, and
@@ -202,7 +221,7 @@ registered into the same catalogue the built-ins live in — the seam
      plugin does in a host still missing features it needs is measured and printed —
      `LUMIT_OFX_BENCH_STRICT` turns that column into an assertion, and it is set the day
      the host can carry it. A suite that went red for a feature nobody has built yet would
-     block everything else (K-007) while proving nothing.
+     block everything else while proving nothing.
    - **The build emits loose `.ofx` binaries, not bundles.** openfx-misc's CMake project
      drops `Misc.ofx` in `build/Release`; the bundle layout §1 loads from is the host's
      own convention, so the runner wraps what it finds. A partial build is still a bench —
@@ -212,7 +231,7 @@ registered into the same catalogue the built-ins live in — the seam
    **What the run said, and what it changed** (openfx-misc at master, ntsc-rs 1.7, Windows,
    207 plugin/context pairs). The first pass: 11 passed, 123 failed. After the five host
    bugs it exposed: **74 passed, 69 rejected at describe, 64 failed**, and **no bad handle
-   or bad value in the whole pass** — K-589's handle discipline holds against eighty
+   or bad value in the whole pass** — §2's handle discipline holds against eighty
    plugins nobody here wrote. The five, each with a regression test:
 
    - **The clips were bound too late.** A plugin asks its input how big it is inside
@@ -236,7 +255,7 @@ registered into the same catalogue the built-ins live in — the seam
      nothing wrong in.
    - The parameter suite's wrong no to a forged handle (item 2).
 
-   **The gap that was left is closed** (K-743). 53 of the 64 remaining failures were the
+   **The gap that was left is closed.** 53 of the 64 remaining failures were the
    same thing: openfx-misc writes a parameter value during `kOfxActionCreateInstance`, this
    host answered `kOfxStatErrUnsupported`, the support library threw, and the instance never
    existed — which from a layer is every plugin refusing to apply, each with whichever
@@ -246,29 +265,22 @@ registered into the same catalogue the built-ins live in — the seam
    [rust-lang#44930](https://github.com/rust-lang/rust/issues/44930)) — and therefore a
    small C shim.
 
-   It needed neither **on Windows**, and that is as far as it went. The Microsoft x64 ABI
-   requires a **variadic** caller to put a floating-point argument in the general-purpose
-   register as well as the vector one, exactly so a callee that does not know the
-   argument's type can still find it. So the trailing arguments were declared as four
-   machine words, and the parameter's own declared type said how to read each of them: the
-   low half for an `int`, the bits for a `double`, the address for a string. The write
-   lands in the instance's snapshot and no further; making it reach the document is still
-   the package docs/12 §2.2 describes.
-
-   **That arrangement is gone, and the shim is back (K-756).** The ceiling K-591 recorded
-   for `paramGetValue` — Apple silicon passes every variadic argument on the stack, so a
-   fixed-arity callee reads leftovers — turned out to mean that *no commercial plugin's
-   parameters worked on an M-series Mac at all*, which is a defect rather than a ceiling.
-   `shim/ofx_varargs.c` now receives those four calls and pulls the trailing arguments with
-   `va_arg`, which is the only construct that knows each platform's rule; the Rust entries
-   behind it are unchanged and are now handed correct arguments. The suite's fields are
-   declared variadic, as the header declares them.
-
-   **And the sentence this note used to end on was wrong**: the real fix is *not* "the
-   broker unpacking the call from a message rather than from a register (§4)". The broker
-   moves the **plugin** into another process, not the **call** — inside it, the plugin
-   still calls these suite function pointers directly across the same C ABI, so the
-   mismatch is identical there. Nothing about out-of-process hosting addresses it.
+   The first fix closed it without the C, on the Microsoft x64 rule that a variadic caller
+   duplicates a floating-point argument into the general-purpose register. True, and
+   Windows-only, so it kept the ceiling above: on Apple silicon variadic arguments go on the
+   stack and a fixed-arity callee reads the wrong register, for reads and writes alike.
+   Each platform ships the same host at the same version, so **the ceiling is retired with
+   the shim after all**: `src/suites/variadic.c`, built by
+   the crate's `build.rs`, defines the four value entry points exactly as the header
+   declares them, asks Rust how many trailing arguments the parameter has and of which
+   kind, pulls exactly those with `va_arg`, and hands them to a fixed-arity Rust function.
+   Every decision stays in Rust; the C does the one thing Rust cannot. The suite table
+   declares the four as variadic, which Rust *can* do, so the test plugin makes real
+   variadic calls and one test proves the shim on every platform CI runs. (The note used to
+   say the broker was the real fix for this. It is not: the broker is a Rust process that
+   hands the plugin the same tables, so the plugin's call is just as variadic there.) The
+   write lands in the instance's snapshot and no further; making it reach the document is
+   still the package docs/12 §2.2 describes.
 
    The tail is ten plugins whose own render or region-of-definition answers
    `kOfxStatErrUnsupported` for reasons of their own, and one `createInstance` that answers
@@ -281,13 +293,12 @@ registered into the same catalogue the built-ins live in — the seam
    a hundred plugins on it offered none of them. `bundle::scan_dir` now walks four levels
    down and does not look inside a bundle for another bundle.
 
-   **And a rejection that is not a host bug, worth writing down so it is not chased again.**
-   Some plugins are locked to named hosts. HitFilm's Vegas bundle reads `kOfxPropName` twice
-   during `kOfxActionDescribe` and answers `kOfxStatErrMissingHostFeature`; Red Giant
-   Universe does the same in `describeInContext`. Neither reads another property first, and
-   putting another host's name in that field gets them past it — and then straight into an
-   access violation, because they expect that host's GPU environment too. There is nothing
-   here to fix, and claiming to be somebody else is not a fix.
+   **And a rejection that is not a host gap.** Some plugins are locked to named hosts:
+   HitFilm's Vegas bundle and Red Giant Universe both read `kOfxPropName` and answer
+   `kOfxStatErrMissingHostFeature` to a name they were not tested against. The real host
+   gaps those bundles hit first (the interact suite, message suite v2, the 1.3 to 1.5 host
+   properties) are closed above; the name itself is data in `quirks.json` (`present_as`),
+   given per bundle and never by default.
 
 2. Handle fuzzing: call every suite function with forged/expired handles → correct OFX
    status codes, zero UB (run under ASan in CI). **Landed** as

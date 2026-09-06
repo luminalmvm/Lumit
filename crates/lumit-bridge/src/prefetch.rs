@@ -111,7 +111,7 @@ fn run(jobs: Receiver<PrefetchWant>, done: Sender<Done>) {
     }
 }
 
-/// Without the decoder there is nothing to decode ahead (K-273). The thread
+/// Without the decoder there is nothing to decode ahead. The thread
 /// still exists and still drains its queue, so the worker's request/drain
 /// calls need no feature gate of their own — it simply never produces a
 /// result, and every frame decodes inline exactly as it did before prefetch

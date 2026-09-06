@@ -1,5 +1,5 @@
 // The camera-track point cloud over the picture, and the gesture that turns a
-// handful of its points into a layer (K-417, docs/07 §2.3.6).
+// handful of its points into a layer (docs/07 §2.3.6).
 //
 // **In plain terms.** When a shot has been tracked, the solver knows where a few
 // hundred little features of the scene are in three dimensions. These are drawn
@@ -14,8 +14,8 @@
 // the bridge already worked out (`trackedPoints`). This file scales composition
 // pixels into the panel and draws circles; it knows nothing about cameras.
 //
-// **Asked for once per frame**, never per rebuild — the Levels histogram's rule
-// (K-413), and the bridge-call budget is the gate.
+// **Asked for once per frame**, never per rebuild — the Levels histogram's rule,
+// and the bridge-call budget is the gate.
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -54,7 +54,7 @@ class ViewerTrackLayer extends StatefulWidget {
   final int playheadFrame;
   final BigInt? revision;
 
-  /// Bumped when an analysis lands a solve (K-430). A third thing to key the
+  /// Bumped when an analysis lands a solve. A third thing to key the
   /// read by, because a solve arriving changes what the engine would answer
   /// while changing neither of the other two — the frame is where it was, and
   /// a solve is not an edit, so the document's revision has not moved.
@@ -69,7 +69,7 @@ class ViewerTrackLayer extends StatefulWidget {
   /// drawn whenever Show points is on and there is a solve — that is what the
   /// switch says — but a cloud that always took the pointer would make the
   /// whole shot unclickable, and clicking the picture is how a layer is
-  /// selected (K-217).
+  /// selected.
   final bool selecting;
 
   /// A layer was added at the selection: the panels re-read.
@@ -107,7 +107,7 @@ class ViewerTrackLayer extends StatefulWidget {
 class _ViewerTrackLayerState extends State<ViewerTrackLayer> {
   List<BridgeTrackPoint> _points = const [];
 
-  /// Which points are picked, by track id. **Panel state** (K-417): a selection
+  /// Which points are picked, by track id. **Panel state**: a selection
   /// of features is a thing you are doing, not a thing the document holds.
   final Set<int> _picked = <int>{};
 

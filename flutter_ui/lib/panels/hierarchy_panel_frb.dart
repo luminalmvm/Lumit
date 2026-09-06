@@ -55,8 +55,8 @@ class _HierarchyPanelFrbState extends State<HierarchyPanelFrb> {
       );
     }
 
-    // The fronted comp's rows come from the read model — zero bridge calls
-    // (K-184); an expanded precomp's inside is read as it opens.
+    // The fronted comp's rows come from the read model — zero bridge calls;
+    // an expanded precomp's inside is read as it opens.
     return ListenableBuilder(
       listenable: ui.model,
       builder: (context, _) {
@@ -98,7 +98,7 @@ class _HierarchyPanelFrbState extends State<HierarchyPanelFrb> {
         name: info.name,
         kind: kind,
         depth: depth,
-        // The whole selection, not just the primary (K-217): a layer chosen in
+        // The whole selection, not just the primary: a layer chosen in
         // the Timeline with Ctrl held reads as chosen here too, or the two
         // panels would be showing two different answers to one question.
         selected: ui.selectedLayerIds.contains(layer.internallayerId),

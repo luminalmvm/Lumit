@@ -150,7 +150,7 @@ void main() {
 
     /// 4. **A row** is a label in a fixed 100px column, 10 after it, and 28
     /// tall — the Export drawing's own, not the New composition dialog's
-    /// (K-458: each drawing measures itself).
+    /// (each drawing measures itself).
     testWidgets('a row is the drawing\'s row', (tester) async {
       await open(tester);
 
@@ -183,11 +183,11 @@ void main() {
       expect(export.left, greaterThan(add.right),
           reason: 'the single filled action is last (§12A.4)');
       expect(find.text('EXPORT'), findsWidgets,
-          reason: "the filled action's label is a kicker (K-450)");
+          reason: "the filled action's label is a kicker");
     });
 
     /// 6. **The tabs name the sections, and the page holds them all.** The
-    /// dialog is one scrolling page (K-485), so every group is in the tree at
+    /// dialog is one scrolling page, so every group is in the tree at
     /// once and a tab is a place on it rather than a page of its own.
     testWidgets('the page holds every section at once', (tester) async {
       await open(tester);
@@ -211,7 +211,7 @@ void main() {
             reason: 'one page holds every group, Composition included');
       }
       expect(find.text('STILL'), findsNothing,
-          reason: 'a still is an image sequence of one frame (K-485)');
+          reason: 'a still is an image sequence of one frame');
     });
 
     /// 6a. **Clicking a tab brings its section to the top of the body** and
@@ -277,7 +277,7 @@ void main() {
     /// 6c. **The right column of a paired row.** Its label column is the
     /// narrower 78 so the frame rate's value well always fits beside its list,
     /// and every control in that column shares one left edge and one right
-    /// (K-485: the drawing asks for 212 of control in a 173 column).
+    /// (the drawing asks for 212 of control in a 173 column).
     testWidgets('the paired right column aligns and fits its value well',
         (tester) async {
       await open(tester);
@@ -337,7 +337,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    /// 6d. **The preset strip is chrome, not a row** (K-487). A preset sets
+    /// 6d. **The preset strip is chrome, not a row**. A preset sets
     /// and saves every section of this dialog, so it sits in a band of its own
     /// under the tab row and above the scrolling body — full width, 8 above a
     /// 22px control and 8 below it. No rule under it (owner): standing
@@ -354,7 +354,7 @@ void main() {
       expect(strip.top, tabs.bottom,
           reason: 'it sits directly under the tab row');
       expect(strip.height, exportPresetStrip,
-          reason: 'K-588: two lines of 22 at rest, 8 above each and 8 under '
+          reason: 'two lines of 22 at rest, 8 above each and 8 under '
               'the last, and no rule under the band');
       expect(output.top, greaterThanOrEqualTo(strip.bottom),
           reason: 'and above the body, which scrolls under it');
@@ -370,8 +370,8 @@ void main() {
     /// and lost. Each button is now its own content's width, with air after
     /// the last of them.
     ///
-    /// K-588's *Set as default* is why the band has two lines: at 180px wide
-    /// it overflowed the strip by 118 standing beside the other two, so it took
+    /// *Set as default* is why the band has two lines: at 180px wide it
+    /// overflowed the strip by 118 standing beside the other two, so it took
     /// a line of its own, starting under the list rather than under the label.
     testWidgets('the preset controls have room to breathe', (tester) async {
       await open(tester);
@@ -391,7 +391,7 @@ void main() {
       expect(edit.left - list.right, exportPresetStripGap);
       expect(saveAs.left - edit.right, exportPresetStripGap);
       expect(setDefault.left, list.left,
-          reason: 'K-588: on its own line, under the list it acts on');
+          reason: 'on its own line, under the list it acts on');
       expect(setDefault.top - saveAs.bottom, exportPresetStripGap,
           reason: 'the strip\'s own 8 between one line and the next');
 
@@ -471,7 +471,7 @@ void main() {
     });
 
     /// 7. **The queue window** is the same pattern at its own width: the
-    /// dialog's title strip and footer, unchanged (K-444).
+    /// dialog's title strip and footer, unchanged.
     testWidgets('the queue window wears the dialog pattern', (tester) async {
       tester.view.physicalSize = const Size(1200, 900);
       tester.view.devicePixelRatio = 1.0;

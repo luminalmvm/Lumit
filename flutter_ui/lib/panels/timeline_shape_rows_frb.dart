@@ -25,7 +25,7 @@ import 'keyframe_controls_frb.dart';
 import 'layer_fold_frb.dart';
 import 'timeline_mask_rows_frb.dart';
 
-/// One piece of a shape layer's art in the Timeline (K-237), on the shared
+/// One piece of a shape layer's art in the Timeline, on the shared
 /// [ItemOpacityRow]. The engine takes the whole contents list, so every
 /// edit — and the drag's preview — is "the list, with this item changed".
 class ShapeItemRow extends StatelessWidget {
@@ -34,7 +34,7 @@ class ShapeItemRow extends StatelessWidget {
   final ValueColumn valueColumn;
   final VoidCallback onChanged;
 
-  /// The composition, for the live preview a drag shows (K-239).
+  /// The composition, for the live preview a drag shows.
   final CompositionReference comp;
 
   const ShapeItemRow({super.key, 
@@ -75,8 +75,8 @@ class ShapeItemRow extends StatelessWidget {
       id: item.id.toString(),
       opacity: item.opacity,
       valueColumn: valueColumn,
-      // Show the opacity the drag is passing through without writing it
-      // (K-239), exactly as the stroke row does.
+      // Show the opacity the drag is passing through without writing it,
+      // exactly as the stroke row does.
       onPreview: (opacity) {
         try {
           comp.renderFrameWithShapePreview(
@@ -100,7 +100,7 @@ class ShapeItemRow extends StatelessWidget {
   }
 }
 
-/// One paint stroke in the Timeline (K-227), on the shared [ItemOpacityRow].
+/// One paint stroke in the Timeline, on the shared [ItemOpacityRow].
 /// The engine takes the whole stroke, so every edit is "this stroke, with one
 /// field changed" — and its name is not renamed here, so the row shows it
 /// plain.
@@ -110,7 +110,7 @@ class StrokeRow extends StatelessWidget {
   final ValueColumn valueColumn;
   final VoidCallback onChanged;
 
-  /// The composition, for the live preview a drag shows (K-239).
+  /// The composition, for the live preview a drag shows.
   final CompositionReference comp;
 
   const StrokeRow({super.key, 
@@ -192,7 +192,7 @@ class StrokeRow extends StatelessWidget {
         } catch (_) {}
       },
       deleteLabel: l10n.deleteStroke,
-      // The layer blend list, on a stroke (K-550) — the same words, from the
+      // The layer blend list, on a stroke — the same words, from the
       // same engine table, so a mark blends by the name it blends by
       // everywhere else.
       extra: _StrokeBlendPicker(
@@ -204,7 +204,7 @@ class StrokeRow extends StatelessWidget {
   }
 }
 
-/// A stroke's blend mode (K-550), on the stroke's own Timeline row.
+/// A stroke's blend mode, on the stroke's own Timeline row.
 ///
 /// The engine's list, read once and held: `listBlendModes` is a table of
 /// English words the engine owns, and every one of them has a translation
@@ -245,7 +245,7 @@ class _StrokeBlendPicker extends StatelessWidget {
   }
 }
 
-/// A stroke's Start or End (K-549) — the pair that draws a stroke on.
+/// A stroke's Start or End — the pair that draws a stroke on.
 ///
 /// The same shape as [MaskValueRow], and for the same reasons: the value is
 /// staged and previewed through the paint preview while it is dragged, the
@@ -290,7 +290,7 @@ class _StrokeValueRowState extends State<StrokeValueRow> {
     super.dispose();
   }
 
-  /// Show the value the drag is passing through without writing it (K-240).
+  /// Show the value the drag is passing through without writing it.
   /// The whole stroke list is sent with this one number replaced, because
   /// paint is stored and committed as a whole list.
   void _preview(BridgeScalar v) {
@@ -401,7 +401,7 @@ class _StrokeValueRowState extends State<StrokeValueRow> {
   }
 }
 
-/// One of an animator's numbers in the Timeline (K-609) — a range end, a push,
+/// One of an animator's numbers in the Timeline — a range end, a push,
 /// a fade — on the same shape of row a stroke's write-on uses.
 ///
 /// **No live preview while it drags**, unlike the mask and stroke rows beside
@@ -526,11 +526,11 @@ class _AnimatorValueRowState extends State<AnimatorValueRow> {
   }
 }
 
-/// One of a shape item's animatable numbers in the Timeline (K-551) — its Trim
+/// One of a shape item's animatable numbers in the Timeline — its Trim
 /// start, end or offset — on the same shape of row a stroke's write-on uses.
 ///
 /// The whole contents list is sent for every write, because a shape layer's art
-/// is stored and committed as a whole list (K-237): a preview shaped differently
+/// is stored and committed as a whole list: a preview shaped differently
 /// from the op would be a second description of the same thing.
 class ShapeValueRow extends StatefulWidget {
   final CompositionReference comp;
@@ -571,7 +571,7 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
 
   (double, double, String) get _units => switch (widget.value) {
         // The shape has no number to drag, so no range and no unit: its row is
-        // the stopwatch and its diamonds (K-606).
+        // the stopwatch and its diamonds.
         ShapeValue.path => (0, 0, ''),
         // Out or in, in layer pixels.
         ShapeValue.offsetPath => (-1000, 1000, ' px'),
@@ -613,7 +613,7 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
     super.dispose();
   }
 
-  /// Show the value the drag is passing through without writing it (K-240).
+  /// Show the value the drag is passing through without writing it.
   void _preview(BridgeScalar v) {
     final ui = Provider.of<LumitUiState>(context, listen: false);
     _throttle.request(() {
@@ -647,7 +647,7 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
             else
               i,
         ],
-        // Not a shape edit: a keyed path is carried through untouched (K-606).
+        // Not a shape edit: a keyed path is carried through untouched.
         at: null,
       );
       widget.onChanged();
@@ -750,7 +750,7 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
 }
 
 /// A shape item's fill colour, its gradient choice, or the gradient's second
-/// colour (K-555). None of the three is a number, so this row carries a swatch
+/// colour. None of the three is a number, so this row carries a swatch
 /// or a dropdown where the others carry a value field — and no stopwatch,
 /// because none of them keys.
 class ShapePaintRow extends StatelessWidget {
@@ -769,7 +769,7 @@ class ShapePaintRow extends StatelessWidget {
   });
 
   /// The whole list back with this item changed — how every shape edit is
-  /// written (K-283), so this is one op and one undo step.
+  /// written, so this is one op and one undo step.
   void _write(BridgeShapeItem Function(BridgeShapeItem) change) {
     try {
       layer.setShapeContents(
@@ -777,7 +777,7 @@ class ShapePaintRow extends StatelessWidget {
           for (final other in layer.getShapeContents())
             if (other.id == item.id) change(other) else other,
         ],
-        // Not a shape edit: a keyed path is carried through untouched (K-606).
+        // Not a shape edit: a keyed path is carried through untouched.
         at: null,
       );
       onChanged();
@@ -843,7 +843,7 @@ class ShapePaintRow extends StatelessWidget {
           child: Align(
             alignment: Alignment.centerLeft,
             child: switch (which) {
-              // Apart, or one of the four ways two paths combine (K-605).
+              // Apart, or one of the four ways two paths combine.
               ShapePaint.combine => SizedBox(
                   width: 96,
                   child: BareDropdown<int>(

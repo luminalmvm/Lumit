@@ -69,8 +69,8 @@ pub const TEXTURIZE_ENABLED_WHEN: &[EnabledWhen] = &[
     // trip, and the shape is untouched.
     premultiplied = true,
     enabled_when = TEXTURIZE_ENABLED_WHEN,
-    // K-428: the matte scales the amount, inside the kernel (the owner's rule
-    // for mattes); the generic strength dissolve does not also run.
+    // The matte scales the amount, inside the kernel (the owner's rule for
+    // mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales Relief per pixel: white lights the full relief, grey a shallower          one, black leaves the surface flat",
@@ -79,7 +79,7 @@ pub const TEXTURIZE_ENABLED_WHEN: &[EnabledWhen] = &[
 pub struct Texturize {
     /// The layer pressed into this one. Unset until the owner picks one — the
     /// labelled no-op every layer row renders (docs/impl/layer-input.md). No
-    /// `self_default` (K-288): a layer textured with itself is an edge-detect
+    /// `self_default`: a layer textured with itself is an edge-detect
     /// with extra steps, not a default anybody wants.
     #[layer(self_default = false)]
     pub texture: bool,

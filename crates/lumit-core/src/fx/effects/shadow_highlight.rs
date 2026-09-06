@@ -45,8 +45,8 @@ pub const SHADOW_HIGHLIGHT_GROUPS: &[ParamGroup] = &[ParamGroup {
     // premultiplied alpha.
     premultiplied = false,
     groups = SHADOW_HIGHLIGHT_GROUPS,
-    // K-395: the matte scales the amount, inside the kernel (the owner's
-    // rule for mattes); the generic strength dissolve does not also run.
+    // The matte scales the amount, inside the kernel (the owner's rule for
+    // mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales Shadow amount and Highlight amount per pixel: white applies \

@@ -15,7 +15,7 @@ impl FxEngine {
                 entries: &[
                     texture_entry(0),
                     texture_entry(1),
-                    // The generic Matte (K-395) at binding 4, below. It is on
+                    // The generic Matte at binding 4, below. It is on
                     // the SHARED layout rather than a layout of its own because
                     // a kernel need not use every binding its pipeline layout
                     // declares — so the two kernels that read a matte get one,
@@ -88,8 +88,8 @@ impl FxEngine {
                 bind_group_layouts: &[&adjust_layout],
                 push_constant_ranges: &[],
             });
-        // The dominant-motion reduction Fast motion blur runs first (K-390,
-        // docs/impl/optical-flow.md §4.5 item 3): the flow field in (0), one
+        // The dominant-motion reduction Motion blur runs first
+        // (docs/impl/optical-flow.md §4.5 item 3): the flow field in (0), one
         // texel per tile out (1), the uniform (2). Its own layout because the
         // output must be rgba32float — the tile vectors are compared against an
         // f32 CPU oracle, and the working fp16 format would round them.
@@ -160,7 +160,7 @@ impl FxEngine {
                         },
                         count: None,
                     },
-                    // The Matte (K-429), on this layout rather than the shared
+                    // The Matte, on this layout rather than the shared
                     // one because Motion blur has three sampled inputs of its
                     // own before it gets to a matte.
                     texture_entry(5),
@@ -512,7 +512,7 @@ impl FxEngine {
                 compilation_options: Default::default(),
                 cache: None,
             });
-        // The supplied Motion vectors layer read as a flow field (K-429): the
+        // The supplied Motion vectors layer read as a flow field: the
         // same layout, since it is also "a picture in, an rgba32float field
         // out", and so no seam of its own.
         let mb_vectors = ctx
@@ -555,7 +555,7 @@ impl FxEngine {
                 compilation_options: Default::default(),
                 cache: None,
             });
-        // The generic Matte dissolve (K-395). Same three-sampled-inputs shape
+        // The generic Matte dissolve. Same three-sampled-inputs shape
         // as the adjustment blend, so it borrows that layout rather than
         // declaring an identical one.
         let matte_mix = ctx
@@ -568,7 +568,7 @@ impl FxEngine {
                 compilation_options: Default::default(),
                 cache: None,
             });
-        // The seam's two K-425 passes, on the same layout for the same reason.
+        // The seam's two passes, on the same layout for the same reason.
         let matte_prepare = ctx
             .device
             .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {

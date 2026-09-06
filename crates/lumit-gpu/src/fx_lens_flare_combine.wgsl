@@ -1,11 +1,11 @@
-// Lens flare (docs/08-EFFECTS.md §3.27, docs/impl/lens-flare.md, K-256).
+// Lens flare (docs/08-EFFECTS.md §3.27, docs/impl/lens-flare.md).
 // See fx_lens_flare_trace.wgsl for the pass map; this file is split from it
 // because each stage binds a different resource set.
 
 // The combine stage.
 
 // The layout fx_lens_flare_detect.wgsl fills and the trace reads. This pass
-// reads the emitting extent too (K-367): the starburst of an extended source
+// reads the emitting extent too: the starburst of an extended source
 // is the point sprite convolved with the source, and the stamp grid below is
 // that convolution.
 struct Light {
@@ -32,7 +32,7 @@ struct CombineParams {
     mix_amt: f32,
     light_count: u32,
     // How the flare element combines with the layer under it: an index into
-    // lumit_core::fx::lens_flare::BLEND_OPTIONS (K-289) -- 0 Normal,
+    // lumit_core::fx::lens_flare::BLEND_OPTIONS -- 0 Normal,
     // 1 Add, 2 Screen, 3 Multiply, 4 Overlay, 5 Soft light, 6 Hard light,
     // 7 Lighten, 8 Darken, 9 Difference, 10 Exclusion, 11 Subtract,
     // 12 Divide. Only reached while live -- the neutral early-out above the
@@ -48,10 +48,10 @@ struct CombineParams {
 @group(0) @binding(4) var<uniform> cp: CombineParams;
 @group(0) @binding(5) var<storage, read> lights: array<Light>;
 
-// Bilinear tap of an rgba texture's rgb — ZERO outside the texture
-// (K-266): a squeeze or scale below 1 asks for coordinates past the flare
-// buffer, and clamp-addressing repeated the edge row outward. Half a texel
-// of grace keeps the true border texels filtered.
+// Bilinear tap of an rgba texture's rgb — ZERO outside the texture: a
+// squeeze or scale below 1 asks for coordinates past the flare buffer, and
+// clamp-addressing repeated the edge row outward. Half a texel of grace
+// keeps the true border texels filtered.
 fn tap_rgb(tex: texture_2d<f32>, fx_in: f32, fy_in: f32, dims: vec2<i32>) -> vec3<f32> {
     let fx = fx_in;
     let fy = fy_in;
@@ -71,13 +71,13 @@ fn tap_rgb(tex: texture_2d<f32>, fx_in: f32, fy_in: f32, dims: vec2<i32>) -> vec
     return a * (1.0 - ty) + b * ty;
 }
 
-// Field-angle slices in the starburst atlas (K-365) -- the WGSL spelling of
+// Field-angle slices in the starburst atlas -- the WGSL spelling of
 // lumit_core::fx::lens_flare::STARBURST_FIELDS, pinned against it by test.
 // The atlas is ONE texture, STARBURST_RES wide by STARBURST_RES * F tall,
 // slice 0 (on-axis) at the top.
 const STARBURST_FIELDS: u32 = 8u;
 
-// The starburst stamp grid (K-367) -- lumit_core's SB_MIN_EXTENT / SB_STAMPS,
+// The starburst stamp grid -- lumit_core's SB_MIN_EXTENT / SB_STAMPS,
 // pinned against them by test. The ghosts integrate their source per ray, but
 // the starburst is a BAKED sprite and cannot; it is shift-invariant, though,
 // so the starburst of an extended source is exactly the point sprite
@@ -218,7 +218,7 @@ fn combine(@builtin(global_invocation_id) gid: vec3<u32>) {
     let sy = cyc + (f32(xy.y) + 0.5 - cyc) / cp.fscale;
     // Flare buffer tap (resolution-relative: Draft renders it half-size).
     // The buffer may be PADDED past the base cp.fw × cp.fh for Squeeze or
-    // Scale under 1 (K-267), geometry centred — the padding only adds the
+    // Scale under 1, geometry centred — the padding only adds the
     // constant border offset, zero when unpadded.
     let fdims = vec2<i32>(textureDimensions(flare_tex));
     let f = tap_rgb(
@@ -229,7 +229,7 @@ fn combine(@builtin(global_invocation_id) gid: vec3<u32>) {
     );
     // One starburst sprite per STAMP: anchored on the stamp, sized by Scale,
     // stretched by the squeeze, tinted by its share of the light -- and
-    // turned and blended across the K-365 field slices at the stamp's OWN
+    // turned and blended across the field-angle slices at the stamp's OWN
     // position, so a smeared starburst near the frame edge leans a little
     // differently at each end of itself, which is the physical picture. A
     // point light is one stamp on its own position at full strength.
@@ -289,7 +289,7 @@ fn combine(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let add = (f + sb) * cp.intensity;
     let luma = 0.2126 * add.r + 0.7152 * add.g + 0.0722 * add.b;
-    // The flare element (K-289): the light this frame drew, with the
+    // The flare element: the light this frame drew, with the
     // coverage that light implies as its alpha. Blend it with the layer,
     // then saturate alpha at 1 -- Add reduces to o + add with alpha
     // min(o.a + luma, 1), the pre-menu behaviour exactly.

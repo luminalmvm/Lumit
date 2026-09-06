@@ -45,7 +45,7 @@ struct DirBlurParams {
     taps: i32,
     edge: u32,
     mix_amt: f32,
-    /// 1 = scale Length by the matte (K-395).
+    /// 1 = scale Length by the matte.
     matte_on: f32,
     _pad0: f32,
 }
@@ -56,7 +56,7 @@ struct DirBlurParams {
 /// the oracle's exact kernel size.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RadialBlurOp {
-    /// Centre in raster pixels (K-558: px@comp, already scaled to this
+    /// Centre in raster pixels (px@comp, already scaled to this
     /// raster by the resolve step) — the kernel reads it as it stands,
     /// exactly like the CPU reference does.
     pub centre_px: [f32; 2],
@@ -82,7 +82,7 @@ struct RadialBlurParams {
     spin: u32,
     edge: u32,
     mix_amt: f32,
-    /// 1 = scale Amount by the matte (K-395).
+    /// 1 = scale Amount by the matte.
     matte_on: f32,
 }
 
@@ -109,12 +109,12 @@ pub(super) struct BlurParams {
     pub(super) sigma: f32,
     pub(super) edge: u32,
     pub(super) mix_amt: f32,
-    /// 1 = scale the radius by the bound matte's luma (K-395). 0 on every
+    /// 1 = scale the radius by the bound matte's luma. 0 on every
     /// internal blur — the glow's halo, the sharpen's unsharp pass and Light
     /// wrap's spill are not the user's Gaussian blur, and their matte (if any)
     /// has already been spent elsewhere.
     pub(super) matte_on: f32,
-    /// Was the Matte's Invert; since K-425 the seam applies it once, before
+    /// Was the Matte's Invert; the seam applies it once instead, before
     /// the kernel (`FxEngine::matte_prepare`), and this pad is always 0.
     pub(super) _pad0: f32,
 }
@@ -126,12 +126,12 @@ struct SharpenParams {
     threshold: f32,
     luma_only: u32,
     mix_amt: f32,
-    /// 1 = scale Amount by the matte (K-395); the combine pass alone reads it.
+    /// 1 = scale Amount by the matte; the combine pass alone reads it.
     matte_on: f32,
     _pad: [f32; 3],
 }
 
-/// One resolved simple 3×3 sharpen (docs/08 §3.9, K-138): a high-pass
+/// One resolved simple 3×3 sharpen (docs/08 §3.9): a high-pass
 /// convolution scaled by `amount`, the radius-free sibling of the Unsharp
 /// mask above. Amount 0 is the bit-exact passthrough.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -150,11 +150,11 @@ struct SharpenSimpleParams {
     amount: f32,
     radius: f32,
     mix_amt: f32,
-    /// 1 = scale Amount by the matte (K-395).
+    /// 1 = scale Amount by the matte.
     matte_on: f32,
 }
 
-/// One resolved light wrap (docs/08 §3.28, K-358): the background's light
+/// One resolved light wrap (docs/08 §3.28): the background's light
 /// spilled around the foreground's edge. A zero width, intensity or mix is the
 /// bit-exact passthrough — there is no band to fill.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -177,7 +177,7 @@ struct LightWrapParams {
     mix_amt: f32,
 }
 
-/// One resolved sprite flare (docs/08 §3.29, K-359) — the art-directed flare,
+/// One resolved sprite flare (docs/08 §3.29) — the art-directed flare,
 /// placed from a light position rather than from the picture's bright pixels.
 /// Mirrors `lumit_core::fx::cpu::SpriteFlareParams`; this crate never depends
 /// on `lumit-core` (docs/05 §architecture), so the shape is restated rather
@@ -203,7 +203,7 @@ pub struct SpriteFlareOp {
     pub mix: f32,
 }
 
-/// The sprite flare's uniform block (docs/08 §3.29, K-359) — field for field
+/// The sprite flare's uniform block (docs/08 §3.29) — field for field
 /// what `fx_sprite_flare.wgsl` declares.
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -237,7 +237,7 @@ struct SpriteFlareParams {
 pub struct GlowOp {
     /// The halo gaussian's half-width, raster pixels.
     pub radius_px: f32,
-    /// Linear-light bright threshold, ≥ 0 (unbounded above, K-090).
+    /// Linear-light bright threshold, ≥ 0 (unbounded above).
     pub threshold: f32,
     /// Soft-knee width around the threshold, 0..1.
     pub knee: f32,
@@ -257,10 +257,10 @@ pub(super) struct GlowParams {
     pub(super) knee: f32,
     pub(super) intensity: f32,
     pub(super) mix_amt: f32,
-    /// 1 = gate the bright pass by the matte's luma (K-395). The combine pass
+    /// 1 = gate the bright pass by the matte's luma. The combine pass
     /// reads the same uniform and ignores both fields.
     pub(super) matte_on: f32,
-    /// Was Invert; the seam applies it once since K-425. Always 0.
+    /// Was Invert; the seam applies it once instead. Always 0.
     pub(super) _pad0: f32,
     pub(super) _pad: [f32; 2],
 }
@@ -281,7 +281,7 @@ impl FxEngine {
         let tmp = work_texture(ctx, w, h, "fx-blur-tmp");
         let out = work_texture(ctx, w, h, "fx-blur-out");
         let sigma = (op.radius_px * 0.5).max(1e-3);
-        // The Matte scales the radius per pixel (K-395) — see fx_blur.wgsl.
+        // The Matte scales the radius per pixel — see fx_blur.wgsl.
         // Both passes carry it, because each reads its DESTINATION pixel's
         // matte and the two halves must agree on this pixel's kernel width.
         let matte_on = f32::from(matte.is_some());
@@ -472,7 +472,7 @@ impl FxEngine {
         out
     }
 
-    /// **Sprite flare** (docs/08 §3.29, K-359): the art-directed flare, drawn
+    /// **Sprite flare** (docs/08 §3.29): the art-directed flare, drawn
     /// from a light POSITION rather than from the picture's bright pixels — so
     /// it cannot flicker on footage, because there is no threshold to cross.
     ///
@@ -521,7 +521,7 @@ impl FxEngine {
         out
     }
 
-    /// **Light wrap** (docs/08 §3.28, K-358): spill the background's light
+    /// **Light wrap** (docs/08 §3.28): spill the background's light
     /// around the foreground's edge, so a keyed subject sits *in* the plate
     /// rather than on it.
     ///
@@ -584,7 +584,7 @@ impl FxEngine {
         out
     }
 
-    /// Apply one simple 3×3 sharpen (docs/08 §3.9, K-138) to a linear working
+    /// Apply one simple 3×3 sharpen (docs/08 §3.9) to a linear working
     /// texture, returning a new texture of the same size. One pass: the
     /// high-pass convolution over the pixel and its four clamp-addressed axis
     /// neighbours, the §2.2 unpremultiply wrap fused into the kernel. Amount 0
@@ -647,7 +647,7 @@ impl FxEngine {
             knee: op.knee,
             intensity: op.intensity,
             mix_amt: op.mix,
-            // The Matte gates the SEED (K-395) — see fx_glow.wgsl. It touches
+            // The Matte gates the SEED — see fx_glow.wgsl. It touches
             // the bright pass only: the halo then spreads from the pixels that
             // survived, which is the whole difference from dissolving the
             // finished glow.
@@ -727,7 +727,7 @@ struct ChannelBlurParams {
     dir: [f32; 2],
     mix_amt: f32,
     edge: u32,
-    /// 1 = scale all four radii by the matte (K-395); both passes read it.
+    /// 1 = scale all four radii by the matte; both passes read it.
     matte_on: f32,
     _pad: [f32; 3],
 }
@@ -749,15 +749,15 @@ pub struct DropShadowOp {
     pub shadow_only: bool,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
-    /// Spread's threshold-remap slope (K-706); 1.0 is no spread and no branch.
+    /// Spread's threshold-remap slope; 1.0 is no spread and no branch.
     pub spread_scale: f32,
-    /// The layer's own shape knocks the shadow out before the composite (K-706).
+    /// The layer's own shape knocks the shadow out before the composite.
     pub knockout: bool,
-    /// Read the coverage from the **inverted** alpha (K-706) — Inner shadow's
+    /// Read the coverage from the **inverted** alpha — Inner shadow's
     /// geometry, and the Edge source of Inner glow.
     pub invert: bool,
-    /// Composite **inside** the shape and over it, rather than underneath
-    /// (K-706) — the other half of what makes an inner style inner.
+    /// Composite **inside** the shape and over it, rather than underneath.
+    /// That is the other half of what makes an inner style inner.
     pub inner: bool,
 }
 
@@ -769,15 +769,15 @@ struct DropShadowParams {
     opacity: f32,
     mix_amt: f32,
     shadow_only: u32,
-    /// 1 = the matte scales the shadow's Opacity per pixel (K-428).
+    /// 1 = the matte scales the shadow's Opacity per pixel.
     matte_on: f32,
-    /// Spread's threshold-remap slope (K-706); 1.0 takes no branch.
+    /// Spread's threshold-remap slope; 1.0 takes no branch.
     spread_scale: f32,
-    /// 1 = the layer's shape knocks the shadow out before the composite (K-706).
+    /// 1 = the layer's shape knocks the shadow out before the composite.
     knockout: u32,
-    /// 1 = read the coverage from the inverted alpha (K-706).
+    /// 1 = read the coverage from the inverted alpha.
     invert: u32,
-    /// 1 = composite inside the shape and over it, not underneath (K-706).
+    /// 1 = composite inside the shape and over it, not underneath.
     inner: u32,
     /// The uniform's size has to be a multiple of 16 bytes.
     _pad: [u32; 2],
@@ -799,7 +799,7 @@ impl FxEngine {
     ) -> wgpu::Texture {
         let tmp = work_texture(ctx, w, h, "fx-chanblur-tmp");
         let out = work_texture(ctx, w, h, "fx-chanblur-out");
-        // The four σ are taken once here, not per pixel (K-137's host-side
+        // The four σ are taken once here, not per pixel (the host-side
         // arithmetic rule), and floored exactly as the CPU reference floors
         // them so a zero radius cannot divide by zero on either path.
         let sigma: [f32; 4] = std::array::from_fn(|c| (op.radii[c] * 0.5).max(1e-3));
@@ -848,7 +848,7 @@ impl FxEngine {
         op: &DropShadowOp,
     ) -> wgpu::Texture {
         // The blur takes no matte: it is where the SHAPE stands, and the claim
-        // is on the shadow's Opacity where the shadow FALLS (K-428).
+        // is on the shadow's Opacity where the shadow FALLS.
         let soft = self.blur(
             ctx,
             src,

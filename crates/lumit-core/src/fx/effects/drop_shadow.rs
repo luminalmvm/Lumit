@@ -28,7 +28,7 @@ use lumit_fx_macros::Effect;
     // `colour · opacity · k` IS "this colour at this coverage" (§3.34's
     // reasoning), and "source over shadow" is the premultiplied composite.
     premultiplied = true,
-    // K-428: the matte scales the amount, inside the kernel (the owner's rule
+    // The matte scales the amount, inside the kernel (the owner's rule
     // for mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
@@ -112,8 +112,8 @@ impl DropShadow {
             shadow_only: self.shadow_only,
             mix: (self.mix / 100.0).clamp(0.0, 1.0),
             // The effect has no Spread, no knockout and neither half of the
-            // inner wrapper: all four are the *styles*' (K-706,
-            // docs/impl/layer-styles.md §4), and the neutral set here is what
+            // inner wrapper: all four are the *styles*'
+            // (docs/impl/layer-styles.md §4), and the neutral set here is what
             // makes the shared kernel draw exactly the picture it drew before
             // the styles generalised it.
             spread_scale: 1.0,

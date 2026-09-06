@@ -1,5 +1,5 @@
 //! Making a proxy: transcoding one footage file into its low-resolution
-//! stand-in (K-501, docs/06-RENDER-PIPELINE.md §5.7).
+//! stand-in (docs/06-RENDER-PIPELINE.md §5.7).
 //!
 //! # In plain terms
 //!
@@ -52,12 +52,12 @@ impl ProxyHandle {
     }
 }
 
-/// The denominator the proxy's width is divided by (K-501): half size, which is
+/// The denominator the proxy's width is divided by: half size, which is
 /// a quarter of the pixels — enough to be several times cheaper to decode, and
 /// still enough picture to judge framing and timing by.
 pub const PROXY_DIVISOR: u32 = 2;
 
-/// Where a proxy for `source` is written (K-501): beside the original, with
+/// Where a proxy for `source` is written: beside the original, with
 /// `_proxy` before a `.mov` extension — `shot.mp4` makes `shot_proxy.mov`.
 ///
 /// Beside the original rather than in a project-relative folder, because a

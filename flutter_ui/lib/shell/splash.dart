@@ -1,4 +1,4 @@
-// The boot splash (K-008, splash.rs): the app opens as a small centred card
+// The boot splash (splash.rs): the app opens as a small centred card
 // listing each module as it comes up, then gives way to the application.
 // With a live bridge the lines are the engine's OWN boot log (library version,
 // ABI, the compiled feature set — `app.bootLog()`, honoured here); the F0
@@ -14,7 +14,7 @@ import '../l10n/strings.dart';
 import '../src/rust/api/state.dart' show OpenPhase;
 import '../widgets/controls.dart';
 
-/// The line the opening card shows for one phase of a project open (K-628).
+/// The line the opening card shows for one phase of a project open.
 ///
 /// The engine names the phase and Lumit says it in the reader's language — the
 /// engine sends no English here, which is why there is nothing for
@@ -44,7 +44,7 @@ const List<String> bootLines = [
 /// project is adopted — one swap, no half-loaded interface.
 ///
 /// The bar fills when the job can say how far it has got and sweeps when it
-/// cannot. Opening a `.lum` can (K-628): the engine names each phase of the
+/// cannot. Opening a `.lum` can: the engine names each phase of the
 /// read as it begins, and [fraction] is the share of the whole open behind it,
 /// drawn as a percentage beside the phase's own line. A job that reports
 /// nothing passes null and gets the sweep, which claims nothing.

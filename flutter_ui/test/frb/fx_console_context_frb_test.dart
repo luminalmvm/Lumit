@@ -1,8 +1,8 @@
-// The reveal request (K-326's surviving half): asking the Timeline to show a
-// property row opens the layer and exactly that row. The console's radial
-// ring that once raised these asks went with the 2026-08-30 boards; the
-// P/S/R/T/A reveal keys still make the same request, so the answer keeps its
-// regression test.
+// The reveal request, all that survives of the console: asking the Timeline
+// to show a property row opens the layer and exactly that row. The console's
+// radial ring that once raised these asks went with the 2026-08-30 boards;
+// the P/S/R/T/A reveal keys still make the same request, so the answer keeps
+// its regression test.
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';

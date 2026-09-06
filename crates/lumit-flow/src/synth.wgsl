@@ -7,7 +7,7 @@
 // at its working resolution instead of being upsampled to frame size first, and
 // nothing round-trips through the CPU.
 //
-// Everything below still runs identically in preview and export (K-031): same
+// Everything below still runs identically in preview and export: same
 // kernels, same order, same inputs.
 
 struct SP {

@@ -1,5 +1,5 @@
 //! The camera-track analysis job, its sidecar cache, and the store the render
-//! path reads (K-417 stage 2, docs/impl/tracking.md §5b).
+//! path reads (docs/impl/tracking.md §5b).
 //!
 //! # In plain terms
 //!
@@ -89,7 +89,7 @@ pub struct AnalysisSettings {
     pub density: u32,
     /// Whether the layer's masks exclude regions from tracking.
     pub use_masks: bool,
-    /// A Planar track's **Follow** index (K-735); zero — the surface — for a
+    /// A Planar track's **Follow** index; zero — the surface — for a
     /// Camera track, which has no such row. It is a setting rather than a field
     /// of [`JobKind`] because it changes what the analysis *finds*, so it
     /// belongs in the cache key: two runs over the same boxes asking different
@@ -169,7 +169,7 @@ impl AnalysisSettings {
 ///
 /// **The factor is usually one** (§5b's seventh deviation): a mask's vertices are
 /// in the layer's own pixel coordinates, and for a footage layer those *are* the
-/// source raster, which is what the tracker works in (K-248), so nothing
+/// source raster, which is what the tracker works in, so nothing
 /// converts. A Precomp layer analysed at a reduced raster is the one exception,
 /// and it hands its render scale in as `to_analysis`.
 ///
@@ -186,7 +186,7 @@ pub struct MaskTrack {
     /// Precomp layer analysed at a reduced raster.
     to_analysis: f64,
     /// A **Planar track's** quad, or a point track's one or two search boxes,
-    /// as the outlines the tracker must stay inside (K-579, K-735). They belong
+    /// as the outlines the tracker must stay inside. They belong
     /// here and not in [`AnalysisSettings`] because they are exactly what an
     /// exclusion region is — a shape deciding where features may live — and
     /// putting them here means they are hashed into the analysis key with the
@@ -226,8 +226,8 @@ impl MaskTrack {
     }
 
     /// The same regions, plus a **boundary** the tracker may not leave — a
-    /// Planar track's quad (K-579). An *inverted* region is what "work only
-    /// inside this shape" already means (K-408), so the quad needs no mechanism
+    /// Planar track's quad. An *inverted* region is what "work only
+    /// inside this shape" already means, so the quad needs no mechanism
     /// of its own.
     #[must_use]
     pub fn within(self, outline: Vec<[f64; 2]>) -> Self {
@@ -235,7 +235,7 @@ impl MaskTrack {
     }
 
     /// The same, for a boundary made of several disjoint pieces — a two-point
-    /// track's search boxes (K-735). They become one region of several contours,
+    /// track's search boxes. They become one region of several contours,
     /// tested even-odd together, which for disjoint boxes reads as "inside any
     /// of them".
     #[must_use]
@@ -398,7 +398,7 @@ impl AnalysisKey {
 ///
 /// A trait because a tracked source is not always a file. [`MediaLuma`] decodes
 /// one; [`CompLuma`] *renders* a nested composition, which is what a Camera
-/// track on a Precomp layer needs (K-417); and the engine tests feed a
+/// track on a Precomp layer needs; and the engine tests feed a
 /// synthetic scene with a camera path they wrote down, since asking them to
 /// encode a video first would be measuring ffmpeg. Whichever it is, it is opened
 /// on the analysis thread and never on the caller's.
@@ -419,7 +419,7 @@ pub trait LumaFrames {
 }
 
 /// What an analysis is being asked for — the one branch in the whole file, and
-/// it is taken only after the frames have been followed (K-579).
+/// it is taken only after the frames have been followed.
 ///
 /// Everything before it is identical: the same decode, the same detector, the
 /// same KLT, the same masks, the same cancellation seam, the same progress
@@ -427,13 +427,13 @@ pub trait LumaFrames {
 /// differs.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum JobKind {
-    /// Where the camera was: a whole-scene solve (K-417).
+    /// Where the camera was: a whole-scene solve.
     Camera,
-    /// Where one flat surface is, as four corners per frame (K-579). The quad is
+    /// Where one flat surface is, as four corners per frame. The quad is
     /// the reference shape, in the analysis's own pixels; the tracker is already
     /// confined to it by the job's [`MaskTrack`].
     Planar { quad: Quad },
-    /// Where one or two small patches are (K-735), each followed on its own and
+    /// Where one or two small patches are, each followed on its own and
     /// assumed to be on nothing in particular. The answer is the same
     /// [`PlanarTrack`] shape: the region box under whatever warp the points can
     /// honestly support — a slide from one, a similarity from two.
@@ -479,7 +479,7 @@ pub struct Job {
     /// composition a Precomp layer's Camera track names — one clip, one answer,
     /// shared by every layer cutting it. For a planar track it is the **effect
     /// instance**, because what was tracked is the quad somebody drew and two
-    /// Planar tracks on one clip are two different answers (K-579).
+    /// Planar tracks on one clip are two different answers.
     pub media: Uuid,
     /// What the sidecar calls it, or `None` for a source with no content name
     /// cheap enough to compute — a nested composition, whose picture is the
@@ -522,8 +522,8 @@ pub enum Progress {
 }
 
 /// Why an analysis did not produce a camera path. Every variant is a refusal
-/// rather than a fault (K-415's rule, inherited): the pictures did not carry the
-/// answer, or the file could not be read.
+/// rather than a fault: the pictures did not carry the answer, or the file
+/// could not be read.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum AnalysisError {
     /// The media could not be opened, or carries no video.
@@ -538,7 +538,7 @@ pub enum AnalysisError {
     /// The shot does not carry a camera solve.
     #[error("the shot could not be solved: {0}")]
     Solve(SolveError),
-    /// The quad does not carry a planar track (K-579).
+    /// The quad does not carry a planar track.
     #[error("the surface could not be followed: {0}")]
     Planar(PlanarError),
     /// The caller stopped it.
@@ -671,7 +671,7 @@ fn euler_of_transpose(r: &Mat3) -> (f64, f64, f64) {
 /// solve that read back as complete would be a lie the sidecar told).
 ///
 /// **3** made the body an [`Answer`] rather than a bare `CameraSolve`, so a
-/// planar track is cached in the same folder under the same rules (K-579).
+/// planar track is cached in the same folder under the same rules.
 /// Every version 2 record is orphaned by it — a re-analysis each, once — which
 /// is the disposal this constant exists to perform.
 const FORMAT_VERSION: u16 = 3;
@@ -807,7 +807,7 @@ impl PlanarSolved {
 /// Every planar track this session knows about, **by Planar track instance**.
 ///
 /// A separate table from [`solves`] rather than a union in one, because the two
-/// are keyed by different things for a reason (K-579): a camera solve describes
+/// are keyed by different things for a reason: a camera solve describes
 /// a file and is shared by every layer cutting it; a planar track describes the
 /// quad somebody drew and is not shared with anything. One table would have to
 /// hold both keys and every reader would have to know which kind it had found.
@@ -997,7 +997,7 @@ pub fn projected_points(media: Uuid, frame: i64) -> Vec<ProjectedPoint> {
     out
 }
 
-/// Where the named tracks sit in the world, averaged — the position K-417's
+/// Where the named tracks sit in the world, averaged — the position the
 /// creation gesture puts a Null or a Solid at.
 ///
 /// The tracker's world **is** Lumit's comp-pixel world: `to_camera_pose` hands
@@ -1021,7 +1021,7 @@ pub fn point_centroid(media: Uuid, tracks: &[u32]) -> Option<[f64; 3]> {
 }
 
 /// The **active** camera's placement at comp time `t`, with its solve link
-/// followed (K-417). The reading the render path takes, replacing
+/// followed. The reading the render path takes, replacing
 /// [`lumit_core::model::Composition::camera_pose`], which answers only what the
 /// document holds.
 #[must_use]
@@ -1143,7 +1143,7 @@ pub fn warm_jobs(doc: &Document) -> Vec<Job> {
             let path = PathBuf::from(&footage.media.absolute_path);
             // One camera job per **media** — two layers cutting the same shot
             // are one analysis. One planar job per **effect instance**, because
-            // two quads on one shot are two answers (K-579), so there is
+            // two quads on one shot are two answers, so there is
             // nothing to deduplicate.
             if seen.insert(media) {
                 if let Some(job) = job_for(layer, path.clone(), fingerprint, false) {
@@ -1159,7 +1159,7 @@ pub fn warm_jobs(doc: &Document) -> Vec<Job> {
 }
 
 /// Read every one of `jobs` back out of the sidecar, on one thread, filling the
-/// store with whatever is already there. What opening a project does (K-417):
+/// store with whatever is already there. What opening a project does:
 /// until this runs, a solve-linked camera resolves only after somebody presses
 /// Analyse in the session, though the answer was on the disk all along.
 ///
@@ -1312,8 +1312,9 @@ fn analyse(
     report(Progress::Solving);
     let stop = || cancel.load(Ordering::Relaxed);
 
-    // K-579's one branch, and it is here rather than anywhere earlier: every
-    // line above this point is the same work whichever question is being asked.
+    // The one branch by job kind, and it is here rather than anywhere earlier:
+    // every line above this point is the same work whichever question is being
+    // asked.
     if let JobKind::Points { regions } = kind {
         let first = set.frame_range().map_or(0, |(f, _)| f);
         let mut track = solve_points_cancellable(
@@ -1545,8 +1546,8 @@ pub fn camera_track_effect(layer: &Layer) -> Option<&EffectInstance> {
 }
 
 /// Build the job for the tracked layer `layer` of `comp`, ready to hand to
-/// [`request`]. `path` is where the frontend resolved the media to (K-173 keeps
-/// absolute paths out of the document, so only it can say).
+/// [`request`]. `path` is where the frontend resolved the media to (the
+/// document keeps no absolute paths, so only the frontend can say).
 ///
 /// `None` when the layer is not footage, or carries no enabled Camera track.
 #[must_use]
@@ -1584,7 +1585,7 @@ pub fn planar_track_effect(layer: &Layer) -> Option<&EffectInstance> {
 
 /// The reference quad an instance declares, in [`Quad`] order.
 ///
-/// The eight rows are px@comp (K-260), and for a footage layer those *are* the
+/// The eight rows are px@comp, and for a footage layer those *are* the
 /// source raster the tracker works in (§5b's seventh deviation), so nothing
 /// converts. A row the instance does not carry reads as the effect's own
 /// default rather than failing (docs/14 §4) — but a *static* read is the only
@@ -1607,7 +1608,7 @@ pub fn planar_quad(fx: &EffectInstance) -> Quad {
 
 /// The point rows off a Planar track instance, read statically at layer time
 /// zero exactly as the quad is and for the same reason: they are where the
-/// things being followed are on the reference frame (K-735).
+/// things being followed are on the reference frame.
 #[must_use]
 pub fn planar_points(fx: &EffectInstance, follow: u32) -> PointRegions {
     let at = |id: &str, fallback: f64| match fx.param(id) {
@@ -1626,7 +1627,7 @@ pub fn planar_points(fx: &EffectInstance, follow: u32) -> PointRegions {
     }
 }
 
-/// Build the job for a layer wearing a Planar track (K-579).
+/// Build the job for a layer wearing a Planar track.
 ///
 /// Filed under the **effect instance**, not the media: what was tracked is the
 /// quad, and two Planar tracks on one clip are two answers. The sidecar key
@@ -1671,7 +1672,7 @@ pub fn planar_job_for(
     })
 }
 
-/// Build the job for a **Precomp** layer wearing a Camera track (K-417): the
+/// Build the job for a **Precomp** layer wearing a Camera track: the
 /// nested composition is the tracked source, and its frames are rendered rather
 /// than decoded.
 ///
@@ -1776,7 +1777,7 @@ fn analysis_scale(comp: &Composition) -> f64 {
 }
 
 /// [`LumaFrames`] over a **nested composition**, rendered frame by frame through
-/// the same headless walk an export uses (K-031: preview and export are one
+/// the same headless walk an export uses (preview and export are one
 /// walk, so an analysis sees exactly the picture the comp makes).
 ///
 /// Its own renderer on its own device, like an export's, so an analysis never
@@ -2117,7 +2118,7 @@ mod tests {
     type Analysed = Result<(f64, usize, Answer), AnalysisError>;
 
     /// The camera half of [`Answer`], for the tests that asked for one — which
-    /// is every one written before K-579 existed.
+    /// is every one written before the planar track existed.
     type AnalysedCamera = Result<(f64, usize, CameraSolve), AnalysisError>;
 
     fn run_here_answer(job: Job, cancel: &AtomicBool) -> (Analysed, Vec<Progress>) {
@@ -2234,8 +2235,8 @@ mod tests {
     }
 
     /// A footage layer wearing the Camera track effect, and a Camera layer
-    /// linked to it — the shape K-417 describes, built for real rather than
-    /// mocked.
+    /// linked to it — the shape the camera track describes, built for real
+    /// rather than mocked.
     fn linked_document(media: Uuid) -> (Document, Composition) {
         let mut footage = layer(
             "shot",
@@ -2257,8 +2258,7 @@ mod tests {
             secs(20, 1),
         );
         // Built already linked, so the base `Op::SetCameraSolveLink` would have
-        // captured is written here — the same pose, off the same properties
-        // (K-578).
+        // captured is written here — the same pose, off the same properties.
         let base = lumit_core::model::stored_camera_pose_lt(&camera, 0.0);
         if let LayerKind::Camera {
             correction_base, ..
@@ -2485,13 +2485,13 @@ mod tests {
     }
 
     /// A shot that stops being followable is solved as far as it went, and the
-    /// job stops there (K-540).
+    /// job stops there.
     ///
     /// Three claims, and they are one claim: the analysis does not decode the
     /// frames it cannot use, the solve covers exactly the span that carried,
     /// and the result says so — so a camera linked to it derives inside that
-    /// span and holds outside it, which is K-417's rule meeting a range that
-    /// now ends early.
+    /// span and holds outside it, which is the camera track's rule meeting a
+    /// range that now ends early.
     #[test]
     fn a_shot_that_stops_carrying_is_solved_as_far_as_it_went() {
         let _serial = serially();
@@ -2555,7 +2555,7 @@ mod tests {
         assert_eq!(solved.last_frame, FRAMES as i64 - 1);
 
         // The link derives inside the span and holds outside it — the same
-        // clamp K-417 already required, now against a range that ends early.
+        // clamp already required, now against a range that ends early.
         let (doc, comp) = linked_document(media);
         let last = linked_pose(&doc, &comp, (FRAMES - 1) as f64 / FPS).expect("a camera");
         assert_eq!(last.state, lumit_core::track::LinkState::Derived);
@@ -2609,7 +2609,7 @@ mod tests {
         clear();
     }
 
-    /// **Track once, then nudge** (K-578), from the render path's side: a
+    /// **Track once, then nudge**, from the render path's side: a
     /// correction moves the frame's *name* as well as its picture, and a second
     /// analysis lands under it rather than over it.
     ///
@@ -2814,7 +2814,7 @@ mod tests {
     }
 
     /// A mask on the tracked layer is a region the analysis does not enter
-    /// (K-408's geometry, read by the tracker): nothing solved comes back from
+    /// (the mask geometry, read by the tracker): nothing solved comes back from
     /// inside it. The same shot without the mask *does* put points there, which
     /// is what stops this passing on a region that was empty anyway.
     #[test]
@@ -3418,7 +3418,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // The planar track (K-579)
+    // The planar track
     // -----------------------------------------------------------------------
 
     /// A flat, textured surface sliding across the frame — everything a planar
@@ -3687,7 +3687,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // The point track (K-735)
+    // The point track
     // -----------------------------------------------------------------------
 
     /// Two textured squares on a flat background, each sliding its **own** way.

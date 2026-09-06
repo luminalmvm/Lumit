@@ -1,5 +1,5 @@
 {
- "note": "The approved Lumit glyph set (docs/15-DESIGN.md §5, K-440). 16px grid, 1.5px stroke, round caps, one weight, currentColor. Each body is the inside of an <svg viewBox=\"0 0 16 16\">; tool/icons/gen_lumit_icons.dart turns this file into lib/icons/lumit_icons.dart.",
+ "note": "The approved Lumit glyph set (docs/15-DESIGN.md §5). 16px grid, 1.5px stroke, round caps, one weight, currentColor. Each body is the inside of an <svg viewBox=\"0 0 16 16\">; tool/icons/gen_lumit_icons.dart turns this file into lib/icons/lumit_icons.dart.",
  "sections": [
   {
    "name": "Tools",
@@ -471,7 +471,7 @@
     {
      "name": "Transparency",
      "body": "<rect x=\"2.5\" y=\"2.5\" width=\"11\" height=\"11\"/><path d=\"M2.5 2.5h5.5v5.5H2.5zM8 8h5.5v5.5H8z\" fill=\"currentColor\" opacity=\".4\"/>",
-     "comment": "A 2x2 checker, not a 3x3 one. This and Grid stand side by side on the Viewer's bottom bar, and both are an 11x11 frame with the inside divided; at the 14 that bar renders them (K-456) a checker of thirds collapsed into the same lattice the grid draws. Halves keep the checker a block of tone against the grid's lines, which is the whole of the difference at that size."
+     "comment": "A 2x2 checker, not a 3x3 one. This and Grid stand side by side on the Viewer's bottom bar, and both are an 11x11 frame with the inside divided; at the 14 that bar renders them a checker of thirds collapsed into the same lattice the grid draws. Halves keep the checker a block of tone against the grid's lines, which is the whole of the difference at that size."
     },
     {
      "name": "Grid",

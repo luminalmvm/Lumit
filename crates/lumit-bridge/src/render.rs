@@ -5,7 +5,7 @@
 //! The Viewer needs the *real* picture — every layer composited, transformed,
 //! blended, with its effects — not one raw footage layer. That compositor lives
 //! in `lumit-render`, the engine crate the egui Viewer and the exporter drive
-//! too (K-178); the bridge reaches it through its headless seam
+//! too; the bridge reaches it through its headless seam
 //! (`lumit_render::headless`). Nothing here depends on a frontend.
 //!
 //! Two render entry points, and the difference is the point:
@@ -48,7 +48,7 @@ enum Slot {
 /// window means one renderer; the lock serialises the render calls it makes.
 static RENDERER: OnceLock<Mutex<Slot>> = OnceLock::new();
 /// The preview quality one Viewer render asks for. The Dart side sends a single
-/// `scale`, which the realtime controller (K-171) drives; below 1.0 it means
+/// `scale`, which the realtime controller drives; below 1.0 it means
 /// "this frame is being shown smaller than the comp, so decode it smaller".
 ///
 /// Auto rather than a fixed divisor because the scale is continuous — it tracks
@@ -128,7 +128,7 @@ pub(crate) fn preview_rung(scale: f32) -> f32 {
 fn with_ready<R>(f: impl FnOnce(&mut lumit_render::headless::HeadlessRenderer) -> R) -> Option<R> {
     let mutex = RENDERER.get_or_init(|| Mutex::new(Slot::Uninit));
     let mut guard = mutex.lock().unwrap_or_else(|poison| poison.into_inner());
-    // A device that has been lost takes this renderer with it (K-585). The
+    // A device that has been lost takes this renderer with it. The
     // worker rebuilds its own; this one is rebuilt by putting the slot back to
     // where the first call finds it, which is the same road and no new one.
     // Without this, one driver reset would leave the export path holding a dead
@@ -149,7 +149,7 @@ fn with_ready<R>(f: impl FnOnce(&mut lumit_render::headless::HeadlessRenderer) -
     Some(f(renderer))
 }
 /// One small still of `comp` at `frame`, composited at `scale` — the picture a
-/// project's welcome row carries (K-468).
+/// project's welcome row carries.
 ///
 /// **This renderer, not the worker's.** The worker's renderer is a queue of
 /// frames somebody is watching; a still taken because a project was saved has
@@ -178,7 +178,7 @@ pub(crate) fn thumbnail(
 }
 
 /// Build the footage/audio inputs and a GPU export context for `comp` through
-/// the headless seam (K-175), so the export driver can hand them to the exact
+/// the headless seam, so the export driver can hand them to the exact
 /// egui exporter (`lumit_render::export::start`). `None` when the machine has no GPU
 /// adapter or the comp is unknown. Reuses the same renderer instance the Viewer
 /// path uses, so probes are shared and warm.

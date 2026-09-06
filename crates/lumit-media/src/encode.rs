@@ -359,7 +359,7 @@ pub fn encoder_label(encoder: &str) -> &'static str {
     }
 }
 
-/// A still-image sequence format the exporter can write (K-201). PNG and TIFF
+/// A still-image sequence format the exporter can write. PNG and TIFF
 /// both carry the full RGBA frame losslessly, which is what a compositor's
 /// image export is for — a lossy sequence would be an mp4 with extra steps.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

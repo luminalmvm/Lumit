@@ -21,7 +21,7 @@
 //   Amber when the playhead sits on a key, muted when it does not — the set has
 //   one weight and no filled variants (§5), so the state is said in colour.
 //
-// All four are drawn from Lumit's own icon set (K-440); the arrowheads used to
+// All four are drawn from Lumit's own icon set; the arrowheads used to
 // be bare Unicode characters, which §5 forbids outright.
 //
 // Every one of these is a single write of the whole animation, so each is one
@@ -86,7 +86,7 @@ BridgeScalar scalarWithValueAt(
 
 /// The scalar with **every** value multiplied by `k`, curve shape held.
 ///
-/// This is what scaling a chained pair's other half means (K-610): each key
+/// This is what scaling a chained pair's other half means: each key
 /// keeps its time and its interpolation, and the whole curve is the same shape
 /// drawn against a stretched value axis. A bezier side's `speed` is in value
 /// units per second, so it goes with the values; influences and times are the
@@ -94,7 +94,7 @@ BridgeScalar scalarWithValueAt(
 /// evaluated, and an expression computes its own number — both are untouched.
 ///
 /// The same arithmetic as `scale_property` in `crates/lumit-core/src/fx/
-/// builtins.rs`, which is how the K-558 migration rescaled a keyed property.
+/// builtins.rs`, which is how an earlier migration rescaled a keyed property.
 BridgeScalar scaledScalar(BridgeScalar scalar, double k) => switch (scalar) {
       BridgeScalar_Static(:final field0) => BridgeScalar.static_(field0 * k),
       BridgeScalar_Keyframed(:final field0) => BridgeScalar.keyframed([
@@ -116,7 +116,7 @@ BridgeSideInterp _scaledSide(BridgeSideInterp side, double k) => switch (side) {
       _ => side,
     };
 
-/// A property's name as a **flat sheet** writes it (K-499, §3.2 of
+/// A property's name as a **flat sheet** writes it (§3.2 of
 /// `docs/impl/timeline-interaction.md`): the group it came out of, muted, a
 /// middle dot, then the property's own name — `Transform · Opacity`.
 ///
@@ -164,14 +164,14 @@ class KeyedValueField extends StatefulWidget {
   final ValueChanged<double> onCommit;
 
   /// Each tick of a drag, if the caller wants to show it. A keyed drag stages
-  /// in Dart and commits once (K-192), which left the picture standing still
+  /// in Dart and commits once, which left the picture standing still
   /// until the release — the same complaint the graph editor's drags drew, for
-  /// the same reason (K-333). Optional: a caller with nothing to preview passes
+  /// the same reason. Optional: a caller with nothing to preview passes
   /// nothing and behaves exactly as before.
   final ValueChanged<double>? onLive;
 
   /// The gesture beginning, before any value has moved. A caller that keys on
-  /// drag-start uses it (K-333): the property is animated, the playhead is
+  /// drag-start uses it: the property is animated, the playhead is
   /// between keys, and the drag is about to edit *something* — so a key holding
   /// the value already there is planted, and nothing moves until the pointer
   /// does.
@@ -256,8 +256,8 @@ class KeyframeControlsFrb extends StatelessWidget {
   /// Distinguishes this row's buttons in a panel full of them.
   final String rowKey;
 
-  /// Lay the controls out on the Effect controls panel's **fixed columns**
-  /// (K-443): the stopwatch in a column of [fxStopwatchColumn], the navigator
+  /// Lay the controls out on the Effect controls panel's **fixed columns**:
+  /// the stopwatch in a column of [fxStopwatchColumn], the navigator
   /// in a slot of [fxKeyNavColumn] that keeps its width whether or not there is
   /// anything in it. That is what stops a label moving sideways the moment its
   /// stopwatch is switched on.
@@ -394,7 +394,7 @@ class KeyframeControlsFrb extends StatelessWidget {
 
     // The two reserved columns. The navigator's slot keeps its width while the
     // property is static, so switching the stopwatch on adds three buttons
-    // without moving the label a pixel (K-443).
+    // without moving the label a pixel.
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -510,7 +510,7 @@ class KeyframeControlsFrb extends StatelessWidget {
   }
 }
 
-/// The stopwatch and ◄ ◆ ► for a mask's **shape** (K-339, K-340).
+/// The stopwatch and ◄ ◆ ► for a mask's **shape**.
 ///
 /// The same controls as [KeyframeControlsFrb] and deliberately in the same
 /// file, so the two cannot drift into different ideas of what a diamond does.
@@ -519,8 +519,8 @@ class KeyframeControlsFrb extends StatelessWidget {
 /// of sending an animation. There is no value to plot, so the lane shows
 /// diamonds and no curve, and the row has no field.
 class PathKeyframesFrb extends StatelessWidget {
-  /// This row's shape keys, as they came across with the mask (K-224) or the
-  /// shape item (K-606) they belong to.
+  /// This row's shape keys, as they came across with the mask or the
+  /// shape item they belong to.
   final List<BridgeKeyframe> keys;
 
   /// Plant or take away a key at this composition time — the diamond.
@@ -555,7 +555,7 @@ class PathKeyframesFrb extends StatelessWidget {
 
   /// The frames the shape is keyed on.
   ///
-  /// **Through the shared memory, not straight at the engine** (K-680). This
+  /// **Through the shared memory, not straight at the engine**. This
   /// getter is read inside the build below, so what it cost was a bridge call
   /// per key per rebuild — the traffic `bridge_call_budget_test` exists to
   /// keep out of build paths, and the sibling control four methods up was

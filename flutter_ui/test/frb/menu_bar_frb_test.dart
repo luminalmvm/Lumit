@@ -89,7 +89,7 @@ void main() {
     /// scrolls — and a row below the fold has to be brought into view before it
     /// can be tapped, which is what a user does with the wheel.
     /// Open [menu] and click [item]. [under] names a submenu to step through
-    /// first — Window → Workspaces → Audio (K-194).
+    /// first — Window → Workspaces → Audio.
     Future<void> choose(WidgetTester tester, String menu, String item,
         {String? under}) async {
       await tester.tap(find.byKey(ValueKey<String>('menu-$menu')));
@@ -104,7 +104,7 @@ void main() {
       await tester.pump();
     }
 
-    /// New composition asks for its settings first (K-180), so every route to a
+    /// New composition asks for its settings first, so every route to a
     /// comp goes through the dialogue: choose the command, then press Create.
     Future<void> makeComp(WidgetTester tester) async {
       await choose(tester, 'Composition', 'New composition');
@@ -179,7 +179,7 @@ void main() {
           reason: 'the barrier closes the menu without choosing anything');
     });
 
-    /// The project's own settings are not in Settings (K-286): Settings is
+    /// The project's own settings are not in Settings: Settings is
     /// this machine's, and a value saved in the `.lum` is not.
     testWidgets('File ▸ Project settings… opens a window of its own',
         (tester) async {
@@ -211,9 +211,9 @@ void main() {
 
     testWidgets('Copy and Paste carry a layer, landing it at the playhead',
         (tester) async {
-      // K-275: Copy takes the selected layer whole and Paste puts it in the
-      // comp on screen, at the playhead. The engine does the carrying; what is
-      // tested here is that the menu is wired to it and to the setting.
+      // Copy takes the selected layer whole and Paste puts it in the comp on
+      // screen, at the playhead. The engine does the carrying; what is tested
+      // here is that the menu is wired to it and to the setting.
       final p = await mount(tester);
       await makeComp(tester);
       final comp = p.uiState.selectedComp!;
@@ -485,7 +485,7 @@ void main() {
       }
     });
 
-    // Text to shapes and Text to points (K-608): the copy lands beside the
+    // Text to shapes and Text to points: the copy lands beside the
     // original, which is still there and still a Type layer.
     testWidgets('Layer ▸ Create turns a text layer into shapes and into points',
         (tester) async {
@@ -641,7 +641,7 @@ void main() {
         (tester) async {
       final p = await mount(tester);
 
-      // The presets live under their own heading now (K-194).
+      // The presets live under their own heading now.
       await choose(tester, 'Window', 'Effects', under: 'Workspace');
       await tester.pump();
       expect(panelsIn(p.uiState.split),
@@ -675,8 +675,8 @@ void main() {
       await tester.tap(find.byKey(const ValueKey<String>('menu-Window')));
       await tester.pump();
       expect(find.text('Command palette…'), findsOneWidget);
-      // The arrangements sit behind their own heading (K-194), and Settings
-      // moved to Edit where every Windows application keeps it (K-244).
+      // The arrangements sit behind their own heading, and Settings
+      // moved to Edit where every Windows application keeps it.
       expect(find.text('Workspace'), findsOneWidget);
       expect(find.text('Settings…'), findsNothing);
       expect(find.text('Reset workspace'), findsNothing,
@@ -695,9 +695,9 @@ void main() {
           reason: 'the default arrangement is back');
     });
 
-    /// The bar is the shape of the finished application, not of today's build
-    /// (K-244): a command that is specified and unbuilt is still listed, marked
-    /// and disabled, so nobody has to guess whether it is missing or broken.
+    /// The bar is the shape of the finished application, not of today's build:
+    /// a command that is specified and unbuilt is still listed, marked and
+    /// disabled, so nobody has to guess whether it is missing or broken.
     testWidgets('unbuilt commands are listed, marked and disabled',
         (tester) async {
       await mount(tester);
@@ -738,10 +738,10 @@ void main() {
     testWidgets('View ▸ Resolution changes what the engine is asked for',
         (tester) async {
       final p = await mount(tester);
-      // The tier is per composition since K-357, so there has to be one.
+      // The tier is per composition, so there has to be one.
       await makeComp(tester);
       expect(p.uiState.previewResolution, PreviewResolution.full,
-          reason: 'Full is the default (K-670) — comp resolution whatever the '
+          reason: 'Full is the default — comp resolution whatever the '
               'panel happens to be showing');
 
       // A panel showing a quarter of the comp: Auto follows it, and the fixed
@@ -750,7 +750,7 @@ void main() {
       expect(p.uiState.viewerScale, closeTo(1.0, 1e-9),
           reason: 'the default does not follow the panel down');
 
-      // **The submenu is opened once** (K-671): a resolution row is an option
+      // **The submenu is opened once**: a resolution row is an option
       // row, so it leaves the menu up and the next tier is one tap away. Five
       // tiers, one opening — which is the whole point of the convention.
       await tester.tap(find.byKey(const ValueKey('menu-View')));
@@ -810,7 +810,7 @@ void main() {
       expect(p.uiState.viewerZoomRequest.value?.$2, ViewerZoomCommand.fit);
     });
 
-    /// Shortcuts are the engine's (K-199): a row shows whatever the keymap
+    /// Shortcuts are the engine's: a row shows whatever the keymap
     /// currently binds to its action, so a rebind changes the menus too.
     testWidgets('a row teaches the chord its action answers to',
         (tester) async {
@@ -824,7 +824,7 @@ void main() {
       await dismiss(tester);
 
       // The row reads the live keymap rather than a chord of its own: the
-      // engine is the only place a binding is written down (K-199).
+      // engine is the only place a binding is written down.
       expect(p.uiState.keymap.chordFor('file.save'), 'Ctrl+S');
       expect(p.uiState.keymap.rawChordFor('file.save'), 'Mod+S');
     });
@@ -833,7 +833,7 @@ void main() {
     /// arrangement, and clicking one adds or drops it. Persistence comes free
     /// — what is stored is the arrangement, and this changes the arrangement.
     ///
-    /// **And the menu stays open while you do it** (K-520). Panels are ticked
+    /// **And the menu stays open while you do it**. Panels are ticked
     /// several at a time, so the row is pressed again here without reopening
     /// anything — which is also what proves the tick redraws in place rather
     /// than showing what it said when the menu was raised.
@@ -910,7 +910,7 @@ void main() {
           reason: 'File is the first heading, at the left');
     });
 
-    /// The update row is live rather than listed-and-dead (K-296). It is not
+    /// The update row is live rather than listed-and-dead. It is not
     /// *pressed* here: pressing it asks GitHub, and a test suite has no
     /// business on the network — what the press does is `updates_test.dart`,
     /// against a service whose seams are stopped up.
@@ -923,7 +923,7 @@ void main() {
       await dismiss(tester);
     });
 
-    /// The two documentation rows hand a web address to the desktop (K-279).
+    /// The two documentation rows hand a web address to the desktop.
     /// The launcher is stopped up: a test suite must never open a browser.
     testWidgets('Help ▸ the documentation rows open the docs site',
         (tester) async {
@@ -972,7 +972,7 @@ void main() {
       await choose(tester, 'Help', 'About Lumit');
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('about-close')), findsOneWidget);
-      // What Settings ▸ General used to say, said here instead (K-244).
+      // What Settings ▸ General used to say, said here instead.
       expect(find.textContaining('lumit-bridge'), findsOneWidget);
     });
 
@@ -999,7 +999,7 @@ void main() {
       await tester.pump();
       expect(a.getEffects().single.name(), 'blur');
       expect(b.getEffects().single.name(), 'blur',
-          reason: 'every selected layer, not just the primary (K-217)');
+          reason: 'every selected layer, not just the primary');
     });
 
     testWidgets('Open recent lists what the workspace remembers',

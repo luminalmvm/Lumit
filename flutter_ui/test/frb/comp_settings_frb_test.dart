@@ -1,4 +1,4 @@
-// The Composition settings / New composition dialogue (K-180).
+// The Composition settings / New composition dialogue.
 //
 // Two things are worth testing here and both were bugs before it: what the
 // dialogue *writes* when only the frame rate changes, and how the two text
@@ -222,7 +222,7 @@ void main() {
 
       expect(find.text('60'), findsWidgets, reason: 'the default rate');
       // Scoped to the rate list: the Preset row above it says Custom for its
-      // own reasons — a size and a rate that match no whole format (K-469).
+      // own reasons — a size and a rate that match no whole format.
       Finder customRate() => find.descendant(
             of: find.byKey(const ValueKey('comp-fps-presets')),
             matching: find.text('Custom'),
@@ -264,7 +264,7 @@ void main() {
       expect(comp.getSettings().name, before.name);
     });
 
-    /// The other half of "a rate is not a speed" (K-572): the comp keeps its
+    /// The other half of "a rate is not a speed": the comp keeps its
     /// length, and the playhead keeps its **moment**. Writing the old frame
     /// number back at the new rate moved the playhead through the comp — at
     /// half the rate it landed twice as far in.
@@ -409,7 +409,7 @@ void main() {
     });
   });
 
-  /// The dialog measured against its own drawing (K-469). It is the same popup
+  /// The dialog measured against its own drawing. It is the same popup
   /// the export dialog is built from, at its own width and with its own row:
   /// a 110px label column, 12 after it, rows of 30.
   group('New composition metrics (frb)', () {
@@ -552,7 +552,7 @@ void main() {
     });
 
     /// The two sections the drawing added are real edits, not decoration: a
-    /// shutter set here reaches the composition it makes (K-120, K-469).
+    /// shutter set here reaches the composition it makes.
     testWidgets('the shutter the dialog sets is the comp\'s own',
         (tester) async {
       tester.view.physicalSize = const Size(1000, 800);

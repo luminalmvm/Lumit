@@ -210,7 +210,7 @@ impl PluginDescriptor {
     /// round-tripped without interpretation and which no control could draw; a
     /// text parameter that is not a path, because Lumit has no text row; and a
     /// parametric curve, which is a function rather than the control points
-    /// Lumit's curve is made of (K-412). Groups and pages are excluded — they
+    /// Lumit's curve is made of. Groups and pages are excluded — they
     /// have no row because they *are* the layout, and reporting them as missing
     /// controls would be noise.
     ///

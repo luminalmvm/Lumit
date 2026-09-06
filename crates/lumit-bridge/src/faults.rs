@@ -28,10 +28,8 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Once;
 
-/// The file's name inside the system's temporary directory. Temp rather than a
-/// directory of our own: it needs no permissions, no creation step, and no
-/// decision about where an application's data lives — and a diagnostic file is
-/// exactly the kind of thing a machine is entitled to clear out.
+/// The file's name inside Lumit's cache directory (`lumit_project::cache_dir`),
+/// or inside the system's temporary directory on a machine with no home.
 const FILE: &str = "lumit-diagnostics.log";
 
 /// Past this many bytes the file starts again. A crash report wants the *last*
@@ -42,7 +40,9 @@ const CAP: u64 = 256 * 1024;
 /// Where the diagnostics go. Printed once at startup so a bug report can say
 /// where to look.
 pub(crate) fn path() -> PathBuf {
-    std::env::temp_dir().join(FILE)
+    lumit_project::cache_dir()
+        .unwrap_or_else(std::env::temp_dir)
+        .join(FILE)
 }
 
 /// Append one line, with the seconds since the epoch in front of it so two
@@ -65,6 +65,10 @@ fn record_to(file: &std::path::Path, line: &str) {
     let over = std::fs::metadata(file)
         .map(|m| m.len() > CAP)
         .unwrap_or(false);
+    // The cache directory may not exist yet on a first run.
+    if let Some(parent) = file.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
     let opened = std::fs::OpenOptions::new()
         .create(true)
         .append(!over)

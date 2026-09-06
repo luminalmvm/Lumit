@@ -84,7 +84,7 @@ pub struct BridgeBeatsResult {
     pub bpm: f64,
 }
 
-/// The comp's confirmed beat grid (docs/09 §5, K-698): what the last
+/// The comp's confirmed beat grid (docs/09 §5): what the last
 /// detection ran its grid at, for the Timeline's beat band to number bars
 /// from. Bars are the grid read four beats at a time.
 #[frb(non_opaque)]
@@ -143,7 +143,7 @@ impl CompositionReference {
 
         let markers = lumit_core::markers::with_regenerated_beats(&composition.markers, beats);
 
-        // The grid the run confirmed (K-698): the tempo used — estimate or
+        // The grid the run confirmed: the tempo used — estimate or
         // override — and the phase nudge, kept on the comp so the Timeline's
         // beat band can number bars. A run that found no tempo clears it: a
         // band numbering bars off a grid the audio no longer answers to would
@@ -165,7 +165,7 @@ impl CompositionReference {
         })
     }
 
-    /// Confirm — or clear, with `None` — the beat grid by hand (K-698): the
+    /// Confirm — or clear, with `None` — the beat grid by hand: the
     /// road a typed BPM or a tap takes when no detection ran, and the road a
     /// test seeds a grid down. One op, one undo step; a tempoless grid is
     /// refused by the op itself.
@@ -191,7 +191,7 @@ impl CompositionReference {
         Ok(())
     }
 
-    /// The comp's confirmed beat grid (K-698), or `None` while no detection
+    /// The comp's confirmed beat grid, or `None` while no detection
     /// with a tempo has run — what the beat band numbers bars from.
     #[frb(sync)]
     pub fn get_beat_grid(&self) -> Result<Option<BridgeBeatGrid>, BridgeError> {
@@ -221,7 +221,7 @@ impl CompositionReference {
         self.commit_markers_and_grid(kept, None)
     }
 
-    /// One undo step for the pair (K-698): the markers and the grid change
+    /// One undo step for the pair: the markers and the grid change
     /// together — detection writes both, clearing takes both away — and two
     /// steps would leave `Ctrl+Z` a state nobody was ever shown.
     #[frb(ignore)]

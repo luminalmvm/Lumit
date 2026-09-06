@@ -4,9 +4,8 @@ This folder is the specification and reference set for Lumit. Start here.
 
 ## Which doc do I want?
 
-**If you are new to the codebase**, read [GUIDE.md](GUIDE.md) - the plain-English
-tour of what each crate does, with Rust and threading explained in editing terms.
-It is large; use its section index rather than reading straight through.
+**If you are new to the codebase**, read [GUIDE.md](GUIDE.md) - the short contributor
+guide: what each crate does, the rules code has to follow, and how to build and run it.
 
 **If you are new to the codebase *and* intend to change it**, read
 [learn/](learn/) - the onboarding set: one doc per area of the repo, plus
@@ -39,7 +38,6 @@ Keeping these separate is what stops the set from rotting:
 |---|---|
 | [00-VISION](00-VISION.md) | Why Lumit exists, pillars, non-goals, the v1 milestone |
 | [01-GLOSSARY](01-GLOSSARY.md) | Canonical terminology - binding on docs, UI, and code. §9 bans terms outright |
-| [02-DECISIONS](02-DECISIONS.md) | Numbered decision log (K-###) with rationale. **Search it; never read it end to end** |
 | [03-DATA-MODEL](03-DATA-MODEL.md) | Project/comp/layer/clip/property/keyframe object model |
 | [04-RETIMING](04-RETIMING.md) | The Retime system: segments, the two graph lenses |
 | [05-ARCHITECTURE](05-ARCHITECTURE.md) | Crates, threads, snapshots, the evaluation graph, GPU |
@@ -59,7 +57,7 @@ Keeping these separate is what stops the set from rotting:
 ## Living documents
 
 - [TODO.md](TODO.md) - the work backlog (Now / Next / Later).
-- [GUIDE.md](GUIDE.md) - the plain-English guide to the codebase.
+- [GUIDE.md](GUIDE.md) - the contributor guide.
 
 ## Subfolders
 
@@ -73,7 +71,7 @@ temporal re-render, paint, shape layers, lens flare, anti-aliasing): the authori
 topic — [impl/README.md](impl/README.md) holds the full table. Read the
 matching note before implementing its feature.
 - [research/](research/) - the background research that informed the specs.
-Compiled 2026-07-12, under the project's former name Kiriko (K-087). Not
+Compiled 2026-07-12, under the project's former name Kiriko. Not
 canonical: where it disagrees with a spec, the spec wins.
 - [archive/](archive/) - frozen, dated material: audits, the egui-to-Flutter port
 notes, and superseded ledgers. Read-only history; never updated.

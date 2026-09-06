@@ -1,4 +1,4 @@
-//! Finding the plugins installed on this machine, and offering them (K-594).
+//! Finding the plugins installed on this machine, and offering them.
 //!
 //! # In plain terms
 //!
@@ -19,7 +19,7 @@
 //! * **The user's switched-off list is consulted before registration**, not
 //!   after. A plugin the user has turned off is never described, never
 //!   instantiated, and never in the menu.
-//! * **A rescan adds; it never replaces.** Registration is additive (K-593), so
+//! * **A rescan adds; it never replaces.** Registration is additive, so
 //!   the second scan of a session skips everything the first one registered —
 //!   by name, before any work is done, which is also what stops a rescan
 //!   leaking a second copy of a schema it already has.

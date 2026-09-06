@@ -46,15 +46,16 @@ pub struct Clip {
     pub place_duration: Rational,
     /// The clip's retime map: clip-local time → source time, in seconds, as
     /// an ordinary keyframable [`Property`] — the same shape a layer's Retime
-    /// has (K-197, K-249).
+    /// has.
     ///
     /// `None` is "not retimed": the clip plays from [`Self::source_in`] at
     /// source rate. That is a different state from a map that happens to be
     /// 1×, exactly as it is on a layer, and only the first skips the map.
     ///
-    /// It was a segment store until K-249. Two representations for one job is
-    /// what that decision existed to end, and clips were the second half of
-    /// it; a document written before then converts on open.
+    /// It was a segment store until the move to this property. Two
+    /// representations for one job is what that move existed to end, and clips
+    /// were the second half of it. A document written before then converts on
+    /// open.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retime: Option<Property>,
     /// How fractional source moments become pixels (render policy).
@@ -96,7 +97,7 @@ impl Clip {
     }
 
     /// A two-key retime running from `source_in` at `v0` to `v1` across the
-    /// clip — the straight-line speed the Vegas envelope authors (K-247).
+    /// clip — the straight-line speed the Vegas envelope authors.
     ///
     /// The keys carry their endpoint speeds as tangents, and the source
     /// position they reach is the area under that straight line: the average
@@ -164,7 +165,7 @@ impl Clip {
     /// The eased shapes the segment store offered (Slow/Fast/Smooth/Sharp) are
     /// not here: they belong to the preset shelf, which is being reworked
     /// (docs/TODO.md) and will be rebuilt on the property like everything else
-    /// K-249 moved.
+    /// that moved off the segment store.
     pub fn with_ramp(&self, v0: Rational, v1: Rational) -> Clip {
         match self.ramp_property(v0, v1) {
             Some((retime, source_out)) => Clip {
@@ -295,7 +296,7 @@ impl Clip {
     /// In plain terms: the clip shows a window onto a longer piece of media,
     /// and this says where that whole piece would sit on the row if none of it
     /// had been trimmed away — which is the faint outline the Timeline draws
-    /// around a trimmed clip (K-441, docs/15-DESIGN.md §12A.1).
+    /// around a trimmed clip (docs/15-DESIGN.md §12A.1).
     ///
     /// The clip-level twin of the layer bar's bounds, and it follows the same
     /// three rules:
@@ -399,7 +400,7 @@ impl Clip {
     /// docs/04-RETIMING.md §8.1, the beat-sync covenant: `place` never moves,
     /// source positions stay exact).
     ///
-    /// **An eased speed ramp cuts like anything else** (K-573). A span is one
+    /// **An eased speed ramp cuts like anything else**. A span is one
     /// cubic, and a cubic splits into two cubics that *are* the original curve
     /// rather than an approximation of it, so the razor through the middle of a
     /// ramp leaves two clips whose speeds concatenate to the speed that was
@@ -647,7 +648,7 @@ impl Clip {
     /// (docs/04-RETIMING.md §7.4, non-ripple): when the retime runs the clip
     /// past its trimmed source end (tail overrun), crop the clip to the crossing
     /// point. The clip's start never moves and a gap is left after it (gaps are
-    /// never auto-closed — the beat-sync covenant K-022). None when there is no
+    /// never auto-closed — the beat-sync covenant). None when there is no
     /// tail overrun, so the command can report "nothing to trim".
     pub fn trim_to_source_end(&self) -> Option<Clip> {
         let crossing = self.overrun_local_time()?;
@@ -688,10 +689,10 @@ impl Clip {
 }
 
 /// Write down the **automatic** tangents either side of `tau` as the beziers
-/// they currently resolve to, so a cut there can keep the curve (K-573).
+/// they currently resolve to, so a cut there can keep the curve.
 ///
 /// In plain terms: an automatic tangent does not store a direction, it works
-/// one out from the keys on either side of it (K-506). A cut changes exactly
+/// one out from the keys on either side of it. A cut changes exactly
 /// those neighbours — the key before the cut gains the cut as its new
 /// neighbour, and the key after it ends up first in a clip of its own with
 /// nothing to its left — so an automatic side would quietly re-aim itself and
@@ -735,7 +736,7 @@ fn freeze_auto_around(map: &mut Property, tau: Rational) {
 }
 
 /// The *shape* of a Sequence layer, apart from what it plays: where its cuts
-/// fall, where its gaps are, and how each piece is ramped (K-248).
+/// fall, where its gaps are, and how each piece is ramped.
 ///
 /// **This is what a depth pass needs.** Cutting one layer to a beat and then
 /// cutting a second — a depth render, a mask pass, a duplicate with different
@@ -849,7 +850,7 @@ fn map_last_value(map: &Property) -> Option<Rational> {
 }
 
 /// Resolve the overlaps a clip has just been dropped into — the **overwrite**
-/// edit every NLE does when one clip lands on another (K-248).
+/// edit every NLE does when one clip lands on another.
 ///
 /// The dropped clip wins its whole span, and each clip already under it is
 /// dealt with by how much of it is covered:
@@ -860,7 +861,7 @@ fn map_last_value(map: &Property) -> Option<Rational> {
 ///
 /// Everything outside the dropped span is untouched, which is the point: an
 /// overwrite is destructive exactly where it lands and nowhere else, so no
-/// edit point beyond it moves and nothing ripples (K-022).
+/// edit point beyond it moves and nothing ripples.
 ///
 /// The surviving pieces keep playing the frames they played — the trims and
 /// the split go through [`Clip::trim_end`], [`Clip::trim_start`] and the same
@@ -913,7 +914,7 @@ pub fn overwrite_with(clips: &[Clip], dropped: Uuid) -> Vec<Clip> {
 }
 
 /// The layer-local span the clips occupy: the first clip's start to the last
-/// clip's end (K-248). None for a Sequence layer with no clips at all, which
+/// clip's end. None for a Sequence layer with no clips at all, which
 /// has no length of its own to take.
 ///
 /// Clips are not required to be in order in the list, so both ends are found
@@ -951,14 +952,14 @@ pub fn resolve(clips: &[Clip], lt: f64) -> Option<(Uuid, ClipSource, f64)> {
 }
 
 /// The single source shared by all clips, if they share one — a sequenced
-/// layer is single-source (K-071). None when empty or mixed.
+/// layer is single-source. None when empty or mixed.
 pub fn single_source(clips: &[Clip]) -> Option<ClipSource> {
     let first = clips.first()?.source;
     clips.iter().all(|c| c.source == first).then_some(first)
 }
 
 /// True when clips never jump backwards in the source as you read the layer
-/// left to right — "no mixing footage time" (K-071): `source_in` is
+/// left to right — "no mixing footage time": `source_in` is
 /// non-decreasing by timeline position. Gaps are allowed; reordering is not.
 pub fn is_source_ordered(clips: &[Clip]) -> bool {
     let mut by_place: Vec<&Clip> = clips.iter().collect();
@@ -1030,7 +1031,7 @@ mod tests {
         assert!((v0 - 1.0).abs() < 1e-9 && (v1 - 3.0).abs() < 1e-9);
         // A ramp has no single constant speed.
         assert_eq!(ramp.constant_speed(), None);
-        // And its first frame is still its own trim-in (K-070's pinning).
+        // And its first frame is still its own trim-in (the frame pinning).
         assert!((ramp.source_time(0.0) - 0.0).abs() < 1e-9);
     }
 
@@ -1179,7 +1180,7 @@ mod tests {
         assert!(clip(src, 0, 4).trim_to_source_end().is_none());
     }
 
-    /// The overwrite edit (K-248): a clip dropped on others takes its whole
+    /// The overwrite edit: a clip dropped on others takes its whole
     /// span, and each clip under it is trimmed, split, or removed.
     #[test]
     fn dropping_a_clip_overwrites_what_is_under_it() {
@@ -1262,7 +1263,7 @@ mod tests {
         assert!(c.cut(rat(6, 1)).is_none());
     }
 
-    /// **The razor goes through an eased ramp** (K-573, docs/04 §8.1). The two
+    /// **The razor goes through an eased ramp** (docs/04 §8.1). The two
     /// halves' maps, laid end to end, must be the curve that was there before —
     /// not close to it, the same. Sampled across the whole span at a fine
     /// stride, which is what "the speed curve is preserved" actually means.
@@ -1314,7 +1315,7 @@ mod tests {
         }
     }
 
-    /// The same, for a map whose middle key **aims itself** (K-506). This is
+    /// The same, for a map whose middle key **aims itself**. This is
     /// the case that was silently wrong: an automatic tangent is a function of
     /// its neighbours, and a cut changes the neighbours, so both halves drifted
     /// — by a sixth of a second of source on the map below, which is four
@@ -1503,7 +1504,7 @@ mod tests {
         assert!(!is_source_ordered(&[c1, early_source_late_place]));
     }
 
-    /// K-441, docs/15-DESIGN.md §12A.1: a trimmed clip draws the faint outline
+    /// docs/15-DESIGN.md §12A.1: a trimmed clip draws the faint outline
     /// of the material trimmed away, exactly as a trimmed layer does. The
     /// reach is the whole source laid on the layer's clock — so a clip trimmed
     /// in by 2 s reaches 2 s to the left of where it starts, and on to the end

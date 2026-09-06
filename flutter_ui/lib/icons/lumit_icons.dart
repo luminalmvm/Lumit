@@ -6,7 +6,7 @@
 //
 //   dart run tool/icons/gen_lumit_icons.dart
 //
-// The set is Lumit's own (docs/15-DESIGN.md §5, K-440): a 16px
+// The set is Lumit's own (docs/15-DESIGN.md §5): a 16px
 // grid, a 1.5px stroke, round caps, one weight, and
 // currentColor throughout, so a glyph takes the text colour of
 // wherever it sits. LumitIcon (lib/icons/lumit_icon.dart) draws
@@ -254,7 +254,7 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3.5" width="11" height="9"/><path d="M5 6h6v4H5z" opacity=".5"/></svg>';
   static const String actualSize =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3.5" width="11" height="9"/><path d="M6 10V6l1 1M10 10V6" /><path d="M9 6h2"/></svg>';
-  /// A 2x2 checker, not a 3x3 one. This and Grid stand side by side on the Viewer's bottom bar, and both are an 11x11 frame with the inside divided; at the 14 that bar renders them (K-456) a checker of thirds collapsed into the same lattice the grid draws. Halves keep the checker a block of tone against the grid's lines, which is the whole of the difference at that size.
+  /// A 2x2 checker, not a 3x3 one. This and Grid stand side by side on the Viewer's bottom bar, and both are an 11x11 frame with the inside divided; at the 14 that bar renders them a checker of thirds collapsed into the same lattice the grid draws. Halves keep the checker a block of tone against the grid's lines, which is the whole of the difference at that size.
   static const String transparency =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11"/><path d="M2.5 2.5h5.5v5.5H2.5zM8 8h5.5v5.5H8z" fill="currentColor" opacity=".4"/></svg>';
   static const String grid =

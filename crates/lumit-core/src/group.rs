@@ -1,4 +1,4 @@
-//! **Layer groups** (docs/03-DATA-MODEL.md §5.4, K-702): a named fold in the
+//! **Layer groups** (docs/03-DATA-MODEL.md §5.4): a named fold in the
 //! Timeline's outline that gathers a run of layers under one row.
 //!
 //! In plain terms: a comp with forty layers in it is a comp nobody can read.
@@ -9,7 +9,7 @@
 //! picture changes while the header carries no effects**: the layers render in
 //! the same order, with the same blends and the same mattes, whether the group
 //! is open, shut, or never made. Drop effects on the header
-//! ([`LayerGroup::effects`], docs/impl/group-effects.md, K-731) and the group
+//! ([`LayerGroup::effects`], docs/impl/group-effects.md) and the group
 //! renders as an implicit per-frame precompose — the members composited alone,
 //! the header's stack run on that one picture — which is the only frame on
 //! which grouping is allowed to change anything.
@@ -44,7 +44,7 @@ use uuid::Uuid;
 pub struct LayerGroup {
     pub id: Uuid,
     pub name: String,
-    /// Label colour: an index into the theme's label palette (K-567), the same
+    /// Label colour: an index into the theme's label palette, the same
     /// palette a layer's own [`crate::model::Layer::label`] indexes. Drawn as
     /// the tick on the group's header row, so a group and the layers in it can
     /// be given one colour between them. 0 by default; purely organisational.
@@ -54,8 +54,8 @@ pub struct LayerGroup {
     /// puts them in stack order, because the stack is the only order that
     /// means anything here.
     pub members: Vec<Uuid>,
-    /// The header's effect stack (docs/impl/group-effects.md, K-731). Same
-    /// shape as `Layer::effects`. Empty = the K-702 group: invisible to the
+    /// The header's effect stack (docs/impl/group-effects.md). Same shape as
+    /// `Layer::effects`. Empty = the organisational group: invisible to the
     /// render walk, byte-identical picture, and every project saved before
     /// this field existed re-saves byte-identical (skipped while empty).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

@@ -1,4 +1,4 @@
-//! Sharpen (docs/08 §3.9, K-138): the plain, radius-free sibling of the Unsharp
+//! Sharpen (docs/08 §3.9): the plain, radius-free sibling of the Unsharp
 //! mask — a fixed 3×3 high-pass convolution scaled by Amount, `out = u +
 //! amount·(4·u − up − down − left − right)` per RGB channel with clamp-addressed
 //! neighbours. On unpremultiplied colour (§2.2, the wrap fused into the kernel),
@@ -22,8 +22,8 @@ use lumit_fx_macros::Effect;
     roi = PaddedPx(16.0),
     // §2.2: sharpening premultiplied haloes matte edges.
     premultiplied = false,
-    // K-395: the matte scales the amount, inside the kernel (the owner's
-    // rule for mattes); the generic strength dissolve does not also run.
+    // The matte scales the amount, inside the kernel (the owner's rule for
+    // mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales Amount per pixel: white sharpens by the full Amount, black \
@@ -33,7 +33,7 @@ use lumit_fx_macros::Effect;
 pub struct SharpenSimple {
     /// High-pass strength: 1 is the classic 5/−1 sharpen kernel, 0 a no-op.
     /// Clamped at zero below (a negative amount would blur, out of scope),
-    /// unbounded above (K-090).
+    /// unbounded above.
     #[slider(min = 0.0, max = 5.0, default = 1.0, hard_min = 0.0, unit = Raw)]
     pub amount: f32,
 

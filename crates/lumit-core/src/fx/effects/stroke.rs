@@ -4,7 +4,7 @@
 //! of it, from one per cent of the way round to another. Keyframe End and the
 //! line draws itself on, which is what the effect is mostly used for.
 //!
-//! It reads the mask's **shape**, not its coverage (K-408, docs/08 §1.2): the
+//! It reads the mask's **shape**, not its coverage (docs/08 §1.2): the
 //! hole a mask cuts cannot say which way is *along* it, and a brush that starts
 //! at 20 % and stops at 80 % has to know.
 //!
@@ -32,15 +32,15 @@ use lumit_fx_macros::Effect;
     roi = Exact,
     cost = Moderate,
     premultiplied = true,
-    // K-428: the matte scales the amount, inside the kernel (the owner's rule
-    // for mattes); the generic strength dissolve does not also run.
+    // The matte scales the amount, inside the kernel (the owner's rule for
+    // mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales Opacity per pixel: white lays the brush down in full, grey          faintly, black not at all",
     ),
 )]
 pub struct Stroke {
-    /// Which of the layer's masks to walk (K-408). Unset is **First mask**,
+    /// Which of the layer's masks to walk. Unset is **First mask**,
     /// because the effect is usually added before the mask is drawn.
     #[mask_path(label = "Mask")]
     pub path: bool,
@@ -138,8 +138,8 @@ pub struct Stroke {
 
 impl Stroke {
     /// Raster pixels per comp pixel (§2.3), pushed at resolve because the seam
-    /// hands its vertices over in px@comp and the brush walks the raster
-    /// (K-408). Never a panel row.
+    /// hands its vertices over in px@comp and the brush walks the raster. Never
+    /// a panel row.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
     /// This instance's raster factor, read back out of a resolved bag.

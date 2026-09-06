@@ -14,7 +14,7 @@ import 'base.dart';
 /// A centred modal on the app Overlay, with a dimmed click-to-dismiss backdrop.
 /// Completes with whatever `close` was given, or null when dismissed.
 ///
-/// **Escape closes it from the ladder's dialogue rung** (K-319, K-575). It was
+/// **Escape closes it from the ladder's dialogue rung**. It was
 /// Flutter's own `DismissIntent` for a while, which did dismiss the window but
 /// could not be ordered against anything: the focus path runs whatever the
 /// hardware-keyboard handlers returned, so a drag being abandoned inside the
@@ -31,7 +31,7 @@ import 'base.dart';
 /// moves it — and, when [initialSize] is given, **resizable** from the grip in
 /// its bottom-right corner. Give an [id] and where it was left is remembered in
 /// the workspace store, so it opens where it was last put, this session and the
-/// next (K-242). Windows without an id always open centred at their natural
+/// next. Windows without an id always open centred at their natural
 /// size, which is what a one-question confirmation wants.
 Future<T?> showLumitModal<T>({
   required BuildContext context,
@@ -89,7 +89,7 @@ Workspace? modalPlacementStore;
 
 int _openModals = 0;
 
-/// Whether a modal window is up (K-243).
+/// Whether a modal window is up.
 ///
 /// The panels register their keyboard commands on the hardware keyboard rather
 /// than holding focus, so nothing about a dialogue being open stopped them
@@ -105,7 +105,7 @@ int _openModals = 0;
 bool get lumitModalOpen => _openModals > 0;
 
 /// For a modal surface that is not a [_MovableWindow] — the FX console
-/// (K-328) is the one today. Counted from `initState` and `dispose`, for the
+/// is the one today. Counted from `initState` and `dispose`, for the
 /// reason the window count is: a surface can leave by having the tree taken
 /// down under it.
 void markModalMounted() => _openModals++;
@@ -239,7 +239,7 @@ class _MovableWindowState extends State<_MovableWindow> {
                     // reading order — left to right, then top to bottom —
                     // rather than widget-tree order, which nests columns
                     // inside rows and visits them in whatever order the
-                    // layout code happened to compose them (K-319).
+                    // layout code happened to compose them.
                     child: FocusScope(
                       child: FocusTraversalGroup(
                         policy: ReadingOrderTraversalPolicy(),

@@ -1,5 +1,5 @@
-// The maths both halves of the Timeline slide by while a layer is dragged
-// (K-208). Pure, so it is tested without an engine or a widget tree — and it
+// The maths both halves of the Timeline slide by while a layer is dragged.
+// Pure, so it is tested without an engine or a widget tree — and it
 // has to be right in one place only, which is the point of it being shared.
 
 import 'package:flutter_test/flutter_test.dart';

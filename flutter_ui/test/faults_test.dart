@@ -1,4 +1,4 @@
-// A panel whose build throws says so, on screen and on disk (K-741).
+// A panel whose build throws says so, on screen and on disk.
 //
 // The regression these hold is the one that made "the Viewer is grey"
 // undiagnosable: a release build replaced a failed panel with Flutter's own

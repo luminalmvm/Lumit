@@ -1,4 +1,4 @@
-// The Project panel, built to the approved redesign mockup (K-451, K-454).
+// The Project panel, built to the approved redesign mockup.
 //
 // **In plain terms**: this is the shelf the project's things live on. Top to
 // bottom the mockup lays it out as a preview card for whatever is picked, a
@@ -18,12 +18,12 @@
 // **Behaviour is unchanged from the panel this replaces.** A click selects the
 // instant the button goes down; a click on the lone selected row *opens* it,
 // which makes a double-click "select, then open" in one motion, and what
-// opening means is the item's own answer (K-243): a comp fronts, footage
+// opening means is the item's own answer: a comp fronts, footage
 // raises New composition on it, a folder shows or hides its children. Renaming
 // is `Enter` or the row menu. A right-click raises that menu; footage and comp
 // rows drag onto the Timeline (a comp lands as a Precomp layer);
 // double-clicking empty space imports, and files dragged in from the OS file
-// manager import the same way (K-581) — the panel lights up while they hover.
+// manager import the same way — the panel lights up while they hover.
 // Missing footage wears the mockup's
 // `missing` badge, and that badge *is* the relink control — clicking it opens
 // the file picker, which is where the old inline "Relink…" button's job went.
@@ -73,12 +73,12 @@ export 'project_row_frb.dart';
 const int _thumbMaxEdge = 224;
 
 /// Put what the OS file manager dropped on the Project panel down the road it
-/// belongs on (K-581), and say whether anything was imported.
+/// belongs on, and say whether anything was imported.
 ///
 /// **In plain terms**: dropping files on the panel is the same command as
 /// **File › Import footage**, so it goes through the same call — one undo step
 /// for the whole batch, the probe worker started per file, image sequences
-/// spotted by the engine rather than here (K-539).
+/// spotted by the engine rather than here.
 ///
 /// Three shapes arrive and each is answered differently:
 ///
@@ -194,7 +194,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       final needle = _searchController.text.trim().toLowerCase();
       if (needle != _search) setState(() => _search = needle);
     });
-    // Enter renames the lone selected item (K-321) — the same key the
+    // Enter renames the lone selected item — the same key the
     // Timeline gives its layers. Registered on the hardware keyboard like the
     // Timeline's commands; the handler stands down for modals, focused
     // fields, and whenever this panel is not the active one.
@@ -205,7 +205,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     // request for its own field.
     _boundUi = Provider.of<LumitUiState>(context, listen: false);
     _boundUi!.panelSearchRequest.addListener(_onSearchRequested);
-    // `Ctrl+A` selects every item this panel is showing (K-522), asked for the
+    // `Ctrl+A` selects every item this panel is showing, asked for the
     // same way the search focus is: the shell routes the chord to whichever
     // panel is focused rather than deciding what "everything" means itself.
     _boundUi!.selectAllRequest.addListener(_onSelectAllRequested);
@@ -274,7 +274,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// The items currently selected, by id, in the order the panel lists them.
   /// Held here rather than in `LumitUiState` because nothing outside this panel
   /// reads the full set — only the anchor item is published, for the FX
-  /// console (K-327), through [_publishSelection].
+  /// console, through [_publishSelection].
   ///
   /// A set rather than one id because more than one row can be picked:
   /// `Ctrl`-click adds or removes one, `Shift`-click takes the run between the
@@ -344,13 +344,13 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// arrive together rather than one frame apart.
   bool _rebuildBooked = false;
 
-  /// Each footage item's proxy (K-501), or null where it has none — for the
+  /// Each footage item's proxy, or null where it has none — for the
   /// `proxy` badge and for the row menu's four commands. A document read like
   /// every other entry here, so it is asked once per document change and never
   /// in a rebuild: the budget test expects a hover to cost nothing.
   final Map<String, BridgeProxy?> _proxies = {};
 
-  /// The project-wide *use proxies* switch (K-501), cached with the rest: it is
+  /// The project-wide *use proxies* switch, cached with the rest: it is
   /// a document read, so a rebuild must never ask for it again.
   bool? _useProxies;
 
@@ -410,7 +410,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     _publishSelection();
   }
 
-  /// Mirror the anchor item to the shell (K-327), where the FX console reads
+  /// Mirror the anchor item to the shell, where the FX console reads
   /// it. The anchor, not the set: the console acts on one thing, the way the
   /// preview card describes one thing. Deselected (a toggle off) or unknown
   /// (a stale id after a delete) publishes null rather than a dead handle.
@@ -440,7 +440,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         _columnWidths = {..._columnWidths, column: next};
       });
 
-  /// The folders the user has shut, by id (K-243). Closed rather than open, so
+  /// The folders the user has shut, by id. Closed rather than open, so
   /// a project opens showing everything it has — which is what the panel did
   /// before folders could be shut at all. Session state, like the search text:
   /// a twirl is where you are looking, not something about the document.
@@ -553,8 +553,8 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       final id = projectItemId(item);
       _itemById[id] = item;
       itemCount++;
-      // Cached like every other row fact beside it (K-676: nothing asks the
-      // engine twice for an answer that only a document change can alter).
+      // Cached like every other row fact beside it: nothing asks the engine
+      // twice for an answer that only a document change can alter.
       // The name was the one that was not, and it is the dearest of them:
       // `ProjectItem::name` clones the whole item across the seam to read one
       // string, so a composition's every layer was copied per row per build.
@@ -567,14 +567,14 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       final searchHit = selfMatched ||
           (item is ItemReference_Folder && _subtreeMatches(item));
       // Sound with no picture at all — the probe's own answer, not the zero
-      // picture width the panel used to infer it from (K-451). A silent
+      // picture width the panel used to infer it from. A silent
       // still has no sound and a picture that does not run; the old guess
       // called it audio.
       final audio = _mediaInfo[id] != null && _mediaInfo[id]!.videoCodec == null;
       // Missing-only is matched on the row's own name alone (docs/07 §3.3).
       // The swatch filter narrows *with* whatever else is running, and on the
       // colour the row is actually **wearing** — its own tag where it has one,
-      // the nearest tagged folder's where it has not (K-634, K-567), and the
+      // the nearest tagged folder's where it has not, and the
       // kind's own default tint where it has neither. Filing a shoot into a
       // red folder colours the shoot, so picking red has to find it — and a
       // just-imported clip visibly wears azure, so picking azure has to find
@@ -800,7 +800,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         }
         return ProjectCells(
           size: '${info.width}×${info.height}',
-          // A still has no rate to state (K-246). It probes with a video
+          // A still has no rate to state. It probes with a video
           // stream of one frame, so a number *is* there — and printing it
           // would say the picture runs when it does not.
           fps: info.isStill ? null : projectRateText(info.fpsNum, info.fpsDen),
@@ -867,7 +867,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   }
 
   /// The **folder** a footage item points into. Display data — the engine
-  /// reads the path the project records (K-173) and touches no disk for it.
+  /// reads the path the project records and touches no disk for it.
   ///
   /// The folder, not the whole path, because the Name column two cells left is
   /// already saying the file name: a Path column that repeated it would be the

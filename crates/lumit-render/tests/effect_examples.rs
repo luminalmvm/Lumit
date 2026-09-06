@@ -104,7 +104,7 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
             ("gain", colour([1.18, 1.0, 0.82, 1.0])),
         ],
         // The classic S: shadows down, highlights up, the middle left alone. The
-        // master curve is a drawn curve now (K-412), so the S is four points.
+        // master curve is a drawn curve now, so the S is four points.
         "curves" => vec![(
             "master",
             EffectValue::Curve(vec![[0.0, 0.0], [0.25, 0.17], [0.75, 0.86], [1.0, 1.0]]),
@@ -156,10 +156,10 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
             ("intensity", f(7.0)),
         ],
         "median" => vec![("radius", f(3.0))],
-        // Radial blur's centre is px@comp since K-558, and the schema default
-        // is the nominal 1080p middle. This plate is 1920x816, so the picture
-        // asks for *its* middle — which is what `instantiate_for_raster` would
-        // have written had the effect been dropped on this comp.
+        // Radial blur's centre is px@comp, and the schema default is the
+        // nominal 1080p middle. This plate is 1920x816, so the picture asks
+        // for *its* middle — which is what `instantiate_for_raster` would have
+        // written had the effect been dropped on this comp.
         "radial_blur" => vec![
             ("centre_x", f(f64::from(W) * 0.5)),
             ("centre_y", f(f64::from(H) * 0.5)),
@@ -257,7 +257,7 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
         ],
 
         // --- temporal ---
-        // Fast motion blur smears motion the footage already contains, so the
+        // Motion blur smears motion the footage already contains, so the
         // example plays the plate faster (see wants_speed_up). The shutter stays
         // where it opens by default: doubling the speed and opening the shutter
         // as well turned the picture into porridge.
@@ -444,15 +444,10 @@ fn wants_scene_below(match_name: &str) -> bool {
 
 /// A whip across the frame, for the effect that samples the scene beneath it.
 ///
-/// The motion is the layer's own transform rather than the footage's, and that
-/// is what accumulation motion blur can actually see: its sub-frame samples
-/// re-render the stack beneath with the footage **held** at the frame-time
-/// decode (docs/impl/temporal-rerender.md §2), so a retime of the plate gives
-/// every sample the same pixels and the average is the plate back, unblurred.
-/// Only transforms, effects and the camera move between samples, so the example
-/// moves the transform. (An earlier note here blamed a black frame on the
-/// retimed path; `a_retimed_layer_under_forced_accumulation_mb_is_not_black` in
-/// `headless.rs` pins that it renders, just without any smear.)
+/// The motion is the layer's own transform rather than the footage's. The
+/// effect now samples footage between frames too (docs/impl/temporal-rerender.md
+/// §2), but the plate here is one still photograph panned by ffmpeg, so a
+/// transform whip is the honest picture of what the scene beneath is doing.
 ///
 /// The layer crosses the frame, and the sampled moment is the one where it sits
 /// dead centre, so the framing matches every other picture in the manual and the
@@ -479,10 +474,10 @@ fn animate_whip(plate: &mut Layer, span: Rational) {
     };
 }
 
-/// Fast motion blur reads motion out of the footage itself, so its example plays
-/// the plate faster through the frame it is sampled at. (Accumulation motion blur
-/// cannot read a retime, see `animate_whip`, so that page moves the transform at
-/// a matching rate instead.)
+/// Motion blur reads motion out of the footage itself, so its example plays
+/// the plate faster through the frame it is sampled at. (Accumulation motion
+/// blur's page moves the transform at a matching rate instead, see
+/// `animate_whip`.)
 fn wants_speed_up(match_name: &str) -> bool {
     match_name == "motion_blur"
 }
@@ -748,7 +743,7 @@ fn example_doc(
 fn wire_aux(inst: &mut EffectInstance) {
     let aux = id("Aux");
     // Displacement map and Set matte take their second picture from the Matte
-    // row itself, which is the deeper meaning K-395 gives that row.
+    // row itself, which is the deeper meaning that row carries.
     let rows: &[&str] = if matches!(
         inst.effect.match_name.as_str(),
         "displacement_map" | "set_matte"
@@ -820,7 +815,7 @@ fn render_every_effect_example() {
     assert!(clip.is_file(), "no clip at {}", clip.display());
     std::fs::create_dir_all(&out).expect("create the output directory");
 
-    let mut r = match HeadlessRenderer::new() {
+    let mut r = match HeadlessRenderer::shared() {
         Ok(r) => r,
         Err(e) => {
             lumit_gpu::no_adapter();

@@ -24,7 +24,7 @@ BridgeTrackStatus trackStatus({required LayerReference layer}) =>
 /// `layer`'s solved point cloud as it lands on composition frame `frame`.
 ///
 /// **Once per frame change, never per rebuild** — the rule the Levels histogram
-/// follows (K-413) and the bridge-call budget pins. The frame the cloud is drawn
+/// follows and the bridge-call budget pins. The frame the cloud is drawn
 /// from is found by the one walk the camera link uses
 /// ([`lumit_core::track::tracked_solved_frame`]), so the dots and the camera
 /// they were solved with can never disagree about which moment this is.
@@ -45,7 +45,7 @@ BridgeCameraLink cameraLink(
     BridgeLib.instance.api
         .crateApiTrackCameraLink(camera: camera, frame: frame);
 
-/// Press one of an effect's Action parameters (K-417).
+/// Press one of an effect's Action parameters.
 ///
 /// An Action carries no value, so this is an **event** and not a write: nothing
 /// is staged, nothing is committed, and no undo entry appears. Today the Camera
@@ -59,17 +59,17 @@ void fireEffectAction(
     BridgeLib.instance.api.crateApiTrackFireEffectAction(
         layer: layer, effect: effect, param: param);
 
-/// Add a Camera layer whose motion is derived from `tracked`'s solve (K-417).
+/// Add a Camera layer whose motion is derived from `tracked`'s solve.
 ///
 /// The link is the whole point: nothing is copied, so re-analysing the shot
 /// moves this camera with it, and every clip of the same footage reads the same
 /// solve through its own time mapping. Its transform rows are the **correction
-/// lane** (K-578) — dragging one nudges the solved motion rather than replacing
+/// lane** — dragging one nudges the solved motion rather than replacing
 /// it — and they start at the pose captured here, which is that lane's nought.
 LayerReference addSolvedCamera({required LayerReference tracked}) =>
     BridgeLib.instance.api.crateApiTrackAddSolvedCamera(tracked: tracked);
 
-/// Bake a solve-linked camera into keyframes and sever the link (K-417).
+/// Bake a solve-linked camera into keyframes and sever the link.
 ///
 /// One key per composition frame, at the composition's rate, exactly the motion
 /// that was being derived — and from then on an ordinary camera the user edits.
@@ -82,7 +82,7 @@ void convertCameraToKeyframes({required LayerReference camera}) =>
     BridgeLib.instance.api
         .crateApiTrackConvertCameraToKeyframes(camera: camera);
 
-/// **Clear corrections** (K-578): put a linked camera's own properties back to
+/// **Clear corrections**: put a linked camera's own properties back to
 /// the pose the link was made at, leaving the link itself alone.
 ///
 /// One undo step. Refused when there is no link, or nothing in the lane — a
@@ -91,7 +91,7 @@ void convertCameraToKeyframes({required LayerReference camera}) =>
 void clearCameraCorrections({required LayerReference camera}) =>
     BridgeLib.instance.api.crateApiTrackClearCameraCorrections(camera: camera);
 
-/// Point `camera` at a tracked layer, or clear the link (K-417).
+/// Point `camera` at a tracked layer, or clear the link.
 ///
 /// The link is a property of the Camera layer, so this is an ordinary
 /// undoable edit — and `None` is how a camera stops being derived without
@@ -100,8 +100,8 @@ void setCameraSolveLink({required LayerReference camera, UuidValue? tracked}) =>
     BridgeLib.instance.api
         .crateApiTrackSetCameraSolveLink(camera: camera, tracked: tracked);
 
-/// Put a Null (or a Solid) at the mean solved position of `tracks` — K-417's
-/// creation gesture, After Effects' own.
+/// Put a Null (or a Solid) at the mean solved position of `tracks` — the
+/// Camera track's creation gesture, After Effects' own.
 ///
 /// The layer is 3D and sits where the points are, **oriented to face the
 /// camera**: a layer carrying the camera's own rotation is parallel to its image
@@ -124,13 +124,13 @@ LayerReference addLayerAtPoints(
 /// Polled while it is moving and never otherwise, exactly as
 /// [`track_status`] is — the reading is a value in a map, not a subscription.
 /// The answer is filed under the **effect instance**, because what was tracked
-/// is the quad this instance holds (K-579).
+/// is the quad this instance holds.
 BridgePlanarStatus planarStatus(
         {required LayerReference layer, required UuidValue effect}) =>
     BridgeLib.instance.api
         .crateApiTrackPlanarStatus(layer: layer, effect: effect);
 
-/// **Create corner pin** (K-579): put a Corner pin on the layer the Planar
+/// **Create corner pin**: put a Corner pin on the layer the Planar
 /// track's *Pin layer* row names, its four points keyframed to the tracked
 /// surface.
 ///
@@ -245,7 +245,7 @@ class BridgePlanarStatus {
 
 /// Why an analysis produced no camera path.
 ///
-/// A **reason, not a sentence** (K-303): the engine's own `AnalysisError`
+/// A **reason, not a sentence**: the engine's own `AnalysisError`
 /// carries English, and English crossing here would ship untranslated inside a
 /// translated window. Dart switches over this and picks the arb key, which is
 /// the shape `lumit_import::Reason` already uses for the import report.
@@ -270,7 +270,7 @@ enum BridgeTrackFailure {
   noSolve,
 
   /// The quad's contents are not one flat surface, or move against
-  /// themselves (K-579).
+  /// themselves.
   notPlanar,
   ;
 }

@@ -1,5 +1,5 @@
 // Menu hover intent: the "safe triangle" a pointer travels through on its way
-// from a submenu row to its flyout (K-318).
+// from a submenu row to its flyout.
 //
 // In plain terms: when a submenu is open beside a menu, the diagonal path from
 // the row to the flyout crosses the rows below it. Without care, brushing one

@@ -34,7 +34,7 @@ void disarmPuppetPreview() =>
     BridgeLib.instance.api.crateApiLayerDisarmPuppetPreview();
 
 /// One window of a source's waveform, summarised to exactly the buckets the
-/// lane asked for (K-280).
+/// lane asked for.
 ///
 /// The **window** is the point: a lane asks for the stretch of audio it is
 /// currently showing at the number of buckets it has pixel columns, so the
@@ -97,8 +97,8 @@ class BridgeAudioPeaks {
           values == other.values;
 }
 
-/// How one two-axis property is shown and edited (K-571,
-/// [`lumit_core::model::AxisMode`]).
+/// How one two-axis property is shown and edited
+/// ([`lumit_core::model::AxisMode`]).
 enum BridgeAxisMode {
   /// One row, one box, the x:y ratio held on every edit.
   linked,
@@ -112,7 +112,7 @@ enum BridgeAxisMode {
 }
 
 /// Every pair's mode, carried in the read model so the panels can draw the
-/// right rows with no bridge call (K-184).
+/// right rows with no bridge call.
 class BridgeAxisModes {
   final BridgeAxisMode anchor;
   final BridgeAxisMode position;
@@ -137,7 +137,7 @@ class BridgeAxisModes {
           scale == other.scale;
 }
 
-/// The shape one dab of the brush leaves (K-548). Not a brush-tip system:
+/// The shape one dab of the brush leaves. Not a brush-tip system:
 /// two shapes, both measured from the dab's centre out to half the stroke's
 /// width and both softened by the same hardness ramp.
 enum BridgeBrushShape {
@@ -161,7 +161,7 @@ class BridgeClip {
   final BridgeRational placeDuration;
 
   /// Where the clip sits on the **comp's** own clock, in frames — so the
-  /// expanded row draws with no time-to-frame trip per clip (K-248, K-184).
+  /// expanded row draws with no time-to-frame trip per clip.
   ///
   /// A clip's `place_*` are in *layer* time; these carry the layer's own
   /// zero already added. The two are the same number only while that zero
@@ -180,7 +180,7 @@ class BridgeClip {
   final bool retimed;
 
   /// The map this clip actually plays by, keyed in **clip-local** time —
-  /// what the sequence view's envelope draws and edits (K-247, K-248).
+  /// what the sequence view's envelope draws and edits.
   ///
   /// Always present, even for a clip with no map of its own: it then holds
   /// the identity that clip is playing, running from its real trim-in.
@@ -194,7 +194,7 @@ class BridgeClip {
 
   /// Where the **whole source** would sit on the comp's clock if none of it
   /// had been trimmed away, in frames — the faint ghost a trimmed clip draws
-  /// inside a Sequence lane (K-441, docs/15 §12A.1), the clip-level twin of
+  /// inside a Sequence lane (docs/15 §12A.1), the clip-level twin of
   /// the outline a trimmed *layer* already wears.
   ///
   /// `None` when the reach is not knowable, and the engine
@@ -253,7 +253,7 @@ class BridgeClip {
           reachEndFrame == other.reachEndFrame;
 }
 
-/// The curve a fade command writes (docs/09 §6, K-695) — the Audio panel's
+/// The curve a fade command writes (docs/09 §6) — the Audio panel's
 /// three chips. Each is built from the easing vocabulary that already exists,
 /// so a fade's keys can be dragged and reshaped like any others afterwards.
 enum BridgeFadeShape {
@@ -271,7 +271,7 @@ enum BridgeFadeShape {
 }
 
 /// Everything the Timeline outline, its bars, and the Hierarchy draw for one
-/// layer, in one crossing (K-183). Read one getter at a time this cost
+/// layer, in one crossing. Read one getter at a time this cost
 /// seven-plus bridge calls per row per rebuild — each cloning the composition
 /// out of the snapshot — plus two time↔frame trips per bar.
 class BridgeLayerInfo {
@@ -292,10 +292,10 @@ class BridgeLayerInfo {
   final Int64List clipFrames;
 
   /// Every clip on a Sequence layer, in list order (empty on other kinds) —
-  /// what the expanded sequence view draws (K-248).
+  /// what the expanded sequence view draws.
   ///
   /// In the read model rather than fetched per clip, so opening a Sequence
-  /// layer costs no bridge calls at all (K-184).
+  /// layer costs no bridge calls at all.
   final List<BridgeClip> clips;
   final UuidValue? parent;
 
@@ -303,19 +303,19 @@ class BridgeLayerInfo {
   /// with no second lookup. None when there is no parent, or it is dangling.
   final String? parentName;
 
-  /// The whole transform, one scalar per property (K-184).
+  /// The whole transform, one scalar per property.
   final BridgeTransform transform;
 
-  /// How each two-axis property is shown (K-571) — which decides how many
+  /// How each two-axis property is shown — which decides how many
   /// rows the Transform group has, so it is read here with the rest of the
   /// drawing data rather than asked for per row.
   final BridgeAxisModes axisModes;
 
-  /// Every effect on the layer, with every parameter's value (K-184). Plain
+  /// Every effect on the layer, with every parameter's value. Plain
   /// data for *drawing*; an edit reads fresh instance handles at commit time.
   final List<BridgeEffectInstanceInfo> effects;
 
-  /// The layer's **styles** (docs/impl/layer-styles.md §5, K-706), in §2's
+  /// The layer's **styles** (docs/impl/layer-styles.md §5), in §2's
   /// pinned painting order — the same shape as [`Self::effects`] because a
   /// style *is* an effect instance in a second, order-locked list.
   ///
@@ -330,69 +330,68 @@ class BridgeLayerInfo {
   /// swatch. Out-of-range values wrap rather than fault.
   final int label;
 
-  /// The layer's matte, for the outline's matte cell (K-184: the row draws
-  /// with no bridge calls). Writes still go through `set_matte`.
+  /// The layer's matte, for the outline's matte cell (the row draws with no
+  /// bridge calls). Writes still go through `set_matte`.
   final BridgeMatte? matte;
 
-  /// The Retime property (K-197), or None when the layer is not retimed —
+  /// The Retime property, or None when the layer is not retimed —
   /// which is exactly what decides whether the fold-out shows a Retime row.
   final BridgeScalar? retime;
 
-  /// The layer's masks (K-222), bottom of the stack first. Carried in the
+  /// The layer's masks, bottom of the stack first. Carried in the
   /// read model for the same reason the effects are: the Timeline's
   /// twirl-down draws a row per mask, and asking per row per frame is the
-  /// cost K-184 exists to remove. Edits still go through `set_mask`.
+  /// cost the read model removes. Edits still go through `set_mask`.
   final List<BridgeMask> masks;
 
-  /// The layer's paint strokes (K-227), oldest first — carried for the same
+  /// The layer's paint strokes, oldest first — carried for the same
   /// reason the masks are: the Timeline lists them, and the Viewer needs to
   /// know a layer has some without asking per frame.
   final List<BridgeStroke> paint;
 
-  /// The layer's puppet (K-704), or None on a layer nobody has pinned —
+  /// The layer's puppet, or None on a layer nobody has pinned —
   /// which is most layers. Carried for the same reason the masks and the
   /// strokes are: the Timeline draws a group row and a row per pin, and the
   /// Viewer needs to know a layer is puppeted without asking per frame.
   final BridgePuppet? puppet;
 
-  /// A shape layer's art (K-237), bottom first; empty on every other kind.
+  /// A shape layer's art, bottom first; empty on every other kind.
   /// Carried for the same reason again — and for one more: the art *is* the
   /// layer's size, so the Viewer's wireframe reads it here.
   final List<BridgeShapeItem> shapeContents;
 
-  /// The layer's own markers (K-254), and the comp frame each falls on — the
+  /// The layer's own markers, and the comp frame each falls on — the
   /// marker's layer-local time carried out by the layer's start offset — so
   /// the bar needs no time↔frame trip to draw one. In the read model because
-  /// the Timeline draws them on every rebuild, which is the cost K-184 exists
-  /// to remove.
+  /// the Timeline draws them on every rebuild, which is the cost it removes.
   final List<BridgeLayerMarker> markers;
 
-  /// Whether optical flow is live on this layer (K-088/K-331) — the switch
+  /// Whether optical flow is live on this layer — the switch
   /// cluster's Flow cell, and what decides whether the fold-out shows a Flow
   /// group. In the read model because the Timeline draws that cell on every
-  /// rebuild, and asking per row per frame is exactly the cost K-184 removed.
+  /// rebuild, and asking per row per frame is exactly the cost it removes.
   final bool flow;
 
-  /// The Flow group's Input rate (K-095/K-160), the one animatable member —
+  /// The Flow group's Input rate, the one animatable member —
   /// carried here so its fold-out row can draw its keyframe diamonds without
   /// a call, exactly as the Retime row's scalar is.
   final BridgeScalar flowInputRate;
 
-  /// **Edited since track** (K-578): this solve-linked Camera layer carries a
+  /// **Edited since track**: this solve-linked Camera layer carries a
   /// correction, or — on a tracked layer — a camera that follows it does.
   ///
   /// One fact from where the user stands ("the tracked motion has been
   /// nudged"), read from two sides because it is drawn on two rows: beside
   /// the camera's link badge, and on the Camera track effect's card. In the
   /// read model rather than as a call, because both rows are rebuilt on every
-  /// document revision and a call there is exactly the cost K-184 removed.
+  /// document revision and a call there is exactly the cost it removes.
   final bool trackCorrected;
 
-  /// A Text layer's animator groups (K-609), in order; empty on every other
+  /// A Text layer's animator groups, in order; empty on every other
   /// kind. Carried for the same reason the masks and the strokes are: the
   /// Timeline draws a row per animator property and the graph editor reads
   /// its curves from here, and asking per row per frame is exactly the cost
-  /// K-184 exists to remove. Edits still go through `set_text`.
+  /// the read model removes. Edits still go through `set_text`.
   final List<BridgeTextAnimator> textAnimators;
 
   /// The project item this layer is made of, or None for a kind with its
@@ -417,20 +416,20 @@ class BridgeLayerInfo {
   /// None for every other kind; footage length arrives with the probe.
   final PlatformInt64? sourceFrames;
 
-  /// The layer's volume in decibels (K-172), the one property an audio row
+  /// The layer's volume in decibels, the one property an audio row
   /// draws that is not otherwise in the model. Carried for the same reason
   /// [`Self::flow_input_rate`] is: the fold-out's Volume row draws its
   /// keyframe diamonds from it, and reading it per audio layer per document
   /// revision is a sync crossing per row for a fact this walk has in hand.
   final BridgeScalar volumeDb;
 
-  /// The layer's Pan (−100 full left … +100 full right, K-694), carried
+  /// The layer's Pan (−100 full left … +100 full right), carried
   /// beside the Volume and for the same reason: the fold-out's Pan row
   /// draws its own keyframe diamonds, and asking per audio row per
   /// revision would be a sync crossing for a fact this walk already holds.
   final BridgeScalar pan;
 
-  /// Whether this layer's node graph has any wire in it at all (K-471).
+  /// Whether this layer's node graph has any wire in it at all.
   ///
   /// The Timeline's fold-out draws a *driven* mark where a wired parameter's
   /// stopwatch would be, and finding out which parameters those are is a
@@ -560,7 +559,7 @@ enum BridgeLayerKind {
   precomp,
   text,
 
-  /// Vector art as the layer's own picture (K-237).
+  /// Vector art as the layer's own picture.
   shape,
   camera,
   sequence,
@@ -568,14 +567,14 @@ enum BridgeLayerKind {
 
   /// A Null layer. Named `NullLayer` rather than `Null` only because the
   /// generated Dart enum would otherwise carry a member called `null`, which
-  /// is a Dart reserved word (K-206); `lumit-core` keeps `LayerKind::Null`.
+  /// is a Dart reserved word; `lumit-core` keeps `LayerKind::Null`.
   nullLayer,
 
-  /// A Light layer (K-360): a source of light other layers see. Draws no
+  /// A Light layer: a source of light other layers see. Draws no
   /// pixels of its own, like a Camera.
   light,
 
-  /// An Audio layer (K-435): a footage source contributing sound only. Not a
+  /// An Audio layer: a footage source contributing sound only. Not a
   /// [`lumit_core::model::LayerKind`] of its own — it is a Footage layer with
   /// `audio_only` set — but the frontend draws it as its own kind (its own
   /// glyph, no thumbnail, no visibility switch), so it is its own kind here.
@@ -620,15 +619,15 @@ enum BridgeLayerSwitch {
   collapse,
   shy,
 
-  /// K-361: whether the comp's Light layers shade this one.
+  /// Whether the comp's Light layers shade this one.
   acceptsLights,
 
-  /// K-497: reference-only — the Viewer draws it, no delivered file carries
+  /// Reference-only — the Viewer draws it, no delivered file carries
   /// it. A locked layer refuses this one, unlike shy: it changes what the
   /// export writes.
   guide,
 
-  /// K-537: the layer sets its own picture aside and grades the composite
+  /// The layer sets its own picture aside and grades the composite
   /// beneath it. Refused ([`BridgeError::NotConvertible`]) on the four kinds
   /// with no picture to set aside — Camera, Light, Null, Audio.
   adjustment,
@@ -644,13 +643,13 @@ class BridgeLayerSwitches {
   final bool locked;
   final bool solo;
 
-  /// 2.5D: positions in z and honours the active camera (K-023).
+  /// 2.5D: positions in z and honours the active camera.
   final bool threeD;
 
   /// The fx switch: bypass the whole effect stack (docs/08 §1.5).
   final bool fx;
 
-  /// Per-layer motion blur (K-120); only blurs when the comp's master
+  /// Per-layer motion blur; only blurs when the comp's master
   /// shutter is also on.
   final bool motionBlur;
 
@@ -661,17 +660,17 @@ class BridgeLayerSwitches {
   /// shy filter is on. Never changes what renders.
   final bool shy;
 
-  /// Guide (K-497): drawn in the Viewer and absent from every delivered
+  /// Guide: drawn in the Viewer and absent from every delivered
   /// file, at every depth — a reference the file does not carry. The one
   /// switch here that changes what an export writes without changing what
   /// the Viewer shows.
   final bool guide;
 
-  /// Accepts lights (K-361): whether the comp's Light layers shade this one.
+  /// Accepts lights: whether the comp's Light layers shade this one.
   /// Defaults on, and does nothing at all in a comp with no lights.
   final bool acceptsLights;
 
-  /// The adjustment switch (K-537): the layer's own picture is set aside and
+  /// The adjustment switch: the layer's own picture is set aside and
   /// its effect stack runs on the composite beneath it.
   ///
   /// True for a layer born an adjustment as well as one switched into being
@@ -743,9 +742,9 @@ class BridgeMask {
   final bool closed;
   final bool inverted;
 
-  /// 0..100, and animatable exactly as a transform property is (K-340) — so
+  /// 0..100, and animatable exactly as a transform property is — so
   /// the Timeline row carries the same stopwatch and the same ◄ ◆ ► as every
-  /// other property. Times are the layer's own, as everywhere else (K-213).
+  /// other property. Times are the layer's own, as everywhere else.
   final BridgeScalar opacity;
 
   /// How this mask combines with the ones above it.
@@ -754,7 +753,7 @@ class BridgeMask {
   /// Width of the soft edge in layer pixels; 0 is the hard antialiased edge.
   final BridgeScalar feather;
 
-  /// A width of its own for each **vertex**, in layer pixels (K-545), each
+  /// A width of its own for each **vertex**, in layer pixels, each
   /// animatable exactly as [`Self::feather`] is. Empty — the ordinary mask —
   /// means one width all the way round, and is what the Timeline shows no
   /// per-point rows for.
@@ -769,14 +768,14 @@ class BridgeMask {
 
   /// This mask's **shape** keys — empty when the path does not animate.
   /// Composition time, carried out by the layer's start offset exactly as a
-  /// scalar's keyframe times cross (K-213).
+  /// scalar's keyframe times cross.
   ///
   /// The shapes themselves do not cross: a key holds a whole path, which the
   /// frontend edits through the drawing tools rather than by sending a list
-  /// of them (K-339). What crosses is where the keys are and how they ease —
+  /// of them. What crosses is where the keys are and how they ease —
   /// which is everything the lane and the graph need.
   ///
-  /// **`value` is the interpolation parameter, counted up** (K-344): key *i*
+  /// **`value` is the interpolation parameter, counted up**: key *i*
   /// carries *i*, so every span rises by exactly 1 as the shape crosses from
   /// one key to the next. The number itself means nothing to look at, but its
   /// *slope* is the rate the shape is changing at — which is the one curve a
@@ -839,10 +838,10 @@ enum BridgeMaskMode {
   subtract,
   intersect,
 
-  /// The greater of this mask and the stack below it (K-545).
+  /// The greater of this mask and the stack below it.
   lighten,
 
-  /// The lesser of the two (K-545).
+  /// The lesser of the two.
   darken,
   difference,
   ;
@@ -878,7 +877,7 @@ class BridgeMatte {
           inverted == other.inverted;
 }
 
-/// What a paint stroke does to the pixels under it (K-227).
+/// What a paint stroke does to the pixels under it.
 enum BridgePaintMode {
   /// Lay the stroke's colour down.
   paint,
@@ -981,7 +980,7 @@ class BridgePuppetPin {
   final BridgePuppetPinKind kind;
 
   /// Where the pin stands, animatable exactly as a mask's opacity is, on the
-  /// composition's clock (K-213) — so the Timeline row carries the same
+  /// composition's clock — so the Timeline row carries the same
   /// stopwatch and the same diamonds, and dragging a pin with the stopwatch
   /// on lands a keyframe.
   final BridgeScalar x;
@@ -1039,7 +1038,7 @@ class BridgePuppetPin {
           extent == other.extent;
 }
 
-/// Which of the four Puppet tools placed a pin (docs/07 §1.7, K-704).
+/// Which of the four Puppet tools placed a pin (docs/07 §1.7).
 enum BridgePuppetPinKind {
   /// Takes hold of a spot and drags it.
   position,
@@ -1108,7 +1107,7 @@ enum BridgeRevealKind {
   ;
 }
 
-/// One piece of vector art on a shape layer (K-237): a path, and how it is
+/// One piece of vector art on a shape layer: a path, and how it is
 /// painted.
 ///
 /// The path is `BridgeVertex`, the same vertices a mask crosses with: one path
@@ -1130,23 +1129,23 @@ class BridgeShapeItem {
   /// 0..100.
   final double opacity;
 
-  /// **Trim paths** (K-551): where along the path's own length the art begins
+  /// **Trim paths**: where along the path's own length the art begins
   /// and ends, as a per cent, and how far the pair is slid along it in
-  /// degrees. Animatable on the layer's own clock (K-213), exactly as a
+  /// degrees. Animatable on the layer's own clock, exactly as a
   /// stroke's write-on is, so the Timeline rows carry the same stopwatch and
   /// the same diamonds.
   final BridgeScalar trimStart;
   final BridgeScalar trimEnd;
   final BridgeScalar trimOffset;
 
-  /// **Dashes** (K-552): the outline's dash and gap lengths in layer pixels,
+  /// **Dashes**: the outline's dash and gap lengths in layer pixels,
   /// alternating — dash, gap, dash, gap. Empty is a solid outline.
   /// `dash_offset` is how far along the path the pattern starts, in the same
   /// pixels.
   final List<BridgeScalar> dashes;
   final BridgeScalar dashOffset;
 
-  /// **A gradient fill** (K-555): 0 is the flat [`fill`](Self::fill), 1 ramps
+  /// **A gradient fill**: 0 is the flat [`fill`](Self::fill), 1 ramps
   /// from it linearly to `gradient_colour` and 2 ramps radially, the end
   /// point sitting on the outer edge. The two points are in layer pixels —
   /// the art's own coordinates — and animate; what a ramp *is* does not.
@@ -1157,29 +1156,28 @@ class BridgeShapeItem {
   final BridgeScalar gradientEndX;
   final BridgeScalar gradientEndY;
 
-  /// **A boolean combine** (K-605): how this item joins the item **before**
+  /// **A boolean combine**: how this item joins the item **before**
   /// it in the list — 0 draws it on its own, 1 unions, 2 subtracts this one
   /// from that one, 3 keeps only what both cover, 4 keeps only what one of
   /// them covers. The run that makes is drawn once, with the paint and the
   /// modifiers of the item that starts it.
   final int combine;
 
-  /// This item's **shape** keys — empty when its path does not animate
-  /// (K-606). Composition time, carried out by the layer's start offset
-  /// exactly as a mask's path keys cross (K-224).
+  /// This item's **shape** keys — empty when its path does not animate.
+  /// Composition time, carried out by the layer's start offset
+  /// exactly as a mask's path keys cross.
   ///
   /// The shapes themselves do not cross: a key holds a whole path, which the
   /// frontend edits through the drawing tools rather than by sending a list
   /// of them. `value` counts the keys up, so the graph draws the *rate* the
-  /// shape is changing at, which is the one curve a path can honestly draw
-  /// (K-344).
+  /// shape is changing at, which is the one curve a path can honestly draw.
   final List<BridgeKeyframe> pathKeys;
 
-  /// **Offset paths** (K-554): how far the outline is pushed out of the path,
+  /// **Offset paths**: how far the outline is pushed out of the path,
   /// in layer pixels; negative pulls it in and zero is the path itself.
   final BridgeScalar offsetAmount;
 
-  /// **The repeater** (K-553): how many copies of the item are drawn, which
+  /// **The repeater**: how many copies of the item are drawn, which
   /// copy the original is (`repeat_offset`), and the transform each copy is
   /// one more step of — moved by `repeat_position_*` layer pixels, turned by
   /// `repeat_rotation` degrees and scaled by `repeat_scale` per cent, all
@@ -1339,7 +1337,7 @@ class BridgeSpan {
           startOffset == other.startOffset;
 }
 
-/// One window of a source as a spectrogram (K-699): `columns` columns of
+/// One window of a source as a spectrogram: `columns` columns of
 /// `bins` bytes, column-major, low band first — brightness is level in dB,
 /// 0 the −60 dB floor and 255 full scale. The window-fetch twin of
 /// [`BridgeAudioPeaks`], for the Timeline's spectral lane mode.
@@ -1389,7 +1387,7 @@ class BridgeSpectrogram {
           values == other.values;
 }
 
-/// One paint stroke on a layer (K-227): the path the pointer took, and how it
+/// One paint stroke on a layer: the path the pointer took, and how it
 /// was painted.
 ///
 /// A **polyline**, not a bezier — a stroke is a record of a gesture rather than
@@ -1413,15 +1411,15 @@ class BridgeStroke {
   final double opacity;
 
   /// Where along the path the mark begins and ends, as a per cent of the
-  /// stroke's own length (K-549). Animatable exactly as a mask's opacity is,
-  /// on the layer's own clock (K-213), so the Timeline row carries the same
+  /// stroke's own length. Animatable exactly as a mask's opacity is,
+  /// on the layer's own clock, so the Timeline row carries the same
   /// stopwatch and the same diamonds. Hold Start at 0 and key End 0 → 100
   /// and the stroke draws itself on.
   final BridgeScalar start;
   final BridgeScalar end;
   final BridgePaintMode mode;
 
-  /// How the mark combines with what is already on the layer (K-550), as an
+  /// How the mark combines with what is already on the layer, as an
   /// index into [`list_blend_modes`] — the same list and the same convention
   /// a layer's own blend crosses on. Ignored by an eraser, which takes alpha
   /// away and never touches colour.
@@ -1495,7 +1493,7 @@ class BridgeStrokePoint {
   final double x;
   final double y;
 
-  /// How hard the stylus was pressed here, 0..1 (K-583). **1.0 is "no stylus
+  /// How hard the stylus was pressed here, 0..1. **1.0 is "no stylus
   /// said otherwise"** — a mouse, a finger, a tablet with the brush's
   /// pressure toggle off — and a stroke whose points are all 1.0 is stored
   /// with no pressures at all, so it is the stroke it would have been before
@@ -1535,7 +1533,7 @@ class BridgeTransform {
   final BridgeScalar positionX;
   final BridgeScalar positionY;
 
-  /// The 2.5D depth (K-023). Present on every layer; only meaningful, and only
+  /// The 2.5D depth. Present on every layer; only meaningful, and only
   /// drawn, when the layer's 3D switch is on.
   final BridgeScalar positionZ;
 
@@ -1597,8 +1595,8 @@ class BridgeTransform {
           opacity == other.opacity;
 }
 
-/// Which two-axis transform property an axis-mode edit names (K-571,
-/// [`lumit_core::model::TransformPair`]).
+/// Which two-axis transform property an axis-mode edit names
+/// ([`lumit_core::model::TransformPair`]).
 enum BridgeTransformPair {
   anchor,
   position,
@@ -1622,7 +1620,7 @@ enum BridgeTransformProp {
   ;
 }
 
-/// One vertex of a mask's path (K-222): where it sits in **layer space**, and
+/// One vertex of a mask's path: where it sits in **layer space**, and
 /// the two tangent handles that shape the curve either side of it.
 ///
 /// Tangents are offsets *from* the vertex, in the same layer pixels — the shape
@@ -1781,8 +1779,8 @@ class LayerReference {
           that: this, density: density, expansion: expansion);
 
   /// The layer's source audio summarised across `[start_seconds,
-  /// end_seconds)` of the **layer's own clock**, in `buckets` buckets
-  /// (K-280, superseding the fixed 2 048 of K-172).
+  /// end_seconds)` of the **layer's own clock**, in `buckets` buckets rather
+  /// than a fixed 2 048.
   ///
   /// Layer time, not comp time, is what makes a trim or a drag free: the
   /// window is fixed to where the layer starts its source, so the Timeline's
@@ -1792,7 +1790,7 @@ class LayerReference {
   /// seconds, and gets a bucket per pixel column of them, however far in the
   /// Timeline is zoomed.
   ///
-  /// **A retimed layer's wave stretches with its map** (K-436). Layer time
+  /// **A retimed layer's wave stretches with its map**. Layer time
   /// and source time are the same line only while the layer plays at speed
   /// 1; once it has a Retime ([`lumit_core::model::Layer::source_time_at`])
   /// they are not, and buckets taken evenly in source time would put the
@@ -1823,15 +1821,14 @@ class LayerReference {
           buckets: buckets,
           multiwave: multiwave);
 
-  /// One window of this layer's audio as a **spectrogram** (K-699): what the
-  /// spectral lane mode draws, in the same window-fetch shape the peaks take
-  /// (K-280) — the visible stretch of the source, one column per pixel, so
-  /// the drawn detail follows the zoom.
+  /// One window of this layer's audio as a **spectrogram**: what the
+  /// spectral lane mode draws, in the same window-fetch shape the peaks take —
+  /// the visible stretch of the source, one column per pixel, so the drawn
+  /// detail follows the zoom.
   ///
   /// Columns are `lumit_audio::spectra::BINS` bytes each, column-major, low
   /// band first: byte 0 of a column is the bottom of the picture. A retimed
-  /// layer's columns are taken through its map, exactly as its peaks are
-  /// (K-436).
+  /// layer's columns are taken through its map, exactly as its peaks are.
   ///
   /// Deliberately not `#[frb(sync)]`: the first ask for a file decodes it
   /// and runs the analysis. Every later ask, at every zoom, is served from
@@ -1847,7 +1844,7 @@ class LayerReference {
           endSeconds: endSeconds,
           columns: columns);
 
-  /// Stop the shape animating, keeping the shape it shows at `time` (K-340).
+  /// Stop the shape animating, keeping the shape it shows at `time`.
   ///
   /// The stopwatch turning off, and it matches what the stopwatch does
   /// everywhere else: the value that stays is the one the curve reads *at the
@@ -1858,8 +1855,8 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceClearMaskPathKeys(
           that: this, id: id, time: time);
 
-  /// Stop this item's shape animating, keeping the shape it shows at `time`
-  /// (K-606) — the stopwatch turning off, and what it does everywhere else:
+  /// Stop this item's shape animating, keeping the shape it shows at `time` —
+  /// the stopwatch turning off, and what it does everywhere else:
   /// the shape that stays is the one the playhead is over, so the picture
   /// does not jump.
   void clearShapePathKeys(
@@ -1868,7 +1865,7 @@ class LayerReference {
           that: this, id: id, time: time);
 
   /// One Sequence clip's audio, summarised in `buckets` across the clip's own
-  /// placed span — the waveform a clip draws inside itself (K-280).
+  /// placed span — the waveform a clip draws inside itself.
   ///
   /// Bucketed in **clip-local placed time**, not source time, because a clip
   /// is the one thing on the timeline whose source clock is not a straight
@@ -1900,7 +1897,7 @@ class LayerReference {
           buckets: buckets,
           multiwave: multiwave);
 
-  /// A thumbnail of the **first frame this clip shows** (K-248).
+  /// A thumbnail of the **first frame this clip shows**.
   ///
   /// Not the file's first frame: a clip after a cut starts part way in, and
   /// a row of thumbnails that all showed frame zero would say nothing about
@@ -1915,7 +1912,7 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceClipThumbnail(
           that: this, clip: clip, maxEdge: maxEdge);
 
-  /// Turn a Sequence layer back into a plain Footage layer (K-248).
+  /// Turn a Sequence layer back into a plain Footage layer.
   ///
   /// The way out of the clip-editing surface, and it must exist: converting
   /// in is offered to anyone, so a user who tries it has to be able to
@@ -1944,10 +1941,10 @@ class LayerReference {
         that: this,
       );
 
-  /// This layer's effects as a `.lumfx` document, for [`Self::paste_effects`]
-  /// (K-275). `effects` copies those; an empty list copies the whole stack.
+  /// This layer's effects as a `.lumfx` document, for [`Self::paste_effects`].
+  /// `effects` copies those; an empty list copies the whole stack.
   ///
-  /// A list rather than one id (K-300), because an effect selection can hold
+  /// A list rather than one id, because an effect selection can hold
   /// several — and they come out in **stack order**, not in the order they
   /// were picked, so a copied group pastes back in the order it was drawn in.
   /// Ids that name nothing on this layer are ignored; naming none of them at
@@ -1962,7 +1959,7 @@ class LayerReference {
           .crateApiLayerLayerReferenceCopyEffects(that: this, effects: effects);
 
   /// This layer as text, for [`crate::api::composition::CompositionReference::
-  /// paste_layer`] — the clipboard's payload (K-275).
+  /// paste_layer`] — the clipboard's payload.
   ///
   /// The whole layer: its kind and source, its transform with every keyframe,
   /// its masks, paint, effects, switches, markers and retime. It is the
@@ -1979,7 +1976,7 @@ class LayerReference {
       );
 
   /// The shape of this Sequence layer — where its cuts fall and how each
-  /// piece is ramped — as text, for [`Self::paste_sequence_shape`] (K-248).
+  /// piece is ramped — as text, for [`Self::paste_sequence_shape`].
   ///
   /// `clip` reads that clip alone; `None` reads the whole row. What comes
   /// back carries no *source*: applying it keeps the target's own media,
@@ -1989,7 +1986,7 @@ class LayerReference {
   String copySequenceShape({UuidValue? clip}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceCopySequenceShape(that: this, clip: clip);
 
-  /// **Text to points** (K-608): a copy of this Type layer beside it, fitted
+  /// **Text to points**: a copy of this Type layer beside it, fitted
   /// with **Emit from image**, so the words become a points stream in the
   /// shape of themselves.
   ///
@@ -2001,7 +1998,7 @@ class LayerReference {
         that: this,
       );
 
-  /// **Text to shapes** (K-608): a copy of this Type layer beside it, whose
+  /// **Text to shapes**: a copy of this Type layer beside it, whose
   /// picture is the glyph outlines as vector art.
   ///
   /// The original is kept and untouched, which is After Effects' convention
@@ -2023,8 +2020,8 @@ class LayerReference {
   /// Razor: cut the clip under `frame` in two, at the playhead.
   ///
   /// The two halves keep their places — a cut must not shift what comes after
-  /// it, which is the beat-sync covenant (K-071). An **eased speed ramp cuts
-  /// like anything else** (K-573): the map's cubic is split at the cut, so
+  /// it, which is the beat-sync covenant. An **eased speed ramp cuts
+  /// like anything else**: the map's cubic is split at the cut, so
   /// the two halves concatenate to the speed curve that was there before.
   /// What still refuses is a moment on one of the clip's own ends, and a
   /// retime driven by an expression — both calm errors rather than a cut that
@@ -2040,8 +2037,8 @@ class LayerReference {
   /// Take one clip off the row, by id.
   ///
   /// What it leaves is a **gap**, not a closed row: nothing after it moves,
-  /// so every edit point still standing keeps the beat it was cut to
-  /// (K-022). `delete_clip_at` is the same thing aimed with the playhead;
+  /// so every edit point still standing keeps the beat it was cut to.
+  /// `delete_clip_at` is the same thing aimed with the playhead;
   /// this is the one the sequence view's own menu uses, because there the
   /// clip has already been pointed at.
   void deleteClip({required UuidValue clip}) => BridgeLib.instance.api
@@ -2049,7 +2046,7 @@ class LayerReference {
 
   /// Delete the clip under `frame`, leaving a gap.
   ///
-  /// A gap is legal on the Vegas surface (K-071), so the clips after it stay
+  /// A gap is legal on the Vegas surface, so the clips after it stay
   /// where they are rather than rippling back — again so a cut never moves
   /// anything that was already in time with the music.
   void deleteClipAt({required PlatformInt64 frame}) => BridgeLib.instance.api
@@ -2076,7 +2073,7 @@ class LayerReference {
   void deleteStroke({required UuidValue id}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceDeleteStroke(that: this, id: id);
 
-  /// **Detach audio** (K-701): put this layer's sound on a row of its own.
+  /// **Detach audio**: put this layer's sound on a row of its own.
   ///
   /// **In plain terms.** A clip that has both picture and sound arrives as
   /// one row, and everything you do to its sound — a fade, a cut, a level
@@ -2086,8 +2083,8 @@ class LayerReference {
   /// nothing sounds different; the sound simply has its own bar to work on,
   /// in the audio surfaces, while the picture keeps its own.
   ///
-  /// The sibling is an Audio layer ([`lumit_core::model::Layer::audio_only`],
-  /// K-435) over the same source, with the same span, offset, retime, volume
+  /// The sibling is an Audio layer ([`lumit_core::model::Layer::audio_only`])
+  /// over the same source, with the same span, offset, retime, volume
   /// and pan **copied** — not linked. Trimming one afterwards does not trim
   /// the other; that is what makes them separately editable, which is the
   /// point of the command. A Precomp layer detaches the same way, its sibling
@@ -2124,7 +2121,7 @@ class LayerReference {
       .crateApiLayerLayerReferenceEquals(that: this, layer: layer);
 
   /// **Fade the layer's sound up from silence** over `seconds` from its in
-  /// point (docs/09 §6, K-695).
+  /// point (docs/09 §6).
   ///
   /// Ordinary Volume keyframes — a pair, between the −∞ knee and whatever
   /// level the layer already holds — so the fade is visible on the row, can
@@ -2150,7 +2147,7 @@ class LayerReference {
   /// `retime.freeze_at_playhead`): the moment showing at `frame` is held for
   /// one second, everything after it is pushed that far later, and the map is
   /// cropped back to the layer's own out point — so the layer's length never
-  /// changes and the beat-sync covenant holds (K-022). The tail may newly
+  /// changes and the beat-sync covenant holds. The tail may newly
   /// overrun, which is drawn rather than repaired.
   ///
   /// One second is the specified default; the hold is two ordinary keyframes
@@ -2193,13 +2190,13 @@ class LayerReference {
         that: this,
       );
 
-  /// Whether flow is live on this layer — the switch-cluster toggle (K-088).
+  /// Whether flow is live on this layer — the switch-cluster toggle.
   bool getFlowEnabled() =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceGetFlowEnabled(
         that: this,
       );
 
-  /// The rate this clip is *interpreted* at for flow (K-095, K-160) — the
+  /// The rate this clip is *interpreted* at for flow — the
   /// Flow group's Input rate, as a keyframeable scalar.
   ///
   /// `0` reads as **Auto**: adjacent source frames, the clip's own rate. Any
@@ -2232,13 +2229,13 @@ class LayerReference {
         that: this,
       );
 
-  /// This layer's whole driver graph in one crossing (K-471,
-  /// docs/impl/node-graph.md §5) — every box the canvas draws with its
+  /// This layer's whole driver graph in one crossing
+  /// (docs/impl/node-graph.md §5) — every box the canvas draws with its
   /// sockets, plus the wiring the user edits.
   ///
   /// **One call, not one per node.** Fetched when the selection or the
   /// document changes and held in Dart; asking per node per rebuild is
-  /// exactly the traffic the budget test forbids (K-183). The boxes are
+  /// exactly the traffic the budget test forbids. The boxes are
   /// derived from the effect stack each time, so there is nothing stale to
   /// invalidate and nothing here to write back — see
   /// [`crate::api::graph::BridgeLayerGraph`].
@@ -2293,14 +2290,14 @@ class LayerReference {
   /// the comp's ruler.
   ///
   /// The layer's, not the source composition's: a comp dropped into another
-  /// brings a **copy** along, and from then on the two lists are unrelated
-  /// (K-254). Deleting one here never reaches into another composition.
+  /// brings a **copy** along, and from then on the two lists are unrelated.
+  /// Deleting one here never reaches into another composition.
   List<BridgeMarker> getMarkers() =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceGetMarkers(
         that: this,
       );
 
-  /// This layer's masks, bottom of the stack first (K-222).
+  /// This layer's masks, bottom of the stack first.
   ///
   /// Empty on a layer with none, which is most layers — the Timeline asks
   /// every row whether it has masks to list, exactly as it asks about clips.
@@ -2319,41 +2316,41 @@ class LayerReference {
         that: this,
       );
 
-  /// This layer's paint strokes, oldest first (K-227).
+  /// This layer's paint strokes, oldest first.
   List<BridgeStroke> getPaint() =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceGetPaint(
         that: this,
       );
 
-  /// This layer's **Pan** (docs/09 §6, K-694): −100 is full left, 0 centre,
+  /// This layer's **Pan** (docs/09 §6): −100 is full left, 0 centre,
   /// +100 full right — a percentage of the way to one side.
   BridgeScalar getPan() =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceGetPan(
         that: this,
       );
 
-  /// This layer's transform parent, if any (K-103).
+  /// This layer's transform parent, if any.
   UuidValue? getParent() =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceGetParent(
         that: this,
       );
 
   /// This layer's puppet, or `None` on a layer nobody has pinned — which is
-  /// most layers (docs/impl/puppet.md §4, K-704).
+  /// most layers (docs/impl/puppet.md §4).
   BridgePuppet? getPuppet() =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceGetPuppet(
         that: this,
       );
 
   /// This layer's Retime property — layer-local time → source time, in
-  /// seconds (K-197) — or `None` when the layer is not retimed, which is what
+  /// seconds — or `None` when the layer is not retimed, which is what
   /// hides the row.
   BridgeScalar? getRetimeProperty() =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceGetRetimeProperty(
         that: this,
       );
 
-  /// This shape layer's contents, bottom of the stack first (K-237).
+  /// This shape layer's contents, bottom of the stack first.
   ///
   /// Empty on a layer that is not a shape, rather than an error: the Timeline
   /// asks every row what it has to list, exactly as it asks about masks.
@@ -2441,12 +2438,12 @@ class LayerReference {
 
   /// Whether this layer has a picture to sample — the mirror of
   /// [`Self::has_audio`], and what tells a matte or a layer-valued effect
-  /// parameter which layers are worth offering (K-194).
+  /// parameter which layers are worth offering.
   ///
   /// Every synthetic kind draws except the two that carry no pixels at all: a
   /// Camera (it *is* a viewpoint) and a Null (a transform and nothing else).
   /// Footage draws only when its container carries a video stream, so an
-  /// audio-only clip answers false. An Audio layer (K-435) answers false
+  /// audio-only clip answers false. An Audio layer answers false
   /// whatever its file holds — that is what the flag means. Probing costs an
   /// FFmpeg open, so callers ask when a menu opens, never while drawing a row.
   bool hasPicture() =>
@@ -2468,7 +2465,7 @@ class LayerReference {
 
   /// Append a `.lumfx` preset's effects to this layer's stack, as one op.
   ///
-  /// Each arrives with a **fresh** instance id (K-065): applying one preset to
+  /// Each arrives with a **fresh** instance id: applying one preset to
   /// several layers must not give them effects that share an id, since an id
   /// is instance identity and every op that names an effect uses it.
   ///
@@ -2478,7 +2475,7 @@ class LayerReference {
   void loadPreset({required String text}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceLoadPreset(that: this, text: text);
 
-  /// Drag one of the shape's keys along the timeline (K-340) — the lane
+  /// Drag one of the shape's keys along the timeline — the lane
   /// diamond, which moves a path key exactly as it moves a scalar's.
   ///
   /// Refused, with `false`, when the move would land on or step over a
@@ -2492,7 +2489,7 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceMoveMaskPathKey(
           that: this, id: id, from: from, to: to);
 
-  /// Drag one of this item's shape keys along the timeline (K-606) — the lane
+  /// Drag one of this item's shape keys along the timeline — the lane
   /// diamond, which moves a path key exactly as it moves a scalar's.
   ///
   /// Refused, with `false`, when the move would land on or step over a
@@ -2506,7 +2503,7 @@ class LayerReference {
           that: this, id: id, from: from, to: to);
 
   /// The frame to open this layer's nested composition on, entering it from
-  /// `outer_frame` on this comp's ruler (K-624).
+  /// `outer_frame` on this comp's ruler.
   ///
   /// `None` when the layer is not a Precomp layer, or when the comp it names
   /// has gone — the caller then opens wherever it was going to anyway.
@@ -2530,8 +2527,8 @@ class LayerReference {
       BridgeLib.instance.api
           .crateApiLayerLayerReferenceNewDriver(that: this, name: name);
 
-  /// Append copied effects to this layer's stack, **timed to the playhead**
-  /// (K-275): whatever the earliest keyframe among them was, it lands at
+  /// Append copied effects to this layer's stack, **timed to the playhead**:
+  /// whatever the earliest keyframe among them was, it lands at
   /// `at_frame` and the rest keep their spacing.
   ///
   /// The owner's rule, and the one that makes a copied animation useful: an
@@ -2548,7 +2545,7 @@ class LayerReference {
           that: this, text: text, atFrame: atFrame);
 
   /// Cut and ramp this Sequence layer to the shape in `text`, keeping its
-  /// own media (K-248).
+  /// own media.
   ///
   /// The row keeps the source its first clip already plays, and is rebuilt
   /// with the pieces the shape describes. A shape longer than this row
@@ -2566,7 +2563,7 @@ class LayerReference {
   /// Cheap and call-shaped rather than part of the read model on purpose: it
   /// changes with the *frame*, not with the document, so the Viewer holds it
   /// against the playhead and the revision exactly as it holds an animated
-  /// mask's path, and a hover asks nothing (K-184, K-681).
+  /// mask's path, and a hover asks nothing.
   BridgePuppetGhost? puppetGhost() =>
       BridgeLib.instance.api.crateApiLayerLayerReferencePuppetGhost(
         that: this,
@@ -2600,7 +2597,7 @@ class LayerReference {
           that: this, effect: effect, newIndex: newIndex);
 
   /// Which of this layer's property groups the reveal shortcuts should open
-  /// (docs/07 §4.3's `U` / `UU`, K-199).
+  /// (docs/07 §4.3's `U` / `UU`).
   ///
   /// The *question* is the engine's, which is why it is answered here rather
   /// than in the Timeline: "does this group hold anything animated" and "is
@@ -2614,16 +2611,14 @@ class LayerReference {
           .crateApiLayerLayerReferenceRevealGroups(that: this, kind: kind);
 
   /// The first scribble on a layer that carries no Roto brush: add the brush
-  /// **and** file the stroke, in one commit (K-723, superseding K-717's
-  /// refusal).
+  /// **and** file the stroke, in one commit.
   ///
   /// The stroke rides *inside* the new instance, so the whole gesture is one
   /// `SetLayerEffects` — one op, one journal entry, one undo step, exactly
-  /// what a scribble on a layer that already had the brush costs. K-717
-  /// refused this on the grounds that `add_effect` plus a stroke would be two
-  /// ops; landing the stroke in the instance before it is pushed is what
-  /// dissolves that. The stroke sets the base frame, as a first stroke always
-  /// does.
+  /// what a scribble on a layer that already had the brush costs. Landing the
+  /// stroke in the instance before it is pushed is what keeps it to one op,
+  /// where `add_effect` plus a stroke would be two. The stroke sets the base
+  /// frame, as a first stroke always does.
   ///
   /// Answers the new instance's id — what the release-time solve
   /// ([`roto_solve_frame`]) and the overlay's next read are addressed to.
@@ -2635,7 +2630,7 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceRotoFirstStroke(
           that: this, points: points, radius: radius, kind: kind, frame: frame);
 
-  /// The JSON text of a **node group** gathered from `nodes` (K-651) — the
+  /// The JSON text of a **node group** gathered from `nodes` — the
   /// mirror of `save_preset` for the graph canvas.
   ///
   /// The engine hands back the text and Dart chooses where it goes, exactly
@@ -2659,7 +2654,7 @@ class LayerReference {
   String savePreset({required String name}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSavePreset(that: this, name: name);
 
-  /// The adjustment switch (K-537): set this layer's own picture aside and
+  /// The adjustment switch: set this layer's own picture aside and
   /// run its effect stack on the composite beneath it, or give it back.
   ///
   /// **On every layer that shows something in the Viewer** — footage, solid,
@@ -2672,7 +2667,7 @@ class LayerReference {
   /// step to walk back through.
   ///
   /// **Nothing is lost while it is on**, which is the whole reason this is a
-  /// flag and not the kind flip K-484 built: the source, the masks and the
+  /// flag and not a kind flip: the source, the masks and the
   /// transform stay put, so switching back is the layer exactly as it was.
   ///
   /// The one asymmetry is a layer *born* an adjustment
@@ -2684,7 +2679,7 @@ class LayerReference {
   void setAdjustment({required bool on_}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetAdjustment(that: this, on_: on_);
 
-  /// Set how one two-axis property is shown and edited (K-571): combined on
+  /// Set how one two-axis property is shown and edited: combined on
   /// one row, linked (Scale), or separated onto a row per axis.
   ///
   /// **Coming back together merges the axes' keyframes.** A separated pair's
@@ -2714,20 +2709,19 @@ class LayerReference {
   /// Replace one clip's whole retime map, keyed in clip-local time.
   ///
   /// The envelope in the sequence view writes through here: it speaks the
-  /// same keyframes the graph editor's Vegas lens does (K-249 made them one
+  /// same keyframes the graph editor's Vegas lens does (they are one
   /// representation), so one editor serves both. The clip keeps its place;
   /// what it plays follows from the map.
   void setClipRetime({required UuidValue clip, required BridgeScalar value}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetClipRetime(
           that: this, clip: clip, value: value);
 
-  /// Set one clip's playback speed, as a percentage (K-247, K-248).
+  /// Set one clip's playback speed, as a percentage.
   ///
   /// The clip keeps its place on the row — its start and its length are
-  /// untouched, so an edit point already on a beat stays on it (K-022) —
+  /// untouched, so an edit point already on a beat stays on it —
   /// and the stretch of source it plays follows from the speed. Its first
-  /// frame is pinned, so re-speeding never moves where a clip begins
-  /// (K-070).
+  /// frame is pinned, so re-speeding never moves where a clip begins.
   ///
   /// `end_percent` makes it a ramp, running straight from one speed to the
   /// other; leave it equal to `percent` for a constant speed. Negative runs
@@ -2771,7 +2765,7 @@ class LayerReference {
       BridgeLib.instance.api
           .crateApiLayerLayerReferenceSetEffects(that: this, effects: effects);
 
-  /// Turn flow on or off (K-088). Off returns the layer to Nearest — the
+  /// Turn flow on or off. Off returns the layer to Nearest — the
   /// policy it had before flow is not recorded, and Nearest is the crisp
   /// default docs/04 §10 names.
   ///
@@ -2853,7 +2847,7 @@ class LayerReference {
       BridgeLib.instance.api
           .crateApiLayerLayerReferenceSetMask(that: this, mask: mask, at: at);
 
-  /// Re-time and re-ease this mask's shape keys in one write (K-344) — what
+  /// Re-time and re-ease this mask's shape keys in one write — what
   /// the graph editor commits when a handle is dragged, and what a lane drag
   /// of several keys at once needs.
   ///
@@ -2916,9 +2910,9 @@ class LayerReference {
   /// retime": the row's stopwatch turned off, or the last key deleted. Written
   /// as it arrived, a constant map is a layer frozen on a single frame for its
   /// whole length, with the row gone quiet and nothing on screen to say why —
-  /// which is not a state K-197 has ("no freeze") and not what either gesture
+  /// which is not a state Retime has ("no freeze") and not what either gesture
   /// means. So it takes the Ctrl+Alt+T-off route instead: the property goes,
-  /// and the layer is re-hung on its source at source rate (K-212), in one
+  /// and the layer is re-hung on its source at source rate, in one
   /// undo step.
   void setRetimeProperty({required BridgeScalar value}) => BridgeLib
       .instance.api
@@ -2933,7 +2927,7 @@ class LayerReference {
   /// A path of fewer than two vertices is refused, as a mask's is: it is not
   /// a shape, and it would be a Timeline row with nothing behind it.
   ///
-  /// **The art that was not edited does not move** (K-308). A shape layer's
+  /// **The art that was not edited does not move**. A shape layer's
   /// picture is its art's bounding box, and the layer's origin is that box's
   /// top-left corner — so growing the box leftwards, which is what dragging
   /// the left-most point left does, would slide every *other* point right by
@@ -2941,8 +2935,8 @@ class LayerReference {
   /// op, so one drag is still one undo step.
   ///
   /// **`at` is where the playhead is**, and it matters only for an item whose
-  /// **shape** is keyed (K-606): the dragged vertices land on the key sitting
-  /// there, or plant one holding them, exactly as they do on a mask (K-340).
+  /// **shape** is keyed: the dragged vertices land on the key sitting
+  /// there, or plant one holding them, exactly as they do on a mask.
   /// Pass `None` for an edit that is not a shape edit — an opacity drag, a
   /// rename, a colour — and the keys are carried through untouched.
   void setShapeContents(
@@ -2950,7 +2944,7 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetShapeContents(
           that: this, contents: contents, at: at);
 
-  /// Re-time and re-ease this item's shape keys in one write (K-606) — what
+  /// Re-time and re-ease this item's shape keys in one write — what
   /// the graph editor commits when a handle is dragged, and what a lane drag
   /// of several keys at once needs.
   ///
@@ -2989,20 +2983,19 @@ class LayerReference {
   /// every other edit here takes a whole value: retyping a word and changing
   /// its size is one action to the user and should be one undo step.
   ///
-  /// **Adding the first animator moves the anchor with it** (K-609). An
+  /// **Adding the first animator moves the anchor with it**. An
   /// animated line is drawn into a box one text size larger a side, with the
   /// words that far in, so a letter has somewhere to drop in from — and the
   /// anchor is a fixed coordinate in the layer's own pixels, so without this
   /// the words would jump by that margin the moment the first animator
   /// arrived. Removing the last one puts it back. One `Op::Batch`, so it is
-  /// one undo step: the same rule K-230 set for typing, where committing the
-  /// document and the pivot separately made `Ctrl+Z` undo a pivot nobody had
-  /// moved.
+  /// one undo step: the same rule as typing, where committing the document
+  /// and the pivot separately made `Ctrl+Z` undo a pivot nobody had moved.
   void setText({required BridgeTextDocument document}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetText(that: this, document: document);
 
   /// Replace a text layer's document **and its anchor and position
-  /// together**, as one op (K-230).
+  /// together**, as one op.
   ///
   /// For the end of a typing session, which is one action to the user and has
   /// to be one undo step. It is two edits underneath — what the line says, and
@@ -3070,8 +3063,8 @@ class LayerReference {
   /// After Effects' split, not a clip cut: the layer keeps everything it has —
   /// its source, effects, masks, parent, label and keyframes — and the copy
   /// takes the tail. Both halves keep the **same `start_offset`**, which is
-  /// what makes the cut invisible: layer time is measured from that offset
-  /// (K-213), so each half shows exactly the frames it showed before and every
+  /// what makes the cut invisible: layer time is measured from that offset,
+  /// so each half shows exactly the frames it showed before and every
   /// keyframe stays where it was on the comp's clock.
   ///
   /// One `Batch`, so it is one undo step — docs/07 §4.7 requires that of every
@@ -3088,7 +3081,7 @@ class LayerReference {
   /// rate it plays at now, and give it the length that implies — 50% is half
   /// speed and twice as long.
   ///
-  /// **Stretch is sugar over Retime** (K-584). It is not a second rate
+  /// **Stretch is sugar over Retime**. It is not a second rate
   /// multiplier hiding behind the map: the map itself is rescaled, so the
   /// graph editor goes on showing the true curve and nothing about playback
   /// consults a stretch factor. That is the same lowering the After Effects
@@ -3108,15 +3101,15 @@ class LayerReference {
   /// an ordinary layer means what it looks like it means.
   ///
   /// One undo step — the span and the map move together or not at all.
-  /// Refused on a Sequence layer (K-075: its clips carry the maps, and
+  /// Refused on a Sequence layer (its clips carry the maps, and
   /// `set_clip_speed` is their road) and on a speed that is not a positive,
   /// finite number.
   void stretch({required double speedPercent}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceStretch(
           that: this, speedPercent: speedPercent);
 
-  /// Key this mask's **shape** at `time`, or take the key already there away
-  /// (K-339, K-340) — the ◆ on the mask's Path row.
+  /// Key this mask's **shape** at `time`, or take the key already there away —
+  /// the ◆ on the mask's Path row.
   ///
   /// A planted key holds the shape the mask is *already showing* at that
   /// moment, so pressing ◆ never moves anything: on an unanimated mask that
@@ -3139,7 +3132,7 @@ class LayerReference {
   /// rather than flattening it: "not retimed" and "retimed to exactly 1×" are
   /// different states in the file, and only the first skips the map.
   ///
-  /// Off also re-hangs the layer on its source (K-212). A retimed layer can be
+  /// Off also re-hangs the layer on its source. A retimed layer can be
   /// any length, so when the map goes away the layer has to be given one
   /// again: it keeps its in point and the frame showing there, then plays at
   /// source rate until the source runs out or its own out point arrives,
@@ -3149,10 +3142,9 @@ class LayerReference {
         that: this,
       );
 
-  /// Key this item's **shape** at `time`, or take the key already there away
-  /// (K-606) — the diamond on a shape item's Path row, and the mask's own
-  /// gesture (K-339, K-340) applied to the other thing in the document that
-  /// holds a path.
+  /// Key this item's **shape** at `time`, or take the key already there away —
+  /// the diamond on a shape item's Path row, and the mask's own gesture
+  /// applied to the other thing in the document that holds a path.
   ///
   /// A planted key holds the shape the item is *already showing* at that
   /// moment, so pressing it never moves anything. `time` is composition time;
@@ -3169,7 +3161,7 @@ class LayerReference {
   /// carries it on at the speed it was already going (§7.3), which is what
   /// lets a clip be lengthened again after a cut. Running past the media it
   /// has is legal — that is overrun, and it renders as a held frame — so it
-  /// is not refused. Nothing else on the row moves: no ripple, ever (K-022).
+  /// is not refused. Nothing else on the row moves: no ripple, ever.
   void trimClip(
           {required UuidValue clip,
           required PlatformInt64 startFrame,

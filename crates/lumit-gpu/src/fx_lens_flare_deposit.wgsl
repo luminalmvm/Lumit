@@ -1,9 +1,9 @@
-// The lens flare's splat deposit and resolve (K-375).
+// The lens flare's splat deposit and resolve.
 //
 // # Why this is a compute pass and not the blender
 //
 // Every ray's flux is deposited over a small footprint, and a bright pixel
-// takes contributions from thousands of them. Until K-375 that accumulation
+// takes contributions from thousands of them. Until this pass, that summing
 // was done by the raster blender, additively, straight into the flare buffer —
 // which is `WORKING_FORMAT`, `Rgba16Float`. Adding a small increment to a large
 // fp16 running sum loses anything below half an ULP of the sum, and that is a
@@ -22,8 +22,9 @@
 // WGSL has no float atomics. The obvious substitute is a compare-and-swap loop
 // over the f32's bit pattern, and it is exact per add — but the *order* of the
 // adds is whatever the threads race to, and float addition is not associative,
-// so the same document renders two different pictures. K-353 exists precisely
-// to stop that, and CI caught it: "an area source must be bit-stable too".
+// so the same document renders two different pictures. The bit-stability
+// rule exists precisely to stop that, and CI caught it: "an area source must
+// be bit-stable too".
 //
 // Integer addition IS associative and commutative, so `atomicAdd` on a u32
 // gives a sum that does not depend on the order at all. The accumulator is
@@ -65,12 +66,12 @@ struct Splat {
 
 struct Dims {
     // The flare buffer's width and height in pixels, how many splats this
-    // dispatch covers, and how many pyramid levels the accumulator holds
-    // (K-380). No level table: FXC cannot dynamically index a uniform
-    // array without unrolling every loop that touches it (it refused), and
-    // none is needed — level l is `ceil(raster / 2^l)` on both axes, which
-    // `level_dim` computes below, exactly as the Rust twin sizes the
-    // buffer (iterated ceil-halving and the closed form agree).
+    // dispatch covers, and how many pyramid levels the accumulator holds. No
+    // level table: FXC cannot dynamically index a uniform array without
+    // unrolling every loop that touches it (it refused), and none is needed —
+    // level l is `ceil(raster / 2^l)` on both axes, which `level_dim` computes
+    // below, exactly as the Rust twin sizes the buffer (iterated ceil-halving
+    // and the closed form agree).
     head: vec4<u32>,
 };
 
@@ -101,13 +102,13 @@ fn level_offset(level: u32) -> u32 {
 //
 // **Sized from what the buffer actually holds, not from a guess.** Measured on
 // the bundled default, the flare buffer peaks at 0.042 and its median lit pixel
-// is 0.0028 — the auto-exposure normalises it there (K-258's
-// `TARGET_PROBE_MEAN`). K-375 first chose 2^18, whose ceiling of 16384 was four
-// hundred thousand times the peak: range spent on headroom no frame will ever
-// use, paid for in resolution exactly where the picture is dark and banding
-// shows. 2^24 keeps a ceiling of 256 — still six thousand times the measured
-// peak, and a thousand times it at four-fold intensity — while the quantum
-// falls to 6e-8, which is a fifty-thousandth of the median lit pixel.
+// is 0.0028 — the auto-exposure normalises it there (`TARGET_PROBE_MEAN`).
+// The first choice was 2^18, whose ceiling of 16384 was four hundred thousand
+// times the peak: range spent on headroom no frame will ever use, paid for in
+// resolution exactly where the picture is dark and banding shows. 2^24 keeps
+// a ceiling of 256 — still six thousand times the measured peak, and a
+// thousand times it at four-fold intensity — while the quantum falls to 6e-8,
+// which is a fifty-thousandth of the median lit pixel.
 //
 // **Above the ceiling the sum wraps**, not saturates: `atomicAdd` has no
 // saturating form, and detecting the overflow would need a compare-and-swap,
@@ -121,7 +122,7 @@ const ACCUM_MAX: f32 = 4294967040.0;
 
 // The quadratic B-spline in units of one grid step — lumit_core's `bspline_q`.
 // A partition of unity like the tent, but C1: no crease where one cell meets
-// the next, which is the artefact K-373's tent still left on screen (K-376).
+// the next, which is the artefact the earlier tent still left on screen.
 fn bspline_q(t: f32) -> f32 {
     let a = abs(t);
     if (a <= 0.5) {
@@ -143,7 +144,7 @@ fn add_fixed(idx: u32, v: f32) {
     atomicAdd(&accum[idx], u32(fixed));
 }
 
-// Widest kernel span, px, a splat deposits at full resolution (K-380) —
+// Widest kernel span, px, a splat deposits at full resolution —
 // past this it moves to a coarser pyramid level. The twin of lumit_core's
 // DEPOSIT_SPAN_PX, pinned by test.
 const DEPOSIT_SPAN_PX: f32 = 48.0;
@@ -168,10 +169,10 @@ fn deposit(@builtin(global_invocation_id) gid: vec3<u32>) {
     let peak = vec3<f32>(s.r, s.g, s.b);
 
     // The quadratic B-spline reaches one and a half grid steps — three
-    // half-axes — each way (K-373 widened it to one step, K-376 to this).
+    // half-axes — each way.
     var ext = 3.0 * (abs(a1) + abs(a2));
 
-    // The pyramid level this splat can afford (K-380): halve the span until
+    // The pyramid level this splat can afford: halve the span until
     // it fits. Exact halving, so the CPU twin picks the same level for the
     // same splat. Everything then scales into the level's pixels; the
     // kernel below is unchanged by the scale — (u, v) solve the same system
@@ -233,8 +234,8 @@ fn level_tap(off: u32, lw: u32, x: u32, y: u32) -> vec3<f32> {
 }
 
 // Write the finished sum into the flare texture: every level bilinearly
-// upsampled and summed (K-380 — level 0's tap is the identity, so a frame
-// whose splats all fit level 0 reads exactly as it did before the pyramid),
+// upsampled and summed (level 0's tap is the identity, so a frame whose
+// splats all fit level 0 reads exactly as it did before the pyramid),
 // back to floating point, the one place the value meets fp16, and the alpha
 // the combine reads is the luma of what landed.
 @compute @workgroup_size(8, 8)

@@ -1,4 +1,4 @@
-// The tone-curve editor (K-412, docs/08 §3.30) — the control a `Curve`
+// The tone-curve editor (docs/08 §3.30) — the control a `Curve`
 // parameter asks for.
 //
 // **In plain terms.** A curve parameter is a handful of points in a square. The
@@ -9,7 +9,7 @@
 //
 // **The spline drawn here is for display only, and that is deliberate.** The
 // engine fits the same clamped cubic once per resolve and bakes it into a
-// 257-entry table, and *that* table is the picture (K-412). Re-implementing the
+// 257-entry table, and *that* table is the picture. Re-implementing the
 // fit in Dart is a divergence with its eyes open: what the user sees while
 // dragging is a drawing of the curve, never the thing that grades the frame, so
 // a last-bit disagreement between the two costs nothing and asking the engine
@@ -435,7 +435,7 @@ const double _channelPhrase = 84;
 const double _channelGap = 4;
 
 /// Several curves behind channel buttons — Curves' five, drawn as one editor
-/// rather than five stacked widgets (K-412, docs/08 §3.30).
+/// rather than five stacked widgets (docs/08 §3.30).
 ///
 /// [labels] names the channels; [curves] is one point list each, same order.
 class CurveChannelEditor extends StatefulWidget {

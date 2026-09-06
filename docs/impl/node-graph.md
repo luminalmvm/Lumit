@@ -1,15 +1,14 @@
 # The node graph — implementation note
 
-**Decision:** K-471 (the stack stays the spine; a layer gains an additive driver graph),
-K-472 (port types, wire colours, the points stream), K-473 (the selected node border).
-**Related:** K-445 (the graph is a second view that can also wire), K-446 (Particulate
-emits a points stream), K-448/K-486/K-528 (the picture at a node — its own panel, then a
-bounded thumbnail, now the Viewer's own chip), K-458 (the drawing is
-authoritative), K-381 (the effect registry), K-395 (the uniform matte row), K-142 (matte
-sources), K-305 (expressions). This note is the *how* for the whole of redesign phase 3:
-model, ops, bridge surface, migration, the points-stream type, and the ordered work
-packages. The approved **NodeGraph** and **Nodes-workspace** drawings bind the two new
-surfaces; where this note and a drawing disagree, the drawing wins (K-458).
+**Decision:** the stack stays the spine and a layer gains an additive driver graph; port
+types, wire colours and the points stream; the selected node border. **Related:** the
+graph is a second view that can also wire; Particulate emits a points stream; the picture
+at a node (its own panel, then a bounded thumbnail, now the Viewer's own chip); the
+drawing is authoritative; the effect registry; the uniform matte row; matte sources;
+expressions. This note is the *how* for the whole of redesign phase 3: model, ops,
+bridge surface, migration, the points-stream type, and the ordered work packages. The
+approved **NodeGraph** and **Nodes-workspace** drawings bind the two new surfaces; where
+this note and a drawing disagree, the drawing wins.
 
 ## In plain terms
 
@@ -43,20 +42,20 @@ existing whole-stack `SetLayerEffects` commit:
 - dropping a node onto a wire = insert at that index (auto-wire is this, automated);
 - deleting a node with Heal on = remove at that index — the list heals by construction;
 - rewiring the chain = reorder;
-- **disconnecting a box = bypassing it** (K-738) — the `enabled` flag its own tick sets,
+- **disconnecting a box = bypassing it** — the `enabled` flag its own tick sets,
   so the effect keeps its slot and the picture goes past it. The Layer out is the
   exception: it has no effect to bypass, so unplugging it sets `LayerGraph::out_unwired`
   and the layer draws nothing at all.
 
-**Built 2026-08-30 (K-674).** A chain input's wire is picked up by its far end exactly as
-a stored wire is: dropped on another chain input it re-routes (the fed box moves to sit
+**Built 2026-08-30.** A chain input's wire is picked up by its far end exactly as a
+stored wire is: dropped on another chain input it re-routes (the fed box moves to sit
 right after the wire's source — one `reorder` op; dropped on the Layer out, the source
-moves to the end), and dropped on empty canvas the box it fed **is bypassed** (K-738,
-superseding this paragraph's first answer): the effect keeps its slot and stops drawing,
+moves to the end), and dropped on empty canvas the box it fed **is bypassed**
+(superseding this paragraph's first answer): the effect keeps its slot and stops drawing,
 which is the state its own tick in Effect controls sets. Each answer is one op and one
 undo step, and a press that never travelled does nothing.
 
-**Built 2026-09-01 (K-738).** The output end has a gesture too — an image output draws a
+**Built 2026-09-01.** The output end has a gesture too — an image output draws a
 wire, and dropping it on a later box's input reorders exactly as the input grab does —
 and a wire dropped on a box switches that box back on. A bypassed effect reports its
 image sockets **unwired** across the bridge, so the panel draws them hollow and the chain
@@ -77,7 +76,7 @@ compositing merge node would be a new decision, deliberately not taken here.
 ```rust
 struct Layer {
     // ...
-    graph: LayerGraph,          // K-471; empty by default, absent from the file when empty
+    graph: LayerGraph,          // empty by default, absent from the file when empty
 }
 
 /// The additive wiring a layer carries beside its effect stack.
@@ -86,10 +85,10 @@ struct LayerGraph {
     edges: Vec<Edge>,                  // §1.4
     layout: Vec<(NodeRef, [f64; 2])>,  // canvas positions; missing entries auto-place
     exposed: Vec<NodeRef>,             // the boxes twirled open (WP2; §1.4)
-    groups: Vec<NodeGroup>,            // named regions of the canvas (K-651)
+    groups: Vec<NodeGroup>,            // named regions of the canvas
 }
 
-/// A named set of boxes drawn on one tinted wash (K-651). No geometry: the
+/// A named set of boxes drawn on one tinted wash. No geometry: the
 /// rectangle is worked out from where the members are sitting, so it follows a
 /// dragged box, and `colour` is an index into the frontend's label palette.
 struct NodeGroup {
@@ -113,13 +112,13 @@ struct Edge {
 ```
 
 Positions are document data (they persist and travel), edited through the same commit as
-everything else in the graph; a drag is staged and commits once, the K-344 pattern.
+everything else in the graph; a drag is staged and commits once, the usual pattern.
 
 ### 1.3 Drivers reuse the effect registry
 
 A driver is an `EffectInstance` whose `EffectDef` declares a **data signature** instead of
 an image kernel — no WGSL, no CPU pixel path, a scalar/colour/analysis function evaluated
-at resolve time. The K-381 registry machinery carries them for free: one file each under
+at resolve time. The registry machinery carries them for free: one file each under
 `lumit-core/src/fx/drivers/`, schema-declared parameters, catalogue generation,
 `list_parameters`, the Effect-controls row rendering. The registry gains one declaration:
 
@@ -148,7 +147,7 @@ The v1 driver set is the six the drawings show, in a **Drivers** catalogue categ
 | **Remap** | Value, in/out ranges (number) | Value (number) | Linear range map with clamp choice. |
 | **Smooth** | Value (number), Time (number) | Value (number) | Temporal smoothing of its input — a temporal dependency, declared as such (§2.3). |
 
-The points-stream programme adds a seventh (K-492, K-494, points-stream.md §2.2), the
+The points-stream programme adds a seventh (points-stream.md §2.2), the
 first with a **data** input rather than only numbers:
 
 | Driver | Inputs | Outputs | Notes |
@@ -163,20 +162,20 @@ producer) is refused at commit by the cycle check, and it is bounded anyway by t
 evaluation budget and depth every other wire spends. One stream is evaluated per producer
 per frame's walk, however many wires read it.
 
-The programme adds an **eighth** (K-604, points-stream.md §1.2, §2.3), and it is the first
+The programme adds an **eighth** (points-stream.md §1.2, §2.3), and it is the first
 driver whose *output* is a stream rather than a number:
 
 | Driver | Inputs | Outputs | Notes |
 |---|---|---|---|
 | **Layer points** | Points layer (layer reference) | Points (stream) | Another layer's points, brought into this layer's graph. The family's cross-layer tap. It has no wire inputs at all: what it reads is *named*, because edges never cross layers. The stream is the first enabled effect on the named layer that makes points, evaluated with **that layer's own graph applied** — so what a tap reads is what that layer draws. `eval_driver` pushes nothing (a stream is not a `Value`); the walk fetches it through `Eval::points_input` instead, and the draw builder through `fx::driver_stream`. |
 
-And a **ninth and tenth** (K-656), the two halves of one idea — the join between the number
+And a **ninth and tenth**, the two halves of one idea — the join between the number
 wires and the colour ones, which the graph had no way to cross:
 
 | Driver | Inputs | Outputs | Notes |
 |---|---|---|---|
 | **Split** | Colour (colour) | Red, Green, Blue, Alpha (number) | A colour taken apart. Nothing is converted or clamped on the way through: the channels leave scene-linear exactly as the colour holds them, so a value above one survives. Unwired, the row's own swatch makes the node a constant four numbers. |
-| **Combine** | Red, Green, Blue, Alpha (number; Alpha defaults to one) | Colour (colour) | Four numbers put back together. Sliders rather than one swatch, because each row is a **socket** and a swatch has nowhere for four wires to land; the 0..1 range is where a colour is usually written, and a wire may carry any number (K-510). |
+| **Combine** | Red, Green, Blue, Alpha (number; Alpha defaults to one) | Colour (colour) | Four numbers put back together. Sliders rather than one swatch, because each row is a **socket** and a swatch has nowhere for four wires to land; the 0..1 range is where a colour is usually written, and a wire may carry any number. |
 
 Both are closed-form and pointwise — no window, no state, `driver_window` nought — and
 `a_colour_survives_split_and_combine_unchanged` is the pair's own test: a colour through
@@ -203,7 +202,7 @@ half: it is made inside `build_comp_draws_at` from the document that walk alread
 and it answers a layer id and a layer-time range by decoding that layer's own footage
 item. Three things make it a *deterministic* answer rather than a plausible one. It is
 built where **both** renders build their draws — the Viewer's and the exporter's — so
-there is no second implementation to drift (K-031). It decodes at a fixed
+there is no second implementation to drift. It decodes at a fixed
 `audio_tap::TAP_RATE` (48 kHz) rather than at the sound device's rate, so the level is a
 fact about the project and not about the machine; the playback mixer's device rate never
 reaches a pixel. And layer time *is* source time for sound, which is exactly the mapping
@@ -211,12 +210,13 @@ reaches a pixel. And layer time *is* source time for sound, which is exactly the
 cannot disagree about which moment of the track a frame sits on. Decoded tracks are
 shared per file across the process under a byte budget. A layer that is not footage, a
 missing file, a failed decode or a reference naming no layer all read as silence — the
-same labelled no-op a dangling reference gives. The K-031 matrix gained an audio-driven
-row (`headless::tests::the_preview_and_export_paths_agree_on_an_audio_driven_comp`),
-which asserts both that the two renders agree **and** that the driven picture differs
-from the same comp with the wire cut — equal pixels there would mean silence again.
+same labelled no-op a dangling reference gives. The export-equals-preview matrix gained
+an audio-driven row
+(`headless::tests::the_preview_and_export_paths_agree_on_an_audio_driven_comp`), which
+asserts both that the two renders agree **and** that the driven picture differs from the
+same comp with the wire cut — equal pixels there would mean silence again.
 
-**The source is a choice of two, and one of them is the comp (K-657).** Audio level's Audio
+**The source is a choice of two, and one of them is the comp.** Audio level's Audio
 row left **unset** reads the composition's own mix rather than silence: the picker's empty
 entry says *This comp*, and the row is the source dropdown the feature was asked for
 without a second control beside it. The mix is not a second summing — `DocumentAudio::mix`
@@ -246,32 +246,32 @@ A driver's cross-layer input (Audio level's Audio, Layer points' Points layer) i
 **layer-reference parameter** (docs/03 §8) — the existing machinery, with the existing
 degrade-to-no-op on a dangling id. **Edges never cross layers**; the canvas draws a
 referenced layer as a derived source node (the drawing's Music node) and the wire from it
-renders the parameter, exactly as the image chain's wires render the list. K-604 settles
-that this holds for a *stream* as well as for a number, which is what makes the family's
-cross-layer tap a node rather than a new kind of edge.
+renders the parameter, exactly as the image chain's wires render the list. This holds
+for a *stream* as well as for a number, which is what makes the family's cross-layer
+tap a node rather than a new kind of edge.
 
 ### 1.4 Edges, ports, and what a wire means
 
 - `Param(node, port)` — the destination parameter follows the source output. At most one
   edge per input. Types must match (§6.1); number accepts number, colour accepts colour.
 - `Matte(effect)` — the effect's matte input. Two feeds exist: the effect's **matte
-  parameter** (a layer reference with channel/invert/source, K-142/K-395 — set from the
+  parameter** (a layer reference with channel/invert/source — set from the
   Effect-controls Matte row or by wiring from a derived source node), and the one new
   capability the NodeGraph drawing shows, `SourceMatte` — the layer's **own** masked
   source alpha, a texture the pipeline has already computed at that point in the chain.
   An in-graph `SourceMatte` edge overrides the parameter while it exists; the Matte row
   displays whichever is in force, by name.
-  **Built, 2026-08-24**: it needed no new carriage. `SourceMatte` lowers to K-288's
+  **Built, 2026-08-24**: it needed no new carriage. `SourceMatte` lowers to the existing
   `LayerInputDraw::ThisLayer`, which the draw builder has always meant by "a matte pointed
   at the layer the effect is on" — the effect's own input at its point in the chain. One
   branch in `mattes_for`, and nothing downstream learns a new shape.
-- **Exposure** (the header twirl; the `E` badge until K-637) grows a node to show one
+- **Exposure** (the header twirl, formerly the `E` badge) grows a node to show one
   hollow, type-coloured socket per parameter. It is presentation state per node, not
   wiring; a wired socket is shown regardless. **Built, 2026-08-24** as
   `LayerGraph::exposed`, a `Vec<NodeRef>` beside `layout` rather than the bool on the
   instance this line first named — see WP2.
 - **Bypass** is the existing `enabled` flag, answered by the enable tick left of the
-  node's name (the `B` badge until K-637); a bypassed node draws its border dashed (both
+  node's name (formerly the `B` badge); a bypassed node draws its border dashed (both
   drawings).
 
 ### 1.5 Validation
@@ -283,14 +283,14 @@ only be reached by an edit we control, never by deleting some *other* entity —
 driver takes its edges with it inside the same commit. A dangling **layer reference** on
 a driver's parameter degrades exactly as a matte does.
 
-**The taxonomy, extended over the cross-layer points tap (K-604).** The dividing line is
+**The taxonomy, extended over the cross-layer points tap.** The dividing line is
 unchanged and worth restating, because a tap is the first node that can be *right* about
 its own graph and still answer nothing: **an edit this application made is refused; a state
 some other entity's edit produced is degraded.** A tap's wiring is the first kind — it type-
 checks, one-wires and cycle-checks through the existing arms with no new case, because it is
 an ordinary driver output into an ordinary Points socket. What it *names* is the second kind,
 and every way of naming nothing reads as the **empty stream** — the consumer draws the
-picture it was handed, and the box wears the "no stream" mark K-509 gave the family:
+picture it was handed, and the box wears the family's "no stream" mark:
 
 | The tap | Answer | Why not a refusal |
 |---|---|---|
@@ -298,7 +298,7 @@ picture it was handed, and the box wears the "no stream" mark K-509 gave the fam
 | Names a layer somebody deleted | empty stream | The deletion was the *timeline's* edit, not the graph's — a matte dangles the same way. |
 | Names a layer with no producer on it | empty stream | The far layer's stack is its own to edit; this graph cannot be refused on its behalf. |
 | Names a layer whose producer is bypassed, or whose fx switch is off | empty stream | A producer that draws nothing hands out nothing; the stream and the picture agree about an off switch. |
-| Names a layer whose producer needs a picture (Scatter, Emit from image) | empty stream | K-599's recorded constraint, unchanged: at resolve time no picture exists. |
+| Names a layer whose producer needs a picture (Scatter, Emit from image) | empty stream | The standing constraint, unchanged: at resolve time no picture exists. |
 | Is itself reached across a layer boundary — a **second hop** | empty stream | The one-hop rule (§1.3). It is a bound, not a judgement, and it is what makes two layers naming each other terminate. |
 
 Nothing here is a new refusal, and that is the finding: the tap needed the taxonomy widened
@@ -320,14 +320,14 @@ At resolve time, before an effect's parameters pack into uniforms, the resolver 
 the layer's driver subgraph at that frame — topological order over the (acyclic) driver
 nodes, pure CPU scalar work — and substitutes driven values. Nothing downstream changes:
 the kernels see numbers, exactly as they see keyframed numbers today. The compiled
-evaluation graph (K-015) is untouched in shape; drivers never become pixel nodes.
+evaluation graph is untouched in shape; drivers never become pixel nodes.
 
 ### 2.2 Determinism
 
 Same project, same time, same value — no wall clock, no render-order dependence:
 
 - **Wiggle** is seeded by its node id and sampled at layer time; two renders agree bit
-  for bit, and export equals preview (K-031).
+  for bit, and export equals preview.
 - **Audio level** computes from decoded samples through a fixed window; its value folds
   the audio fingerprint, the time and the window into the frame key.
 - Driver evaluation order is the topological order with ties broken by node id — never
@@ -394,8 +394,9 @@ docs/05 §3 already names structural sharing as the upgrade if cloning ever bite
 ## 4. Serialisation, old files, versioning
 
 - `graph` is **additive with a serde default** (empty), skipped on save when empty. Every
-  pre-K-471 file loads to an empty graph; a file that never wires never changes on disk.
-- Unknown-field preservation (K-065) carries a graph through an older reader unharmed,
+  file saved before the graph existed loads to an empty graph; a file that never wires
+  never changes on disk.
+- Unknown-field preservation carries a graph through an older reader unharmed,
   under the pre-1.0 no-migration policy (docs/03 §12). No `min_reader` bump: an older
   Lumit renders such a project without its drivers — the same silent-degrade class as a
   missing plugin — which pre-1.0 accepts and 1.0's registry will revisit.
@@ -412,7 +413,7 @@ docs/05 §3 already names structural sharing as the upgrade if cloning ever bite
   `set_effects`; driver params reuse the property calls, from the staged instances
   `get_graph_drivers()` hands out.
 - **Catalogue**: the Drivers category rides the existing effect-catalogue listing,
-  through `list_drivers()` of its own. **Amended 2026-08-30 (K-645)**: `list_drivers()`
+  through `list_drivers()` of its own. **Amended 2026-08-30**: `list_drivers()`
   still answers the canvas's narrower question — what may be *dropped on the graph* — but
   the family is no longer filtered out of `list_effects()`, and every entry now carries the
   `controls` grouping key and heading, because `FxCategory::grouping()` files Drivers under
@@ -432,7 +433,7 @@ docs/05 §3 already names structural sharing as the upgrade if cloning ever bite
   parameter moves under the pointer instead of only on release. The nodes only: a drag on
   a number changes no wire, position or exposure, and staging them would invent a state
   the document cannot be in.
-- **Node groups** (K-651): `BridgeGraphWiring::groups` rides the stored half, and
+- **Node groups**: `BridgeGraphWiring::groups` rides the stored half, and
   `save_node_group` / `insert_node_group` / `list_node_groups()` are the library seam —
   `.lumgrp` files beside the `.lumfx` presets, in the same per-user folder. A group names
   boxes and a palette index; the wash's rectangle is derived from its members' positions,
@@ -441,7 +442,7 @@ docs/05 §3 already names structural sharing as the upgrade if cloning ever bite
   the wires that left it dropped.
 - **Port types cross as an enum**; Dart maps type → theme token. No colour crosses the
   bridge.
-- **K-005 gate**: every label the engine can send gets its `engine_labels.dart` entry and
+- **l10n gate**: every label the engine can send gets its `engine_labels.dart` entry and
   matching `app_en.arb` key in the same commit — `engine_labels_test.dart` walks the
   tables. The driver names, their controls and the Drivers heading landed with WP1 (they
   could not wait, see there); what is left for WP2 is the **port** names it introduces.
@@ -454,7 +455,7 @@ docs/05 §3 already names structural sharing as the upgrade if cloning ever bite
 enum PortType { Image, Matte, Number, Colour, Shape, Points, Audio }
 ```
 
-Wire and socket colour is the type — colour as the legend (K-445), five colours for
+Wire and socket colour is the type — colour as the legend, five colours for
 seven types, grouped as the NodeGraph drawing's legend groups them:
 
 | Token (theme, viz-family) | Types | Drawing's colour |
@@ -468,7 +469,7 @@ seven types, grouped as the NodeGraph drawing's legend groups them:
 The tokens live in the theme struct (`PortColours`, 15-DESIGN §4.1) under the no-hex
 rule; the drawing's hexes are the dark theme's values.
 
-### 6.2 The points stream (K-446's seam)
+### 6.2 The points stream (Particulate's seam)
 
 `PortType::Points` lands with WP1 so the type system is complete from the first commit.
 A **points stream** is evaluated data, like an image — never stored in the document:
@@ -477,7 +478,7 @@ A **points stream** is evaluated data, like an image — never stored in the doc
 /// One frame's particles/instances, structure-of-arrays, GPU-resident.
 struct PointsStream {
     count: u32,                 // budgeted cap, declared like any allocation
-    position: Buffer<Vec2>,     // px@comp (K-419); grows to Vec3 with 2.5D points
+    position: Buffer<Vec2>,     // px@comp; grows to Vec3 with 2.5D points
     speed: Buffer<Vec2>,        // px per second, direction and magnitude (the glossary
                                 // reserves "velocity" for a Retime lens label — §9 ban)
     age: Buffer<f32>,           // seconds since birth
@@ -488,14 +489,14 @@ struct PointsStream {
 }
 ```
 
-**Particulate** (K-446) is a stack effect — image in, image out (it draws its points over
+**Particulate** is a stack effect — image in, image out (it draws its points over
 its input), *plus* a declared `Points` output port, so it sits honestly in the linear
 stack today and feeds the later grid/scatter/clone-to-points/connect-points family
 without redesign. Its feature set is WP6's design document, not this note.
 
 ## 7. What the graph never shows
 
-- The compiled **evaluation graph** (K-015) — the Graph panel draws the document (stack +
+- The compiled **evaluation graph** — the Graph panel draws the document (stack +
   wiring), never `lumit-eval`'s nodes; constant-folding, deduplication and pass-through
   elision remain invisible.
 - **Branched image chains** — §1.1's rule; the gesture does not exist.
@@ -503,15 +504,15 @@ without redesign. Its feature set is WP6's design document, not this note.
   never the other layer's own graph.
 - The Layer out node draws an **Audio** input port (the Nodes-workspace drawing) that
   represents the layer's own audio and accepts no wire in this phase — audio comes only
-  from a footage layer's own stream (K-435). Drawn, unfilled, honest; wiring audio into
+  from a footage layer's own stream. Drawn, unfilled, honest; wiring audio into
   a layer's output is future work, listed not faked.
 
 ## 8. Work packages
 
-Ordered; each sized for one agent; each lands with its tests (K-007). K-458's standing
-rules bind every UI package: the named drawing is authoritative, cited by name and never
-by any working-folder path. WP1 → WP2 → WP3 → WP4 → WP5; WP6 needs
-only WP1's type enum and may run any time after it.
+Ordered; each sized for one pull request; each lands with its tests. Standing rules bind every UI
+package: the named drawing is authoritative, cited by name and never by any working-folder
+path. WP1 → WP2 → WP3 → WP4 → WP5; WP6 needs only WP1's type enum and may run any time
+after it.
 
 ### WP1 — Engine model and evaluation
 
@@ -557,7 +558,7 @@ inverse restores nodes *and* edges; export-equals-preview on a driven comp (rend
 Drivers category in the catalogue listing, `BridgePortType`.
 **Files**: `crates/lumit-bridge/src/api/**` (then codegen; generated files never edited),
 `flutter_ui/lib/l10n/engine_labels.dart` + `app_en.arb` (new keys listed in the commit
-message and PR for translation, K-303).
+message and PR for translation).
 **Tests**: `engine_labels_test.dart` green over the new tables; an frb test driving
 add-driver/connect/undo through the bridge; `bridge_call_budget_test.dart` unchanged at 0
 for rebuild paths.
@@ -584,9 +585,10 @@ things this note asked for came out differently, and each is the smaller change:
   answers the canvas's question and `list_effects()` the stack's; one shared catalogue walk
   builds both.
 - **A port declares its own English label** (`fx::Port { id, label, ty }`, shared by
-  `Signature::Data`'s outputs and the derived nodes' constants), so the K-303 walk finds
-  port words the same way it finds an effect's. Four were new — Image, Input, Output,
-  Layer out; the drivers' output words were already in the table as parameter labels.
+  `Signature::Data`'s outputs and the derived nodes' constants), so the l10n gate's walk
+  finds port words the same way it finds an effect's. Four were new — Image, Input,
+  Output, Layer out; the drivers' output words were already in the table as parameter
+  labels.
   The **property-path spelling is `<layer>/graph/<node>/<param>`**, as §3 proposed: the
   fold paths name the layer's group in the second segment, and `graph` is what the field
   is called.
@@ -600,13 +602,13 @@ Node panel still costs no call in a rebuild.
 
 The panel to the approved **NodeGraph** drawing: dot-grid canvas, node anatomy (header
 kick, port rows, sockets), type-coloured wires and the legend, Auto-wire and Heal
-toggles (`HouseToggle`, on in `animated` per K-465), frame-all and zoom readout, the
-console (Ctrl+Space over the canvas, or a wire dragged onto empty ground — K-673) with
+toggles (`HouseToggle`, on in `animated`), frame-all and zoom readout, the
+console (Ctrl+Space over the canvas, or a wire dragged onto empty ground) with
 type-filtered results while a wire is in hand,
 drag-to-wire and disconnect, `E` exposure, dashed bypass, the selected border in
-`animated` (K-473). Image-chain gestures lower to `set_effects`; everything else to
+`animated`. Image-chain gestures lower to `set_effects`; everything else to
 `set_layer_graph` — except a disconnect, which lowers to `set_effect_enabled`, and the
-Layer out's own socket, which lowers to `set_layer_graph` like the wires (K-738); one
+Layer out's own socket, which lowers to `set_layer_graph` like the wires; one
 gesture, one undo step. The Effect-controls rows gain the *driven*
 state (hollow type-coloured ring, driver's name in the well — the Nodes-workspace
 drawing's Node panel rows are the reference).
@@ -631,20 +633,19 @@ widget, no fork).
 
 ### WP5 — The picture at a node
 
-K-448 asked for its own panel, openable in a sidebar of the Effects workspace: a locked,
-read-only second viewport showing one node's output without soloing. **K-486** landed it
+The first answer was its own panel, openable in a sidebar of the Effects workspace: a
+locked, read-only second viewport showing one node's output without soloing. It landed
 that way on 2026-08-24 as a bounded 256px thumbnail rather than a second zero-copy
 target.
 
-**K-528 folded it into the Viewer** (owner ruling: "node preview is just the viewer") and
-supersedes both. The panel is gone. Selecting an effect — a box on this canvas *or* a
-heading in the Effect controls stack, which are one selection (K-300) — offers an **"at
-&lt;effect&gt;" chip** over the Viewer's own picture, and turning it on renders the
-composition with that layer's stack truncated there, down the ordinary frame transport at
-the Viewer's full quality. A second viewport for a still was the thing worth removing: at
-full size, in the Viewer you are already looking at, it is the same picture answered
-properly. K-528 carries the reasoning; the seam is `render_frame`'s optional
-`BridgePrefixPoint` (docs/17).
+**It was then folded into the Viewer** (owner ruling: "node preview is just the viewer").
+The panel is gone. Selecting an effect — a box on this canvas *or* a heading in the
+Effect controls stack, which are one selection — offers an **"at &lt;effect&gt;" chip**
+over the Viewer's own picture, and turning it on renders the composition with that
+layer's stack truncated there, down the ordinary frame transport at the Viewer's full
+quality. A second viewport for a still was the thing worth removing: at full size, in
+the Viewer you are already looking at, it is the same picture answered properly. The
+seam is `render_frame`'s optional `BridgePrefixPoint` (docs/17).
 
 The three things WP5 established all survive the fold, and two of them are why it was
 cheap:
@@ -676,7 +677,7 @@ surfaces, its clearing, and its bounded cost per toggle.
 
 ### WP6 — Points stream and the Particulate design document
 
-Writes `docs/impl/particulate.md`: Particulate's parameter surface against K-446's
+Writes `docs/impl/particulate.md`: Particulate's parameter surface against its standing
 constraints (separate effect, points out, the owner's 2-second-per-frame class budget for
 physical simulation recorded where relevant), the `PointsStream` attribute layout
 finalised (§6.2 is the starting shape), emission/simulation determinism rules (seeded,
@@ -690,13 +691,14 @@ new terms appear.
 
 Beyond the per-package tests, four properties are the ones a regression would betray:
 
-1. **Old files are untouched**: load any pre-K-471 fixture, save, byte-compare.
+1. **Old files are untouched**: load any fixture saved before the graph existed, save,
+   byte-compare.
 2. **The stack view never lies**: for every graph fixture, the effect list order equals
    the image-chain order the graph read model reports (a property test over generated
    graphs, not one example). **This one belongs to WP2**, which is where the read model
    (`graph_of_layer`) is built — WP1 has no image-chain reporting to hold the list
    against, because the model deliberately stores none.
 3. **Determinism**: a driven comp renders bit-identically twice, and export equals
-   preview (K-031's standing gate extended with one driven fixture).
+   preview (the standing gate extended with one driven fixture).
 4. **Undo symmetry**: any `SetLayerGraph`/`SetLayerEffects` sequence walked back restores
    the original document exactly (journal round-trip over the same generated fixtures).

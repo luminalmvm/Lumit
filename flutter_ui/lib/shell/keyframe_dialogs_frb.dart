@@ -1,4 +1,4 @@
-// The two keyframe dialogues the Animation menu opens (K-244), on the K-444
+// The two keyframe dialogues the Animation menu opens, on the shared dialogue
 // pattern: how a key is approached and left, and how far its handles reach.
 //
 // In plain terms: a keyframe has two sides. The one the animation arrives on
@@ -6,8 +6,8 @@
 // the next key), a straight line, a curve the user aims, or a curve the engine
 // aims for them. **Interpolation** picks which of those four each side is;
 // **Speed** sets how far the curved sides reach — the influence a tangent
-// handle drags (K-505; a side's speed is what that handle carries, so it is
-// not a fifth number to type).
+// handle drags (a side's speed is what that handle carries, so it is not a
+// fifth number to type).
 //
 // Neither dialogue writes anything. Each collects an answer and hands it back;
 // the menu applies it, so the rule about *which* keys are affected lives in one
@@ -184,9 +184,9 @@ class _SpeedBodyState extends State<_SpeedBody> {
       );
 }
 
-/// The shape both of these wear (K-444): a title, label-left rows in a 110px
-/// column, and the single filled action with Cancel beside it. Enter applies
-/// wherever the focus sits (K-243).
+/// The shape both of these wear: a title, label-left rows in a 110px column,
+/// and the single filled action with Cancel beside it. Enter applies wherever
+/// the focus sits.
 Widget _dialogue(
   BuildContext context, {
   required String title,

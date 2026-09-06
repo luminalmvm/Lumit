@@ -1,4 +1,4 @@
-// The Timeline's selection model (K-500, docs/impl/timeline-interaction.md §2).
+// The Timeline's selection model (docs/impl/timeline-interaction.md §2).
 //
 // One model for Layers mode's lanes, Keys mode and the graph, and every
 // sentence of §2 is a claim here: a marquee starts from any ground in either
@@ -27,7 +27,7 @@ import 'frb_test_support.dart';
 void main() {
   setUpAll(initEngineForTests);
 
-  group('Timeline selection (K-500)', () {
+  group('Timeline selection', () {
     ({LumitState state, LumitUiState uiState, CompositionReference comp})
         withComp() {
       final p = freshProject();
@@ -369,7 +369,7 @@ void main() {
     });
 
     /// **The stopwatch stays what it is** — the animate toggle, never a
-    /// selector (K-196). Nor is the value well.
+    /// selector. Nor is the value well.
     testWidgets('the stopwatch does not select the row\'s keys',
         (tester) async {
       final p = withComp();
@@ -410,7 +410,7 @@ void main() {
     // §2.2 — letting go.
     // ---------------------------------------------------------------------
 
-    /// A plain click on any ground deselects everything (K-203).
+    /// A plain click on any ground deselects everything.
     testWidgets('a plain click on lane ground lets everything go',
         (tester) async {
       final p = withComp();
@@ -429,7 +429,7 @@ void main() {
       expect(p.uiState.selectedLayer.value, isNull);
     });
 
-    /// Closing a fold drops what was inside it, keys included (K-203).
+    /// Closing a fold drops what was inside it, keys included.
     testWidgets('shutting a fold drops the keys it held', (tester) async {
       final p = withComp();
       final layer = keyedLayer(p);
@@ -601,11 +601,11 @@ void main() {
     });
 
     // ---------------------------------------------------------------------
-    // The easing claim (K-349): what a preset tile presses (K-726).
+    // The easing claim: what a preset tile presses.
     // ---------------------------------------------------------------------
 
     /// **An applied ease writes the drawn tangents, and however many layers
-    /// the selection spans it is one undo step** (K-720's rule: a
+    /// the selection spans it is one undo step** (the rule is that a
     /// multi-selection edit is one edit). The write is one op per layer, so
     /// without the undo group a two-layer apply was two steps — this fails
     /// without the `asOneUndoStep` round `_applyEasing`.

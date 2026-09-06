@@ -1,5 +1,4 @@
-// The Ctrl+Space console (K-324; popover face K-658):
-// one search popover floating where the pointer is.
+// The Ctrl+Space console: one search popover floating where the pointer is.
 //
 // **In plain terms.** One box, four bands, top to bottom: a search row (the
 // magnifier, the query, and a kicker naming the key that opened it), a strip
@@ -11,14 +10,14 @@
 // the offer, open from the first frame, and typing narrows it.
 //
 // The console opens **where the mouse is**, so the eye never travels: type
-// "gau", press Enter, and Gaussian blur is on every selected layer (K-523).
-// The search half is modelled on Video Copilot's FX Console — including its
-// **snapshot** button, which writes the frame on screen to a PNG so two
-// versions of a look can be compared without setting up an export.
+// "gau", press Enter, and Gaussian blur is on every selected layer. The search
+// half is modelled on Video Copilot's FX Console — including its **snapshot**
+// button, which writes the frame on screen to a PNG so two versions of a look
+// can be compared without setting up an export.
 //
-// The graph opens this same surface (K-645, K-673) — Ctrl+Space with the
-// canvas focused, or a wire let go over empty ground: what a caller
-// contributes is the list, the kicker naming its key, and the foot sentence.
+// The graph opens this same surface — Ctrl+Space with the canvas focused, or a
+// wire let go over empty ground: what a caller contributes is the list, the
+// kicker naming its key, and the foot sentence.
 //
 // **The console applies things; it does not know how.** Every entry carries a
 // callback the caller supplied, exactly as the command palette does (docs/07
@@ -40,8 +39,8 @@ import '../widgets/escape_ladder.dart';
 
 /// Where the pointer last was, in global coordinates — recorded by the shell
 /// on every hover, move and press, because the keyboard event that opens the
-/// console carries no position and the popover opens on the mouse (K-325).
-/// Null until the pointer has ever been seen, which falls back to centre.
+/// console carries no position and the popover opens on the mouse. Null until
+/// the pointer has ever been seen, which falls back to centre.
 Offset? lastKnownPointerPosition;
 
 /// What kind of thing a search row is — what the ranking keeps apart.
@@ -123,7 +122,7 @@ Future<void> showFxConsoleFrb({
 
   // The anchor arrives in window coordinates and the console is laid out in
   // the overlay's own space, which is not the same space at any UI scale but
-  // 100% (K-560) — so it is converted here, exactly as a popup's is.
+  // 100% — so it is converted here, exactly as a popup's is.
   final at = anchor == null ? null : overlayLocal(context, anchor);
   entry = OverlayEntry(
     builder: (_) => _FxConsole(model: model, anchor: at, onClose: close),
@@ -206,8 +205,8 @@ class _FxConsoleState extends State<_FxConsole> {
   final TextEditingController _query = TextEditingController();
 
   /// The search field's focus, held here because the console steers it: the
-  /// field is focused on open and *kept* focused for the console's whole life
-  /// (K-328), so anything typed while the console is up lands in the box.
+  /// field is focused on open and *kept* focused for the console's whole life,
+  /// so anything typed while the console is up lands in the box.
   final FocusNode _queryFocus = FocusNode(debugLabel: 'fx-console-query');
   int _highlighted = 0;
 
@@ -224,10 +223,10 @@ class _FxConsoleState extends State<_FxConsole> {
     // one step back, and a menu raised over the console is what that press
     // takes first.
     _escapeRelease = EscapeLadder.register(EscapeRung.dialog, _escapeAnywhere);
-    // While the console is up, the keyboard is the console's (K-328): the
-    // panels' hardware-keyboard commands stand down exactly as they do for a
-    // dialogue, so a keystroke meant for the search box can never rename a
-    // layer underneath.
+    // While the console is up, the keyboard is the console's: the panels'
+    // hardware-keyboard commands stand down exactly as they do for a dialogue,
+    // so a keystroke meant for the search box can never rename a layer
+    // underneath.
     markModalMounted();
     // And the search box owns typing outright: focused now — deterministic,
     // where `autofocus` lost a race against the shell's own scope — and
@@ -290,7 +289,7 @@ class _FxConsoleState extends State<_FxConsole> {
   }
 
   /// Every group the entries carry, in first-appearance order — the browse
-  /// groupings the strip offers after All (K-645 files the drivers under
+  /// groupings the strip offers after All (the drivers are filed under
   /// Controls before they ever get here).
   List<String> get _groups {
     final seen = <String>[];
@@ -492,11 +491,10 @@ class _FxConsoleState extends State<_FxConsole> {
                   key: const ValueKey('fx-console-key'),
                   style: t.kicker.copyWith(letterSpacing: 0.54)),
             ],
-            // The snapshot button, folded in from the old bar (K-324): one
-            // press writes the frame on screen to a PNG, so two versions of a
-            // look can be compared without setting an export up. The board
-            // draws no home for it; the row's end is where FX Console keeps
-            // its own.
+            // The snapshot button, folded in from the old bar: one press
+            // writes the frame on screen to a PNG, so two versions of a look
+            // can be compared without setting an export up. The board draws no
+            // home for it; the row's end is where FX Console keeps its own.
             const SizedBox(width: 8),
             LumitTooltip(
               message: l10n.fxConsoleSnapshotTip,

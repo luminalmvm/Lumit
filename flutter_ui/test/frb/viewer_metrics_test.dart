@@ -1,4 +1,4 @@
-// The Viewer, measured against its approved drawing (K-466).
+// The Viewer, measured against its approved drawing.
 //
 // **Why this file exists.** `viewer_panel_frb_test` asserts what the Viewer
 // *does* — the transport steps, a drag moves a layer, a snapshot is taken. This
@@ -152,7 +152,7 @@ void main() {
     });
 
     /// **The bottom bar is 22 as well**, and its marks are 14 — the drawing's
-    /// own glyph size (K-456), not a panel icon's 16 nor the 20 the transport
+    /// own glyph size, not a panel icon's 16 nor the 20 the transport
     /// used to take.
     testWidgets('the bottom bar is 22, its glyphs 14, its gaps 8 and 10',
         (tester) async {
@@ -305,11 +305,11 @@ void main() {
       expect(find.byKey(const ValueKey('viewer-tag')), findsNothing);
     });
 
-    /// **The three arrangements** (K-448's setting, K-466's drawing). Split is
-    /// the drawing's: a header above the picture and the bar below it. The
-    /// other two gather everything into one strip, which then carries the
-    /// panel's kicker and the three pickers ahead of the bar's own marks —
-    /// the same controls in the same order, on one row instead of two.
+    /// **The three arrangements.** Split is the drawing's: a header above
+    /// the picture and the bar below it. The other two gather everything
+    /// into one strip, which then carries the panel's kicker and the three
+    /// pickers ahead of the bar's own marks — the same controls in the same
+    /// order, on one row instead of two.
     testWidgets('the setting splits the bars, or gathers them top or bottom',
         (tester) async {
       final p = withLayer();
@@ -406,7 +406,7 @@ void main() {
       expect(reset, findsOneWidget, reason: 'and stays, back at rest');
     });
 
-    /// **What the reading sheds, and in what order** (§12A.6, K-451). The two
+    /// **What the reading sheds, and in what order** (§12A.6). The two
     /// gaps give way first — the reading keeps its full line at widths that
     /// used to elide it — then the arrowed preview size, then the composition's
     /// name. The time, the size and the magnification are the last to stand.

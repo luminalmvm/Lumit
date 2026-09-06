@@ -31,7 +31,7 @@ A new Flutter FFI plugin project.
     # library. The frb template ships `../../rust rust_lib_lumit_flutter`, which
     # assumes its own layout; our crate is a workspace member at
     # crates/lumit-bridge and its cdylib is `lumit_bridge`. Untested — the macOS
-    # pass is K-033, still to come — but the template values are certainly wrong.
+    # pass is still to come — but the template values are certainly wrong.
     :script => 'sh "$PODS_TARGET_SRCROOT/../cargokit/build_pod.sh" ../../../crates/lumit-bridge lumit_bridge',
     :execution_position => :before_compile,
     :input_files => ['${BUILT_PRODUCTS_DIR}/cargokit_phony'],
@@ -43,7 +43,7 @@ A new Flutter FFI plugin project.
     'DEFINES_MODULE' => 'YES',
     # Flutter.framework does not contain a i386 slice.
     'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386',
-    # FFmpeg 8 has no Homebrew formula yet (see ci.yml's macOS note and K-736),
+    # FFmpeg 8 has no Homebrew formula yet (see ci.yml's macOS note),
     # so these paths cover both shapes: a future real ffmpeg@8 keg, and the
     # 8.1.2 formula extracted out of homebrew-core's history, whose keg is named
     # ffmpeg@8.1.2. Neither names ffmpeg@7 any more - linking 7's dylibs into
@@ -53,7 +53,7 @@ A new Flutter FFI plugin project.
     # on Apple Silicon, /usr/local on Intel — and ld ignores a -L directory that
     # does not exist, so naming both covers either machine.
     #
-    # Caveat for K-033 (notarisation and distribution): those dylibs are linked by
+    # Caveat for notarisation and distribution: those dylibs are linked by
     # absolute path, so the produced .app is not relocatable — it runs only on a
     # machine that has the same Homebrew keg installed. Shipping needs the FFmpeg
     # libraries vendored into the bundle and their install names rewritten

@@ -97,7 +97,7 @@ void main() {
     testWidgets('double-clicking applies to every selected layer',
         (tester) async {
       // The Effect menu and the effects console both apply to the whole
-      // selection (K-217); this panel reached for the primary layer alone, so
+      // selection; this panel reached for the primary layer alone, so
       // the same effect on the same selection landed on three layers from the
       // menu and on one from here.
       final p = freshProject();
@@ -189,7 +189,7 @@ void main() {
     });
 
     /// A **preset** row is added to the same list by the same gesture as an
-    /// effect row, so it lands on the same layers (K-523). It reached for the
+    /// effect row, so it lands on the same layers. It reached for the
     /// primary layer alone while the effect row beside it took the whole
     /// selection.
     testWidgets('a library preset applies to every selected layer',

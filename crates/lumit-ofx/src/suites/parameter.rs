@@ -21,7 +21,7 @@
 //! parameter values while `kOfxActionCreateInstance` is still running, and a
 //! host that refuses there has the library throw before the instance exists —
 //! which from a layer looks like every plugin failing to apply, for a different
-//! reason each time (K-595). What the write does not do is reach the document;
+//! reason each time. What the write does not do is reach the document;
 //! see [`write_param`].
 //!
 //! Keyframing, and the derivative and integral of an animated control, are
@@ -39,8 +39,8 @@ use std::ffi::{c_char, c_int, c_uint, c_void};
 use crate::describe::{ParamRecord, ParamRef};
 use crate::ffi::{
     double_types, param_types, prop_keys as keys, prop_values as values, string_modes,
-    OfxParamHandle, OfxParamSetHandle, OfxParamSlot, OfxParameterSuiteV1, OfxPropertySetHandle,
-    OfxRangeD, OfxTime,
+    OfxParamHandle, OfxParamSetHandle, OfxParameterSuiteV1, OfxPropertySetHandle, OfxRangeD,
+    OfxTime,
 };
 use crate::handles::{Handle, HandleKind};
 use crate::host::state;
@@ -48,21 +48,55 @@ use crate::props::{PropValue, PropertySet};
 use crate::status::{Status, StatusResult};
 use crate::suites::{cstr, guard, out_handle};
 
+// The four C-variadic entry points, defined in `variadic.c` (see the note at
+// the top of that file, and `OfxParameterSuiteV1` for why they are not Rust),
+// and the one call that tells the C where the Rust halves are.
+extern "C" {
+    fn lumit_ofx_param_get_value(param: OfxParamHandle, ...) -> c_int;
+    fn lumit_ofx_param_get_value_at_time(param: OfxParamHandle, time: OfxTime, ...) -> c_int;
+    fn lumit_ofx_param_set_value(param: OfxParamHandle, ...) -> c_int;
+    fn lumit_ofx_param_set_value_at_time(param: OfxParamHandle, time: OfxTime, ...) -> c_int;
+    fn lumit_ofx_variadic_bind(
+        shape: unsafe extern "C" fn(OfxParamHandle, *mut c_int, *mut c_int),
+        get: unsafe extern "C" fn(
+            OfxParamHandle,
+            *mut c_void,
+            *mut c_void,
+            *mut c_void,
+            *mut c_void,
+        ) -> c_int,
+        set: unsafe extern "C" fn(OfxParamHandle, u64, u64, u64, u64) -> c_int,
+    );
+}
+
+/// Point the C shim at the Rust halves. Called once, from the first build of
+/// the host state, which every suite call reaches before a plugin can hold a
+/// parameter handle, so no variadic call can arrive unbound.
+///
+/// Pointers rather than named exports, because a `#[no_mangle]` symbol would
+/// be defined twice in this crate's own test binaries: they link the crate
+/// under test *and* the copy the test plugin borrows its C declarations from.
+pub(crate) fn bind() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        // SAFETY: the C side stores three function pointers of exactly the
+        // types it declares, and reads them only after this returns.
+        unsafe { lumit_ofx_variadic_bind(param_shape, param_get, param_set) };
+    });
+}
+
 /// The table handed out by `fetchSuite`.
 pub static SUITE: OfxParameterSuiteV1 = OfxParameterSuiteV1 {
     param_define,
     param_get_handle,
     param_set_get_property_set,
     param_get_property_set,
-    // The four variadic entries go out as the **C shim**, never as the Rust
-    // functions below: only C can receive a `...` correctly, and the Rust half
-    // is what the shim calls once the arguments are in hand (K-756).
-    param_get_value: crate::ffi::lumit_ofx_shim_param_get_value,
-    param_get_value_at_time: crate::ffi::lumit_ofx_shim_param_get_value_at_time,
+    param_get_value: lumit_ofx_param_get_value,
+    param_get_value_at_time: lumit_ofx_param_get_value_at_time,
     param_get_derivative,
     param_get_integral,
-    param_set_value: crate::ffi::lumit_ofx_shim_param_set_value,
-    param_set_value_at_time: crate::ffi::lumit_ofx_shim_param_set_value_at_time,
+    param_set_value: lumit_ofx_param_set_value,
+    param_set_value_at_time: lumit_ofx_param_set_value_at_time,
     param_get_num_keys,
     param_get_key_time,
     param_get_key_index,
@@ -314,30 +348,11 @@ unsafe extern "C" fn param_get_property_set(
 
 // ---------------------------------------------------------- reading values --
 
-/// The type a parameter was defined as, as its OFX string.
-///
-/// Shared by the read half, the write half and the shim's arity question
-/// (K-756), which is why it is a function rather than the same six lines three
-/// times. **It takes the state lock and gives it back**, so every caller must
-/// be holding nothing when it calls.
-fn param_type_of(param: OfxParamHandle) -> Result<String, Status> {
-    let handle = Handle::from_ptr(param);
-    let state = state();
-    let record = state.params.get(handle)?;
-    Ok(state
-        .props
-        .get(record.props)?
-        .get_string(keys::PARAM_TYPE, 0)?
-        .to_string_lossy()
-        .into_owned())
-}
-
 /// Write one parameter's value into the plugin's out-parameters.
 ///
 /// The four slots are the widest a standard parameter can be — RGBA — and only
-/// as many as the value has dimensions are written. See
-/// [`crate::ffi::OfxParameterSuiteV1`] for why the arity is fixed rather than
-/// variadic, and what that costs.
+/// as many as the value has dimensions are written. The shim pulled exactly as
+/// many as the parameter declares ([`param_shape`]); the rest are null.
 ///
 /// # Safety
 ///
@@ -345,18 +360,22 @@ fn param_type_of(param: OfxParamHandle) -> Result<String, Status> {
 /// the type the parameter declares, which is the contract of every OFX
 /// `paramGetValue` call.
 unsafe fn write_value(param: OfxParamHandle, slots: [*mut c_void; 4]) -> Result<(), Status> {
-    // Asked before the lock is taken, because [`param_type_of`] takes it: this
-    // host's state is behind one mutex and re-entering it would deadlock.
-    let param_type = param_type_of(param)?;
+    let handle = Handle::from_ptr(param);
+
+    let state = state();
+    let record = state.params.get(handle)?;
+    let param_type = state
+        .props
+        .get(record.props)?
+        .get_string(keys::PARAM_TYPE, 0)?
+        .to_string_lossy()
+        .into_owned();
     // A push button has no value at all, and inventing one for it would have a
     // plugin read a number where the spec says there is nothing to read.
     if param_type == param_types::PUSH_BUTTON {
         return Err(Status::ErrUnsupported);
     }
 
-    let handle = Handle::from_ptr(param);
-    let state = state();
-    let record = state.params.get(handle)?;
     let instance = state
         .effects
         .get(record.effect)?
@@ -410,20 +429,24 @@ unsafe fn write_value(param: OfxParamHandle, slots: [*mut c_void; 4]) -> Result<
     Ok(())
 }
 
-/// `paramGetValue`'s Rust half — the slots the shim pulled, written into.
+/// The Rust half of `paramGetValue` and `paramGetValueAtTime`: the C shim has
+/// pulled the out-pointers off the variadic list and hands them over fixed.
 ///
-/// Exported under a C name because `shim/ofx_varargs.c` is what the suite table
-/// hands out and this is what it calls back (K-756). The arity is fixed here
-/// and **correct**, precisely because the pulling happened over there, where
-/// `va_arg` knew the platform's rule for where the caller had put them.
+/// The snapshot *is* the answer at a time: it was taken at the time this
+/// evaluation was scheduled, with every curve and expression already resolved
+/// (docs/12 §2.2), which is why the shim does not pass the time on. A plugin
+/// asking for another time (a retimer reading its own control ahead) gets
+/// the same value, which is right for a control that does not animate and is
+/// the ceiling for one that does. Lifting it needs the property system on the
+/// far side of the bridge and the frame prefetch `getFramesNeeded` already
+/// plans; until then the honest thing is to answer from the snapshot rather
+/// than from nothing.
 ///
 /// # Safety
 ///
-/// Each of `v0..v3` must be null or point at writable storage of the type the
-/// parameter declares — the contract of every OFX `paramGetValue` call, kept by
-/// the shim, which passes null for every slot the parameter does not have.
-#[no_mangle]
-pub unsafe extern "C" fn lumit_ofx_param_get_value(
+/// As [`write_value`]: each non-null slot points at storage of the parameter's
+/// declared type.
+unsafe extern "C" fn param_get(
     param: OfxParamHandle,
     v0: *mut c_void,
     v1: *mut c_void,
@@ -431,33 +454,6 @@ pub unsafe extern "C" fn lumit_ofx_param_get_value(
     v3: *mut c_void,
 ) -> c_int {
     // SAFETY: the plugin's out-parameters, as OFX declares them.
-    guard(|| unsafe { write_value(param, [v0, v1, v2, v3]) })
-}
-
-/// As [`lumit_ofx_param_get_value`], for the timed spelling.
-///
-/// # Safety
-///
-/// As [`lumit_ofx_param_get_value`].
-#[no_mangle]
-pub unsafe extern "C" fn lumit_ofx_param_get_value_at_time(
-    param: OfxParamHandle,
-    time: OfxTime,
-    v0: *mut c_void,
-    v1: *mut c_void,
-    v2: *mut c_void,
-    v3: *mut c_void,
-) -> c_int {
-    // The snapshot *is* the answer at a time: it was taken at the time this
-    // evaluation was scheduled, with every curve and expression already
-    // resolved (docs/12 §2.2). A plugin asking for another time — a retimer
-    // reading its own control ahead — gets the same value, which is right for
-    // a control that does not animate and is the ceiling for one that does.
-    // Lifting it needs the property system on the far side of the bridge and
-    // the frame prefetch `getFramesNeeded` already plans; until then the honest
-    // thing is to answer from the snapshot rather than from nothing.
-    let _ = time;
-    // SAFETY: as `lumit_ofx_param_get_value`.
     guard(|| unsafe { write_value(param, [v0, v1, v2, v3]) })
 }
 
@@ -503,15 +499,11 @@ unsafe extern "C" fn param_get_integral(
 
 // ---------------------------------------------------------- writing values --
 
-/// Which of the three shapes a trailing word is.
-///
-/// The discriminants are **shared with `shim/ofx_varargs.c`** (K-756), which
-/// reads them back as a plain `int` to know which `va_arg` type to pull. They
-/// are written down rather than left to the compiler for that reason, and
-/// `the_shim_and_its_rust_half_agree_about_readings` is the test that says the
-/// two halves still match.
+/// Which of the three shapes a trailing argument is. The numbers are the
+/// contract with `variadic.c`, which pulls an `int`, a `double` or a
+/// `const char *` off the list accordingly.
 #[derive(Clone, Copy)]
-#[repr(C)]
+#[repr(i32)]
 enum Reading {
     Int = 0,
     Double = 1,
@@ -538,59 +530,48 @@ fn slots_of(param_type: &str) -> Option<(usize, Reading)> {
     }
 }
 
-/// How many trailing arguments a call on this parameter carries, and how they
-/// are typed — the one question the C shim must have answered before it may
-/// touch `va_arg` (K-756).
+/// What the C shim asks before it touches the variadic list: how many trailing
+/// arguments this parameter carries, and of which kind.
 ///
-/// **Why the shim has to ask at all.** `va_arg` cannot know how many arguments
-/// the caller pushed; it walks forward on request and reads whatever lies at
-/// the next position. Pulling one more than was passed therefore reads
-/// something else entirely — and on a *read* that something else would then be
-/// written through as if it were the plugin's out-pointer. So the count comes
-/// from the parameter's own declaration, which is a fact this host has held
-/// since `paramDefine`, and a well-behaved plugin passes exactly that many.
-///
-/// `0` means answered. Anything else means **this parameter has no value to
-/// read or write**: a push button, a group, a page, a parametric curve, or a
-/// handle that names none of those because it names nothing. The shim then
-/// calls through with empty slots, so the refusal is still decided in exactly
-/// one place — [`write_value`] and [`write_param`] — rather than restated in C,
-/// where the two copies would drift.
+/// **Never fails, and never tallies.** A handle this host cannot serve (forged,
+/// stale, a push button) answers with a count of nought, so the shim pulls
+/// nothing and passes the call straight on to the Rust half, which then gives
+/// the *right* refusal and records it exactly once. Answering an error here
+/// would either tally it twice or leave the shim to invent a status of its own.
 ///
 /// # Safety
 ///
-/// `count` and `reading` must each point at writable storage for one `c_int`.
-#[no_mangle]
-pub unsafe extern "C" fn lumit_ofx_param_arity(
-    param: OfxParamHandle,
-    count: *mut c_int,
-    reading: *mut c_int,
-) -> c_int {
-    // A null out-parameter is the caller's bug, and this is the one place that
-    // can answer it without dereferencing anything.
-    if count.is_null() || reading.is_null() {
-        return 1;
+/// `kind` and `count` must point at writable `int`s, which the shim's are.
+unsafe extern "C" fn param_shape(param: OfxParamHandle, kind: *mut c_int, count: *mut c_int) {
+    let shape = std::panic::catch_unwind(|| {
+        let handle = Handle::from_ptr(param);
+        let state = state();
+        let record = state.params.get(handle).ok()?;
+        let param_type = state
+            .props
+            .get(record.props)
+            .ok()?
+            .get_string(keys::PARAM_TYPE, 0)
+            .ok()?
+            .to_string_lossy()
+            .into_owned();
+        slots_of(&param_type)
+    })
+    .ok()
+    .flatten();
+    let (found, reading) = shape.unwrap_or((0, Reading::Int));
+    if !kind.is_null() {
+        // SAFETY: the shim's own local.
+        unsafe { *kind = reading as c_int };
     }
-    let Ok(param_type) = param_type_of(param) else {
-        return 1;
-    };
-    let Some((slots, kind)) = slots_of(&param_type) else {
-        return 1;
-    };
-    // SAFETY: the caller's contract, plus the null checks above. `slots` is one
-    // of the small constants in `slots_of`, so the conversion cannot lose it;
-    // `unwrap_or` is there because a fallible conversion may not panic in an
-    // engine crate (docs/14 §4), not because the value could be out of range.
-    unsafe {
-        *count = c_int::try_from(slots).unwrap_or(0);
-        *reading = kind as c_int;
+    if !count.is_null() {
+        // SAFETY: as above.
+        unsafe { *count = c_int::try_from(found).unwrap_or(0) };
     }
-    0
 }
 
-/// Turn the words a caller left in the argument registers back into the value
-/// the parameter holds (see [`crate::ffi::OfxParamSlot`] for why they arrive as
-/// words at all).
+/// Turn the words the shim packed back into the value the parameter holds: an
+/// `int` in the low half, a `double` as its bits, a string as its address.
 ///
 /// # Safety
 ///
@@ -600,12 +581,10 @@ pub unsafe extern "C" fn lumit_ofx_param_arity(
 unsafe fn value_from_slots(
     reading: Reading,
     count: usize,
-    slots: [OfxParamSlot; 4],
+    slots: [u64; 4],
 ) -> Result<PropValue, Status> {
     let taken = slots.into_iter().take(count);
     Ok(match reading {
-        // An `int` argument occupies the low half of its word; the top half is
-        // whatever the caller happened to leave there.
         Reading::Int => PropValue::Int(taken.map(|word| word as u32 as i32).collect()),
         Reading::Double => PropValue::Double(taken.map(f64::from_bits).collect()),
         Reading::Text => {
@@ -625,7 +604,7 @@ unsafe fn value_from_slots(
 /// there has the library throw, the action fail, and the instance never appear
 /// — which from a layer looks like every plugin refusing to apply, with a
 /// different status each time depending on what the vendor's own handler did
-/// with the exception (K-595, docs/impl/ofx-host.md §5).
+/// with the exception (docs/impl/ofx-host.md §5).
 ///
 /// What the write does **not** do is reach the document. Lumit owns parameter
 /// storage (docs/12 §2.2), so the next render replaces the snapshot with the
@@ -640,17 +619,21 @@ unsafe fn value_from_slots(
 // ponytail: the write reaches the snapshot and not the document, so a control a
 // plugin sets does not appear in Effect Controls or in undo. The upgrade is the
 // bridge seam docs/12 §2.2 names, not a different shape here.
-unsafe fn write_param(param: OfxParamHandle, slots: [OfxParamSlot; 4]) -> StatusResult {
-    // Before the lock, and for the same reason [`write_value`] does it here.
-    let param_type = param_type_of(param)?;
-    let (count, reading) = slots_of(&param_type).ok_or(Status::ErrUnsupported)?;
-    // SAFETY: the caller's contract.
-    let value = unsafe { value_from_slots(reading, count, slots) }?;
-
+unsafe fn write_param(param: OfxParamHandle, slots: [u64; 4]) -> StatusResult {
     let handle = Handle::from_ptr(param);
     let mut state = state();
     let record = state.params.get(handle)?;
     let (effect, name) = (record.effect, record.name.clone());
+    let param_type = state
+        .props
+        .get(record.props)?
+        .get_string(keys::PARAM_TYPE, 0)?
+        .to_string_lossy()
+        .into_owned();
+    let (count, reading) = slots_of(&param_type).ok_or(Status::ErrUnsupported)?;
+    // SAFETY: the caller's contract.
+    let value = unsafe { value_from_slots(reading, count, slots) }?;
+
     state
         .effects
         .get_mut(effect)?
@@ -664,47 +647,20 @@ unsafe fn write_param(param: OfxParamHandle, slots: [OfxParamSlot; 4]) -> Status
     Ok(())
 }
 
-/// `paramSetValue`'s Rust half — the words the shim pulled, interpreted.
+/// The Rust half of `paramSetValue` and `paramSetValueAtTime`: the C shim has
+/// pulled the values off the variadic list, packed each into a word, and hands
+/// them over fixed.
 ///
-/// See [`lumit_ofx_param_get_value`] for why the C name.
-///
-/// # Safety
-///
-/// For a string parameter the first word must be a pointer to a NUL-terminated
-/// string alive for the duration of the call, which is what OFX promises for
-/// `paramSetValue` on a string. The other readings carry no pointer.
-#[no_mangle]
-pub unsafe extern "C" fn lumit_ofx_param_set_value(
-    param: OfxParamHandle,
-    v0: OfxParamSlot,
-    v1: OfxParamSlot,
-    v2: OfxParamSlot,
-    v3: OfxParamSlot,
-) -> c_int {
-    // SAFETY: the trailing arguments the plugin passed, as OFX declares them.
-    guard(|| unsafe { write_param(param, [v0, v1, v2, v3]) })
-}
-
-/// As [`lumit_ofx_param_set_value`], for the timed spelling.
+/// The snapshot is one moment, so a value written at a time is just the value,
+/// and the shim does not pass the time on. Keyframing a plugin's control from
+/// inside the plugin is the same later package as making the write reach the
+/// document, and refusing would fail an action the plugin did nothing wrong in.
 ///
 /// # Safety
 ///
-/// As [`lumit_ofx_param_set_value`].
-#[no_mangle]
-pub unsafe extern "C" fn lumit_ofx_param_set_value_at_time(
-    param: OfxParamHandle,
-    time: OfxTime,
-    v0: OfxParamSlot,
-    v1: OfxParamSlot,
-    v2: OfxParamSlot,
-    v3: OfxParamSlot,
-) -> c_int {
-    // The snapshot is one moment, so a value written at a time is just the
-    // value. Keyframing a plugin's control from inside the plugin is the same
-    // later package as making the write reach the document, and refusing here
-    // would fail an action the plugin did nothing wrong in.
-    let _ = time;
-    // SAFETY: as `lumit_ofx_param_set_value`.
+/// As [`write_param`].
+unsafe extern "C" fn param_set(param: OfxParamHandle, v0: u64, v1: u64, v2: u64, v3: u64) -> c_int {
+    // SAFETY: the trailing arguments the plugin passed, as the shim packed them.
     guard(|| unsafe { write_param(param, [v0, v1, v2, v3]) })
 }
 
@@ -784,24 +740,4 @@ unsafe extern "C" fn param_edit_begin(param_set: OfxParamSetHandle, name: *const
 
 unsafe extern "C" fn param_edit_end(param_set: OfxParamSetHandle) -> c_int {
     guard(|| live_param_set(param_set))
-}
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-mod tests {
-    use super::Reading;
-
-    /// The C shim reads `Reading` back as a plain `int` to know which `va_arg`
-    /// type to pull (K-756), so the two halves have to agree about the numbers.
-    /// Nothing else would notice if they stopped: a drifted reading would pull
-    /// a `double` where an `int` was pushed and hand back a plausible wrong
-    /// number, which is the shape of bug this whole change exists to end.
-    #[test]
-    fn the_shim_and_its_rust_half_agree_about_readings() {
-        // The literals below are `#define`s in `shim/ofx_varargs.c`; change one
-        // there and this fails rather than the picture changing quietly.
-        assert_eq!(Reading::Int as i32, 0, "LUMIT_OFX_READING_INT");
-        assert_eq!(Reading::Double as i32, 1, "LUMIT_OFX_READING_DOUBLE");
-        assert_eq!(Reading::Text as i32, 2, "LUMIT_OFX_READING_TEXT");
-    }
 }

@@ -1,4 +1,4 @@
-//! The Custom shader's GPU half (docs/impl/custom-shader.md §2.1, §3, K-650):
+//! The Custom shader's GPU half (docs/impl/custom-shader.md §2.1, §3):
 //! validate, compile, cache, and one dispatch.
 //!
 //! **In plain terms.** Everything about the user's text has already happened by
@@ -7,7 +7,7 @@
 //! What is left is the three things that need a graphics card, or nearly:
 //!
 //! - **Checking it**, with the very shader compiler wgpu is built on, on the
-//!   very settings the shipped kernels are held to (K-263). No card involved,
+//!   very settings the shipped kernels are held to. No card involved,
 //!   which is what lets a machine with no graphics hardware tell a person their
 //!   shader is broken; and running it here rather than at pipeline creation is
 //!   what turns a black frame on a stranger's adapter into a sentence.
@@ -121,10 +121,27 @@ impl CustomShaderPipelines {
             compiles: Mutex::new(0),
         }
     }
+
+    /// Forget every compiled shader and count, so a shared engine
+    /// (`crate::test_support`) starts each test the way a new one would.
+    #[cfg(any(test, feature = "test-fixtures"))]
+    pub(super) fn reset_for_tests(&self) {
+        if let Ok(mut cache) = self.cache.lock() {
+            cache.clear();
+        }
+        if let Ok(mut last_good) = self.last_good.lock() {
+            last_good.clear();
+        }
+        self.stale_ok
+            .store(false, std::sync::atomic::Ordering::Relaxed);
+        if let Ok(mut compiles) = self.compiles.lock() {
+            *compiles = 0;
+        }
+    }
 }
 
 /// Parse and validate an assembled module the way wgpu will, without a graphics
-/// card (K-263's road, on K-263's settings).
+/// card (the same road the shipped kernels take, on the same settings).
 ///
 /// `Capabilities::empty()` is the load-bearing argument: it is what the shipped
 /// kernels are held to, and a custom shader that asked for more would compile on
@@ -232,7 +249,7 @@ impl FxEngine {
     ) -> Result<Arc<wgpu::ComputePipeline>, String> {
         // naga first, always: it is the only road that produces a *message*
         // rather than a device error nobody can read, and it is the same road
-        // K-263 holds the shipped kernels to.
+        // the shipped kernels take.
         validate(assembled)?;
         let module = ctx
             .device

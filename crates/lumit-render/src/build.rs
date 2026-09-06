@@ -16,7 +16,7 @@
 //! read again (see [`crate::plan::same_decode`]).
 //!
 //! Preview and export both build through here, so a comp cannot look different
-//! in the viewport and the file (K-031).
+//! in the viewport and the file.
 
 use crate::decode::CompLayerPixels;
 use crate::draw::{
@@ -164,8 +164,8 @@ fn preview_puppet(pixels: &LayerPixels, layer: Uuid, density: f64, expansion: f6
 }
 
 /// The single `model::BlendMode` → `gpu::Blend` mapping shared by every path
-/// that composites (K-031: they must never disagree). Every mode maps to its
-/// like-named GPU variant (K-162, T24).
+/// that composites (they must never disagree). Every mode maps to its
+/// like-named GPU variant (T24).
 #[must_use]
 pub fn blend_of(b: lumit_core::model::BlendMode) -> lumit_gpu::Blend {
     use lumit_core::model::BlendMode as M;
@@ -248,15 +248,15 @@ pub fn patch_layer_effect_param(
 }
 
 /// The world placement matrix of `layer`'s parent chain within `comp` at comp
-/// time `t_comp` (K-103 layer parenting): `P_top × … × P_grandparent ×
+/// time `t_comp` (layer parenting): `P_top × … × P_grandparent ×
 /// P_parent`, each ancestor's `place_matrix` sampled at its own local time
 /// (`t_comp − start_offset`). `None` when the layer has no parent. Used as a
 /// draw's `pre`, which the GPU applies as `pre × own_placement` — so the child
 /// ends up placed inside its parent's coordinate space (After Effects
 /// parenting). Cycle- and missing-parent-safe via `model::layer_parent_chain`.
-/// Shared by the preview (here) and the export path so the two stay identical
-/// (K-031). v1 composes the full `place_matrix` (2D plus the 2.5D axes it
-/// already carries); no behaviour changes for an unparented layer (`None`).
+/// Shared by the preview (here) and the export path so the two stay identical.
+/// v1 composes the full `place_matrix` (2D plus the 2.5D axes it already
+/// carries); no behaviour changes for an unparented layer (`None`).
 pub fn parent_world_placement(
     comp: &lumit_core::model::Composition,
     layer: &lumit_core::model::Layer,
@@ -308,7 +308,7 @@ pub fn parent_world_placement(
 }
 
 /// Where the composition's camera puts a particle that sits off `layer`'s own
-/// plane (K-561) — the points stream's third axis, made visible.
+/// plane — the points stream's third axis, made visible.
 ///
 /// # In plain terms
 ///
@@ -330,7 +330,7 @@ pub fn parent_world_placement(
 /// `None` — a 2D layer, or a comp with no active camera — is not "the identity
 /// matrix": the render paths branch on it and leave the positions' bits alone,
 /// which is what makes an old project's picture bit-identical rather than
-/// nearly so (K-258).
+/// nearly so.
 pub fn points_projection(
     doc: &lumit_core::model::Document,
     comp: &lumit_core::model::Composition,
@@ -391,8 +391,8 @@ pub fn points_projection(
     Some(lumit_core::fx::points::Projection { m })
 }
 
-/// **The stream a points consumer's wire brings it** (K-600,
-/// points-stream.md §3.3), in px@comp, and which effect it came from.
+/// **The stream a points consumer's wire brings it** (points-stream.md §3.3),
+/// in px@comp, and which effect it came from.
 ///
 /// # In plain terms
 ///
@@ -402,17 +402,17 @@ pub fn points_projection(
 /// function the Points sample driver asks, so a consumer stamps the particles a
 /// driver would have counted and the producer did draw.
 ///
-/// **The back-samples** (K-601): a consumer that declares Trail's two rows —
+/// **The back-samples**: a consumer that declares Trail's two rows —
 /// `back_samples` and `back_step` — is asking for the same producer at
 /// `t − k·step` as well, newest first. Named by their parameter ids rather than
 /// by an effect's name, the way a producer's birth scan is found by its
-/// `emit_rate` row (K-598), so a second consumer that wants a history declares
+/// `emit_rate` row, so a second consumer that wants a history declares
 /// the same two ids and needs no edit here.
 ///
 /// `(vec![], None)` — the documented calm — for every producer, for a consumer
 /// with nothing wired, and for a producer that cannot answer at this point in
-/// the frame (Scatter, K-599). The effect renders as a passthrough and the box
-/// wears the "no stream" mark (K-509); nothing faults, and nothing is guessed.
+/// the frame (Scatter). The effect renders as a passthrough and the box
+/// wears the "no stream" mark; nothing faults, and nothing is guessed.
 #[allow(clippy::too_many_arguments)]
 fn points_input_for(
     layer: &lumit_core::model::Layer,
@@ -444,7 +444,7 @@ fn points_input_for(
         port: port.id.to_owned(),
     });
     // Two things a points wire may come out of, and nothing else: a producer in
-    // this stack, or a **cross-layer tap** naming another layer's (K-604). A
+    // this stack, or a **cross-layer tap** naming another layer's. A
     // number or the source matte is neither; the type check refused those at
     // commit, so they are stale lines to ignore rather than cases to guess.
     enum Source {
@@ -458,7 +458,7 @@ fn points_input_for(
         Some(OutputRef::Driver { node, .. }) => Source::Tap(*node),
         _ => return none,
     };
-    // **Which producer the wire names, for the frame key** (K-600): the stack
+    // **Which producer the wire names, for the frame key**: the stack
     // index of a same-layer producer, and `None` for a tap — whose own node,
     // and with it the layer it names and that layer's whole stack, is already
     // folded into this layer's key by the graph's driver-node hashing
@@ -552,17 +552,18 @@ fn invert3(m: &[[f32; 3]; 3]) -> Option<[[f32; 3]; 3]> {
 }
 
 /// The per-layer motion-blur sub-frame placements for `layer` at comp time
-/// `t_comp` (docs/06 §4, K-120): the layer's own transform re-evaluated at each
+/// `t_comp` (docs/06 §4): the layer's own transform re-evaluated at each
 /// shutter sample time. Empty — so the layer draws normally — unless the comp
 /// master (`comp.motion_blur.enabled`) and the layer's own switch are both on
 /// and `samples` ≥ 2.
 ///
 /// Each sample's comp time is `t_comp + offset · dt` (dt = one frame in comp
 /// seconds; offsets from [`MotionBlur::sample_offsets`], centred on the frame),
-/// and its layer time subtracts the layer's `start_offset`. Shared by the
-/// every caller of the one comp walk (K-031) so all paths smear identically. Parent motion within the shutter is a
-/// follow-up: only the layer's OWN transform is sampled here — a parented
-/// layer keeps its frame-time parent placement (`pre`) for every sub-copy.
+/// and its layer time subtracts the layer's `start_offset`. Shared by every
+/// caller of the one comp walk so all paths smear identically. Parent motion
+/// within the shutter is a follow-up: only the layer's OWN transform is sampled
+/// here — a parented layer keeps its frame-time parent placement (`pre`) for
+/// every sub-copy.
 pub fn motion_blur_samples(
     comp: &lumit_core::model::Composition,
     layer: &lumit_core::model::Layer,
@@ -613,8 +614,8 @@ pub fn motion_blur_samples(
         .collect()
 }
 
-/// The comp's Light layers, reduced to what the lighting pass needs (docs/06,
-/// K-361): each light's emitting rectangle as four corners in comp pixels,
+/// The comp's Light layers, reduced to what the lighting pass needs (docs/06):
+/// each light's emitting rectangle as four corners in comp pixels,
 /// wound the same way for every light so the form-factor integral has a
 /// consistent sign.
 ///
@@ -726,7 +727,7 @@ pub(crate) fn unit(v: [f32; 3]) -> [f32; 3] {
 }
 
 /// Resolve a layer's **effect stack and then its styles**, as one op list
-/// (docs/impl/layer-styles.md §3, K-706).
+/// (docs/impl/layer-styles.md §3).
 ///
 /// **In plain terms.** A layer's styles are a second little stack that runs on
 /// the layer's own picture after its effects and before the transform
@@ -836,14 +837,14 @@ pub fn build_comp_draws(
 /// (each layer's own `start_offset` subtracted) so the flag is honoured at every
 /// depth.
 ///
-/// `keys` names each non-collapsed Precomp's frame (K-422) so the realiser can
+/// `keys` names each non-collapsed Precomp's frame so the realiser can
 /// serve it from the nested-frame store; `None` leaves every nested draw
 /// unnamed, which realises it every time.
 ///
 /// `spliced` says this comp is being spliced into its parent by a collapsed
 /// Precomp layer (docs/06 §1.4): its layers are not clipped to its own
 /// rectangle, so a layer that covers *this* comp's frame proves nothing about
-/// the parent's, and the occlusion cull (K-423) is switched off.
+/// the parent's, and the occlusion cull is switched off.
 #[allow(clippy::too_many_arguments)]
 pub fn build_comp_draws_at(
     doc: &Arc<lumit_core::model::Document>,
@@ -859,7 +860,7 @@ pub fn build_comp_draws_at(
     let in_span = |l: &lumit_core::model::Layer| {
         t_comp >= l.in_point.0.to_f64() && t_comp < l.out_point.0.to_f64()
     };
-    // Occlusion cull (K-423, docs/06 §1.1): the same question the decode
+    // Occlusion cull (docs/06 §1.1): the same question the decode
     // planner asks, so a layer skipped here was never decoded either.
     let occluder = (!spliced)
         .then(|| lumit_core::occlusion::occluder_index(doc, comp, t_comp))
@@ -870,14 +871,14 @@ pub fn build_comp_draws_at(
     // nesting level — this function recurses through Precomps).
     let expr_doc = doc;
 
-    // Where the Audio level driver's samples come from (K-471 §1.3). Made here,
+    // Where the Audio level driver's samples come from. Made here,
     // from the document this walk already holds, so the preview and the export
     // — which both build their draws through this function — hand the driver
-    // the same sound and reach the same number (K-031).
+    // the same sound and reach the same number.
     let audio = crate::audio_tap::DocumentAudio::new(doc, comp, t_comp);
 
     // A layer's driver graph, resolved with the camera its own particles would
-    // be drawn through (K-561). One closure for all four resolve sites: the
+    // be drawn through. One closure for all four resolve sites: the
     // Points sample driver measures a distance **on the frame**, so a stream it
     // samples has to be projected exactly as the picture projects it, and a
     // rule spelled four ways is a rule three of them will eventually break.
@@ -905,7 +906,7 @@ pub fn build_comp_draws_at(
             current_depth: 0,
         });
 
-        // A layer acting as an adjustment (K-537) has no picture of its own to
+        // A layer acting as an adjustment has no picture of its own to
         // give — by kind or by the flag, the same answer, so a footage layer
         // switched on stops handing its frames to a matte too.
         if layer.is_adjustment() {
@@ -926,7 +927,7 @@ pub fn build_comp_draws_at(
                     // viewport zoom, and sizing the layer by that made it
                     // scale with zoom (a small layer ballooned when zoomed in).
                     (
-                        lp.rgba.clone(),
+                        own_shutter_average(layer, lp, lt),
                         lp.width,
                         lp.height,
                         (lp.natural_w as f32, lp.natural_h as f32),
@@ -937,7 +938,7 @@ pub fn build_comp_draws_at(
                 let px = solid_rgba(sd.colour);
                 // A flat colour is normally an 8×8 tile stretched to size —
                 // but a mask gates *pixels* and a stroke paints them, so both
-                // want the solid at its real size to work on (K-227).
+                // want the solid at its real size to work on.
                 //
                 // **And so does an effect stack.** The tile is a promise that
                 // nothing between here and the compositor cares *where* a pixel
@@ -974,7 +975,7 @@ pub fn build_comp_draws_at(
                     && layer.paint.is_empty()
                     && !layer.effects.iter().any(|e| e.enabled)
                     // A style draws on the layer's own raster exactly as an
-                    // effect does (K-706), so a styled solid needs its real
+                    // effect does, so a styled solid needs its real
                     // pixels for the same reason an effected one does — an
                     // 8 × 8 tile has no edge for a shadow to fall off.
                     && !layer.styles.iter().any(|e| e.enabled);
@@ -993,9 +994,9 @@ pub fn build_comp_draws_at(
 
                 let line = document.resolved_text(context.clone());
                 let size = document.size as f32;
-                // **Text on a path** (K-607). The named mask's own flattened
+                // **Text on a path**. The named mask's own flattened
                 // curve, read through the carriage every path-walking effect
-                // reads (K-408) — so the glyphs and a Stroke on the same mask
+                // reads — so the glyphs and a Stroke on the same mask
                 // agree about where the curve is. A layer whose row names
                 // nothing, or a mask since deleted, flattens to an empty
                 // polyline and the line lays straight: refuse calmly, never
@@ -1004,11 +1005,11 @@ pub fn build_comp_draws_at(
                     .path
                     .map(|id| lumit_core::mask::mask_path_at(&layer.masks, Some(id), false, lt))
                     .filter(|p| !p.is_empty());
-                // **The letters move separately** (K-609). What each one is
+                // **The letters move separately**. What each one is
                 // asked to do is worked out here, from the animators' own
                 // keyframed numbers at this layer time; a layer with none hands
                 // back an empty list and the rasteriser takes the path it
-                // always took, byte for byte (K-258).
+                // always took, byte for byte.
                 let xforms = lumit_core::text::glyph_xforms(&document.animators, &line, lt);
                 let r = match &spine {
                     Some(path) => {
@@ -1031,8 +1032,8 @@ pub fn build_comp_draws_at(
                 (r.rgba, r.width, r.height, (r.width as f32, r.height as f32))
             }),
             // Vector art: rasterised at the size the frame is being drawn at,
-            // into its own bounding box, which is also the layer's natural size
-            // (K-237). Unlike every other kind, that size moves when the art is
+            // into its own bounding box, which is also the layer's natural
+            // size. Unlike every other kind, that size moves when the art is
             // edited.
             LayerKind::Shape { contents } => in_span(layer)
                 .then(|| lumit_core::shape::contents_bounds(contents, lt))
@@ -1054,14 +1055,14 @@ pub fn build_comp_draws_at(
                 }),
             LayerKind::Precomp { .. } => None, // handled as Nested below
             LayerKind::Camera { .. } => None,  // shapes the view, draws nothing
-            // A light is something other layers SEE (K-360). It has no picture
+            // A light is something other layers SEE. It has no picture
             // of its own; the effects that read lights take them from
             // `Composition::lights_at`, not from the draw list.
             LayerKind::Light { .. } => None,
         };
         raw.map(|(mut rgba, w, h, natural)| {
             // Paint first, masks second: a stroke is part of the layer's
-            // picture, and a mask gates the picture (K-227, docs/06 render
+            // picture, and a mask gates the picture (docs/06 render
             // order). Painting after the mask would let a brush draw outside
             // the shape the mask cut.
             lumit_core::paint::apply_strokes(
@@ -1071,7 +1072,7 @@ pub fn build_comp_draws_at(
                 f64::from(natural.0),
                 f64::from(natural.1),
                 &layer.paint,
-                // The layer's own clock, as a mask's keys are read on (K-213):
+                // The layer's own clock, as a mask's keys are read on:
                 // a stroke keyed to draw itself on travels with the layer.
                 lt,
             );
@@ -1090,7 +1091,7 @@ pub fn build_comp_draws_at(
 
     let pixels_for = |layer: &lumit_core::model::Layer| -> Option<LayerPixels> {
         // The layer's own clock, the same one its transform, its masks and its
-        // paint are read at (K-213) — a keyframed shape modifier travels with
+        // paint are read at — a keyframed shape modifier travels with
         // the layer exactly as a keyframed mask does.
         let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
         let mut pixels = solo_at(layer, lt)?;
@@ -1122,11 +1123,11 @@ pub fn build_comp_draws_at(
     // is usually hidden so it doesn't render — only in-span; the decode
     // planner (app_state::collect_comp_jobs) decodes layer-input references
     // exactly like matte sources, and export applies the same in-span-only
-    // gate (K-031).
-    // A reference to a PRECOMP — as a layer input (K-266) or as a track matte
-    // (K-268): its picture exists only as a render, so package the nested
-    // comp's draw list for realise to run recursively — the DrawSource::Nested
-    // shape, on the referencing slot.
+    // gate.
+    // A reference to a PRECOMP — as a layer input or as a track matte: its
+    // picture exists only as a render, so package the nested comp's draw list
+    // for realise to run recursively — the DrawSource::Nested shape, on the
+    // referencing slot.
     // `visited_path` is a snapshot of the ancestor chain at this comp's
     // entry, so a matte that (transitively) contains its own comp stops at
     // the cycle instead of recursing forever; a fresh clone per reference keeps
@@ -1184,23 +1185,23 @@ pub fn build_comp_draws_at(
 
     // One referenced layer resolved into an input slot — the body
     // `dof_inputs_for` and `mattes_for` share (docs/impl/layer-input.md §2): the
-    // span gate, the K-266 nested-precomp render, and the K-142
-    // masks-and-effects folding, so a matte and a background plate can never
-    // disagree about what "a layer rendered alone" means.
+    // span gate, the nested-precomp render, and the masks-and-effects folding,
+    // so a matte and a background plate can never disagree about what "a layer
+    // rendered alone" means.
     let layer_slot = |e: &lumit_core::model::EffectInstance, param: &str| -> Option<DofInputDraw> {
         let id = e.layer_ref(param)?;
         let src = comp.layers.iter().find(|l| l.id == id)?;
         if !in_span(src) {
             return None;
         }
-        // A Precomp reference renders its comp (K-266) — "a white circle
+        // A Precomp reference renders its comp — "a white circle
         // in a precomp" is the natural way to author a flare source, and
         // a depth pass authored as a comp is the same shape.
         if let Some(nested) = nested_input_for(src) {
             return Some(nested);
         }
         let mode = e.layer_source(param);
-        // Layer source (K-142). None samples the layer's raw pixels —
+        // Layer source. None samples the layer's raw pixels —
         // clear its masks so `pixels_for` skips them; Masks and Effects
         // and masks keep them.
         let (rgba, tex_w, tex_h, natural) = if mode.applies_masks() {
@@ -1210,11 +1211,11 @@ pub fn build_comp_draws_at(
             bare.masks.clear();
             pixels_for(&bare)?
         };
-        // Effects and masks (K-142): resolve the referenced layer's own
+        // Effects and masks: resolve the referenced layer's own
         // stack at its layer time so render_dof_inputs runs it on the
         // texture before resampling. Uses that layer's decode scale (its
-        // px@comp radii stay honest), the same resolve export uses
-        // (K-031). Empty otherwise.
+        // px@comp radii stay honest), the same resolve export uses. Empty
+        // otherwise.
         let (fx, lut_files) = if mode.folds_effects() && src.switches.fx {
             let slt = lumit_core::time::layer_time(t_comp, src.start_offset.0);
             let comp_diag = ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
@@ -1230,7 +1231,7 @@ pub fn build_comp_draws_at(
                 comp_time: t_comp,
                 current_depth: 0,
             });
-            // The referenced layer's own driver graph too (K-471): a wire
+            // The referenced layer's own driver graph too: a wire
             // substitutes where a keyframe would have been read, so it belongs
             // to whichever stack is being resolved.
             let drivers = drivers_for(src, slt, context.clone());
@@ -1262,7 +1263,7 @@ pub fn build_comp_draws_at(
         })
     };
 
-    // **The auxiliary-layer inputs** (K-123, docs/impl/layer-input.md §2): one
+    // **The auxiliary-layer inputs** (docs/impl/layer-input.md §2): one
     // slot per enabled built-in whose declaration names a Layer row that is not
     // its matte — Light wrap's Background, Texturize's Texture, Fast motion
     // blur's Motion vectors, Set matte's source — AND that resolves to an op at
@@ -1270,9 +1271,9 @@ pub fn build_comp_draws_at(
     // list stays 1:1 with the ops `run_ops` walks.
     //
     // The parameter comes from the schema's own
-    // [`EffectSchema::layer_input`] rather than a table of match names here
-    // (K-429): a table is a second rule, and a second rule is a thing to forget
-    // when an effect gains a layer row.
+    // [`EffectSchema::layer_input`] rather than a table of match names here: a
+    // table is a second rule, and a second rule is a thing to forget when an
+    // effect gains a layer row.
     let dof_inputs_for =
         |owner: uuid::Uuid, effects: &[lumit_core::model::EffectInstance]| -> Vec<LayerInputDraw> {
             use lumit_core::model::EffectNamespace;
@@ -1285,7 +1286,7 @@ pub fn build_comp_draws_at(
                     def.is_image_op().then_some((e, param))
                 })
                 .map(|(e, param)| {
-                    // "This layer" (K-288): a reference to the layer the effect
+                    // "This layer": a reference to the layer the effect
                     // is ON is not a second render — it is the effect's own
                     // input, which `run_ops` already holds.
                     if e.layer_ref(param) == Some(owner) {
@@ -1296,7 +1297,7 @@ pub fn build_comp_draws_at(
                 .collect()
         };
 
-    // **The Matte inputs — the one carriage** (K-395, docs/08 §2.6). One slot
+    // **The Matte inputs — the one carriage** (docs/08 §2.6). One slot
     // per enabled built-in whose declaration names a matte parameter AND
     // resolves to an op at all — the two conditions `resolve_stack` itself
     // applies, so this list stays 1:1 with the ops `run_ops` walks. An
@@ -1311,12 +1312,12 @@ pub fn build_comp_draws_at(
     // than strength, and the only thing that differs is which parameter holds
     // the reference.
     // `graph` carries the layer's driver wiring: an in-graph **SourceMatte**
-    // edge (K-471 §1.4) feeds an effect the layer's OWN masked source alpha at
-    // that point in the chain, and overrides the Matte parameter while it
-    // exists. That is precisely what K-288's "this layer" already means to the
-    // render — the effect's own input rather than a second pass over another
-    // layer — so the wire lowers to the answer this builder has always had, and
-    // nothing downstream learns a new shape.
+    // edge feeds an effect the layer's OWN masked source alpha at that point in
+    // the chain, and overrides the Matte parameter while it exists. That is
+    // precisely what "this layer" already means to the render — the effect's
+    // own input rather than a second pass over another layer — so the wire
+    // lowers to the answer this builder has always had, and nothing downstream
+    // learns a new shape.
     let mattes_for = |owner: uuid::Uuid,
                       effects: &[lumit_core::model::EffectInstance],
                       graph: &lumit_core::graph::LayerGraph|
@@ -1346,7 +1347,7 @@ pub fn build_comp_draws_at(
                 {
                     return LayerInputDraw::Absent;
                 }
-                // "This layer" (K-288): a matte pointed at the layer the
+                // "This layer": a matte pointed at the layer the
                 // effect is on is the effect's own input, not a re-render —
                 // on an adjustment layer, the composite below.
                 if e.layer_ref(param) == Some(owner) {
@@ -1357,7 +1358,7 @@ pub fn build_comp_draws_at(
             .collect()
     };
 
-    // **The mask paths — the geometry carriage** (K-408, K-546, docs/08 §1.2).
+    // **The mask paths — the geometry carriage** (docs/08 §1.2).
     // One polyline per MaskPath **row** of every enabled built-in that resolves
     // to an op at all — the same two conditions `mattes_for` applies, so this
     // list stays in step with the ops `run_ops` walks, with its own counter
@@ -1405,13 +1406,13 @@ pub fn build_comp_draws_at(
             .collect()
     };
 
-    // **The roto mattes — the coverage carriage** (K-710, docs/impl/roto.md §5).
+    // **The roto mattes — the coverage carriage** (docs/impl/roto.md §5).
     // One slot per enabled `roto_brush` op that resolves to an op at all — the
     // same two conditions `mask_paths_for` applies, so this list stays 1:1 with
     // the ops `run_ops` walks, with its own counter there.
     //
     // The lookup is by (instance, **source** frame): a matte describes the
-    // file's frames (K-248), so it survives every transform, retime and preview
+    // file's frames, so it survives every transform, retime and preview
     // tier this layer applies, and one shot's mattes serve every comp cutting
     // it. `None` — outside the propagated span, nothing propagated yet, the
     // cache folder deleted — is the effect's passthrough and never a fault.
@@ -1442,8 +1443,8 @@ pub fn build_comp_draws_at(
             .collect()
     };
 
-    // **The birth schedules — the timing carriage** (points-stream.md §3.3,
-    // K-474). One per enabled built-in that declares a Points output AND
+    // **The birth schedules — the timing carriage** (points-stream.md §3.3).
+    // One per enabled built-in that declares a Points output AND
     // resolves to an op at all — the same two conditions `mask_paths_for`
     // applies, so this list stays 1:1 with the ops `run_ops` walks, with its
     // own counter there because the predicate is a different one.
@@ -1473,7 +1474,7 @@ pub fn build_comp_draws_at(
      -> Vec<lumit_core::fx::points::PointsSchedule> {
         use lumit_core::model::EffectNamespace;
         let dt = 1.0 / comp.frame_rate.fps().max(1.0);
-        // **The camera carriage** (K-561), worked out once for the layer: a
+        // **The camera carriage**, worked out once for the layer: a
         // stream's third axis is only visible through the comp's camera, and
         // the camera is no more a number in the bag than the layer's clock is.
         let projection = owner.and_then(|layer| {
@@ -1502,7 +1503,7 @@ pub fn build_comp_draws_at(
                 wants.then_some((e, def))
             })
             .map(|(e, def)| {
-                // A pinned effect (K-132) is evaluated at the true playhead, so
+                // A pinned effect is evaluated at the true playhead, so
                 // its schedule is scanned there too: the picture and the
                 // particles it draws must be of one moment.
                 let t = if e.sample_temporally { slt } else { frame_slt };
@@ -1513,11 +1514,11 @@ pub fn build_comp_draws_at(
                     comp_time: t_comp,
                     current_depth: 0,
                 });
-                // **The stream a wire brings in** (K-600): nothing at all for a
+                // **The stream a wire brings in**: nothing at all for a
                 // producer, and for a consumer the producer's own stream
                 // evaluated by the very function the driver walk reads
                 // (points-stream.md §3.3). In px@comp — the units a stream is
-                // data in (K-419) — and rescaled into the raster by whichever
+                // data in — and rescaled into the raster by whichever
                 // consumer draws it.
                 let (input, input_from) = match owner {
                     Some(layer) => points_input_for(
@@ -1534,7 +1535,7 @@ pub fn build_comp_draws_at(
                     // in: the consumer's documented empty input.
                     None => (Vec::new(), None),
                 };
-                // **A generator has no births to schedule** (K-598): its points
+                // **A generator has no births to schedule**: its points
                 // are arithmetic over its own parameters, and what it wants
                 // from this carriage is the camera and the clock. A *consumer*
                 // has none either, for the plainer reason that it makes no
@@ -1579,13 +1580,13 @@ pub fn build_comp_draws_at(
             .collect()
     };
 
-    // **Live groups** (docs/impl/group-effects.md §2, K-731): a group whose
+    // **Live groups** (docs/impl/group-effects.md §2): a group whose
     // header stack has an enabled instance and whose drawn run is non-empty
     // renders as an implicit per-frame precompose — the run's draws collected
     // and wrapped in one comp-sized Nested draw carrying the header's stack.
     // This is the only reading of `Composition.groups` the render ever makes,
     // so on every frame where no header is live the walk stays group-blind
-    // and K-702's byte-identical promise holds.
+    // and the byte-identical promise holds.
     let stack_ids: Vec<uuid::Uuid> = comp.layers.iter().map(|l| l.id).collect();
     let mut live_spans: Vec<(usize, usize, &lumit_core::group::LayerGroup)> = Vec::new();
     for g in &comp.groups {
@@ -1658,14 +1659,14 @@ pub fn build_comp_draws_at(
                 source: DrawSource::Nested {
                     width: comp.width,
                     height: comp.height,
-                    // Transparent where nothing covers it (K-241), exactly as
+                    // Transparent where nothing covers it, exactly as
                     // a Precomp's intermediate is.
                     background: [0.0, 0.0, 0.0, 0.0],
                     draws: members,
                     // The comp's own active camera, so 3D members land exactly
                     // where they did; the finished slab is one 2D picture.
                     camera: crate::track::camera_pose(doc, comp, t_comp),
-                    // Uncached in v1 (§4): the K-421 stance the adjustment
+                    // Uncached in v1 (§4): the stance the adjustment
                     // path takes for its below-composite.
                     key: None,
                     paint: Vec::new(),
@@ -1693,7 +1694,7 @@ pub fn build_comp_draws_at(
                 fx_ids,
                 neighbours: Vec::new(),
                 // Temporal/flow effects on a header are inert or pass through
-                // in v1 (§3, K-544's documented degrade): nothing builds
+                // in v1 (§3, the documented degrade): nothing builds
                 // neighbours or flow for the unit.
                 flow_fields: Vec::new(),
                 lut_files: lut_files(&group.effects, t_comp),
@@ -1706,7 +1707,7 @@ pub fn build_comp_draws_at(
                 points_schedules: points_schedules_for(None, &group.effects, t_comp, frame_t),
                 flare_lens_files: flare_lens_files(&group.effects, t_comp),
                 // The stack resolved at comp scale but runs on the render
-                // target (K-266) — realise rescales, exactly the adjustment
+                // target — realise rescales, exactly the adjustment
                 // arm's setting.
                 fx_ref_width: Some(comp.width as f32),
                 fx_input_key: None,
@@ -1723,7 +1724,7 @@ pub fn build_comp_draws_at(
     // index, its group, and where in `draws` its members began.
     let mut open_unit: Option<(usize, &lumit_core::group::LayerGroup, usize)> = None;
 
-    // Solo / isolate (K-105): while any layer is soloed, only soloed layers
+    // Solo / isolate: while any layer is soloed, only soloed layers
     // render — computed once for the whole comp.
     let any_solo = lumit_core::model::any_picture_solo(comp);
     let mut draws: Vec<CompLayerDraw> = Vec::new();
@@ -1755,12 +1756,12 @@ pub fn build_comp_draws_at(
             current_depth: 0,
         });
 
-        // An Audio layer draws nothing at all (K-435) — no source, no solid, no
+        // An Audio layer draws nothing at all — no source, no solid, no
         // effects on an empty canvas. The mixer has already taken what it needs.
         if layer.audio_only {
             continue;
         }
-        // A layer whose Layer out is unplugged draws nothing (K-738), which is
+        // A layer whose Layer out is unplugged draws nothing, which is
         // the same nothing a hidden layer draws and is skipped in the same place.
         if !layer.switches.visible
             || layer.graph.out_unwired
@@ -1778,7 +1779,7 @@ pub fn build_comp_draws_at(
         // held/sub-frame re-render must not re-sample (docs/impl/
         // temporal-rerender.md §5). Equal to `lt` on an ordinary render.
         let frame_lt = lumit_core::time::layer_time(frame_t, layer.start_offset.0);
-        // Which frame of the **file** this layer is showing (K-710). The plan
+        // Which frame of the **file** this layer is showing. The plan
         // worked it out to decide what to decode, the decode carried it here,
         // and a Roto brush's matte is indexed by it — the document holds no
         // frame rate for a media item, so this is the only place the answer is
@@ -1801,27 +1802,27 @@ pub fn build_comp_draws_at(
         );
         let tr = &layer.transform;
         // The neighbour pictures a flow-consuming effect on this layer measures
-        // against (docs/08 §3.2, K-565). Filled in by the two kinds whose
+        // against (docs/08 §3.2). Filled in by the two kinds whose
         // picture the decode worker cannot measure — a Precomp here, an
         // adjustment in its own arm — and left empty by every other, which is
         // every layer that already carries a decoded field.
         let mut flow_below = Vec::new();
 
-        // The layer's own Matte (K-142), built before the kind match so that
+        // The layer's own Matte, built before the kind match so that
         // **every** arm can use it — the adjustment arm pushes and `continue`s,
         // and while this lived below the match an adjustment layer's Matte
         // dropdown chose a source that gated nothing at all.
         let matte = layer.matte.as_ref().and_then(|mr| {
             let src = comp.layers.iter().find(|l| l.id == mr.layer)?;
-            // A Precomp matte renders its comp (K-268): a comp has no pixels
+            // A Precomp matte renders its comp: a comp has no pixels
             // until it is rendered, so `pixels_for` gives up on one and the
             // matte silently gated nothing — a layer set to a precomp matte
             // simply vanished. The nested render stands in for the source
             // texture; the source-mode toggles below do not apply to it,
             // because a comp already carries its layers' own masks and
-            // effects (the K-266 layer-input boundary, unchanged).
+            // effects (the layer-input boundary, unchanged).
             let nested = in_span(src).then(|| nested_comp_draw(src)).flatten();
-            // Matte source mode (K-142). None reads the source's raw pixels —
+            // Matte source mode. None reads the source's raw pixels —
             // clear its masks so `pixels_for` skips them; Masks and Effects and
             // masks keep them.
             let (m_rgba, m_w, m_h, m_nat) = if let Some(n) = &nested {
@@ -1840,11 +1841,11 @@ pub fn build_comp_draws_at(
             };
             let mlt = lumit_core::time::layer_time(t_comp, src.start_offset.0);
             let mtr = &src.transform;
-            // Effects and masks matte (K-142): resolve the matte source's own
+            // Effects and masks matte: resolve the matte source's own
             // stack at its layer time so gpu.rs runs it on the matte texture
             // before the matte gates the consumer. Uses the source's decode scale
             // (its px@comp radii stay honest under reduced-res preview), the same
-            // §1.4 markers and the same resolve export uses (K-031). Empty for
+            // §1.4 markers and the same resolve export uses. Empty for
             // None / Masks or when the source's fx switch is off.
             let (fx, lut_files) = if nested.is_some() {
                 // The nested render already ran every layer's own stack.
@@ -1905,7 +1906,7 @@ pub fn build_comp_draws_at(
         });
 
         let (source, natural) = match &layer.kind {
-            // Guarded so a Precomp acting as an adjustment (K-537) falls
+            // Guarded so a Precomp acting as an adjustment falls
             // through to the adjustment arm below rather than drawing its comp.
             LayerKind::Precomp { comp: nested_id } if !layer.is_adjustment() => {
                 if visited.contains(nested_id) {
@@ -1955,7 +1956,7 @@ pub fn build_comp_draws_at(
                     );
                     // If the collapsed precomp is itself parented, its parent's
                     // world placement wraps its own before it wraps the inner
-                    // draws (K-103).
+                    // draws.
 
                     let parent = match parent_world_placement(comp, layer, t_comp, context.clone())
                     {
@@ -1970,10 +1971,10 @@ pub fn build_comp_draws_at(
                             None => parent,
                         });
                         // Per-layer motion blur on an inner layer of a collapsed
-                        // Precomp is a follow-up (docs/06 §4, K-120): the export
+                        // Precomp is a follow-up (docs/06 §4): the export
                         // splice (collect_collapsed) carries no sub-frame
                         // samples, so clearing them here keeps preview and export
-                        // identical (K-031). A non-collapsed Precomp layer still
+                        // identical. A non-collapsed Precomp layer still
                         // blurs via its own switch on the main path.
                         d.mb = Vec::new();
                         // A Posterize Time adjustment inside a collapsed Precomp
@@ -1986,7 +1987,7 @@ pub fn build_comp_draws_at(
                         // for the same sizing reason.
                         d.temporal_below = None;
                         d.accumulation_below = None;
-                        // And the flow neighbours (§3.2, K-565), for the same
+                        // And the flow neighbours (§3.2), for the same
                         // sizing reason: they were built at the nested comp's
                         // raster, so splicing them into the parent would
                         // measure motion against a mis-sized picture.
@@ -2007,7 +2008,7 @@ pub fn build_comp_draws_at(
                     false,
                 );
                 // The nested picture again at each neighbour time (docs/08
-                // §3.2, K-565), for a Fast motion blur or Datamosh on the
+                // §3.2), for a Motion blur or Datamosh on the
                 // Precomp layer itself: a comp has no decoded frames for the
                 // worker to measure between, but it can be built again at
                 // another moment. The offset steps by the *parent* comp's
@@ -2045,7 +2046,7 @@ pub fn build_comp_draws_at(
                         width: nested.width,
                         height: nested.height,
                         // A nested comp's intermediate is transparent where
-                        // nothing covers it (K-241). A comp's background colour
+                        // nothing covers it. A comp's background colour
                         // is a viewing backdrop for the comp being looked at,
                         // not a layer of its own, so filling the intermediate
                         // with it would turn every gap in a Precomp into opaque
@@ -2053,11 +2054,11 @@ pub fn build_comp_draws_at(
                         background: [0.0, 0.0, 0.0, 0.0],
                         draws: nested_draws,
                         camera: crate::track::camera_pose(doc, nested, lt),
-                        // The nested frame's own name (K-422). `lt` is on the
+                        // The nested frame's own name. `lt` is on the
                         // flick grid already (`layer_time`), so a Precomp
                         // layer moved by whole frames keeps its names.
                         key: keys.and_then(|k| k.nested_key(nested, lt)),
-                        // Paint on a Precomp (K-547): stamped into the nested
+                        // Paint on a Precomp: stamped into the nested
                         // picture by the realiser, because a comp has no
                         // pixels until it is rendered. Collapse is already
                         // forced off by any paint (`collapse_state`), so the
@@ -2065,13 +2066,13 @@ pub fn build_comp_draws_at(
                         paint: layer.paint.clone(),
                         // The layer's own clock, so a keyed Start/End on a
                         // Precomp's paint reads where every other keyed value
-                        // on that layer reads (K-213, K-549).
+                        // on that layer reads.
                         paint_time: lt,
                     },
                     (nested.width as f32, nested.height as f32),
                 )
             }
-            // **The one adjustment path** (K-537). Reached both by the layer
+            // **The one adjustment path**. Reached both by the layer
             // kind *New adjustment layer* makes and by any drawing layer with
             // the adjustment switch on: either way the layer's own source is
             // set aside, so there is one behaviour here and no second copy of
@@ -2084,7 +2085,7 @@ pub fn build_comp_draws_at(
                 let comp_diag = ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
                 let (fx_ids, fx) = if layer.switches.fx {
                     // The §1.4 marker context, built by the same shared
-                    // constructor export uses (K-031). Effects flagged
+                    // constructor export uses. Effects flagged
                     // sample_temporally == false resolve at the frame time in a
                     // held re-render (§5); equal to `lt` on an ordinary render.
                     let markers = lumit_core::fx::MarkerContext::for_layer(comp, layer);
@@ -2103,7 +2104,7 @@ pub fn build_comp_draws_at(
                 };
                 // Posterize Time everything-below (docs/08 §3.25): the below
                 // stack re-rendered at the held time, built by the shared
-                // `below_draws_at` export also drives (K-031). A Posterize Time
+                // `below_draws_at` export also drives. A Posterize Time
                 // effect has no Resolved op, so this — not `fx` — is what makes
                 // such an adjustment live. `frame_t` carries the playhead through
                 // so the held below honours sample_temporally too (§5).
@@ -2132,11 +2133,11 @@ pub fn build_comp_draws_at(
                     visited,
                 )
                 .map(|mut ab| {
-                    // Its Matte (K-429), rendered by the same helper every
+                    // Its Matte, rendered by the same helper every
                     // other matte and layer input goes through. It is filled in
                     // here rather than inside `accumulation_mb_below` because
                     // that is a free function and this is where `layer_slot`
-                    // lives. Pointed at the adjustment itself (K-288), the
+                    // lives. Pointed at the adjustment itself, the
                     // matte is the composite below — which is what an
                     // adjustment layer's own input is.
                     if let Some(e) = layer.effects.iter().find(|e| {
@@ -2229,10 +2230,10 @@ pub fn build_comp_draws_at(
                     ),
                     flare_lens_files: flare_lens_files(&layer.effects, lt),
                     // The adjust stack resolves at comp scale but runs on
-                    // the render target (K-266) — realise rescales.
+                    // the render target — realise rescales.
                     fx_ref_width: Some(comp.width as f32),
-                    // The composite below has no name of its own in v1
-                    // (K-421): an adjustment's stack runs uncached.
+                    // The composite below has no name of its own in v1: an
+                    // adjustment's stack runs uncached.
                     fx_input_key: None,
                     // An adjustment layer is a staging point, not a picture —
                     // motion blur has no image of its own to smear (docs/06 §4).
@@ -2243,8 +2244,8 @@ pub fn build_comp_draws_at(
                     lights: Vec::new(),
                     temporal_below,
                     accumulation_below,
-                    // The composite this layer's Fast motion blur or Datamosh
-                    // measures its motion against (docs/08 §3.2, K-565): the
+                    // The composite this layer's Motion blur or Datamosh
+                    // measures its motion against (docs/08 §3.2): the
                     // below-stack again at each neighbour time. Empty unless
                     // one of those effects is live, which is the whole cost
                     // gate — nothing else on an adjustment layer builds it.
@@ -2292,7 +2293,7 @@ pub fn build_comp_draws_at(
                 // scale doubles as the §2.3 preview-resolution factor:
                 // raster pixels per comp pixel for px@comp parameters. The
                 // §1.4 marker context comes from the same shared
-                // constructor export uses (K-031). In a held/sub-frame temporal
+                // constructor export uses. In a held/sub-frame temporal
                 // re-render, an effect flagged sample_temporally == false stays
                 // at the frame time `frame_lt` (§5); on an ordinary render
                 // `frame_lt == lt`, so this is the plain resolve.
@@ -2313,8 +2314,8 @@ pub fn build_comp_draws_at(
         };
         // Effects ON a Precomp layer run on the nested comp's raster, and that
         // raster shrinks with the preview scale while the stack above resolved
-        // px@comp parameters at factor 1 — the K-266 disease on the nested arm
-        // (K-268). Hand realise the width the stack was resolved against (the
+        // px@comp parameters at factor 1 — the same disease on the nested arm.
+        // Hand realise the width the stack was resolved against (the
         // nested comp's own width) and it rescales to whatever it renders at,
         // exactly as it does for an adjustment layer. `None` for every other
         // kind: a Pixels stack already resolved at its decode scale above.
@@ -2322,10 +2323,10 @@ pub fn build_comp_draws_at(
             DrawSource::Nested { width, .. } => Some(*width as f32),
             DrawSource::Pixels { .. } | DrawSource::Adjust => None,
         };
-        // The name the per-effect cache files this stack's outputs under
-        // (K-421): a picture made from bytes, or — since K-422 named it — a
-        // nested comp's frame, whose texture is exactly what the stack runs on
-        // (`op_keys` folds in the raster size, so the render scale is covered).
+        // The name the per-effect cache files this stack's outputs under: a
+        // picture made from bytes, or a nested comp's frame, whose texture is
+        // exactly what the stack runs on (`op_keys` folds in the raster size,
+        // so the render scale is covered).
         let fx_input_key = match &source {
             DrawSource::Pixels { tex_w, tex_h, .. } => {
                 fx_input_key(doc, layer, pixels_by_layer, lt, *tex_w, *tex_h)
@@ -2345,7 +2346,7 @@ pub fn build_comp_draws_at(
             })
             .unwrap_or_default();
         // The dense motion fields, one per offset a flow-consuming effect
-        // asked for (K-544), carried from the same decode job (their
+        // asked for, carried from the same decode job (their
         // `(u, v, conf)` are at the layer's decoded size).
         let flow_fields = pixels_by_layer
             .get(&layer.id)
@@ -2420,7 +2421,7 @@ pub fn build_comp_draws_at(
             // Depth inputs of the enabled built-in `dof` and `light_wrap`
             // effects, 1:1 with the stack's layer-input-consuming ops (docs/08
             // §3.22, §3.28); built the same way export does, so the two blur
-            // identically (K-031).
+            // identically.
             dof_inputs: dof_inputs_for(layer.id, &layer.effects),
             mattes: mattes_for(layer.id, &layer.effects, &layer.graph),
             mask_paths: mask_paths_for(&layer.effects, &layer.masks, lt),
@@ -2429,11 +2430,11 @@ pub fn build_comp_draws_at(
             flare_lens_files: flare_lens_files(&layer.effects, lt),
             fx_ref_width,
             fx_input_key,
-            // Per-layer motion blur (docs/06 §4, K-120): the layer's own
+            // Per-layer motion blur (docs/06 §4): the layer's own
             // transform sampled across the open shutter, empty unless it blurs.
             // Built the same way export does, so the two smear identically.
             mb: motion_blur_samples(comp, layer, t_comp, context.clone()),
-            // The comp's lights, if this layer takes them (docs/06, K-361).
+            // The comp's lights, if this layer takes them (docs/06).
             lights: shading_lights(comp, layer, t_comp),
             // Ordinary layers never carry a temporal re-render — that is an
             // adjustment-only capability in v1 (docs/08 §3.25, §3.26).
@@ -2449,8 +2450,8 @@ pub fn build_comp_draws_at(
     draws
 }
 
-/// The content name of the picture a layer's effect stack runs on (K-421,
-/// [`CompLayerDraw::fx_input_key`]): what the source is, then everything
+/// The content name of the picture a layer's effect stack runs on
+/// ([`CompLayerDraw::fx_input_key`]): what the source is, then everything
 /// `pixels_for` bakes into it before the stack sees it — the paint strokes,
 /// the masks at this layer time — and the raster it was made at. Footage and
 /// Sequence layers name their source by the decode job's identity
@@ -2498,12 +2499,12 @@ fn fx_input_key(
 }
 
 /// The ordered file paths of a layer's enabled built-in `lut` effects
-/// (docs/08 §3.11, K-114), each resolved at layer time `lt` (None = unset).
+/// (docs/08 §3.11), each resolved at layer time `lt` (None = unset).
 /// `resolve_stack` filters on the identical `e.enabled && namespace == Builtin`
 /// predicate and preserves order, and a `lut` effect always resolves to exactly
 /// one op, so this list is 1:1 and in the same order as the stack's
 /// `lut` ops — the alignment `run_ops` relies on to bind LUT k to op
-/// k. Preview (here) and export build it the same way, so the two match (K-031).
+/// k. Preview (here) and export build it the same way, so the two match.
 fn lut_files(effects: &[lumit_core::model::EffectInstance], lt: f64) -> Vec<Option<String>> {
     use lumit_core::model::EffectNamespace;
     effects
@@ -2518,7 +2519,7 @@ fn lut_files(effects: &[lumit_core::model::EffectInstance], lt: f64) -> Vec<Opti
 }
 
 /// The `lens_file` paths of the enabled built-in `lens_flare` effects, 1:1
-/// and in order with the stack's `lens_flare` ops (K-264) — the LUT-files
+/// and in order with the stack's `lens_flare` ops — the LUT-files
 /// pattern for the flare's custom prescription.
 fn flare_lens_files(effects: &[lumit_core::model::EffectInstance], lt: f64) -> Vec<Option<String>> {
     use lumit_core::model::EffectNamespace;
@@ -2534,22 +2535,24 @@ fn flare_lens_files(effects: &[lumit_core::model::EffectInstance], lt: f64) -> V
 }
 
 /// Render the composite of `below` (the layers beneath a temporal adjustment,
-/// in document order) at the held/sample comp time `tau`, reusing the SAME
-/// decoded `pixels_by_layer` — footage frames are held; only transforms,
-/// effects and the camera re-resolve at `tau` (docs/impl/temporal-rerender.md
-/// §2). This is the one re-render both the preview (`build_comp_draws` +
-/// [`Realiser::realise`]) and export drive, so a Posterize Time (and, later,
-/// accumulation motion blur) frame is identical in the viewport and the file
-/// (K-031). Re-resolving decodes nothing: the same held pixels are reused, so
-/// the decode planner is never re-entered (docs/impl/temporal-rerender.md
-/// Traps).
+/// in document order) at the held/sample comp time `tau`, reusing the
+/// decoded `pixels_by_layer` the caller hands in — for a Posterize hold that
+/// is the frame-time decode, so footage is held and only transforms, effects
+/// and the camera re-resolve at `tau`; for an accumulation sample the caller
+/// has already swapped in each clip's picture at that moment (docs/impl/
+/// temporal-rerender.md §2). This is the one re-render both the preview
+/// (`build_comp_draws` + [`Realiser::realise`]) and export drive, so a
+/// Posterize Time or accumulation motion blur frame is identical in the
+/// viewport and the file. Re-resolving decodes nothing here: every picture it
+/// reads was planned with the frame, so the decode planner is never re-entered
+/// (docs/impl/temporal-rerender.md Traps).
 ///
 /// Temporal effects inside the below-stack (echo, flow motion blur, datamosh)
 /// are held to a still here — their neighbour frames and flow fields are
 /// dropped by [`strip_temporal_inputs`], because the held re-render reuses the
 /// frame-time decode and export carries no neighbour decode for it. A
 /// documented v1 boundary (docs/08 §3.25), matching the after-effects matte's
-/// own temporal boundary (K-125).
+/// own temporal boundary.
 ///
 /// `frame_t` is the true playhead, threaded so an effect in the below-stack
 /// flagged `sample_temporally == false` holds at the frame time rather than
@@ -2584,9 +2587,10 @@ pub fn render_below_at(
 /// Build the below-stack's draw list at the held/sample comp time `tau`, plus
 /// the comp's camera at `tau` — the shared CPU step both the preview (embedded
 /// on the adjustment draw as [`TemporalBelow`]) and export (`render_below_at`)
-/// drive, so the two re-render the identical stack (K-031). Footage is held
-/// (the same `pixels_by_layer`); temporal effects in the below-stack are
-/// dropped to stills ([`strip_temporal_inputs`]).
+/// drive, so the two re-render the identical stack. Footage is whatever
+/// `pixels_by_layer` says it is at `tau` (held for a Posterize, the moment's
+/// own picture for an accumulation sample); temporal effects in the
+/// below-stack are dropped to stills ([`strip_temporal_inputs`]).
 #[allow(clippy::too_many_arguments)]
 pub fn below_draws_at(
     doc: &Arc<lumit_core::model::Document>,
@@ -2608,7 +2612,7 @@ pub fn below_draws_at(
     below_comp.layers = below.to_vec();
     // Accumulation MB *Force on all layers* (docs/08 §3.26): drop the effect's
     // shutter onto this SAMPLE-ONLY comp clone and turn every layer's own
-    // motion-blur switch on, so per-layer motion blur (K-120) smears each layer
+    // motion-blur switch on, so per-layer motion blur smears each layer
     // in every sub-frame sample — the real comp is never touched. None leaves
     // the sample render exactly as before (Posterize, or accumulation without
     // the toggle).
@@ -2618,7 +2622,7 @@ pub fn below_draws_at(
             l.switches.motion_blur = true;
         }
     }
-    // No nested-frame keyer (K-422): a held re-render strips the temporal
+    // No nested-frame keyer: a held re-render strips the temporal
     // inputs below, so a Precomp in it is not the picture its name would claim.
     let mut draws = build_comp_draws_at(
         doc,
@@ -2653,7 +2657,7 @@ pub fn posterize_below(
 ) -> Option<TemporalBelow> {
     let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
     let p = lumit_core::fx::stack_posterize(&layer.effects, layer.switches.fx, lt)?;
-    // The below-render reach is implied by the carrier (K-166): only an
+    // The below-render reach is implied by the carrier: only an
     // adjustment layer's Posterize holds the composite beneath it.
     if !layer.is_adjustment() {
         return None;
@@ -2683,7 +2687,7 @@ pub fn posterize_below(
 /// `τ_k = t_comp + off_k·dt` with the offsets from [`lumit_core::fx::
 /// AccumulationMbParams::sample_offsets`] (the shared per-layer motion-blur
 /// shutter maths), and each below-stack is built by the same `below_draws_at`
-/// export drives, so preview equals export (K-031). `frame_t` threads the
+/// export drives, so preview equals export. `frame_t` threads the
 /// playhead so a sample_temporally == false effect in the below-stack still holds
 /// at the frame time (§5).
 #[allow(clippy::too_many_arguments)]
@@ -2713,6 +2717,25 @@ pub fn accumulation_mb_below(
         .iter()
         .map(|off| {
             let tau = t_comp + off * dt;
+            // The footage at this moment (docs/08 §3.26): the decode
+            // planner fetched each covered clip at every offset of the
+            // shutter, and this sample's below-stack reads those pixels in
+            // place of the frame-time ones, so a clip playing under the
+            // adjustment smears the way a moving layer does. A clip with no
+            // picture for this moment (a Sequence clip, a dropped decode)
+            // keeps its frame-time pixels, which is the held behaviour this
+            // effect always had. References only: the moment's pixels live on
+            // the frame-time entry, so no frame is copied here.
+            let mut at_moment_by_layer = pixels_by_layer.clone();
+            for lp in pixels_by_layer.values() {
+                if let Some((_, moment)) = lp
+                    .shutter
+                    .iter()
+                    .find(|(o, _)| o.to_bits() == off.to_bits())
+                {
+                    at_moment_by_layer.insert(lp.layer, &**moment);
+                }
+            }
             below_draws_at(
                 doc,
                 comp,
@@ -2720,7 +2743,7 @@ pub fn accumulation_mb_below(
                 tau,
                 frame_t,
                 force_mb,
-                pixels_by_layer,
+                &at_moment_by_layer,
                 visited,
             )
         })
@@ -2729,7 +2752,7 @@ pub fn accumulation_mb_below(
         samples,
         mix: p.mix as f32,
         // Filled in by the caller, which has the layer-rendering helper this
-        // free function does not (K-429).
+        // free function does not.
         matte: LayerInputDraw::Absent,
         matte_channel: p.matte_channel,
         matte_invert: p.matte_invert,
@@ -2737,22 +2760,75 @@ pub fn accumulation_mb_below(
     })
 }
 
+/// A clip's picture when the layer itself carries accumulation motion blur
+/// (docs/08 §3.26): the clip averaged over its own shutter moments, which the
+/// decode planner fetched onto [`CompLayerPixels::shutter`] for exactly this.
+/// The frame-time pixels unchanged when the layer carries no live copy of the
+/// effect, which is every ordinary layer.
+///
+/// A plain carrier has nothing beneath it to re-render, so this is what the
+/// effect means there: the motion inside the footage, averaged the way a Blend
+/// retime averages its two frames, in the decoded bytes. The layer's transform
+/// is not sampled here; that is the motion blur switch's job, and the two
+/// stack. A moment the worker could not make (a Sequence clip, a dropped
+/// decode) stands in as the frame-time picture, and Mix blends the average
+/// back toward it. The Matte is not read on a plain carrier.
+///
+/// ponytail: a scalar byte average, N reads of the frame on the CPU each
+/// render. Sum the moments on the card if a profile ever shows it; the
+/// planner and worker need not change.
+fn own_shutter_average(layer: &lumit_core::model::Layer, lp: &CompLayerPixels, lt: f64) -> Vec<u8> {
+    let offsets = match lumit_core::fx::stack_accumulation_mb(&layer.effects, layer.switches.fx, lt)
+    {
+        Some(p) if !layer.is_adjustment() => (p.sample_offsets(), p.mix),
+        _ => return lp.rgba.clone(),
+    };
+    let (offsets, mix) = offsets;
+    if offsets.is_empty() {
+        return lp.rgba.clone();
+    }
+    let n = lp.rgba.len();
+    let mut sum = vec![0u32; n];
+    for off in &offsets {
+        let moment = lp
+            .shutter
+            .iter()
+            .find(|(o, _)| o.to_bits() == off.to_bits())
+            .map(|(_, m)| m.rgba.as_slice())
+            .filter(|m| m.len() == n)
+            .unwrap_or(&lp.rgba);
+        for (s, &b) in sum.iter_mut().zip(moment) {
+            *s += u32::from(b);
+        }
+    }
+    let count = offsets.len() as u32;
+    let average: Vec<u8> = sum
+        .iter()
+        .map(|&s| ((s + count / 2) / count) as u8)
+        .collect();
+    if mix >= 1.0 {
+        average
+    } else {
+        lumit_core::pixels::blend_rgba(&lp.rgba, &average, mix as f32)
+    }
+}
+
 /// The neighbour below-stacks a flow-consuming effect on an **adjustment**
-/// layer measures its motion against (docs/08 §3.2, K-565), or None when the
+/// layer measures its motion against (docs/08 §3.2), or None when the
 /// layer carries no such effect.
 ///
 /// An adjustment layer's picture is the composite of everything below it, which
-/// the decode worker never sees — so Fast motion blur and Datamosh on one were
+/// the decode worker never sees — so Motion blur and Datamosh on one were
 /// a silent passthrough, on exactly the layer docs/08 §3.2 calls the most common
 /// place to put the effect. The answer is the one the temporal re-renders
 /// already use: build the below-stack again at the neighbour time through the
-/// shared `below_draws_at`, so preview and export measure the identical pair
-/// (K-031). `idx` is the layer's document index, so the below-set is
+/// shared `below_draws_at`, so preview and export measure the identical pair.
+/// `idx` is the layer's document index, so the below-set is
 /// `comp.layers[idx + 1..]`.
 ///
 /// One entry per offset the stack asked for, in ascending order — Fast motion
 /// blur's `+1` and Datamosh's `-1` are different measurements, and each consumer
-/// gets its own (K-544).
+/// gets its own.
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn adjustment_flow_below(
     doc: &Arc<lumit_core::model::Document>,
@@ -2801,7 +2877,7 @@ fn strip_temporal_inputs(draws: &mut [CompLayerDraw]) {
     for d in draws.iter_mut() {
         d.neighbours = Vec::new();
         d.flow_fields = Vec::new();
-        // The composite measurement (§3.2, K-565) is temporal too, and dropping
+        // The composite measurement (§3.2) is temporal too, and dropping
         // it here is what bounds the work: without this, an adjustment inside a
         // neighbour render would build its own neighbours, and a stack of them
         // would multiply a frame's cost by two to the depth.
@@ -2972,7 +3048,7 @@ mod parent_placement_tests {
     }
 }
 
-/// **The points projection** (K-561): the restriction really is the camera.
+/// **The points projection**: the restriction really is the camera.
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod points_projection_tests {
@@ -3073,7 +3149,7 @@ mod points_projection_tests {
         }
     }
 
-    /// The raster rescale is the same projection in smaller pixels (K-266): a
+    /// The raster rescale is the same projection in smaller pixels: a
     /// particle at half scale lands at half the coordinates it landed at, and
     /// foreshortens by exactly as much.
     #[test]
@@ -3219,7 +3295,7 @@ mod render_below_at_tests {
 
     /// A Light layer in a comp must actually change the picture — and a comp
     /// with no lights must render byte-for-byte as it did before lighting
-    /// existed (docs/06, K-361). The second half is the compatibility promise:
+    /// existed (docs/06). The second half is the compatibility promise:
     /// every project ever saved has no Light layers, and none of them may
     /// shift by a byte.
     ///
@@ -3230,19 +3306,19 @@ mod render_below_at_tests {
     fn a_light_layer_lights_the_comp_and_no_lights_changes_nothing() {
         use lumit_core::model::{LightDef, LightKind};
 
-        let Ok(ctx) = lumit_gpu::GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             return; // no GPU here — skip, as the gpu crate's own tests do
         };
-        let engine = lumit_gpu::ColourEngine::new(&ctx);
-        let compositor = lumit_gpu::Compositor::new(&ctx);
-        let fx = lumit_gpu::fx::FxEngine::new(&ctx);
+        let engine = ctx.colour();
+        let compositor = ctx.compositor();
+        let fx = ctx.fx();
         let lut_cache = std::cell::RefCell::new(crate::fxops::LutCache::default());
         let fx_cache = std::cell::RefCell::new(crate::fxops::FxCache::default());
         let realiser = Realiser {
             ctx: ctx.clone_handle(),
-            engine: &engine,
-            compositor: &compositor,
-            fx: &fx,
+            engine,
+            compositor,
+            fx,
             lut_cache: &lut_cache,
             fx_cache: &fx_cache,
             render_scale: 1.0,
@@ -3326,7 +3402,7 @@ mod render_below_at_tests {
     }
 
     /// A region of interest composites a window of the comp, and that window
-    /// must be **the same pixels** the full frame has there (K-362). This is
+    /// must be **the same pixels** the full frame has there. This is
     /// the whole promise: a region changes how much is computed, never what
     /// the picture is. If the two ever disagree, working inside a region is
     /// working on a lie.
@@ -3336,19 +3412,19 @@ mod render_below_at_tests {
     /// names rather than banking a duplicate set under new ones.
     #[test]
     fn a_region_of_interest_is_the_same_pixels_the_full_frame_has_there() {
-        let Ok(ctx) = lumit_gpu::GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             return; // no GPU here — skip, as the gpu crate's own tests do
         };
-        let engine = lumit_gpu::ColourEngine::new(&ctx);
-        let compositor = lumit_gpu::Compositor::new(&ctx);
-        let fx = lumit_gpu::fx::FxEngine::new(&ctx);
+        let engine = ctx.colour();
+        let compositor = ctx.compositor();
+        let fx = ctx.fx();
         let lut_cache = std::cell::RefCell::new(crate::fxops::LutCache::default());
         let fx_cache = std::cell::RefCell::new(crate::fxops::FxCache::default());
         let realiser = Realiser {
             ctx: ctx.clone_handle(),
-            engine: &engine,
-            compositor: &compositor,
-            fx: &fx,
+            engine,
+            compositor,
+            fx,
             lut_cache: &lut_cache,
             fx_cache: &fx_cache,
             render_scale: 1.0,
@@ -3447,23 +3523,23 @@ mod render_below_at_tests {
     // `render_below_at` — the one shared re-render helper — reuses
     // `build_comp_draws` and `Realiser::realise`, so at `tau == t` it must
     // reproduce the plain composite exactly. This is the identity the whole
-    // preview==export promise (K-031) rests on; it is proved before anything is
+    // preview==export promise rests on; it is proved before anything is
     // built on top of the helper.
     #[test]
     fn still_scene_rerender_at_same_time_is_bit_identical() {
-        let Ok(ctx) = lumit_gpu::GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             return; // no GPU here — skip, exactly as the gpu crate's own tests do
         };
-        let engine = lumit_gpu::ColourEngine::new(&ctx);
-        let compositor = lumit_gpu::Compositor::new(&ctx);
-        let fx = lumit_gpu::fx::FxEngine::new(&ctx);
+        let engine = ctx.colour();
+        let compositor = ctx.compositor();
+        let fx = ctx.fx();
         let lut_cache = std::cell::RefCell::new(crate::fxops::LutCache::default());
         let fx_cache = std::cell::RefCell::new(crate::fxops::FxCache::default());
         let realiser = Realiser {
             ctx: ctx.clone_handle(),
-            engine: &engine,
-            compositor: &compositor,
-            fx: &fx,
+            engine,
+            compositor,
+            fx,
             lut_cache: &lut_cache,
             fx_cache: &fx_cache,
             render_scale: 1.0,
@@ -3822,7 +3898,7 @@ mod render_below_at_tests {
         );
     }
 
-    // docs/08 §3.25 + K-031: the whole preview Posterize path (detect → held
+    // docs/08 §3.25: the whole preview Posterize path (detect → held
     // below → adjustment blend) must reduce, at full coverage, to a plain render
     // of the below-stack at the held time. So a posterised frame at t = 0.35
     // equals `render_below_at` at tau = 0.3 bit-for-bit — the moving-scene
@@ -3830,19 +3906,19 @@ mod render_below_at_tests {
     // differ, because the text has moved between 0.3 and 0.35.)
     #[test]
     fn posterised_frame_equals_a_plain_render_at_the_held_time() {
-        let Ok(ctx) = lumit_gpu::GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             return;
         };
-        let engine = lumit_gpu::ColourEngine::new(&ctx);
-        let compositor = lumit_gpu::Compositor::new(&ctx);
-        let fx = lumit_gpu::fx::FxEngine::new(&ctx);
+        let engine = ctx.colour();
+        let compositor = ctx.compositor();
+        let fx = ctx.fx();
         let lut_cache = std::cell::RefCell::new(crate::fxops::LutCache::default());
         let fx_cache = std::cell::RefCell::new(crate::fxops::FxCache::default());
         let realiser = Realiser {
             ctx: ctx.clone_handle(),
-            engine: &engine,
-            compositor: &compositor,
-            fx: &fx,
+            engine,
+            compositor,
+            fx,
             lut_cache: &lut_cache,
             fx_cache: &fx_cache,
             render_scale: 1.0,
@@ -4011,25 +4087,25 @@ mod render_below_at_tests {
         assert!((ab.mix - 1.0).abs() < 1e-6, "full Mix by default");
     }
 
-    // docs/08 §3.26 + K-031: a still scene averaged over N is bit-identical to the
+    // docs/08 §3.26: a still scene averaged over N is bit-identical to the
     // plain composite (the accumulation adjustment is a pure identity when nothing
     // moves), while a moving scene smears — differs from the plain composite and
     // covers a wider horizontal extent. The same combine drives the export path.
     #[test]
     fn accumulation_still_scene_is_identity_and_moving_scene_smears() {
-        let Ok(ctx) = lumit_gpu::GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             return; // no GPU here — skip, as the gpu crate's own tests do
         };
-        let engine = lumit_gpu::ColourEngine::new(&ctx);
-        let compositor = lumit_gpu::Compositor::new(&ctx);
-        let fx = lumit_gpu::fx::FxEngine::new(&ctx);
+        let engine = ctx.colour();
+        let compositor = ctx.compositor();
+        let fx = ctx.fx();
         let lut_cache = std::cell::RefCell::new(crate::fxops::LutCache::default());
         let fx_cache = std::cell::RefCell::new(crate::fxops::FxCache::default());
         let realiser = Realiser {
             ctx: ctx.clone_handle(),
-            engine: &engine,
-            compositor: &compositor,
-            fx: &fx,
+            engine,
+            compositor,
+            fx,
             lut_cache: &lut_cache,
             fx_cache: &fx_cache,
             render_scale: 1.0,
@@ -4118,7 +4194,7 @@ mod render_below_at_tests {
     }
 
     // An adjustment layer carrying the named built-in effects at their
-    // defaults — Fast motion blur (docs/08 §3.2) and Datamosh (§3.12) are the
+    // defaults — Motion blur (docs/08 §3.2) and Datamosh (§3.12) are the
     // two that want measured motion.
     fn flow_adjustment(names: &[&str]) -> Layer {
         let mut l = accumulation_adjustment(4.0);
@@ -4137,7 +4213,7 @@ mod render_below_at_tests {
         text
     }
 
-    // docs/08 §3.2 + K-544, K-565: an adjustment layer's picture is the
+    // docs/08 §3.2: an adjustment layer's picture is the
     // composite below it, which nothing decodes — so the below-stack is built
     // again at each neighbour time the effects asked for. The two consumers want
     // opposite measurements, and each must get its own: one below-stack per
@@ -4167,7 +4243,7 @@ mod render_below_at_tests {
         assert_eq!(
             offsets(&["motion_blur"]),
             vec![1],
-            "Fast motion blur measures forward, to the next frame"
+            "Motion blur measures forward, to the next frame"
         );
         assert_eq!(
             offsets(&["datamosh"]),
@@ -4177,7 +4253,7 @@ mod render_below_at_tests {
         assert_eq!(
             offsets(&["motion_blur", "datamosh"]),
             vec![-1, 1],
-            "both consumers, both measurements (K-544)"
+            "both consumers, both measurements"
         );
         assert!(
             offsets(&["blur"]).is_empty(),
@@ -4207,10 +4283,7 @@ mod render_below_at_tests {
     // The two GPU engines plus the flow backend a composite measurement needs,
     // as the headless renderer's owner holds them.
     struct FlowRig {
-        ctx: lumit_gpu::GpuContext,
-        engine: lumit_gpu::ColourEngine,
-        compositor: lumit_gpu::Compositor,
-        fx: lumit_gpu::fx::FxEngine,
+        ctx: lumit_gpu::test_support::Lease,
         lut_cache: std::cell::RefCell<crate::fxops::LutCache>,
         fx_cache: std::cell::RefCell<crate::fxops::FxCache>,
         flow: std::cell::RefCell<crate::realise::CompositeFlow>,
@@ -4218,24 +4291,21 @@ mod render_below_at_tests {
 
     impl FlowRig {
         fn new() -> Option<Self> {
-            let ctx = lumit_gpu::GpuContext::headless().ok()?;
+            let ctx = lumit_gpu::test_support::lease()?;
             Some(FlowRig {
-                engine: lumit_gpu::ColourEngine::new(&ctx),
-                compositor: lumit_gpu::Compositor::new(&ctx),
-                fx: lumit_gpu::fx::FxEngine::new(&ctx),
+                ctx,
                 lut_cache: std::cell::RefCell::new(crate::fxops::LutCache::default()),
                 fx_cache: std::cell::RefCell::new(crate::fxops::FxCache::default()),
                 flow: std::cell::RefCell::new(crate::realise::CompositeFlow::default()),
-                ctx,
             })
         }
 
         fn realiser(&self) -> Realiser<'_> {
             Realiser {
                 ctx: self.ctx.clone_handle(),
-                engine: &self.engine,
-                compositor: &self.compositor,
-                fx: &self.fx,
+                engine: self.ctx.colour(),
+                compositor: self.ctx.compositor(),
+                fx: self.ctx.fx(),
                 lut_cache: &self.lut_cache,
                 fx_cache: &self.fx_cache,
                 render_scale: 1.0,
@@ -4258,11 +4328,13 @@ mod render_below_at_tests {
                 comp.background.0.map(f64::from),
                 &draws,
             );
-            self.engine
+            self.ctx
+                .colour()
                 .readback8(
                     &self.ctx,
                     &self
-                        .engine
+                        .ctx
+                        .colour()
                         .display(&self.ctx, &tex, lumit_gpu::DisplayParams::NEUTRAL),
                 )
                 .unwrap()
@@ -4279,7 +4351,7 @@ mod render_below_at_tests {
             .count()
     }
 
-    // docs/08 §3.2 + K-565: **the headline case**. Fast motion blur on an
+    // docs/08 §3.2: **the headline case**. Motion blur on an
     // adjustment layer over a moving scene must actually smear it — the effect's
     // commonest placement, and a silent passthrough until the composite below
     // could be measured. Deterministic across two runs, as every render is.
@@ -4297,7 +4369,7 @@ mod render_below_at_tests {
         let b = rig.render(&doc, &blurred, 0.5);
         assert_ne!(
             a, b,
-            "Fast motion blur on an adjustment layer must smear the composite \
+            "Motion blur on an adjustment layer must smear the composite \
              below it, not pass it through"
         );
         assert_eq!(
@@ -4314,11 +4386,11 @@ mod render_below_at_tests {
         );
     }
 
-    // docs/08 §3.12 + K-544, K-565: Datamosh on an adjustment layer wants the
+    // docs/08 §3.12: Datamosh on an adjustment layer wants the
     // *other* measurement — back to the previous frame — and it drags that
     // previous picture along the field, so both halves of the composite
     // measurement have to arrive. Before this it could have neither, and passed
-    // through. Sharing the machinery with Fast motion blur must not mean sharing
+    // through. Sharing the machinery with Motion blur must not mean sharing
     // the field: a stack holding both is checked structurally above.
     #[test]
     fn an_adjustment_datamosh_drags_the_previous_composite() {
@@ -4343,7 +4415,7 @@ mod render_below_at_tests {
         );
     }
 
-    // docs/08 §3.2 + K-565: the same for a **Precomp** layer, whose picture is a
+    // docs/08 §3.2: the same for a **Precomp** layer, whose picture is a
     // comp render rather than a composite of the layers below — the other kind
     // with no decoded frames of its own. The motion is inside the nested comp;
     // the effect sits on the Precomp layer in the parent.
@@ -4389,7 +4461,7 @@ mod render_below_at_tests {
         assert_eq!(
             d.flow_below.iter().map(|(o, _, _)| *o).collect::<Vec<_>>(),
             vec![1],
-            "the Precomp carries the +1 neighbour Fast motion blur asked for"
+            "the Precomp carries the +1 neighbour Motion blur asked for"
         );
         let here = match &d.source {
             DrawSource::Nested { draws, .. } => draws[0].position.0,
@@ -4405,7 +4477,7 @@ mod render_below_at_tests {
         let b = rig.render(&doc, &blurred, 0.5);
         assert_ne!(
             a, b,
-            "Fast motion blur on a Precomp layer must smear the comp inside it"
+            "Motion blur on a Precomp layer must smear the comp inside it"
         );
         assert_eq!(
             b,

@@ -36,13 +36,13 @@ struct RgbSplitParams {
     scale_g: f32,
     scale_b: f32,
     mix_amt: f32,
-    /// 1 = scale Amount by the matte (K-427).
+    /// 1 = scale Amount by the matte.
     matte_on: f32,
     _pad1: f32,
 }
 
 /// One resolved spectral split — the RGB split's Wavelength mode (docs/08
-/// §3.6, K-090), its own kernel so the classic mode stays byte-identical.
+/// §3.6), its own kernel so the classic mode stays byte-identical.
 /// The offset vector and the wavelength basis both arrive host-computed
 /// (`lumit_core::fx::rgb_split_offset` / `spectral_basis_uniform`), so the
 /// kernel consumes exactly the CPU reference's numbers.
@@ -54,7 +54,7 @@ pub struct SpectralSplitOp {
     /// Radial-mode peak offset (reached at the corner distance), raster px.
     pub amount_px: f32,
     pub radial: bool,
-    /// The spectral taps (FX-9/K-144): each row is `[r, g, b, fraction]` — the
+    /// The spectral taps (FX-9): each row is `[r, g, b, fraction]` — the
     /// column-normalised weight and the tap's offset fraction in `[-1, +1]`.
     /// The first `count` rows are active; the rest are zero. From
     /// `lumit_core::fx::spectral_basis_uniform`.
@@ -75,7 +75,7 @@ struct SpectralSplitParams {
     radial: u32,
     count: u32,
     mix_amt: f32,
-    /// 1 = scale Amount by the matte (K-427).
+    /// 1 = scale Amount by the matte.
     matte_on: f32,
     _pad1: f32,
 }
@@ -88,7 +88,7 @@ struct SpectralSplitParams {
 pub struct ChromaticAberrationOp {
     /// Peak channel offset, raster pixels (reached at the corner distance).
     pub amount_px: f32,
-    /// The three radial taps' tints `[[r, g, b]; 3]` (P2/K-143), at fractions
+    /// The three radial taps' tints `[[r, g, b]; 3]` (P2), at fractions
     /// −1 / 0 / +1. Defaults red / green / blue reproduce the classic split.
     pub tints: [[f32; 3]; 3],
     /// 0..1, blended against the unprocessed input.
@@ -102,7 +102,7 @@ struct ChromaticAberrationParams {
     tints: [[f32; 4]; 3],
     amount: f32,
     mix_amt: f32,
-    /// 1 = scale Amount by the matte (K-427).
+    /// 1 = scale Amount by the matte.
     matte_on: f32,
     _pad1: f32,
 }
@@ -150,7 +150,7 @@ impl FxEngine {
     }
 
     /// Apply one spectral split — the RGB split's Wavelength mode (docs/08
-    /// §3.6, K-090) — to a linear working texture, returning a new texture
+    /// §3.6) — to a linear working texture, returning a new texture
     /// of the same size. Single pointwise pass, nine offset bilinear taps
     /// weighted by the host-supplied wavelength basis.
     pub fn spectral_split(

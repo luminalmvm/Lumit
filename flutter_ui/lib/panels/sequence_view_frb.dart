@@ -1,11 +1,11 @@
-// The sequence view: a Sequence layer's row, grown tall (K-248).
+// The sequence view: a Sequence layer's row, grown tall.
 //
 // Double-click a Sequence layer — its name in the outline, or its bar in the
 // lanes — and the row opens *in place* rather than swapping the Timeline for
 // another tab. Cutting is the reason: you cut against the beat you can see, so
 // the music, the other layers and the ruler all have to stay on screen while
-// you do it. K-071 originally put this in a tab of its own; K-248 supersedes
-// that clause.
+// you do it. The spec originally put this in a tab of its own; that clause no
+// longer stands.
 //
 // **Six rows, three and three.** The clips get three rows' worth of height —
 // enough to take hold of, cut, drag along the row and trim by the edges — and
@@ -14,13 +14,13 @@
 // rather than a thing floating over it.
 //
 // The envelope is the same editor as the graph's Vegas lens, over the same
-// keyframes (K-247, K-249): a point per key, its height the playback speed in
+// keyframes: a point per key, its height the playback speed in
 // per cent, straight lines between. `Ctrl`-click or double-click the line
 // plants a point; `Alt`-click lifts one. A clip that has never been retimed
 // draws the flat 100% it is playing at, and the first edit gives it a real map.
 //
 // Zero bridge calls to draw: every clip and its map ride in on the comp read
-// model (K-184). The bridge is crossed only when a gesture commits.
+// model. The bridge is crossed only when a gesture commits.
 
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -44,7 +44,7 @@ import 'waveform_frb.dart';
 /// are the view's to size and are the same at either density.
 ///
 /// The layer's own row is not one of these: that one belongs to the table, and
-/// so measures `t.density.laneRow` (K-454). Counting it here as well is what
+/// so measures `t.density.laneRow`. Counting it here as well is what
 /// used to leave the view a pixel shorter than the room the outline reserved
 /// for it under Regular, and the halves went out of step below an open view.
 const double sequenceRow = 22;
@@ -55,7 +55,7 @@ const double sequenceRow = 22;
 /// The clips get three rows in all — **including the layer's own bar row**,
 /// which is the top of them. Collapsed, that row is exactly the bar it always
 /// was; opening adds the two below it and the clips spread across all three,
-/// so nothing about the layer's own row changes shape as it opens (K-248).
+/// so nothing about the layer's own row changes shape as it opens.
 const double sequenceClipExtra = sequenceRow * 2;
 const double sequenceEnvelopeStrip = sequenceRow * 3;
 
@@ -92,7 +92,7 @@ class SequenceViewFrb extends StatefulWidget {
   /// with nothing naming them. The graph editor solved this the same way.
   final ScrollController? hScroll;
 
-  /// How waveforms draw (K-280, K-285). Passed in rather than read here: the
+  /// How waveforms draw. Passed in rather than read here: the
   /// Timeline already reads the setting for its own lanes, and a clip and a
   /// layer disagreeing about it would be two answers to one question.
   final WaveformStyle style;
@@ -123,7 +123,7 @@ class SequenceViewFrb extends StatefulWidget {
   final VoidCallback onChanged;
 
   /// Show `clip` playing under a map it has not been given yet — the live
-  /// drag, which never touches the document (K-247).
+  /// drag, which never touches the document.
   final void Function(BridgeClip clip, List<BridgeKeyframe> keys)? onPreview;
 
   const SequenceViewFrb({
@@ -160,7 +160,7 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
   /// so a rebuild mid-flight does not ask twice.
   final Map<String, ui.Image?> _thumbs = {};
 
-  /// Each clip's waveform peaks, by clip id (K-280) — the sound *inside* the
+  /// Each clip's waveform peaks, by clip id — the sound *inside* the
   /// cut, which is what a beat-checked edit is actually aimed at (docs/09 §4).
   ///
   /// Bucketed in the clip's own placed time by the engine, so a ramped clip's
@@ -208,8 +208,7 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
 
   /// Ask for the waveform of the part of `clip` that is on screen, at one
   /// bucket per pixel column of it — so a clip's wave gains detail as the
-  /// Timeline zooms in, rather than stretching the summary it was given first
-  /// (K-280).
+  /// Timeline zooms in, rather than stretching the summary it was given first.
   ///
   /// Off the build, and claimed before the fetch starts, exactly as the
   /// thumbnails are: the first ask for a file decodes it.
@@ -313,15 +312,15 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
                     child: ColoredBox(color: t.surface1),
                   ),
                 ),
-                // Each clip's untrimmed reach, behind the clips (K-441,
-                // §12A.1): what shows past a clip's ends is exactly the
-                // material trimmed away, the same outline a trimmed *layer*
-                // draws around its bar.
+                // Each clip's untrimmed reach, behind the clips (§12A.1):
+                // what shows past a clip's ends is exactly the material
+                // trimmed away, the same outline a trimmed *layer* draws
+                // around its bar.
                 for (final c in _clips)
                   if (_clipGhost(t, c) case final ghost?) ghost,
                 for (final c in _clips) _clip(t, c),
-                // Where two clips overlap, the join is a crossfade (K-695)
-                // and the overlap wears the board's opposed-fades pair, with
+                // Where two clips overlap, the join is a crossfade, and the
+                // overlap wears the board's opposed-fades pair, with
                 // a handle at either end — dragging one adjusts the fade by
                 // trimming the clip whose ramp it is.
                 ..._crossfades(t),
@@ -383,7 +382,7 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
   }
 
   /// The joins where clips overlap, each drawn as the opposed-fades pair with
-  /// a handle at either end (K-695, the AudioWorkspace board).
+  /// a handle at either end (the AudioWorkspace board).
   ///
   /// The overlap **is** the crossfade — the mixer ramps the outgoing clip out
   /// and the incoming one in across exactly this span — so the drawing is
@@ -482,7 +481,7 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
       );
 
   /// Where this clip's **whole source** would sit if none of it had been
-  /// trimmed away (K-441, docs/15 §12A.1) — the clip-level twin of the outline
+  /// trimmed away (docs/15 §12A.1) — the clip-level twin of the outline
   /// a trimmed layer bar draws.
   ///
   /// `null` when there is nothing to draw, and the engine decides most of
@@ -615,7 +614,7 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
                   .labelColour(widget.entry.info.label)
                   .withValues(alpha: clipFillAlpha),
               border: Border.all(color: t.surface0, width: 1),
-              // Stadium ends under Round (K-394, §12.1), clamped to half the
+              // Stadium ends under Round (§12.1), clamped to half the
               // clip's own height by the control radius sentinel. **The hit
               // rect stays rectangular** — the gesture detector is outside
               // this box and reads localPosition.dx across the full width, so
@@ -666,7 +665,7 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
                     ),
                   ),
                 // The frame this clip opens on, so a row of cuts can be told
-                // apart at a glance rather than by their timings (K-248).
+                // apart at a glance rather than by their timings.
                 //
                 // **And nothing beside it** (§6.27). The thumbnail used to
                 // share its row with the clip's speed, printed as a percentage
@@ -707,7 +706,7 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
             onPressed: () => close('paste'), child: Text(l10n.clipPasteShape)),
         // The numeric speed entry (docs/04 §12.1's `retime.set_segment_speed`),
         // beside the reset that was already here. No duration well: a clip's
-        // place and length are fixed by the covenant (K-022), so its speed
+        // place and length are fixed by the covenant, so its speed
         // decides what it plays rather than how long it runs.
         MenuRow(
             key: ValueKey<String>('seq-clip-speed-${clip.id}'),
@@ -739,7 +738,7 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
             .setClipSpeed(clip: clip.id, percent: percent, endPercent: percent);
       // The shape — where the cuts fall and how each piece is ramped — with
       // no media in it, so pasting it onto a depth pass cuts and ramps that
-      // pass to match without touching what it plays (K-248).
+      // pass to match without touching what it plays.
       case 'copy-clip':
         sequenceShapeClipboard =
             widget.entry.layer.copySequenceShape(clip: clip.id);
@@ -790,9 +789,9 @@ enum _Grab { body, start, end }
 
 /// The opposed-fades pair over one overlap: the outgoing clip's ramp falls,
 /// the incoming one's rises — the board's own X across the join. Straight
-/// lines, as the board draws them; the mixer's ramps underneath are the
-/// equal-power quarter-sines K-695 pins, and the picture's job is to say
-/// *where the fade is*, which the crossing does.
+/// lines, as the board draws them; the mixer's ramps underneath are
+/// equal-power quarter-sines, and the picture's job is to say *where the
+/// fade is*, which the crossing does.
 class _CrossfadePainter extends CustomPainter {
   final Color line;
 
@@ -973,14 +972,14 @@ class _EnvelopeStripState extends State<_EnvelopeStrip> {
   (double, double)? _frozen;
 
   /// The range the strip draws over: the documented default, grown to hold
-  /// every point on every clip (K-247).
+  /// every point on every clip.
   (double, double) get _range {
     final frozen = _frozen;
     if (frozen != null) return frozen;
     final (lo, hi) = fitEnvelopeRange([for (final c in _clips) _keysOf(c)]);
     // A little air past whatever the curves reach, so a point at the extreme
     // is not drawn half outside its own row. The *default* range carries its
-    // own headroom (K-250), so an ordinary clip needs none added.
+    // own headroom, so an ordinary clip needs none added.
     const air = 8.0;
     final (dlo, dhi) = envelopeDefaultRange;
     return (lo < dlo ? lo - air : dlo, hi > dhi ? hi + air : dhi);
@@ -1008,7 +1007,7 @@ class _EnvelopeStripState extends State<_EnvelopeStrip> {
         // the slot before the gesture detector and rebuilt its element from
         // scratch — taking with it the recogniser holding the drag, which
         // ended the gesture the instant the readout showed up. The same trap
-        // K-212 records against the trimmed-layer ghost.
+        // that caught the trimmed-layer ghost.
         return Stack(
           children: [
             Positioned.fill(

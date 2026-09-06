@@ -1,4 +1,4 @@
-// The effect Blend and Mix, once at the seam (K-425, docs/08 §1.5).
+// The effect Blend and Mix, once at the seam (docs/08 §1.5).
 //
 // Every effect's Mix row carries a Blend choice — the layer blend modes,
 // verbatim — saying how the effect's result combines with its input. The
@@ -13,8 +13,8 @@
 // compositor's layer modes (docs/06 §blend domains — Add, Multiply, Lighten,
 // Darken and Subtract per channel in linear; the rest encoded to sRGB, the
 // W3C formula, decoded), alpha the effect's own. Never dispatched for Normal:
-// an unset Blend row runs no pass and renders byte for byte what it did
-// (K-258). Shares the adjustment blend's bind-group layout; the third sampled
+// an unset Blend row runs no pass and renders byte for byte what it did.
+// Shares the adjustment blend's bind-group layout; the third sampled
 // slot is bound but unread.
 
 @group(0) @binding(0) var input: texture_2d<f32>;

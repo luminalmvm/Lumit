@@ -1,4 +1,4 @@
-// Accumulation motion blur's per-pixel shutter (docs/08 §3.26, K-429): fold one
+// Accumulation motion blur's per-pixel shutter (docs/08 §3.26): fold one
 // sub-frame render into the running average, at a weight the Matte decides.
 //
 // **In plain terms.** The effect above this one has already rendered the whole

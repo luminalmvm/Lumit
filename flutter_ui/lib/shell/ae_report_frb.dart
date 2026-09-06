@@ -14,7 +14,7 @@
 // The reasons are written in `l10n/engine_labels.dart` from the stable id and
 // the facts the engine sends, rather than shown as the engine's English: a
 // sentence built with `format!` on the other side could not be translated
-// (K-303, docs/17).
+// (docs/17).
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/import.dart';

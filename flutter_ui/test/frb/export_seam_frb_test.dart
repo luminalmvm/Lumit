@@ -1,4 +1,4 @@
-// The export seam's new surface (K-493, K-497, K-498, K-501, K-502).
+// The export seam's new surface.
 //
 // What only Dart can prove is asserted here; the behaviour behind each field is
 // covered by the engine's own tests. Two things, both of which would compile
@@ -71,7 +71,7 @@ void main() {
 
   group('Export seam (frb)', () {
     // The spec check asks a *composition*, because whether a colour space can
-    // be delivered is a question about that project's colour config (K-490).
+    // be delivered is a question about that project's colour config.
     late CompositionReference comp;
     setUp(() {
       comp = LumitBridgeState.newProject().newComposition(name: 'Scene');

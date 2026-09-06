@@ -116,7 +116,7 @@ pub struct RangeParams {
 /// straight segment — and those readings stay. This says "not that one", and
 /// it exists because the ACES v2 configs need it: their display encodings all
 /// mirror, and their gamma spaces ask for `pass_thru` by name in the config
-/// file (K-517).
+/// file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Negatives {
     /// The curve is applied to the magnitude and the sign is put back, so the

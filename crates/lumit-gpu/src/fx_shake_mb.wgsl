@@ -1,4 +1,4 @@
-// Shake motion blur (docs/08-EFFECTS.md §3.4, T18/K-165): the shake's own
+// Shake motion blur (docs/08-EFFECTS.md §3.4, T18): the shake's own
 // motion blur. The wobble is a pure function of time, so it is sampled at up to
 // SHAKE_MB_SAMPLES sub-frame placements across the shutter — each a full
 // transform-domain inverse affine (host-computed: WGSL has no 64-bit integer
@@ -28,7 +28,7 @@ struct Params {
     count: u32,     // active taps, 1..=MAX_TAPS
     edge: u32,      // 0 transparent, 1 repeat, 2 mirror
     mix_amt: f32,   // 0..1, blended against the unprocessed input
-    matte_on: f32,  // 1 = the matte scales every tap's displacement (K-427)
+    matte_on: f32,  // 1 = the matte scales every tap's displacement
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -36,14 +36,14 @@ struct Params {
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
 
-// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// The Matte (docs/08 §2.6), bound for every kernel on this layout and
 // read only under `matte_on` — bound to `src` when there is none, since a
 // texture binding cannot be left empty.
 @group(0) @binding(4) var matte: texture_2d<f32>;
 
 // This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
 // luma, clamped. The Channel pick and Invert already happened, once, at the
-// seam (fx_matte_prepare.wgsl, K-425).
+// seam (fx_matte_prepare.wgsl).
 fn matte_k(xy: vec2<i32>) -> f32 {
     let m = textureLoad(matte, xy, 0);
     return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
@@ -118,7 +118,7 @@ fn shake_mb(@builtin(global_invocation_id) gid: vec3<u32>) {
     let pos = vec2<f32>(xy) + vec2<f32>(0.5);
     let n = min(p.count, MAX_TAPS);
     // The matte scales every tap's displacement toward none, read at the
-    // destination pixel (K-427, == cpu::transform_average_matted).
+    // destination pixel (== cpu::transform_average_matted).
     var mk = 1.0;
     if (p.matte_on != 0.0) {
         mk = matte_k(xy);

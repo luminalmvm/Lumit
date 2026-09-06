@@ -251,8 +251,8 @@ pub fn resolved_side(keys: &[Keyframe], i: usize, out: bool) -> SideInterp {
 
 /// The instantaneous speed dv/dt at time `t` (value-units per second) — the
 /// exact derivative of what [`evaluate`] returns, so the speed lens draws the
-/// true derivative of the value bezier rather than a finite-difference guess
-/// (K-080). Held past the ends (the value is clamped there, so the slope is 0)
+/// true derivative of the value bezier rather than a finite-difference guess.
+/// Held past the ends (the value is clamped there, so the slope is 0)
 /// and 0 across a Hold-out span. `None` only when the key list is empty.
 pub fn evaluate_speed(keys: &[Keyframe], t: f64) -> Option<f64> {
     let first = keys.first()?;
@@ -434,7 +434,7 @@ impl CubicSpan {
     }
 
     /// De Casteljau: the two cubics that together *are* this one, meeting at
-    /// parameter `u` (K-221). Exact, not an approximation — which is the whole
+    /// parameter `u`. Exact, not an approximation — which is the whole
     /// reason a key can be inserted mid-span without the picture changing.
     #[must_use]
     pub fn split_at(&self, u: f64) -> (Self, Self) {
@@ -493,7 +493,7 @@ impl CubicSpan {
     /// `y′(u)/x′(u)` at the parameter with `x(u) = t`. `x′` can touch zero at a
     /// 100%-influence handle, so it is floored to keep the speed finite (the
     /// curve is simply "very fast" there). This is what the speed lens draws so
-    /// its curve is the exact derivative of the value bezier (K-080).
+    /// its curve is the exact derivative of the value bezier.
     pub fn speed_at(&self, t: f64) -> f64 {
         let u = self.solve_u(t);
         Self::bezier_deriv(&self.y, u) / Self::bezier_deriv(&self.x, u).max(1e-12)
@@ -556,7 +556,7 @@ impl Property {
         matches!(&self.animation, Animation::Keyframed(keys) if !keys.is_empty())
     }
 
-    /// Put a keyframe at `t` **without changing the curve** (K-221).
+    /// Put a keyframe at `t` **without changing the curve**.
     ///
     /// The new key takes the value the curve already had there, and the two
     /// halves of the span it lands in are re-described so that every value
@@ -671,7 +671,7 @@ impl Property {
 
     /// Write a **fade** across `[from, to]` in this property's own clock: a
     /// pair of keys between `floor` and the level the property already holds
-    /// at the loud end, shaped by `shape` (docs/09 §6, K-695).
+    /// at the loud end, shaped by `shape` (docs/09 §6).
     ///
     /// `rising` is a fade *in* — silence at `from`, level at `to`; false is a
     /// fade out. Any keys already inside the span are replaced, so running a
@@ -735,7 +735,7 @@ impl Property {
     }
 }
 
-/// The curve a fade command writes (docs/09 §6, K-695) — the board's three
+/// The curve a fade command writes (docs/09 §6) — the board's three
 /// chips, each built out of the easing vocabulary that already exists rather
 /// than a new kind of span.
 ///
@@ -787,7 +787,7 @@ mod tests {
         }
     }
 
-    /// **A fade is a pair of ordinary keys** (docs/09 §6, K-695): between the
+    /// **A fade is a pair of ordinary keys** (docs/09 §6): between the
     /// −∞ knee and the level the property already held, shaped from the
     /// easing vocabulary that already exists, with everything outside the
     /// span left alone.
@@ -1020,7 +1020,7 @@ mod tests {
         assert!((evaluate(&keys, 0.5).unwrap() - 0.5).abs() < 1e-9);
     }
 
-    /// **A key inserted mid-span must not move the curve** (K-221). Sampled
+    /// **A key inserted mid-span must not move the curve**. Sampled
     /// densely across the whole span, before and after, and compared: the razor
     /// puts one of these on every retimed layer it cuts, and a cut that changed
     /// the speed ramp would be a cut nobody could trust.

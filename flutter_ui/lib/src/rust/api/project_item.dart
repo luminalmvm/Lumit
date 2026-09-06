@@ -58,7 +58,7 @@ sealed class ItemReference with _$ItemReference {
       );
 
   /// This item's colour tag: an index into the same label palette a layer's
-  /// chip uses, `0` for untagged (K-451). Every item of a project saved
+  /// chip uses, `0` for untagged. Every item of a project saved
   /// before tags existed answers 0.
   int label() => BridgeLib.instance.api.crateApiProjectItemItemReferenceLabel(
         that: this,
@@ -101,7 +101,7 @@ sealed class ItemReference with _$ItemReference {
   /// Untagging leaves the document exactly as it was found — the engine
   /// stores tags as a map beside the items and removes the entry rather than
   /// writing a zero — so a project nobody has tagged gains no line in the
-  /// file (K-258).
+  /// file.
   void setLabel({required int label}) => BridgeLib.instance.api
       .crateApiProjectItemItemReferenceSetLabel(that: this, label: label);
 }

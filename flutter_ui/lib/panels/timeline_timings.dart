@@ -104,7 +104,7 @@ class TimingsHeaderCell extends StatelessWidget {
 }
 
 /// The session's measuring switch: a clock in the bottom strip, after the cache
-/// meters (K-276 revision). Lit in the accent while measuring.
+/// meters. Lit in the accent while measuring.
 ///
 /// **Why here and not on the column.** It governs the whole session and it
 /// costs something to have on, which is the same shape of thing as the cache

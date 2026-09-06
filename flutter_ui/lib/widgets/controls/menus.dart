@@ -1,5 +1,5 @@
 // Menus: the rows, the floating surface they sit on with its safe-triangle
-// hover intent (K-318), and the right-click holder.
+// hover intent, and the right-click holder.
 
 import 'dart:async';
 
@@ -16,12 +16,12 @@ import 'popups.dart';
 /// an empty slot of the same width where it is not, so a menu's names line up
 /// whether anything in it is ticked or nothing is.
 ///
-/// The mark is a glyph, not the character `✓` (K-440's tick): a character is
-/// drawn by whichever font has it, at whatever weight that font gives it, and
-/// sat beside the set's own marks at three different weights across three
-/// menus. The glyph takes the row's text colour like any other — [MenuRow]
-/// puts `bodyPrimary` on its children — and `colour` is for the one caller
-/// that draws a row disabled and needs the tick to go with it.
+/// The mark is a glyph, not the character `✓`: a character is drawn by
+/// whichever font has it, at whatever weight that font gives it, and sat beside
+/// the set's own marks at three different weights across three menus. The glyph
+/// takes the row's text colour like any other — [MenuRow] puts `bodyPrimary` on
+/// its children — and `colour` is for the one caller that draws a row disabled
+/// and needs the tick to go with it.
 Widget menuTick(bool on, {Color? colour}) => SizedBox(
       width: 16,
       child: on
@@ -36,11 +36,11 @@ class MenuRow extends StatefulWidget {
   final VoidCallback onPressed;
   final bool selected;
 
-  /// **An option row leaves the menu open** (K-671), the way a checkbox row
-  /// does (K-520) — for the menus whose rows change the picture in front of
-  /// you: the preview resolution, the playback mode. Flipping between them is
-  /// comparing them, and a menu that shut after each choice made comparing two
-  /// tiers a matter of reopening the menu between every look.
+  /// **An option row leaves the menu open**, the way a checkbox row does — for
+  /// the menus whose rows change the picture in front of you: the preview
+  /// resolution, the playback mode. Flipping between them is comparing them,
+  /// and a menu that shut after each choice made comparing two tiers a matter
+  /// of reopening the menu between every look.
   ///
   /// The row runs its command and stays; the menu then goes when the pointer
   /// leaves it, on Escape, or on a click away. Only rows that pick one of
@@ -94,8 +94,8 @@ class _MenuRowState extends State<MenuRow> {
         // Tell the surface which row the pointer is on, so a submenu that is
         // out can take itself back when the pointer moves to another row. The
         // surface may *hold* the report briefly while the pointer is inside an
-        // open flyout's safe triangle (K-318) — the highlight above is
-        // immediate either way; only the flyout switch waits.
+        // open flyout's safe triangle — the highlight above is immediate either
+        // way; only the flyout switch waits.
         surface?._hoverRow(widget.hoverId ?? this, e.position);
       },
       onHover: (e) => surface?._hoverMoved(widget.hoverId ?? this, e.position),
@@ -105,7 +105,7 @@ class _MenuRowState extends State<MenuRow> {
         onTap: () {
           widget.onPressed();
           // The row stayed, so the menu now needs a way out that is not a
-          // click: the pointer leaving it (K-671).
+          // click: the pointer leaving it.
           if (widget.option) surface?._optionPicked();
         },
         child: Container(
@@ -133,10 +133,9 @@ class FloatSurface extends StatefulWidget {
   final double? width;
 
   /// How to take this menu down once an option row has been picked and the
-  /// pointer has left it (K-671). Null on a surface with no option rows — and
-  /// on the menu bar's own lists, whose flyouts are navigated by moving off
-  /// one surface and onto another, so "the pointer left" is not a dismissal
-  /// there.
+  /// pointer has left it. Null on a surface with no option rows — and on the
+  /// menu bar's own lists, whose flyouts are navigated by moving off one
+  /// surface and onto another, so "the pointer left" is not a dismissal there.
   final VoidCallback? onLeaveAfterOption;
 
   const FloatSurface({
@@ -152,7 +151,7 @@ class FloatSurface extends StatefulWidget {
       context.getInheritedWidgetOfExactType<_MenuHoverScope>()?.hovered;
 
   /// The surface state itself — the rows and [SubmenuRow] talk to it for the
-  /// hover-intent gating (K-318).
+  /// hover-intent gating.
   static _FloatSurfaceState? _of(BuildContext context) =>
       context.getInheritedWidgetOfExactType<_MenuHoverScope>()?.state;
 
@@ -163,7 +162,7 @@ class FloatSurface extends StatefulWidget {
 class _FloatSurfaceState extends State<FloatSurface> {
   final _hovered = ValueNotifier<Object?>(null);
 
-  // --- Safe-triangle hover intent (K-318) -------------------------------
+  // --- Safe-triangle hover intent ---------------------------------------
   //
   // While a [SubmenuRow]'s flyout is out, it arms a guard here: the row it
   // belongs to, and the flyout's rectangle. A hover report from any *other*
@@ -319,8 +318,8 @@ class _FloatSurfaceState extends State<FloatSurface> {
     _hovered.value = owner;
   }
 
-  /// An option row was pressed and left the menu up (K-671). From here the
-  /// pointer leaving the surface is what takes it down.
+  /// An option row was pressed and left the menu up. From here the pointer
+  /// leaving the surface is what takes it down.
   bool _leaveArmed = false;
   void _optionPicked() => _leaveArmed = true;
 
@@ -432,7 +431,7 @@ class _MenuHoverScope extends InheritedWidget {
   bool updateShouldNotify(_MenuHoverScope old) => false;
 }
 
-/// A menu row that opens a submenu beside it (K-194).
+/// A menu row that opens a submenu beside it.
 ///
 /// The parent menu stays open underneath while the submenu is up — closing it
 /// first would take this row's `BuildContext` with it, and the overlay the
@@ -468,7 +467,7 @@ class _SubmenuRowState extends State<SubmenuRow> {
   VoidCallback? _close;
 
   /// The open flyout's surface, measured after it builds — what the parent
-  /// surface's safe triangle points at (K-318).
+  /// surface's safe triangle points at.
   final GlobalKey _flyoutKey = GlobalKey();
 
   /// The parent surface this row sits on, resolved in build. Held as a state

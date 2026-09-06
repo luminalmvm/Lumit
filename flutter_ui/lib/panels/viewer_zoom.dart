@@ -1,5 +1,5 @@
 // The Zoom tool, and the arithmetic every zoom in the Viewer goes through
-// (K-218, docs/07 §2.2).
+// (docs/07 §2.2).
 //
 // **In plain terms.** There are three ways to change the magnification: the
 // wheel, a click with the Zoom tool, and dragging a box with it. All three ask
@@ -107,7 +107,7 @@ class ViewerZoomLayer extends StatefulWidget {
 
   final Color accent;
 
-  /// The drawn pointer's own colours (K-230).
+  /// The drawn pointer's own colours.
   final Color mark;
   final Color outline;
 
@@ -140,7 +140,7 @@ class _ViewerZoomLayerState extends State<ViewerZoomLayer> {
   /// releasing Alt has to repaint. A keyboard handler is the only way to hear
   /// about a modifier changing while nothing else is happening.
   ///
-  /// **It starts false every time the tool is picked up** (K-236). Windows eats
+  /// **It starts false every time the tool is picked up**. Windows eats
   /// the Alt key-up when Alt reaches for the window menu or Alt+Tab leaves the
   /// application, so the platform's own "is Alt down?" can answer yes long
   /// after the key came up — and the Zoom tool then opened on the minus,
@@ -170,7 +170,7 @@ class _ViewerZoomLayerState extends State<ViewerZoomLayer> {
 
   bool _onKey(KeyEvent event) {
     // Re-hiding the system cursor after Alt takes it back is
-    // [DrawnPointerRegion]'s own job (K-235); this only repaints the sign.
+    // [DrawnPointerRegion]'s own job; this only repaints the sign.
     final held = HardwareKeyboard.instance.isAltPressed;
     if (held != _alt && mounted) setState(() => _alt = held);
     // Never consumed: Alt is a modifier here, not a shortcut.
@@ -188,7 +188,7 @@ class _ViewerZoomLayerState extends State<ViewerZoomLayer> {
   Widget build(BuildContext context) {
     if (!widget.active) return const SizedBox.shrink();
     return Positioned.fill(
-      // The system pointer is hidden and replaced below (K-230): `zoomIn` and
+      // The system pointer is hidden and replaced below: `zoomIn` and
       // `zoomOut` are in Flutter's list of pointers but not in the Windows
       // embedder's, where an unknown one silently becomes the ordinary arrow —
       // so the Zoom tool looked like no tool at all. A drawn magnifier is the
@@ -199,7 +199,7 @@ class _ViewerZoomLayerState extends State<ViewerZoomLayer> {
           behavior: HitTestBehavior.opaque,
           // `_alt`, not the platform's answer: what the pointer showed is
           // what the click must do, or the tool does the opposite of what it
-          // has just promised (K-236).
+          // has just promised.
           onTapUp: (details) =>
               widget.onZoomAt(details.localPosition, out: _alt),
           onPanStart: (details) => setState(() {

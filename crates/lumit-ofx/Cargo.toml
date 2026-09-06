@@ -37,7 +37,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 # An effect instance is named by a uuid, and a plugin definition keeps one live
-# plugin instance per effect instance (K-593).
+# plugin instance per effect instance.
 uuid = { version = "1", features = ["v7"] }
 # The control plane: length-prefixed `bincode` over a duplex local socket —
 # a named pipe on Windows, a Unix socket elsewhere (docs/impl/ofx-host.md §4).
@@ -49,12 +49,11 @@ interprocess = "2"
 memmap2 = "0.9"
 
 [build-dependencies]
-# The C-variadic shim (K-756). Four of `OfxParameterSuiteV1`'s entry points take
-# a trailing `...` in the header, and Rust cannot *define* such a function on
-# stable — so `shim/ofx_varargs.c` holds the four that can, and this builds it.
-# `cc` picks the platform's own compiler (clang here, `cl.exe` on Windows),
-# which is the whole point: `va_arg` expands to that platform's rule for where a
-# variadic argument was put, and no two of those rules agree.
+# The four parameter-suite entry points that are C-variadic in the header are
+# written in C (`src/suites/variadic.c`), because Rust cannot define one on
+# stable and a fixed-arity stand-in is only right on some ABIs. `cc` is already
+# in the lock file through the tree's other dependencies; this is its first use
+# in the workspace's own code.
 cc = "1"
 
 [dev-dependencies]

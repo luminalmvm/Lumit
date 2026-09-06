@@ -63,8 +63,8 @@ use crate::describe::{ParamDescription, PluginDescriptor, Rejection};
 
 /// The catalogue name prefix a **CLAP** plugin's effect answers to — spelled
 /// once, in the engine, so the crate that mints the name and the walks that
-/// read it cannot drift (K-700). VST3's is beside it and
-/// [`Abi::prefix`](crate::abi::Abi::prefix) chooses between them (K-707).
+/// read it cannot drift. VST3's is beside it and
+/// [`Abi::prefix`](crate::abi::Abi::prefix) chooses between them.
 pub const MATCH_PREFIX: &str = lumit_core::fx::CLAP_MATCH_PREFIX;
 
 /// The name one described plugin's effect answers to: its standard's prefix and

@@ -1,23 +1,22 @@
-// The export dialog, rebuilt to its drawing (K-444, K-449, K-458, K-485).
+// The export dialog, rebuilt to its drawing.
 //
 // **The shape is the approved drawing's.** A frame of 640: a kicker title
 // strip naming the composition, a row of section tabs, the preset strip
-// (K-487 — a preset sets and saves every section, so it is chrome over the
-// whole page rather than a row inside Output; K-588 added *Set as default*
-// there, which remembers the preset in force between sessions), and a body of
-// titled
-// groups — Output, Composition, Time, Picture, Colour, Audio, Metadata — whose
-// rows are a label in a fixed column with the control beside it, two to a line
-// where the rows are short. The footer states the facts (frames, length, size,
-// rate, an estimate of the file) and carries the two actions: *Add to queue*
-// outlined, and EXPORT, the single filled action.
+// (a preset sets and saves every section, so it is chrome over the whole page
+// rather than a row inside Output, and *Set as default* there remembers the
+// preset in force between sessions), and a body of titled groups — Output,
+// Composition, Time, Picture, Colour, Audio, Metadata — whose rows are a label
+// in a fixed column with the control beside it, two to a line where the rows
+// are short. The footer states the facts (frames, length, size, rate, an
+// estimate of the file) and carries the two actions: *Add to queue* outlined,
+// and EXPORT, the single filled action.
 //
-// **One page, and the tabs say where you are** (K-485). The dialog is a single
+// **One page, and the tabs say where you are.** The dialog is a single
 // scrolling page rather than six of them: the tab strip follows the section
-// last touched or scrolled to, and clicking a tab scrolls its section into view
-// when it is not fully visible and lights its box for a moment. A settings
-// dialog where the same file's picture and sound are on different pages hides
-// half of what an export is from the person deciding it.
+// last touched or scrolled to, and clicking a tab scrolls its section into
+// view when it is not fully visible and lights its box for a moment. A
+// settings dialog where the same file's picture and sound are on different
+// pages hides half of what an export is from the person deciding it.
 //
 // **Nothing here polls.** The old dialog started an export and then watched it
 // from this window; the drawing has no progress line, because progress belongs
@@ -32,18 +31,18 @@
 // already typed.
 //
 // **The engine decides what a file can hold.** Every format carries a
-// capability row (K-479), and a control the chosen format cannot honour is
-// drawn **disabled** rather than left out or left live: an mp4 has no alpha
-// channel and no sixteenth bit, a PNG sequence has no sound and no bitrate, a
-// WAV has no picture at all, an AAC file has no sample width and a still
-// states no colour space.
+// capability row, and a control the chosen format cannot honour is drawn
+// **disabled** rather than left out or left live: an mp4 has no alpha channel
+// and no sixteenth bit, a PNG sequence has no sound and no bitrate, a WAV has
+// no picture at all, an AAC file has no sample width and a still states no
+// colour space.
 //
 // **Every row the drawing shows is now a real setting.** Proxies, guide
 // layers, motion blur, Retime blend, the resampler, the colour space and the
-// three sound faces were drawn dead while the engine had nowhere to put them
-// (K-485); K-493, K-497, K-498, K-501 and K-502 built the settings and K-503
-// carried them over the seam, so each one writes into the spec now. The one
-// face still drawn dead is OCIO, which is genuinely not in this build.
+// three sound faces were drawn dead while the engine had nowhere to put them.
+// The settings were built and carried over the seam, so each one writes into
+// the spec now. The one face still drawn dead is OCIO, which is genuinely not
+// in this build.
 //
 // **Nothing here crosses the bridge in `build`.** The capability row, the
 // refusal, the crop and the bitrate are all the engine's answers, and all four
@@ -74,8 +73,8 @@ import 'status_line_frb.dart';
 const double exportDialogWidth = 640;
 
 /// The label column and the gap after it, and a row's own height — the
-/// drawing's own, which are not the New composition dialog's (K-458: each
-/// drawing measures itself).
+/// drawing's own, which are not the New composition dialog's. Each drawing
+/// measures itself.
 const double exportLabelColumn = 100;
 const double exportRowGap = 10;
 const double exportRowHeight = 28;
@@ -107,35 +106,35 @@ const double exportSizeWell = 64;
 
 /// The preset strip: its own band under the tab row, 8 above a 22px control
 /// and 8 below it, over a hairline — chrome above the scroll, exactly as the
-/// tab row is (the owner's ruling; K-487).
+/// tab row is (the owner's ruling).
 ///
-/// **Two lines at rest** since K-588: the list with *Edit* and *Save as…*, and
+/// **Two lines at rest**: the list with *Edit* and *Save as…*, and
 /// *Set as default* under them. Three buttons will not stand beside a 220px
 /// list in the 600 the strip has — the third overflowed by 118 — and the
-/// drawing's own numbers win over the band's height, which is the rule K-469
-/// settled for exactly this kind of collision. A further line of the same 22
-/// and 8 appears while a preset is being named, which is why this is the
-/// *resting* height rather than the band's only one.
+/// drawing's own numbers win over the band's height, which is how a collision
+/// like this is settled. A further line of the same 22 and 8 appears while a
+/// preset is being named, which is why this is the *resting* height rather
+/// than the band's only one.
 const double exportPresetStrip = 68;
 const double exportPresetStripGap = 8;
 
 /// The preset list itself. 220 in the 502 the strip has after its label column
 /// leaves the three buttons their content width and air after them, so none of
-/// *Edit*, *Save as…* or *Set as default* is ever cut (K-487, K-588).
+/// *Edit*, *Save as…* or *Set as default* is ever cut.
 const double exportPresetDropdown = 220;
 
-/// The three destination policies the export defaults store knows (K-588), by
-/// the engine's own names. Here rather than in the Settings window because the
+/// The three destination policies the export defaults store knows, by the
+/// engine's own names. Here rather than in the Settings window because the
 /// dialogue is what *acts* on them and Settings only sets them, and two places
 /// spelling `"project"` differently would seed the wrong folder in silence.
 const String exportDestinationAsk = 'ask';
 const String exportDestinationProject = 'project';
 const String exportDestinationFolder = 'folder';
 
-/// The tokens a filename template may carry (K-119) — the exporter's own, and
-/// the whole list: it substitutes these three and nothing else. Syntax rather
-/// than prose, which is why they are spelled here and not in the arb: a
-/// translated `{comp}` would stop being a token.
+/// The tokens a filename template may carry — the exporter's own, and the
+/// whole list: it substitutes these three and nothing else. Syntax rather than
+/// prose, which is why they are spelled here and not in the arb: a translated
+/// `{comp}` would stop being a token.
 const String exportTokenComp = '{comp}';
 const String exportTokenDate = '{date}';
 
@@ -170,7 +169,7 @@ const double exportSpyBias = 24;
 const List<int> _audioRates = [320000, 256000, 192000, 128000];
 
 /// What the export writes. *Still* is not here and will not be: a still is an
-/// image sequence of one frame, which the span already says (K-485).
+/// image sequence of one frame, which the span already says.
 enum ExportOutputType { video, imageSequence, audioOnly }
 
 /// A section of the page, and the tab that names it. The Composition group has
@@ -276,8 +275,8 @@ Future<void> showExportDialogFrb({
   try {
     final ui = context.read<LumitUiState>();
     roi ??= ui.regionOfInterest;
-    // The project's colour config, off the held summary rather than the file
-    // (K-490) — its space names fill the Colour section's dropdown.
+    // The project's colour config, off the held summary rather than the file:
+    // its space names fill the Colour section's dropdown.
     colour = ui.colourSummary;
   } catch (_) {
     roi = region;
@@ -305,8 +304,8 @@ class _ExportDialog extends StatefulWidget {
   final CompositionReference comp;
 
   /// The project, for the one colour question only it can answer: whether a
-  /// named space can actually be delivered right now (K-490). Null where the
-  /// dialog was raised without one, which leaves the config section off.
+  /// named space can actually be delivered right now. Null where the dialog
+  /// was raised without one, which leaves the config section off.
   final ProjectReference? project;
 
   /// The colour config's names as the shell holds them.
@@ -347,8 +346,8 @@ class _ExportDialogState extends State<_ExportDialog> {
   bool _naming = false;
   final TextEditingController _presetName = TextEditingController();
 
-  /// The preset the defaults store names (K-588), so the strip can show whether
-  /// what is in force is already the default. Empty when nothing was saved.
+  /// The preset the defaults store names, so the strip can show whether what
+  /// is in force is already the default. Empty when nothing was saved.
   String _defaultPreset = '';
 
   _Format _format = _formats.first;
@@ -363,9 +362,9 @@ class _ExportDialogState extends State<_ExportDialog> {
   bool _audio = true;
   int _audioRate = _audioRates.first;
 
-  /// The three sound settings K-493 made real: the rate the mix is written at,
-  /// the width of one written sample, and how many channels the file carries.
-  /// Their defaults are what every export has always written.
+  /// The three sound settings: the rate the mix is written at, the width of
+  /// one written sample, and how many channels the file carries. Their
+  /// defaults are what every export has always written.
   int _audioSampleRate = 48000;
   int _audioDepth = 16;
   int _audioChannels = 2;
@@ -396,34 +395,33 @@ class _ExportDialogState extends State<_ExportDialog> {
   bool _alphaChannel = false;
   bool _straightAlpha = false;
 
-  /// Deliver from the proxies rather than the originals (K-501), and deliver
-  /// the guide layers too (K-497). Both are off by default whatever the
-  /// project is set to: a proxy switched on to work with is not a picture
-  /// anybody meant to ship.
+  /// Deliver from the proxies rather than the originals, and deliver the guide
+  /// layers too. Both are off by default whatever the project is set to: a
+  /// proxy switched on to work with is not a picture anybody meant to ship.
   bool _useProxies = false;
   bool _renderGuides = false;
 
-  /// The Time overrides (K-502). Motion blur has three answers — the
-  /// composition's own, on for every checked layer, off for all of them — and
-  /// Retime blend has two, because Lumit has no comp-wide blending master for
-  /// a third to speak to.
+  /// The Time overrides. Motion blur has three answers — the composition's
+  /// own, on for every checked layer, off for all of them — and Retime blend
+  /// has two, because Lumit has no comp-wide blending master for a third to
+  /// speak to.
   int _motionBlur = 0;
   int _retimeBlend = 0;
 
-  /// The filter a resized frame is resampled with (K-498). The empty string is
-  /// *Fast* — bilinear, what every Lumit export has always used — and it stays
-  /// the default, because changing it would silently alter what every stored
-  /// preset writes.
+  /// The filter a resized frame is resampled with. The empty string is
+  /// *Fast* — bilinear, what every Lumit export has always used — and it
+  /// stays the default, because changing it would silently alter what every
+  /// stored preset writes.
   String _resample = '';
 
   /// The colour space the file is written and tagged in, as the engine's own
-  /// stored name (K-498). Empty is sRGB / Rec. 709, which is a pass-through.
+  /// stored name. Empty is sRGB / Rec. 709, which is a pass-through.
   String _colourSpace = '';
 
   /// Why each of the config's spaces cannot be delivered, for the ones that
-  /// cannot (K-490, K-485's disabled-not-hidden). Worked out once as the
-  /// dialog opens — the config cannot change while it is up, and asking per
-  /// rebuild would cross the bridge once per name per frame.
+  /// cannot: disabled, never hidden. Worked out once as the dialog opens — the
+  /// config cannot change while it is up, and asking per rebuild would cross
+  /// the bridge once per name per frame.
   final Map<String, String> _colourRefused = {};
 
   int _cropTop = 0;
@@ -513,7 +511,7 @@ class _ExportDialogState extends State<_ExportDialog> {
       }
     }
     _presets = exportPresetList();
-    // What the last *Set as default* — or Settings ▸ Export — asked for (K-588).
+    // What the last *Set as default* — or Settings ▸ Export — asked for.
     // Read once here: this is the one moment the store is consulted, and
     // `build` crosses no bridge.
     final defaults = exportDefaultsGet();
@@ -689,7 +687,7 @@ class _ExportDialogState extends State<_ExportDialog> {
             spec: spec, width: width, height: height, fps: _rate)
         .toInt();
     // Asked of the composition, not free-standing: whether a colour space can
-    // be delivered is a question about this project's colour config (K-490).
+    // be delivered is a question about this project's colour config.
     _check = widget.comp.exportSpecCheck(spec: spec);
   }
 
@@ -763,8 +761,8 @@ class _ExportDialogState extends State<_ExportDialog> {
             ),
             HouseButton(
               key: const ValueKey('export-start'),
-              // The window's default action (K-319): Enter exports unless a
-              // field is being typed in.
+              // The window's default action: Enter exports unless a field is
+              // being typed in.
               primary: true,
               autofocus: true,
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -910,8 +908,8 @@ class _ExportDialogState extends State<_ExportDialog> {
               ),
             ]),
           ),
-          // The drawing's dropdown is two ticks instead (K-485): *when done* is
-          // two independent answers, and a long export left running wants the
+          // The drawing's dropdown is two ticks instead: *when done* is two
+          // independent answers, and a long export left running wants the
           // sound and the folder both.
           _row(
             t,
@@ -927,11 +925,11 @@ class _ExportDialogState extends State<_ExportDialog> {
         ],
       );
 
-  /// **The preset strip: chrome above the scroll, not a row inside Output**
-  /// (K-487). A preset sets and saves every section of this dialog, so it
-  /// belongs to the whole page rather than to one group of it — and the strip
-  /// gives *Save as…* its content width, which is what the 173px column it
-  /// used to share never could.
+  /// **The preset strip: chrome above the scroll, not a row inside Output.** A
+  /// preset sets and saves every section of this dialog, so it belongs to the
+  /// whole page rather than to one group of it — and the strip gives
+  /// *Save as…* its content width, which is what the 173px column it used to
+  /// share never could.
   ///
   /// It is not a tab: it sits under the tab row, above the body, and the
   /// scroll-spy neither reads it nor is read by it.
@@ -969,12 +967,12 @@ class _ExportDialogState extends State<_ExportDialog> {
               ],
             ),
             // *Set as default* stands with the preset controls because it is
-            // one of them (K-588): what it remembers is the preset in force.
-            // On its own line because three buttons will not stand beside a
-            // 220px list in 600, and under the list rather than beside the
-            // label because it acts on what is above it. It reads as in-force
-            // when the preset showing is already the default, which is how a
-            // press that saved says so.
+            // one of them: what it remembers is the preset in force. On its
+            // own line because three buttons will not stand beside a 220px
+            // list in 600, and under the list rather than beside the label
+            // because it acts on what is above it. It reads as in-force when
+            // the preset showing is already the default, which is how a press
+            // that saved says so.
             _stripRow(
               t,
               '',
@@ -997,7 +995,7 @@ class _ExportDialogState extends State<_ExportDialog> {
                   // ground: a saved preset's row carries a fourth button
                   // (*Delete*), and 220 of field plus four buttons is eight
                   // pixels more than the strip has. The buttons keep their
-                  // content width — that was the whole of K-487's fix — so the
+                  // content width — that was the whole of the fix — so the
                   // field takes the difference and the list above it stays the
                   // one the eye measures against.
                   Flexible(
@@ -1143,8 +1141,8 @@ class _ExportDialogState extends State<_ExportDialog> {
           ),
         ),
         // Both default to the delivery answer rather than to the project's
-        // own: an export reads the originals (K-501) and leaves the guide
-        // layers out (K-497), whatever is switched on to work with.
+        // own: an export reads the originals and leaves the guide layers out,
+        // whatever is switched on to work with.
         _columns(
           _row(
             t,
@@ -1241,7 +1239,7 @@ class _ExportDialogState extends State<_ExportDialog> {
           ),
           // The value well is a fixed 56 and the list beside it takes whatever
           // the row has left, so the rate is always readable and the column's
-          // controls keep one left edge and one right (K-485).
+          // controls keep one left edge and one right.
           _row(
             t,
             l10n.frameRate,
@@ -1287,8 +1285,8 @@ class _ExportDialogState extends State<_ExportDialog> {
             labelColumn: exportLabelColumnPaired,
           ),
         ),
-        // Both are overrides on the export's own throwaway snapshot (K-502).
-        // Motion blur has three answers because blur passes two gates — the
+        // Both are overrides on the export's own throwaway snapshot. Motion
+        // blur has three answers because blur passes two gates — the
         // composition's master switch and the layer's own check; Retime blend
         // has two, because a layer's Nearest/Blend/Flow choice *is* its check
         // and there is no comp-wide master for a third answer to speak to.
@@ -1535,8 +1533,8 @@ class _ExportDialogState extends State<_ExportDialog> {
             ),
             const Spacer(),
             // *Fast* is bilinear and *High* is Lanczos-3 widened by the shrink
-            // factor (K-498). Fast leads because it is what every export has
-            // always written, not because it is better.
+            // factor. Fast leads because it is what every export has always
+            // written, not because it is better.
             SizedBox(
               width: exportResampleWidth,
               height: dialogControlHeight,
@@ -1616,14 +1614,14 @@ class _ExportDialogState extends State<_ExportDialog> {
   }
 
   /// Colour: the five built-in spaces this build transforms to, and — once the
-  /// project names a colour config — every output space that config offers
-  /// (K-490). The list a format offers is the format's own (K-498): a
-  /// container that can state its colour carries all five built-ins, and a
-  /// still — which states none — is offered only the space an untagged file is
-  /// universally taken to be. A config's space rides on top of that list
-  /// whatever the container can state, because an OCIO export is written
-  /// untagged by design (docs/impl/ocio.md §5.2); what refuses it is the
-  /// config, not the format, and `_colourRefused` is where that answer is.
+  /// project names a colour config — every output space that config offers.
+  /// The list a format offers is the format's own: a container that can state
+  /// its colour carries all five built-ins, and a still — which states none —
+  /// is offered only the space an untagged file is universally taken to be. A
+  /// config's space rides on top of that list whatever the container can
+  /// state, because an OCIO export is written untagged by design
+  /// (docs/impl/ocio.md §5.2); what refuses it is the config, not the format,
+  /// and `_colourRefused` is where that answer is.
   Widget _colourGroup(LumitTheme t) {
     final dim = !_picture;
     return _group(
@@ -1640,9 +1638,8 @@ class _ExportDialogState extends State<_ExportDialog> {
             value: _colourSpace,
             options: _colourOptions,
             label: _colourSpaceLabel,
-            // The config's names are the user's own words and never go
-            // through the label table (K-303); the heading over them is
-            // ours.
+            // The config's names are the user's own words and never go through
+            // the label table; the heading over them is ours.
             group: (v) => widget.colour.spaces.contains(v) &&
                     !_caps.colourSpaces.contains(v)
                 ? l10n.colourSpaceFromConfig
@@ -1745,11 +1742,11 @@ class _ExportDialogState extends State<_ExportDialog> {
               ),
             ),
             const SizedBox(width: 6),
-            // The three sound settings (K-493). The rate resamples at the
-            // source rather than after the mix; the width means something
-            // only for the uncompressed forms, so AAC offers sixteen alone
-            // rather than accepting a setting it cannot honour; and mono is
-            // the finished stereo mix folded down, once.
+            // The three sound settings. The rate resamples at the source
+            // rather than after the mix; the width means something only for
+            // the uncompressed forms, so AAC offers sixteen alone rather than
+            // accepting a setting it cannot honour; and mono is the finished
+            // stereo mix folded down, once.
             SizedBox(
               width: exportAudioRateWidth,
               height: dialogControlHeight,
@@ -1994,8 +1991,7 @@ class _ExportDialogState extends State<_ExportDialog> {
             _caps.depths.length > 1 ? (d) => _edit(() => _depth = d) : null,
       );
 
-  /// One crop inset: its mark and its well, in pixels at composition size
-  /// (K-419).
+  /// One crop inset: its mark and its well, in pixels at composition size.
   Widget _cropWell(LumitTheme t, String id, String mark, int value,
           ValueChanged<int> set, int limit) =>
       Row(mainAxisSize: MainAxisSize.min, children: [
@@ -2112,7 +2108,7 @@ class _ExportDialogState extends State<_ExportDialog> {
       });
 
   /// A preset fills every field it names — it is the whole settings payload,
-  /// not a stamp on three of them (K-479's preset store).
+  /// not a stamp on three of them.
   void _applyPreset(String name) {
     if (name.isEmpty) {
       _edit(() => _preset = '');
@@ -2168,9 +2164,9 @@ class _ExportDialogState extends State<_ExportDialog> {
     });
   }
 
-  /// Fill in the destination the defaults store asks for (K-588), so a person
-  /// who always writes to the same place opens the dialog with a file name
-  /// already in the Destination row.
+  /// Fill in the destination the defaults store asks for, so a person who
+  /// always writes to the same place opens the dialog with a file name already
+  /// in the Destination row.
   ///
   /// *Ask* leaves it empty, which is what the dialog has always done. *Beside
   /// the project* falls back to asking when the project has never been saved
@@ -2216,9 +2212,9 @@ class _ExportDialogState extends State<_ExportDialog> {
   }
 
   /// *Set as default*: remember the preset and the format in force as what the
-  /// dialog opens on (K-588). The filename template and the destination policy
-  /// are left exactly as they were — those are Settings ▸ Export's rows, and
-  /// this button must not quietly answer questions it does not ask.
+  /// dialog opens on. The filename template and the destination policy are
+  /// left exactly as they were — those are Settings ▸ Export's rows, and this
+  /// button must not quietly answer questions it does not ask.
   void _setAsDefault() {
     final stored = exportDefaultsGet();
     try {

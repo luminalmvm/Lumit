@@ -110,7 +110,7 @@ install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
 # === The plugin brokers ===
 # Third-party plugins never load into Lumit's own process (docs/12 §2.3): OFX
 # ones load into `lumit-ofx-broker`, one process per bundle, and CLAP ones into
-# `lumit-aplug-broker`, one process per module (K-696). Both are spawned from
+# `lumit-aplug-broker`, one process per module. Both are spawned from
 # beside the host's own executable. cargokit builds the bridge's cdylib and has
 # no notion of a second binary, so the one command that builds these lives here —
 # and they are installed next to the runner, which is where

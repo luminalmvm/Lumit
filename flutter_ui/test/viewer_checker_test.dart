@@ -1,4 +1,4 @@
-// The transparency board behind the picture (K-230): how much of it is painted.
+// The transparency board behind the picture: how much of it is painted.
 //
 // The board is drawn a square at a time, so what it costs is the *number of
 // squares*, and that number has to stay the same however far the picture is

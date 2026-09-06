@@ -369,11 +369,11 @@ void main() {
     });
 
     /// 6b. **The ruler is one band, the height of the outline's two chrome
-    /// rows** (docs/15 §12A.1, K-513). The clock's labels sit near its top and
+    /// rows** (docs/15 §12A.1). The clock's labels sit near its top and
     /// the markers stand on its floor, and nothing is ruled off between them.
     ///
-    /// **The highlight is the second row's; the handles are both rows'**
-    /// (K-529). K-513 gave the highlight the whole height too, and the owner
+    /// **The highlight is the second row's; the handles are both rows'.**
+    /// An earlier rule gave the highlight the whole height too, and the owner
     /// reversed that half after living with it: a wash over the clock makes
     /// the numbers harder to read and says nothing the lower row was not
     /// already saying. The handles keep the full reach, because a handle is a
@@ -399,12 +399,12 @@ void main() {
 
       final band = tester.getRect(find.byKey(const ValueKey('tl-work-area')));
       expect(band.top, closeTo(waist, 0.5),
-          reason: 'the highlight starts at the waist (K-529)');
+          reason: 'the highlight starts at the waist');
       expect(band.bottom, closeTo(ruler.bottom, 0.5),
           reason: 'and reaches its floor, which the cache bar is drawn on');
 
       // Both handles reach — and are grabbable for — the whole ruler, which
-      // is the half of K-513 that stands.
+      // is the half of that earlier rule which stands.
       for (final end in const ['start', 'end']) {
         final handle =
             tester.getRect(find.byKey(ValueKey<String>('tl-work-$end')));
@@ -417,8 +417,8 @@ void main() {
       }
 
       // The tab is drawn, and it is the band's own colour **solid** —
-      // derived, never a second hex (K-529, the owner's reference image;
-      // K-616, which took the alpha off).
+      // derived, never a second hex (the owner's reference image; a later
+      // change took the alpha off).
       final tabFinder = find.descendant(
           of: find.byKey(const ValueKey('tl-work-start')),
           matching: find.byType(DecoratedBox));
@@ -426,7 +426,7 @@ void main() {
       final t = LumitTheme.dark();
       expect((tab.decoration as BoxDecoration).color, workAreaHandleColour(t));
 
-      // Thicker, shorter, and still a rectangle (K-576, the owner's ruling
+      // Thicker, shorter, and still a rectangle (the owner's ruling
       // from desktop testing): the drawn tab stops under the clock's labels
       // while the grab above it stays the whole ruler's.
       final drawn = tester.getRect(tabFinder);
@@ -445,7 +445,7 @@ void main() {
       expect(workAreaHandleRadius, lessThan(workAreaHandleTabWidth / 2),
           reason: 'a corner taken off, not a pill');
       expect(workAreaHandleColour(t).a, 1.0,
-          reason: 'solid (K-616): a tab drawn through takes its colour from '
+          reason: 'solid: a tab drawn through takes its colour from '
               'whatever it happens to be standing over');
       expect(workAreaHandleColour(t).a, greaterThan(workAreaEdgeColour(t).a),
           reason: 'stronger than the band\'s edge, in the same hue');
@@ -633,12 +633,12 @@ void main() {
           reason: 'it is drawn where the document says it is');
     });
 
-    /// 9. **The mockups' heights are canonical** (K-451, docs/15 §12A.6). The
+    /// 9. **The mockups' heights are canonical** (docs/15 §12A.6). The
     /// panel's chrome is built to those logical pixels, not to approximations
     /// of them, so each one is measured here rather than trusted — and against
     /// the density's own tokens rather than against numbers copied out of the
-    /// table, so the pin cannot drift from what the app reads (K-454).
-    testWidgets('the panel is built to K-451 heights', (tester) async {
+    /// table, so the pin cannot drift from what the app reads.
+    testWidgets('the panel is built to the spec heights', (tester) async {
       final p = withComp();
       final layer = p.comp.addAdjustmentLayer();
       p.uiState.model.refresh();
@@ -660,12 +660,12 @@ void main() {
       // is the ruler's whole derivation** (§12A.6): the lane side spends on
       // its ruler exactly what the outline spends on its two rows, so the two
       // halves meet. Above that pair both halves spend the navigator's band —
-      // the strip on the lane side, a taller timecode row on the outline's
-      // (K-682) — so the derivation is measured from the ruler, one band down.
+      // the strip on the lane side, a taller timecode row on the outline's —
+      // so the derivation is measured from the ruler, one band down.
       expect(outlineRow(tester, layer).top - ruler.top, closeTo(d.ruler, 0.5),
           reason: 'two chrome rows sit above the first layer row');
-      // **The toolbar row fills the navigator's band** (K-682, the owner's
-      // ruling; it amends K-648's full-width strip). The strip stands over
+      // **The toolbar row fills the navigator's band** (the owner's
+      // ruling; it amends the strip's old full width). The strip stands over
       // the lane area alone, and the outline's top row grows by exactly its
       // band to meet the panel top — both halves' chrome starts at one y,
       // and no dead ground stands beside the strip.
@@ -679,8 +679,8 @@ void main() {
       expect(ruler.top - strip.top, closeTo(TimelineNavigator.band, 0.5),
           reason: 'and the ruler starts one band down, facing the rest of '
               'the toolbar row and the column header');
-      // And they are the two the density states, at K-512's own numbers: the
-      // row that is aimed at all day is the taller of the pair.
+      // And they are the two the density states, at the chrome row numbers:
+      // the row that is aimed at all day is the taller of the pair.
       expect(
           tester
                   .getRect(find.byKey(const ValueKey('tl-view-lanes')))
@@ -712,7 +712,7 @@ void main() {
     });
 
     /// 10. **The pieces inside a row are the mockup's, not approximations of
-    /// them** (K-451): a bar is 16 whatever the row measures and centred in it,
+    /// them**: a bar is 16 whatever the row measures and centred in it,
     /// the layer's label colour is a 6px dot, and the number beside it stands
     /// in an 18px column.
     testWidgets('a lane row draws a 16px bar centred in it', (tester) async {
@@ -739,9 +739,9 @@ void main() {
       expect(dot.height, closeTo(6, 0.5));
     });
 
-    /// 10b. **A bar carries no name unless the setting asks for one** (K-514,
-    /// the owner's ruling), and when it does the label is **Hanken at 10**
-    /// (§7.1, K-451) — the mockup's own size, and the face §7.1 gives
+    /// 10b. **A bar carries no name unless the setting asks for one** (the
+    /// owner's ruling), and when it does the label is **Hanken at 10**
+    /// (§7.1) — the mockup's own size, and the face §7.1 gives
     /// everything the *user* named. It was mono at 11, which is the row the
     /// axis numbers keep.
     ///
@@ -768,8 +768,8 @@ void main() {
           reason: 'a layer\'s own name is sentence-case Hanken, not mono');
     });
 
-    /// 10b-bis. **Both halves rule their rows on the same pixel** (K-513's
-    /// sibling fix, reported from desktop as "the outline's dividers look 2px
+    /// 10b-bis. **Both halves rule their rows on the same pixel** (a sibling
+    /// fix, reported from desktop as "the outline's dividers look 2px
     /// and faint where the lanes' look crisp").
     ///
     /// The lane side draws its seams inside the scrolled content, so they fall
@@ -806,7 +806,7 @@ void main() {
         }
       }
       // And a blank leaves its middle unruled while keeping the seams that
-      // bound it (K-248).
+      // bound it.
       final blanked =
           rowSeamOffsets(step: step, height: 200, blanks: [(23, 92)]);
       expect(blanked.where((y) => (y - 45.5).abs() < 0.01), isEmpty);
@@ -847,8 +847,8 @@ void main() {
       }
     });
 
-    /// 10c. **The pickers inside a row wear the in-row face** (§12A.6's table,
-    /// K-451): matte, blend and parent are cells in a layer's row, not dialog
+    /// 10c. **The pickers inside a row wear the in-row face** (§12A.6's
+    /// table): matte, blend and parent are cells in a layer's row, not dialog
     /// controls, and the mockup draws all three at the shorter face with a
     /// 10px label.
     testWidgets('the matte, blend and parent pickers are the density\'s',
@@ -865,8 +865,7 @@ void main() {
         expect(tester.getRect(picker).height,
             closeTo(DensityTokens.regular.inRowPicker, 0.5),
             reason: 'the $cell picker is the mockup\'s 18 under Regular, '
-                'against the 20 a dropdown elsewhere in a panel stands at '
-                '(K-454)');
+                'against the 20 a dropdown elsewhere in a panel stands at');
         expect(tester.getRect(picker).center.dy, closeTo(row.center.dy, 0.5),
             reason: 'and is centred in its row');
         expect(
@@ -881,7 +880,7 @@ void main() {
       }
     });
 
-    /// 10c-bis. **The layer search stands at whatever its row states** (K-511).
+    /// 10c-bis. **The layer search stands at whatever its row states.**
     ///
     /// Under **Compact** that is nothing at all, and the well keeps the
     /// drawing's own 16 in an 18 row — ground above and below it, rather than
@@ -923,7 +922,7 @@ void main() {
     });
 
     /// 10c-bis. **The search well has [outlineGap] of air at each side**
-    /// (K-529, the owner after desktop testing). It had the chrome row's 2 —
+    /// (the owner after desktop testing). It had the chrome row's 2 —
     /// the gap between two chips of one segmented run — which is not what a
     /// well stretched between a counter and a set of tabs is, and at 2 it read
     /// as wedged between them. The 8 is the rhythm the compose boxes keep
@@ -948,7 +947,7 @@ void main() {
           reason: 'the same number the compose boxes keep between them');
     });
 
-    /// 10d. **Compact is the same panel, a pixel tighter** (K-454, §12A.6's
+    /// 10d. **Compact is the same panel, a pixel tighter** (§12A.6's
     /// second column). The setting reaches the rows that matter — the layer
     /// rows and the panel's own chrome — and it reaches them through the
     /// theme, so the outline and the lanes move together: a table whose two
@@ -968,14 +967,13 @@ void main() {
       // The ruler is still exactly the two chrome rows the outline spends
       // opposite it, which is what holds the halves level at either density —
       // and under Compact those two rows are 18 apiece, exactly as they were
-      // before K-512 grew Regular's.
+      // before Regular's grew.
       expect(row.top - ruler.top, closeTo(36, 0.5),
           reason: 'two 18px chrome rows stand above the first layer row');
       expect(d.timelineChromeRow, 18);
       expect(d.timelineHeaderRow, 18);
-      // The toolbar row carries the navigator's band under Compact too
-      // (K-682): the strip is no denser there, so the grown row is not
-      // either.
+      // The toolbar row carries the navigator's band under Compact too: the
+      // strip is no denser there, so the grown row is not either.
       expect(tester.getRect(find.byKey(const ValueKey('tl-toolbar'))).height,
           closeTo(d.timelineChromeRow + TimelineNavigator.band, 0.5),
           reason: 'the timecode row fills the band beside the strip');
@@ -1001,7 +999,7 @@ void main() {
       expectLevel(tester, layer, why: 'under Compact');
     });
 
-    /// 10d-bis. **The identity cluster is the drawing's** (K-461): twirl,
+    /// 10d-bis. **The identity cluster is the drawing's**: twirl,
     /// then the layer number, then the label dot, then the name — and 8 px of
     /// air between each of the three marks, where the outline used to run the
     /// twirl hard against the dot. Measured as edges rather than as widget
@@ -1027,7 +1025,7 @@ void main() {
           reason: 'the twirl opens the cluster');
       expect(number.right, lessThanOrEqualTo(dot.left),
           reason: 'the number is the row\'s address and comes before the dot '
-              '(K-461 — they used to stand the other way round)');
+              '(they used to stand the other way round)');
       expect(dot.right, lessThanOrEqualTo(name.left),
           reason: 'and the dot belongs to the name it colours');
 
@@ -1040,9 +1038,9 @@ void main() {
       expect(identityGap, 8, reason: 'which is the constant\'s own value');
     });
 
-    /// 10d-ter. **The compose columns start at their content** (K-461): the
+    /// 10d-ter. **The compose columns start at their content**: the
     /// drawing's 84 / 84 / 64 faces, and — with no matte set anywhere in the
-    /// comp — nothing else (K-463). They had been 118 / 112 / 96, which is
+    /// comp — nothing else. They had been 118 / 112 / 96, which is
     /// slack no picker ever used; then the matte column kept the mode toggles'
     /// 28 whether or not they were drawn, which read as a hole between the
     /// matte and the blend on every row of every comp without a matte.
@@ -1060,7 +1058,7 @@ void main() {
               'the gap between — no room held back for toggles nobody has '
               'asked for');
       expect(parentGroupWidth, 64,
-          reason: 'and the parent picker is a cluster of its own (K-529), so '
+          reason: 'and the parent picker is a cluster of its own, so '
               "the bottom bar's Parent toggle hides it and nothing else");
       expect(composeGroupWidth + groupDividerWidth + parentGroupWidth,
           lessThan(334),
@@ -1088,7 +1086,7 @@ void main() {
     });
 
     /// 10d-sexies. **The matte column widens for the toggles, and only while a
-    /// matte is set** (owner, K-463). With one set, the two mode toggles have
+    /// matte is set** (owner). With one set, the two mode toggles have
     /// to fit between the matte face and the blend column — on the row that
     /// has the matte *and* on the rows that do not, or the blend column stops
     /// being a column.
@@ -1163,15 +1161,15 @@ void main() {
 
       // Across the row: the two cluster seams a solid layer draws cells on
       // either side of, and then picker to picker.
-      // Guide is the cluster's last cell since K-497, so it is the mark the
-      // identity cluster stands a gap away from.
+      // Guide is the cluster's last cell, so it is the mark the identity
+      // cluster stands a gap away from.
       expect(at('twirl').left - at('guide').right, closeTo(outlineGap, 0.5),
           reason: 'the seam between the switches and the identity cluster is '
               'one gap, where it had been 7');
-      // A solid draws the adjustment cell (K-484) and neither of the two that
-      // end the column — flow is footage's and collapse is a Precomp's (K-632)
-      // — so the seam between the modes and the pickers is one gap past two
-      // cells it keeps but does not fill.
+      // A solid draws the adjustment cell and neither of the two that end the
+      // column — flow is footage's and collapse is a Precomp's — so the seam
+      // between the modes and the pickers is one gap past two cells it keeps
+      // but does not fill.
       expect(at('matte').left - at('adjust').right,
           closeTo(outlineGap + 2 * switchCellWidth, 0.5),
           reason: 'as is the seam between the modes and the pickers — the '
@@ -1179,15 +1177,15 @@ void main() {
       expect(at('blend').left - at('matte').right, closeTo(outlineGap, 0.5),
           reason: 'and the matte face is one gap from the blend on a comp with '
               'no matte set — the toggles\' room appears with the first matte '
-              'and not before (K-463)');
+              'and not before');
       expect(at('parent').left - at('blend').right, closeTo(outlineGap, 0.5),
           reason: 'as the blend is from the parent');
     });
 
-    /// 10d-quater. **A lane key is the drawing's 11 in Layers mode too**
-    /// (K-459), and its mark is **split at its vertical centre** — the left
+    /// 10d-quater. **A lane key is the drawing's 11 in Layers mode too**,
+    /// and its mark is **split at its vertical centre** — the left
     /// half drawn from the interpolation coming in, the right half from the
-    /// one going out (K-457).
+    /// one going out.
     ///
     /// Two claims, asked two ways: the size off the rendered lane, because
     /// that is what a reader aims at; the shapes off the geometry itself,
@@ -1221,7 +1219,7 @@ void main() {
           reason: 'a twirled-open property draws its own lane of keys');
       expect(laneKeyHalf * 2, 11,
           reason: 'a key stands 11 point to point in Layers mode as it does '
-              'in Keys — Layers used to draw them at 8 (K-459)');
+              'in Keys — Layers used to draw them at 8');
       expect(
           tester
               .getRect(
@@ -1231,7 +1229,7 @@ void main() {
           reason: 'and the lane it is drawn in has the room for it');
     });
 
-    /// 10d-quinquies. **The mark is split at its vertical centre** (K-457):
+    /// 10d-quinquies. **The mark is split at its vertical centre**:
     /// each half is its own side's shape, all three shapes stand the same
     /// height, and a bezier side is the **hourglass** — two triangles tip to
     /// tip — which supersedes the rounded shape Keys mode first drew.
@@ -1396,7 +1394,7 @@ void main() {
       const d = DensityTokens.compact;
 
       // Twirled open onto Transform, which is how a keyed property's row is
-      // reached (K-529: the dope sheet used to open every layer for you).
+      // reached (the dope sheet used to open every layer for you).
       await openFold(tester, layer.internallayerId, group: 'Transform');
       await tester.pumpAndSettle();
 
@@ -1417,8 +1415,8 @@ void main() {
           reason: 'the two halves are level in Compact too');
     });
 
-    /// 11. **A switch column drags, and what it buys is cells** (K-633,
-    /// moving K-448's pin). Both columns are rows of icons, so there is no
+    /// 11. **A switch column drags, and what it buys is cells**, moving an
+    /// earlier pinned width. Both columns are rows of icons, so there is no
     /// stretching to be had — but narrowing one puts its least-used marks away
     /// in a named order, and dragging it back brings them out again.
     testWidgets('a narrowed switch column sheds its marks in order',
@@ -1429,8 +1427,8 @@ void main() {
       await mount(tester, p);
       final id = layer.internallayerId;
 
-      // Both columns are exactly their cells: six A/V marks (K-497 added
-      // guide) and six modes (K-632 gave collapse its own).
+      // Both columns are exactly their cells: six A/V marks (guide is the
+      // sixth) and six modes (collapse has one of its own).
       expect(switchesGroupWidth, 6 * switchCellWidth);
       expect(renderGroupWidth, 6 * switchCellWidth);
 
@@ -1476,7 +1474,7 @@ void main() {
       expect(drawn('3d'), isTrue);
     });
 
-    /// 11b. **The rows redraw under the drag, not on release** (K-633): the
+    /// 11b. **The rows redraw under the drag, not on release**: the
     /// Layers column's names widen with the hand. The seam used to stage its
     /// whole gesture and tell the panel once, on release, because a live drag
     /// rebuilt the entire Timeline per pointer move.
@@ -1585,6 +1583,6 @@ void main() {
 
 /// The Sequence view takes the layer's own bar row as the top of its clip
 /// strip, so the outline's spacer holds everything *below* that row — one row
-/// less than the view is tall (K-248). That row is the table's, and so the
-/// density's (K-454), not one of the view's own.
+/// less than the view is tall. That row is the table's, and so the
+/// density's, not one of the view's own.
 final double _seqOwnRow = DensityTokens.regular.laneRow;

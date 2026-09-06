@@ -506,7 +506,7 @@ fn seed_instance_properties(
     // **The project's size, and this instance's own tiles answer.** The OFX
     // support library reads all of these when a plugin is constructed, and a
     // plugin that cannot find one of them throws before it exists — six of the
-    // conformance bench's plugins died on `ProjectExtent` alone (K-595).
+    // conformance bench's plugins died on `ProjectExtent` alone.
     //
     // The numbers here are a standing default; [`set_project_size`] replaces
     // them with the frame actually being rendered before the plugin is asked
@@ -548,6 +548,7 @@ fn seed_clip_instance_properties(props: &mut PropertySet) {
     seed_string(keys::PIXEL_DEPTH, values::BIT_DEPTH_FLOAT);
     seed_string(keys::COMPONENTS, values::COMPONENT_RGBA);
     seed_string(keys::CLIP_UNMAPPED_COMPONENTS, values::COMPONENT_RGBA);
+    seed_string(keys::CLIP_UNMAPPED_PIXEL_DEPTH, values::BIT_DEPTH_FLOAT);
     seed_string(keys::PRE_MULTIPLICATION, values::IMAGE_PRE_MULTIPLIED);
     seed_string(keys::CLIP_FIELD_ORDER, values::IMAGE_FIELD_NONE);
 

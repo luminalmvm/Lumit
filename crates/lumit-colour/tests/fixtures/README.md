@@ -32,7 +32,7 @@ Both were planned as pure data drops. Neither was, and this is the part worth
 reading: **five reader faults**, none of which any hand-built row had caught,
 because each needs a real published config to appear at all.
 
-1. **A matrix meeting its own inverse did not cancel** (K-516). A config states
+1. **A matrix meeting its own inverse did not cancel**. A config states
    one direction of a space and Lumit inverts it for the other, so
    `ACES - ACEScc → ACES - ACEScg` is the AP1→AP0 matrix immediately followed by
    its own inverse. Walked step by step in single precision, an input whose red
@@ -52,7 +52,7 @@ because each needs a real published config to appear at all.
    for the scene-to-display leg and applies its own on top; the parser was
    folding that key into the scene-referred one and running it backwards, which
    drops the rendering and still produces a picture.
-5. **The negative style was read from the wrong key** (K-517). A config *file*
+5. **The negative style was read from the wrong key**. A config *file*
    writes `style`; `negativeStyle` is the C++ API's and CLF's spelling. Reading
    for the wrong one finds nothing and applies the default, so `pass_thru` gamma
    spaces were read as clamping ones — invisible above zero.
@@ -89,8 +89,8 @@ primary — 0.017 at green, 0.0054 at red, and better than 2 × 10⁻³ everywhe
 inside the gamut. The ACES 2.0 rendering is not smooth on a 65-point log grid
 there: the eight corners of the cell containing that colour span 0.165 in Z and
 are not even monotone in blue. It is stated per row rather than as a global
-tolerance so the other rows keep gating, it is recorded in K-518 and §5.4, and
-§4.1's Rust ports are what will tighten it.
+tolerance so the other rows keep gating, it is recorded in §5.4, and §4.1's
+Rust ports are what will tighten it.
 
 ## What was curated out, and why
 
@@ -151,7 +151,7 @@ executable form.
 
 The one thing it gets right that is easy to get wrong is **which door the
 reference run enters the config by**. Lumit's working space is scene-linear
-Rec.709 and never moves (K-490), so a view row's input is in Lumit's working
+Rec.709 and never moves, so a view row's input is in Lumit's working
 space and the reference run has to enter at the same place — and §2.1's two
 readings are genuinely different. `aces-cg` has an `aces_interchange` role, so
 Lumit crosses Rec.709 → AP0 and the run enters at the config's own linear Rec.709

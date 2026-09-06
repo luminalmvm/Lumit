@@ -1,5 +1,5 @@
-//! Reading an After Effects project file directly (K-418,
-//! docs/impl/ae-import.md §7, docs/11-AE-IMPORT.md §7).
+//! Reading an After Effects project file directly
+//! (docs/impl/ae-import.md §7, docs/11-AE-IMPORT.md §7).
 //!
 //! In plain terms: the other way into Lumit asks the user to run a script
 //! inside After Effects, which writes a folder of JSON describing the project.
@@ -354,7 +354,7 @@ fn read_folder<'a>(
 /// *missing* for an item that is not one, and the report says one thing rather
 /// than two about the same row.
 ///
-/// An **image sequence** says so in the same alias record (K-539): its
+/// An **image sequence** says so in the same alias record: its
 /// `target_is_folder` is set, because what the item points at is the folder the
 /// numbered run lives in rather than any one file. Like the path beside it that
 /// is a field naming itself rather than a byte offset, which is why it can be
@@ -376,7 +376,7 @@ fn read_footage(id: i64, parent_id: i64, name: Option<String>, inside: &[Chunk<'
         .and_then(|alias| alias.get("fullpath")?.as_str().map(str::to_string))
         .filter(|path| !path.is_empty());
 
-    // **An image sequence says so in the alias** (K-539): `target_is_folder`,
+    // **An image sequence says so in the alias**: `target_is_folder`,
     // because what the item points at is the folder the run lives in rather
     // than any one file. Like the path beside it, that is a field naming
     // itself and not a byte offset, which is why it can be read here while the
@@ -1216,7 +1216,7 @@ mod tests {
     }
 
     /// **An image sequence is read from the two things After Effects says
-    /// about it, and a single file from neither** (K-539).
+    /// about it, and a single file from neither.**
     ///
     /// Both signals here were taken off a real project (the golden fixture has
     /// no file footage in it, which is why the rest of the interpretation is

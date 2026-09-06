@@ -1,4 +1,4 @@
-// The Audio workspace opens the sound lanes (K-728, the approved
+// The Audio workspace opens the sound lanes (the approved
 // AudioWorkspace board): applying the preset twirls the Audio group and the
 // Waveform lane open on every layer that carries sound, so the Timeline shows
 // the board's own picture — waves, rubber bands and lane chips — rather than

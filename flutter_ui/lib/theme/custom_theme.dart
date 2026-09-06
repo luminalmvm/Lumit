@@ -1,4 +1,4 @@
-// A theme the user made (K-202).
+// A theme the user made.
 //
 // A custom theme is a **name, a light-or-dark base, and a bag of colours** —
 // not a copy of `LumitTheme`. The base matters because a theme is more than

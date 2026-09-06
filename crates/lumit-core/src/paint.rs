@@ -27,12 +27,12 @@
 //! makes "mask off the part I painted" and "blur what I painted" both mean the
 //! obvious thing.
 //!
-//! **A stroke blends.** `blend` is the layer blend list (K-550) — the same
+//! **A stroke blends.** `blend` is the layer blend list — the same
 //! words on the same maths, through the one shared kernel — deciding what
 //! colour the mark lays down. It never changes how the mark *covers*, and an
 //! eraser ignores it, having no colour to combine.
 //!
-//! **A stroke can be pressed.** `pressures` (K-583) is how hard the stylus was
+//! **A stroke can be pressed.** `pressures` is how hard the stylus was
 //! pressed at each point, and the only thing it changes is the *width* of the
 //! dab stamped there. An empty list is the constant 1.0 — every mouse-drawn
 //! stroke, and everything painted before there was a stylus to read — so it
@@ -41,18 +41,18 @@
 //! **What is deliberately not here.** Tilt, spacing curves and any GPU path.
 //! Tilt needs a brush tip that can *turn*, and there is deliberately no angle
 //! anywhere in [`BrushShape`]; angling a round dab would be a lie and angling a
-//! square one is the brush-tip system K-548 refused. Each is a real feature;
-//! none of them changes the shape of what is stored, which is what this first
-//! cut is for.
+//! square one is the brush-tip system this module refused. Each is a real
+//! feature; none of them changes the shape of what is stored, which is what
+//! this first cut is for.
 //!
-//! **A stroke can draw itself on.** `start` and `end` (K-549) are a per cent of
+//! **A stroke can draw itself on.** `start` and `end` are a per cent of
 //! the stroke's own length, animatable like any other property: hold Start at 0,
 //! key End from 0 to 100, and the mark appears as if it were being made. The
 //! trim is a walk along the polyline by arc length — per cent of *length*, not
 //! of the samples, so a write-on runs at an even speed whatever the hand that
 //! drew it was doing.
 //!
-//! The brush tip itself is round or square ([`BrushShape`], K-548) and softens
+//! The brush tip itself is round or square ([`BrushShape`]) and softens
 //! by one hardness ramp either way. That is deliberately not a brush-*tip*
 //! system: no bitmap, no angle, no roundness, and no room made for one.
 
@@ -131,7 +131,7 @@ pub(crate) fn is_static_full(p: &Property) -> bool {
 ///
 /// The path is a **polyline** rather than a bezier: it is a record of a gesture,
 /// sampled as it happened, not a shape anyone will edit vertex by vertex. Masks
-/// and shape layers are the bezier things (K-222); a stroke is a stroke.
+/// and shape layers are the bezier things; a stroke is a stroke.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PaintStroke {
     pub id: Uuid,
@@ -140,7 +140,7 @@ pub struct PaintStroke {
     /// One point is a dab; two or more are joined by round-capped segments.
     pub points: Vec<(f64, f64)>,
     /// How hard the stylus was pressed at each point, 0..1, parallel to
-    /// [`points`](Self::points) (K-583).
+    /// [`points`](Self::points).
     ///
     /// **Empty is the whole of the compatibility story**: an empty list is the
     /// constant 1.0 everybody painted with, so a mouse-drawn stroke — and every
@@ -157,13 +157,14 @@ pub struct PaintStroke {
     /// enough falloff left to keep it from stair-stepping. The same ramp
     /// whatever the [`shape`](Self::shape) is.
     pub hardness: f64,
-    /// Round (the default, and what every stroke was before K-548) or square.
+    /// Round (the default, and what every stroke was before brush shapes
+    /// existed) or square.
     #[serde(default, skip_serializing_if = "BrushShape::is_round")]
     pub shape: BrushShape,
     /// 0..100, like every other opacity in the document.
     pub opacity: f64,
     /// Where along the path the mark **begins**, as a per cent of the stroke's
-    /// own length, and where it **ends** (K-549). Animatable, and the pair is
+    /// own length, and where it **ends**. Animatable, and the pair is
     /// the whole of write-on: hold `start` at 0, key `end` from 0 to 100, and
     /// the stroke draws itself on. `end` at or below `start` is a stroke that
     /// is not there yet, which is what a write-on's first frame looks like.
@@ -180,7 +181,7 @@ pub struct PaintStroke {
     )]
     pub end: Property,
     pub mode: PaintMode,
-    /// How the mark combines with what is already on the layer (K-550) — the
+    /// How the mark combines with what is already on the layer — the
     /// layer blend list, the same words on the same maths. `Normal` is
     /// source-over, which is what every stroke did before there was a choice
     /// and what the rasteriser still runs byte for byte.
@@ -229,7 +230,7 @@ impl PaintStroke {
     ///
     /// The **whole** path, untrimmed: this answers "where could this stroke
     /// ever be", which is what a caller asking about a stroke wants. The
-    /// rasteriser measures the trimmed piece itself (K-549).
+    /// rasteriser measures the trimmed piece itself.
     pub fn bounds(&self) -> Option<(f64, f64, f64, f64)> {
         bounds_of(&self.points, self.width)
     }
@@ -254,7 +255,8 @@ impl PaintStroke {
 }
 
 /// The pressure at point `i` of a path: 1.0 wherever there is none, which is
-/// the whole of a mouse-drawn stroke and of every stroke drawn before K-583.
+/// the whole of a mouse-drawn stroke and of every stroke drawn before pressure
+/// existed.
 fn pressure_at(pressures: &[f64], i: usize) -> f64 {
     match pressures.get(i) {
         // A number nobody could act on reads as a full press rather than as an
@@ -281,7 +283,7 @@ fn bounds_of(points: &[(f64, f64)], width: f64) -> Option<(f64, f64, f64, f64)> 
 }
 
 /// The piece of `points` between `start` and `end` per cent of the path's own
-/// **arc length** (K-549) — a straight walk along the polyline, cutting the two
+/// **arc length** — a straight walk along the polyline, cutting the two
 /// segments the ends land in at exactly the right fraction.
 ///
 /// Per cent of *length*, not of the point count: the samples of a gesture are
@@ -298,7 +300,7 @@ pub(crate) fn trimmed(points: &[(f64, f64)], start: f64, end: f64) -> Vec<(f64, 
 }
 
 /// [`trimmed`] carrying a per-point scalar through the same walk — the stylus
-/// pressures (K-583), lerped at the two segments the ends cut into, so a
+/// pressures, lerped at the two segments the ends cut into, so a
 /// write-on of a pressed stroke thins and thickens exactly where the untrimmed
 /// one does.
 ///
@@ -459,7 +461,7 @@ fn fill_coverage(
     if stroke.points.is_empty() || stroke.width <= 0.0 || stroke.opacity <= 0.0 {
         return None;
     }
-    // The piece drawn at this frame (K-549). Measured and dabbed from the
+    // The piece drawn at this frame. Measured and dabbed from the
     // trimmed path, so a write-on's box grows with it rather than reserving
     // the whole stroke from the first frame.
     let (points, pressures) = stroke.drawn_pressed_at(t);
@@ -478,7 +480,7 @@ fn fill_coverage(
     // that ever stops being true.
     let scale = sx.min(sy);
     // The brush at full pressure. Every dab is this scaled by how hard the
-    // stylus was pressed there (K-583); with no pressures that factor is 1.0
+    // stylus was pressed there; with no pressures that factor is 1.0
     // at every dab and the numbers below are the ones the rasteriser has always
     // used, to the bit.
     let radius = (stroke.width / 2.0 * scale).max(0.5);
@@ -521,7 +523,7 @@ fn fill_coverage(
 }
 
 /// Where the dabs along a stroke's polyline go, in layer coordinates, and how
-/// hard each one presses (K-583).
+/// hard each one presses.
 ///
 /// One point gives one dab. Each segment is walked at [`DAB_SPACING`] of the
 /// radius so the marks overlap into a line; the segment's far end is always
@@ -668,7 +670,7 @@ fn composite(
     let h = rgba.len() / 4 / (w as usize).max(1);
     // The blend, as the index into `BlendMode::ALL` the shared kernel takes.
     // Worked out once per stroke; `None` for Normal, which is the early exit
-    // that keeps every unblended stroke byte for byte what it was (K-550).
+    // that keeps every unblended stroke byte for byte what it was.
     let blend = (stroke.blend != BlendMode::Normal).then(|| {
         BlendMode::ALL
             .iter()
@@ -818,7 +820,7 @@ mod tests {
 
     /// A square brush fills its corners; a round one does not. Same width, same
     /// hardness, same place — the only difference is how the distance to the
-    /// centre is measured (K-548).
+    /// centre is measured.
     #[test]
     fn a_square_brush_marks_its_corners_and_a_round_one_does_not() {
         let dab = |shape: BrushShape| {
@@ -856,7 +858,7 @@ mod tests {
     }
 
     /// Hardness is one ramp, and it softens a square exactly as it softens a
-    /// round (K-548): the shape decides what "distance from the centre" means
+    /// round: the shape decides what "distance from the centre" means
     /// and nothing else.
     #[test]
     fn a_soft_square_fades_at_its_flat_edge() {
@@ -898,7 +900,7 @@ mod tests {
         assert_eq!(back.shape, BrushShape::Square);
     }
 
-    /// Start and End trim the path by **arc length** (K-549): the write-on
+    /// Start and End trim the path by **arc length**: the write-on
     /// that makes a stroke draw itself on.
     #[test]
     fn start_and_end_trim_the_stroke_by_its_length() {
@@ -943,7 +945,7 @@ mod tests {
 
     /// Length, not point count: a gesture's samples bunch up where the hand
     /// slowed down, so counting them would make a write-on speed up and slow
-    /// down with the drawing (K-549).
+    /// down with the drawing.
     #[test]
     fn the_trim_measures_length_and_not_samples() {
         // Two arms of 40 pixels each. The first is sampled once, the second
@@ -994,8 +996,8 @@ mod tests {
         assert_eq!(back.start.value_at(0.0), 0.0, "the default comes back");
     }
 
-    /// A stroke's blend is the layer blend list on the layer blend maths
-    /// (K-550), run through the one shared kernel.
+    /// A stroke's blend is the layer blend list on the layer blend maths, run
+    /// through the one shared kernel.
     #[test]
     fn a_strokes_blend_combines_it_with_what_is_under_it() {
         let dab = |blend: BlendMode, colour: LinearColour| {
@@ -1049,7 +1051,7 @@ mod tests {
     }
 
     /// A blend does not change how the mark *covers*, only what colour it
-    /// lays down — so half opacity is still half the way there (K-550).
+    /// lays down — so half opacity is still half the way there.
     #[test]
     fn a_blend_changes_the_colour_and_not_the_coverage() {
         let mut rgba = raster(20, 20, [128, 128, 128, 255]);
@@ -1072,7 +1074,7 @@ mod tests {
     }
 
     /// An erase has no colour to blend, so a mode on one is ignored rather
-    /// than being a second way of saying nothing (K-550).
+    /// than being a second way of saying nothing.
     #[test]
     fn a_blend_on_an_erase_changes_nothing() {
         let rub = |blend: BlendMode| {
@@ -1283,7 +1285,7 @@ mod tests {
         assert_eq!(once, twice);
     }
 
-    // --- Pressure (K-583) -------------------------------------------------
+    // --- Pressure ---------------------------------------------------------
 
     /// How wide the mark is across the middle of a dab: the numeric row a
     /// pressure has to move, and the whole of what pressure does.
@@ -1345,8 +1347,8 @@ mod tests {
         }
     }
 
-    /// A trim cuts the pressures with the points (K-549 + K-583), so a write-on
-    /// of a pressed stroke thins where the whole stroke thins.
+    /// A trim cuts the pressures with the points, so a write-on of a pressed
+    /// stroke thins where the whole stroke thins.
     #[test]
     fn a_trim_carries_the_pressure_with_it() {
         let mut stroke = PaintStroke::new("Line", vec![(0.0, 0.0), (100.0, 0.0)]);

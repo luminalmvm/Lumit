@@ -1,6 +1,6 @@
-//! The Camera track effect's whole surface across the seam (K-417, phase 4
-//! stage 3): pressing its buttons, reading how far the analysis has got,
-//! drawing its point cloud, and everything a solve-linked Camera layer needs.
+//! The Camera track effect's whole surface across the seam: pressing its
+//! buttons, reading how far the analysis has got, drawing its point cloud,
+//! and everything a solve-linked Camera layer needs.
 //!
 //! # In plain terms
 //!
@@ -18,7 +18,7 @@
 //! cue is a decision about the whole cloud and the interface draws what it is
 //! given (docs/17 "the engine owns the decisions"). The failure of an analysis
 //! comes back as a *reason*, never as a sentence: the words are Dart's, from the
-//! arb, the way an import report's reasons are (K-303).
+//! arb, the way an import report's reasons are.
 
 use std::path::PathBuf;
 
@@ -34,10 +34,10 @@ use crate::api::{layer::LayerReference, state::PROJECTS, BridgeError};
 /// here, because a typo would be silent: the press would simply do nothing.
 const ANALYSE: &str = "analyse";
 const CANCEL: &str = "cancel";
-/// The Planar track's third Action: write the Corner pin (K-579).
+/// The Planar track's third Action: write the Corner pin.
 const PIN: &str = "pin";
 /// The Planar track's fourth: write the movement onto the target layer's own
-/// transform instead (K-734).
+/// transform instead.
 const TRANSFORM_KEYS: &str = "transform_keys";
 
 // ---------------------------------------------------------------------------
@@ -68,7 +68,7 @@ pub enum BridgeTrackStage {
 
 /// Why an analysis produced no camera path.
 ///
-/// A **reason, not a sentence** (K-303): the engine's own `AnalysisError`
+/// A **reason, not a sentence**: the engine's own `AnalysisError`
 /// carries English, and English crossing here would ship untranslated inside a
 /// translated window. Dart switches over this and picks the arb key, which is
 /// the shape `lumit_import::Reason` already uses for the import report.
@@ -89,7 +89,7 @@ pub enum BridgeTrackFailure {
     /// The shot carries a camera move the solver could not stand behind.
     NoSolve,
     /// The quad's contents are not one flat surface, or move against
-    /// themselves (K-579).
+    /// themselves.
     NotPlanar,
 }
 
@@ -255,7 +255,7 @@ fn failure_of(why: &lumit_render::track::AnalysisError) -> BridgeTrackFailure {
 /// `layer`'s solved point cloud as it lands on composition frame `frame`.
 ///
 /// **Once per frame change, never per rebuild** — the rule the Levels histogram
-/// follows (K-413) and the bridge-call budget pins. The frame the cloud is drawn
+/// follows and the bridge-call budget pins. The frame the cloud is drawn
 /// from is found by the one walk the camera link uses
 /// ([`lumit_core::track::tracked_solved_frame`]), so the dots and the camera
 /// they were solved with can never disagree about which moment this is.
@@ -350,7 +350,7 @@ pub fn camera_link(camera: LayerReference, frame: i64) -> BridgeCameraLink {
 // Pressing
 // ---------------------------------------------------------------------------
 
-/// Press one of an effect's Action parameters (K-417).
+/// Press one of an effect's Action parameters.
 ///
 /// An Action carries no value, so this is an **event** and not a write: nothing
 /// is staged, nothing is committed, and no undo entry appears. Today the Camera
@@ -369,7 +369,7 @@ pub fn fire_effect_action(
         .iter()
         .find(|e| e.id == effect)
         .ok_or(BridgeError::InvalidEffect)?;
-    // The Roto brush's two go the same way (K-713), and so do the Planar
+    // The Roto brush's two go the same way, and so do the Planar
     // track's four: one doorway, so a press is one crossing whichever effect
     // made it.
     if fx.effect.match_name == lumit_core::roto::ROTO_BRUSH {
@@ -404,8 +404,8 @@ pub fn fire_effect_action(
     if fx.effect.match_name != lumit_core::track::CAMERA_TRACK {
         return Err(BridgeError::InvalidParam);
     }
-    // A Camera track names its source: a footage item, or — on a Precomp layer
-    // (K-417) — the nested composition, whose frames are rendered rather than
+    // A Camera track names its source: a footage item, or — on a Precomp
+    // layer — the nested composition, whose frames are rendered rather than
     // decoded.
     let media = lumit_core::track::tracked_source_id(&item).ok_or(BridgeError::NotFootage)?;
     match param.as_str() {
@@ -484,12 +484,12 @@ pub(crate) fn media_source(
 // The gestures a solve offers
 // ---------------------------------------------------------------------------
 
-/// Add a Camera layer whose motion is derived from `tracked`'s solve (K-417).
+/// Add a Camera layer whose motion is derived from `tracked`'s solve.
 ///
 /// The link is the whole point: nothing is copied, so re-analysing the shot
 /// moves this camera with it, and every clip of the same footage reads the same
 /// solve through its own time mapping. Its transform rows are the **correction
-/// lane** (K-578) — dragging one nudges the solved motion rather than replacing
+/// lane** — dragging one nudges the solved motion rather than replacing
 /// it — and they start at the pose captured here, which is that lane's nought.
 #[frb(sync)]
 pub fn add_solved_camera(tracked: LayerReference) -> Result<LayerReference, BridgeError> {
@@ -531,7 +531,7 @@ pub fn add_solved_camera(tracked: LayerReference) -> Result<LayerReference, Brid
     Ok(LayerReference::new(tracked.project_id, tracked.comp_id, id))
 }
 
-/// Bake a solve-linked camera into keyframes and sever the link (K-417).
+/// Bake a solve-linked camera into keyframes and sever the link.
 ///
 /// One key per composition frame, at the composition's rate, exactly the motion
 /// that was being derived — and from then on an ordinary camera the user edits.
@@ -557,7 +557,7 @@ pub fn convert_camera_to_keyframes(camera: LayerReference) -> Result<(), BridgeE
     camera.commit(op)
 }
 
-/// **Clear corrections** (K-578): put a linked camera's own properties back to
+/// **Clear corrections**: put a linked camera's own properties back to
 /// the pose the link was made at, leaving the link itself alone.
 ///
 /// One undo step. Refused when there is no link, or nothing in the lane — a
@@ -575,7 +575,7 @@ pub fn clear_camera_corrections(camera: LayerReference) -> Result<(), BridgeErro
     camera.commit(op)
 }
 
-/// Point `camera` at a tracked layer, or clear the link (K-417).
+/// Point `camera` at a tracked layer, or clear the link.
 ///
 /// The link is a property of the Camera layer, so this is an ordinary
 /// undoable edit — and `None` is how a camera stops being derived without
@@ -595,8 +595,8 @@ pub fn set_camera_solve_link(
     })
 }
 
-/// Put a Null (or a Solid) at the mean solved position of `tracks` — K-417's
-/// creation gesture, After Effects' own.
+/// Put a Null (or a Solid) at the mean solved position of `tracks` — the
+/// Camera track's creation gesture, After Effects' own.
 ///
 /// The layer is 3D and sits where the points are, **oriented to face the
 /// camera**: a layer carrying the camera's own rotation is parallel to its image
@@ -717,13 +717,13 @@ fn tracked_media(layer: &LayerReference) -> Option<Uuid> {
     lumit_core::track::tracked_source_id(&layer.item().ok()?)
 }
 // Which layer of a composition is the tracked one is deliberately **not** a
-// call: the read model (K-184) already carries every layer's every effect, so
+// call: the read model already carries every layer's every effect, so
 // the interface finds the layer whose stack holds an enabled Camera track from
 // data it is already holding. A call here would be one crossing per repaint for
 // an answer that never changes between document revisions.
 
 // ---------------------------------------------------------------------------
-// The planar track (K-579)
+// The planar track
 // ---------------------------------------------------------------------------
 
 /// Everything the Planar track's status row draws, in one crossing.
@@ -774,7 +774,7 @@ impl BridgePlanarStatus {
 /// Polled while it is moving and never otherwise, exactly as
 /// [`track_status`] is — the reading is a value in a map, not a subscription.
 /// The answer is filed under the **effect instance**, because what was tracked
-/// is the quad this instance holds (K-579).
+/// is the quad this instance holds.
 #[frb(sync)]
 #[must_use]
 pub fn planar_status(layer: LayerReference, effect: Uuid) -> BridgePlanarStatus {
@@ -818,7 +818,7 @@ pub fn planar_status(layer: LayerReference, effect: Uuid) -> BridgePlanarStatus 
     status
 }
 
-/// **Create corner pin** (K-579): put a Corner pin on the layer the Planar
+/// **Create corner pin**: put a Corner pin on the layer the Planar
 /// track's *Pin layer* row names, its four points keyframed to the tracked
 /// surface.
 ///
@@ -860,7 +860,7 @@ pub fn create_corner_pin(tracked: LayerReference, effect: Uuid) -> Result<(), Br
     tracked.commit(op)
 }
 
-/// **Create transform keys** (K-734): the movement the Planar track measured,
+/// **Create transform keys**: the movement the Planar track measured,
 /// written onto the *Pin layer*'s own Position — and, unless the **Transform**
 /// row says position alone, its Rotation and Scale as well.
 ///

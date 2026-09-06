@@ -130,7 +130,7 @@ pub enum Interpolation {
     Flow(FlowParams),
 }
 
-/// The resolution flow is *measured* at (docs/08 §3.1, K-331).
+/// The resolution flow is *measured* at (docs/08 §3.1).
 ///
 /// Deliberately independent of the preview quality tier. Flow used to run on
 /// whatever the preview scale had shrunk the decode to, which made a draft
@@ -211,7 +211,7 @@ impl VectorDetail {
         }
     }
 
-    /// Variational-refinement fixed-point iterations per pyramid level (K-332),
+    /// Variational-refinement fixed-point iterations per pyramid level,
     /// the third part of DIS. This is where most of the quality lives: it is
     /// what fills smoke, sky and darkness with a sensible field instead of
     /// leaving them flagged untrustworthy and crossfaded. Low still runs one
@@ -323,12 +323,12 @@ impl FlowFallback {
     }
 }
 
-/// Optical-flow parameters (docs/08 §3.1, K-331). Every knob §3.1 specifies,
+/// Optical-flow parameters (docs/08 §3.1). Every knob §3.1 specifies,
 /// plus the engagement override and the HUD guard.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FlowParams {
-    /// The resolution flow is measured at — independent of preview quality
-    /// (K-331). Defaults to Native.
+    /// The resolution flow is measured at — independent of preview quality.
+    /// Defaults to Native.
     #[serde(default)]
     pub resolution: FlowResolution,
     /// Pyramid depth and refinement iterations (docs/08 §3.1 "Vector detail").
@@ -347,17 +347,17 @@ pub struct FlowParams {
     pub fallback: FlowFallback,
     /// Bias static, well-textured regions toward pure blending (docs/08 §3.1
     /// step 5) — the guard that stops a game HUD smearing across the frame.
-    /// On by default: this project's primary footage is game capture (K-002).
+    /// On by default: this project's primary footage is game capture.
     #[serde(default = "default_true")]
     pub hud_guard: bool,
-    /// Force flow on even where it cannot help (K-331). Flow normally passes
+    /// Force flow on even where it cannot help. Flow normally passes
     /// through to Nearest unless the source rate through the retime undershoots
     /// the comp rate — at 100% speed there is no in-between frame to invent, so
     /// measuring one is pure cost. This overrides that gate.
     #[serde(default)]
     pub always: bool,
     /// The rate the footage is *interpreted* at for flow, in fps — a
-    /// keyframeable value (K-095, K-160). `0` (the default) means Native:
+    /// keyframeable value. `0` (the default) means Native:
     /// interpolate between adjacent source frames, unchanged behaviour. A
     /// positive rate below the native one conforms the clip: flow brackets the
     /// source frames spaced `1/rate` apart and interpolates between *those*, so
@@ -394,7 +394,7 @@ impl Default for FlowParams {
 
 impl FlowParams {
     /// The conform rate the footage is interpreted at for flow at layer-local
-    /// time `lt`, or `None` for the source's native rate (K-095, K-160). The
+    /// time `lt`, or `None` for the source's native rate. The
     /// rate is a keyframeable [`crate::anim::Property`]; a value below `0.5`
     /// (i.e. one that rounds to 0 fps) reads as Native, so a keyframe ramp from
     /// Native to a real rate resolves cleanly. Callers pass the result straight
@@ -406,7 +406,7 @@ impl FlowParams {
 
     /// The rate the clip is actually *read* at for flow at local time `lt`,
     /// given its native rate: the conform rate when one is set and sits below
-    /// native, otherwise native itself (K-095). The one place that rule lives,
+    /// native, otherwise native itself. The one place that rule lives,
     /// so the frame picker, the engagement gate and the cache key can never
     /// disagree about which frames flow is working between.
     pub fn read_fps_at(&self, lt: f64, native_fps: f64) -> f64 {
@@ -416,8 +416,7 @@ impl FlowParams {
         }
     }
 
-    /// Whether flow has anything to do here (K-088's "engages only when it can
-    /// help", built at last in K-331).
+    /// Whether flow has anything to do here: it engages only when it can help.
     ///
     /// Flow invents the frame *between* two real ones. At 100% speed on
     /// matched rates there is no such frame — every comp frame lands on a
@@ -428,7 +427,7 @@ impl FlowParams {
     /// under 1 repeats. `source_fps` is the rate the clip is *read* at, so pass
     /// the conform rate ([`Self::input_fps_at`]) when one is set — conforming
     /// 600 fps footage to 24 is exactly how you make flow engage on material
-    /// whose adjacent frames barely move (K-095).
+    /// whose adjacent frames barely move.
     ///
     /// [`Self::always`] overrides this: the user asked for flow, they get flow.
     /// Degenerate rates (either at or below zero) answer `false` — nothing is
@@ -470,7 +469,7 @@ fn default_true() -> bool {
 /// own closed-form [`Retime::speed_at`]), so the speed is the slope of that
 /// curve. A central difference gives it: exact on the linear stretches that
 /// dominate, and at a keyframe it averages the two sides, which is the right
-/// answer for the one thing this feeds — the flow engagement gate (K-331),
+/// answer for the one thing this feeds — the flow engagement gate,
 /// where being a hair out at the instant a ramp changes gradient decides
 /// nothing. `None` is un-retimed: 100%.
 pub fn property_speed_at(retime: Option<&crate::anim::Property>, lt: f64) -> f64 {
@@ -555,7 +554,7 @@ impl RateSegment {
 }
 
 /// Value-defined segment: an x-monotone parametric cubic bezier in (t, s),
-/// AE-compatible (docs/04-RETIMING.md §4.2, K-025). Endpoint positions come
+/// AE-compatible (docs/04-RETIMING.md §4.2). Endpoint positions come
 /// from the two boundaries; this stores only the handle description.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MapSegment {
@@ -616,7 +615,7 @@ impl Retime {
     pub fn identity(duration: Rational, source_in: Rational) -> Self {
         // source_in + duration is exact for any real media; the fallback
         // chain below only degrades past ~400 years of source time, where a
-        // frozen tail beats a panic (engine crates never panic, K-011).
+        // frozen tail beats a panic (engine crates never panic).
         let s_end = add_with_flick_fallback(source_in, duration).unwrap_or(source_in);
         Self {
             boundaries: vec![
@@ -682,7 +681,7 @@ impl Retime {
     /// time → speed, 1.0 = 100%): each consecutive pair becomes a Linear-ease
     /// Rate segment, and boundary source positions are integrated from
     /// `source_in` (§4.1). This is the store the timeline's keyframable speed
-    /// row produces (K-072). Needs ≥ 2 keys, the first at local time 0, times
+    /// row produces. Needs ≥ 2 keys, the first at local time 0, times
     /// strictly increasing; returns None otherwise (caller keeps its store).
     pub fn from_speed_keyframes(
         source_in: Rational,
@@ -752,7 +751,7 @@ impl Retime {
 
     /// Build a value-lens retime from AE Time Remap keyframes: local time →
     /// source time, each side carrying the same bezier tangent (`SideInterp`)
-    /// the transform graph uses (K-078). Every consecutive pair becomes a
+    /// the transform graph uses. Every consecutive pair becomes a
     /// [`MapSegment`] whose control handles are the left key's out-tangent and
     /// the right key's in-tangent — the exact control-point construction of
     /// [`crate::anim::CubicSpan::from_ae`] — so the source curve evaluates
@@ -885,7 +884,7 @@ impl Retime {
     /// The value-lens keyframes with bezier tangents (local time → source time,
     /// each side a `SideInterp`) — the inverse of [`Self::from_source_keyframes`],
     /// so the value lens can draw and edit *any* store with the transform
-    /// graph's own handles (K-078). A [`MapSegment`] contributes its stored
+    /// graph's own handles. A [`MapSegment`] contributes its stored
     /// tangents exactly; a [`RateSegment`] shows as a straight (Linear) side,
     /// since its eased source advance has no single per-key tangent — dragging a
     /// handle there recommits the whole channel through `from_source_keyframes`.
@@ -944,7 +943,7 @@ impl Retime {
     /// A copy with the ease of the RateSegment covering local time `t` set to
     /// `ease`, downstream source positions recomputed (docs/04-RETIMING.md §9.2:
     /// "change a RateSegment's ease — Δs changes per E(1), downstream recomputes").
-    /// The segment's start position is pinned (K-070), so only frames after it
+    /// The segment's start position is pinned, so only frames after it
     /// move. None if `t` is outside the domain or lands in a MapSegment.
     pub fn with_segment_ease(&self, t: Rational, ease: Ease) -> Option<Retime> {
         let i = self.segment_index_at(t)?;
@@ -960,7 +959,7 @@ impl Retime {
     /// A copy with the endpoint speeds of the RateSegment covering local time `t`
     /// set to `(v0, v1)`, downstream source positions recomputed (docs/04-RETIMING.md
     /// §9.2: "drag a RateSegment endpoint level — downstream boundary `s` values
-    /// recompute exactly"). The segment start is pinned (K-070). Unlike the
+    /// recompute exactly"). The segment start is pinned. Unlike the
     /// speed-keyframe path this works on eased segments too. None for a MapSegment
     /// or out-of-domain `t`.
     pub fn with_segment_speeds(&self, t: Rational, v0: Rational, v1: Rational) -> Option<Retime> {
@@ -979,7 +978,7 @@ impl Retime {
     /// §9.2, the eased-store edit the speed lens needs): the incoming
     /// segment's end speed and the outgoing segment's start speed both take
     /// `v` — a smooth join — with every other endpoint and every ease left
-    /// alone; downstream source positions recompute exactly (K-070). At the
+    /// alone; downstream source positions recompute exactly. At the
     /// first boundary only the outgoing start moves; at the last, only the
     /// incoming end. None when an adjacent segment is a Map (those are edited
     /// through their own handles) or `j` is out of range.
@@ -1934,8 +1933,8 @@ mod tests {
 
     #[test]
     fn source_keyframes_evaluate_like_a_transform_property() {
-        // The whole point of K-078: a Time Remap built from bezier keyframes
-        // must render bit-for-bit like the same keys on a transform property.
+        // The whole point: a Time Remap built from bezier keyframes must
+        // render bit-for-bit like the same keys on a transform property.
         use crate::anim::{Keyframe, SideInterp};
         let keys = vec![
             Keyframe {
@@ -2683,7 +2682,7 @@ mod tests {
             interp_out: SideInterp::Linear,
         };
 
-        // Default is Native: no conform rate at any time (K-160).
+        // Default is Native: no conform rate at any time.
         let native = FlowParams::default();
         assert_eq!(native.input_fps_at(0.0), None);
         assert_eq!(native.input_fps_at(5.0), None);
@@ -2725,7 +2724,7 @@ mod tests {
     #[test]
     fn flow_input_rate_native_stays_out_of_the_file() {
         // A plain Native rate serialises exactly as before it became
-        // keyframeable — no `input_fps` field in the JSON (K-160 clean storage).
+        // keyframeable — no `input_fps` field in the JSON.
         let native = FlowParams::default();
         let json = serde_json::to_value(&native).unwrap();
         assert!(json.get("input_fps").is_none(), "{json}");
@@ -2738,8 +2737,8 @@ mod tests {
         assert_eq!(back, set);
     }
 
-    /// K-331: flow engages only where a source frame would otherwise hold
-    /// across two or more comp frames — the K-088 rule, built at last.
+    /// Flow engages only where a source frame would otherwise hold across two
+    /// or more comp frames.
     #[test]
     fn flow_engages_only_where_it_can_help() {
         let p = FlowParams::default();
@@ -2766,8 +2765,8 @@ mod tests {
         assert!(!p.engages(30.0, 0.0, 0.5));
     }
 
-    /// The manual override forces flow on regardless of the gate (K-331) —
-    /// the "wind toggle" K-095 refers to.
+    /// The manual override forces flow on regardless of the gate — the "wind
+    /// toggle".
     #[test]
     fn the_flow_override_beats_the_gate() {
         let forced = FlowParams {
@@ -2779,7 +2778,7 @@ mod tests {
         assert!(forced.engages(0.0, 0.0, 0.0));
     }
 
-    /// The conform rate is what the gate measures against (K-095 + K-331):
+    /// The conform rate is what the gate measures against:
     /// 600 fps footage at 10% speed still advances 60 source frames per comp
     /// frame, so flow would decline — until the clip is conformed to 24, at
     /// which point there is real motion between the bracketing frames.
@@ -2810,7 +2809,7 @@ mod tests {
     }
 
     /// Every §3.1 parameter round-trips, and the defaults are the documented
-    /// ones (docs/08 §3.1's table, K-331).
+    /// ones (docs/08 §3.1's table).
     #[test]
     fn flow_params_default_and_round_trip() {
         let d = FlowParams::default();
@@ -2916,7 +2915,7 @@ mod tests {
     }
 
     proptest! {
-        // The frame-pinning covenant (K-070): editing a segment's speeds only
+        // The frame-pinning covenant: editing a segment's speeds only
         // moves source positions *after* its start — the start itself is pinned,
         // and the store stays valid, for any speeds.
         #[test]
@@ -2955,7 +2954,7 @@ mod keyframe_seam_tests {
     ///
     /// `source_keyframes` renders a [`RateSegment`] as a straight Linear side,
     /// because an eased speed ramp has no single per-key tangent to report
-    /// (K-078 says so for layers, and it is the same maths here). So a curve
+    /// (the rule for layers says so, and it is the same maths here). So a curve
     /// whose shape lives in an *ease* comes back as the chord.
     ///
     /// It matters because it is the reason a Sequence layer's clips are being

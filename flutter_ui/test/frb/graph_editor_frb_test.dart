@@ -10,6 +10,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/panels/effect_param_row_frb.dart'
+    show cachedListParameters;
 import 'package:lumit_flutter/panels/graph_editor_frb.dart';
 import 'package:uuid/uuid.dart';
 import 'package:lumit_flutter/panels/graph_maths.dart';
@@ -83,7 +85,7 @@ void main() {
 
     /// Mount the panel in Graph mode with a property picked.
     ///
-    /// **The outline is the Layers outline** (K-529): the graph's own
+    /// **The outline is the Layers outline**: the graph's own
     /// colour-ticked filtered list is gone, so a property is reached by
     /// twirling the layer open exactly as it is in Layers mode, and the
     /// `layersOutline` flag those tests used to pass has nothing left to
@@ -143,7 +145,7 @@ void main() {
     });
 
     /// **The graph follows a value drag in the outline, while the pointer is
-    /// still down** (K-333/K-334). The row publishes each tick (`rowValueDrag`)
+    /// still down**. The row publishes each tick (`rowValueDrag`)
     /// and the pane draws the key through it; the release commits and the
     /// publication clears. Fails if any link of that chain breaks — the wiring
     /// this bug shipped without twice.
@@ -182,7 +184,7 @@ void main() {
           reason: 'and the document now holds what the drag showed');
     });
 
-    /// The same chain with the playhead **between** keys (K-334): the drag
+    /// The same chain with the playhead **between** keys: the drag
     /// starts by planting a key at the playhead — holding the value already
     /// there, so nothing moves — and the graph then carries that key live.
     /// This is the everyday shape of the reported bug: nobody drags a value
@@ -193,7 +195,7 @@ void main() {
       animateOpacity(p.comp, p.layer);
       // Frame 31, not a rounder number: 31/60 s as a double times 60 is not
       // 31.0, which is exactly the float mismatch that made the old preview
-      // insert a duplicate key instead of replacing (K-336). Frame 50 is
+      // insert a duplicate key instead of replacing. Frame 50 is
       // float-exact and cannot catch it.
       p.uiState.scrubTo(31);
       await mountGraph(tester, p);
@@ -217,7 +219,7 @@ void main() {
       // equality, and frame 31 at 60 fps does not read back as 31.0, so the
       // drag's key was inserted BESIDE the planted one instead of replacing
       // it — one extra key, every later diamond one index off, the dragged
-      // key drawn at the next key's place (K-336).
+      // key drawn at the next key's place.
       expect(
           find.byWidgetPredicate((w) =>
               w.key is ValueKey<String> &&
@@ -247,7 +249,7 @@ void main() {
       expect(rowValueDrag.value, isNull);
     });
 
-    /// An **effect parameter's** drag feeds the same chain (K-334) — the wiring
+    /// An **effect parameter's** drag feeds the same chain — the wiring
     /// the transform rows got first, which is exactly how "still not fixed"
     /// shipped: the reporter was dragging an effect value.
     testWidgets('the graph follows an effect value drag mid-gesture',
@@ -310,7 +312,7 @@ void main() {
       expect(rowValueDrag.value, isNull);
     });
 
-    /// The screenshot bug (K-336): drag the **Retime** readout on a frame with
+    /// The screenshot bug: drag the **Retime** readout on a frame with
     /// no key, and the diamonds floated off the curve — every glyph past the
     /// insertion drew with one key's x and another's y, because x read the
     /// document's keys while y read the preview's longer list. The first tick
@@ -568,11 +570,11 @@ void main() {
           reason: 'the mode is per side, and the strip sets both');
     });
 
-    /// The shaped ease (K-348): a curve drawn once in the unit box, stamped on
+    /// The shaped ease: a curve drawn once in the unit box, stamped on
     /// every **span** whose two ends are selected — and only from the value
     /// lens, because the shape is drawn against value travel.
     ///
-    /// Driven through the *popup* mode of K-349, because this test mounts the
+    /// Driven through the button's *popup* mode, because this test mounts the
     /// Timeline alone: in panel mode the button docks a pane that only the full
     /// shell renders, and what is under test here is the stamping, not where
     /// the editor is shown. `easing_panel_frb_test.dart` covers the panel, and
@@ -597,7 +599,7 @@ void main() {
       await tester.tap(find.byKey(ValueKey<String>(opacityKey(p.layer, 0))));
       await tester.pump();
       await openEditor();
-      // A tile now applies as it loads (K-726), and the Apply press repeats
+      // A tile now applies as it loads, and the Apply press repeats
       // it — both are no-ops on a lone key.
       await tester.ensureVisible(find.text('Slow start'));
       await tester.tap(find.text('Slow start'));
@@ -647,7 +649,7 @@ void main() {
       expect(find.byKey(const ValueKey('graph-interp-easing')), findsNothing);
     });
 
-    /// Which door the button opens is Settings ▸ Interface ▸ Editing (K-349).
+    /// Which door the button opens is Settings ▸ Interface ▸ Editing.
     /// The panel is the default because it outlasts a selection change; the
     /// popup is the deviation, for anyone who would rather not spend a column.
     testWidgets('by default the Easing button docks the panel', (tester) async {
@@ -685,7 +687,7 @@ void main() {
       expect(panels.where((x) => x == Panel.easing), hasLength(1));
     });
 
-    /// The claim the Easing panel presses (K-349) tracks the lens, so a panel
+    /// The claim the Easing panel presses tracks the lens, so a panel
     /// docked elsewhere in the shell can grey its Apply without ever being told
     /// what is selected.
     testWidgets('the shell claim follows the lens', (tester) async {
@@ -904,7 +906,7 @@ void main() {
       expect(opacityKeys(p.layer), hasLength(3), reason: 'nothing was lost');
     });
 
-    /// And it does not jump when the button comes up (K-747).
+    /// And it does not jump when the button comes up.
     ///
     /// The test above reads only the committed frame, which was always right —
     /// the defect was entirely in the drawing. `_keysWithDotTimeMove` puts the
@@ -955,8 +957,8 @@ void main() {
 
       await tester.tap(find.byKey(ValueKey<String>(opacityKey(p.layer, 1))));
       await tester.pump();
-      // The chord itself is the shell's since K-300 — it asks the claim this
-      // panel registers, which is what a shell test drives end to end
+      // The chord itself is the shell's — it asks the claim this panel
+      // registers, which is what a shell test drives end to end
       // (`Ctrl+C with keyframes selected copies those`). Here the claim is
       // called directly, because this test mounts the panel and not the shell.
       expect(p.uiState.copyClaim!(), isTrue);
@@ -994,11 +996,11 @@ void main() {
       expect(opacityKeys(p.layer), hasLength(2), reason: 'the key went');
     });
 
-    /// **A row with no keyframes still has a value, and Copy takes it**
-    /// (K-301). With the row selected and no individual key picked, `Ctrl+C`
-    /// used to find nothing to copy, give up, and quietly copy the whole layer
-    /// instead — so the one thing the user was pointing at was the one thing
-    /// that did not travel.
+    /// **A row with no keyframes still has a value, and Copy takes it**. With
+    /// the row selected and no individual key picked, `Ctrl+C` used to find
+    /// nothing to copy, give up, and quietly copy the whole layer instead — so
+    /// the one thing the user was pointing at was the one thing that did not
+    /// travel.
     testWidgets('a static row copies its value, and pasting puts it back',
         (tester) async {
       final p = withLayer();
@@ -1023,7 +1025,7 @@ void main() {
     });
 
     /// Copy and paste belong to the keyframes, not to the graph: a selection
-    /// boxed up on a *lane* copies and pastes the same way (K-196).
+    /// boxed up on a *lane* copies and pastes the same way.
     testWidgets('copy and paste work from the lane view too', (tester) async {
       final p = withLayer();
       // Spread out, so a marquee can take one key and leave the other.
@@ -1132,7 +1134,7 @@ void main() {
       expect(channels.last.keys, hasLength(2));
     });
 
-    /// **A closed range graphs like the float it is** (K-414). The Slider kind
+    /// **A closed range graphs like the float it is**. The Slider kind
     /// says which control to draw, not how the number is stored — docs/08 §1.2
     /// names the graph editor among the affordances it keeps. When the four
     /// wipes' Completion adopted the kind, this channel resolver was still
@@ -1172,7 +1174,7 @@ void main() {
 
       // **M28 leftover.** The parameter's hard range reaches the graph, so the
       // line drawn while a key is dragged can be held inside the range the
-      // engine will put the value in. Completion is closed 0..100 (K-414).
+      // engine will put the value in. Completion is closed 0..100.
       expect(channels.single.hardBounds, (0.0, 100.0));
       expect(channels.single.clampToBounds(140), 100);
       expect(channels.single.clampToBounds(-20), 0);
@@ -1208,6 +1210,47 @@ void main() {
           100);
     });
 
+    /// An Angle is a Float scalar drawn as a dial, so a keyed one is a curve
+    /// like any other. The resolver above was still naming the kinds it took,
+    /// so Twirl's Angle opened to an empty graph.
+    testWidgets('graphChannels resolves an angle parameter', (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'twirl');
+      final staged = p.layer.getEffects();
+      final fxId = staged.single.id();
+      final angle = cachedListParameters('twirl').firstWhere(
+          (param) => param.id == 'angle',
+          orElse: () => fail('twirl has no angle parameter'));
+      expect(angle.kind, isA<BridgeParamKind_Angle>());
+      for (final instance in staged) {
+        instance.setValue(
+          id: 'angle',
+          value: BridgeEffectValue.float(BridgeScalar.keyframed([
+            for (final (f, v) in [(0, -30.0), (100, 90.0)])
+              BridgeKeyframe(
+                time: p.comp.timeOfFrame(frame: f),
+                value: v,
+                interpIn: const BridgeSideInterp.linear(),
+                interpOut: const BridgeSideInterp.linear(),
+              ),
+          ])),
+        );
+      }
+      p.layer.setEffects(effects: staged);
+      final id = p.layer.internallayerId.toString();
+      p.uiState.model.refresh();
+
+      final channels = graphChannels(
+        layers: p.uiState.model.layers,
+        selected: ['$id/effects/$fxId/angle'],
+      );
+      expect(channels, hasLength(1),
+          reason: 'an Angle kind is a float and belongs in the graph');
+      expect(channels.single.keys, hasLength(2));
+      expect(channels.single.hardBounds, (null, null),
+          reason: 'a dial winds through full turns');
+    });
+
     /// A transform has no parameter range to be held inside, so its curve is
     /// drawn wherever it is dragged — the clamp must not invent a bound.
     testWidgets('an unbounded channel clamps nothing', (tester) async {
@@ -1223,8 +1266,8 @@ void main() {
       expect(channels.first.clampToBounds(-9000), -9000);
     });
 
-    /// **A mask's numbers reach the graph** (K-341), and so does its **shape**
-    /// once it is keyed (K-344) — as the interpolation parameter, whose slope
+    /// **A mask's numbers reach the graph**, and so does its **shape**
+    /// once it is keyed — as the interpolation parameter, whose slope
     /// is the rate the shape is changing at. A *still* shape has no keys and so
     /// no curve, and stays out.
     testWidgets("graphChannels resolves a mask's numbers and its keyed shape",
@@ -1274,7 +1317,7 @@ void main() {
       expect(channels.first.label, contains('Ellipse'));
     });
 
-    // --- the Vegas speed envelope (K-247) -------------------------------
+    // --- the Vegas speed envelope ---------------------------------------
 
     /// Turn the preference on the way Settings does, then open the layer's
     /// Retime row — which is where the default-lens rule fires.
@@ -1296,7 +1339,7 @@ void main() {
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('tl-graph')));
       await tester.pump();
-      // The graph's outline is the Layers outline (K-529), so the Retime row
+      // The graph's outline is the Layers outline, so the Retime row
       // is reached by twirling the layer open, as it is in Layers mode.
       await tester.tap(
           find.byKey(ValueKey<String>('tl-twirl-${layer.internallayerId}')));
@@ -1310,12 +1353,12 @@ void main() {
       final p = withLayer();
       await openRetime(tester, p, vegas: true);
 
-      // The preference chose the lens on the way in (K-246).
+      // The preference chose the lens on the way in.
       final base = 'graph-key-${p.layer.internallayerId}/retime#0';
       expect(find.byKey(ValueKey<String>('$base-out')), findsOneWidget,
           reason: 'the speed view is showing');
       // …and the envelope is one point per key, not the two-sided pair the
-      // ordinary speed graph draws (K-247).
+      // ordinary speed graph draws.
       expect(find.byKey(ValueKey<String>('$base-in')), findsNothing);
       final second = 'graph-key-${p.layer.internallayerId}/retime#1';
       expect(find.byKey(ValueKey<String>('$second-in')), findsNothing);
@@ -1334,7 +1377,7 @@ void main() {
     });
 
     /// The Vegas edit: drag a point's speed and the frames after it change,
-    /// while every keyframe time stays exactly where it was (K-022, K-247).
+    /// while every keyframe time stays exactly where it was.
     testWidgets('dragging an envelope point re-times without moving a key',
         (tester) async {
       final p = withLayer();
@@ -1587,7 +1630,7 @@ void main() {
     });
 
     /// The drawing's handle line: 2 on, 2 off, in `text_primary`. Solid
-    /// `warning` was neither (K-439 — `warning` has no job on this pane).
+    /// `warning` was neither (`warning` has no job on this pane).
     testWidgets('handle lines are dashed hairlines in text_primary',
         (tester) async {
       final p = withLayer();
@@ -1656,7 +1699,7 @@ void main() {
     });
 
     /// A selected key is `text_primary` and one size step larger — never the
-    /// accent (K-439) — and its grab target does not change size with it.
+    /// accent — and its grab target does not change size with it.
     testWidgets('a selected key draws in text_primary, one step larger',
         (tester) async {
       final p = withLayer();
@@ -1672,7 +1715,7 @@ void main() {
       expect((tester.widget<CustomPaint>(glyph()).painter as dynamic).colour,
           isNot(t.accent));
 
-      // **No cursor of its own** (K-529, owner): hovering a key used to swap
+      // **No cursor of its own** (owner): hovering a key used to swap
       // the pointer for the move cursor, so crossing a curve full of keys made
       // it flicker. The mark under the pointer already says a key is there.
       // The drag cursors stay — see the handle ring and the box edges.
@@ -1740,7 +1783,7 @@ void main() {
       );
     }
 
-    /// **The graph outline is the Layers outline, identical** (K-529). The
+    /// **The graph outline is the Layers outline, identical**. The
     /// colour-ticked filtered list is gone: the same twirls, the same columns,
     /// the same rows, in both views — so switching mode changes what is drawn
     /// against time and nothing about how a property is found.
@@ -1765,7 +1808,7 @@ void main() {
           reason: 'Normalise goes with it (the owner found it opaque)');
     });
 
-    /// **A property row is what puts a curve on the pane** (K-529), in both
+    /// **A property row is what puts a curve on the pane**, in both
     /// views — the tick that used to do it went with the graph's own outline,
     /// and selecting a row was always the other way in.
     testWidgets('picking a property row puts its curve on the pane',

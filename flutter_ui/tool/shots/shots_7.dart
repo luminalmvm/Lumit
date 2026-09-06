@@ -195,7 +195,7 @@ Future<void> main() async {
 ///
 /// Worked out from the window itself rather than guessed, because these five
 /// are five different sizes. Named rather than typed because the surface a
-/// dialogue opens on is `showLumitModal`'s own private window (K-575's movable,
+/// dialogue opens on is `showLumitModal`'s own private window (a movable,
 /// resizable one), and a sweep cannot write that class down.
 /// [tall] keeps the full height of the app window and narrows only the sides.
 /// The export settings are the one dialogue that draws past the box it lays

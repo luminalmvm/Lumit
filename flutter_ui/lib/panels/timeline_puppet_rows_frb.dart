@@ -1,5 +1,5 @@
 // The Timeline's puppet rows: a pin, and each of its animatable numbers
-// (K-704, docs/impl/puppet.md §5).
+// (docs/impl/puppet.md §5).
 //
 // **In plain terms.** A layer with pins in it grows a **Puppet** heading in the
 // Timeline, the way a masked layer grows a Masks one, with a row per pin under

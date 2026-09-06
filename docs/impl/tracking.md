@@ -1,12 +1,11 @@
 # Tracking — implementation note
 
-**Decision:** K-415 (classical, global, zoom-aware; learned trackers are a plugin
-road). **Related:** K-248 (the tracker runs on full, unaltered footage), K-408 (mask
-geometry reaches the engine), K-579 (the planar tracker and its Corner pin, §6),
-K-734 (the same track onto a layer's transform, §6), K-735 (one- and two-point
-tracking, §7),
-docs/08 §4's Tracker and Corner pin rows, docs/16-ROADMAP Phase 5. This note pins the algorithms, the crate shape, and the test
-plan so they are not re-derived per phase.
+**Decision:** classical, global, zoom-aware; learned trackers are a plugin road.
+**Related:** the tracker runs on full, unaltered footage, and mask geometry reaches
+the engine. The planar tracker and its Corner pin, and the same track onto a layer's
+transform, are in §6, and one- and two-point tracking is in §7. Also docs/08 §4's
+Tracker and Corner pin rows, and docs/16-ROADMAP Phase 5. This note pins the
+algorithms, the crate shape, and the test plan so they are not re-derived per phase.
 
 ## In plain terms
 
@@ -37,9 +36,9 @@ between frames.
 | **1 — tracks** | Feature detection + pyramidal affine KLT + track store + masks + forward-backward verification. The substrate everything else reads. | **Built** (see §2's "As built") |
 | **2 — two-view** | Normalised 8-point/7-point fundamental, LO-RANSAC, keyframe selection, epipolar-based dynamic-track segmentation, the zoom-burst detector. | **Built** (see §3's "As built") |
 | **3 — solve** | Rotation averaging → global positions → triangulation → sparse-Schur Levenberg–Marquardt bundle adjustment with per-segment focal. | **Built** (see §4's "As built") |
-| **4 — surface** | K-417's shape: the Camera track *effect* (identity render, Analyse/Cancel actions, status), the background analysis job keyed to (media, settings) with the sidecar `track/` cache, the solve-linked dynamic Camera layer reading through the comp→clip→source time chain, Convert to keyframes, the point-cloud overlay with select → Null/Solid, and `ParamKind::Action`. 2D track → keyframed transform / corner-pin export rides the same store. | **Built** (§5a, §5b, §5c) |
-| **4b — planar** | K-579's shape: the Planar track *effect*, a quad followed as a homography per frame against the reference frame, filed under the effect instance in the same store and sidecar, with **Create corner pin** writing the four corner pairs onto another layer as keyframes — and **Create transform keys** writing the same corners as Position, Rotation and Scale (K-734). | **Built** (§6) |
-| **4c — points** | K-735's shape: the same effect's **Follow** row turned to one or two small boxes, each followed on its own by the median step of the features inside it, reported as the same `PlanarTrack` under a translation or a similarity. | **Built** (§7) |
+| **4 — surface** | The Camera track *effect* (identity render, Analyse/Cancel actions, status), the background analysis job keyed to (media, settings) with the sidecar `track/` cache, the solve-linked dynamic Camera layer reading through the comp→clip→source time chain, Convert to keyframes, the point-cloud overlay with select → Null/Solid, and `ParamKind::Action`. 2D track → keyframed transform / corner-pin export rides the same store. | **Built** (§5a, §5b, §5c) |
+| **4b — planar** | The Planar track *effect*, a quad followed as a homography per frame against the reference frame, filed under the effect instance in the same store and sidecar, with **Create corner pin** writing the four corner pairs onto another layer as keyframes — and **Create transform keys** writing the same corners as Position, Rotation and Scale. | **Built** (§6) |
+| **4c — points** | The same effect's **Follow** row turned to one or two small boxes, each followed on its own by the median step of the features inside it, reported as the same `PlanarTrack` under a translation or a similarity. | **Built** (§7) |
 
 Phase 1 first and alone: every later phase's quality is decided by track quality.
 
@@ -60,10 +59,10 @@ Phase 1 first and alone: every later phase's quality is decided by track quality
   settled patch against the track's *reference* patch (updated on drift, kept on
   success) above a floor. Fail → the track ends; it is never silently teleported.
 - **Masks:** a track is neither detected in nor allowed to wander into a masked
-  region. Masks arrive as `lumit_core::mask` polylines (K-408's flattening) at comp
+  region. Masks arrive as `lumit_core::mask` polylines, already flattened, at comp
   scale; point-in-polygon on the flattened path, inverted per the mask's flag.
 - **Store:** `Track { id, points: Vec<(frame, x, y)>, state }` in a `TrackSet` keyed
-  by contiguous frame ranges; f64 coordinates at source raster scale (K-248: the
+  by contiguous frame ranges; f64 coordinates at source raster scale (the
   full, unaltered footage — no comp scaling, no retime; mapping through retimes
   happens at export).
 - **Re-detection:** when live tracks in a bucket fall below a floor, detect there
@@ -98,7 +97,7 @@ forced by building it:
    "updated on drift, kept on success" made operable — one threshold either ends
    healthy tracks that changed slowly or lets a track walk off its feature.
 4. **The comp→source conversion happens at the mask, once.** Masks arrive in
-   px@comp (K-408) and tracks live in source raster pixels (K-248), so
+   px@comp and tracks live in source raster pixels, so
    `ExclusionMask::from_mask`/`from_polyline` take the factor and store source
    pixels; the per-point test does no arithmetic.
 5. **Template gradients are central differences of the bilinear-sampled
@@ -221,12 +220,12 @@ Nine things are deviations from, or decisions under, the wording above:
    shot with no geometry at all, which is worse; the pair carries its own
    `parallax` and phase 3 can weigh it.
 9. **The zoom detector judges a pair against its neighbours, not against
-   zero** (redesigned 2026-08-26 after the train-POV failure; K-580 has the
-   design in full). Three mechanisms, in order. *The signature:* a hot pair's
-   scale-only fit leaves a residual, and that residual as a fraction of the
-   radial displacement the scale accounts for separates lens from travel — a
-   zoom leaves noise, travel leaves parallax, and parallax is a constant
-   fraction of the flow however slow the travel (`parallax_fraction`, 0.15;
+   zero** (redesigned 2026-08-26 after the train-POV failure). Three
+   mechanisms, in order. *The signature:* a hot pair's scale-only fit leaves a
+   residual, and that residual as a fraction of the radial displacement the
+   scale accounts for separates lens from travel — a zoom leaves noise, travel
+   leaves parallax, and parallax is a constant fraction of the flow however
+   slow the travel (`parallax_fraction`, 0.15;
    measured ≈0.03–0.06 on synthetic zooms against ≈0.2–0.4 on dollies). A pair
    too slow to judge alone is pooled with up to `signature_window` (6)
    neighbours either side until the scale displacement reaches `signature_px`
@@ -408,7 +407,7 @@ per cent.
 
 ## 5a. Phase 4, stage 1 — the model half, as built
 
-`crates/lumit-core` (2026-08-21). Stage 1 is everything K-417 decides that can be
+`crates/lumit-core` (2026-08-21). Stage 1 is everything the design decides that can be
 built and tested **without decoding a single frame**: the schema kind, the effect,
 the link, and the bake. A written-down solve stands in for a real one, injected
 through a trait, and every claim below is asserted against it.
@@ -423,7 +422,7 @@ through a trait, and every claim below is asserted against it.
   all the manual's table can honestly say about a button.
 - **The Camera track effect** (`fx/effects/camera_track.rs`), Utility, catalogue
   entry 91, identity render (`is_image_op → false`, the Controls family's
-  convention from K-414 for a different reason: this one holds a *job*). Analyse
+  convention, here for a different reason: this one holds a *job*). Analyse
   and Cancel are the two Actions; Feature density, Use masks and Show points are
   the value rows. `DENSITY` is the `(grid.0, grid.1, per_bucket)` table the
   analysis job reads into `TrackSettings` — it lives on the effect because the
@@ -442,10 +441,10 @@ through a trait, and every claim below is asserted against it.
 - **`Op::SetCameraSolveLink`** and **`OpError::CameraLinked`** (`ops.rs`). The
   refusal is a `solve_link_guards` function shaped exactly like the existing
   `lock_guards`, checked in `apply` before the match — one guard for every caller
-  and every op yet to be written. *Reversed by K-578: the refusal and the error
+  and every op yet to be written. *Reversed later: the refusal and the error
   are gone, and the same two ops now write the correction lane; see §5f.*
 
-Six things are deviations from, or decisions under, K-417's wording:
+Six things are deviations from, or decisions under, the design's wording:
 
 1. **The store hands back poses already in Lumit's camera terms**, not
    `lumit_track::CameraSolve`. `lumit-core` cannot depend on `lumit-track` (the
@@ -460,17 +459,17 @@ Six things are deviations from, or decisions under, K-417's wording:
    *is* the hold — the nearest solved frame is the last derived motion — and it is
    stateless, deterministic and free. Where the link resolves nowhere at all there
    is nothing derived to hold, so the fallback is the camera's own stored
-   properties, which are the ones it had when the link was made — plus, since
-   K-578, whatever has been nudged since, read as a pose rather than as a
-   correction. The two cases are different `LinkState`s, so the interface can
-   say which.
-3. **The tracked layer inside a precomp is found by the effect on it.** K-417 says
+   properties, which are the ones it had when the link was made — plus, now
+   that corrections exist (§5f), whatever has been nudged since, read as a pose
+   rather than as a correction. The two cases are different `LinkState`s, so
+   the interface can say which.
+3. **The tracked layer inside a precomp is found by the effect on it.** The design says
    the chain resolves through a Precomp layer to the tracked layer inside but does
    not say how the inside one is identified; the effect *is* the handle, so the
    layer carrying an enabled Camera track is the answer, first in stack order so
    it never depends on the playhead. A precomp with no tracked layer resolves to
    nothing and says `Unresolved` rather than guessing at the first footage it finds.
-   *Amended by K-577: a precomp layer that wears the effect **itself** stops the
+   *Amended later: a precomp layer that wears the effect **itself** stops the
    walk there and is tracked as a nested comp; see §5e.*
 4. **The bake is a `Batch`, built by a function, not an `Op` that computes.** An
    `Op` is serialisable and replayed by `apply(doc, op)`, which has no store to
@@ -528,7 +527,7 @@ dependency. The bridge (stage 3) presses the button; nothing about the work
 itself is in the bridge.
 
 **The thread.** One analysis at a time, on a thread spawned for it and named
-`lumit-track` — never a pool worker (K-417, and docs/05 §2's decode rule for the
+`lumit-track` — never a pool worker (docs/05 §2's decode rule holds for the
 same reason: it holds a decoder open and stalls on seeks). `request` claims the
 one running slot and returns immediately; the *cache probe happens on that thread
 too*, so no caller — least of all the interface — ever waits on the disk. A
@@ -548,7 +547,7 @@ converted **once**, when a solve lands, into a `Vec<CameraPose>` indexed by fram
 so the per-frame read is a slice index and no trigonometry runs in the render path
 at all.
 
-Eight things are deviations from, or decisions under, K-417's wording:
+Eight things are deviations from, or decisions under, the design's wording:
 
 1. **The conversion is derived, not chosen, and tested against the real matrix.**
    The tracker puts a world point at `centre + f · p.xy / p.z` with
@@ -569,7 +568,7 @@ Eight things are deviations from, or decisions under, K-417's wording:
    Exact for the ordinary case (a comp made from the shot), off by the size ratio
    otherwise. Recorded rather than hidden; a comp-aware scale is a change to the
    trait, not to this arithmetic.
-3. **The sidecar is global, like `media-index/`, not per project.** K-417 says
+3. **The sidecar is global, like `media-index/`, not per project.** The design says
    "the project's sidecar (`track/`)", and docs/10 §3 calls the whole cache root
    the sidecar — of whose two existing tiers one is already global for precisely
    this reason. The key is (media fingerprint, settings, mask geometry): the solve
@@ -604,7 +603,7 @@ Eight things are deviations from, or decisions under, K-417's wording:
    the layer's own pixel coordinates, and for a footage layer those *are* the source
    raster — `build.rs` rasterises them at the layer's natural size, which is the
    file's own size whatever the preview tier decodes at. The tracker works in the
-   same pixels (K-248), so nothing converts. The mask is flattened at layer time
+   same pixels, so nothing converts. The mask is flattened at layer time
    zero: a tracker takes one fixed set of regions for a whole run, so a mask
    keyframed to follow a mover cannot be honoured yet (owed, in TODO).
    *Superseded — the regions are now re-flattened per frame; see §5e.*
@@ -653,8 +652,8 @@ the one that has to bite, and it does.
 **Owed to stage 3** (and listed in docs/TODO.md): the Action press event and the
 `BridgeParamKind`; `Progress` and `LinkState` surfaced as the effect's status row
 and the camera's badge; the point-cloud overlay; the warm pass wired to project
-open and `clear()` to project close; a Camera track on a **Precomp** layer (K-417
-allows it, and the analysis decodes media, so tracking a nested comp means
+open and `clear()` to project close; a Camera track on a **Precomp** layer (allowed
+by design, and the analysis decodes media, so tracking a nested comp means
 rendering it first); keyframed masks as time-varying exclusion regions; and more
 than one analysis at a time if anyone ever wants it. *All but the last landed —
 see §5e.*
@@ -673,7 +672,7 @@ over the picture, and the badge a derived camera wears.
 `track_status`, `tracked_points`, `camera_link`. The whole surface, with its
 reasoning, is docs/17's "The camera track: an event down, readings up".
 
-Seven things are deviations from, or decisions under, K-417's wording:
+Seven things are deviations from, or decisions under, the design's wording:
 
 1. **An Action press is not an edit, and so has nothing to poll against.** Every
    other reading in the interface is refreshed by a document revision moving; a
@@ -689,19 +688,19 @@ Seven things are deviations from, or decisions under, K-417's wording:
    carries English (`thiserror`'s messages) and English crossing the seam ships
    untranslated inside a translated window. `BridgeTrackFailure` is six variants;
    Dart's switch over the generated enum picks the arb key, so a reason added to
-   the engine is a Dart compile error rather than a blank line. That is K-303's
-   chain one step stricter than the import report's, which sends an id *and* its
-   English as a fallback — this one has no free text to fall back to.
+   the engine is a Dart compile error rather than a blank line. That is the
+   translation chain one step stricter than the import report's, which sends an
+   id *and* its English as a fallback — this one has no free text to fall back to.
 4. **The cloud is drawn always and clickable only when its layer is selected.**
    Show points says whether the dots are there; a cloud that also took every click
    would make the shot unselectable, and clicking the picture is how a layer is
-   selected (K-217). Recorded in docs/07 §2.3.6 as the rule, because it is the one
+   selected. Recorded in docs/07 §2.3.6 as the rule, because it is the one
    thing about the overlay that is not obvious from looking at it.
 5. **The creation affordance is a floating row, not a context menu.** The gesture
    that makes the selection is a drag on the picture; asking for a second, hidden
    gesture to act on it would look calmer and be slower. Two buttons, under the
    picked points, clamped onto the panel.
-6. **"Create camera" had to be invented.** K-417 describes what a solve-linked
+6. **"Create camera" had to be invented.** The design describes what a solve-linked
    camera *does* but not how one comes to exist, and without a gesture the link,
    the badge and Convert to keyframes are all unreachable. It sits beside the
    status line, where the solve it links to is being reported, and is one op:
@@ -747,7 +746,7 @@ the shot, and setting the ground plane and origin from a selection.
 ## 5d. A partial track, as built
 
 `crates/lumit-render/src/track.rs`, with the two things it needed from
-`crates/lumit-track/src/lib.rs` (2026-08-24, K-540). Until this, a shot that
+`crates/lumit-track/src/lib.rs` (2026-08-24). Until this, a shot that
 stopped being followable part-way was analysed to its end regardless: the run
 carried on decoding frames nothing crossed, the solve placed cameras on them
 anyway, and the interface reported the result as a whole answer. This is the
@@ -805,7 +804,7 @@ Four things are worth recording as decisions under that:
    settings, and re-deriving it would take the same minutes to stop in the same
    place. The format version went to 2 so a version 1 record — which could not
    say how long its clip was — is simply never asked for.
-4. **The hold needed no new mechanism, and that was worth checking.** K-417's
+4. **The hold needed no new mechanism, and that was worth checking.** The
    hold is a clamp into the store's solved range (§5a's second deviation), and
    the range now ends where the track does, so a camera linked to a partial
    solve derives inside the span and holds the last derived pose outside it with
@@ -914,7 +913,7 @@ Four things worth stating:
    features it allowed in the mask's destination are still there when the mask
    arrives.
 
-**A Camera track on a Precomp layer analyses** (2026-08-25, K-577). `LumaFrames`
+**A Camera track on a Precomp layer analyses** (2026-08-25). `LumaFrames`
 gains a second real implementation: `CompLuma` renders the nested comp through
 `HeadlessRenderer` — its own device, built inside `Job::open` on the analysis
 thread, the same walk an export takes — instead of decoding a file. Everything
@@ -922,7 +921,7 @@ above it is unchanged, which is the point: the frame loop, the progress
 readings, the mask exclusion and the cancellation seam are one loop whatever is
 feeding it.
 
-Four things, all of them K-577's:
+Four things, all of them decisions under that:
 
 1. **The walk stops at the precomp layer** when that layer wears the effect, and
    descends into the comp when it does not. `lumit_core::track::wears_camera_track`
@@ -954,7 +953,7 @@ direction.
 `crates/lumit-core/src/{model,ops,track}.rs`, with the read in
 `crates/lumit-bridge/src/api/{layer,track}.rs` and the two rows in
 `flutter_ui/lib/panels/{camera_track_display_frb,effect_controls_panel_frb}.dart`
-(2026-08-25, K-578). Until this, a solve-linked camera's transform rows were
+(2026-08-25). Until this, a solve-linked camera's transform rows were
 read-only badges: the engine refused `SetTransformProperty` and `SetCameraZoom`
 with `OpError::CameraLinked`, and the only way past a solve that was slightly
 wrong was to bake it and lose the link. This is the half that lets a measurement
@@ -981,11 +980,11 @@ Five things are decisions rather than transcription:
    them both.
 2. **Channel-wise addition, not a composed transform.** The parent-child
    alternative — the solve as a parent, the correction as its child — is what a
-   rig would do, and it was rejected for two reasons given in full in K-578: a
-   row stops meaning what it says (a "position x" nudge would run along the
-   shot's axis and swing with every pan), and the curve the graph editor draws
-   stops being the curve that was dragged. Addition also commutes with itself,
-   so two corrections in either order are the same camera.
+   rig would do, and it was rejected for two reasons: a row stops meaning what
+   it says (a "position x" nudge would run along the shot's axis and swing with
+   every pan), and the curve the graph editor draws stops being the curve that
+   was dragged. Addition also commutes with itself, so two corrections in either
+   order are the same camera.
 3. **The base is computed inside `apply`.** §5a's fourth deviation argued that a
    computing op is a trap, and it is — for an op that would need the *store*, or
    whose answer depends on anything outside the document. This one reads seven
@@ -1004,9 +1003,9 @@ Five things are decisions rather than transcription:
    answers for a camera ("this one is nudged") and for a tracked layer ("a camera
    following me is"), which is one fact from where the user stands. Both rows
    that draw it repaint on every document revision and a correction *is* a
-   document revision, so a call there is the cost K-184 exists to remove. The
-   tracked-layer half scans the comp's cameras, and only for a layer wearing a
-   Camera track — one layer in a comp at most times, none in most comps.
+   document revision, so a call there is the cost a read model exists to remove.
+   The tracked-layer half scans the comp's cameras, and only for a layer wearing
+   a Camera track — one layer in a comp at most times, none in most comps.
 
 **The surface.** The Transform heading's badge gains the dot and **Clear
 corrections**, offered only when there is something to clear; the Camera track's
@@ -1159,7 +1158,7 @@ next honest step.
 `crates/lumit-track/src/planar.rs`, with the render-side job in
 `crates/lumit-render/src/track.rs`, the model half in `crates/lumit-core/src/track.rs`
 and the surface in `crates/lumit-bridge/src/api/track.rs` and
-`flutter_ui/lib/panels/planar_track_display_frb.dart` (2026-08-25, K-579). Phases 1–4
+`flutter_ui/lib/panels/planar_track_display_frb.dart` (2026-08-25). Phases 1–4
 answer *where the camera was*. This answers *where one flat thing is*, which is a smaller
 question with a much shorter route to it — and the route reuses every line of phase 1.
 
@@ -1179,7 +1178,7 @@ So the job is never "where did the phone go". It is "which eight numbers, this f
    frame** — the *reference frame*, which everything else is measured against.
 2. The ordinary [`Tracker`] follows specks, confined to the quad. Confining it needs no new
    mechanism: an **inverted** `ExclusionMask` already means "the tracker works only within
-   this shape" (K-408, §2), so the quad is one region prepended to the layer's own masks.
+   this shape" (§2), so the quad is one region prepended to the layer's own masks.
    Those still apply *inside* it, which is how the hand crossing the phone is excluded.
 3. For each later frame, take `TrackSet::correspondences(anchor, frame)` — every speck
    present on both — and fit a homography robustly: `homography_ransac`, which is the
@@ -1303,8 +1302,7 @@ Three decisions there:
    the file and survives every edit to the clips cutting it. A corner pin is a *look* on one
    layer of one length that the user is going to adjust — soften a corner, ease a hit, trim
    the tail — and keys are what that wants: real, editable, drawn by the graph editor, taken
-   back by the ordinary undo, with nothing left resolving behind them. K-579 argues it in
-   full.
+   back by the ordinary undo, with nothing left resolving behind them.
 2. **Appended, not replacing.** A warp belongs last in a stack, and a layer that already has
    a Corner pin keeps it — the user asked for a pin, not for a tidy-up.
 3. **`corner_pin_from_track` refuses rather than writing defaults.** Nothing tracked under
@@ -1329,7 +1327,7 @@ The panel is `PlanarTrackDisplayFrb`: the Camera track's polling shape exactly �
 second, only while the reading is moving, never subscribed to — the same `TrackSpanBar`
 above the line, and one extra line when the run re-anchored.
 
-### The transform it writes (K-734)
+### The transform it writes
 
 docs/08 §4's Tracker row names two 2D deliverables, and the second one — a **point** track
 baked into a layer's transform — needed no second tracker. A quad's four corners already
@@ -1402,9 +1400,9 @@ homography would fail on geometry rather than on a defect.
 
 **Three in `lumit-core`**: the pin's eight numbers frame for frame against a written-down
 store, with one undo taking the whole pin back; the same through a half-speed retime into a
-freeze, which is K-248 restated from the planar side; and both refusals, including a store
-holding the right shape of answer under a *different* effect id — the failure a media-keyed
-store would have made silently.
+freeze, which is the full-footage rule restated from the planar side; and both refusals,
+including a store holding the right shape of answer under a *different* effect id — the
+failure a media-keyed store would have made silently.
 
 **Two in `lumit-render`**: a real analysis of a rendered sliding plane, checked on the
 corners against the warp each frame was drawn under (worst 0.94 px), on `reanchors == 0`, on
@@ -1414,7 +1412,7 @@ over a blank patch refusing and leaving nothing in the store. Its fixture is del
 *not* §5b's `Shot`: that one is two planes at different depths so the camera solve has
 parallax to find, and parallax is exactly what a planar track has no use for.
 
-**Three more in `lumit-core` for the transform half** (K-734): a rigid quad that slides by
+**Three more in `lumit-core` for the transform half**: a rigid quad that slides by
 (2, 3) px a frame, turns 7° a frame and grows 1 % a frame — an exact formula, so the bake's
 Position, Rotation and Scale are checked against arithmetic rather than against a
 measurement, including the turn reaching 413° at frame 59 rather than snapping back to −53°,
@@ -1436,10 +1434,10 @@ On-canvas handles for the quad: the four corners are panel rows today, and dragg
 the picture is what a compositor expects. A **keyframed** quad, so the reference shape can
 move — refused for now, and the refusal is a real one rather than an omission (§6's opening:
 the quad is the shape the surface has on the reference frame), and the same for the point
-boxes of §7. And a Planar track on a **Precomp** layer, which K-577 already built the
+boxes of §7. And a Planar track on a **Precomp** layer, which §5e already built the
 machinery for on the camera side.
 
-## 7. Point tracking, as built (K-735)
+## 7. Point tracking, as built
 
 `crates/lumit-track/src/planar.rs` again — the same file, because the answer is the same
 type — with the job's branch in `crates/lumit-render/src/track.rs` and the row in
@@ -1525,8 +1523,8 @@ bit-identical to `solve_points` when never raised.
 one-point case, where the box slides and its edges provably keep their length and their
 angle.
 
-**One in `lumit-bridge`**, folded into K-734's: the **Follow** row set to one point, and the
-next press writing Position alone.
+**One in `lumit-bridge`**, folded into the transform-keys test: the **Follow** row set to
+one point, and the next press writing Position alone.
 
 ### Owed
 
@@ -1546,7 +1544,7 @@ two boxes of different sizes would be a second row for a second thing.
   4+ and needs its own note section when reached; 2D export ships first.
 - Lens distortion beyond k1/k2 (anamorphic) — revisit against real footage.
 - ~~A zoom inside a shot that is also moving forward is not detected at all~~ —
-  **resolved 2026-08-26** (K-580): the detector now judges a pair against its
+  **resolved 2026-08-26**: the detector now judges a pair against its
   neighbours (§3's deviation 9 — the radial-flow-versus-parallax signature and
   the travel baseline), and a ramp's focal is solved as knots in the bundle
   (§4's deviation 7). The failing-first fixtures reproduced the 2026-08-24

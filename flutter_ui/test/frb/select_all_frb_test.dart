@@ -1,4 +1,4 @@
-// `Ctrl+A` is the focused panel's, not the composition's (K-522).
+// `Ctrl+A` is the focused panel's, not the composition's.
 //
 // `edit.select.all` used to mean "every layer" wherever it was pressed, so in
 // the Project panel it selected things that were not on screen. The shell now
@@ -23,7 +23,7 @@ void main() {
     /// and which leave it to mean "every layer".
     test('only the panels that keep a selection claim the chord', () {
       final p = freshProject();
-      // The Node graph joined once its pick became a set (K-533): before that
+      // The Node graph joined once its pick became a set: before that
       // a single-node selection had nothing to select *all* of, and claiming
       // the chord there would only have made it a dead key.
       for (final panel in [

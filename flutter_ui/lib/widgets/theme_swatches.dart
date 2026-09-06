@@ -1,4 +1,4 @@
-// A theme at a glance: eight colours in a row (K-298).
+// A theme at a glance: eight colours in a row.
 //
 // The picker names themes and shows none of them, so choosing between seven
 // built-ins and a shelf of your own meant selecting each in turn and watching

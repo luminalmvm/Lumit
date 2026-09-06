@@ -13,7 +13,7 @@
 //! a seam, and Phase slides every other row along so the grid stops reading as a
 //! grid.
 //!
-//! Everything starts at the identity (K-542): one whole-frame tile, cut from the
+//! Everything starts at the identity: one whole-frame tile, cut from the
 //! middle, stamped over exactly the frame it came from. Dropping Tile on a layer
 //! changes nothing until a number is moved.
 
@@ -26,7 +26,7 @@ use lumit_fx_macros::Effect;
     match_name = "tile",
     label = "Tile",
     // 2: the tile's size and the output window's size crossed from per cents of
-    // the frame to px@comp (K-558). `migrate_percent_to_px` converts a v1
+    // the frame to px@comp. `migrate_percent_to_px` converts a v1
     // instance on load.
     version = 2,
     category = Distortion,
@@ -41,7 +41,7 @@ pub struct Tile {
     /// px@comp: the centre of the rectangle that gets stamped. The schema
     /// default is nominal 1080p centre; `instantiate_for_raster` centres a fresh
     /// instance on the actual comp, which is what makes the default the exact
-    /// identity on a comp of any size (K-542).
+    /// identity on a comp of any size.
     #[slider(label = "Tile centre x", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
     pub tile_centre_x: f32,
 
@@ -51,13 +51,13 @@ pub struct Tile {
 
     /// px@comp: how wide the stamped rectangle is — half the frame's width is a
     /// 2×2 repeat. A size is a distance, so it is pixels and not a share of the
-    /// frame (K-558, which supersedes K-542's per-cent rationale for the pair).
+    /// frame.
     ///
     /// The declared default is a nominal 1080p frame's width, and
     /// `instantiate_for_raster` writes the actual comp's, so a fresh Tile is one
     /// whole-frame tile cut from the middle of the frame — AE's Motion Tile, and
-    /// the exact identity on a comp of any size (K-542's lands-as-identity, kept
-    /// the way the centre already keeps it).
+    /// the exact identity on a comp of any size, kept the way the centre already
+    /// keeps it.
     #[slider(
         label = "Tile width",
         min = 1.0,
@@ -79,18 +79,17 @@ pub struct Tile {
     )]
     pub tile_height: f32,
 
-    /// px@comp: how wide the stamped area is, **centred on the tile centre**
-    /// (K-613) — half the extra to each side of the rectangle being stamped,
-    /// the way AE's Motion Tile spreads it. Narrower than the frame and the
-    /// output is transparent outside it; the frame's own width covers it
-    /// exactly, which is the default (a nominal 1080p frame's, with
-    /// `instantiate_for_raster` writing the comp's own). **Wider than the frame
-    /// and the working picture grows** (K-542): the stamps carry on past the
-    /// frame's edges into a wider
-    /// raster, and every effect after this one in the stack runs on that raster,
-    /// so the copies are real picture to them rather than transparency. The
-    /// composite places the wider picture by the layer's own transform, so
-    /// nothing moves — the layer simply reaches further.
+    /// px@comp: how wide the stamped area is, **centred on the tile centre** —
+    /// half the extra to each side of the rectangle being stamped, the way AE's
+    /// Motion Tile spreads it. Narrower than the frame and the output is
+    /// transparent outside it; the frame's own width covers it exactly, which is
+    /// the default (a nominal 1080p frame's, with `instantiate_for_raster`
+    /// writing the comp's own). **Wider than the frame and the working picture
+    /// grows**: the stamps carry on past the frame's edges into a wider raster,
+    /// and every effect after this one in the stack runs on that raster, so the
+    /// copies are real picture to them rather than transparency. The composite
+    /// places the wider picture by the layer's own transform, so nothing moves —
+    /// the layer simply reaches further.
     #[slider(
         label = "Output width",
         min = 1.0,
@@ -141,7 +140,7 @@ pub struct Tile {
 impl Tile {
     /// The bundle both kernels consume (docs/impl/effect-registry.md §2.4).
     ///
-    /// The four sizes are px@comp (K-558) and both kernels want fractions of the
+    /// The four sizes are px@comp and both kernels want fractions of the
     /// raster — a fraction is what lets the same resolved op be handed a raster
     /// of another size — so the division happens once, here, against the raster
     /// being drawn on. Sizes and raster carry the same preview factor, so a Half

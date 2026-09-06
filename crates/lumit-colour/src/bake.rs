@@ -128,7 +128,7 @@ impl Shaper {
     /// This is the map the graphics card runs too. It has to be: the tail
     /// cannot be "evaluate the original steps" on one side and a table on the
     /// other, or the Viewer and the export stop agreeing where it matters most
-    /// (K-031, docs/impl/ocio.md §5.1).
+    /// (docs/impl/ocio.md §5.1).
     #[must_use]
     pub fn forward_signed(&self, x: f32) -> f32 {
         if x.is_nan() {
@@ -182,8 +182,8 @@ pub enum Stage {
 /// the graphics card — the card would have to re-implement every logarithm and
 /// power in the chain, and agree with Rust to the last bit. Sampling across
 /// the shaper's signed range instead makes the tail a table lookup like
-/// everything else, so both sides run the same two lines and K-031 holds off
-/// the end of the range as well as inside it.
+/// everything else, so both sides run the same two lines and preview equals
+/// export off the end of the range as well as inside it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CurveStage {
     /// Indexed over `[0, 1]` in **shaper space**, not in linear light.

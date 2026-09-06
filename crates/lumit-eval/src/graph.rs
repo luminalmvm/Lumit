@@ -24,7 +24,7 @@ pub enum SourceRef {
     Solid(Uuid),
     Precomp(Uuid),
     Text,
-    /// Vector art rasterised from the layer's own contents (K-237). Like Text,
+    /// Vector art rasterised from the layer's own contents. Like Text,
     /// it has no asset behind it: the art *is* the layer.
     Shape,
     Sequence,
@@ -161,8 +161,8 @@ pub fn compile(comp: &Composition) -> EvalGraph {
             sources.insert(source, id);
             id
         };
-        // Retime folds away unless the layer actually carries one (K-249: the
-        // map is the layer's property, whatever the layer's kind).
+        // Retime folds away unless the layer actually carries one. The map is
+        // the layer's property, whatever the layer's kind.
         if layer.retime.is_some() {
             top = g.push(NodeKind::Retime, vec![top]);
         }
@@ -267,7 +267,7 @@ mod tests {
     }
 
     /// A footage layer, retimed or not. `retime` is the layer's own Retime
-    /// property (K-249) — the only map there is — so "is this layer retimed"
+    /// property — the only map there is — so "is this layer retimed"
     /// is now a question about the layer rather than about its kind.
     fn footage(
         retime: Option<lumit_core::anim::Property>,

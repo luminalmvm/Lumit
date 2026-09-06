@@ -72,14 +72,14 @@ reordered stack (`StaleEffectStack`) rather than guessing.
 
 Because every call to `render_frame_with_preview` is by definition a live drag, the worker
 also renders those ticks small: `realtime.rs` picks the finest divisor of 1/2/3/4 whose
-raster fits a 640×360 pixel budget, floored at Quarter (K-383). Dragging a Depth of field
+raster fits a 640×360 pixel budget, floored at Quarter. Dragging a Depth of field
 radius otherwise left the picture seconds behind the pointer. This is a decision taken before
 the first tick, not the adaptive tier, which needs a dozen measured frames and would still
 stall the first drag. The rule lives here rather than in Dart so no new drag call site can
 forget it, and a release comes back through `render_frame` at the Viewer's own scale.
 
 Every keyframe crosses on the **composition's clock**. Conversion by the layer's
-`start_offset` happens at the seam (K-213).
+`start_offset` happens at the seam.
 
 ## Events: Rust → Dart
 
@@ -97,7 +97,7 @@ playback requests are `#[frb(sync)]` channel sends. The worker owns a
 `HeadlessRenderer` outright — no lock. It drains its queue latest-wins per class.
 Scrub frames supersede each other, and Play/Stop are kept.
 
-Publishing is zero-copy only (K-177/K-183):
+Publishing is zero-copy only:
 
 ```mermaid
 sequenceDiagram
@@ -110,7 +110,7 @@ sequenceDiagram
     D->>T: register as external texture<br/>(viewer_texture_controller.dart → platform runner)
 ```
 
-**A still frame and a playback frame decide their quality separately** (K-372), and the two
+**A still frame and a playback frame decide their quality separately**, and the two
 functions in `api/worker_thread.rs` say which is which. `still_quality(scale)` is the scale the
 caller asked for, full stop. `playback_quality(scale, mode, tier)` coarsens it by the
 adaptive tier, and only when the run is Adaptive. When one function served both, scrubbing
@@ -128,7 +128,7 @@ is a gesture, not an error. None of this is an op, and none of it reaches an exp
 
 The only pixel payloads that cross as bytes are bounded stills: thumbnails,
 256×256 scope traces, ≤129×129 colour-dropper windows (capped engine-side).
-Playback lives in the worker (K-181). It renders ahead into a ring sized by p95 frame
+Playback lives in the worker. It renders ahead into a ring sized by p95 frame
 cost. It presents on a time grid, pre-rolls audio, and chases the audio clock.
 Settings cross as atomics (cache budgets, profiling switch). The worker polls them
 once per loop.
@@ -139,11 +139,11 @@ The keymap model (chords, contexts, actions, clash rules) is the engine crate
 `lumit-keymap`. The bridge holds the session map in
 `static KEYMAP: OnceLock<Mutex<Keymap>>`. Every keypress calls sync
 `keymap_lookup(context, chord) -> Option<String>` (an action id). The stored keymap
-file is Dart's. Imports apply on top of shipped defaults (K-302).
+file is Dart's. Imports apply on top of shipped defaults.
 
 Engine display text (keymap action descriptions, effect and parameter labels) crosses
 as **British English beside a stable id**. Dart translates on arrival via
-`lib/l10n/engine_labels.dart` (K-303). Never build display text with `format!` on the
+`lib/l10n/engine_labels.dart`. Never build display text with `format!` on the
 Rust side.
 
 ## Traps

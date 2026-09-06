@@ -1,4 +1,4 @@
-//! Where the Audio level driver's samples come from (K-471 §1.3, docs/09 §2,
+//! Where the Audio level driver's samples come from (docs/09 §2,
 //! docs/impl/node-graph.md §1.3).
 //!
 //! # In plain terms
@@ -19,7 +19,7 @@
 //! through the same [`crate::build::build_comp_draws_at`], which makes one of
 //! these from the document it was handed. There is no second implementation to
 //! disagree with, which is what makes the driven picture the same in the Viewer
-//! and in the file (K-031).
+//! and in the file.
 //!
 //! **Nothing here depends on the machine.** The sound is decoded at a fixed
 //! [`TAP_RATE`] rather than at whatever the sound card asked for, so two
@@ -145,7 +145,7 @@ pub struct DocumentAudio<'a> {
     /// the composition's and the composition's clock is this one.
     t_comp: f64,
     /// Read the mix at everyone's **keyframed** Volume, ignoring any *Duck
-    /// under* wires (K-471, the Out Volume socket). Only the driven-Volume
+    /// under* wires (the Out Volume socket). Only the driven-Volume
     /// evaluation itself sets this: a chain reading "this comp" would
     /// otherwise be baking the very envelope it is part of, forever.
     pre_duck: bool,
@@ -158,8 +158,8 @@ impl<'a> DocumentAudio<'a> {
     /// The tap for `comp`'s layers within `doc`, for the frame at `t_comp`.
     ///
     /// A driver's Audio parameter names a layer of the composition its own
-    /// layer sits in — wires never cross layers, and neither does this
-    /// (K-471 §1.3) — or names nothing, which is the comp's own mix.
+    /// layer sits in — wires never cross layers, and neither does this — or
+    /// names nothing, which is the comp's own mix.
     #[must_use]
     pub fn new(doc: &'a Arc<Document>, comp: &'a Composition, t_comp: f64) -> Self {
         Self {
@@ -244,12 +244,12 @@ impl lumit_core::fx::AudioTap for DocumentAudio<'_> {
     /// the file will carry, identical in every render of the picture, which is
     /// the property that matters here.
     ///
-    /// ponytail: the layers' **audio insert chains** are deliberately not run
-    /// (K-700). A driver reading the mix is asked once per picture frame, and a
-    /// plugin cannot answer a window of a track thousands of times in a render
-    /// — so a glow that follows the music follows the *dry* music. Bake each
-    /// chain once at control rate and read the tap off that, if a plugin ever
-    /// changes a level enough for the picture to notice.
+    /// ponytail: the layers' **audio insert chains** are deliberately not run.
+    /// A driver reading the mix is asked once per picture frame, and a plugin
+    /// cannot answer a window of a track thousands of times in a render — so a
+    /// glow that follows the music follows the *dry* music. Bake each chain
+    /// once at control rate and read the tap off that, if a plugin ever changes
+    /// a level enough for the picture to notice.
     fn mix(&self, half: f64, out: &mut Vec<f32>) -> Option<f64> {
         if half <= 0.0 || half.is_nan() || !self.t_comp.is_finite() {
             return None;
@@ -312,7 +312,7 @@ impl lumit_core::fx::AudioTap for DocumentAudio<'_> {
                 &placed,
                 window,
                 // Through the comp's master fader, because a driver reads
-                // what a listener hears (K-691): pulling the master down
+                // what a listener hears: pulling the master down
                 // must dim a glow that follows the music, not only the sound.
                 lumit_audio::mix::db_to_gain(self.comp.master_volume_db),
             ),
@@ -464,7 +464,7 @@ mod tests {
 
     /// The tap is a pure function of the file, the layer and the window: two
     /// reads of the same moment give the same samples, which is what makes the
-    /// preview and the export agree on the number (K-031).
+    /// preview and the export agree on the number.
     #[test]
     fn the_same_window_reads_the_same_samples_twice() {
         let dir = tempfile::tempdir().expect("temp dir");

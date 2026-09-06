@@ -1,18 +1,17 @@
 # The points stream — implementation note
 
-**Decision:** K-491 (the programme is commissioned; K-474 and K-475 confirmed), K-492 (a
-points connection is a graph wire), K-494 (the v1 consumers), **K-561 (points are 3D, and
-the composition's camera sees them — superseding K-495)**, K-596 (how the axis was
-built: the projection's carriage, the port's 3D flag, and projected-space nearest
-distance).
-**Related:** K-446 (Particulate emits a points stream), K-471 (the wiring model), K-472
-(the `Points` port type), K-419 (px@comp), K-031 (preview equals export), K-123 (layer
-references). This note is the *how* for the points-stream programme's **infrastructure**:
-how a stream is consumed, the first consumers, the evaluation contract, the seam, and the
-ordered work packages. [particulate.md](particulate.md) remains the effect's own design —
-parameters, closed forms, budgets, its test plan — and nothing here changes it beyond the
-open questions it deferred to this step. [node-graph.md](node-graph.md) §6 holds the type
-system this note builds on.
+**Decision:** the programme is commissioned, a points connection is a graph wire, the v1
+consumers are named, **points are 3D and the composition's camera sees them**, and the
+axis was built as the projection's carriage, the port's 3D flag, and projected-space
+nearest distance.
+**Related:** Particulate emits a points stream, the wiring model, the `Points` port type,
+px@comp, preview equals export, layer references. This note is the *how* for the
+points-stream programme's **infrastructure**: how a stream is consumed, the first
+consumers, the evaluation contract, the seam, and the ordered work packages.
+[particulate.md](particulate.md) remains the effect's own design — parameters, closed
+forms, budgets, its test plan — and nothing here changes it beyond the open questions it
+deferred to this step. [node-graph.md](node-graph.md) §6 holds the type system this note
+builds on.
 
 ## In plain terms
 
@@ -36,15 +35,15 @@ brightens when a particle passes the lamp" is two wires and a Remap, with no new
 it. The rest of the family — Connect points, Clone to points, Trail, Scatter — waits,
 each as its own named package, all plugging into sockets this programme leaves ready.
 
-## 1. How a stream is consumed — the wire (K-492)
+## 1. How a stream is consumed — the wire
 
 The Tier C2 question — graph wire versus reference parameter — is decided for the
 **graph wire**, consistent with drivers and with the owner's ruling that the graph is
-"both a second view of the effect stack *and* a way to wire effects into each other"
-(K-445's resolution, K-471). A reference parameter would have been a second way of
-saying the same thing with a second storage; the matte row's two-feed arrangement
-(parameter *and* `SourceMatte` edge, one overriding the other) is precisely the
-awkwardness not to repeat. A points connection has **one storage: the edge**.
+"both a second view of the effect stack *and* a way to wire effects into each other". A
+reference parameter would have been a second way of saying the same thing with a second
+storage; the matte row's two-feed arrangement (parameter *and* `SourceMatte` edge, one
+overriding the other) is precisely the awkwardness not to repeat. A points connection has
+**one storage: the edge**.
 
 ### 1.1 The new edge arm
 
@@ -56,7 +55,7 @@ enum OutputRef {
     SourceMatte,
     /// A stack effect's declared data output — the first stack-sourced wire.
     /// The effect keeps making its picture for the chain; this taps the data
-    /// it declares beside it (K-492).
+    /// it declares beside it.
     EffectData { effect: Uuid, port: String },
 }
 ```
@@ -69,7 +68,7 @@ No new `InputRef` arm.
 
 **A points wire is a data edge, never an image edge.** It does not reorder, branch, or
 skip the image chain; `Layer::effects` remains the only authority for the picture's
-path, and every image gesture still lowers to `SetLayerEffects`. The K-471 §1.1
+path, and every image gesture still lowers to `SetLayerEffects`. The node-graph.md §1.1
 invariant — every graph state has an honest stack rendering — survives because a points
 wire renders in the stack view the same way a driven parameter does: the consumer's row
 says what feeds it, by name. No carve-out is needed; the carve-out that *is* recorded is
@@ -79,7 +78,7 @@ Validation (`LayerGraph::validate`, same refusals, same calm messages):
 
 - **Type match**: the source port's declared type must equal the destination's —
   `Points` into `Points`, through the existing `PortTypeMismatch` refusal.
-- **Same layer only**: edges never cross layers (K-471). A cross-layer points tap, if
+- **Same layer only**: edges never cross layers. A cross-layer points tap, if
   ever wanted, is a layer-reference parameter drawn as a derived source node — exactly
   Audio level's shape — and is deferred with the family.
 - **One wire per input**: the existing rule, unchanged.
@@ -118,7 +117,7 @@ resolves the producer's parameters *with their own driver substitutions applied*
 sampled stream must be the same stream the picture draws, or the driver would report a
 particle field the viewer cannot see. Acyclicity is what makes that recursion terminate.
 
-## 2. The v1 consumers (K-494)
+## 2. The v1 consumers
 
 The owner's commission — "the point stream type stuff that we can use to **drive things
 and render** etc" — names both halves.
@@ -138,18 +137,18 @@ proof of the seam:
 |---|---|
 | **Data input** | `points` — "Points", `PortType::Points`. Wire-only: declared in the signature, not the schema — there is no stored value, nothing to keyframe, no panel row. Unwired reads as an empty stream, the documented no-op. |
 | **Parameter** | Position — 2D point, px@comp, default comp centre, animatable and drivable, with the pick-on-Viewer dropper. The query point. |
-| **Outputs** | Count — "Count", number: live particles this frame. Nearest distance — "Nearest distance", number: px@comp from Position to the nearest live particle, **measured in projected space** (K-561): Position is a point on the frame the user picked by looking at the picture, so the honest answer is how far the nearest particle is *in that picture*. A distance through the depth axis would be measured in a space the query point does not live in. A consumer wanting the true 3D distance declares `Port::three_d` and does its own geometry. |
+| **Outputs** | Count — "Count", number: live particles this frame. Nearest distance — "Nearest distance", number: px@comp from Position to the nearest live particle, **measured in projected space**: Position is a point on the frame the user picked by looking at the picture, so the honest answer is how far the nearest particle is *in that picture*. A distance through the depth axis would be measured in a space the query point does not live in. A consumer wanting the true 3D distance declares `Port::three_d` and does its own geometry. |
 | **Empty stream** | Count is 0; Nearest distance is 1e9 — "nothing is anywhere near", which is the honest direction for the wire's typical use (Remap → nearness drives a value). Documented here, pinned by test. |
 | **Temporal window** | 0 — pointwise. The stream at the frame is all it reads. |
 
 The nearest-particle search is a linear scan over the live set — bounded by the
-producer's cap (K-475), a few hundred microseconds at the default 20 000 even on the
+producer's cap, a few hundred microseconds at the default 20 000 even on the
 CPU, and deterministic. (ponytail: O(n) scan; a grid or kd-tree only if a profile ever
 shows a real graph spending it.)
 
 **Why a driver consumer is legal at all**: driver evaluation is CPU work at resolve
 time, before any pixel exists — and a v1 stream is a pure function of the document and
-the time (K-474), never of the input picture. **Emit-from-image breaks that**: a
+the time, never of the input picture. **Emit-from-image breaks that**: a
 luminance-weighted birth schedule makes the stream depend on the producer's input frame,
 which does not exist at resolve time. The emit-from-image package therefore owns a
 recorded constraint: when it lands, a stream from an image-dependent emitter either
@@ -162,20 +161,20 @@ Each of these was a future work package with its own design step, all consuming 
 contract in §3 unchanged: **Connect points** (lines between near particles — plexus),
 **Clone to points** (a layer instanced per particle, generalising Sprite mode),
 **Trail** (history drawn from closed-form back-evaluation, like Streak but longer),
-**cross-layer points taps** (§1.2). **All four are built** (K-600, K-601, K-602, K-604),
-along with a fourth producer this list did not name — **Emit from image** (K-603), points
-where a layer's pixels are bright, which is Scatter asking the pixel about light instead of
-about coverage. The family is complete.
+**cross-layer points taps** (§1.2). **All four are built**, along with a fourth producer
+this list did not name — **Emit from image**, points where a layer's pixels are bright,
+which is Scatter asking the pixel about light instead of about coverage. The family is
+complete.
 
 Two of them settled something that belongs here rather than in one effect:
 
-- **Connect points bucketed the plane** (K-602). Its pairing is `n²/2` distances asked
+- **Connect points bucketed the plane**. Its pairing is `n²/2` distances asked
   plainly, which docs/13 would never pass, so the *projected* plane is cut into squares of
   one Max distance and a point asks only the nine around it. The answer is identical to the
   exhaustive one — a test runs both — and the remaining ceiling is a clump, marked with its
   upgrade and its trigger. Nearness is judged in projected space because a line is drawn on
-  the picture, which is the same reading K-561 gave Points sample's Nearest distance.
-- **The cross-layer tap is a node, not an edge** (K-604), which is what §1.2 said it would
+  the picture, the same reading Points sample's Nearest distance takes.
+- **The cross-layer tap is a node, not an edge**, which is what §1.2 said it would
   be: a **Layer points** driver with a layer-reference row and a Points *output*, so
   anything that already takes a points wire takes this one without knowing the difference.
   It reaches **one layer, never two** — the far side is evaluated by a fresh walk with the
@@ -183,7 +182,7 @@ Two of them settled something that belongs here rather than in one effect:
   visited set and no cycle to detect. Its wiring needed no new validation arm; the refusal
   taxonomy widened on the *degrade* side alone (node-graph.md §1.5).
 
-**The generators are built** (K-598, K-599): **Grid**, a lattice of points with a jitter
+**The generators are built**: **Grid**, a lattice of points with a jitter
 per axis, and **Scatter**, points thrown uniformly inside the layer's own alpha or a
 chosen matte. Both are stack effects declaring the same `Points` output Particulate does
 and drawing their own points as discs beside it — the family's *producers*, where
@@ -197,7 +196,7 @@ because they are the family's rather than one effect's:
   and would duplicate the compaction in a second shader module. The consequence is a
   guarantee rather than a saving: what a generator draws *is* what its CPU reference
   evaluated.
-- **Scatter answers §2.2's recorded constraint** (K-599). Its stream is a function of the
+- **Scatter answers §2.2's recorded constraint**. Its stream is a function of the
   input picture, which does not exist at resolve time, so it takes the **refusal** branch:
   a points wire from Scatter into a driver reads the documented empty stream, tested as
   such. The constraint stands unchanged for Emit-from-image, which is the same shape of
@@ -211,14 +210,14 @@ because they are the family's rather than one effect's:
 
 ## 3. The evaluation contract
 
-### 3.1 The layout, confirmed — and 3D (K-561, superseding K-495)
+### 3.1 The layout, confirmed — and 3D
 
 particulate.md §4's `PointsStream` layout is **confirmed as finalised**, including the
-`life` buffer and id-is-birth-index. Positions and speeds are **`Vec3`** since K-561: a
-particle carries three coordinates, the closed forms integrate the third under the same
-drag and wind algebra, and the growth path node-graph.md §6.2 recorded is the one that
-was taken. The buffer strides moved (GPU: 17 words a particle, not 14) and nothing in
-this note's contracts did.
+`life` buffer and id-is-birth-index. Positions and speeds are **`Vec3`**: a particle
+carries three coordinates, the closed forms integrate the third under the same drag and
+wind algebra, and the growth path node-graph.md §6.2 recorded is the one that was taken.
+The buffer strides moved (GPU: 17 words a particle, not 14) and nothing in this note's
+contracts did.
 
 **The wire stays one type.** A stream is three axes whatever reads it; what varies is
 which of two readings a consumer asks for, and it asks on its **port**:
@@ -240,10 +239,10 @@ requires; the family's own packages decide one by one.
 row-major 3×4 mapping `(x, y, z, 1)` to `(X, Y, W)`, so the particle is drawn at
 `(X/W, Y/W)` and every length about it (diameter, streak, sprite square) scales by `1/W`.
 `Projection::FLAT` is the identity and is what a 2D layer, a comp with no camera and
-every project saved before K-561 evaluate under; `apply` returns the bits it was handed
-there, so the flat guarantee is arithmetic rather than a promise. A particle at or behind
-the camera's own plane answers a scale of nought and draws nothing, which is the
-degenerate case degrading rather than dividing by a vanishing `W`.
+every project saved before points went 3D evaluate under; `apply` returns the bits it
+was handed there, so the flat guarantee is arithmetic rather than a promise. A particle
+at or behind the camera's own plane answers a scale of nought and draws nothing, which is
+the degenerate case degrading rather than dividing by a vanishing `W`.
 
 **Where it comes from, and why not from here.** The matrix is built in `lumit-render`
 (`build::points_projection`) out of `lumit_gpu::camera_matrix` and
@@ -262,27 +261,27 @@ The stream exists in two forms with one meaning:
 - **GPU form**: the SoA buffers of particulate.md §4, written by the evaluate/compaction
   passes, read by the instanced draw and (later) by stack consumers.
 - **CPU form**: the same attributes in plain `Vec`s, produced by the shared closed-form
-  module — the K-019 reference oracle, **and** what the Points sample driver reads.
+  module — the reference oracle, **and** what the Points sample driver reads.
   One module (`fx/points.rs`), two callers; a second implementation of the closed forms
   would be a drift waiting to be found.
 
 ### 3.2 Equality and determinism
 
 - CPU and GPU stream attributes agree to **10⁻⁵ of each attribute's own range**
-  (particulate.md §5 — data has no perceptual tolerance; K-508 corrected the measure from
+  (particulate.md §5 — data has no perceptual tolerance; the measure was corrected from
   the ≤ 2 ULP this note first asked for, which no GPU can meet against libm); pixels agree
   to the `moderate` perceptual epsilon.
 - Compaction is a prefix sum in birth-index order, never atomics (particulate.md §5), so
   `id` order is a fact, not a scheduling artefact.
 - The Points sample driver reads the CPU form, so its numbers are bit-identical across
-  machines and renders by construction, and export equals preview (K-031) with no new
+  machines and renders by construction, and export equals preview with no new
   argument.
 
 ### 3.3 Where the stream lives, per frame
 
 **v1**: the GPU stream never leaves Particulate — the evaluate, compaction and draw
 passes share buffers inside the effect's own op, from the governor's pools, sized by the
-cap (K-475). The only cross-effect consumer is the driver, which evaluates the CPU form
+cap. The only cross-effect consumer is the driver, which evaluates the CPU form
 inside the driver walk: the walk gains the layer's stack and timing context (in point,
 comp rate) so an `EffectData` wire can resolve its producer, and the evaluated stream is
 **memoised per producer within one frame's walk** so two wires from one Particulate cost
@@ -293,15 +292,15 @@ shared by both forms.
 effect declares a Points input, the frame's arena keys the producer's compacted SoA set
 by `(layer, effect instance id)` beside the intermediate textures; the draw builder
 threads a consumer's points input as a `PointsInputDraw { producer }` resolved at build
-time — the same shape `LayerInputDraw` threads a matte texture (K-288,
-layer-input.md). Lifetime is the layer's render scope, released with the frame arena.
+time — the same shape `LayerInputDraw` threads a matte texture (layer-input.md).
+Lifetime is the layer's render scope, released with the frame arena.
 Budget accounting: the buffers are the **producer's** declared peak scratch (the cap,
 docs/13 §6); a consumer declares nothing for reading them.
 
 ### 3.4 Cache keys
 
 **No new terms.** Particulate's key is the standard formula — parameters hash as usual,
-`seeded` folds the layer's local time (K-474). A points-wired layer is already covered
+`seeded` folds the layer's local time. A points-wired layer is already covered
 by node-graph.md §2.3's corrected folding: the wires fold (an `EffectData` edge is an
 edge like any other), the layer time folds, the driver declarations fold, and the
 producer's stored parameters were always hashed with the stack. The frame-key
@@ -339,7 +338,7 @@ signature's data inputs beside the schema params, so `InputRef::Param` needs no 
   the signature and needs only the driver-inputs half.
 - Driver boxes append their signature data inputs to their parameter sockets.
 - Refusals cross as the existing calm sentences; the cycle message already exists.
-- **K-005/K-303**: the port label "Points" is a new engine-sendable word — its
+- **l10n**: the port label "Points" is a new engine-sendable word — its
   `engine_labels.dart` entry and `app_en.arb` key land with the seam package, listed in
   the commit and PR for translation. Particulate's own labels land with PS1, Points sample's
   with PS4, the moment each enters the catalogue (the label walk fails CI otherwise).
@@ -356,19 +355,18 @@ signature's data inputs beside the schema params, so `InputRef::Param` needs no 
   bridge reports the ports; the only new panel knowledge is nothing at all — teal was
   drawn from `PortColours` since WP1.
 - **Effect controls**: Particulate's parameter surface is particulate.md §2 through the
-  ordinary schema — groups as kickers, the two over-life curves (K-412), the seed row
-  with reseed (docs/08 §2.4), the mask-path reference (K-408), the sprite layer
-  reference with the standard source combobox (K-142), the Mix row with Blend (K-425).
+  ordinary schema — groups as kickers, the two over-life curves, the seed row
+  with reseed (docs/08 §2.4), the mask-path reference, the sprite layer
+  reference with the standard source combobox, the Mix row with Blend.
   No new row kinds.
 - **Node panel**: Points sample renders like any driver — its Position row, its wired
   Points input shown as a socket, its outputs as sockets.
 
 ## 5. Work packages
 
-Ordered; each sized for one agent; each lands with its tests (K-007) and its GUIDE.md
-plain-English addition where a new mechanism appears. PS1 → PS2 and PS1 → PS3 → PS4 →
+Ordered; each sized for one pull request; each lands with its tests. PS1 → PS2 and PS1 → PS3 → PS4 →
 PS5 → PS6 → PS7; PS2 may run in parallel with PS3–PS4 once PS1 lands. Binding documents
-per package are listed; fresh-read the K numbers cited before appending anything.
+per package are listed.
 
 ### PS1 — Stream core and the closed-form Particulate (engine, CPU)
 
@@ -383,7 +381,7 @@ per §2's Traits block, the declared Points output, and the **CPU render path** 
 and streaks as software dabs (the paint rasteriser's precedent), sprite via the
 layer-input machinery (layer-input.md), unset-sprite-draws-discs.
 **l10n**: Particulate's label, group kickers and every parameter label —
-`app_en.arb` + `engine_labels.dart` in the same commit, keys listed for translation (K-303).
+`app_en.arb` + `engine_labels.dart` in the same commit, keys listed for translation.
 **Tests**: particulate.md §9 items 1–7 and 9–11 on the CPU path (determinism, random
 access, schedule against closed-form counts, force closed forms across the guard,
 turbulence golden values, id stability, cap rule, mask-path no-op, sprite fallback,
@@ -395,15 +393,15 @@ now carries a field; the ninety existing declarations untouched.
 
 The WGSL twin of PS1's closed forms (one thread per candidate), prefix-sum compaction in
 birth-index order, the instanced quad raster for disc/sprite/streak, sprite texture
-threading as a matte's is, the host Blend/Mix seam (K-425), buffers from the governor's
+threading as a matte's is, the host Blend/Mix seam, buffers from the governor's
 pools sized by the cap, cancellation between evaluate and draw, the halving degradation
 rung (interaction-only, status readout, never on export).
 **Files**: `crates/lumit-gpu` (WGSL + pipeline), `crates/lumit-render` (draw building).
 **Tests**: particulate.md §9 item 8 (CPU/GPU twins — pixels within `moderate` epsilon,
-stream attributes within 10⁻⁵ of their range, K-508), item 1's export-equals-preview fixture joining the K-031
-matrix, item 7's degradation-never-on-export render test. **docs/08 gains its §3.x
-Particulate entry in this package** — the effect is whole here — derived from
-particulate.md, and docs/13 §7.3 gains the four budget rows (gated in PS7).
+stream attributes within 10⁻⁵ of their range), item 1's export-equals-preview fixture
+joining the parity matrix, item 7's degradation-never-on-export render test. **docs/08
+gains its §3.x Particulate entry in this package** — the effect is whole here — derived
+from particulate.md, and docs/13 §7.3 gains the four budget rows (gated in PS7).
 **Binds**: particulate.md §5–§7, docs/06 §1.2, docs/13 §6.
 
 ### PS3 — The points edge
@@ -433,8 +431,8 @@ empty-stream values pinned.
 **Tests**: the sampled stream equals PS1's drawn stream **under driven producer
 parameters** (a Wiggle on Emit rate, then sample — the §1.3 property); unwired and
 empty-stream values; nearest-distance against a hand-placed fixture; frame-key
-sensitivity (§3.4's three cases); a points-driven row joining the K-031 matrix (driven
-picture differs from the wire-cut picture, and preview equals export).
+sensitivity (§3.4's three cases); a points-driven row joining the preview-equals-export
+matrix (driven picture differs from the wire-cut picture, and preview equals export).
 **Binds**: this note §2.2, §3.3–§3.4; node-graph.md §2.
 
 ### PS5 — Seam and codegen
@@ -458,15 +456,15 @@ verification and any missing row kind; Node panel rows for Points sample.
 **Tests**: widget tests — the wire gesture commits one `SetLayerGraph`; the Tab filter;
 Particulate's rows render with the curve and seed rows present; 0 bridge calls in
 rebuild paths. Run only the affected test files.
-**Binds**: this note §4.3; particulate.md §2; the NodeGraph drawing (K-458).
+**Binds**: this note §4.3; particulate.md §2; the NodeGraph drawing.
 
 ### PS7 — Conformance, goldens, budget gates ✅ landed
 
-Golden frames for the three render modes at pinned seeds; the four K-475 numbers as perf
--harness gates on the reference-desktop runner (docs/13 §7.3): default look ≲ 0.2 ms,
+Golden frames for the three render modes at pinned seeds; the four budget numbers as
+perf-harness gates on the reference-desktop runner (docs/13 §7.3): default look ≲ 0.2 ms,
 20 000 discs ≤ 1 ms desktop / ≤ 4 ms laptop, the 1 000 000 hard cap ≤ 16 ms with the
 cancellation check, degradation determinism (newest `cap/2`).
-Also **the clamp question K-509 left open**: whether a driven value should be clamped
+Also **the clamp question PS6 left open**: whether a driven value should be clamped
 to its parameter's hard range engine-side, as a typed value is. It is not today, which is
 what makes an unwired Points sample show up as a parameter pinned *past* its limits
 rather than at them; PS6 marks the cause in the panel and deliberately does not treat the
@@ -474,7 +472,7 @@ symptom. It touches every driver rather than this one, and it changes rendered o
 it is answered here — with its own appended entry — or recorded as deliberate.
 **Tests**: particulate.md §9 item 12; the golden suite.
 **Binds**: particulate.md §7, §9; docs/13 §7.3; docs/16's verification-beats-assertion
-standing rule; K-509.
+standing rule.
 
 **What landed.** Four things, and one of them changed a number in docs/13 rather than
 meeting it:
@@ -482,7 +480,7 @@ meeting it:
 - **The goldens** are `crates/lumit-render/particulate-golden.txt`, regenerated on purpose
   like `fx-reference.json`: the pinned fixture's ids (exact), its eight stream attributes,
   and the CPU reference's drawn frame in each of disc, sprite and streak. Everything is
-  held to K-508's 10⁻⁵-of-range bound. Two tests read it — the CPU one, which needs no
+  held to the 10⁻⁵-of-range bound. Two tests read it — the CPU one, which needs no
   graphics adapter and so gates on every runner there is, and the card's, which puts the
   `particulate_stream` read-back against the same numbers. The existing twin test says the
   two paths agree with each other; the goldens say what they agree *on*, which is the one
@@ -498,11 +496,11 @@ meeting it:
   ≲ 0.2 ms with 0.062 ms of that being the copy; the floor is real work but it is the
   frame's, not the effect's. §7.3's other convention then applies unchanged: B12 and B13
   are under a millisecond, so the ratio gate stays quiet on them.
-- **The clamp is answered, K-510**: a driven value is held to its parameter's hard range at
+- **The clamp is answered**: a driven value is held to its parameter's hard range at
   the substitution in `resolve_into_arena` — which is the walk both the preview and the
   export take, so the two clamp identically by construction. On an **effect's** sockets
   only: a driver's own row exists to be handed numbers from outside its range, and Remap is
-  the proof. K-509's "no stream" mark stays exactly as PS6 built it; this is the backstop
+  the proof. The "no stream" mark stays exactly as PS6 built it; this is the backstop
   beneath it, not a replacement for it.
 - **The degradation rung** is pinned as the guarantee it is:
   `particulate_exports_its_whole_declared_field` holds the export walk's picture identical
@@ -515,7 +513,7 @@ Beyond the per-package tests, the properties a regression would betray:
 1. **One stream, two readers**: the driver's sampled stream and the drawn stream agree
    under any parameter/driver configuration (PS4's central test).
 2. **Determinism**: a Particulate comp renders bit-identically twice; export equals
-   preview with the points wire live (K-031 rows from PS2 and PS4).
+   preview with the points wire live (the preview-equals-export rows from PS2 and PS4).
 3. **The chain is still the list**: node-graph.md §9's property test extended over
    graphs containing `EffectData` edges — the effect list order still equals the image-
    chain order the read model reports.

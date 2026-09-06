@@ -7,7 +7,7 @@ pub mod audio;
 // Always compiled, feature or no feature: the generated Dart is one shape
 // whatever the build (docs/17 §Feature gates), so an API function that
 // disappears with a feature breaks `--no-default-features` at the generated
-// call site rather than at anything a person wrote (K-273). Detection itself
+// call site rather than at anything a person wrote. Detection itself
 // needs the audio pipeline and says so calmly when the build has none.
 pub mod beats;
 pub mod cache;
@@ -82,7 +82,7 @@ pub enum BridgeError {
     /// A scope's colour list was not five `[r, g, b]` triples.
     InvalidScopeColours,
     /// A region of interest that is not four finite comp fractions, or that
-    /// comes to less than a pixel either way (K-687). There is no composition
+    /// comes to less than a pixel either way. There is no composition
     /// inside it to crop to.
     InvalidRegion,
     /// The text handed to `load_preset` is not a `.lumfx` document.
@@ -106,11 +106,11 @@ pub enum BridgeError {
     /// The edit named a camera layer and the layer is not one.
     NotCamera,
     /// Text to shapes was asked of a layer whose words come to nothing — an
-    /// empty line, or one made only of spaces (K-608). There is no art to make,
+    /// empty line, or one made only of spaces. There is no art to make,
     /// so the command says so rather than leaving an empty layer behind.
     NothingToConvert,
     /// Analyse was pressed while another analysis is already running. One at a
-    /// time is deliberate (K-417): two disk-bound jobs share one drive and
+    /// time is deliberate: two disk-bound jobs share one drive and
     /// halve each other.
     AnalysisBusy,
     /// Convert to keyframes was asked of a camera with no solve link to bake,
@@ -123,13 +123,13 @@ pub enum BridgeError {
     NotSequence,
     /// Only a Footage layer converts to a Sequence layer.
     NotFootage,
-    /// The adjustment switch (K-537) was asked of a layer with no picture to
+    /// The adjustment switch was asked of a layer with no picture to
     /// set aside — a Camera, a Light, a Null or an Audio layer. Every layer
     /// that shows something in the Viewer takes it; the cell is not drawn on
     /// the four that do not.
     NotConvertible,
-    /// A Sequence layer's retiming belongs to its clips, not to the layer
-    /// (K-075), so it has no Retime channel to switch on.
+    /// A Sequence layer's retiming belongs to its clips, not to the layer,
+    /// so it has no Retime channel to switch on.
     NotRetimeable,
     /// Converting back to a plain Footage layer needs one clip, and this row
     /// has several — which of them the layer would become is the user's
@@ -151,17 +151,17 @@ pub enum BridgeError {
     PuppetNoMesh,
     /// A pin was aimed outside the mesh. Never a floating pin (§6).
     PuppetOutsideMesh,
-    /// A paint stroke with no points in it (K-227).
+    /// A paint stroke with no points in it.
     EmptyStroke,
     /// No stroke of that id on this layer.
     NoSuchStroke,
-    /// The layer is not a shape layer (K-237).
+    /// The layer is not a shape layer.
     NotShape,
     /// The razor was pointed at a time outside the layer's span, or at one of
     /// its ends — either way there is no second layer to make.
     NothingToSplit,
     /// There is no cut to make in the clip under the playhead. An eased speed
-    /// ramp is no longer one of these (K-573): a cubic splits into two cubics
+    /// ramp is no longer one of these: a cubic splits into two cubics
     /// that are the same curve, so the razor goes through a ramp exactly. What
     /// is left is the moment landing on one of the clip's own ends — an end is
     /// not a cut — and a retime driven by an expression, which cannot be split

@@ -1,10 +1,10 @@
-// A theme as a file you can send somebody (K-298).
+// A theme as a file you can send somebody.
 //
 // **In plain terms.** A custom theme normally lives inside the workspace file,
 // which is machine-local: it never leaves the computer it was made on. This is
 // the same theme written out on its own, so it can be posted, put in a repo, or
-// carried to another machine — the keymap has had one of these since K-199, and
-// a theme is the other thing in Lumit worth sharing.
+// carried to another machine — the keymap already has one of these, and a theme
+// is the other thing in Lumit worth sharing.
 //
 // **The file is a small, readable JSON document**: a marker saying what it is, a
 // version, the theme's name, its light-or-dark base, and the colours as

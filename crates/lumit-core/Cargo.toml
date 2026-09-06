@@ -9,8 +9,8 @@ publish = false
 
 [dependencies]
 lumit-fx-macros = { path = "../lumit-fx-macros" }
-# An audio plugin's opaque state blob is bytes in a pretty-printed JSON file
-# (K-700), which wants a string. Already in the lock, so this downloads nothing.
+# An audio plugin's opaque state blob is bytes in a pretty-printed JSON file,
+# which wants a string. Already in the lock, so this downloads nothing.
 hex = "0.4"
 rayon = "1"
 arc-swap = "1"

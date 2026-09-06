@@ -1,5 +1,5 @@
 // The Puppet tools over the picture: the mesh ghost, the pins, and the gestures
-// that place and move them (K-704, docs/impl/puppet.md §5, docs/07 §1.7).
+// that place and move them (docs/impl/puppet.md §5, docs/07 §1.7).
 //
 // **In plain terms.** With a puppet tool in hand, a thin wireframe appears over
 // the **selected layer**: that is the mesh, a net of small triangles laid over
@@ -17,7 +17,7 @@
 // document or in a project file; the render builds the mesh from the layer's
 // alpha and leaves the one it just used where this can read it
 // ([PuppetGhosts]). So the wireframe cannot disagree with the pixels, and a
-// hover asks the engine nothing at all (K-681).
+// hover asks the engine nothing at all.
 //
 // **Two refusals, both calm.** A click on a layer with nothing opaque under it,
 // and a click outside the mesh, are refused with a line in the status area and
@@ -135,7 +135,7 @@ class _ViewerPuppetLayerState extends State<ViewerPuppetLayer> {
 
   /// The pin being dragged, and where the press landed. The framework only
   /// reports a drag once it has travelled its slop, and a drag that began 18 px
-  /// along is the wrong drag (K-217's trap, and every tool since).
+  /// along is the wrong drag.
   UuidValue? _dragging;
   Offset? _downAt;
 
@@ -148,8 +148,8 @@ class _ViewerPuppetLayerState extends State<ViewerPuppetLayer> {
   double? _dragScale;
 
   /// What was last asked of the render's mesh preview, so arming it is a state
-  /// change rather than something a rebuild does (K-681: no bridge calls in a
-  /// rebuild path).
+  /// change rather than something a rebuild does (no bridge calls in a rebuild
+  /// path).
   ///
   /// It starts at "no layer", which is the truth: this widget is mounted with
   /// every Viewer whether or not a puppet tool is in hand, and standing down a
@@ -239,8 +239,8 @@ class _ViewerPuppetLayerState extends State<ViewerPuppetLayer> {
     if (box == null) return;
     // The mesh a puppeted layer already has is built from the numbers on its own
     // block, so the options are only live on it if they are written there — the
-    // "re-meshing on commit" half of K-225. One-way: the block takes what the
-    // toolbar says, and the toolbar never reads it back.
+    // "re-meshing on commit" rule. One-way: the block takes what the toolbar
+    // says, and the toolbar never reads it back.
     try {
       _pushMeshOptions(box, widget.uiState.tools);
     } catch (_) {
@@ -327,7 +327,7 @@ class _ViewerPuppetLayerState extends State<ViewerPuppetLayer> {
     final t = ThemeScope.of(context).theme;
     final box = _target;
     return Positioned.fill(
-      // The hardware crosshair leads (K-724): a pin is driven into a pixel,
+      // The hardware crosshair leads: a pin is driven into a pixel,
       // and the OS pointer is the one that moves at input rate.
       child: DrawnPointerRegion(
         cursor: SystemMouseCursors.precise,
@@ -344,7 +344,7 @@ class _ViewerPuppetLayerState extends State<ViewerPuppetLayer> {
             child: Stack(
               children: [
                 // **Under a listener of its own**, as the solved point cloud
-                // is (K-430). The mesh moves when a *frame* lands, and a frame
+                // is. The mesh moves when a *frame* lands, and a frame
                 // landing moves neither the document's revision nor the
                 // playhead — so without this the wireframe would hold the pose
                 // it had at the last edit and only catch up when something
@@ -356,8 +356,7 @@ class _ViewerPuppetLayerState extends State<ViewerPuppetLayer> {
                       // Held against the layer, the frame the engine last
                       // delivered and the document's revision — the three
                       // things that can move the mesh — so this costs a
-                      // comparison on a hover and a call on none of them
-                      // (K-184, K-681).
+                      // comparison on a hover and a call on none of them.
                       _ghosts.refresh(
                         layer: box?.layer,
                         generation: widget.uiState.frameArrived.value,
@@ -430,7 +429,7 @@ class _ViewerPuppetLayerState extends State<ViewerPuppetLayer> {
       // it, and the engine's two answers — no mesh at all, and a point outside
       // the one there is — are exactly "is there a wireframe" and "there is".
       // The overlay is holding that answer already, so nothing is asked and
-      // nothing is scraped (K-303).
+      // nothing is scraped.
       //
       // ponytail: the held wireframe is a frame behind the engine's, so on the
       // one frame where the layer's alpha has just emptied the message can be

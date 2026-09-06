@@ -211,14 +211,14 @@ pub fn stress_document(p: &StressParams) -> Document {
         items,
         item_labels: Default::default(),
         // No proxies: the fixture's media is small already, and the master
-        // switch is on like any new project (K-501).
+        // switch is on like any new project.
         proxies: Default::default(),
         use_proxies: true,
         auto_folders: AutoFolders::default(),
-        // The default, on, like any new project (K-274).
+        // The default, on, like any new project.
         anti_aliasing: Default::default(),
         colour: Default::default(),
-        // And it keeps no colours: an empty shelf writes no line (K-448), so
+        // And it keeps no colours: an empty shelf writes no line, so
         // the fixture's bytes are the same as they were before swatches.
         swatches: Vec::new(),
         // The fixture caches wherever the application is set to, like any
@@ -306,7 +306,7 @@ mod tests {
         let path = dir.path().join("stress.lum");
         crate::save(&doc, &path).unwrap();
         let (loaded, _) = crate::open(&path).unwrap();
-        // Absolute paths are session-state and never saved (K-173): the
+        // Absolute paths are session-state and never saved: the
         // reopened document differs exactly there and nowhere else.
         let mut expected = doc;
         for item in &mut expected.items {

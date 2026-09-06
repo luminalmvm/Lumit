@@ -1,4 +1,4 @@
-// Settings → Audio (K-586): the page K-465 named and left unbuilt until the
+// Settings → Audio: the page the drawings named and left unbuilt until the
 // engine could name the machine's outputs.
 //
 // Everything here is deliberately independent of what sound hardware the

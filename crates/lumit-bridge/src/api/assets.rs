@@ -40,18 +40,18 @@ pub struct BridgeTextDocument {
     /// Pixel size at natural scale.
     pub size: f64,
     pub fill: BridgeColourRgba,
-    /// The mask **on this layer** whose curve the glyphs run along (K-607).
+    /// The mask **on this layer** whose curve the glyphs run along.
     /// Unset lays the line straight, and so does a mask id that names nothing.
     pub path: Option<Uuid>,
     /// How far along that curve the line starts, px@comp, on the composition's
-    /// clock like every other animatable channel that crosses here (K-213).
+    /// clock like every other animatable channel that crosses here.
     pub path_offset: BridgeScalar,
-    /// The animator groups moving the letters separately (K-609). Empty is the
+    /// The animator groups moving the letters separately. Empty is the
     /// ordinary text layer.
     pub animators: Vec<BridgeTextAnimator>,
 }
 
-/// What a range selector counts (K-609).
+/// What a range selector counts.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BridgeSelectorBasis {
@@ -59,7 +59,7 @@ pub enum BridgeSelectorBasis {
     Words,
 }
 
-/// How a range selector's weight falls off across its range (K-609).
+/// How a range selector's weight falls off across its range.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BridgeSelectorShape {
@@ -79,7 +79,7 @@ pub struct BridgeRangeSelector {
 }
 
 /// One animator group: what a reached letter is asked to do, and the range
-/// saying which letters those are (K-609).
+/// saying which letters those are.
 ///
 /// Every animator carries all five property groups — the decision entry argues
 /// why there is no menu of properties to add them from — defaulted to values
@@ -140,15 +140,14 @@ impl LayerReference {
     /// every other edit here takes a whole value: retyping a word and changing
     /// its size is one action to the user and should be one undo step.
     ///
-    /// **Adding the first animator moves the anchor with it** (K-609). An
+    /// **Adding the first animator moves the anchor with it**. An
     /// animated line is drawn into a box one text size larger a side, with the
     /// words that far in, so a letter has somewhere to drop in from — and the
     /// anchor is a fixed coordinate in the layer's own pixels, so without this
     /// the words would jump by that margin the moment the first animator
     /// arrived. Removing the last one puts it back. One `Op::Batch`, so it is
-    /// one undo step: the same rule K-230 set for typing, where committing the
-    /// document and the pivot separately made `Ctrl+Z` undo a pivot nobody had
-    /// moved.
+    /// one undo step: the same rule as typing, where committing the document
+    /// and the pivot separately made `Ctrl+Z` undo a pivot nobody had moved.
     #[frb(sync)]
     pub fn set_text(&self, document: BridgeTextDocument) -> Result<(), BridgeError> {
         let layer = self.item()?;
@@ -157,7 +156,7 @@ impl LayerReference {
         };
         let offset = layer.start_offset.0;
         // A line on a path already has its room and its corner at the layer's
-        // origin (K-607), so nothing there moves.
+        // origin, so nothing there moves.
         let straight = before.path.is_none() && document.path.is_none();
         let was = !before.animators.is_empty();
         let now = !document.animators.is_empty();
@@ -204,7 +203,7 @@ impl LayerReference {
     }
 
     /// Replace a text layer's document **and its anchor and position
-    /// together**, as one op (K-230).
+    /// together**, as one op.
     ///
     /// For the end of a typing session, which is one action to the user and has
     /// to be one undo step. It is two edits underneath — what the line says, and
@@ -248,7 +247,7 @@ impl LayerReference {
         self.commit(lumit_core::Op::Batch { ops })
     }
 
-    /// **Text to shapes** (K-608): a copy of this Type layer beside it, whose
+    /// **Text to shapes**: a copy of this Type layer beside it, whose
     /// picture is the glyph outlines as vector art.
     ///
     /// The original is kept and untouched, which is After Effects' convention
@@ -322,9 +321,9 @@ impl LayerReference {
         }
         // **The masks and the paint do not come across.** Both are drawn in
         // layer pixels measured from the layer's box corner, and a shape
-        // layer's corner is its *art's* bounding box rather than the origin
-        // (K-237) — so a mask carried over would land somewhere else. The path
-        // mask has already done its work: the curve is in the outlines.
+        // layer's corner is its *art's* bounding box rather than the origin —
+        // so a mask carried over would land somewhere else. The path mask has
+        // already done its work: the curve is in the outlines.
         copy.masks.clear();
         copy.paint.clear();
         // Which is also why the anchor moves by that corner: the art's box
@@ -346,7 +345,7 @@ impl LayerReference {
         Ok(LayerReference::new(self.project_id, self.comp_id, new_id))
     }
 
-    /// **Text to points** (K-608): a copy of this Type layer beside it, fitted
+    /// **Text to points**: a copy of this Type layer beside it, fitted
     /// with **Emit from image**, so the words become a points stream in the
     /// shape of themselves.
     ///
@@ -404,7 +403,7 @@ impl LayerReference {
         let lumit_core::model::LayerKind::Camera { zoom, .. } = layer.kind else {
             return Ok(None);
         };
-        // Keys on the composition's clock, like every other channel (K-213).
+        // Keys on the composition's clock, like every other channel.
         Ok(Some(BridgeScalar::read_at(&zoom, layer.start_offset.0)))
     }
 

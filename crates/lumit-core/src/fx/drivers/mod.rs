@@ -1,4 +1,5 @@
-//! The drivers, and how a layer's driver graph is evaluated (K-471 §1.3, §2).
+//! The drivers, and how a layer's driver graph is evaluated
+//! (node-graph.md §1.3, §2).
 //!
 //! # In plain terms
 //!
@@ -8,25 +9,25 @@
 //! cycle, Math, Remap, Smooth, Points sample, Layer points — and the small walk
 //! that works out, at one frame, what every wire is carrying.
 //!
-//! **One of them carries no value at all.** Layer points (K-604) is a *source*:
+//! **One of them carries no value at all.** Layer points is a *source*:
 //! it names another layer and hands out that layer's points stream, so what
 //! leaves it is read through [`Eval::points_input`] rather than substituted
 //! into a parameter. It is the family's cross-layer tap, and it is a
 //! layer-reference parameter rather than a wire because edges never cross
-//! layers (K-471).
+//! layers.
 //!
 //! **One of them reads a picture effect's data.** Points sample takes a wire
 //! from Particulate's Points socket, which makes the walk *re-entrant through
 //! the effect stack*: answering that wire evaluates the producer's particle
 //! stream, and the producer's own parameters may themselves be driven, so the
 //! walk calls back into itself. It terminates because a loop between the two is
-//! refused at commit (K-492), and it is bounded anyway by the same evaluation
+//! refused at commit, and it is bounded anyway by the same evaluation
 //! budget every other wire spends (§3.3).
 //!
 //! **Driver evaluation is parameter evaluation.** It happens where a keyframe
 //! would have been read, before an effect's numbers are packed for the GPU, so
 //! nothing downstream learns anything new: the kernels see numbers, exactly as
-//! they see keyframed numbers today, and the compiled evaluation graph (K-015)
+//! they see keyframed numbers today, and the compiled evaluation graph
 //! is untouched in shape. Drivers never become pixel nodes.
 //!
 //! **The walk is demand-driven.** Asking what an effect's socket is carrying
@@ -34,7 +35,7 @@
 //! on back to the numbers somebody typed. That is topological order by
 //! construction, and there is no map iteration anywhere, so two machines
 //! evaluate in the same order and get the same numbers — which is what makes
-//! export equal preview (K-031).
+//! export equal preview.
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -82,7 +83,7 @@ const EVAL_BUDGET: u32 = 4096;
 /// stack before the budget notices.
 const MAX_DEPTH: u32 = 32;
 
-/// What a layer's driver graph came to at one frame (K-471 §2.1).
+/// What a layer's driver graph came to at one frame (node-graph.md §2.1).
 ///
 /// Two answers, because a wire carries one of two things: a **value** that
 /// stands in for a parameter's keyframes, or the layer's **own source alpha**
@@ -147,7 +148,7 @@ pub fn resolve_drivers(
 }
 
 /// [`resolve_drivers`], told where the composition's camera puts a particle
-/// that is off the layer's plane (K-561).
+/// that is off the layer's plane.
 ///
 /// **Why the walk needs to be told at all.** A driver reads a points stream as
 /// *data*, and Nearest distance is a distance on the frame — so the numbers a
@@ -258,7 +259,7 @@ pub fn driven_volume_db(
 }
 
 /// **One stack effect's points stream**, at layer time `t` and in px@comp
-/// (K-600, points-stream.md §3.3).
+/// (points-stream.md §3.3).
 ///
 /// # In plain terms
 ///
@@ -271,11 +272,11 @@ pub fn driven_volume_db(
 /// `None` means *no stream*, which is always the documented calm rather than a
 /// fault: the effect is not a producer, it is bypassed, it is Scatter (whose
 /// stream is a function of a picture that does not exist at this point in the
-/// frame — K-599), or the document names an effect this layer does not carry.
+/// frame), or the document names an effect this layer does not carry.
 ///
 /// `context` must name the producer's own comp and layer; `projection` is where
 /// the composition's camera puts a particle off the layer's plane, which the
-/// caller works out because nothing in this crate derives a camera (K-561).
+/// caller works out because nothing in this crate derives a camera.
 #[must_use]
 pub fn effect_stream(
     graph: &LayerGraph,
@@ -303,9 +304,9 @@ pub fn effect_stream(
     Some(Rc::try_unwrap(stream).unwrap_or_else(|shared| (*shared).clone()))
 }
 
-/// **One cross-layer tap's points stream**, at layer time `t` and in px@comp
-/// (K-604) — [`effect_stream`]'s sibling, for the other kind of thing a points
-/// wire can come out of.
+/// **One cross-layer tap's points stream**, at layer time `t` and in px@comp:
+/// [`effect_stream`]'s sibling, for the other kind of thing a points wire can
+/// come out of.
 ///
 /// # In plain terms
 ///
@@ -346,8 +347,9 @@ pub fn driver_stream(
 }
 
 /// The largest distance either side of the frame any driver in this graph reads
-/// (K-471 §2.3) — the **temporal declaration**, folded into the frame key so a
-/// cached frame cannot outlive the range it was averaged or measured from.
+/// (node-graph.md §2.3) — the **temporal declaration**, folded into the frame
+/// key so a cached frame cannot outlive the range it was averaged or measured
+/// from.
 ///
 /// Nought for a graph of pointwise drivers, which is most of them.
 #[must_use]
@@ -385,9 +387,9 @@ struct Eval<'a> {
     graph: &'a LayerGraph,
     context: Arc<ExpressionContext>,
     audio: Option<&'a dyn AudioTap>,
-    /// Where the composition's camera puts a particle off the layer's plane
-    /// (K-561), in **px@comp** — the units a driver reads a stream in. Flat on
-    /// a 2D layer, and flat for every caller that does not place layers.
+    /// Where the composition's camera puts a particle off the layer's plane, in
+    /// **px@comp** — the units a driver reads a stream in. Flat on a 2D layer,
+    /// and flat for every caller that does not place layers.
     projection: points::Projection,
     budget: Cell<u32>,
     /// **One evaluation per producer per frame** (points-stream.md §3.3): two
@@ -398,7 +400,7 @@ struct Eval<'a> {
     /// and a linear scan over three entries beats hashing a `Uuid`. The stream
     /// is shared rather than cloned: it is eight `Vec`s of up to the cap.
     streams: RefCell<Vec<(Uuid, Rc<PointsStream>)>>,
-    /// **Whether this walk may still cross a layer boundary** (K-604).
+    /// **Whether this walk may still cross a layer boundary**.
     ///
     /// A cross-layer tap evaluates the named layer with a fresh walk over
     /// *that* layer's graph, and that walk is built with this set false — so a
@@ -533,7 +535,7 @@ impl Eval<'_> {
         })?;
         match from {
             OutputRef::EffectData { effect, .. } => self.stream(*effect, t, depth),
-            // **A cross-layer tap** (K-604): a driver whose output is a stream
+            // **A cross-layer tap**: a driver whose output is a stream
             // rather than a number, so a points socket may legitimately be fed
             // by one. Anything else on a driver's output is a number, which is
             // not a stream and was refused at commit by the type check.
@@ -543,14 +545,14 @@ impl Eval<'_> {
         }
     }
 
-    /// The stream a **cross-layer tap** hands out (K-604,
-    /// points-stream.md §1.2): the first producer on the layer its Points layer
-    /// row names, evaluated with that layer's own graph applied.
+    /// The stream a **cross-layer tap** hands out (points-stream.md §1.2): the
+    /// first producer on the layer its Points layer row names, evaluated with
+    /// that layer's own graph applied.
     ///
     /// `None` — the documented empty stream, never a fault — for every absence
     /// there is: a node this build does not know, a bypassed one, a row naming
     /// no layer or a deleted one, a layer with no producer or with its fx
-    /// switch off, a producer whose stream depends on a picture (K-599, K-603),
+    /// switch off, a producer whose stream depends on a picture,
     /// and **a second hop**.
     ///
     /// The second hop is the recursion argument and it is deliberately blunt: a
@@ -582,7 +584,7 @@ impl Eval<'_> {
             return None;
         }
         // **The first producer on it**, asked of the signature rather than of a
-        // list of names (K-598's rule). A layer carrying two is a layer whose
+        // list of names. A layer carrying two is a layer whose
         // first one is tapped.
         let producer = layer.effects.iter().find(|e| {
             e.enabled
@@ -624,7 +626,7 @@ impl Eval<'_> {
     /// particle field the viewer cannot see; resolving the producer's
     /// parameters any other way is exactly the drift that would cause.
     ///
-    /// Termination rests on the commit-time cycle refusal (K-492): a document
+    /// Termination rests on the commit-time cycle refusal: a document
     /// where the stream depends on the parameters and the parameters on the
     /// stream never reaches this path. A hand-edited file that carries one
     /// anyway bottoms out on the shared budget and depth, like every other
@@ -653,7 +655,7 @@ impl Eval<'_> {
         }
         let def = super::BUILTIN_DEFS.get(&inst.effect.match_name)?;
         // Something that does not emit points has no stream to hand over, and
-        // the walk asks the signature rather than a list of names (K-598).
+        // the walk asks the signature rather than a list of names.
         // **Which** producer it is still decides how the stream is made, at the
         // bottom of this function, because a birth schedule and a lattice are
         // not the same arithmetic.
@@ -692,7 +694,7 @@ impl Eval<'_> {
             source_matte: Vec::new(),
         };
 
-        // **px@comp, always** (K-419): a stream read as data is in composition
+        // **px@comp, always**: a stream read as data is in composition
         // pixels whatever raster the preview happens to be drawn at, so the
         // number Nearest distance hands a px@comp parameter travels through the
         // same rescale a typed one does and lands in the right units.
@@ -710,7 +712,7 @@ impl Eval<'_> {
             &wired,
         );
         let params = bag.get(0)?.params;
-        // **A generator's stream is arithmetic and nothing else** (K-598): no
+        // **A generator's stream is arithmetic and nothing else**: no
         // schedule to scan, no mask to flatten, no clock to read. It is here
         // rather than behind a trait method because the two producers want
         // genuinely different things from the document — Particulate wants the
@@ -722,8 +724,8 @@ impl Eval<'_> {
             return Some(stream);
         }
         // **The picture-dependent producers cannot be sampled here, and that is
-        // the recorded answer** to points-stream.md §2.2's constraint (K-599,
-        // K-603): Scatter's stream is a function of the input picture and Emit
+        // the recorded answer** to points-stream.md §2.2's constraint:
+        // Scatter's stream is a function of the input picture and Emit
         // from image's is a function of a Source layer's, and at resolve time —
         // which is when this walk runs — no picture exists. The wire reads the
         // documented empty stream rather than a guess at one, and nothing is
@@ -889,9 +891,9 @@ mod tests {
         );
     }
 
-    /// K-031, and the whole reason a driver is seeded rather than random: the
-    /// same node at the same time is the same number, twice and for ever — and
-    /// two Wiggles on one layer are two different wobbles.
+    /// The determinism promise, and the whole reason a driver is seeded rather
+    /// than random: the same node at the same time is the same number, twice
+    /// and for ever — and two Wiggles on one layer are two different wobbles.
     #[test]
     fn wiggle_is_the_same_wobble_every_time() {
         let mut w = inst("wiggle");
@@ -1078,14 +1080,14 @@ mod tests {
             assert_eq!(output_of(&node, "value", 0.0), want);
         }
         // An option index this build does not know renders as the default
-        // rather than faulting (K-065).
+        // rather than faulting.
         assert_eq!(math::apply(99, 2.0, 3.0), 6.0);
     }
 
     /// A colour through Split and back through Combine is the colour that went
     /// in, **bit for bit** — including a channel above one, because neither
     /// node converts anything and a driver's own sockets are never held to a
-    /// range (K-510). Split's four numbers are the channels themselves.
+    /// range. Split's four numbers are the channels themselves.
     #[test]
     fn a_colour_survives_split_and_combine_unchanged() {
         // Scene-linear, deliberately awkward: over one on red, exact zero on
@@ -1503,7 +1505,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // Points sample (K-494, points-stream.md §2.2, §3.3).
+    // Points sample (points-stream.md §2.2, §3.3).
     // -----------------------------------------------------------------------
 
     /// The comp every points test is staged in: 1920×1080 at 60 fps, one solid
@@ -1734,7 +1736,7 @@ mod tests {
         );
     }
 
-    /// **A second producer, on the same wire** (K-598): a Grid's lattice reads
+    /// **A second producer, on the same wire**: a Grid's lattice reads
     /// through the Points sample exactly as a particle field does, because the
     /// walk asks the *signature* who emits points rather than carrying a name.
     /// The count is the lattice, cell for cell, and the nearest distance is a
@@ -1782,7 +1784,7 @@ mod tests {
         assert_eq!(read("mix"), 0.0, "the centre cell is where the query is");
     }
 
-    /// **Scatter's stream cannot be sampled by a driver** (K-599), which is the
+    /// **Scatter's stream cannot be sampled by a driver**, which is the
     /// recorded answer to points-stream.md §2.2's constraint: the stream is a
     /// function of the input picture, and at resolve time there is no picture.
     /// The wire reads the documented empty stream — nothing alive, nothing
@@ -1820,7 +1822,7 @@ mod tests {
                 .as_f32()
         };
         assert_eq!(read("radius"), 0.0, "a picture-less stream counted points");
-        // Clamped to the parameter's own hard range at the socket (K-510), as
+        // Clamped to the parameter's own hard range at the socket, as
         // every driven value is, so this is the far value held to Mix's top.
         assert!(
             read("mix") > 0.0,
@@ -1905,7 +1907,7 @@ mod tests {
         assert_eq!(points_sample::sample(Some(&s), [30.0, 40.0]).1, 0.0);
     }
 
-    /// **Nearest distance is measured where the picture draws** (K-561): the
+    /// **Nearest distance is measured where the picture draws**: the
     /// projected position, not the three axes.
     ///
     /// Position is a point on the frame, so the honest answer to "how far is
@@ -1940,7 +1942,7 @@ mod tests {
         assert_eq!(points_sample::sample(Some(&s), [0.0, 0.0]).1, 100.0);
     }
 
-    /// The wire stays one type (K-561): the v1 consumer does **not** declare 3D
+    /// The wire stays one type: the v1 consumer does **not** declare 3D
     /// awareness, so what it reads is the projected pair. A test rather than a
     /// comment because the flag is what the family package builds on, and a
     /// port that quietly flipped would change what every 2D consumer measures.
@@ -2112,7 +2114,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------
-    // The clamp (K-510, PS7; the question K-509 left open)
+    // The clamp (PS7)
     // -----------------------------------------------------------------
 
     /// What `target`'s `socket` actually resolves to once `graph`'s wires have
@@ -2151,13 +2153,13 @@ mod tests {
         m
     }
 
-    /// **An unwired Points sample's `1e9` arrives clamped** (K-509, K-510).
+    /// **An unwired Points sample's `1e9` arrives clamped**.
     ///
     /// This is the case that raised the question: the driver answers a
     /// deliberately enormous distance over an empty stream, and before the
     /// clamp that number went straight into the parameter — a Blur radius sat
     /// at a billion pixels, past a hard maximum a typed value can never reach.
-    /// The panel's *"no stream"* mark (K-509) still says why; this is what
+    /// The panel's *"no stream"* mark still says why; this is what
     /// stops the picture being nonsense while it does.
     #[test]
     fn an_empty_streams_enormous_distance_clamps_to_the_hard_range() {
@@ -2189,12 +2191,12 @@ mod tests {
         assert_eq!(
             resolved_param(&target, "radius", &graph, 1.0),
             2000.0,
-            "a driven radius must stop where a typed one stops (K-090)"
+            "a driven radius must stop where a typed one stops"
         );
     }
 
-    /// **A wild driver cannot push past either bound** (K-090's hard range,
-    /// K-510) — and the clamp is in schema space, before the raster scaling,
+    /// **A wild driver cannot push past either bound**, the parameter's hard
+    /// range — and the clamp is in schema space, before the raster scaling,
     /// so it is the same number at every preview resolution.
     #[test]
     fn a_driven_value_is_held_to_both_hard_bounds() {
@@ -2235,8 +2237,8 @@ mod tests {
         assert_eq!(at(5.0), 5.0);
     }
 
-    /// **An unbounded-above parameter still takes big values** (K-090's
-    /// one-sided amendment): the clamp is the *declared* range, not a range
+    /// **An unbounded-above parameter still takes big values** (a hard range
+    /// may be one-sided): the clamp is the *declared* range, not a range
     /// invented for it. Radial blur's Amount clamps at nought below and runs
     /// free above, and a driver may take it anywhere the user could type it.
     #[test]
@@ -2251,16 +2253,16 @@ mod tests {
             };
             resolved_param(&target, "amount", &graph, 1.0)
         };
-        assert_eq!(at(50_000.0), 50_000.0, "nothing bounds it above (K-090)");
+        assert_eq!(at(50_000.0), 50_000.0, "nothing bounds it above");
         assert_eq!(at(-1.0), 0.0, "and it still stops at nought below");
     }
 
-    /// **A driver's own socket is not clamped** (K-510), and this is the case
+    /// **A driver's own socket is not clamped**, and this is the case
     /// that decides it: Remap exists to take a wide number and narrow it. Its
     /// Value row declares a 0..=1 slider, which is a sensible thing to *type*
     /// into and a nonsense bound on a **wire** — clamping there would leave the
     /// one driver written for out-of-range numbers unable to see them, and
-    /// would make Nearest distance (pixels, K-419) unusable through the very
+    /// would make Nearest distance (pixels) unusable through the very
     /// driver points-stream.md §2.2 names for it.
     ///
     /// A hard bound says what a *kernel* was written for. A chain of drivers
@@ -2293,7 +2295,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // The cross-layer points tap (K-604, points-stream.md §1.2, §2.3).
+    // The cross-layer points tap (points-stream.md §1.2, §2.3).
     // -----------------------------------------------------------------------
 
     /// A comp of **two** layers: a reader whose graph `reader_graph` builds
@@ -2448,7 +2450,7 @@ mod tests {
         (context, built, node_id)
     }
 
-    /// **A tap hands out the points of the layer it names** (K-604): the stream
+    /// **A tap hands out the points of the layer it names**: the stream
     /// the *other* layer's producer makes, reaching this layer's graph as an
     /// ordinary wire out of a derived source node — no edge crosses anything.
     #[test]
@@ -2459,7 +2461,7 @@ mod tests {
         assert_eq!(stream.id, (0..15).collect::<Vec<u64>>());
     }
 
-    /// **Every absence is the empty stream** (K-604) — the labelled no-op a
+    /// **Every absence is the empty stream** — the labelled no-op a
     /// dangling layer reference has always been, over the five ways a tap can
     /// come to nothing. None of them is a refusal: a tap that answers nothing
     /// leaves its consumer drawing the picture it was handed.
@@ -2500,7 +2502,7 @@ mod tests {
         }
     }
 
-    /// **A tap reaches one layer, never two** (K-604) — the recursion argument,
+    /// **A tap reaches one layer, never two** — the recursion argument,
     /// asserted rather than reasoned about. The source layer's own graph
     /// carries a tap of its own and no producer; the far tap answers nothing,
     /// so the near one does, and two layers naming each other terminate at the
@@ -2547,7 +2549,7 @@ mod tests {
         );
     }
 
-    /// **A driver reads a tap the same way it reads a producer** (K-604):
+    /// **A driver reads a tap the same way it reads a producer**:
     /// Points sample counts another layer's points, which is the wire the
     /// family's whole cross-layer story is for.
     #[test]

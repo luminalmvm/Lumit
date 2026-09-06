@@ -35,7 +35,7 @@ DISOpticalFlow documents the algorithm; the paper is Kroeger et al., ECCV 2016.
 All passes on grayscale (BT.709 luma of the linear frame, then **gamma-encode before
 correlating** — flow works better on perceptual values; this matches OpenCV practice).
 
-**Two ways in (K-565).** The luma the pyramid starts from usually arrives from the CPU:
+**Two ways in.** The luma the pyramid starts from usually arrives from the CPU:
 `flow_grays` greys a decoded RGBA frame and `GpuFlow::flow_pair_with` uploads it. A
 **composite** never can — an adjustment layer's picture is the composite of everything below
 it and a Precomp's is a comp render, both textures on the render device, and reading two
@@ -92,7 +92,7 @@ synthesis itself moves GPU-side).
 4. **Smoothing**: one 3×3 edge-aware blur of the flow field — bilateral on luma *and* on
    flow difference, so vectors from the two sides of a motion boundary never average into
    a phantom in-between motion.
-5. **Variational refinement** — DIS part three, and **not optional** (K-332). This note
+5. **Variational refinement** — DIS part three, and **not optional**. This note
    previously said to skip it in v1 and "measure first"; the measurement happened and both
    halves of the reasoning were wrong. Untextured regions are not rare in game capture (smoke,
    sky, muzzle flash, water, darkness are most of a frame during the fast moments a montage
@@ -194,7 +194,8 @@ out = (1/W) Σ_{i=−S..S} w_i · frame(x + v·(i/(2S)))   // w_i = 1 (box) — 
   to a layer, the effect receives a flag and must not add transform-derived velocity
   ([06-RENDER-PIPELINE.md](../06-RENDER-PIPELINE.md) §motion-blur).
 
-**Shipped v1 (labelled "Fast motion blur", FX-19).** The v1 effect measures the single forward
+**Shipped v1 (labelled "Motion blur", FX-19; "Fast motion blur" until the accumulation kind
+took the longer name).** The v1 effect measures the single forward
 neighbour (+1) and streaks each pixel with a fixed centred box of `Samples` taps. Crucially it
 does **not** drop occluded taps from the sum (a per-tap on/off gate showed as hard blurred /
 un-blurred cut regions). Instead the *streak length* is scaled smoothly by a per-pixel
@@ -206,7 +207,7 @@ shutter_frac · conf`; confidence 0 collapses the streak to the pixel (a passthr
 **View** enum outputs the finished blur, the flow colour-coded, or the confidence as greyscale.
 CPU oracle (`lumit_core::fx::cpu::motion_blur`) and WGSL stay op-for-op (§1.6).
 
-**Shipped v2 (K-392, the Guertin-class reconstruction).** §4.7 carries it. The confidence
+**Shipped v2 (the Guertin-class reconstruction).** §4.7 carries it. The confidence
 taper survives as the *smooth* quantity v1 measured it to need, but it now steers rather
 than shortens: an uncertain pixel borrows its neighbourhood's motion instead of collapsing
 to none. Taps became adaptive, the reconstruction became a two-direction weighted gather,
@@ -216,7 +217,7 @@ and High re-samples the field along the streak. The ±1 central difference did *
 ## 5. Parameters and defaults (user-facing, per [08-EFFECTS.md](../08-EFFECTS.md))
 
 Resist adding more knobs — Twixtor's manual is a warning, not a target. The set is closed at
-the §3.1 table, which ships in full as of K-331.
+the §3.1 table, which ships in full.
 
 **Engine-side (`lumit_flow::FlowSettings`).** `lumit-flow` is an engine crate and knows
 nothing of the document, so the stored `FlowParams` are translated into plain numbers by
@@ -229,12 +230,12 @@ cannot translate the same parameters into two different measurements.
 | `iterations` | Vector detail | §1 step 2's cap: 6 / 12 / 20 / 32 (Medium is the paper's ≤ 12) |
 | `min_level_dim` | Vector detail | §1's pyramid floor: 48 / 24 / 24 / 16. Below ~24 the 8×8 patches go frame-scale — the failure §6.1 measured |
 | `smoothness` | Smoothness | Scales `FLOW_SIGMA2` in §1 step 4's bilateral, quadratically over a 4× span each way, clamped. 50 is exactly the tuned constant, so the default is bit-identical to the pre-parameter engine |
-| `refine_iters` | Vector detail | §1 step 5's fixed-point iterations per level: 1 / 1 / 2 / 3. `0` disables DIS part three and is **not user-reachable** — it is the two-part engine K-332 replaced, kept only so the A/B test and the GPU parity test can address it |
+| `refine_iters` | Vector detail | §1 step 5's fixed-point iterations per level: 1 / 1 / 2 / 3. `0` disables DIS part three and is **not user-reachable** — it is the old two-part engine, kept only so the A/B test and the GPU parity test can address it |
 | `occlusion` | Occlusion handling | §3's weights: Visible-only keeps the `(1 − occ)` terms, Blend drops them |
 | `fallback` | Fallback | §3's both-occluded branch: crossfade or the nearer endpoint |
 | `hud_guard` | HUD guard | Runs §3.1 step 5's `hud_weights` and mixes synthesis back toward the plain blend by it |
 
-Fast motion blur's own controls are docs/08 §3.2's table, not this one: they describe the
+Motion blur's own controls are docs/08 §3.2's table, not this one: they describe the
 *reconstruction*, not the measurement. The blur reads whatever field these settings
 produced — `MbQuality` (Normal/High) chooses how it is integrated (§4.7), the tap cap how
 finely, and neither changes a vector.
@@ -251,7 +252,7 @@ the algorithm again.
 **Measured (960×540 pair, dev machine):** GPU parts 1–2 4.3 ms, all three **8.9 ms**; CPU all
 three 1.9 s. The refinement roughly doubles GPU cost and is comfortably inside budget.
 
-## 4.5 The quality programme (K-390): census matching, edge-held boundaries, feature-aware blur
+## 4.5 The quality programme: census matching, edge-held boundaries, feature-aware blur
 
 What §5.5 measured is the brief: flow wins convincingly on game capture and loses to a
 crossfade on line art by the worst-block measure, because the matching cost has no
@@ -267,8 +268,8 @@ upgrades, each classical, GPU-shaped, and model-free (models stay a plugin quest
    **Built, measured, and reverted.** It is the only one of the three that moves
    §5.5's numbers at all — the right way on both animation clips, the wrong way on
    game capture (§5.5.1) — and choosing the cost per patch instead of per build
-   (K-393, §5.5.2) shrank the miss without closing it. Neither form clears the bar,
-   so the shipped inverse search scores by SSD exactly as it did before K-390.
+   (§5.5.2) shrank the miss without closing it. Neither form clears the bar,
+   so the shipped inverse search scores by SSD exactly as it did before the programme.
 2. **Edge-aware densification of the field.** After the pyramid, solve the field against
    the picture's own edges: a fast-bilateral-solver-shaped pass (Barron & Poole) with
    the luma image as the guide and §4's confidence as the data weight, so vectors stop
@@ -293,15 +294,15 @@ and a tile-max debug view) that make it checkable by eye.
 
 **Outcome: the flow half ships nothing; the blur half ships in full.** Item 1 met
 three of the four conditions and missed game capture by 0.0023 (§5.5.1); choosing the
-cost per patch (K-393, §5.5.2) moved the miss to 0.0002 on the cinematic and fixed the
+cost per patch (§5.5.2) moved the miss to 0.0002 on the cinematic and fixed the
 synthetic clip, but three of four is still three of four, and the frontier's shape says
 a hard per-patch switch cannot close the last of it. **The bar was written strict on
 purpose and it is not negotiated with**, so both forms of the cost change were reverted:
-the shipped inverse search is the pre-K-390 SSD one, and the shipped densification is
-§1 step 3 unchanged. Item 2's code is deleted (§4.6); item 1's and K-393's code is gone
-too. What the programme leaves behind is item 3, the measurement machinery, and four
-sections of numbers that mean a later attempt starts from evidence rather than from
-the same guess.
+the shipped inverse search is the old SSD one, and the shipped densification is
+§1 step 3 unchanged. Item 2's code is deleted (§4.6); item 1's and the per-patch
+selector's code is gone too. What the programme leaves behind is item 3, the
+measurement machinery, and four sections of numbers that mean a later attempt starts
+from evidence rather than from the same guess.
 
 **Tiers.** Only the blur's Quality survives the programme as a tier — Normal/High, buying
 half the tap spacing and curved trails (§4.7). The flow tier the plan sketched had solver
@@ -309,7 +310,7 @@ convergence to sell and there is no solver left to converge. Measured on the own
 machine; if High ever costs more than a second a frame at 1080p the tier split is mandatory
 (owner's rule), otherwise both tiers ship anyway because the knob is nearly free.
 
-## 4.6 What edge-aware densification measured, and why it is gone (K-391)
+## 4.6 What edge-aware densification measured, and why it is gone
 
 §4.5 item 2 predicted the win on line art. It was built — CPU reference and WGSL twin,
 op-for-op, `gpu_matches_the_cpu_oracle` green at both sweep parities — and measured on
@@ -355,7 +356,7 @@ The edge-stopping half was sound, and was held by its own test while the pass ex
 (`densification_fills_a_flat_band_without_crossing_its_edge`): motion crossed a flat band
 from the evidence inside it and stopped dead at a luma boundary. The mechanism did what it
 said. It is the premise — that a *field-space* solve can fix line art — that the numbers
-refuse. What line art lacked was evidence, and evidence was item 1's job (census, K-390),
+refuse. What line art lacked was evidence, and evidence was item 1's job (census),
 which did move anime: worst-5% 0.697 → 0.7025 against the same blend baseline, closing the
 gap to a crossfade from −0.015 to −0.0095 — though census did not clear its own bar either
 and does not ship (§5.5.1, §5.5.2). Line art is still behind a crossfade on the worst
@@ -376,7 +377,7 @@ with a luma-similarity affinity, and the paragraph above records both what it do
 it costs. Anything rebuilding it starts from a page of measurements rather than from §4.5's
 prediction, which is the difference between the two attempts.
 
-## 4.7 The Guertin-class blur, as built (K-392)
+## 4.7 The Guertin-class blur, as built
 
 §4.5 item 3, shipped. Two passes now: `fx_mb_tilemax.wgsl` reduces the flow field to one
 dominant vector per 16 px tile, then `fx_motionblur.wgsl` blurs. The reduction lives inside
@@ -441,7 +442,7 @@ if one is ever wanted, is a depth input, not a constant.
 **What it costs, re-confirmed against the shipping tree (2026-08-19).**
 `blur_proof.rs::flow_and_blur_frame_cost`, owner's machine, half-res flow, kernel time with
 the readback subtracted. The flow rows are the reverted engine — census and the selector are
-out, so these are the pre-K-390 figures, unchanged by the programme.
+out, so these are the figures from before the programme, unchanged by it.
 
 | frame | flow Normal | flow High | blur Normal | blur High |
 |---|---|---|---|---|
@@ -462,7 +463,7 @@ pairs. The §5.5 held-frame exclusion therefore applies as written, with no extr
 cartoon.mp4 by contrast is 17% held, 56.1% flat, mostly on 1s — much more continuous motion,
 which is why it is the harder clip of the two.
 
-## 5.5 Measured quality (the harness, K-332 follow-up)
+## 5.5 Measured quality (the harness)
 
 `crates/lumit-render/tests/flow_quality.rs` scores the engine on real footage by
 rebuilding a frame from its two neighbours and comparing against the frame that
@@ -500,7 +501,7 @@ comfortably the worst, and the difference was entirely the sampling.
 **What it says.** On game capture flow is not marginally better than a crossfade,
 it is holding structure together where a crossfade falls apart: +0.26 of
 worst-block SSIM at a 60 fps effective rate, against a blend that has essentially
-collapsed there (0.083). This is the footage the project exists for (K-002) and
+collapsed there (0.083). This is the footage the project exists for and
 the engine is doing its job on it.
 
 On cel animation flow is level with a crossfade on PSNR and consistently *worse*
@@ -523,18 +524,18 @@ flat on the game capture. Either statistic alone separates them, which is what
 makes choosing an engine automatically (§0's `rife` backend) a tractable thing
 rather than a guess.
 
-### 5.5.1 The K-390 result, measured end to end
+### 5.5.1 The census result, measured end to end
 
 The programme's own acceptance bar (§4.5): worst-5% block SSIM **up** on both
 animation clips, and **not down by more than 0.005** on game capture or the
 cinematic. Measured on the owner's five clips, the shipping `flow (defaults)` row,
-the same clips and the same sampling either side of the change — the pre-K-390
+the same clips and the same sampling either side of the change — the SSD
 engine against the census one. Only **census matching** moves these numbers:
 densification was measured out (§4.6) and the blur does not take part in frame
 synthesis, so the "after" column is the census stage alone, isolated on purpose.
 
 **This table is a record, not a release note.** The census column did not clear the
-bar, neither did K-393's per-patch refinement of it (§5.5.2), and both were reverted
+bar, neither did the per-patch refinement of it (§5.5.2), and both were reverted
 — so the *shipping* engine is the "before" column. The reading below is why.
 
 | clip | stride, triplets | before (PSNR / SSIM / worst-5%) | census | Δ worst-5% | bar |
@@ -570,13 +571,13 @@ to §1 step 2 and a new measurement, not a knob, and it is not in this stage.
 **Final status (2026-08-19).** §5.5.2 was built, swept and also missed — three of
 four again, by 0.0002 on the cinematic instead of 0.0023 on game capture. A smaller
 miss is not a met bar. **Census matching and the per-patch selector are both reverted;
-the inverse search ships as SSD, unchanged since before K-390**, and the tree carries
+the inverse search ships as SSD, unchanged since before census**, and the tree carries
 no census constant, no `CENSUS_GRAD_RMS`, and no third code path to maintain. The
 flow ships nothing this round. What it gained is this table and §5.5.2's frontier:
 the next attempt at line art knows what census is worth, what it costs, and which
 clip fails first, which is more than the last one knew.
 
-### 5.5.2 Choosing the cost per patch, and the frontier it buys (K-393)
+### 5.5.2 Choosing the cost per patch, and the frontier it buys
 
 §5.5.1 named the fix; this is it, built and measured. The choice census made
 globally is made per patch, from the one quantity that *is* SSD's
@@ -593,8 +594,8 @@ and the same arithmetic in both backends.
 
 **The two ends of the sweep are §5.5.1's two columns, which is the
 implementation's own proof.** At τ = 0 no patch is ever census and the engine
-reproduces the pre-K-390 baseline; at τ = ∞ every patch is and it reproduces the
-shipped K-390 figures. Measured, not asserted: three of the five clips land on
+reproduces the SSD baseline; at τ = ∞ every patch is and it reproduces the
+global-census figures. Measured, not asserted: three of the five clips land on
 §5.5.1's recorded numbers to four decimals at *both* ends, and the other two
 differ by 0.0002 at most. An SSD-mode patch really is the old engine and a
 census-mode patch really is the new one.
@@ -629,7 +630,7 @@ cinematic **≥ −0.005**):
 | 0.08 | +0.0014 | +0.0064 | −0.0069 | −0.0045 | 3 of 4 — gameplay short by 0.0019 |
 | 0.113 | +0.0023 | +0.0083 | −0.0079 | −0.0036 | 3 of 4 — gameplay short by 0.0029 |
 | 0.16 | +0.0011 | +0.0056 | −0.0072 | −0.0034 | 3 of 4 — gameplay short by 0.0022 |
-| ∞ (K-390 as shipped) | +0.0025 | +0.0046 | −0.0073 | −0.0034 | 3 of 4 — gameplay short by 0.0023 |
+| ∞ (global census) | +0.0025 | +0.0046 | −0.0073 | −0.0034 | 3 of 4 — gameplay short by 0.0023 |
 
 **No setting clears the bar, and the shape of the table says why it cannot.**
 Game capture falls monotonically as τ rises — every patch the threshold hands to
@@ -651,23 +652,23 @@ at a point**, or add hysteresis so a patch's mode agrees with its neighbours'.
 Either would need the two costs put on a common scale, which is a real design
 question and a second measurement, so it is not smuggled in here.
 
-**The best row is 0.0566, and it is not what shipped.** Against the K-390 state it is a strictly better
-position on the bar's own terms: the miss moves from **0.0023 on game capture**
-— the footage the project exists for (K-002), and the clip the bar was written
+**The best row is 0.0566, and it is not what shipped.** Against global census it is a
+strictly better position on the bar's own terms: the miss moves from **0.0023 on game
+capture** — the footage the project exists for, and the clip the bar was written
 strict to protect — to **0.0002 on the cinematic**, which is a tenth the size and
 inside the harness's own scatter (the anime column wanders 0.0035 across
 neighbouring thresholds on 72 triplets). Both animation clips still rise, game
 capture recovers 0.0030 of the 0.0073 census cost it, and the synthetic clip is
 fixed outright: −0.0059 under global census becomes **+0.0026**. It is the same
-trade as K-390, three times smaller and pointed at a less important clip — but it
-is still a trade, so the bar says no.
+trade as global census, three times smaller and pointed at a less important clip —
+but it is still a trade, so the bar says no.
 
 **Reverted (2026-08-19).** The bar is not a target to get close to; the whole
 reason §5.5 recorded and removed a 0.036-for-0.012 trade once already is that a
 strict bar is the only thing that stops a campaign bargaining its way to a slower,
 more complex engine that is not better. Census, the selector, `CENSUS_GRAD_RMS`
 and the Huber residual are all out of the tree, and `inverse_search` is
-byte-for-byte the function it was before K-390 in both backends. The two tables
+byte-for-byte the function it was before census in both backends. The two tables
 above are what the stage produced, and they are worth more than the code was: they
 say that the two costs are each better *somewhere*, that a hard switch between them
 cannot be tuned into a win, and — from the cinematic's U — that the damage lives at
@@ -683,7 +684,7 @@ patches take the SSD branch. That scene left with the revert, and any second att
 at a two-cost inverse search needs it back. A flat cel with a hard outline is the
 tempting scene for this and the wrong one: its interior constrains nothing, so
 float noise alone picks different candidates on the two backends and it fails
-parity at every threshold, including τ = ∞ where the code is exactly K-390's.
+parity at every threshold, including τ = ∞ where the code is plain global census.
 
 ## 6. Test plan
 
@@ -701,5 +702,5 @@ parity at every threshold, including τ = ∞ where the code is exactly K-390's.
    game footage, side-by-side against Twixtor output — comparable on clean shots, no
    crash/garbage on the hostile ones (fallback engages instead).
 5. Perf: flow pair ≤ 4 ms half-res 1080p, synthesis ≤ 0.5 ms, blur ≤ 2 ms at defaults on
-   the reference GPU; CPU reference implementation (required by K-019) matches WGSL within
+   the reference GPU; the required CPU reference implementation matches WGSL within
    1e-3 on the analytic tests — it is the oracle, speed is irrelevant.

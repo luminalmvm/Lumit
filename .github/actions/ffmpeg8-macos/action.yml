@@ -1,4 +1,4 @@
-# FFmpeg 8.1.2 on a macOS runner, from an extracted Homebrew formula (K-736).
+# FFmpeg 8.1.2 on a macOS runner, from an extracted Homebrew formula.
 #
 # In plain terms: Homebrew has no `ffmpeg@8` formula and its plain `ffmpeg` has
 # already moved to 9.x, which no published rsmpeg supports. But homebrew-core's
@@ -15,6 +15,16 @@
 # key; the losers log a benign "cache already exists"). Every run after that
 # restores a keg and takes about a minute.
 #
+# A restored keg can go stale. Its runtime dependencies (x264, x265, lame and
+# the rest) are not cached with it, they are reinstalled from today's bottles,
+# and the keg names each one's dylib by its exact versioned file name. When
+# Homebrew bumps one of them the keg links fine and then aborts at load, in the
+# first test binary that touches FFmpeg. So a restored keg is checked with
+# otool before anything uses it: if a dylib it names is missing, the keg is
+# thrown away, rebuilt, and saved under a fresh key. The key ends in the run id
+# and the restore matches on the prefix, which is what lets a rebuilt keg
+# replace a stale one without anyone bumping cache-bump.
+#
 # The one thing this must never do is succeed quietly with the wrong FFmpeg.
 # rsmpeg's `ffmpeg8` feature generates bindings for avcodec 62 / avutil 60, and
 # linking those against another major is a struct-layout mismatch that compiles
@@ -24,7 +34,7 @@
 # than what was asked for.
 #
 # The action exports FFMPEG_PKG_CONFIG_PATH into $GITHUB_ENV for the rest of the
-# job (rusty_ffmpeg's explicit-override path, K-204 - this stays out of
+# job (rusty_ffmpeg's explicit-override path - this stays out of
 # .cargo/config.toml because Cargo's [env] has no per-target form and the macOS
 # path injected on Linux made the build script panic), and puts the keg's bin/
 # on PATH for the `ffmpeg` CLI the media tests generate fixtures with.
@@ -39,7 +49,8 @@ inputs:
     description: >
       Bump this to discard every cached keg - after changing what this action
       builds, or when a keg is suspected of being broken. It is part of the
-      cache key and nothing else.
+      cache key and nothing else. A keg whose dependencies moved under it does
+      not need this; the load check below catches that on its own.
     required: false
     default: "1"
 
@@ -69,25 +80,87 @@ runs:
         echo "cellar=$cellar" >> "$GITHUB_OUTPUT"
         echo "Cellar directory for this keg: $cellar"
 
+    # The primary key never matches (it ends in this run's id), so the restore
+    # always goes through restore-keys and picks up the newest keg saved under
+    # the prefix. That is deliberate: a keg rebuilt below is saved under the
+    # primary key, and the next run finds it ahead of the stale one.
     - name: Restore the built keg
       id: cache
-      uses: actions/cache@v4
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: ${{ steps.paths.outputs.cellar }}
-        key: ffmpeg-8.1.2-${{ runner.os }}-${{ runner.arch }}-bump${{ inputs.cache-bump }}
+        key: ffmpeg-8.1.2-${{ runner.os }}-${{ runner.arch }}-bump${{ inputs.cache-bump }}-${{ github.run_id }}
+        restore-keys: |
+          ffmpeg-8.1.2-${{ runner.os }}-${{ runner.arch }}-bump${{ inputs.cache-bump }}-
 
-    # Cache miss: the real build. `brew extract` needs homebrew-core's git
-    # history, which a modern brew does not necessarily have on disk (it reads
-    # formulae from the JSON API instead), so the retry clones it - loudly,
-    # because that clone is minutes on its own and nobody should discover it by
-    # reading a timing graph.
+    # Cache hit: the keg is back, but its runtime dependencies (x264, x265, lame
+    # and the rest) are not - those live in their own kegs, which were never
+    # cached, and libavcodec names them by absolute path. The install receipt
+    # inside the restored keg lists exactly what it was linked against, so
+    # reinstall that list from bottles; it takes a minute and needs no tap.
+    #
+    # Then check the keg still loads. Each dylib in it is asked what it links
+    # (otool -L) and every Homebrew path it names must exist. One that does not
+    # means a dependency was bumped since the keg was built, and the keg is
+    # removed so the build step below runs as if the cache had missed.
+    - name: Reinstall the cached keg's runtime dependencies and check it loads
+      id: check
+      if: steps.cache.outputs.cache-matched-key != ''
+      shell: bash
+      run: |
+        set -euo pipefail
+        cellar="${{ steps.paths.outputs.cellar }}"
+        keg="$(ls -d "$cellar"/*/ 2>/dev/null | sort -V | tail -1 || true)"
+        keg="${keg%/}"
+        receipt="$keg/INSTALL_RECEIPT.json"
+        if [ ! -f "$receipt" ]; then
+          echo "::error::Cache hit for $cellar but no install receipt at $receipt - the cached keg is not a keg."
+          ls -la "$cellar" || true
+          exit 1
+        fi
+        command -v jq >/dev/null || brew install jq
+        deps="$(jq -r '.runtime_dependencies[]?.full_name' "$receipt" | tr '\n' ' ')"
+        if [ -z "${deps// /}" ]; then
+          echo "::warning::The cached keg records no runtime dependencies. If the build then fails to link or load FFmpeg, bump cache-bump to force a rebuild."
+        else
+          echo "Reinstalling: $deps"
+          # shellcheck disable=SC2086 # a word-split list of formula names is the point
+          brew install $deps
+        fi
+
+        missing="$(
+          for lib in "$keg"/lib/*.dylib; do
+            [ -L "$lib" ] && continue
+            otool -L "$lib" | tail -n +2 | awk '{print $1}' \
+              | grep -E '^/(opt/homebrew|usr/local)/' \
+              | while read -r dep; do
+                  [ -e "$dep" ] || echo "$(basename "$lib") wants $dep"
+                done || true
+          done | sort -u
+        )"
+        if [ -n "$missing" ]; then
+          echo "::warning::The cached FFmpeg keg no longer loads, a dependency was bumped under it. Rebuilding."
+          echo "$missing"
+          rm -rf "$cellar"
+          echo "usable=false" >> "$GITHUB_OUTPUT"
+        else
+          echo "The cached keg loads against today's dependencies."
+          echo "usable=true" >> "$GITHUB_OUTPUT"
+        fi
+
+    # No keg, or a keg that no longer loads: the real build. `brew extract`
+    # needs homebrew-core's git history, which a modern brew does not
+    # necessarily have on disk (it reads formulae from the JSON API instead), so
+    # the retry clones it - loudly, because that clone is minutes on its own and
+    # nobody should discover it by reading a timing graph.
     #
     # --build-from-source is deliberate: an extracted formula can still carry
     # homebrew-core's `bottle` block, whose binaries were built for the `ffmpeg`
     # keg path, not this one. Pouring that would install a keg whose dylibs name
     # a directory that does not exist. Build it.
     - name: Build FFmpeg 8.1.2 from an extracted formula
-      if: steps.cache.outputs.cache-hit != 'true'
+      id: build
+      if: steps.cache.outputs.cache-matched-key == '' || steps.check.outputs.usable == 'false'
       shell: bash
       run: |
         set -euo pipefail
@@ -106,40 +179,21 @@ runs:
         formula="$(find "$tapdir" -name 'ffmpeg@8.1.2.rb' | head -1 || true)"
         if [ -z "$formula" ]; then
           echo "::error::brew extract reported success but wrote no ffmpeg@8.1.2.rb under $tapdir."
-          echo "::error::8.1.2 may have fallen out of homebrew-core's history; see K-736."
+          echo "::error::8.1.2 may have fallen out of homebrew-core's history."
           find "$tapdir" -name '*.rb' || true
           exit 1
         fi
         echo "Extracted $formula"
         brew install --build-from-source --formula "$tap/ffmpeg@8.1.2"
 
-    # Cache hit: the keg is back, but its runtime dependencies (x264, x265, lame
-    # and the rest) are not - those live in their own kegs, which were never
-    # cached, and libavcodec names them by absolute path. The install receipt
-    # inside the restored keg lists exactly what it was linked against, so
-    # reinstall that list from bottles; it takes a minute and needs no tap.
-    - name: Reinstall the cached keg's runtime dependencies
-      if: steps.cache.outputs.cache-hit == 'true'
-      shell: bash
-      run: |
-        set -euo pipefail
-        cellar="${{ steps.paths.outputs.cellar }}"
-        keg="$(ls -d "$cellar"/*/ 2>/dev/null | sort -V | tail -1 || true)"
-        receipt="${keg%/}/INSTALL_RECEIPT.json"
-        if [ ! -f "$receipt" ]; then
-          echo "::error::Cache hit for $cellar but no install receipt at $receipt - the cached keg is not a keg."
-          ls -la "$cellar" || true
-          exit 1
-        fi
-        command -v jq >/dev/null || brew install jq
-        deps="$(jq -r '.runtime_dependencies[]?.full_name' "$receipt" | tr '\n' ' ')"
-        if [ -z "${deps// /}" ]; then
-          echo "::warning::The cached keg records no runtime dependencies. If the build then fails to link or load FFmpeg, bump cache-bump to force a rebuild."
-        else
-          echo "Reinstalling: $deps"
-          # shellcheck disable=SC2086 # a word-split list of formula names is the point
-          brew install $deps
-        fi
+    # Only a keg built in this run is saved, under this run's key, so the next
+    # run's prefix restore finds it first.
+    - name: Save the built keg
+      if: steps.build.outcome == 'success'
+      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ${{ steps.paths.outputs.cellar }}
+        key: ${{ steps.cache.outputs.cache-primary-key }}
 
     # Both paths converge here. The opt symlink is what `brew link` would have
     # made; making it directly means the cache-hit path needs no tap and no
@@ -189,7 +243,7 @@ runs:
         avutil="$(awk -F': *' '/^Version:/{print $2}' "$pc")"
         if [ "${avutil%%.*}" != "60" ]; then
           echo "::error::libavutil is $avutil; FFmpeg 8's is 60.x, and rsmpeg's ffmpeg8 bindings are generated for it."
-          echo "::error::Linking these would be a struct-layout mismatch that compiles. See K-736."
+          echo "::error::Linking these would be a struct-layout mismatch that compiles."
           exit 1
         fi
         echo "FFmpeg ${{ steps.keg.outputs.version }}, libavutil $avutil - matches the ffmpeg8 feature."

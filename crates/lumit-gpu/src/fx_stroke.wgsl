@@ -1,4 +1,4 @@
-// Stroke (**style**, K-706, docs/impl/layer-styles.md §4): an alpha-contour
+// Stroke (**style**, docs/impl/layer-styles.md §4): an alpha-contour
 // stroke. Mirrors lumit_core::fx::cpu::stroke_contour op-for-op (§1.6: the CPU
 // is the oracle), whose two morphological copies are `cpu::matte_morph` — so
 // this file's `stroke_morph` mirrors `matte_morph` twice over, once per copy.

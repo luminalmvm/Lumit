@@ -277,10 +277,10 @@ fn entries() -> Vec<Entry> {
             (parameter::SUITE.param_get_integral)(h, 0.0, 1.0)
         }),
         entry!("paramSetValue", Expect::BadHandle, |h| unsafe {
-            (parameter::SUITE.param_set_value)(h, 0_i32)
+            (parameter::SUITE.param_set_value)(h, 0.0_f64)
         }),
         entry!("paramSetValueAtTime", Expect::BadHandle, |h| unsafe {
-            (parameter::SUITE.param_set_value_at_time)(h, 0.0, 0_i32)
+            (parameter::SUITE.param_set_value_at_time)(h, 0.0, 0.0_f64)
         }),
         entry!("paramGetNumKeys", Expect::BadHandle, |h| unsafe {
             (parameter::SUITE.param_get_num_keys)(h, out::uint_slot())

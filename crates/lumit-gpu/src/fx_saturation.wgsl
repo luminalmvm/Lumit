@@ -1,5 +1,5 @@
-// Saturation (docs/08-EFFECTS.md §3.10 as amended by K-090: the v1 Grade
-// split into single-purpose colour effects): scale colourfulness about
+// Saturation (docs/08-EFFECTS.md §3.10, amended when the v1 Grade split
+// into single-purpose colour effects): scale colourfulness about
 // Rec. 709 luma, in linear light on unpremultiplied colour (§2.2, the wrap
 // fused into the kernel). Mirrors lumit_core::fx::cpu::saturate op-for-op
 // (§1.6: the CPU is the oracle); saturation 1 short-circuits the whole
@@ -8,7 +8,7 @@
 struct Params {
     saturation: f32,   // 0 = greyscale, 1 = neutral, 2 = doubled, open above
     mix_amt: f32,      // 0..1, blended against the unprocessed input
-    matte_on: f32,     // 1 = the matte drives the control below (K-395)
+    matte_on: f32,     // 1 = the matte drives the control below
     _pad1: f32,
 };
 
@@ -17,14 +17,14 @@ struct Params {
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
 
-// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// The Matte (docs/08 §2.6), bound for every kernel on this layout and
 // read only under `matte_on` — bound to `src` when there is none, since a
 // texture binding cannot be left empty.
 @group(0) @binding(4) var matte: texture_2d<f32>;
 
 // This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
 // luma, clamped. The Channel pick and Invert already happened, once, at the
-// seam (fx_matte_prepare.wgsl, K-425).
+// seam (fx_matte_prepare.wgsl).
 fn matte_k(xy: vec2<i32>) -> f32 {
     let m = textureLoad(matte, xy, 0);
     return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
@@ -62,7 +62,7 @@ fn saturate_fx(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let u = unpremult(o);
     let luma = u.r * LUMA.r + u.g * LUMA.g + u.b * LUMA.b;
-    // The matte pulls Saturation toward 1 per pixel (K-395).
+    // The matte pulls Saturation toward 1 per pixel.
     var sat = p.saturation;
     if (p.matte_on != 0.0) {
         sat = matte_toward(sat, 1.0, matte_k(xy));

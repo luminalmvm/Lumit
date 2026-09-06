@@ -1,9 +1,9 @@
 # Lumit project format
 
 **Status: canonical.** Serialisation of the model in [03-DATA-MODEL.md](03-DATA-MODEL.md),
-per decision K-040 (hybrid container) and K-024 (non-destructive always).
+as a hybrid container, non-destructive always.
 
-Design goals, in priority order: **never lose work** → **portable between machines** (K-065)
+Design goals, in priority order: **never lose work** → **portable between machines**
 → **human-inspectable** → fast. Speed is engineered around the format (caches, lazy thumbs),
 never by making the document opaque.
 
@@ -27,8 +27,8 @@ Rules:
   `{ "format": "lumit-project", "schema_version": "…", "written_by": "lumit x.y.z",
   "min_reader": "…" }`. A reader newer than `schema_version` migrates; older than
   `min_reader` refuses with a clear message; otherwise it loads and preserves unknowns.
-  The current schema is **`0.2.0`**. The one migration in the chain, `0.1.0` → `0.2.0`
-  (K-249), moves a Footage layer's own retime segment store onto the layer as the Retime
+  The current schema is **`0.2.0`**. The one migration in the chain, `0.1.0` → `0.2.0`,
+  moves a Footage layer's own retime segment store onto the layer as the Retime
   **property**, and lifts the frame-interpolation policy out beside it; `min_reader` stays
   `0.1.0`, because the fields a `0.1.0` reader does not know about are preserved rather
   than fatal (§1.1).
@@ -48,27 +48,27 @@ Rules:
   (`"channel": "Alpha"`, `"blend": "Screen"`); a data-carrying variant is externally tagged
   (`{ "Footage": { … } }`). Variants are additive, so old readers keep unknown ones via the
   preservation rule below.
-- **The interface arrangement rides along, opaquely** (K-245): `ui_state` is the frontend's
+- **The interface arrangement rides along, opaquely**: `ui_state` is the frontend's
   own JSON — the panel arrangement, which comps were open, the playhead, the selection — and
   the engine never reads inside it. Absent by default, so a project nobody has arranged gains
   no line for it. It is a *hint*: a reader that already has its own record of this project
   prefers that, and one that cannot make sense of what is here ignores it. What it may **not**
   contain is anything machine-specific — no pixel window placements, no paths, no usernames
-  (§2's rule, which K-245 narrowed rather than lifted: panel names, tab indices and fractional
+  (§2's rule, narrowed rather than lifted: panel names, tab indices and fractional
   shares mean the same thing on any machine, and that is all this field is for).
 - **Rendering settings that change the picture travel with the file.** `anti_aliasing`
-  (K-274) is the first of them: the project's coverage-sample count, written as its variant
+  is the first of them: the project's coverage-sample count, written as its variant
   name (`"anti_aliasing": "x4"`). Absent — as it is in any `.lum` written before the field
   existed — it reads as the default rather than failing, which is the serde-default rule
   every additive field here follows.
-- **Colour tags ride beside the items, not on them** (K-451): `item_labels` maps an item's
+- **Colour tags ride beside the items, not on them**: `item_labels` maps an item's
   id to an index into the same label palette a layer's chip uses
   (`"item_labels": { "0191…": 5 }`), 0 — the absence of an entry — meaning untagged. A map
   rather than a field on each of the four kinds of item, because it is one organisational
   byte that is almost always the default; ordered by id, so two saves of the same project
   stay byte-identical. Absent when nothing is tagged, so a project nobody has tagged gains
   no line for it and an older `.lum` opens with every item untagged.
-- **The project's colour shelf is a list, in the user's own order** (K-448): `swatches` is
+- **The project's colour shelf is a list, in the user's own order**: `swatches` is
   the colours kept for this project, each `{ "colour": [r, g, b, a] }` with an optional
   `"name"`, and the picker is where they are read and edited (docs/07 §6.1). A list rather
   than a map, because the order is the only order there is; absent when the shelf is empty,
@@ -76,7 +76,7 @@ Rules:
   existed.
 - **Unknown-field preservation is mandatory**: a reader keeps any keys it does not
   understand and writes them back out. This is what lets shared projects and newer/older
-  Lumit versions coexist (K-065) and lets Placeholder effects round-trip
+  Lumit versions coexist and lets Placeholder effects round-trip
   ([11-AE-IMPORT.md](11-AE-IMPORT.md)).
 
 ## 2. Media references and relinking
@@ -85,9 +85,9 @@ Per `MediaRef` in [03-DATA-MODEL.md](03-DATA-MODEL.md) §3, a saved reference ca
 **project-relative path** (rebased against the project's folder on every save; forward
 slashes, so a save from any OS resolves on any other) and a **fingerprint**
 (size + mtime + head/tail hash, stamped at save time). The file's absolute location is
-**session-state only** (K-173): it is held in memory while the app runs and is never
+**session-state only**: it is held in memory while the app runs and is never
 serialized — an absolute path embeds the local username, which this section has always
-promised the file never contains. Projects saved before K-173 may still carry one; it is
+promised the file never contains. Older projects may still carry one; it is
 read and honoured as a fallback, and disappears on their next save. On open:
 
 1. Try relative path → 2. a legacy file's absolute path, if present → 3. fingerprint search
@@ -98,7 +98,7 @@ read and honoured as a fallback, and disappears on their next save. On open:
 Step 3b is the weakest match and so it runs last, and only over what is still lost: it is
 what answers a project that arrived beside its media but carrying another machine's paths,
 which is every After Effects import on a second computer, where there are no fingerprints
-yet because nothing has been saved (K-538). The tree is walked **once** for all the missing
+yet because nothing has been saved. The tree is walked **once** for all the missing
 items rather than once each, and where two files share a name the first in walk order
 answers for both — the fingerprint search above it is what tells those apart once a project
 has been saved.
@@ -107,7 +107,7 @@ Steps 1–3b are wired (`resolve_all_media`, run before anything probes); step 4
 future work — today missing files are named in a notice and keep their reference untouched,
 so a later relink loses nothing.
 
-Relinking one file automatically relinks siblings that moved the same way (K-538). The
+Relinking one file automatically relinks siblings that moved the same way. The
 mapping is the **longest** rewrite the move supports: whatever the old path and the new one
 share at the end did not move, and the prefix in front of it did, so relinking one clip four
 folders deep inside a footage tree brings back every other lost item under that same root —
@@ -117,9 +117,9 @@ sibling the rewrite does not reach falls back to a file of its name beside the p
 
 **Collect for sharing**: an explicit command copies the project plus all referenced media
 into one folder, rewriting references relative — the mechanism behind community project
-sharing (K-065). Nothing machine-specific is ever written into `project.json` (no cache
+sharing. Nothing machine-specific is ever written into `project.json` (no cache
 paths, no local usernames, no window placements in monitor pixels); per-machine state lives in
-app settings. **Amended by K-245:** the *panel arrangement* is not machine-specific — panel
+app settings. **One amendment:** the *panel arrangement* is not machine-specific — panel
 names, tab indices and fractional shares read the same anywhere — so it travels in `ui_state`
 (§1.1) precisely so a shared project opens the way its author left it. The machine-local
 workspace store still keeps its own copy per project path, and that copy is preferred on open;
@@ -138,8 +138,8 @@ planned ([TODO.md](TODO.md)). What exists today:
 │   ├── index.bin                  #   the index snapshot: hash, size, cost, last use, quality
 │   └── index.log                  #   changes since that snapshot, replayed at open
 ├── media-index/       # frame indexes for exact long-GOP seeking, shared across projects
-├── track/             # camera solves (K-417), shared across projects — see below
-├── roto/              # propagated roto mattes (K-710), shared across projects — see below
+├── track/             # camera solves, shared across projects — see below
+├── roto/              # propagated roto mattes, shared across projects — see below
 └── <project-uuid>/journal/ops.jsonl # the crash-recovery journal (§4)
 
 <project>.lum-cache/   # the same frame cache, when the user asks for it beside the project
@@ -152,7 +152,7 @@ The intended full per-project layout (`<cache root>/<project-uuid>/` with `disk-
 `proxies/`, `peaks/`, `flow/`, `index/`) is the design direction; audio peaks are currently
 computed on demand rather than stored.
 
-**Where the frame cache sits is the user's choice (K-214, docs/07 §15):** under the global
+**Where the frame cache sits is the user's choice (docs/07 §15):** under the global
 root keyed by the document's uuid (the default), in a `<project>.lum-cache/` sidecar beside the
 project file, or under a folder the user picks. The global root is the platform's own cache
 directory, resolved by `directories::ProjectDirs` exactly as the journal and media index resolve
@@ -166,7 +166,7 @@ needs the project to *have* a file, and a project caches from the moment it is c
 document uuid is inside the `.lum` and survives every save, so the global-root folder still
 finds its frames after a save and a reopen.
 
-The choice is application-wide by default and **may be made per project** (K-215), in which case
+The choice is application-wide by default and **may be made per project**, in which case
 it is a field on the document (`cache_location`) and therefore inside `project.json`: it travels
 with a copy of the project and survives being opened on another machine, which a setting in one
 machine's settings file cannot. Absent when the project follows the application, so a project
@@ -174,7 +174,7 @@ that has never been given a place of its own gains no line for it and an older b
 file unchanged (§1.1's forward-compatibility rule). Nothing is moved when the choice changes —
 the frames in the old folder simply stop being addressed.
 
-**`track/` — the camera-solve sidecar (K-417).** One file per analysis, named
+**`track/` — the camera-solve sidecar.** One file per analysis, named
 `<32-byte blake3>.ltrk`, where the hash is over the media's fingerprint (size + head/tail
 hash), the analysis settings the Camera track effect was carrying, the mask geometry it was
 given, and this tier's own format version. The file is a seven-byte magic (`LUMTRK\0`), a
@@ -182,7 +182,7 @@ little-endian `u16` version, then a bincode record of that key, the media's fram
 **clip's own frame count**, and the solve: a pose per source frame, the focal per segment,
 the point cloud, the keyframes and the solve's notes. The clip's length is stored because the
 solve's poses describe only the span that was followed, and a track that stopped part-way
-(K-540) has to read back from the cache as the partial thing it is rather than as a whole
+has to read back from the cache as the partial thing it is rather than as a whole
 one — version 2 of this tier, and version 1 files are simply never asked for. A file whose magic does not match, whose version is **newer than this
 build** (the same refuse-newer rule `manifest.json` follows in §1), whose body will not
 parse, or whose stored key is not the one being asked for, is ignored and re-analysed —
@@ -190,11 +190,11 @@ every refusal costs one analysis and nothing else.
 
 Global rather than per-project, for the reason `media-index/` is: a solve describes the
 *file* and the settings it was analysed under, so two projects cutting the same rushes share
-one, and a copy of a project finds its solves already there. The solve is deterministic
-(K-415), so a rebuild is byte-identical to what was deleted — asserted by a test, not
+one, and a copy of a project finds its solves already there. The solve is deterministic,
+so a rebuild is byte-identical to what was deleted — asserted by a test, not
 assumed.
 
-**`roto/` — the roto-matte sidecar (K-710).** One file per propagation run, named
+**`roto/` — the roto-matte sidecar.** One file per propagation run, named
 `<media>-<run>.lrot`, where `<media>` is sixteen bytes of blake3 over the media's fingerprint
 and `<run>` sixteen bytes of blake3 over the tier's format version, the Roto brush's
 propagation settings, its base frame and its whole stroke table. Two halves rather than one
@@ -231,7 +231,7 @@ Rules, binding:
   the target. A crash mid-save can never corrupt the previous save.
 - **Autosave**: every N minutes (default 5) and before risky operations (export start,
   plugin install), rotating `<name>.autosave-<k>.lum` copies (default keep 5) in an
-  `autosaves/` folder beside the project. The timer is the engine's (K-587): it writes
+  `autosaves/` folder beside the project. The timer is the engine's: it writes
   only when the document's revision has moved since the last save or the last copy, and
   only for a project that has a path to write beside — an unsaved project is covered by
   the journal alone. N and the keep count are application settings, handed over by the
@@ -252,9 +252,9 @@ Rules, binding:
 - **Template**: an ordinary `.lum` file opened in "new from template" mode (copy, not
   edit-in-place). Community "CC packs" and project files are just these two forms.
 
-## 6. Colour themes (`.lumtheme`, K-298)
+## 6. Colour themes (`.lumtheme`)
 
-A custom theme (K-202) written out on its own so it can be shared: a small indented JSON
+A custom theme written out on its own so it can be shared: a small indented JSON
 document carrying `format: "lumit-theme"`, a `version`, and then the theme itself — `name`,
 `mode` (`light`/`dark`, the base it is built over), and `colours`, a map of token key to
 `#rrggbb`. The colours are exactly what the workspace file stores, so the shared and the

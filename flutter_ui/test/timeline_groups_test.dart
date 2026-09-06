@@ -1,4 +1,4 @@
-// Where a comp's layer groups land on its rows (K-702).
+// Where a comp's layer groups land on its rows.
 //
 // `groupFolds` is the whole of the Timeline's own grouping logic: which layer
 // carries a group's header row, and which layers a shut fold takes off the
@@ -88,7 +88,7 @@ void main() {
     });
 
     test('the fx twirl rides the header, independent of the member fold', () {
-      // K-731: the wardrobe's lanes belong to the band, so they can be open
+      // The wardrobe's lanes belong to the band, so they can be open
       // while the members are folded away, and shut while they show.
       final folds = groupFolds(
         groups: [

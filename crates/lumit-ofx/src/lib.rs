@@ -1,4 +1,4 @@
-//! `lumit-ofx` — Lumit's OpenFX host (K-061; docs/12 §2 says what it must do,
+//! `lumit-ofx` — Lumit's OpenFX host (docs/12 §2 says what it must do,
 //! docs/impl/ofx-host.md says how).
 //!
 //! # In plain terms

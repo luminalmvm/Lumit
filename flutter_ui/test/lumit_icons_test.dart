@@ -27,7 +27,7 @@ Map<String, String> _glyphBodies() {
 
 /// The generator's wrapper, rebuilt here so an edited body in glyphs.json
 /// without a re-run fails this test instead of quietly shipping the old
-/// drawing (docs/GUIDE.md §15 promises exactly that).
+/// drawing.
 String _document(String body) => '<svg viewBox="0 0 16 16" fill="none" '
     'stroke="currentColor" stroke-width="1.5" stroke-linecap="round" '
     'stroke-linejoin="round">$body</svg>';
@@ -77,7 +77,7 @@ void main() {
     });
   });
 
-  /// The gate that keeps K-440's list closed.
+  /// The gate that keeps the icon list closed.
   ///
   /// Every name the app asks for by [icons.LumitIcon] draws a glyph of the set,
   /// bar four that are Lumit's own artwork and are painter-drawn on purpose —

@@ -1,4 +1,4 @@
-// The menu bar: nine menus in the After Effects arrangement (K-244).
+// The menu bar: nine menus in the After Effects arrangement.
 //
 // **One tree, two renderers.** [lumitMenus] returns the whole bar as data —
 // labels, shortcuts, enablement, ticks — and nothing in it knows how a menu is
@@ -18,7 +18,7 @@
 // when pressed: an item you can see is disabled tells you the state of the
 // document, where one that does nothing when pressed does not.
 //
-// **Shortcuts are the engine's** (K-199). A row shows whatever chord the keymap
+// **Shortcuts are the engine's.** A row shows whatever chord the keymap
 // currently binds to its action id, so rebinding in Settings ▸ Keymap changes
 // the menus too, and a row whose action has no binding simply shows nothing.
 
@@ -208,7 +208,7 @@ class MenuEntry {
         live = null,
         rebuild = null;
 
-  /// **A checkbox row that leaves the menu open** (K-520).
+  /// **A checkbox row that leaves the menu open.**
   ///
   /// The panel toggles in Window are used several at a time — turn Scopes on,
   /// turn Node preview off, turn Hierarchy on — and a menu that shut after
@@ -230,17 +230,17 @@ class MenuEntry {
         live = null,
         rebuild = null;
 
-  /// **An option row that leaves the menu open** (K-671), on the same terms as
+  /// **An option row that leaves the menu open**, on the same terms as
   /// [MenuEntry.toggle] and for a narrower reason: the rows that pick one of
   /// several *and* change the picture in front of you — the preview
   /// resolution. Picking one is nearly always comparing it with the last, and
   /// a menu that shut after each choice made comparing two tiers a matter of
   /// reopening the menu between every look.
   ///
-  /// K-520 left these as ordinary rows because "closing is what a choice
-  /// should do"; that holds for a choice you cannot see the result of without
-  /// the menu out of the way — a workspace preset — and not for one whose
-  /// whole point is on screen behind the menu.
+  /// These were ordinary rows once, on the ground that "closing is what a
+  /// choice should do". That holds for a choice you cannot see the result of
+  /// without the menu out of the way — a workspace preset — and not for one
+  /// whose whole point is on screen behind the menu.
   MenuEntry.option(this.label, this.onPressed,
       {this.action, required bool Function() checked})
       : isDivider = false,
@@ -288,12 +288,12 @@ class MenuEntry {
   /// time [live] fires — and which does *not* close the menu when pressed.
   ///
   /// Only for rows where the press has visible consequences in the row itself:
-  /// Check for updates is the one, and it is the whole reason this exists
-  /// (K-296). Pressing it starts a check, the row greys and says so, and the
-  /// answer arrives in the same row a second or two later. A row that closed
-  /// the menu would leave the user pressing Help again to find out what
-  /// happened, and one that did not redraw would still say "Check for updates"
-  /// while it was checking.
+  /// Check for updates is the one, and it is the whole reason this exists.
+  /// Pressing it starts a check, the row greys and says so, and the answer
+  /// arrives in the same row a second or two later. A row that closed the menu
+  /// would leave the user pressing Help again to find out what happened, and
+  /// one that did not redraw would still say "Check for updates" while it was
+  /// checking.
   MenuEntry.live(Listenable this.live, MenuEntry Function() this.rebuild)
       : label = null,
         onPressed = null,
@@ -311,9 +311,9 @@ class MenuEntry {
     return now == null ? _checked : now();
   }
 
-  /// Whether pressing this row leaves the menu up — a [MenuEntry.toggle]
-  /// (K-520) or a [MenuEntry.option] (K-671). Both read their tick through a
-  /// closure, which is what lets it be redrawn after the press.
+  /// Whether pressing this row leaves the menu up — a [MenuEntry.toggle] or a
+  /// [MenuEntry.option]. Both read their tick through a closure, which is what
+  /// lets it be redrawn after the press.
   bool get keepsMenuOpen => _checkedNow != null;
 
   /// This row as it currently reads. The same row for everything except a
@@ -349,7 +349,7 @@ class LumitMenuBarFrb extends StatelessWidget {
   final Future<List<String>> Function()? footagePicker;
 
   /// The After Effects project chooser — a file picker for the `.aep` itself
-  /// or a zipped bundle (K-418).
+  /// or a zipped bundle.
   final Future<String?> Function()? aeProjectPicker;
 
   /// The Bridge bundle chooser — a folder picker (docs/11 §2.1).
@@ -370,10 +370,10 @@ class LumitMenuBarFrb extends StatelessWidget {
     // ValueNotifier that does not notify the shell state. Without this the bar
     // would keep whatever selection it was last built with, and every one of
     // those rows would be greyed out with a layer plainly selected.
-    // The updater (K-296) is watched on macOS only, where the whole tree is
-    // handed to the system and there is no rebuilding a single row. In-app,
-    // the Help menu's live row listens for itself (see [_MenuList]), so
-    // download progress never rebuilds the whole bar.
+    // The updater is watched on macOS only, where the whole tree is handed to
+    // the system and there is no rebuilding a single row. In-app, the Help
+    // menu's live row listens for itself (see [_MenuList]), so download
+    // progress never rebuilds the whole bar.
     final ui = context.read<LumitUiState>();
     return ValueListenableBuilder<List<LayerReference>>(
       valueListenable: ui.selectedLayers,
@@ -398,8 +398,8 @@ class LumitMenuBarFrb extends StatelessWidget {
       palette: () => _palette(context),
     );
 
-    // macOS puts menus in the system bar, not in the window (K-244). The bar
-    // itself draws nothing here; the hotkey holder still has to be in the tree.
+    // macOS puts menus in the system bar, not in the window. The bar itself
+    // draws nothing here; the hotkey holder still has to be in the tree.
     if (defaultTargetPlatform == TargetPlatform.macOS) {
       return PlatformMenuBar(
         menus: platformMenusFor(context, menus),
@@ -447,8 +447,8 @@ class LumitMenuBarFrb extends StatelessWidget {
               requests: context.read<LumitUiState>().paletteRequest,
               onRequested: () => _palette(context),
             ),
-            // The same, for Ctrl+Space (K-324): the console's effects and comps
-            // come from this file for the same reason the palette's commands do.
+            // The same, for Ctrl+Space: the console's effects and comps come
+            // from this file for the same reason the palette's commands do.
             _RequestHotkey(
               requests: context.read<LumitUiState>().consoleRequest,
               onRequested: () => _console(context),
@@ -570,22 +570,22 @@ class LumitMenuBarFrb extends StatelessWidget {
     );
   }
 
-  /// The Ctrl+Space console (K-324). Its two halves are built here beside the
-  /// menus for the same reason the palette's list is: the effects it applies
-  /// and the comps it fronts must be the ones the menus mean.
+  /// The Ctrl+Space console. Its two halves are built here beside the menus
+  /// for the same reason the palette's list is: the effects it applies and the
+  /// comps it fronts must be the ones the menus mean.
   Future<void> _console(BuildContext context) async {
     final ui = Provider.of<LumitUiState>(context, listen: false);
-    // With the graph focused, the console is the graph's own add surface
-    // (K-673): the panel opens the same popover wearing the canvas's list —
-    // a chosen box lands on the graph — and this one, which applies to the
-    // selected layers, stands down.
+    // With the graph focused, the console is the graph's own add surface: the
+    // panel opens the same popover wearing the canvas's list — a chosen box
+    // lands on the graph — and this one, which applies to the selected layers,
+    // stands down.
     if (ui.consoleClaim?.call() ?? false) return;
     final comp = ui.selectedComp;
 
     void applyEffect(String name) {
       final layers = ui.selectedLayers.value;
       if (layers.isEmpty) return;
-      // Every selected layer, as the Effect menu does (K-217).
+      // Every selected layer, as the Effect menu does.
       for (final target in layers) {
         target.addEffect(name: name);
       }
@@ -593,8 +593,8 @@ class LumitMenuBarFrb extends StatelessWidget {
     }
 
     // A saved preset's whole stack, to every selected layer — the Effects &
-    // presets panel's own rules (K-523): read once, applied per layer, each
-    // layer's refusal leaving the rest of the batch standing.
+    // presets panel's own rules: read once, applied per layer, each layer's
+    // refusal leaving the rest of the batch standing.
     void applyPreset(BridgePresetInfo preset) {
       final layers = ui.selectedLayers.value;
       if (layers.isEmpty) return;
@@ -614,8 +614,8 @@ class LumitMenuBarFrb extends StatelessWidget {
 
     await showFxConsoleFrb(
       context: context,
-      // The popover opens on the mouse (K-325): the shell records where the
-      // pointer last was, because the key event itself has no position.
+      // The popover opens on the mouse: the shell records where the pointer
+      // last was, because the key event itself has no position.
       anchor: lastKnownPointerPosition,
       model: FxConsoleModel(
         keyHint: l10n.fxConsoleKey,
@@ -750,9 +750,9 @@ List<MenuSection> lumitMenus(
                 : () => importFootageFrb(app, picker: footagePicker),
             action: 'file.import'),
         // The After Effects route keeps the submenu. The Bridge-bundle entry
-        // is gone (owner, repeatedly): the .aep front door (K-418) is the
-        // import; the bundle format itself remains supported for anything
-        // that already produced one, just not offered here.
+        // is gone (owner, repeatedly): the .aep front door is the import; the
+        // bundle format itself remains supported for anything that already
+        // produced one, just not offered here.
         MenuEntry.submenu(l10n.menuImport, [
           // Not gated on a project: an import *replaces* whatever is loaded,
           // the way opening a `.lum` does, so it is offered with none.
@@ -766,7 +766,7 @@ List<MenuSection> lumitMenus(
             action: 'file.export'),
         MenuEntry.divider(),
         // The project's own settings, kept apart from Settings because Settings
-        // is this machine's and these travel in the `.lum` (K-286).
+        // is this machine's and these travel in the `.lum`.
         MenuEntry(
             l10n.menuProjectSettings,
             project == null
@@ -789,16 +789,16 @@ List<MenuSection> lumitMenus(
         MenuEntry(l10n.menuRedo,
             (history?.canRedo ?? false) ? () => redoFrb(app) : null,
             action: 'edit.redo'),
-        // The journal as a list you can read and click (K-688). Undo and redo
-        // above it walk the same list one step at a time.
+        // The journal as a list you can read and click. Undo and redo above it
+        // walk the same list one step at a time.
         MenuEntry(l10n.menuHistory,
             project == null ? null : () => showHistoryFrb(context, app)),
         MenuEntry.divider(),
-        // Copy takes the finest thing that is selected (K-300): the keyframes a
-        // panel has claimed, else the picked effects, else the selected layer
-        // whole — transform, keyframes, masks, paint, effects and switches — as
-        // the document text the engine hands back (K-275). Cut is that plus the
-        // delete, so the two can never disagree about what "the selection" was.
+        // Copy takes the finest thing that is selected: the keyframes a panel
+        // has claimed, else the picked effects, else the selected layer whole
+        // — transform, keyframes, masks, paint, effects and switches — as the
+        // document text the engine hands back. Cut is that plus the delete, so
+        // the two can never disagree about what "the selection" was.
         MenuEntry(l10n.menuCut,
             _somethingSelected(ui) ? () => cutSelectionFrb(app, ui) : null,
             action: 'edit.cut'),
@@ -855,10 +855,10 @@ List<MenuSection> lumitMenus(
         MenuEntry(l10n.compositionSettingsEllipsis,
             comp == null ? null : () => _compSettings(context, app),
             action: 'comp.settings'),
-        // Make the comp be the stretch you marked (K-686), and the frame be
-        // the rectangle you swept (K-687). Each is greyed until there is one:
-        // a comp with no work area is already its own work area (K-203), and
-        // with no region there is no rectangle to crop to.
+        // Make the comp be the stretch you marked, and the frame be the
+        // rectangle you swept. Each is greyed until there is one: a comp with
+        // no work area is already its own work area, and with no region there
+        // is no rectangle to crop to.
         MenuEntry(l10n.menuTrimCompToWorkArea, _trimAction(app, comp)),
         MenuEntry(
             l10n.menuCropCompToRegion,
@@ -923,7 +923,7 @@ List<MenuSection> lumitMenus(
           MenuEntry(l10n.menuSequence, onComp((c) => c.addSequenceLayer())),
         ]),
         // What the layer *is*, as opposed to what it is doing: its name, and a
-        // Solid's own size and colour (K-444's dialogue pattern).
+        // Solid's own size and colour (the shared dialogue pattern).
         MenuEntry(
             l10n.menuLayerSettings,
             onLayer((l) async {
@@ -939,10 +939,10 @@ List<MenuSection> lumitMenus(
         // Audio ▸ — what to do with the *sound* of a layer that has some.
         // Detach puts it on a row of its own, muting the picture's row, so it
         // can be cut and ridden in the audio surfaces without the picture
-        // coming along (K-701). Greyed on a layer that is already nothing but
-        // sound; a layer that turns out to make none refuses when pressed and
-        // says so in the status line, because the answer costs a probe of the
-        // media and a menu cannot wait for one.
+        // coming along. Greyed on a layer that is already nothing but sound; a
+        // layer that turns out to make none refuses when pressed and says so
+        // in the status line, because the answer costs a probe of the media
+        // and a menu cannot wait for one.
         MenuEntry.submenu(l10n.menuAudio, [
           MenuEntry(
             l10n.menuDetachAudio,
@@ -958,22 +958,22 @@ List<MenuSection> lumitMenus(
                 : null,
           ),
         ]),
-        // The selected layer's Retime (K-197). In the menu as well as on the
-        // keyboard (K-198's lesson: a command whose only route is a chord has no
-        // route the day something intercepts the chord). The command names what
-        // it will do, so a layer that already has one offers to take it away.
-        // Greyed out on a Sequence layer: its clips carry the retiming and are
-        // ramped in the sequence view (K-075), so there is nothing here for the
-        // command to switch on. Said with a disabled row rather than an error
-        // after the click.
+        // The selected layer's Retime. In the menu as well as on the keyboard
+        // (a command whose only route is a chord has no route the day
+        // something intercepts the chord). The command names what it will do,
+        // so a layer that already has one offers to take it away. Greyed out
+        // on a Sequence layer: its clips carry the retiming and are ramped in
+        // the sequence view, so there is nothing here for the command to
+        // switch on. Said with a disabled row rather than an error after the
+        // click.
         MenuEntry(_retimeLabel(layer),
             _retimeable(layer) ? onLayer((l) => app.toggleRetime(l)) : null,
             action: 'layer.retime.enable'),
         // In and out of the clip-editing surface, for anyone — the Vegas
-        // preference decides what an *import* becomes (K-246), never what a
-        // layer is allowed to be. Offered here and on a layer's right-click.
-        // Coming back out is offered whenever going in is, because a user who
-        // tries it has to be able to change their mind.
+        // preference decides what an *import* becomes, never what a layer is
+        // allowed to be. Offered here and on a layer's right-click. Coming
+        // back out is offered whenever going in is, because a user who tries
+        // it has to be able to change their mind.
         MenuEntry(
             _sequenced(layer)
                 ? l10n.menuConvertToFootageLayer
@@ -1007,8 +1007,8 @@ List<MenuSection> lumitMenus(
         MenuEntry.divider(),
         MenuEntry.todo(l10n.menuReveal),
         // Create ▸ — what a layer can be turned *into*, keeping the layer it
-        // was (K-608). Both rows are live only on a Type layer, said by greying
-        // out rather than by an error after the click; the copy lands directly
+        // was. Both rows are live only on a Type layer, said by greying out
+        // rather than by an error after the click; the copy lands directly
         // above the original, where a duplicate goes.
         MenuEntry.submenu(l10n.menuCreate, [
           MenuEntry(
@@ -1054,11 +1054,11 @@ List<MenuSection> lumitMenus(
                       workspace: ui.workspace,
                     ),
             action: 'layer.precompose'),
-        // The light fold beside the heavy one (K-702). Group is live with
-        // something selected; Ungroup only while the selection is actually in
-        // a group, so the row greys out rather than doing nothing when
-        // pressed. Both go through the shell's own command, which is the one
-        // implementation the keyboard reaches too.
+        // The light fold beside the heavy one. Group is live with something
+        // selected; Ungroup only while the selection is actually in a group,
+        // so the row greys out rather than doing nothing when pressed. Both go
+        // through the shell's own command, which is the one implementation the
+        // keyboard reaches too.
         MenuEntry.divider(),
         MenuEntry(
             l10n.menuGroupLayers,
@@ -1106,7 +1106,7 @@ List<MenuSection> lumitMenus(
         keyframeSpeedRow(context, app, ui),
         MenuEntry.divider(),
         animateTextRow(app, ui),
-        // A K-609 animator carries exactly one range selector and it arrives
+        // A text animator carries exactly one range selector and it arrives
         // with the animator, so there is nothing for this to add until more
         // than one selector exists to have.
         MenuEntry.todo(l10n.menuAddTextSelector),
@@ -1116,11 +1116,11 @@ List<MenuSection> lumitMenus(
         trackCameraRow(app, ui),
         MenuEntry.todo(l10n.menuTrackMotion),
         MenuEntry.divider(),
-        // The Reveal family (K-684): `U`'s own machinery under the menu's
-        // words, each row a wider rule than the one above it. They act on the
-        // selection, or on the whole composition when nothing is selected —
-        // which is why they are live whenever a comp is open, and greyed
-        // rather than absent when none is.
+        // The Reveal family: `U`'s own machinery under the menu's words, each
+        // row a wider rule than the one above it. They act on the selection,
+        // or on the whole composition when nothing is selected — which is why
+        // they are live whenever a comp is open, and greyed rather than absent
+        // when none is.
         for (final reveal in const [
           (RevealFilter.keyframed, 'reveal.animated'),
           (RevealFilter.animated, null),
@@ -1164,10 +1164,10 @@ List<MenuSection> lumitMenus(
             ),
         ]),
         MenuEntry.divider(),
-        // The marks over the picture (docs/07 §2.2 items 5–6, K-683). All
-        // three are the Viewer's own view menu under other names, so they are
-        // toggles: turning the rulers on to drag a guide out and ticking Snap
-        // to grid is two ticks, not two trips to the View menu (K-520).
+        // The marks over the picture (docs/07 §2.2 items 5–6). All three are
+        // the Viewer's own view menu under other names, so they are toggles:
+        // turning the rulers on to drag a guide out and ticking Snap to grid
+        // is two ticks, not two trips to the View menu.
         //
         // Show grid carries no chord: `Ctrl+'` belongs to the *transparency*
         // grid (§15's table), which is a different grid and a different
@@ -1184,17 +1184,17 @@ List<MenuSection> lumitMenus(
           action: 'viewer.rulers.toggle',
           checked: () => ui.viewerOverlays.rulers,
         ),
-        // The layer-controls switch (K-217, K-466): the wireframes, the
-        // handles and the hover highlight, on and off together. The bar's own
-        // view menu carries the same switch under its own name — they are one
-        // switch until the full wireframe display mode of §2.2 item 5 gives
-        // this row something of its own to turn on.
+        // The layer-controls switch: the wireframes, the handles and the hover
+        // highlight, on and off together. The bar's own view menu carries the
+        // same switch under its own name — they are one switch until the full
+        // wireframe display mode of §2.2 item 5 gives this row something of
+        // its own to turn on.
         MenuEntry(l10n.menuShowWireframe,
             () => ui.setViewerLayerControls(!ui.viewerLayerControls),
             checked: ui.viewerLayerControls),
         // Whether the grid's own lines are things a dragged layer lands on,
-        // over and above the guides (K-683). The magnet on the toolbar is what
-        // decides whether *any* of it engages; this says what is in the list.
+        // over and above the guides. The magnet on the toolbar is what decides
+        // whether *any* of it engages; this says what is in the list.
         MenuEntry.toggle(
           l10n.menuSnapToGrid,
           () => ui.tools.snapToGrid = !ui.tools.snapToGrid,
@@ -1221,9 +1221,9 @@ List<MenuSection> lumitMenus(
           MenuEntry.divider(),
           MenuEntry(l10n.menuResetWorkspace, ui.resetLayout),
         ]),
-        // A chord for the arrangement on screen (K-574): the engine's nine
-        // `workspace.switch.N` actions count *slots* on the strip, so what
-        // is bound is the position rather than the name — which is what the
+        // A chord for the arrangement on screen: the engine's nine
+        // `workspace.switch.N` actions count *slots* on the strip, so what is
+        // bound is the position rather than the name — which is what the
         // dialogue says, and what makes the key reach the same place next
         // launch.
         MenuEntry(l10n.menuAssignWorkspaceShortcut,
@@ -1231,9 +1231,9 @@ List<MenuSection> lumitMenus(
         MenuEntry.divider(),
         // Every panel, ticked when it is in the arrangement. Toggling one adds
         // or drops its pane and persists the layout, so a panel you closed stays
-        // closed across a restart — and the menu stays open while you do it
-        // (K-520), because turning three panels on is three ticks, not three
-        // trips to the Window menu.
+        // closed across a restart — and the menu stays open while you do it,
+        // because turning three panels on is three ticks, not three trips to
+        // the Window menu.
         for (final panel in Panel.values)
           MenuEntry.toggle(
             panel.title,
@@ -1258,10 +1258,10 @@ List<MenuSection> lumitMenus(
           () => updateMenuEntry(context, app, ui, savePicker: savePicker),
         ),
         MenuEntry.divider(),
-        // The documentation, in whatever the user reads the web with (K-279).
-        // Both are pages on docs.lumitlab.com rather than one of them being
-        // the marketing site: "online guides" is where you are taught, and
-        // that is the walkthrough, not the download page.
+        // The documentation, in whatever the user reads the web with. Both are
+        // pages on docs.lumitlab.com rather than one of them being the
+        // marketing site: "online guides" is where you are taught, and that is
+        // the walkthrough, not the download page.
         MenuEntry(l10n.menuLumitHelp, () => _openLink(app, lumitDocsUrl)),
         MenuEntry(
             l10n.menuLumitOnlineGuides, () => _openLink(app, lumitGuidesUrl)),
@@ -1280,9 +1280,9 @@ List<MenuSection> lumitMenus(
   ];
 }
 
-/// The Effect menu: one submenu per effect category (K-090), each applying its
-/// effect to every selected layer. Disabled outright with nothing selected —
-/// there is nowhere for an effect to go.
+/// The Effect menu: one submenu per effect category, each applying its effect
+/// to every selected layer. Disabled outright with nothing selected — there is
+/// nowhere for an effect to go.
 List<MenuEntry> _effectMenu(LumitState app, List<LayerReference> layers) => [
       for (final group in _effectGroups().entries)
         MenuEntry.submenu(engineLabel(group.key), [
@@ -1329,8 +1329,7 @@ bool _sequenced(LayerReference? layer) {
 
 /// Whether this layer can cross between footage and sequence at all. Only
 /// footage has clips to cut, and only a sequence has any to put back.
-/// Whether this is a Type layer — the one kind Create ▸ has anything to offer
-/// (K-608).
+/// Whether this is a Type layer — the one kind Create ▸ has anything to offer.
 bool _typed(LayerReference? layer) {
   if (layer == null) return false;
   try {
@@ -1350,10 +1349,10 @@ bool _convertible(LayerReference? layer) {
   }
 }
 
-/// Whether this layer has a sound that could be put on a row of its own
-/// (K-701). A layer that is *already* only sound has nothing to separate it
-/// from; whether the rest of them actually make any is the engine's answer,
-/// and it costs a probe, so it is given as a refusal rather than a grey row.
+/// Whether this layer has a sound that could be put on a row of its own.
+/// A layer that is *already* only sound has nothing to separate it from;
+/// whether the rest of them actually make any is the engine's answer, and it
+/// costs a probe, so it is given as a refusal rather than a grey row.
 bool _detachable(LayerReference? layer) {
   if (layer == null) return false;
   try {
@@ -1364,7 +1363,7 @@ bool _detachable(LayerReference? layer) {
 }
 
 /// Whether this layer can carry a Retime at all. A Sequence layer cannot: its
-/// clips each have one of their own (K-075).
+/// clips each have one of their own.
 bool _retimeable(LayerReference? layer) {
   if (layer == null) return false;
   try {
@@ -1392,10 +1391,10 @@ String _retimeLabel(LayerReference? layer) {
 // --- The commands ---------------------------------------------------------
 //
 // Free functions, not methods, because the keyboard runs the same commands the
-// menu does (K-199 dispatch lives in main.dart) and a shortcut that took a
-// different path than its menu item would be two implementations to keep
-// honest. [saveProjectFrb] was the first of these (K-203); the rest followed
-// when the menu grew shortcuts.
+// menu does (dispatch lives in main.dart) and a shortcut that took a different
+// path than its menu item would be two implementations to keep honest.
+// [saveProjectFrb] was the first of these; the rest followed when the menu
+// grew shortcuts.
 
 /// Follow a Help-menu link, and say so in the status line when the desktop
 /// would not take it — a machine with no browser registered leaves a menu row
@@ -1421,7 +1420,7 @@ Future<void> importFootageFrb(LumitState app,
 ///
 /// One function for both File ▸ Import rows: the `.aep` picker and the Bridge
 /// bundle folder picker hand it a path, and which route the path takes is the
-/// engine's decision from the bytes (K-418).
+/// engine's decision from the bytes.
 ///
 /// The report is shown whatever it says — an import that adjusted nothing still
 /// opens the window, because "everything came across untouched" is the answer
@@ -1468,10 +1467,10 @@ void redoFrb(LumitState app) {
 bool _somethingSelected(LumitUiState ui) =>
     ui.selectedEffects.value.isNotEmpty || ui.selectedLayer.value != null;
 
-/// What Copy takes, finest selection first (K-300): the keyframes a panel has
-/// claimed, else the picked effects, else the selected layer. Returns whether
-/// anything was copied, so the keyboard can leave the chord unhandled when
-/// there was nothing to take.
+/// What Copy takes, finest selection first: the keyframes a panel has claimed,
+/// else the picked effects, else the selected layer. Returns whether anything
+/// was copied, so the keyboard can leave the chord unhandled when there was
+/// nothing to take.
 ///
 /// One function for the Edit menu and the `Mod+C` chord, because a menu row and
 /// a shortcut that disagreed about what "the selection" is would be the bug
@@ -1497,7 +1496,7 @@ bool copySelectionFrb(LumitUiState ui) {
 }
 
 /// Cut is Copy plus the removal, so the two can never disagree about what the
-/// selection was (K-275, extended to effects by K-300).
+/// selection was, effects included.
 bool cutSelectionFrb(LumitState app, LumitUiState ui) {
   final effects = ui.selectedEffects.value;
   final effectsLayer = ui.selectedEffectsLayer;
@@ -1520,16 +1519,16 @@ bool cutSelectionFrb(LumitState app, LumitUiState ui) {
   return true;
 }
 
-/// What Paste does with whatever is on the clipboard (K-275), or `null` when
-/// there is nothing to paste — or nowhere to put it.
+/// What Paste does with whatever is on the clipboard, or `null` when there is
+/// nothing to paste — or nowhere to put it.
 ///
 /// A layer goes into the composition on screen: at the playhead by default, or
 /// at the time it was copied from when Settings → Interface says so. An effect
 /// goes onto the selected layer, always with its first keyframe at the
 /// playhead.
 /// Paste for the `Mod+V` chord: a panel holding keyframes takes it first
-/// (K-300, the same claim Delete has used since K-234), else the clipboard's
-/// layer or effects go in. Returns whether anything was pasted.
+/// (the same claim Delete uses), else the clipboard's layer or effects go in.
+/// Returns whether anything was pasted.
 ///
 /// The Edit menu's own row stays on [_pasteAction]: keyframes have never been
 /// one of its cases, and a row that greys on the clipboard being empty must not
@@ -1543,7 +1542,7 @@ Future<bool> pasteSelectionFrb(
   if (ui.pasteClaim?.call() ?? false) return true;
   // Nothing in the tray: something may have been copied in another Lumit
   // window, or in this one before something else on the machine overwrote the
-  // tray's mirror (K-302).
+  // tray's mirror.
   if (ui.clipboard.isEmpty) await ui.adoptSystemClipboard();
   final paste = _pasteAction(app, ui, comp, layer);
   if (paste == null) return false;
@@ -1585,9 +1584,9 @@ VoidCallback? _pasteAction(
   }
 }
 
-/// **Trim comp to work area** (K-686), offered only when there is a work area
-/// to trim to: a comp nobody has narrowed is already its own work area (K-203),
-/// so the row would promise a change it could not make.
+/// **Trim comp to work area**, offered only when there is a work area to trim
+/// to: a comp nobody has narrowed is already its own work area, so the row
+/// would promise a change it could not make.
 ///
 /// The read is inside the menu's own `items()` closure, so it costs one call on
 /// a deliberate press rather than one per rebuild of the bar — and it is
@@ -1639,12 +1638,12 @@ Future<void> _recover(BuildContext context, LumitState app) async {
   await showRecoveryDialogFrb(context: context, state: app, projectPath: path);
 }
 
-/// Where the welcome screen's thumbnails come from (K-468). Replaced in a test
-/// the way [openExternalLink] is; the application's own is the Viewer's.
+/// Where the welcome screen's thumbnails come from. Replaced in a test the way
+/// [openExternalLink] is; the application's own is the Viewer's.
 Future<Uint8List?> Function() projectThumbnailCapture = captureViewerPicturePng;
 
 /// Keep a picture of the project just saved, for the welcome screen's recent
-/// row to show next launch (K-468).
+/// row to show next launch.
 ///
 /// **Nothing here may cost anybody a save.** It runs after the write has
 /// finished and the notice has been posted, and it swallows everything: a
@@ -1704,9 +1703,9 @@ Future<void> saveProjectFrb(
     target = picked;
   }
   // How the interface is arranged goes into the file, so a project handed to
-  // someone else opens the way it was left (K-245). Written here rather than
-  // as it changes, because this is the moment it is asked for: recording a
-  // panel drag into the document would make moving furniture an unsaved change.
+  // someone else opens the way it was left. Written here rather than as it
+  // changes, because this is the moment it is asked for: recording a panel
+  // drag into the document would make moving furniture an unsaved change.
   project.setUiState(uiState: ui.sessionJson());
   try {
     final written = await project.save(path: target);
@@ -1716,10 +1715,10 @@ Future<void> saveProjectFrb(
     ui.rememberSession();
     app.refreshWindowTitle();
     // The welcome screen's picture of this project, taken *after* the save and
-    // never in front of it (K-468): the save is done, the notice is posted, and
-    // taking the picture happens on its own time. The fronted composition at
-    // the playhead is what it is a picture of, falling back to the project's
-    // first comp — a save made from the welcome screen fronts nothing, and a
+    // never in front of it: the save is done, the notice is posted, and taking
+    // the picture happens on its own time. The fronted composition at the
+    // playhead is what it is a picture of, falling back to the project's first
+    // comp — a save made from the welcome screen fronts nothing, and a
     // project's first comp is the one its row is recognised by.
     final comps = app.comps();
     unawaited(fileProjectThumbnail(
@@ -1735,8 +1734,7 @@ Future<void> saveProjectFrb(
   app.notifyDocumentChanged();
 }
 
-/// The Help ▸ Check for updates row, reading whatever the updater is doing
-/// (K-296).
+/// The Help ▸ Check for updates row, reading whatever the updater is doing.
 ///
 /// Built fresh every time the service notifies, which is what makes one row
 /// carry the whole sequence: check, offer, download, restart. Disabled while
@@ -1885,9 +1883,9 @@ List<PlatformMenuItem> platformMenusFor(
 // --- The in-app renderer --------------------------------------------------
 
 /// Holds the subscription to a shortcut-request bump — the palette's
-/// Ctrl+Shift+P, the console's Ctrl+Space (K-324) — and opens its surface
-/// when the notifier fires. Draws nothing; it exists only so the menu bar
-/// itself stays a plain stateless widget.
+/// Ctrl+Shift+P, the console's Ctrl+Space — and opens its surface when the
+/// notifier fires. Draws nothing; it exists only so the menu bar itself stays
+/// a plain stateless widget.
 class _RequestHotkey extends StatefulWidget {
   final ValueNotifier<int> requests;
   final VoidCallback onRequested;
@@ -2027,7 +2025,7 @@ class _MenuList extends StatefulWidget {
 }
 
 /// Stateful for one reason: a [MenuEntry.toggle] row leaves the menu up, so the
-/// list has to redraw itself to show the tick it just changed (K-520).
+/// list has to redraw itself to show the tick it just changed.
 class _MenuListState extends State<_MenuList> {
   @override
   Widget build(BuildContext context) {
@@ -2069,7 +2067,7 @@ class _MenuListState extends State<_MenuList> {
                   )
                 else if (item.live case final listenable?)
                   // Stays open and redraws in place: the point of a live row is
-                  // to watch what pressing it did (K-296).
+                  // to watch what pressing it did.
                   ListenableBuilder(
                     listenable: listenable,
                     builder: (context, _) {

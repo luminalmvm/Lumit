@@ -13,19 +13,19 @@
 //! **The path type is the mask's.** One `BezierPath` in the document, one set of
 //! maths, one vertex type crossing the bridge. A shape's path and a mask's path
 //! differ in what they *do*, not in what they are — which is why the shape tools
-//! could draw both from the same geometry from the day they landed (K-222).
+//! could draw both from the same geometry from the day they landed.
 //!
 //! **The layer's own size is the art's bounding box**, and it changes as the art
 //! is edited. Every other layer kind has a size fixed by its source; this is the
 //! first that does not, and anything caching "how big is this layer" has to
 //! follow the document's revision rather than assume (docs/impl/shape-layers.md).
 //!
-//! **The modifiers are fields on the item, not a tree** (K-551). After Effects
+//! **The modifiers are fields on the item, not a tree**. After Effects
 //! carries Trim Paths, the Repeater and the rest as entries in a nested group,
 //! where their position decides what they act on. Lumit's list is flat, so each
 //! modifier is a property of the item it modifies and the order they apply in is
 //! fixed and written down here rather than dragged: **combine, then offset, then
-//! trim, then repeat**. A **combine** (K-605) is the one field that reaches past
+//! trim, then repeat**. A **combine** is the one field that reaches past
 //! its own item: it says how this item's path joins the item before it, and the
 //! run that makes is drawn once with the first item's paint. The
 //! nested tree is still the long-term shape (docs/03 §9.2); nothing stored here
@@ -65,12 +65,12 @@ pub struct ShapeItem {
     /// 0..100, like every other opacity in the document.
     #[serde(default = "full_opacity")]
     pub opacity: f64,
-    /// **Trim paths** (K-551): where along the path the art begins and ends, as
+    /// **Trim paths**: where along the path the art begins and ends, as
     /// a per cent of the path's own **arc length**, and how far the pair is slid
     /// along it in degrees (360 is once round).
     ///
     /// Per cent of length rather than of vertex count, for the reason a paint
-    /// stroke's write-on gives (K-549): the eye watches length. The trim cuts
+    /// stroke's write-on gives: the eye watches length. The trim cuts
     /// the fill as well as the outline — a half-trimmed circle is a half circle,
     /// filled by closing the piece that is left.
     ///
@@ -97,7 +97,7 @@ pub struct ShapeItem {
         skip_serializing_if = "crate::paint::is_static_zero"
     )]
     pub trim_offset: Property,
-    /// **Dashes** (K-552): the outline's dash and gap lengths in layer pixels,
+    /// **Dashes**: the outline's dash and gap lengths in layer pixels,
     /// alternating — dash, gap, dash, gap — and `dash_offset` is how far along
     /// the path the pattern starts, in the same pixels.
     ///
@@ -117,7 +117,7 @@ pub struct ShapeItem {
         skip_serializing_if = "crate::paint::is_static_zero"
     )]
     pub dash_offset: Property,
-    /// **A gradient fill** (K-555): 0 draws the flat [`fill`](Self::fill), 1
+    /// **A gradient fill**: 0 draws the flat [`fill`](Self::fill), 1
     /// ramps from it **linearly** to [`gradient_colour`](Self::gradient_colour)
     /// and 2 ramps **radially**, `gradient_colour` sitting on the outer edge.
     ///
@@ -159,19 +159,19 @@ pub struct ShapeItem {
         skip_serializing_if = "crate::paint::is_static_zero"
     )]
     pub gradient_end_y: Property,
-    /// **A morphing path** (K-606): the shapes this item's path is keyed to,
+    /// **A morphing path**: the shapes this item's path is keyed to,
     /// in the layer's own time. Empty is the still [`path`](Self::path) above,
     /// which is what every shape is until somebody keys its shape, and is
     /// absent from the file.
     ///
-    /// The same [`PathKeyframe`] a mask's shape keys with (K-224) and the same
+    /// The same [`PathKeyframe`] a mask's shape keys with, and the same
     /// interpolation beneath it: two keys with the same number of points run
     /// point for point, and unequal ones have the sparser path **resampled**
     /// first — cut into as many pieces as the denser one has, by splitting its
     /// own curve, so nothing about the shape moves in the process.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub path_keys: Vec<crate::mask::PathKeyframe>,
-    /// **A boolean combine** (K-605): how this item joins the item **before**
+    /// **A boolean combine**: how this item joins the item **before**
     /// it in the layer's list — 0 draws it on its own, 1 unions the two, 2
     /// subtracts this one from that one, 3 keeps only what both cover and 4
     /// keeps only what one of them covers.
@@ -186,21 +186,21 @@ pub struct ShapeItem {
     /// between subtract and intersect would have to mean something.
     #[serde(default, skip_serializing_if = "is_flat")]
     pub combine: u32,
-    /// **Offset paths** (K-554): how far the outline is pushed **out** of the
+    /// **Offset paths**: how far the outline is pushed **out** of the
     /// path, in layer pixels — negative pulls it in. Zero is the path itself
     /// and is absent from the file.
     ///
-    /// The corners are **round**, which is the one join this crate draws
-    /// (K-237); the offset does not undo its own self-intersections, so an
-    /// inward offset past a curve's own radius leaves a small loop that the
-    /// non-zero winding fill mostly swallows.
+    /// The corners are **round**, which is the one join this crate draws. The
+    /// offset does not undo its own self-intersections, so an inward offset
+    /// past a curve's own radius leaves a small loop that the non-zero winding
+    /// fill mostly swallows.
     #[serde(
         default = "Property::zero",
         with = "crate::mask::still_or_keyed",
         skip_serializing_if = "crate::paint::is_static_zero"
     )]
     pub offset_amount: Property,
-    /// **The repeater** (K-553): how many copies of the item are drawn, and the
+    /// **The repeater**: how many copies of the item are drawn, and the
     /// transform each copy is one more step of.
     ///
     /// `repeat_copies` is a count, rounded and held to 1..[`MAX_COPIES`]; a
@@ -354,7 +354,7 @@ impl ShapeItem {
 
     /// The shape this item has at `t` — its still [`path`](Self::path) where
     /// nothing has keyed it, and the blend of the two keys either side where
-    /// something has (K-606).
+    /// something has.
     ///
     /// `t` is the **layer's** clock, the one every other number on the item is
     /// read on.
@@ -399,7 +399,7 @@ impl ShapeItem {
     }
 
     /// One polyline pushed out by this item's offset and cut by its trim — the
-    /// tail of [`trimmed_at`], shared so a **combined** run's contours (K-605)
+    /// tail of [`trimmed_at`], shared so a **combined** run's contours
     /// are offset and trimmed by exactly the same arithmetic the item's own
     /// path is.
     fn shaped(&self, mut points: Vec<(f64, f64)>, closed: bool, t: f64) -> Vec<(f64, f64)> {
@@ -569,10 +569,10 @@ impl ShapeItem {
     /// too small. It can be a little generous on a strongly curved path, which
     /// costs a few transparent pixels and no correctness.
     ///
-    /// `t` is here because the **repeater** puts art where the path is not
-    /// (K-553), and where it puts it can be keyed. A trim needs no clock — it
-    /// only ever takes art away, and the box stays the untrimmed one for the
-    /// reason a paint stroke's bounds give (K-549).
+    /// `t` is here because the **repeater** puts art where the path is not, and
+    /// where it puts it can be keyed. A trim needs no clock — it only ever
+    /// takes art away, and the box stays the untrimmed one for the reason a
+    /// paint stroke's bounds give.
     pub fn bounds(&self, t: f64) -> Option<(f64, f64, f64, f64)> {
         let mut out: Option<(f64, f64, f64, f64)> = None;
         for v in &self.path_at(t).vertices {
@@ -598,7 +598,7 @@ impl ShapeItem {
             0.0
         };
         // An outline pushed out of the path is art outside the path, so the
-        // box holds it too (K-554). Pulled *in* it never needs more room, so
+        // box holds it too. Pulled *in* it never needs more room, so
         // only the outward half counts.
         let half = half + self.offset_amount.value_at(t).max(0.0);
         let (x0, y0, x1, y1) = (x0 - half, y0 - half, x1 + half, y1 + half);
@@ -624,10 +624,10 @@ impl ShapeItem {
 ///
 /// This is the number the wireframe, hit-testing and the transform all read, and
 /// it moves when the art is edited: a shape layer is the first kind whose size
-/// is not fixed by its source. Since K-553 it can also move as the art is
-/// *played*, because a keyed repeater puts copies somewhere new each frame.
+/// is not fixed by its source. It can also move as the art is *played*,
+/// because a keyed repeater puts copies somewhere new each frame.
 ///
-/// **A combined run is still measured member by member** (K-605). Every
+/// **A combined run is still measured member by member**. Every
 /// boolean of two shapes lies inside the union of the two, so the box already
 /// holds it; working the combine out again here would cost the boolean a
 /// second time each frame to shave transparent pixels off the edge of a layer.
@@ -646,7 +646,7 @@ pub fn contents_bounds(contents: &[ShapeItem], t: f64) -> Option<(f64, f64, f64,
     out
 }
 
-/// The layer's contents split into the pieces that draw as **one** (K-605).
+/// The layer's contents split into the pieces that draw as **one**.
 ///
 /// An item whose [`combine`](ShapeItem::combine) is 0 starts a run of its own;
 /// each item after it that names a combine joins the run in front of it. The
@@ -664,7 +664,7 @@ fn runs(contents: &[ShapeItem]) -> Vec<std::ops::Range<usize>> {
     out
 }
 
-/// The contours a combined run draws at `t` (K-605), in the art's own
+/// The contours a combined run draws at `t`, in the art's own
 /// coordinates and before the first item's offset and trim have had them.
 ///
 /// The run is folded left to right — each item is combined with everything
@@ -741,7 +741,7 @@ fn combined_at(run: &[ShapeItem], t: f64) -> Vec<Vec<(f64, f64)>> {
 /// walk, with the same two vertical subsamples, that decides which pixels a mask
 /// gates. One path type, one rasteriser.
 ///
-/// `t` is the **layer's** own clock (K-213), the one its masks and its paint are
+/// `t` is the **layer's** own clock, the one its masks and its paint are
 /// read on: it is what a keyframed trim is sampled at.
 // The box is four numbers and the raster is two; bundling them into a struct
 // nobody else holds would be a name for an argument list, not a type.
@@ -765,7 +765,7 @@ pub fn rasterise_contents(
 
     for run in runs(contents) {
         // A combined run is drawn once, with the paint and the modifiers of the
-        // **first** item in it (K-605); the ones after it lend their path and
+        // **first** item in it; the ones after it lend their path and
         // nothing else. A run of one is every shape nobody has combined.
         let ring = run.len() > 1;
         let Some(item) = contents.get(run.start) else {
@@ -787,7 +787,7 @@ pub fn rasterise_contents(
         } else {
             item.trimmed_at(t).map(|p| vec![p])
         };
-        // The shape this instant, which a keyed path moves (K-606).
+        // The shape this instant, which a keyed path moves.
         let drawn = item.path_at(t);
         // A boolean's contours close on themselves; a trimmed piece has two
         // ends whatever the path it was cut from had.
@@ -805,7 +805,7 @@ pub fn rasterise_contents(
             None => None,
         };
 
-        // The copies the repeater asks for (K-553), drawn **last first** so the
+        // The copies the repeater asks for, drawn **last first** so the
         // original ends up on top of the copies made from it — which is what
         // After Effects draws, and the only order in which turning the count up
         // does not hide the shape you already had.
@@ -823,7 +823,7 @@ pub fn rasterise_contents(
             let placed: Vec<BezierPath> = match &lines {
                 // A trimmed piece or a boolean's contour is a polyline, and a
                 // polyline is a bezier whose handles are all zero — one path
-                // type, still (K-237). Closed so the fill has something to
+                // type, still. Closed so the fill has something to
                 // fill: a half-trimmed circle fills as a half circle, exactly
                 // as AE draws it.
                 Some(lines) => lines
@@ -841,9 +841,9 @@ pub fn rasterise_contents(
             if let Some(fill) = item.fill {
                 // All the contours at once, so a boolean's hole is a hole: the
                 // even-odd crossings have to be counted across the whole shape,
-                // not one ring at a time (K-605).
+                // not one ring at a time.
                 let coverage = crate::mask::rasterise_paths(&placed, w, h, sx, sy);
-                // A gradient fill (K-555) is the same coverage painted with a
+                // A gradient fill is the same coverage painted with a
                 // colour that changes across it; the flat fill is the same
                 // walk with the colour worked out once.
                 match item.ramp_at(t, &to_box, sx, sy) {
@@ -875,18 +875,17 @@ pub fn rasterise_contents(
             if let (Some(stroke), true) = (item.stroke, item.stroke_width > 0.0) {
                 // A stroke is a brush run along the path, which is exactly what the
                 // paint rasteriser already does — one widened-path implementation
-                // for both, rather than two that can disagree (K-237).
+                // for both, rather than two that can disagree.
                 // The outline follows the trimmed piece, and it is drawn **open**
                 // whatever the path was: a trim is what turns a closed ring into a
                 // stroke with two ends. A **boolean's** contour is a ring and is
-                // outlined all the way round, so it comes back to its first point
-                // (K-605).
+                // outlined all the way round, so it comes back to its first point.
                 // A copy is a scaled **drawing**, not a scaled path: its outline
                 // and its dashes grow with it, or a copy at half size would be a
                 // shape with an outline twice as heavy.
                 let scale = copy.scale();
                 // Dashes cut the outline into pieces, each of which is a brush run
-                // of its own (K-552). A solid outline is one piece, which is the
+                // of its own. A solid outline is one piece, which is the
                 // same single run it always was.
                 let pattern: Vec<f64> = item.dash_pattern_at(t).iter().map(|d| d * scale).collect();
                 let pieces: Vec<Vec<(f64, f64)>> = placed
@@ -914,7 +913,7 @@ pub fn rasterise_contents(
                         name: item.name.clone(),
                         points,
                         // A vector outline is not a gesture: there is no stylus
-                        // behind it and its width is the item's own (K-583).
+                        // behind it and its width is the item's own.
                         pressures: Vec::new(),
                         colour: stroke,
                         width: item.stroke_width * scale,
@@ -926,18 +925,18 @@ pub fn rasterise_contents(
                         // is what the round brush already draws.
                         shape: crate::paint::BrushShape::Round,
                         // The item's own opacity, faded by this copy's share of the
-                        // repeater's ramp (K-553) — the same number the fill above
+                        // repeater's ramp — the same number the fill above
                         // multiplied its coverage by, in the per cent the brush
                         // reads it in.
                         opacity: item.opacity * ramp,
                         // A vector outline is drawn whole; a shape item's own trim
-                        // paths are a shape-layer feature, not the brush's (K-549),
+                        // paths are a shape-layer feature, not the brush's,
                         // so the whole path every time and no clock to read.
                         start: crate::anim::Property::zero(),
                         end: crate::anim::Property::fixed(100.0),
                         mode: crate::paint::PaintMode::Paint,
                         // A shape item's outline lays its colour down; a blend of
-                        // its own would be a shape-layer feature (K-550).
+                        // its own would be a shape-layer feature.
                         blend: crate::model::BlendMode::Normal,
                         clone_offset: (0.0, 0.0),
                         extra: serde_json::Map::new(),
@@ -1091,7 +1090,7 @@ impl Ramp {
 const JOIN_STEPS_PER_QUARTER: f64 = 4.0;
 
 /// `points` pushed `amount` layer pixels **out** of itself, corners rounded —
-/// After Effects' Offset Paths, with the one join this crate draws (K-554).
+/// After Effects' Offset Paths, with the one join this crate draws.
 ///
 /// "Out" is decided by the ring's own winding for a closed path, so a positive
 /// amount always grows the shape whichever way round its points were written.
@@ -1845,7 +1844,7 @@ mod tests {
         }
     }
 
-    /// The gradient belongs to the art, so a repeated copy carries it (K-553).
+    /// The gradient belongs to the art, so a repeated copy carries it.
     #[test]
     fn a_repeated_copy_carries_its_gradient_with_it() {
         let mut it = item(square(0.0, 0.0, 10.0));

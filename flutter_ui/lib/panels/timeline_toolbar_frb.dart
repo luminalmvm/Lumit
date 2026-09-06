@@ -31,7 +31,7 @@ import 'timeline_metrics_frb.dart';
 import 'timeline_navigator.dart';
 
 /// **A control standing in one of the Timeline's two chrome rows**, grown to
-/// the height the density states for them (K-512).
+/// the height the density states for them.
 ///
 /// In plain terms: Regular's chrome rows are taller than they used to be, so
 /// the tabs, the search well and the two readouts in them are told to stand
@@ -56,8 +56,8 @@ Widget timelineChromeControl(LumitTheme t, Widget child) {
 /// the well and the segments.
 ///
 /// **The Timeline's first chrome row**, and so `t.density.timelineChromeRow` —
-/// **24** under Regular, 18 under Compact (K-512, docs/15 §12A.6) — **plus the
-/// navigator's band** (K-682, the owner's ruling): the time navigator (K-648)
+/// **24** under Regular, 18 under Compact (docs/15 §12A.6) — **plus the
+/// navigator's band** (the owner's ruling): the time navigator
 /// stands over the lane area alone, and this row grows by exactly its band to
 /// meet the panel top, where the strip's blank half used to leave a sliver of
 /// dead ground above it. The row used to be a plain secondary row at 19 either
@@ -66,18 +66,18 @@ Widget timelineChromeControl(LumitTheme t, Widget child) {
 /// under it face exactly what the lane side spends on the strip and its ruler,
 /// which is what makes the two halves meet.
 ///
-/// **This is where the hit floor gives way** (§7.2, K-452): the buttons in
+/// **This is where the hit floor gives way** (§7.2): the buttons in
 /// this row are the row's own height, well under the 32 nothing interactive is
 /// supposed to hit-test below. They are not given the floor by slop, because
 /// there is nowhere to take it from — a few pixels above is the composition
 /// tab strip and a few below is the column header's own drag-to-reorder and
 /// resize seams, so an expanded target here would swallow a neighbour's
 /// gesture rather than add one. Across, where a row like this is actually
-/// aimed, they keep their room. What K-512 could do — and did — is give the
-/// row itself more height and grow every control in it to match, which is
-/// what [timelineChromeControl] is.
+/// aimed, they keep their room. What an earlier change could do — and did — is
+/// give the row itself more height and grow every control in it to match,
+/// which is what [timelineChromeControl] is.
 class Toolbar extends StatelessWidget {
-  /// The read model, for the exact rate — no bridge calls in a build (K-184).
+  /// The read model, for the exact rate — no bridge calls in a build.
   final CompModel model;
 
   /// Listened to, not read: only the two readouts redraw as it moves.
@@ -87,7 +87,7 @@ class Toolbar extends StatelessWidget {
   /// on the ruler makes, so typing a time also stops the transport.
   final ValueChanged<int> onSeek;
 
-  /// Which view is up, and how to ask for another (K-455).
+  /// Which view is up, and how to ask for another.
   final TimelineMode mode;
   final ValueChanged<TimelineMode> onMode;
   final ValueChanged<String> onSearch;
@@ -124,7 +124,7 @@ class Toolbar extends StatelessWidget {
           // 00:00:00:00, so three seconds into a 24 fps comp reads f72.
           //
           // Both sit in slots wide enough for the longest thing they can say
-          // and both can be typed into (K-287): a readout that resized itself
+          // and both can be typed into: a readout that resized itself
           // as it counted shoved the search field sideways through every
           // second of playback, and a time you can read is a time you should
           // be able to state. Anything outside the composition lands on its
@@ -150,7 +150,7 @@ class Toolbar extends StatelessWidget {
                       minFrame: 0,
                       maxFrame: lastFrame,
                       tooltip: l10n.tipPlayheadTime,
-                      // A **well**, because the clock can be typed into (K-460):
+                      // A **well**, because the clock can be typed into:
                       // the recess is what says so, and a time you can read is a
                       // time you should be able to state. It was bare text that
                       // happened to answer a click.
@@ -174,7 +174,7 @@ class Toolbar extends StatelessWidget {
                       maxFrame: lastFrame,
                       tooltip: l10n.tipFrameNumber,
                       well: true,
-                      // Rests as `F48`, edits as `48` (K-460, capital by owner ruling). The `f` names the
+                      // Rests as `F48`, edits as `48` (capital by owner ruling). The `f` names the
                       // clock rather than counting in it, so the field holds the
                       // bare number and wears the letter again on commit — an
                       // edit that began by stepping over a letter began wrong.
@@ -193,7 +193,7 @@ class Toolbar extends StatelessWidget {
           // count matches the counter rather than fading a step further.
           // Outside the listener, because a comp's length does not move as the
           // playhead does; outside the well, because the comp's length is not
-          // editable and a recess round it would say it was (K-460).
+          // editable and a recess round it would say it was.
           const SizedBox(width: 4),
           Text(
             '/${model.durationFrames}',
@@ -211,7 +211,7 @@ class Toolbar extends StatelessWidget {
               child: timelineChromeControl(
                   t, LayerSearchFrb(onChanged: onSearch, width: 1e9))),
           const SizedBox(width: outlineGap),
-          // The two modes, at the far right of the row (§12A.1, K-529).
+          // The two modes, at the far right of the row (§12A.1).
           // Kicker segments rather than icons: "Layers" and "Graph" are the
           // names of two shapes of the same panel, and a word says which one
           // is in force where two small glyphs made the reader guess.
@@ -254,8 +254,8 @@ class Toolbar extends StatelessWidget {
     final t = ThemeScope.of(context).theme;
     return LumitTooltip(
       message: tip,
-      // Grown to the chrome row's stated control height under Regular
-      // (K-512): these three are the buttons the owner named as hard to hit.
+      // Grown to the chrome row's stated control height under Regular:
+      // these three are the buttons the owner named as hard to hit.
       child: timelineChromeControl(
         t,
         HouseButton(
@@ -300,7 +300,7 @@ Widget _compToggleButton(
       small: true,
       frameless: true,
       // No vertical padding: a 16px glyph plus the button's own 1px edge is
-      // the whole of an 18px bottom bar (K-451), and 2px more spilled it.
+      // the whole of an 18px bottom bar, and 2px more spilled it.
       padding: const EdgeInsets.symmetric(horizontal: 4),
       onPressed: onPressed,
       child:
@@ -430,7 +430,7 @@ Future<void> _showLayerMenu(
     width: 190,
     rows: (close) => [
       // The row carries what it does, not a word to switch on: the label is
-      // translated (K-303) and would no longer match an English case.
+      // translated and would no longer match an English case.
       for (final (label, add) in <(String, VoidCallback)>[
         (l10n.menuSolid, comp.addSolidLayer),
         (l10n.menuText, comp.addTextLayer),
@@ -464,7 +464,7 @@ Future<void> _showLayerMenu(
 /// a kicker naming a run of kickers only spent room the outline's foot has
 /// less of than the lane bar had.
 ///
-/// Two shapes, one per view. In **Layers** it is the keyframe strip (K-458):
+/// Two shapes, one per view. In **Layers** it is the keyframe strip:
 /// the four interpolations — and nothing after them, since the owner removed
 /// Reverse, Copy and Paste at playhead from the bar (2026-08-31).
 /// In **graph view** it is the graph's own commands (docs/07 §5.3): the eases,
@@ -472,7 +472,7 @@ Future<void> _showLayerMenu(
 /// button keeps the face, the tooltip and the widget key it had on the lane
 /// bar — this is a move, not a redesign.
 class KeyCommandStrip extends StatelessWidget {
-  /// Set in **Layers mode**: the keyframe strip (K-458).
+  /// Set in **Layers mode**: the keyframe strip.
   final bool strip;
 
   /// Set in graph view; null leaves the graph's own commands out.
@@ -487,7 +487,7 @@ class KeyCommandStrip extends StatelessWidget {
 
   /// The Easing… button pressed, with the button's own context so a popup can
   /// be anchored to it. Whether that is a popup or a docked panel is the
-  /// panel's decision, not this strip's (K-349).
+  /// panel's decision, not this strip's.
   final ValueChanged<BuildContext>? onOpenEasing;
 
   /// The Ease word pressed, with its own context so the popover can be
@@ -525,7 +525,7 @@ class KeyCommandStrip extends StatelessWidget {
           // is closed and a lens or an ease is not on it, so which is in force
           // reads from the frame and the brighter label, as the mode tabs do.
           frameless: !on,
-          // 18px bottom bar (K-451): one pixel of the button's own edge is
+          // 18px bottom bar: one pixel of the button's own edge is
           // all the room a 9px kicker leaves above and below it.
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
           onPressed: onPressed,
@@ -533,10 +533,10 @@ class KeyCommandStrip extends StatelessWidget {
         ),
       );
 
-  /// A strip command drawn as a glyph of the set (K-725): the interpolation
+  /// A strip command drawn as a glyph of the set: the interpolation
   /// entries, whose shapes — a line, a step, a curve, a handled curve — say
   /// more at 16px than four capitalised words did. The word is the tooltip,
-  /// which is the control's name (K-482), and the semantic label for a reader.
+  /// which is the control's name, and the semantic label for a reader.
   Widget _glyphButton(
     LumitTheme t, {
     required String keyName,
@@ -551,7 +551,7 @@ class KeyCommandStrip extends StatelessWidget {
           small: true,
           frameless: true,
           // The comp-toggle buttons' own padding: a 16px glyph plus the
-          // button's 1px edge is the whole of an 18px bottom bar (K-451).
+          // button's 1px edge is the whole of an 18px bottom bar.
           padding: const EdgeInsets.symmetric(horizontal: 4),
           onPressed: onPressed,
           // A command, not a toggle: it rests at the column's muted strength,
@@ -582,7 +582,7 @@ class KeyCommandStrip extends StatelessWidget {
             // segmented run, 12 between one run and the next, so the runs read
             // as groups rather than as one long strip of buttons.
             if (strip) ...[
-              // Glyphs, not words (K-725, the owner's ask): the set's own
+              // Glyphs, not words (the owner's ask): the set's own
               // marks for the four interpolations, each named by its tooltip.
               _glyphButton(t,
                   keyName: 'keys-interp-linear',
@@ -725,7 +725,7 @@ class KeyCommandStrip extends StatelessWidget {
   }
 }
 
-/// The outline's end of the bottom bar (K-448, §12A.1): one kicker per
+/// The outline's end of the bottom bar (§12A.1): one kicker per
 /// column group, lit while that group is drawn.
 ///
 /// Kickers rather than buttons because these name *containers* (§7.1) — they
@@ -738,7 +738,7 @@ class ColumnToggles extends StatelessWidget {
   final Set<TimelineGroup> hidden;
   final ValueChanged<TimelineGroup> onToggle;
 
-  /// What the chrome says (K-440), read once by the panel and handed down.
+  /// What the chrome says, read once by the panel and handed down.
   /// These three toggles are the setting's **first consumer**: in every mode
   /// but [ChromeLabels.words] they draw the set's own Switches, Modes and
   /// Parent glyphs, and the word arrives in the tooltip as it does everywhere.
@@ -769,7 +769,7 @@ class ColumnToggles extends StatelessWidget {
   });
 
   /// What the comp-wide switches act on, and the read model they read their
-  /// state from (K-184: no bridge call in a build).
+  /// state from (no bridge call in a build).
   final CompositionReference comp;
   final CompModel model;
 
@@ -824,11 +824,11 @@ class ColumnToggles extends StatelessWidget {
               ),
               const SizedBox(width: 4),
             ],
-            // The Animated filter, last of the outline's own marks (K-441,
-            // 6.43). One toggle rather than the withdrawn Keys sheet's *Show —
-            // All / Animated* pair: two states are two states, and a word that
-            // reads like its neighbours on a strip of them says which is in
-            // force without spending a row on saying so twice.
+            // The Animated filter, last of the outline's own marks (6.43). One
+            // toggle rather than the withdrawn Keys sheet's *Show — All /
+            // Animated* pair: two states are two states, and a word that reads
+            // like its neighbours on a strip of them says which is in force
+            // without spending a row on saying so twice.
             LumitTooltip(
               message:
                   animatedOnly ? l10n.tipAnimatedShowing : l10n.tipAnimatedOnly,
@@ -905,7 +905,7 @@ class ColumnToggles extends StatelessWidget {
   }
 }
 
-/// The set's own glyph for a column group (K-440) — the one the drawing gives
+/// The set's own glyph for a column group — the one the drawing gives
 /// that word. Only the three toggleable groups can be asked: the rest are
 /// never drawn as a toggle.
 String _columnGlyph(TimelineGroup group) => switch (group) {

@@ -117,6 +117,8 @@ const STATUS_COUNT: usize = 15;
 /// allocation: this is on the path of every property read a plugin makes, and
 /// the tally must cost nothing worth measuring.
 static ANSWERED: [AtomicU64; STATUS_COUNT] = [const { AtomicU64::new(0) }; STATUS_COUNT];
+/// Answers that were the plugin's doing rather than the host's: see [`uncount`].
+static FORGIVEN: [AtomicU64; STATUS_COUNT] = [const { AtomicU64::new(0) }; STATUS_COUNT];
 
 /// Tally one answer. Called by the suites' guards and by nothing else.
 pub(crate) fn record(code: OfxStatus) {
@@ -126,19 +128,40 @@ pub(crate) fn record(code: OfxStatus) {
     }
 }
 
+/// Take one answer of `code` back out of the tally.
+///
+/// For the one case where the code is the spec's answer and yet not the host's
+/// refusal: a plugin handing the property suite a **null** handle (Red Giant
+/// Universe reads `kOfxPropTime` off `createInstance`'s `inArgs`, which the
+/// spec says is null). The plugin is told `kOfxStatErrBadHandle`, as it must
+/// be, and carries on; counting that against the host would have the
+/// conformance bench call a plugin's slip a host bug.
+pub(crate) fn uncount(code: OfxStatus) {
+    // Its own counter, subtracted on read: this runs inside the call, before
+    // the guard records the answer, so taking one off the tally here would
+    // find nothing to take.
+    let index = usize::try_from(code).unwrap_or(usize::MAX);
+    if let Some(slot) = FORGIVEN.get(index) {
+        slot.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
 /// How many times the host has answered `status` since the last [`forget`].
 #[must_use]
 pub fn answered(status: Status) -> u64 {
     let index = usize::try_from(status.code()).unwrap_or(usize::MAX);
-    ANSWERED
-        .get(index)
-        .map_or(0, |slot| slot.load(Ordering::Relaxed))
+    let count = |table: &[AtomicU64; STATUS_COUNT]| {
+        table
+            .get(index)
+            .map_or(0, |slot| slot.load(Ordering::Relaxed))
+    };
+    count(&ANSWERED).saturating_sub(count(&FORGIVEN))
 }
 
 /// Start the tally again from nought — what a harness does before the pass it
 /// wants the count for.
 pub fn forget() {
-    for slot in &ANSWERED {
+    for slot in ANSWERED.iter().chain(&FORGIVEN) {
         slot.store(0, Ordering::Relaxed);
     }
 }

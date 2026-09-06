@@ -1,15 +1,15 @@
-// The Viewer's **"at effect" chip** (K-528): the picture at one point in a
+// The Viewer's **"at effect" chip**: the picture at one point in a
 // layer's effect stack, in the Viewer rather than in a panel of its own.
 //
 // **In plain terms.** Select an effect — its heading in the Effect controls
-// stack, or its box on the node graph, which are the same pick (K-300) — and
+// stack, or its box on the node graph, which are the same pick — and
 // this chip appears over the Viewer's picture saying *at* that effect's name.
 // Click it and the Viewer shows the composition as it looks with that layer's
 // effects stopping there: the blur applied and nothing after it. Click it again
 // and the finished picture comes back. Nothing is soloed, bypassed or switched
 // off, and the document is not touched.
 //
-// **Why it is a chip and not a panel.** It used to be one (K-448, K-486): a
+// **Why it is a chip and not a panel.** It used to be one: a
 // second, locked viewport showing a 256-pixel thumbnail. The owner's ruling is
 // that a node preview is just the viewer — so the question is answered in the
 // Viewer, at its own size and quality, through the one frame transport, and a
@@ -47,7 +47,7 @@ String? prefixChipName(LumitUiState ui) {
   if (effect == null) return info.name;
   for (final on in info.effects) {
     if (on.id == effect) {
-      // The user's own name where one is set (K-321), else the effect's label,
+      // The user's own name where one is set, else the effect's label,
       // exactly as the Effect controls heading spells it.
       return on.customName ?? effectLabelOf(on.name);
     }

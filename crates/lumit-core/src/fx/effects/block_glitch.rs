@@ -5,7 +5,7 @@
 //! or the blocks blur into noise instead of popping. So layer time is discretised
 //! to a fixed tick before it reaches the hash. A tick is not a control anybody
 //! sets, so it is worked out at resolve time through the one hook that sees the
-//! clock ([`EffectDef::resolve_derived`], K-385) and handed to the kernel as a
+//! clock ([`EffectDef::resolve_derived`]) and handed to the kernel as a
 //! whole number, exactly as the hand-written resolve arm handed it over before.
 
 use crate::fx::{
@@ -23,8 +23,8 @@ use lumit_fx_macros::Effect;
     cost = Cheap,
     roi = FullFrame,
     seeded = true, // its pixels are a function of time under constant parameters
-    // K-427: the matte scales the displacement, inside the kernel (the
-    // owner's rule for mattes); the generic strength dissolve does not also run.
+    // The matte scales the displacement, inside the kernel (the owner's rule
+    // for mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales Intensity per pixel: white glitches at the full Intensity, grey \
@@ -162,7 +162,7 @@ impl EffectDef for BlockGlitchDef {
     }
 
     /// The discretised tick — the whole of what the old resolve arm did beyond
-    /// reading its rows, moved unchanged (K-385). `floor` in `f64` and only then
+    /// reading its rows, moved unchanged. `floor` in `f64` and only then
     /// narrowed, exactly as the arm ordered it, so the frame a tick changes on is
     /// the same frame it always was.
     fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {

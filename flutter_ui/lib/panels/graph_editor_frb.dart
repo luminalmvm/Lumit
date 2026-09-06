@@ -11,7 +11,7 @@
 // that move independently, each with a single influence handle — the AE speed
 // graph.
 //
-// **Zero bridge calls to draw** (K-184): the curves are evaluated by the Dart
+// **Zero bridge calls to draw**: the curves are evaluated by the Dart
 // port of the engine's own cubic (graph_maths.dart, pinned together by
 // docs/impl/keyframe-eval.md), and every scalar rides in on the comp read
 // model. The bridge is only crossed when a gesture commits — one write per
@@ -113,10 +113,10 @@ class GraphEditorFrb extends StatefulWidget {
   /// nobody has to hold a tool to edit a curve.
   final bool penArmed;
 
-  /// Settings ▸ Interface ▸ Editing ▸ *Retime opens to Velocity* (K-246).
+  /// Settings ▸ Interface ▸ Editing ▸ *Retime opens to Velocity*.
   ///
-  /// On, a **Retime** channel's speed view becomes the Vegas envelope of
-  /// K-247: one point per key whose height is the playback speed in per cent,
+  /// On, a **Retime** channel's speed view becomes the Vegas envelope: one
+  /// point per key whose height is the playback speed in per cent,
   /// straight lines between them, and the frames after a dragged point
   /// re-integrated. Off — and for every channel that is not a Retime, in
   /// either mode — the speed view is the ordinary two-sided derivative graph
@@ -209,7 +209,7 @@ typedef _KeyMove = (double frame, double value) Function(
 /// The box spans the selected keys in time and in value; a handle scales the
 /// selection about the **opposite** edge, so the edge you are not holding is
 /// the one that stays put — a stretch rather than a move, exactly as a lane
-/// block's handle behaves (K-458).
+/// block's handle behaves.
 class _BoxDrag {
   /// Which axis this edge scales: the left and right edges scale **time**, the
   /// top and bottom edges scale **value**. One axis each, so the box answers
@@ -493,7 +493,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   /// framing fixed however far the time axis was zoomed in — zoom into a
   /// quiet stretch of a curve that spikes somewhere off-screen and the pane
   /// still made room for the spike, so the part under the pointer stayed a
-  /// flat line (K-333).
+  /// flat line.
   ///
   /// The edge samples are what stop a span *between* two keys from framing on
   /// nothing: zoomed between them there is no key in view at all, and the
@@ -529,12 +529,12 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   }
 
   /// Which reading [channel] draws in. Everything follows the view's lens
-  /// except a mask's **shape** (K-344), which has no value to plot and so
+  /// except a mask's **shape**, which has no value to plot and so
   /// draws its rate of change in both.
   GraphLens lensOf(GraphChannel channel) =>
       channel.isMaskPath ? GraphLens.speed : widget.lens;
 
-  /// Whether [channel] draws as the Vegas speed envelope right now (K-247) —
+  /// Whether [channel] draws as the Vegas speed envelope right now —
   /// a Retime, in the speed view, with the preference on.
   bool isEnvelope(GraphChannel channel) =>
       widget.vegas && channel.retime && widget.lens == GraphLens.speed;
@@ -542,7 +542,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   bool get _anyEnvelope => widget.channels.any(isEnvelope);
 
   (double, double) _fitRange() {
-    // Only shapes on screen means only speeds on screen (K-344).
+    // Only shapes on screen means only speeds on screen.
     final allPaths = widget.channels.isNotEmpty &&
         widget.channels.every((c) => c.isMaskPath);
     if (widget.lens == GraphLens.value && !allPaths) {
@@ -620,7 +620,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     // Through [_shownKeys], never the document's keys, in every lens: the
     // drag previews — a row drag's published value, a handle's provisional
     // sides — live in the shown list, and the diamond has to sit on the curve
-    // that is actually being drawn (K-334, K-336).
+    // that is actually being drawn.
     final shown = _shownKeys(channel);
     if (index >= shown.length) return 0;
     if (lensOf(channel) == GraphLens.value) {
@@ -677,7 +677,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   /// far outside the window, a pan of one wheel notch moves it by a fraction of
   /// a span nobody can see, and only another Alt+wheel — being multiplicative —
   /// can climb back. That is the "no other scroll works until I press Alt
-  /// again" report, and it was never the Alt key at all (K-333).
+  /// again" report, and it was never the Alt key at all.
   (double, double) _sane((double, double) range) {
     final fit = _fitRange();
     final reference = (fit.$2 - fit.$1).abs();
@@ -708,7 +708,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     widget.onSelectionChanged();
   }
 
-  /// [additive] is read by the marquee at the drag's *start* (K-500 §2.1) —
+  /// [additive] is read by the marquee at the drag's *start* —
   /// the modifier decides the gesture when it begins, not when it ends.
   void _applyMarquee(
       Rect rect, (double, double) range, double height, bool additive) {
@@ -760,7 +760,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   /// that moment, so the picture does not move — adding a point is a place to
   /// grab, not an edit. In the Vegas envelope the new point also takes the
   /// speed the envelope already reads there, so the straight line it sits on
-  /// stays straight (K-247).
+  /// stays straight.
   void _addKeyAt(Offset local, (double, double) range, double height) {
     final frame = widget.magnet
         ? widget.axis.frameAt(local.dx).toDouble()
@@ -1063,7 +1063,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     // a curve one key longer than the document's, and reading x from the
     // document while y read the preview drew every diamond past the insertion
     // with one key's x and another's y — glyphs floating off the curve until
-    // release (K-336). The same list the glyph loop iterates, so the index can
+    // release. The same list the glyph loop iterates, so the index can
     // never cross lists.
     final shown = _shownKeys(channel);
     if (index >= shown.length) return Offset.zero;
@@ -1076,7 +1076,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     // A speed-lens dot in flight: the side being dragged sits at the speed the
     // pointer is asking for.
     //
-    // **Its sideways travel is not added here** (K-747). The paragraph above
+    // **Its sideways travel is not added here**. The paragraph above
     // is the rule and this block used to break it: `_keysWithDotTimeMove` has
     // already put the key at its new frame in [shown], so `x += dot.dxPx` moved
     // the dot a second time and it ran away from the pointer at twice the
@@ -1324,7 +1324,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
         // An envelope point: its height is the playback speed in per cent,
         // straight off the axis, and it carries the key sideways like any
         // speed dot. There is no influence to set — an envelope's sides are
-        // always the chord (K-247), which is what keeps its lines straight.
+        // always the chord, which is what keeps its lines straight.
         drag.speed = pointerValue;
         if (drag.dotOnly) {
           drag.rawDx += dx;
@@ -1354,7 +1354,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       }
 
       if (nb == null) return;
-      // `Shift` lays the handle flat (K-333): the value is held at the key's
+      // `Shift` lays the handle flat: the value is held at the key's
       // own, so the tangent leaves it horizontally — the ease-out-to-nothing
       // every editor spells this way. A joined partner is mirrored from the
       // dragged side, so it comes flat with it and the pair reads as one
@@ -1372,11 +1372,11 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       drag.influence = r.influence;
       _mirrorPartner(drag, key, r.speed, r.influence, range, height);
     });
-    // The shaped curve, exactly as the release will commit it (K-192): an ease
+    // The shaped curve, exactly as the release will commit it: an ease
     // or an envelope point changes which source moment every frame between two
     // keys reads, so it is as much a picture edit as moving the key itself.
     //
-    // **Only where the picture can actually differ** (K-529, owner: a handle
+    // **Only where the picture can actually differ** (owner: a handle
     // drag cost calls by the hundred per second wherever it was made). An ease
     // changes the values *between* two keys and nothing outside them, so with
     // the playhead outside that span every one of those renders came back with
@@ -1393,7 +1393,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   /// when the two sides are joined and so swing together.
   ///
   /// An envelope point is the exception and always answers true: dragging one
-  /// re-integrates every frame after it (K-247), so the change is not bounded
+  /// re-integrates every frame after it, so the change is not bounded
   /// by a span at all.
   bool _handleDragShowsAtPlayhead(_HandleDrag drag) {
     if (isEnvelope(drag.channel) || drag.dotOnly) return true;
@@ -1575,8 +1575,8 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   /// move together while the pointer is down.
   List<BridgeKeyframe> _keysWithHandleDrag(
       _HandleDrag drag, List<BridgeKeyframe> keys) {
-    // An envelope point sets a speed and the source positions after it follow
-    // (K-247). Every keyframe *time* stays exactly put, so a beat already
+    // An envelope point sets a speed and the source positions after it follow.
+    // Every keyframe *time* stays exactly put, so a beat already
     // synced stays synced — the covenant this whole feature is built around.
     if (isEnvelope(drag.channel)) {
       return setEnvelopeSpeed(keys, drag.index, drag.speed);
@@ -1602,7 +1602,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   }
 
   /// [keys] with the row drag's value written into the key at its frame —
-  /// matched to the **nearest half frame**, never by float equality (K-336).
+  /// matched to the **nearest half frame**, never by float equality.
   ///
   /// `withKeyAt` merged by exact double frame, and a key's frame comes back
   /// through rational-to-float maths: frame 50 at 60 fps reads 49.999…, which
@@ -1708,7 +1708,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       moved ??= [...keys];
       final key = keys[i];
       // The commit's own arithmetic, so with the magnet on the key draws on
-      // the whole frame it will land on (K-333) and a key taken off either end
+      // the whole frame it will land on and a key taken off either end
       // of the composition draws where it will actually come to rest.
       final (frame, value) =
           move(channel, keyFrame(key, widget.fps), key.value);
@@ -2013,7 +2013,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                       height: height,
                       // `text_primary`, the colour of everything selected —
                       // never the accent, and never `warning`, which has no
-                      // job on this pane (K-439, §6.1).
+                      // job on this pane (§6.1).
                       colour: t.textPrimary,
                     ),
                   ),
@@ -2311,7 +2311,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
         final sides = widget.lens == GraphLens.value || isEnvelope(channel)
             // The value view, and the Vegas envelope: one point per key. The
             // envelope's whole idea is that a key has *a* speed rather than
-            // two one-sided ones (K-247), so a second dot would be a second
+            // two one-sided ones, so a second dot would be a second
             // answer to a question with one.
             ? const [true]
             // Speed lens: an in dot and an out dot, moved independently —
@@ -2435,7 +2435,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                         // Selected is `text_primary` — the one colour
                         // selection speaks in. Not the accent: its jobs are
                         // the playhead, the one filled button and the active
-                        // tab tick, and nothing else (K-439).
+                        // tab tick, and nothing else.
                         colour: chosen
                             ? t.textPrimary
                             : t.curve[channel.colourIndex % t.curve.length],
@@ -2541,7 +2541,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       return (e.time, e.value);
     }
     // An envelope point has no influence handle: its sides are always the
-    // chord, which is what keeps the lines between points straight (K-247).
+    // chord, which is what keeps the lines between points straight.
     if (isEnvelope(channel)) return null;
     // Speed lens: the influence handle reaches horizontally from the dot.
     final keyTime = rationalSeconds(key.time);
@@ -2591,7 +2591,7 @@ class _GraphPainter extends CustomPainter {
   /// The gutter's translucent ground.
   final Color gutterFill;
 
-  /// Whether Retime channels draw as the Vegas envelope (K-247) — which puts
+  /// Whether Retime channels draw as the Vegas envelope — which puts
   /// their curve on the axis in **per cent** rather than in source seconds per
   /// second, so it lands on the points drawn over it.
   final bool vegas;
@@ -2627,10 +2627,10 @@ class _GraphPainter extends CustomPainter {
       final channel = channels[c];
       final keys = shownKeys[c];
       // A Retime drawn as the Vegas envelope reads in per cent, so its curve
-      // is scaled onto the same axis as its points (K-247).
+      // is scaled onto the same axis as its points.
       final envelope = vegas && channel.retime && lens == GraphLens.speed;
       final speedScale = envelope ? 100.0 : 1.0;
-      // **A shape draws its rate of change in both lenses** (K-344): a path has
+      // **A shape draws its rate of change in both lenses**: a path has
       // no value to plot, so the value view would otherwise be an empty pane
       // for a property that is plainly animating.
       final chLens = channel.isMaskPath ? GraphLens.speed : lens;

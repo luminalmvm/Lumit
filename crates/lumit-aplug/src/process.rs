@@ -54,7 +54,7 @@ pub const INTERLEAVED_LEN: usize = BLOCK_FRAMES * CHANNELS;
 ///
 /// `time` is the frame offset within the block, which is how CLAP places an
 /// event; a value baked at the block's start has `time` nought, which is what
-/// the envelope precedent (K-172) delivers.
+/// the envelope precedent delivers.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 pub struct ParamEvent {
     /// Frames from the start of the block.
@@ -165,7 +165,7 @@ impl Block {
     }
 
     /// The two planar buffers, for a boundary that carries its events some other
-    /// way — VST3's ride in a queue object rather than in the call (K-707).
+    /// way — VST3's ride in a queue object rather than in the call.
     pub(crate) fn planes(&mut self) -> (&mut [f32], &mut [f32]) {
         (&mut self.input, &mut self.output)
     }

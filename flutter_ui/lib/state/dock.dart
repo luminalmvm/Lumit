@@ -5,7 +5,7 @@
 // In plain terms: the workspace is a tree. A *split* lays its children side by
 // side (or stacked) with weighted shares; a *tabs* node stacks panels behind
 // one another with a tab bar; a *pane* is one panel. A pane that sits alone —
-// not inside a tabs node — renders bare, with no tab bar (K-086).
+// not inside a tabs node — renders bare, with no tab bar.
 
 import 'package:lumit_flutter/l10n/strings.dart';
 
@@ -23,16 +23,16 @@ enum Panel {
   easing,
 
   /// The layer's effect stack drawn as nodes and wires, plus the drivers wired
-  /// into its parameters (K-471). A second *view* of the same document, not a
+  /// into its parameters. A second *view* of the same document, not a
   /// second document.
   graph,
 
-  /// The parameter rows of whichever box the Graph panel has picked (K-471) —
+  /// The parameter rows of whichever box the Graph panel has picked —
   /// the Nodes workspace's lower-right column. The Effect controls panel lists
   /// the whole stack; this one answers "what is selected", drivers included.
   node,
 
-  /// The desk (docs/09 §3.1, K-690/K-691): one strip per audible row of the
+  /// The desk (docs/09 §3.1): one strip per audible row of the
   /// fronted comp — fader, pan pot, meters off the engine's tap, mute and
   /// solo — and the Master strip with its limiter lamp. The Audio workspace's
   /// left column fronts it.
@@ -71,7 +71,7 @@ sealed class DockNode {
   /// one — and its parent drops it.
   ///
   /// **A folded-away panel must not cost anyone their arrangement.** Panels do
-  /// go: the Node preview became a chip on the Viewer's own picture (K-528).
+  /// go: the Node preview became a chip on the Viewer's own picture.
   /// Every workspace saved while it existed still names it, and reading that
   /// as a fault would have thrown on the way in — a stored layout taking the
   /// settings down with it, which is the worst way to learn a panel was
@@ -162,7 +162,7 @@ class DockSplit extends DockNode {
         'kind': 'split',
         'axis': axis.name,
         // A copy: the live list is mutated in place as splitters are dragged,
-        // and a caller that keeps this map — the per-project session (K-245)
+        // and a caller that keeps this map — the per-project session
         // does — would otherwise be holding the layout rather than a record of
         // what it was.
         'shares': [...shares],
@@ -179,12 +179,12 @@ class DockSplit extends DockNode {
 /// behind Project while fronting Debug on the right. Viewer and Timeline sit
 /// alone and render bare.
 ///
-/// **The Debug panel is in no shipped arrangement either** (K-739): it is a
+/// **The Debug panel is in no shipped arrangement either**: it is a
 /// developer's readout, and the owner took it out of every default when the
 /// arrangements were measured off their own screen. Like Hierarchy it is one
 /// tick away in the Window menu.
 ///
-/// **The Hierarchy panel is in no shipped arrangement** (K-614): it is the
+/// **The Hierarchy panel is in no shipped arrangement**: it is the
 /// parenting tree, which is a thing you go and look at rather than a thing
 /// you work beside, and a tab nobody opens is a tab in everybody's way. It
 /// is one tick away in the Window menu, like Easing, Graph and Node.
@@ -215,11 +215,11 @@ DockSplit defaultLayout() => DockSplit(
 /// inventory, arranged for different work. Structure only, per the spec.
 ///
 /// Retiming, Nodes and Audio are the presets that change the inventory rather
-/// than only the arrangement (K-349, K-471, the AudioWorkspace board): the
+/// than only the arrangement (the AudioWorkspace board): the
 /// Easing panel is in no other arrangement, and neither are the Graph, Node,
 /// Mixer and Audio panels, because a panel nobody asked for should not appear
-/// in an arrangement they already know. Hierarchy is in none of them at all
-/// (K-614), for the same reason.
+/// in an arrangement they already know. Hierarchy is in none of them at all,
+/// for the same reason.
 ///
 /// The order is the strip's order, which is the drawing's: Nodes sits third,
 /// beside Effects, because both are about what an effect does rather than
@@ -249,7 +249,7 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
       WorkspacePreset.edit => defaultLayout(),
       // Effect controls promoted to its own column beside the Project panel;
       // Effects & presets on the right with Scopes tabbed behind. The
-      // Timeline is Edit's height exactly (K-739): the owner asked for one
+      // Timeline is Edit's height exactly: the owner asked for one
       // timeline height across Edit, Effects, Nodes and Colour, so that
       // changing workspace does not move the lanes under the pointer. The
       // right column is the owner's own measured width — wide enough to work
@@ -274,12 +274,12 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
           ],
           [0.68, 0.32],
         ),
-      // Nodes (K-445, K-471): the graph as the main surface, and the one
+      // Nodes: the graph as the main surface, and the one
       // preset whose root splits **across** rather than down — the Timeline
       // runs under the Graph panel only, not under the small viewer, which is
       // what the approved Nodes-workspace drawing shows. The proportions are
       // the owner's own, measured off their screen and superseding the
-      // drawing's (K-739): 0.76/0.24 across; the graph column 0.68/0.32, so
+      // drawing's: 0.76/0.24 across; the graph column 0.68/0.32, so
       // the Timeline stands at the height every other arrangement gives it
       // rather than the drawing's short strip; the right column 0.32 Viewer —
       // whole bar kept — to 0.68 Node panel, the parameter rows being what
@@ -303,7 +303,7 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
       // Scopes given a wide right-hand column outright, no longer tabbed
       // over the Debug panel; the left group Project, Effect controls
       // (fronted) and Effects & presets; Viewer centre-dominant; the Timeline
-      // at the one height (K-739).
+      // at the one height.
       WorkspacePreset.colour => DockSplit(
           DockAxis.vertical,
           [
@@ -353,7 +353,7 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
           ],
           [0.53, 0.47],
         ),
-      // Retiming (K-349): the arrangement for shaping movement. The **Easing**
+      // Retiming: the arrangement for shaping movement. The **Easing**
       // panel takes the right-hand column outright rather than tabbing behind
       // Scopes — the whole point of the panel over the popup is that it stays
       // on screen while the selection changes underneath it, and a panel behind
@@ -597,7 +597,7 @@ void _removeSplitChild(DockSplit split, int i) {
 
 /// The dock's simplification rules, mirroring egui_tiles' options in
 /// dock.rs::dock_simplification_options: prune empty tabs and splits, unwrap a
-/// single-child tab group to a bare pane (K-086) and a single-child split to
+/// single-child tab group to a bare pane and a single-child split to
 /// its child, and join a nested split into a same-axis parent (scaling the
 /// nested child's shares by its own share). The root always stays a DockSplit;
 /// were it to collapse to one child, it keeps a one-child split instead.

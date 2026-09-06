@@ -8,7 +8,7 @@ use lumit_fx_macros::Effect;
 /// wants (docs/impl/effect-registry.md §2.4).
 ///
 /// **Why `packed` returns this rather than a tuple.** Wavelength is a *quality
-/// tier* (K-090), not a dial: on, the effect runs a different kernel with a
+/// tier*, not a dial: on, the effect runs a different kernel with a
 /// different uniform — which is why it had two `Resolved` variants before the
 /// migration. One enum keeps that fork in one place, so the CPU reference and
 /// the GPU wrapper cannot disagree about which mode an instance is in.
@@ -23,7 +23,7 @@ pub enum Split {
         angle_deg: f32,
         /// Per-tap displacement scale (FX-9), `[t0, t1, t2]`.
         scale: [f32; 3],
-        /// The three taps' tints, normalised per channel (K-167).
+        /// The three taps' tints, normalised per channel.
         tints: [[f32; 3]; 3],
         /// 0..1.
         mix: f32,
@@ -39,7 +39,7 @@ pub enum Split {
         /// Tap count, rounded from the Samples slider (clamped 3..=64 by the
         /// tap builder both paths share).
         samples: i32,
-        /// The three picker colours driving the dispersion gradient (A1/K-163);
+        /// The three picker colours driving the dispersion gradient (A1);
         /// **not** normalised — the gradient reads them as authored.
         tints: [[f32; 3]; 3],
         /// 0..1.
@@ -51,7 +51,7 @@ pub enum Split {
 ///
 /// A saved project that carries no `amount` at all now reads the declared
 /// default rather than dropping the effect, which is the registry's rule for
-/// every parameter (K-258); the old arm's `?` made a missing Amount silently
+/// every parameter; the old arm's `?` made a missing Amount silently
 /// remove the whole op.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
@@ -62,8 +62,8 @@ pub enum Split {
     cost = Cheap,
     // Amount's own hard maximum: 500 px@comp.
     roi = PaddedPx(500.0),
-    // K-427: the matte scales the displacement, inside the kernel (the
-    // owner's rule for mattes); the generic strength dissolve does not also run.
+    // The matte scales the displacement, inside the kernel (the owner's rule
+    // for mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales Amount per pixel: white splits the channels the full distance, \
@@ -99,7 +99,7 @@ pub struct RgbSplit {
     /// Per-tap displacement scales (FX-9), per cent: each tap shifts by Amount
     /// times its own scale. The defaults 100 / 0 / 100 %, paired with the
     /// red / green / blue tints below, reproduce the classic split bit-for-bit.
-    /// Open both sides (K-135): a negative scale flips a tap's direction.
+    /// Open both sides: a negative scale flips a tap's direction.
     /// Labelled Red / Green / Blue for the classic case; each really scales its
     /// like-numbered tint.
     #[slider(label = "Red", min = -200.0, max = 200.0, default = 100.0, unit = Percent)]
@@ -129,13 +129,13 @@ pub struct RgbSplit {
     #[colour(label = "Colour 3", default = [0.0, 0.0, 1.0, 1.0])]
     pub channel_colour_3: [f32; 4],
 
-    /// K-090 quality tier: off = the classic three-tap split (byte-identical to
+    /// A quality tier: off = the classic three-tap split (byte-identical to
     /// before this toggle existed); on = a smooth dispersion. The per-tap scales
     /// apply to the classic mode only; the tints drive both.
     #[toggle(default = false)]
     pub wavelength: bool,
 
-    /// Wavelength mode's tap count (FX-9/K-144): more taps fill the same
+    /// Wavelength mode's tap count (FX-9): more taps fill the same
     /// ±offset span more densely. Rounded and clamped to 3..=64; ignored in the
     /// classic mode.
     #[slider(min = 3.0, max = 64.0, default = 16.0, hard_min = 3.0, hard_max = 64.0, unit = Raw)]
@@ -190,7 +190,7 @@ impl RgbSplit {
                 mix,
             }
         } else {
-            // Per cent → factor. Normalised per channel (K-167): aligned
+            // Per cent → factor. Normalised per channel: aligned
             // regions pass through unchanged; the picker tints only the fringes.
             let scale = |v: f32| (f64::from(v) / 100.0) as f32;
             Split::Classic {

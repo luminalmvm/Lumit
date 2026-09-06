@@ -18,7 +18,7 @@ shared library (a `.dll` on Windows) which the Flutter runner loads at start-up.
 Two kinds of information cross the boundary:
 
 **Commands and readings** cross through generated bindings
-([flutter_rust_bridge](https://github.com/fzyzcjy/flutter_rust_bridge), K-179).
+([flutter_rust_bridge](https://github.com/fzyzcjy/flutter_rust_bridge)).
 Dart never holds a copy of the document. It holds **handles** — small opaque
 tokens standing for one thing in it — and calls methods on them:
 `layer.rename(name: 'hero shot')`. Rust pushes a small "something changed, and
@@ -47,12 +47,12 @@ crates/lumit-core, -project,    the engine (unchanged by the bridge)
     exists - is unbroken. The bridge is not an engine crate; it is the seam.
 - The Viewer render path goes through `lumit-render`'s headless renderer
     (`lumit_render::headless`), an **engine** crate. The bridge depends on no
-    frontend at all (K-178 retired the last such edge).
+    frontend at all.
 - Long-running work (decode, export, beat detection) runs on worker threads with
     channels inside the engine; the bridge exposes progress through poll functions
     the frontend calls on a cadence.
 
-## The transport: flutter_rust_bridge (K-179)
+## The transport: flutter_rust_bridge
 
 The seam is generated, not hand-written. `crates/lumit-bridge/src/api/` declares
 the surface in Rust; `flutter_rust_bridge_codegen generate`, run from
@@ -81,18 +81,18 @@ undo step:
     pixels without producing a hundred commits, journal writes and undo entries.
     Only the release commits. Everything editable on a staged
     `BridgeEffectInstance` follows that shape, not `set_value` alone:
-    `set_custom_name` (the instance's own display name, K-321) stages onto the
+    `set_custom_name` (the instance's own display name) stages onto the
     copy and `LayerReference::set_effects` is the commit, so a rename is one op
     and one undo step like any other stack edit. `render_frame_with_preview`'s
     siblings patch the other things a drag can be holding — a transform, a text
     document, a paint or shape or mask list, a clip's retime envelope, a layer's
-    own Retime map (`render_frame_with_retime`, K-329), and its **driver graph
-    nodes** (`render_frame_with_driver_preview`, K-471) — one layer's one
+    own Retime map (`render_frame_with_retime`), and its **driver graph
+    nodes** (`render_frame_with_driver_preview`) — one layer's one
     state per request, so a gesture spanning more than that previews the part it
     grabbed. The driver call stages the graph's *nodes* only: a drag on a
     number changes no wire, no position and no badge, and staging them would be
     inventing a state the document cannot be in.
-- **A parameter's hard range is kept engine-side, on ingest** (K-620).
+- **A parameter's hard range is kept engine-side, on ingest.**
     `BridgeEffectInstance::set_value` clamps what it is given to the range the
     effect's schema declares — statics and every keyframe alike, an expression
     passed through because it is a string until it runs — and both the preview
@@ -147,7 +147,7 @@ These are the contract.
 
 The engine owns the document; the frontend never mutates it directly.
 
-**And the engine owns the decisions (K-181).** The frontend holds *interaction
+**And the engine owns the decisions.** The frontend holds *interaction
 state* — where the playhead is, the zoom, the selection, the pan — and acts on it
 the instant the user does, with no round trip to wait on. What it does not hold
 is *policy*. It states facts ("the playhead is at 40", "play from here", "the
@@ -172,8 +172,8 @@ other side of this boundary.
     `LumitBridgeState::open_project(path, on_change_stream, on_progress_stream)`
     takes an optional `StreamSink<OpenProgress>` and names each phase of the read
     as it begins — `ReadingFile`, `ResolvingMedia`, `PreparingProject`,
-    `StartingPreview` — each carrying the share of the whole open behind it
-    (K-628). The engine stops at `StartingPreview`, because the last stretch is
+    `StartingPreview` — each carrying the share of the whole open behind it.
+    The engine stops at `StartingPreview`, because the last stretch is
     the frontend's: the render worker starting and answering. The weights live in
     Rust, so the frontend draws a number rather than deciding one, and the phases
     are only the divisions the engine can honestly see — a deserialise has no
@@ -181,8 +181,8 @@ other side of this boundary.
 - **A capability is not document state, and reads as its own answer.** Most reads
     ask the document; a few ask the *machine*, and the two must not be conflated.
     `ProjectReference::anti_aliasing` returns what the project asks for;
-    `anti_aliasing_in_use` returns what this graphics card will actually give
-    (K-274, K-286). Keeping them as two calls is what lets a limited adapter be
+    `anti_aliasing_in_use` returns what this graphics card will actually give.
+    Keeping them as two calls is what lets a limited adapter be
     reported without rewriting the project — and the capability read takes no
     engine lock, because a panel asking what the card can do must never queue
     behind a frame.
@@ -195,13 +195,13 @@ other side of this boundary.
     keyframe placed in floating point does not land on the frame it was set on.
     Crossing between **two comps' clocks** is the engine's job for the same reason:
     `LayerReference::nested_entry_frame(outer_frame)` answers which frame of a Precomp
-    layer's nested composition that layer is showing (K-624), running the outer frame
+    layer's nested composition that layer is showing, running the outer frame
     through the layer's `start_offset` and its Retime property and out at the nested
     comp's own rate. `None` when the layer is not a Precomp layer or the comp it names has
-    gone. One sync call, made when a layer is double-clicked and never in a rebuild
-    (K-184) — a frontend working this out itself would be a second implementation of what
+    gone. One sync call, made when a layer is double-clicked and never in a rebuild —
+    a frontend working this out itself would be a second implementation of what
     the renderer already decides.
-- **Keyframe times cross on the composition's clock (K-213).** The engine keys every
+- **Keyframe times cross on the composition's clock.** The engine keys every
     animatable property in the layer's **own** time — comp time less its `start_offset` —
     which is what makes a layer's animation travel with it when it is moved. The frontend
     thinks in comp frames: that is what the ruler counts, what a lane draws against, and
@@ -213,7 +213,7 @@ other side of this boundary.
     volume curve, a staged `BridgeEffectInstance` — carries the same conversion. Read raw,
     every key on a layer that had been moved drew at the start of the composition.
 
-### The History list crosses as named rows and one index (K-688)
+### The History list crosses as named rows and one index
 
 `ProjectReference::history_entries` returns the journal as rows — `{name, undone}`,
 those applied oldest first, then those undone in the order redoing would put them
@@ -227,15 +227,15 @@ the frontend does not, so a second table of op kinds never has to be kept in ste
 The **jump is undo and redo in a loop**, not a state to restore — so the seam
 carries an index, never a document, and the list can reach no state the keyboard
 could not. And the list is **read on purpose**, when the window opens and after
-each jump, never in a rebuild (K-184).
+each jump, never in a rebuild.
 
 The two composition commands beside it cross the same way: `trim_to_work_area`
-takes nothing at all, because the work area is in the document (K-686), and
+takes nothing at all, because the work area is in the document, and
 `crop_to_region` takes the Viewer's own `[u0, v0, u1, v1]` comp fractions and
 converts them to pixels at the seam, because the region of interest is session
-state that must never reach a file (K-362, K-687).
+state that must never reach a file.
 
-### The Project panel's item reads (K-451)
+### The Project panel's item reads
 
 An item handle answers what the redesigned panel draws, and each is one call because each is
 one question the document already knows the answer to:
@@ -258,7 +258,7 @@ one question the document already knows the answer to:
     the calls**, not a plural entry point: the seam stays one item per call, and the group is
     what makes a multi-selection one undo step.
 - `FootageReference::file_path()` — the Path column: the relative path a saved project
-    actually carries (K-173), falling back to the absolute one when a project has never been
+    actually carries, falling back to the absolute one when a project has never been
     saved. **Display data, and it touches no disk** — `get_status` is the question about the
     filesystem, and keeping the two apart is what makes drawing the column free.
 - `ItemReference::is_used()` — the `in use` badge. Direct placement only, and the rule is
@@ -267,23 +267,23 @@ one question the document already knows the answer to:
     one is well inside a frame, and a cache would be machinery bought with nothing.
 - `ItemReference::label()` / `set_label(u8)` — the colour tag, an index into the same palette
     a layer's chip uses, `0` untagged. Untagging removes the entry rather than writing a zero,
-    so a project nobody has tagged gains no line in its file (K-258).
+    so a project nobody has tagged gains no line in its file.
 - `BridgeMediaInfo` carries the container's own **codec names** (`video_codec`,
     `audio_codec`, each `None` when that stream is absent), the sound's `channels` and
     `sample_rate`, and an `is_still` flag. The flag exists because a still image probes *with*
     a video stream — one frame of it — so "is this a still" is `MediaProbe::runs_as_video`'s
     answer and never something a panel may infer. It replaced the panel's zero-picture-width
     guess, which could only say "there are no pixels" and said "this is sound". Codec names
-    are the *file's* words, not ours, so they cross untranslated (K-303).
+    are the *file's* words, not ours, so they cross untranslated.
 
-### The Timeline's three drawing facts (K-441)
+### The Timeline's three drawing facts
 
 - **A marker's span crosses as frames.** `BridgeMarker.duration_frames` is `None` for a
     moment — which is what a plain cue is, and what every marker of a file written before
     markers could span opens as — and otherwise how many frames of the owner's own rate the
     pill's bar runs for. Frames rather than the exact rational the *time* crosses as, because
-    frames are what the ruler draws with. The write-back still rides `core_markers`' id merge
-    (K-270), with one rule the frames make necessary: a duration that still reads as the same
+    frames are what the ruler draws with. The write-back still rides `core_markers`' id merge,
+    with one rule the frames make necessary: a duration that still reads as the same
     number of frames keeps the document's **exact** rational, so a rename or a drag cannot
     quantise away a span finer than a frame that nobody resized.
 - **A cache-bar frame is one byte in two nibbles.** `cached_frames` answers
@@ -306,7 +306,7 @@ one question the document already knows the answer to:
     comp, a footage item's comes from the media probe — so the **seam** supplies it, which is
     why `read_layer_info` now takes the project's state and its document.
 
-### What a layer is made of is a fact, not a call (K-680)
+### What a layer is made of is a fact, not a call
 
 `BridgeLayerInfo` carries the layer's **source** — the same `ItemReference`
 `get_source_item` answers with — plus `source_size` (a Precomp's comp size, a Solid's
@@ -326,14 +326,14 @@ shape of the general rule: **a fact the model can state for nothing turns a per-
 question into no question at all**, and the expensive read (`get_graph`, to find which
 parameters a wire is deciding) is then made only for the layers that can possibly answer.
 
-### A layer group crosses already resolved (K-702)
+### A layer group crosses already resolved
 
 `BridgeCompModel.groups: Vec<BridgeLayerGroup>` carries, per group, its id, name and label
 colour, **the member ids in stack order**, the combined `in_frame`/`out_frame` its bar
 spans, four switch faces (`visible`, `audible`, `solo`, `locked`) that are on only when
-every member is, and — K-731 — `effects`, the header's own stack as the same
+every member is, and `effects`, the header's own stack as the same
 `BridgeEffectInstanceInfo` listing a layer's `info.effects` carries, resolved at comp time
-(a group has no layer clock). Empty for the K-702 group, which is what the Timeline's fx
+(a group has no layer clock). Empty for a plain group, which is what the Timeline's fx
 tick and the header's fold key their visibility on.
 
 Every one of those is a question the engine can answer for nothing while it already holds
@@ -347,19 +347,19 @@ group per rebuild, on a panel that rebuilds constantly.
 Down the wire go the commands on `CompositionReference` — `group_layers` (which answers
 the new id, and refuses a scattered selection rather than moving anything),
 `ungroup`, `set_group_name`, `set_group_label`, `set_group_switch` (one `Op::Batch` over
-the members) and `shift_group` (likewise, for the combined bar's drag). K-731 adds two for
+the members) and `shift_group` (likewise, for the combined bar's drag). Two more serve
 the header's stack: `get_group_effects` (staged `BridgeEffectInstance` handles, offset
 zero) and `add_group_effect` (the Add-effect road's group arm; a driver is refused — a
 group carries no graph). **Everything else the header's stack needs is the layer commands
 it already had**: `remove_effect`, `set_effect_enabled`, `set_effects` and the whole
 staged-parameter road route by the shared instance lookup (effects, then styles, then the
-comp's group headers — the K-706 pattern grown its third arm), so a group instance handed
+comp's group headers — the same lookup grown its third arm), so a group instance handed
 to any member's `LayerReference` commits as one `Op::SetGroupEffects` with no second code
 path. *Pre-compose group* passes its group id to `precompose(…, group)`: the header's
 stack moves onto the new Precomp layer and the emptied band is ungrouped in the same
 batch, so one undo restores band, wardrobe and layers together.
 
-Two of those grew **selection twins** (K-720), on the same reference and down the same
+Two of those grew **selection twins**, on the same reference and down the same
 roads: `ungroup_selection(layer_ids)` resolves every band the given layers touch and takes
 them away as one batch (one undo restores each in its old slot, which the op's inverse
 carries), and `slide_layers(layer_ids, delta)` is the same slide `shift_group` performs —
@@ -377,27 +377,27 @@ An effect's parameters are one question; how the panel *arranges* them is anothe
 have different lifetimes. Four `#[frb(sync)]` free functions answer them, each keyed by the
 effect's match name and each memoised on the Dart side for the life of the process — the
 schema is static, and re-fetching it per card per rebuild was real hover-hot bridge traffic
-(K-183, and the budget test that forbids bridge calls in a rebuild path):
+(the budget test forbids bridge calls in a rebuild path):
 
 - `list_parameters(effect)` — one `BridgeParamInfo` per declared parameter, in schema order:
     its id, its label, its **unit**, and its **kind**, which is what decides the control drawn.
-    The **unit** (`BridgeUnit`, K-443) is what the row draws as its rider beside the value —
+    The **unit** (`BridgeUnit`) is what the row draws as its rider beside the value —
     `Raw` (no rider), `Percent`, `Px` (px@comp), `Degrees`, `Seconds`, `Frames` — and it is
     also what a point pick has to write in. It crosses because the *declaration* is the only
     thing that can tell Radial blur's per-cent `centre_x` from the dozen effects whose
     `centre_x` is px@comp; a Dart map keyed by parameter id could not, and was deleted with
     this. `Unit::Unset` and `Unit::PctDiag` never reach the seam — the first fails the engine
-    build, the second is forbidden to every parameter (K-419) — and both would arrive as
+    build, the second is forbidden to every parameter — and both would arrive as
     `Raw`, which draws no rider.
     The kinds
     are Float, Int, **Angle**, Choice, Bool, Colour, Seed, File, Layer, **MaskPath**,
     **Curve** and **Slider**.
-    A `MaskPath` names one of the *owning layer's* masks (K-408) and crosses as a
+    A `MaskPath` names one of the *owning layer's* masks and crosses as a
     `BridgeEffectValue::MaskPath(Option<Uuid>)` — the mask id, or `None` for the panel's
     "First mask" entry. The **geometry never crosses**: the render flattens the curve
     engine-side, beside the op. The panel builds the dropdown from the mask names already in
     the layer entries it holds, so the row costs no call of its own per rebuild.
-    A `Curve` is a **tone curve** (K-412) and crosses as
+    A `Curve` is a **tone curve** and crosses as
     `BridgeEffectValue::Curve(Vec<Vec<f32>>)` — an ordered list of 2..=16 `[x, y]` pairs in
     the unit square, the identity diagonal `[[0, 0], [1, 1]]` by default. Here the shape
     *does* cross, because a curve is at most sixteen pairs of numbers the user dragged and
@@ -407,25 +407,25 @@ schema is static, and re-fetching it per card per rebuild was real hover-hot bri
     what it reads — sorted by x, repeated x dropped, clamped into the square, and the
     diagonal when fewer than two points survive — so a panel writing mid-drag never has to,
     and a write is never refused for being momentarily out of order.
-    A **`Slider`** (K-414 — a closed range) carries `default`, `min` and `max`, and those
+    A **`Slider`** (a closed range) carries `default`, `min` and `max`, and those
     two numbers are the travel *and* the hard bound, which is exactly what closed means. It
     is a kind of its own because it draws a control of its own — a track and thumb with the
     value beside it — the same reason `Angle` is. Its **value** still crosses as a
     `BridgeEffectValue::Float`, the arrangement `Int` and `Angle` already use: the kind says
     which control to draw, not how the number is stored, so a Slider row keeps every float
     path the panel has — keyframes, the graph editor, the expression seed.
-    An **`Action`** (K-417) is a **button**, and the one kind that carries no value at all:
+    An **`Action`** is a **button**, and the one kind that carries no value at all:
     no default, no range, and nothing in `BridgeEffectInstanceInfo::values`, because a press
     is an event and not a number that could be keyframed, undone or interpolated. It crosses
     only so the panel can draw one; the press goes back through
     `api::track::fire_effect_action(layer, effect, param)`, which is *not* an edit — nothing
     is staged, nothing is committed, and no undo entry appears. `defaultEffectValue` answers
     `null` for it, so Reset walks past the button rather than trying to put it back.
-- `list_parameter_groups(effect)` — the twirls (K-145). A group names a *contiguous run* of
+- `list_parameter_groups(effect)` — the twirls. A group names a *contiguous run* of
     the schema's parameters and renders where its first member sits; an empty label renders
     headerless, and `visible_when_param`/`visible_when_values` hide the whole run while a
-    sibling Choice holds a different value (K-259).
-- `list_enabled_when(effect)` — the **greying rules** (K-313): `param` is editable only while
+    sibling Choice holds a different value.
+- `list_enabled_when(effect)` — the **greying rules**: `param` is editable only while
     `on` satisfies `cond` (a bool is some value, a choice is/is not some index, a layer
     reference actually names a layer). `lumit_core::fx::param_enabled` is the same rule in
     Rust and the authority the tests pin; the panel evaluates it locally against values it
@@ -434,7 +434,7 @@ schema is static, and re-fetching it per card per rebuild was real hover-hot bri
     write to a greyed parameter is still accepted, and the resolve step implements the real
     branch independently and never consults these rules, so the two cannot drift into
     disagreeing about pixels.
-- `list_pairs(effect)` — the **vector pairs** (K-443): one `BridgeParamPair` per two adjacent
+- `list_pairs(effect)` — the **vector pairs**: one `BridgeParamPair` per two adjacent
     `_x`/`_y` Float parameters, carrying the pair's `stem` and both halves' ids. The
     convention used to be read off the ids at the seam, in Dart, by whoever happened to need
     it; `EffectSchema::pairs()` is the declaration answering it now, so the panel's row
@@ -460,7 +460,7 @@ undo step like every other effect-stack edit. The **proportional drag itself is 
 seam at all**: scaling y as x is dragged is UI-time arithmetic for the life of a gesture, and
 the document's business is only which pairs are tied together.
 
-### The Custom shader: rows that belong to the instance, not to the effect (K-642)
+### The Custom shader: rows that belong to the instance, not to the effect
 
 Every list above is keyed by **match name**, so every one of them answers a fact about the
 *effect*. The Custom shader ([impl/custom-shader.md](impl/custom-shader.md)) is the one entry
@@ -508,7 +508,8 @@ one.
     the §4.3 vocabulary for the add-search. The engine stays the single validator: the canvas
     refuses a drop by building the candidate graph and asking, never by learning the type
     rules itself. Both are gesture-time calls, never rebuild traffic. Port and kind ids cross
-    as ids, not English — the frontend's arb owns their words, so K-303 has nothing to walk.
+    as ids, not English — the frontend's arb owns their words, so the engine-labels chain has
+    nothing to walk.
 
 **A derived row's value.** The document is not made to carry a row it has never been told
 about: the derived defaults are filled onto the two copies the bridge makes — the one
@@ -517,7 +518,7 @@ holds, so `set_value` can write it. A staged copy reaches the document only alon
 the user actually made, which is what keeps §1.5's "nothing is added automatically" true while
 still leaving every derived control live.
 
-### The layer graph: derived boxes down one way, stored wiring both (K-471)
+### The layer graph: derived boxes down one way, stored wiring both
 
 `api::graph` is the Graph panel's whole surface, and it is shaped by the one rule the
 model rests on: **`Layer::effects` is still the only authority for the picture**
@@ -527,7 +528,7 @@ split is the design:
 - **Derived, read only.** `LayerReference::get_graph()` answers a `BridgeLayerGraph`
     whole: every box the canvas draws — the Source, one per effect **in stack order**, the
     Layer out, then the drivers — each with the sockets it draws, its English label and its
-    bypass state. The Layer out carries one *writable* property socket, **Volume** (K-697):
+    bypass state. The Layer out carries one *writable* property socket, **Volume**:
     a Number wire onto `Param { node: Out, port: "volume" }` — the Audio panel's *Duck
     under…* — overrides the layer's Volume keyframes in the mix, and every other derived
     socket still refuses a wire. None of it is stored anywhere; it is worked out from the layer on each
@@ -535,14 +536,14 @@ split is the design:
     to its `Effect` boxes *is* the effect stack, which is why the stack view can never be
     made to lie: the graph has no second opinion to disagree with.
 - **Stored, read and written.** `BridgeGraphWiring` — the wires, the canvas positions,
-    which boxes wear the `E` badge, and the **named groups** (K-651) — comes back inside
+    which boxes wear the `E` badge, and the **named groups** — comes back inside
     the same read, is edited, and is handed straight to
     `LayerReference::set_graph(drivers, wiring)`, which commits one `Op::SetLayerGraph`.
     Add a driver, connect, disconnect, drag a box, toggle exposure, name a region: each
     gesture is one write and therefore one undo step, and auto-wire folds its edge into
     the same commit as the add. There is deliberately **no per-wire call**.
 
-**A group names boxes, never geometry** (K-651). `BridgeNodeGroup` carries a name, a label
+**A group names boxes, never geometry.** `BridgeNodeGroup` carries a name, a label
 palette *index* and its members; the wash's rectangle is worked out from where those
 members are sitting, so it follows a dragged box and no colour crosses the bridge —
 the same rule the port types follow. `save_node_group(name, colour, nodes)` hands back the
@@ -551,7 +552,7 @@ JSON and Dart chooses where it goes (the engine never opens a file dialogue, exa
 were inside the set and commits **once**, so a whole rig arrives and leaves in one undo
 step. `list_node_groups()` lists the `.lumgrp` files beside the `.lumfx` presets.
 
-**One call, not one per node** (K-183). `get_graph` is asked on selection and on document
+**One call, not one per node.** `get_graph` is asked on selection and on document
 change and held in Dart; the budget test forbids it in a rebuild path, and nothing about a
 box needs a second question.
 
@@ -568,8 +569,8 @@ the second segment names the group on the layer, as `transform`, `masks`, `effec
 path — nothing about it crosses the bridge — but it is spelled here so the two panels that
 will draw a driver row agree, and `effectIdOfPath` cannot mistake one for the other.
 
-**A points wire is an edge like any other, and its source is an effect** (K-492,
-[impl/points-stream.md](impl/points-stream.md) §1). `BridgeOutputRef` has a third arm,
+**A points wire is an edge like any other, and its source is an effect**
+([impl/points-stream.md](impl/points-stream.md) §1). `BridgeOutputRef` has a third arm,
 `EffectData { effect, port }` — the first wire whose source is a *stack* effect rather
 than a driver or the layer's own alpha. It carries **data, never a picture**: it cannot
 reorder, branch or skip the image chain, so filtering `nodes` to its `Effect` boxes is
@@ -597,9 +598,9 @@ read model, which is the same "evaluate it locally against what you already hold
 the greying rules follow. The engine's refusal is the backstop, not the message channel.
 
 **Port types cross; colours never do.** `BridgePortType` has the model's seven variants and
-the frontend maps each to a `port.*` theme token (K-472 §6.1) — five colours for seven
+the frontend maps each to a `port.*` theme token — five colours for seven
 types. A port also carries its **English label**, declared beside the port in the engine
-(`fx::Port`) rather than worked out from its id at the seam, so it rides the K-303 chain
+(`fx::Port`) rather than worked out from its id at the seam, so it rides the engine-labels chain
 like every other engine word: `fx-labels.txt` lists it and `engine_labels_test.dart` fails
 without its entry.
 
@@ -620,7 +621,7 @@ one that would actually connect. Derived from `Signature::Data` and the schema's
 `ParamKind::port_type`, so the entry's sockets and the wires `LayerGraph::validate`
 accepts cannot disagree.
 
-### The audio insert chain has no surface of its own (K-700)
+### The audio insert chain has no surface of its own
 
 An audio plugin is an entry in the layer's ordinary effect stack, so the chain is read and
 written by the calls that already exist and **nothing was added to this contract for it**:
@@ -633,7 +634,7 @@ alongside its OFX ones and registers what it finds into the same catalogue, and
 `set_plugin_enabled` takes a `clap:` match name as readily as an `ofx:` one, writing to the
 one preference file both hosts read.
 
-**VST3 added nothing to this contract either (K-707).** The same two calls see more again:
+**VST3 added nothing to this contract either.** The same two calls see more again:
 `rescan_plugins` scans the machine's VST3 folders alongside its CLAP and OFX ones, and
 `set_plugin_enabled` takes a `vst3:` match name as readily as the other two — one host, one
 switched-off list, one preference file. A VST3 plugin's identifier is its **class id spelled
@@ -643,7 +644,7 @@ a plugin speaks is carried by the match name's prefix and by nothing else: the n
 `EffectKey` is `Clap` for both, because the namespace answers "is this an audio plugin",
 which is the only question anything downstream asks.
 
-**The panel surface added no calls either (K-709, AP5).** What changed is what existing
+**The panel surface added no calls either (AP5).** What changed is what existing
 answers say: `list_effects` gives an audio plugin `namespace: "audio"`, `category:
 "audio"` and an **empty** `category_label` — one group for every audio plugin, worded by
 the frontend ("Audio plugins"), because neither standard declares a menu path the way OFX
@@ -658,13 +659,13 @@ The one thing that crosses **nowhere** is a plugin's opaque state blob: it is a 
 the effect instance, written into the `.lum` and handed back to the plugin, and no panel
 has any business reading it.
 
-### The puppet: pins cross, triangles never do (K-704)
+### The puppet: pins cross, triangles never do
 
 `docs/impl/puppet.md` §4's block reaches the frontend as `BridgePuppet` — a reference time,
 a density, an expansion and a list of `BridgePuppetPin` — and **no mesh crosses this seam
 in either direction**. The triangles are rebuilt engine-side from the layer's own alpha and
 cached there, so a future triangulator changes nothing in any saved project *and* nothing
-in any panel. The overlay's ghost is that rule kept rather than broken (K-716): the render
+in any panel. The overlay's ghost is that rule kept rather than broken: the render
 *publishes* the mesh it just warped the pixels through, and the frontend holds it against the
 layer, the frame counter and the revision — so the wireframe cannot disagree with the picture
 and a hover fetches nothing.
@@ -684,13 +685,13 @@ invertible, so every puppet edit is one undo step:
   channels, so a drag with the stopwatch on lands a keyframe through exactly the machinery
   a mask's opacity uses, and `NoSuchPin` is the calm answer to a stale id.
 
-Three more since PU3 (K-716), none of which put a triangle in the document:
+Three more since PU3, none of which put a triangle in the document:
 
 - `puppet_ghost()` answers the wireframe this layer is showing at the frame the render last
   built — the deformed vertices, flat; the triangles, flat; and the ids of the pins that have
   gone inert. `None` when no frame carrying a mesh on this layer has been built. Read against
   the layer, the frame counter and the document revision, exactly as an animated mask's path
-  is, so a hover costs nothing (K-184, K-681).
+  is, so a hover costs nothing.
 - `arm_puppet_preview(density, expansion)` asks the render for a mesh on a layer that has no
   block yet — which is what makes the *first* pin placeable — and the free
   `disarm_puppet_preview()` stands it down. One layer at a time; not an edit, and undo has
@@ -702,12 +703,12 @@ Three more since PU3 (K-716), none of which put a triangle in the document:
   the point falls outside the mesh. Neither leaves a block behind.
 
 Two conventions this seam keeps rather than invents. Every time on it is **composition**
-time, carried across the layer's start offset (K-213) — the pins' keyframes and the block's
+time, carried across the layer's start offset — the pins' keyframes and the block's
 reference time alike. And every position is **layer pixels**, never per cent: a point
 parameter is pixels everywhere in Lumit, and the mesh lives in the layer's own pixels at
 natural size.
 
-### The camera track: an event down, readings up (K-417)
+### The camera track: an event down, readings up
 
 `api::track` is the Camera track effect's whole surface, and it is shaped by one fact: the
 analysis is a minutes-long job on its own thread, over the *media file*, in `lumit-render`.
@@ -721,21 +722,21 @@ Nothing here does the work; this is the doorway.
   `add_layer_at_points(tracked, tracks, frame, solid)` drops a 3D Null or Solid at the mean
   solved position of the named tracks, turned to face the camera at that frame.
   `clear_camera_corrections(camera)` puts a nudged camera's own properties back to the pose
-  the link was made at (K-578), leaving the link itself alone, as one undoable batch —
+  the link was made at, leaving the link itself alone, as one undoable batch —
   refused when there is no link or nothing in the lane, so the command is never offered on a
   heading where it would do nothing.
 - **Up, and polled** — `track_status(layer)` is one `BridgeTrackStatus`: a stage
   (idle/queued/tracking/solving/done/cancelled/failed), the frames done and total, the
   solve's mean reprojection error, its point count, the frames it covers **and the frames the
-  clip has**, and — on a refusal — a `BridgeTrackFailure`. The last pair is the partial track
-  (K-540): `frames < clip_frames` says the analysis stopped before the end of the shot, and
+  clip has**, and — on a refusal — a `BridgeTrackFailure`. The last pair is the partial track:
+  `frames < clip_frames` says the analysis stopped before the end of the shot, and
   since the span is always a prefix — the job follows the source from its first frame and can
   only ever stop early — those two numbers are the whole of the bar the panel draws and the
   sentence it writes. It is **read, never subscribed to**: the engine keeps the reading as
   a value and whoever repaints samples it, exactly as the cache bar is sampled. The panel
   polls twice a second *only while a job is moving*, and stops the moment it is not.
-- **The failure is a reason, not a sentence** — the same K-303 chain the import report uses,
-  one step stricter: the reason crosses as an enum with no text at all, and Dart's switch
+- **The failure is a reason, not a sentence** — the same engine-labels chain the import report
+  uses, one step stricter: the reason crosses as an enum with no text at all, and Dart's switch
   over the generated enum picks the arb key. A reason added to the engine is a compile error
   in Dart rather than an English island in a translated window.
 - **The point cloud** — `tracked_points(layer, frame)` answers where each solved point lands
@@ -743,21 +744,20 @@ Nothing here does the work; this is the doorway.
   0..1 over the cloud on that frame. The engine projects; the interface draws. Which solved
   frame that is comes from `lumit_core::track::tracked_solved_frame`, the same walk the
   camera link takes, so the dots and the camera they were solved with cannot disagree. Asked
-  for **once per frame change, never per rebuild** — the Levels histogram's rule (K-413), and
+  for **once per frame change, never per rebuild** — the Levels histogram's rule, and
   the budget test is the gate.
 - **The badge** — `camera_link(camera, frame)` answers the `BridgeLinkState`
   (unlinked/derived/held/unresolved) and the tracked layer's id, once per frame change.
-- **Edited since track is not a call** — `BridgeLayerInfo.track_corrected` (K-578) says a
+- **Edited since track is not a call** — `BridgeLayerInfo.track_corrected` says a
   solve-linked camera carries a correction, and on a *tracked* layer says a camera following
   it does. Both rows that draw the dot — the camera's Transform heading and the Camera
   track's status row — are rebuilt on every document revision, and a correction is a
-  document edit, so this rides in the read model rather than being asked for per repaint
-  (K-184).
+  document edit, so this rides in the read model rather than being asked for per repaint.
 - **What is not a call**: which layer of a composition is the tracked one. The read model
-  (K-184) already carries every layer's every effect, so the interface finds the layer whose
+  already carries every layer's every effect, so the interface finds the layer whose
   stack holds an enabled Camera track with Show points on, from data it is already holding.
 
-### The Roto brush: strokes down, a span and a progress up (K-713)
+### The Roto brush: strokes down, a span and a progress up
 
 `crates/lumit-bridge/src/api/roto.rs`. The propagation itself is `lumit-render`'s — its own
 thread, over the media file — and this is the doorway.
@@ -767,7 +767,7 @@ thread, over the media file — and this is the doorway.
   `set_shader_source` stage on, and `LayerReference::set_effects` commits, so a scribble is
   one op, one journal entry and one undo step. There is no roto-shaped op and no roto-shaped
   commit, because there is no roto-shaped question the whole-stack commit cannot answer.
-- **Points cross in source raster pixels** (K-248), as a flat `[x0, y0, x1, y1, …]`. The
+- **Points cross in source raster pixels**, as a flat `[x0, y0, x1, y1, …]`. The
   viewer converts, because only it knows the chain of transforms the pointer came through,
   and the matte has to describe the *file's* frames rather than one composition's — which is
   what lets one shot's mattes serve every composition that cuts it. A stroke with no points,
@@ -784,15 +784,15 @@ thread, over the media file — and this is the doorway.
   hold a subscription (the camera track's arrangement).
 - **The reason crosses as an enum with no text in it.** `BridgeRotoFailure` is seven variants
   — offline, no flow on this device, busy, no base frame, unreadable, no frames, no seeds —
-  and Dart's exhaustive switch (`panels/roto_display_frb.dart`) picks the arb key. K-303's
-  chain at its strictest: there is no free text to fall back to, so a reason added to the
-  engine is a Dart compile error rather than a blank line.
+  and Dart's exhaustive switch (`panels/roto_display_frb.dart`) picks the arb key. The
+  engine-labels chain at its strictest: there is no free text to fall back to, so a reason
+  added to the engine is a Dart compile error rather than a blank line.
 - **The span is what makes the passthrough legible.** Outside `first_frame..last_frame` the
   effect renders the layer unchanged, and the status row says how far the matte reaches, so
   an untouched frame is explained rather than mysterious. A **cancelled** run reports the same
   shape as a finished one, because it is the same kind of answer: the frames it reached are
-  kept (K-540).
-- **Two more since RB3** (K-717), both read once per frame change and never per rebuild:
+  kept.
+- **Two more since RB3**, both read once per frame change and never per rebuild:
   `roto_source_frame(layer, frame)` answers **which frame of the file** a composition frame
   shows on that layer — the decode planner's own arithmetic (`layer_time` → `source_time_at` →
   `frame_pick`), because a layer's start offset and its Retime map live in the document and Dart
@@ -806,7 +806,7 @@ thread, over the media file — and this is the doorway.
   thousand numbers rather than two megabytes — thinned to a fixed cap engine-side, so the answer
   never grows with the picture.
 
-### The export dialogue's settings cross flat (K-479, K-485, K-503)
+### The export dialogue's settings cross flat
 
 `BridgeExportSpec` is `lumit_render::export::ExportSpec` **flattened**: no engine enum
 crosses, every choice is a number or a short stable string, and **every field added since
@@ -828,13 +828,13 @@ The flattening rules, in the order they matter:
 - **An enum crosses as the number the rows are drawn in**, with `0` the default row:
     `motion_blur` 0/1/2 = current settings / on for checked layers / off for all layers;
     `retime_blend` 0/1 = current settings / off for all layers, and there is deliberately no
-    third answer (K-502).
+    third answer.
 - **A colour space crosses as its stored name**, not as a label: `""` (sRGB / Rec. 709),
     `linear`, `rec709`, `rec2020`, `display-p3`, or an OCIO config's own name. The wording
-    belongs in `app_en.arb` like every other string (K-005), and a name this build does not
-    know is shown as it arrived, exactly as a codec name is (K-303).
+    belongs in `app_en.arb` like every other string, and a name this build does not
+    know is shown as it arrived, exactly as a codec name is.
 - **`resample`** is `"high"` for Lanczos-3 and anything else — blank included — for the
-    bilinear filter every export has always used (K-498).
+    bilinear filter every export has always used.
 
 `BridgeFormatCaps` is the same treatment of `FormatCaps`, and it is what the dialogue
 **disables** rows from; the engine refuses the same combinations again before a frame is
@@ -850,14 +850,14 @@ deliberately not lists:
     the row is live. The same test holds the two in step. Channel layout needs no row either
     — every format that carries sound carries both mono and stereo.
 
-**Reordering the queue carries no undo (K-503).** `export_queue_move(id, index)` sits beside
+**Reordering the queue carries no undo.** `export_queue_move(id, index)` sits beside
 `export_queue_cancel`/`export_queue_remove` and commits no op: the queue is not in the `.lum`,
 it does not survive a restart, and its order is interaction state of the kind the frontend
 would hold if it were not process-wide. It refuses in the export's own words — "that export is
 already running", "that export has already run", "that export is no longer in the queue" — and
 an `index` past the end lands the row last, which is what dragging one off the bottom means.
 
-### A footage item's second file: the proxy (K-501)
+### A footage item's second file: the proxy
 
 A proxy is a second `MediaRef` on a footage item, so it reads and writes the same way the
 original does — but it is three questions, not one, and the panel draws a different row for
@@ -866,7 +866,7 @@ each:
 - `FootageReference::get_proxy()` — one call, `None` for an item with no proxy, otherwise the
     path to show, this item's own tick (`enabled`), and whether the document actually reads it
     (`in_use`: the project's master switch **and** the item's tick). Three row states from one
-    read, which is the one-call-per-structure rule (K-451).
+    read, which is the one-call-per-structure rule.
 - Writes are ordinary commits: `set_proxy(path)` (attach or replace, switched on),
     `clear_proxy()`, `set_use_proxy(on)` — refused on an item with nothing attached, because
     the panel does not draw that tick — and `ProjectReference::set_use_proxies(on)` for the
@@ -891,7 +891,7 @@ the job rather than passed in, so the proxy arrives whether or not the panel tha
 is still on screen. The document's lock is taken after the job's own is dropped, never across
 it (the one-lock-held-briefly rule above).
 
-### Colour management crosses as names down, a summary up (K-489, K-490)
+### Colour management crosses as names down, a summary up
 
 The project stores a path to an OCIO config and a colour-space name per footage item, and
 **everything else is derived** — the parse, the resolved chains, the baked tables. So the
@@ -900,14 +900,14 @@ seam is one read of derived state and two ordinary document edits.
 - **Read**: `ProjectReference::colour_summary() -> BridgeColourSummary` — the config's
     display path, whether it is loaded and usable, the refusal if it is not, the active
     colour space names, and each display with its views. **One call for the whole
-    structure** (K-451), fetched on a document change and held in Dart; it reads the config
-    file to see whether it has changed, so it never belongs in a `build()` (K-183, and the
-    budget test that forbids it). `FootageReference::colour_space()` is the per-item read.
+    structure**, fetched on a document change and held in Dart; it reads the config
+    file to see whether it has changed, so it never belongs in a `build()` (the budget
+    test forbids it). `FootageReference::colour_space()` is the per-item read.
 - **Write**: `ProjectReference::set_colour_config(path)` and
     `FootageReference::set_colour_space(space)`, both `None` for "back to the built-in
     family". Ordinary commits, so one gesture is one undo step and both travel in the
     `.lum` — colour management changes what a comp looks like, so it is the project's
-    property and not the machine's. The path is stored as a `MediaRef` (K-173), built by
+    property and not the machine's. The path is stored as a `MediaRef`, built by
     the same `media_ref_at` a proxy is attached with.
 - **The Viewer's chosen display and view ride the look message**, as
     `set_viewer_look(..., colour_view: Option<Vec<String>>)` — the two-name list
@@ -919,20 +919,20 @@ seam is one read of derived state and two ordinary document edits.
 - **The export's two colour questions are asked of the project**, because whether a name
     can be delivered depends on this project's config:
     `ProjectReference::can_deliver_colour_space(name)` is what the dialogue's dropdown
-    enables a row on (K-485's disabled-not-hidden rule), and
+    enables a row on (the disabled-not-hidden rule), and
     `CompositionReference::export_spec_check(spec)` — which replaced the free-standing
     `export_spec_check` — is the pre-queue check. `BridgeExportSpec::colour_space` itself
     **does not change shape**: it is still one stable string, and a config's own name is
     simply one more value it can hold.
 
 **A refusal is not a sentence.** Every reason a config can be unusable names something in
-the middle of it, so it crosses as `ColourError::key` plus `::args` — the K-303 rule below,
+the middle of it, so it crosses as `ColourError::key` plus `::args` — the display-text rule below,
 with the import report as the other worked example. `problem_english` rides along as the
 fallback. **The config's own names — spaces, displays, views, and the facts inside a
 refusal — are the user's words and are never translated**, so they must not go through
 `engineLabel` on the way to the screen.
 
-### The layer switches (K-497)
+### The layer switches
 
 `BridgeLayerSwitches` is one read of every switch, and `set_switch(BridgeLayerSwitch, on)` is
 one write per switch — one op each, so a click is one undo step and toggling one never
@@ -941,7 +941,7 @@ every delivered file at every depth. It is the one switch in the group that a **
 refuses, and the reason is the line the group divides on — shy changes what the Timeline
 lists, guide changes what the file carries, and a lock is a lock against the second.
 
-`Adjustment` joined them next (K-537): the layer sets its own picture aside and runs its
+`Adjustment` joined them next: the layer sets its own picture aside and runs its
 effect stack on the composite beneath it. It is read like the rest — `BridgeLayerSwitches
 ::adjustment`, which answers **true for a layer born an adjustment as well as one switched
 into being one**, so the frontend draws the cell from the switch and never from the kind —
@@ -956,7 +956,7 @@ one undo step. `set_switch` delegates to `set_adjustment(on)` rather than repeat
 that, so the Timeline's plural switch handler and the direct call cannot disagree.
 
 The plural write is `CompositionReference::set_switch_on_layers(clicked, layers, switch,
-on)` (K-720): one `Op::Batch` over the given layers, filtered to those that actually
+on)`: one `Op::Batch` over the given layers, filtered to those that actually
 change, so a switch click on a multi-selection is **one** undo step rather than one per
 layer. It keeps the manners the old per-layer loop had: a locked *sibling* silently drops
 out of the batch (as does, for the adjustment switch, a sibling with no picture to set
@@ -969,7 +969,7 @@ selection click cannot disagree about what one flip writes.
 ### The After Effects import crosses once, as a report
 
 `LumitBridgeState::import_ae_bundle(path, on_change_stream)` is the whole surface of
-[11-AE-IMPORT.md](11-AE-IMPORT.md)'s user half. **One call takes both front doors** (K-418):
+[11-AE-IMPORT.md](11-AE-IMPORT.md)'s user half. **One call takes both front doors**:
 an After Effects project file read directly, or a Lumit Bridge bundle as a folder or a zip.
 The frontend does not choose between them — `lumit_import::open_ae` decides from the bytes
 (RIFX magic is an `.aep`, anything else is a bundle), so the picker's only job is to offer
@@ -983,9 +983,9 @@ rather than in an error. The project it leaves open has no path: an import is no
 
 The `BridgeImportReport` crosses **once**, whole, on that call, and is held in Dart — the
 report window filters and lists from the object it was handed, so no bridge call rides a
-rebuild (K-183, and the budget test that forbids it).
+rebuild (the budget test forbids it).
 
-Its rows are the worked example of the K-303 rule below. A reason is *not* sent as a
+Its rows are the worked example of the display-text rule below. A reason is *not* sent as a
 sentence: it crosses as a stable id plus its facts by name — `blend_mode_unavailable` with
 `ae_mode: "Dissolve"` — because "blend mode Dissolve has no equivalent" is a different whole
 text for every blend mode and a whole-text lookup could never hold it. The frontend writes the
@@ -1007,12 +1007,12 @@ A video frame is too large to marshal field by field, so frames have their own
 path, documented beside the types in
 [`api/state.rs`](../crates/lumit-bridge/src/api/state.rs).
 
-- **Zero-copy shared textures are the ONLY frame transport (K-177, K-183).**
+- **Zero-copy shared textures are the ONLY frame transport.**
     The engine renders into a shared texture and hands the frontend a handle,
     which the runner registers as a Flutter external texture — no pixels ever
     cross the boundary. Default-on cargo features (`shared-texture` for D3D12
     on Windows, `shared-texture-linux` for Vulkan/DMA-BUF, `shared-texture-macos`
-    for Metal/IOSurface, K-195), each inert off its platform. The CPU read-back
+    for Metal/IOSurface), each inert off its platform. The CPU read-back
     transport that serialised every pixel (8.8 ms per 1080p frame in the SSE
     codec alone) is deleted; a build with no zero-copy path at all drops every
     frame. Both publish variants are always *declared*, so the generated Dart is
@@ -1021,8 +1021,8 @@ path, documented beside the types in
     the same payload Windows does, because both are one opaque integer naming a
     surface plus its size (an NT handle there, an `IOSurfaceID` here). Only
     Linux needs more (fd, stride, offset, DRM format).
-- **A composition's own small still crosses as pixels too** (K-667, superseding
-    K-468's Viewer photograph). `CompositionReference::thumbnail(frame, max_edge)`
+- **A composition's own small still crosses as pixels too.**
+    `CompositionReference::thumbnail(frame, max_edge)`
     answers a `BridgeRenderedFrame` whose longest edge is `max_edge` — 128 px for
     the welcome screen's recent rows, which is 36 KiB against a 1080p frame's 8
     MiB. It is **not** a second frame transport and cannot become one: the caller
@@ -1035,7 +1035,7 @@ path, documented beside the types in
     waits behind a frame somebody is watching nor holds one up.
 - **Small stills still cross as pixels**, deliberately: footage thumbnails
     (`BridgeRenderedFrame`), the 256×256 scope traces and the dropper's
-    129×129 windows (`BridgeSampledPixels`, K-210 — 66 KiB). All are bounded and
+    129×129 windows (`BridgeSampledPixels`, 66 KiB). All are bounded and
     rare, which is what makes the per-byte codec tolerable there. A window is a
     *reading*, not a picture: it answers "what is around this pixel", and the
     size cap is enforced engine-side (`worker_thread::cut_patch`, `MAX_WINDOW`)
@@ -1047,12 +1047,11 @@ path, documented beside the types in
     **fraction of the picture**, not a pixel, and the reply says which raster it
     cut from: the engine may be working at preview resolution, so neither side
     can name a pixel in the other's grid.
-- **The Viewer's picture may be cut short at an effect (K-528, superseding
-    K-486's thumbnail seam).** `CompositionReference::render_frame(frame, scale,
-    mode, prefix)` takes an optional `BridgePrefixPoint` — a layer (which
-    carries its composition) and the effect instance to stop **after**, or no
-    effect at all for the layer's own picture before any of them — the Source
-    box on the node canvas, which takes the chip like every other box. With one
+- **The Viewer's picture may be cut short at an effect.**
+    `CompositionReference::render_frame(frame, scale, mode, prefix)` takes an optional
+    `BridgePrefixPoint` — a layer (which carries its composition) and the effect instance
+    to stop **after**, or no effect at all for the layer's own picture before any of them —
+    the Source box on the node canvas, which takes the chip like every other box. With one
     set, the engine renders the composition with that layer's effect stack
     truncated there and publishes it down the ordinary zero-copy frame
     transport, at the Viewer's own quality. There is no second render path and
@@ -1088,7 +1087,7 @@ path, documented beside the types in
     the user is looking at; answering it by compositing that picture again is
     both slower and less true, and on a zero-copy build (where the shown frame
     lives in VRAM and nowhere else) it is what every read used to do.
-- **Instrumentation rides it too (K-276).** Two further messages come back on the
+- **Instrumentation rides it too.** Two further messages come back on the
     same stream, both small and both about a frame rather than being one:
     `WorkerResponse::RenderProgress` (`BridgeRenderProgress`: frame, stage code,
     0..1 fraction, and a `done` flag) says how far the frame the user is waiting
@@ -1107,7 +1106,7 @@ path, documented beside the types in
     graphics card at each node, so an unasked-for frame costs exactly what it
     did before this existed.
 
-## Display text crosses the bridge in English (K-303)
+## Display text crosses the bridge in English
 
 Some of what the bridge sends is meant to be read by a person: `BridgeEffectInfo`'s
 `label` and `category_label`, the parameter and choice labels in an effect's schema, and
@@ -1136,7 +1135,7 @@ a preset name are the *user's* words, and are passed through untouched.
 
 - **`media`** (default on) pulls `lumit-media` (FFmpeg) for probing and decoding.
     Without it, footage does not probe and thumbnails are absent.
-- **Note.** `--no-default-features` builds and tests (K-273). It is **not** a
+- **Note.** `--no-default-features` builds and tests. It is **not** a
     build without FFmpeg: `lumit-render` and `lumit-audio` depend on
     `lumit-media` unconditionally and the bridge depends on both, so the library
     is still linked. The feature governs the bridge's own decode paths. The API surface is
@@ -1152,7 +1151,7 @@ through the headless seam.
 - **`shared-texture`**, **`shared-texture-linux`**, **`shared-texture-macos`**
 (all default on) enable the zero-copy path above, one per platform; each is inert
 off its own target, so one default set builds everywhere. They scope the interop
-code only. The **backend pin is not one of them** (K-205): `GpuContext::headless`
+code only. The **backend pin is not one of them**: `GpuContext::headless`
 selects DX12 on Windows, Vulkan on Linux and Metal on macOS in every build,
 feature or no feature, because a mixed-backend instance has no remaining use now
 that read-back is gone.
@@ -1160,9 +1159,9 @@ that read-back is gone.
 ## Threading and long-running work
 
 - **Export** runs on its own encode thread inside `lumit-bridge::export`, driving
-    `lumit-render` (K-017). The bridge holds the handle and drains progress on
+    `lumit-render`. The bridge holds the handle and drains progress on
     `api::export::export_poll`.
-    **`BridgeExportSpec` is the whole of `lumit_render::export::ExportSpec`** (K-485),
+    **`BridgeExportSpec` is the whole of `lumit_render::export::ExportSpec`**,
     flattened: format key, frame, bitrate (auto / a typed rate and its peak / blank for the
     encoder's own quality), rate, range, sound, depth, channels and alpha, colour space,
     the four crop insets plus *use region of interest* and the Viewer's region, ordered
@@ -1179,7 +1178,7 @@ that read-back is gone.
     "this build has no encoder" and every capability reads false, which disables the
     dialogue rather than removing a call.
 - **Playback / realtime tier.** A genuine render reports its measured cost to
-    `lumit-eval`'s realtime controller (K-171); the frontend reads the current tier
+    `lumit-eval`'s realtime controller; the frontend reads the current tier
     and scale back through `api::shell::playback_tier` to drive the Auto
     resolution setting.
     **The Viewer does not ask.** Each published frame carries the tier it was made
@@ -1211,8 +1210,8 @@ that read-back is gone.
     BPM override and the phase nudge, with `standard()` being the one-click
     detection every menu entry runs — waits for its own answer, and returns
     the count beside the tempo the grid used (`BridgeBeatsResult`), for the
-    panel's BPM well. **A named source is heard whatever the switches say**
-    (K-718): `source_layer` naming a layer builds that row's jobs through
+    panel's BPM well. **A named source is heard whatever the switches say**:
+    `source_layer` naming a layer builds that row's jobs through
     `AudioJobsBuilder::layer_audio_jobs`, which steps over the row's own audible
     switch and any solo elsewhere, while an empty `source_layer` mixes the comp
     as it actually sounds. Either way the walk needs no graphics card, so a
@@ -1223,24 +1222,24 @@ that read-back is gone.
     The analysis answers times and confidences; the marker ids are minted by
     the caller afterwards, which is what keeps "the same audio finds the same
     beats" a checkable claim (docs/impl/beat-detection.md §5.4).
-    A run that used a grid also commits the **confirmed beat grid** (K-698)
+    A run that used a grid also commits the **confirmed beat grid**
     beside its markers, one undo step for the pair; `get_beat_grid` reads it
     back (`BridgeBeatGrid`: bpm and phase seconds) for the Timeline's beat
     band, `clear_beat_markers` takes it with the markers it describes, and a
     marker crosses with `is_beat` so the ruler can draw a detected beat as a
     tick rather than a flag — the flag stays read-only on a write-back, where
-    K-270's merge-by-id is what keeps a beat a beat.
-- **Audio pictures** are window fetches (K-280's shape): the lane asks for the
+    the id merge is what keeps a beat a beat.
+- **Audio pictures** are window fetches: the lane asks for the
     stretch of source it is showing at one bucket per pixel column, and asks
     again when the window moves far enough to matter. `audio_peaks` /
     `clip_audio_peaks` answer min/max/RMS buckets off the session peak cache;
-    `audio_spectrogram` (K-699) answers the same window as columns of
+    `audio_spectrogram` answers the same window as columns of
     `lumit_audio::spectra::BINS` bytes, low band first, off its own bounded
     cache — the spectral lane mode's picture. Both decode on first ask and are
     served from memory after, and both map a retimed layer's columns through
-    its own clock (K-436).
+    its own clock.
 
-- **Detach audio** (K-701) is `LayerReference::detach_audio()`: one `Op::Batch` —
+- **Detach audio** is `LayerReference::detach_audio()`: one `Op::Batch` —
     `AddLayer` of an `audio_only` copy of the layer directly below it, then
     `SetLayerAudible(false)` on the original — so the pair is one undo step, and a
     locked layer refuses the batch whole like every other edit. The copy carries the

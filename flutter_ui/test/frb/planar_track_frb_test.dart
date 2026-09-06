@@ -1,5 +1,5 @@
 // The Planar track effect's interface: its three buttons, its status line, and
-// the span bar a partial track draws (K-579).
+// the span bar a partial track draws.
 //
 // Every document operation here is genuine; see frb_test_support.dart. What is
 // *not* genuine is the track behind the status, and it cannot be: a planar
@@ -59,17 +59,17 @@ void main() {
           reason: 'the corner-pin gesture is a third Action row');
       expect(find.byKey(ValueKey<String>('fx-action-$effect-transform_keys')),
           findsOneWidget,
-          reason: 'the transform gesture is the fourth (K-734)');
+          reason: 'the transform gesture is the fourth');
       final cancel = find.byKey(ValueKey<String>('fx-action-$effect-cancel'));
       expect(cancel, findsOneWidget);
 
       // The quad's four corners are the effect's own rows — each an x/y pair,
-      // folded into one point row the way every other pair is (K-443) — and the
+      // folded into one point row the way every other pair is — and the
       // layer the pin lands on is a row beside them.
       expect(find.text('Upper left'), findsOneWidget);
       expect(find.text('Lower right'), findsOneWidget);
       expect(find.text('Pin layer'), findsOneWidget);
-      // What the analysis is asked to follow (K-735).
+      // What the analysis is asked to follow.
       expect(find.text('Follow'), findsOneWidget);
 
       expect(

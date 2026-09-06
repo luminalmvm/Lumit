@@ -55,8 +55,8 @@
 //! any path that reaches a result. Two runs over the same frames produce
 //! bit-identical mattes.
 //!
-//! Coordinates are **source raster pixels**, per K-248: strokes describe the
-//! full, unaltered footage, so one shot's mattes serve every comp that cuts it.
+//! Coordinates are **source raster pixels**: strokes describe the full,
+//! unaltered footage, so one shot's mattes serve every comp that cuts it.
 //!
 //! ```
 //! use lumit_roto::{base_seeds, FrameRgb, RotoSolver, RotoSettings, RotoStroke, StrokeKind};

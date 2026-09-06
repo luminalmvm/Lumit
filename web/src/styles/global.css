@@ -2,9 +2,9 @@
 
 /* The site's tokens ARE the application's tokens (docs/15-DESIGN.md §2.1-§2.3, §3.1):
    the same three greys, the same four text tiers, the same two hairlines, the same
-   spruce accent (K-511). Nothing here is a website-only colour. The wordmark carries its
+   spruce accent. Nothing here is a website-only colour. The wordmark carries its
    own gradient inside its SVG - green too, now, rather than the cyan-to-pink it kept
-   through K-511 - and that is the only place a saturated hue appears at size. */
+   before - and that is the only place a saturated hue appears at size. */
 @theme {
   --color-ink:      #0b0c0e;  /* surface_0 - the page */
   --color-ink-2:    #131517;  /* surface_1 - cards, media wells */
@@ -18,7 +18,7 @@
   --color-accent:   #35785e;  /* spruce: link hover, focus, the active tab tick */
   --color-accent-2: #478a70;  /* accent_hover - spruce, +0x12 a channel */
 
-  /* K-476: a control's corner is 2. Cards are the drawing's own 4. */
+  /* A control's corner is 2. Cards are the drawing's own 4. */
   --radius-ctl:  2px;
   --radius-card: 4px;
 
@@ -65,7 +65,7 @@
     @apply block h-2 w-3.5 shrink-0 rounded-ctl border border-current;
   }
   */
-  /* One button shape: a resting outline (K-450). No filled action on the site -
+  /* One button shape: a resting outline. No filled action on the site -
      the drawing's hero download is an outline and nothing here outranks it. */
   .btn {
     @apply inline-flex h-10 items-center justify-center gap-2 rounded-ctl border

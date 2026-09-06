@@ -12,13 +12,13 @@ part 'export.freezed.dart';
 // These functions are ignored because they are not marked as `pub`: `reply_error`, `reply_ok`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
-/// What one output format can and cannot carry (K-479). The dialogue asks this
+/// What one output format can and cannot carry. The dialogue asks this
 /// of every format key it offers and disables what the answer refuses.
 BridgeFormatCaps exportFormatCaps({required String codec}) =>
     BridgeLib.instance.api.crateApiExportExportFormatCaps(codec: codec);
 
 /// Every sample rate an export can write sound at, in hertz and in the order
-/// the Sound row lists them (K-493).
+/// the Sound row lists them.
 ///
 /// Not a capability row, because it does not vary by format: a format either
 /// carries sound — `BridgeFormatCaps::audio` — and then carries all of these,
@@ -29,7 +29,7 @@ Uint32List exportAudioRates() =>
 
 /// The crop this spec actually applies to a `comp_width` × `comp_height` frame,
 /// and the frame that survives it — the typed insets, or the Viewer's region of
-/// interest when that is asked for and exists (K-362, K-479).
+/// interest when that is asked for and exists.
 BridgeCrop exportCropFor(
         {required BridgeExportSpec spec,
         required int compWidth,
@@ -82,7 +82,7 @@ void exportDefaultsSet({required BridgeExportDefaults defaults}) =>
 /// What a delivery preset stamps into the dialogue, and what to call the file.
 ///
 /// A blank `preset` gives the custom defaults. `template` drives the
-/// `{comp}`/`{preset}`/`{date}` substitution (K-119); blank yields the preset's
+/// `{comp}`/`{preset}`/`{date}` substitution; blank yields the preset's
 /// own suggested name.
 BridgeExportPreset exportPreset(
         {required String preset,
@@ -181,7 +181,7 @@ class BridgeCrop {
           height == other.height;
 }
 
-/// What the export dialogue opens on when nothing else has been said (K-588) —
+/// What the export dialogue opens on when nothing else has been said —
 /// the subset of a spec worth remembering between sessions, kept beside the
 /// preset library in the application's own data area and never in a `.lum`.
 ///
@@ -196,7 +196,7 @@ class BridgeExportDefaults {
   final String codec;
 
   /// The filename pattern in the tokens the exporter already substitutes —
-  /// `{comp}`, `{preset}`, `{date}` (K-119). Empty gives each preset's own
+  /// `{comp}`, `{preset}`, `{date}`. Empty gives each preset's own
   /// suggested name.
   final String filenameTemplate;
 
@@ -393,20 +393,19 @@ sealed class BridgeExportQueueState with _$BridgeExportQueueState {
 }
 
 /// What the export dialogue is asking for — the whole of
-/// `lumit_render::export::ExportSpec`, in the flat shape the seam carries
-/// (K-479, K-485).
+/// `lumit_render::export::ExportSpec`, in the flat shape the seam carries.
 ///
 /// `width`/`height` of zero mean "the composition's own size", which is what the
 /// dialogue shows until somebody types over it. `bitrate_mbps` of zero means the
 /// encoder's own default — a quality nobody chose is better than a number this
 /// layer invented — and is a *different answer* from `bitrate_auto`, which works
-/// a delivery-quality rate out from the frame and the rate (K-479).
+/// a delivery-quality rate out from the frame and the rate.
 class BridgeExportSpec {
   /// A preset name from the store, or empty for a custom export.
   final String preset;
 
   /// The output format key: `h264` / `hevc` for an `.mp4`, `png` / `tiff`
-  /// for a numbered image sequence (K-201), `m4a` / `wav` for sound alone.
+  /// for a numbered image sequence, `m4a` / `wav` for sound alone.
   final String codec;
   final int width;
   final int height;
@@ -419,7 +418,7 @@ class BridgeExportSpec {
 
   /// Work the bitrate out from the frame and the rate. Overrides
   /// `bitrate_mbps`; a blank field (zero) with this off means the encoder
-  /// chooses its own quality, which is what blank has always meant (K-119).
+  /// chooses its own quality, which is what blank has always meant.
   final bool bitrateAuto;
 
   /// Output frame rate; zero means the composition's own. A different rate
@@ -437,12 +436,12 @@ class BridgeExportSpec {
   /// Audio bits per second; zero takes the delivery-preset rate.
   final PlatformInt64 audioBitRate;
 
-  /// The sound's sample rate in hertz — one of [`export_audio_rates`]
-  /// (K-493). Zero means the customary 48 kHz, so a caller that never sets
+  /// The sound's sample rate in hertz — one of [`export_audio_rates`].
+  /// Zero means the customary 48 kHz, so a caller that never sets
   /// it writes the file Lumit has always written.
   final int audioRate;
 
-  /// Bits a sound sample: 16 or 24 (K-493). Anything below 24 reads as
+  /// Bits a sound sample: 16 or 24. Anything below 24 reads as
   /// sixteen, which is what an unset field has always meant. A format whose
   /// sound cannot carry the choice (AAC stores coefficients, not samples) is
   /// refused rather than handed the identical file either way —
@@ -450,7 +449,7 @@ class BridgeExportSpec {
   final int audioDepth;
 
   /// Channels in the written sound: `1` folds the composition's stereo mix
-  /// down to mono, anything else (zero included) keeps it stereo (K-493).
+  /// down to mono, anything else (zero included) keeps it stereo.
   /// Every format that carries sound carries both, so there is no capability
   /// row for it.
   final int audioChannels;
@@ -471,17 +470,16 @@ class BridgeExportSpec {
   /// Rec. 709 (a genuine pass-through), `linear`, `rec709`, `rec2020`,
   /// `display-p3`, or the name of an OCIO output space (post-v1; an export
   /// that asks for one before OCIO exists is refused). A space the chosen
-  /// container cannot *state* is refused too, rather than written unlabelled
-  /// (K-498).
+  /// container cannot *state* is refused too, rather than written unlabelled.
   final String colourSpace;
 
-  /// The filter a resized frame is resampled with (K-498): `high` for
+  /// The filter a resized frame is resampled with: `high` for
   /// Lanczos-3, anything else — blank included — for the bilinear default
   /// every Lumit export has always used. Blank rather than `fast` as the
   /// unset value, so a caller that never sets it cannot change a byte.
   final String resample;
 
-  /// Pixels taken off each edge, at composition size (K-419).
+  /// Pixels taken off each edge, at composition size.
   final int cropTop;
   final int cropLeft;
   final int cropBottom;
@@ -490,7 +488,7 @@ class BridgeExportSpec {
   /// Take the crop from the Viewer's region of interest instead.
   final bool useRegionOfInterest;
 
-  /// That region as comp fractions `[x0, y0, x1, y1]` (K-362), or empty for
+  /// That region as comp fractions `[x0, y0, x1, y1]`, or empty for
   /// none. Anything that is not four increasing finite numbers is no region.
   final Float64List region;
 
@@ -508,27 +506,27 @@ class BridgeExportSpec {
   /// Run each layer's effect stack.
   final bool effects;
 
-  /// Honour solo switches (K-105).
+  /// Honour solo switches.
   final bool honourSolo;
 
-  /// Deliver the guide layers too (K-497). Off — the default — is what a
+  /// Deliver the guide layers too. Off — the default — is what a
   /// guide layer is: drawn in the Viewer, absent from the file, at every
   /// depth.
   final bool renderGuides;
 
-  /// Motion blur at export (K-502): `0` the compositions' own settings, `1`
+  /// Motion blur at export: `0` the compositions' own settings, `1`
   /// on for checked layers, `2` off for all layers. An unknown number is the
   /// compositions' own settings — an answer nobody recognises is not a
   /// reason to refuse an export.
   final int motionBlur;
 
-  /// Retime blend at export (K-502): `0` the compositions' own settings, `1`
+  /// Retime blend at export: `0` the compositions' own settings, `1`
   /// off for all layers. There is **no** *on for checked layers*: a layer's
   /// interpolation policy is its own check, so that answer would write the
   /// identical file as the first.
   final int retimeBlend;
 
-  /// Read the proxies instead of the originals (K-501). Off by default
+  /// Read the proxies instead of the originals. Off by default
   /// whatever the project is set to work at: delivery is the one moment a
   /// proxy must not apply, and a draft for review is the only export it is
   /// right for.
@@ -582,7 +580,7 @@ class BridgeExportSpec {
   });
 
   /// A comp-sized H.264 mp4 with sound — what a plain "Export…" has always
-  /// meant (K-119) — mirroring `ExportSpec::default()` field for field.
+  /// meant — mirroring `ExportSpec::default()` field for field.
   static Future<BridgeExportSpec> default_() =>
       BridgeLib.instance.api.crateApiExportBridgeExportSpecDefault();
 
@@ -696,7 +694,7 @@ sealed class BridgeExportState with _$BridgeExportState {
 }
 
 /// What one output format can and cannot carry — `ExportFormat::caps()` as the
-/// dialogue reads it (K-479).
+/// dialogue reads it.
 ///
 /// A control the format cannot honour is **disabled**, not live: the dialogue
 /// reads this row to decide, and the engine refuses the same combinations as a
@@ -723,7 +721,7 @@ class BridgeFormatCaps {
   final bool audioBitRate;
 
   /// This format's sound can be written twenty-four bits a sample as well as
-  /// sixteen (K-493) — true for uncompressed PCM, false for AAC and for
+  /// sixteen — true for uncompressed PCM, false for AAC and for
   /// every format with no sound at all.
   ///
   /// A flag rather than a list, because the engine's list is
@@ -738,11 +736,11 @@ class BridgeFormatCaps {
 
   /// The colour spaces this format's container can **state**, by the stable
   /// names `BridgeExportSpec::colour_space` carries: `""` (sRGB / Rec. 709),
-  /// `linear`, `rec709`, `rec2020`, `display-p3` (K-498). Empty where the
+  /// `linear`, `rec709`, `rec2020`, `display-p3`. Empty where the
   /// format carries no picture.
   ///
   /// Names, not labels: a space the seam cannot translate is a space whose
-  /// wording belongs in `app_en.arb` like every other string (K-005, K-303),
+  /// wording belongs in `app_en.arb` like every other string,
   /// and a name nobody recognises — an OCIO config's own — is shown as it
   /// arrived, exactly as a codec name is.
   final List<String> colourSpaces;

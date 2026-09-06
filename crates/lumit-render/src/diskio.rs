@@ -82,7 +82,7 @@ pub struct LoadedFrame {
 /// How many frames may be waiting to be written at once.
 ///
 /// **A queue with a hard limit, because the alternative was measured in tens of
-/// gigabytes (K-277).** Parking is write-behind: the frame's bytes are handed
+/// gigabytes.** Parking is write-behind: the frame's bytes are handed
 /// over and forgotten, and the bytes sit in the channel until this thread has
 /// swizzled, compressed and written them. Compressing is slower than reading a
 /// frame back off the card, so a producer that never checks can hand over
@@ -111,7 +111,7 @@ pub struct DiskIo {
 /// disk, and how many may be at once. Its own type so the two rules that keep
 /// the write-behind queue bounded — **never the same frame twice**, **never
 /// more than [`MAX_PENDING_PARKS`]** — can be read and tested in one place
-/// rather than inferred from a lock and a length check (K-277).
+/// rather than inferred from a lock and a length check.
 #[derive(Default)]
 pub(crate) struct ParkQueue {
     on_the_way: HashSet<u128>,
@@ -418,7 +418,7 @@ mod tests {
         (0..(w * h * 4)).map(|i| (i % 251) as u8).collect()
     }
 
-    /// **The runaway (K-277).** Parking is write-behind, so a frame is not on
+    /// **The runaway.** Parking is write-behind, so a frame is not on
     /// disk — and so does not answer `contains` — until the write lands. The
     /// idle backup asks that question every couple of milliseconds, so without
     /// a second question every frame in the queue looked like one that had

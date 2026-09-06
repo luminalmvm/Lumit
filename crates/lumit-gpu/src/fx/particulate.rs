@@ -1,5 +1,5 @@
-//! Particulate's GPU passes (docs/08 §3.86, K-446, K-474, K-475;
-//! docs/impl/particulate.md §5–§7): evaluate, compact, draw.
+//! Particulate's GPU passes (docs/08 §3.86; docs/impl/particulate.md §5–§7):
+//! evaluate, compact, draw.
 //!
 //! **In plain terms.** The kernel next door works out where every particle is
 //! and packs the live ones together; this file is the host half — it makes the
@@ -62,18 +62,18 @@ pub const MAX_CANDIDATES: u64 = (MAX_WORKGROUPS_PER_DIM as u64) * (EVAL_WORKGROU
 /// reads — every distance in **raster** pixels, as the resolve step left them.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ParticulateOp<'a> {
-    /// The emitter's centre, three axes (K-561).
+    /// The emitter's centre, three axes.
     pub emitter_pos: [f32; 3],
     /// The Line/Ellipse/Rectangle extents.
     pub emitter_wh: [f32; 2],
-    /// The Point/Ellipse/Rectangle extent through the layer's plane (K-561).
+    /// The Point/Ellipse/Rectangle extent through the layer's plane.
     pub emitter_depth: f32,
     pub emitter_angle_deg: f32,
     pub direction_deg: f32,
-    /// Launch elevation out of the layer's plane, degrees (K-561).
+    /// Launch elevation out of the layer's plane, degrees.
     pub direction_z_deg: f32,
     pub spread_deg: f32,
-    /// The elevation's own cone, degrees (K-561).
+    /// The elevation's own cone, degrees.
     pub spread_z_deg: f32,
     pub speed: f32,
     /// `0..=1`.
@@ -83,7 +83,7 @@ pub struct ParticulateOp<'a> {
     pub shape: u32,
     pub seed: u32,
     /// The most particles to **draw**: Max particles, halved once per
-    /// degradation rung (K-475).
+    /// degradation rung.
     pub cap: u32,
     pub life: f32,
     /// `0..=1`.
@@ -98,7 +98,7 @@ pub struct ParticulateOp<'a> {
     /// Scene-linear RGBA at birth and at death.
     pub colour: [f32; 4],
     pub end_colour: [f32; 4],
-    /// The air's own speed on all three axes (K-561).
+    /// The air's own speed on all three axes.
     pub wind: [f32; 3],
     pub gravity: f32,
     pub drag: f32,
@@ -121,7 +121,7 @@ pub struct ParticulateOp<'a> {
     pub candidates: u32,
     /// The two baked over-life curves, size then opacity, 257 entries each.
     pub curves: &'a [f32],
-    /// The mask path as `(x, y, arc length, unused)` per vertex (K-408); empty
+    /// The mask path as `(x, y, arc length, unused)` per vertex; empty
     /// for every other emitter shape, and the documented no-op for Mask path.
     pub path: &'a [[f32; 4]],
     pub path_total: f32,
@@ -129,14 +129,14 @@ pub struct ParticulateOp<'a> {
     pub tail_seconds: f32,
     /// `0..=1`.
     pub feather: f32,
-    /// The host Mix, `0..=1`, folded into the particle's own coverage (K-425).
+    /// The host Mix, `0..=1`, folded into the particle's own coverage.
     pub mix: f32,
     /// The `RenderMode` code: 0 Disc, 1 Sprite, 2 Streak. **An unset Sprite
     /// arrives as Disc** — the host resolves the fallback so the kernel has one
     /// less branch (particulate.md §2).
     pub mode: u32,
-    /// Where the composition's camera puts a particle off the layer's plane
-    /// (K-561): a row-major 3×4 already scaled to **this raster**, or `None` on
+    /// Where the composition's camera puts a particle off the layer's plane:
+    /// a row-major 3×4 already scaled to **this raster**, or `None` on
     /// a 2D layer, a comp with no camera, and every project saved before the
     /// axis existed. `None` is not "the identity matrix" — the kernel takes a
     /// different branch and touches the position's bits not at all, which is
@@ -220,14 +220,14 @@ pub(super) struct ParticulateParams {
 const SCAN_BLOCK: u32 = 256;
 
 /// Words of stream per particle: position 3, speed 3, age, life, size,
-/// rotation, colour 2 (half pairs), id 2, and the draw's own tail 3 (K-561).
+/// rotation, colour 2 (half pairs), id 2, and the draw's own tail 3.
 pub(super) const STREAM_WORDS: u64 = 17;
 
 impl FxEngine {
     /// Draw one Particulate over a working texture, returning a new texture of
     /// the same size (docs/08 §3.86).
     ///
-    /// `sprite` is the Sprite layer's rendered picture (K-123), `None` in every
+    /// `sprite` is the Sprite layer's rendered picture, `None` in every
     /// other mode **and** when the row is unset — in which case `op.mode` is
     /// already Disc, because a render mode must always draw something.
     ///
@@ -294,7 +294,7 @@ impl FxEngine {
     }
 
     /// The compacted stream itself, read back to the host — the **oracle hook**
-    /// (K-019, docs/08 §1.6), and what PS7's goldens will pin.
+    /// (docs/08 §1.6), and what PS7's goldens will pin.
     ///
     /// Runs the evaluate and compaction passes and nothing else, then maps the
     /// stream buffer. It has `readback_linear_f32`'s shape and its reason: a
@@ -426,7 +426,7 @@ impl FxEngine {
             project: u32::from(op.projection.is_some()),
             // Particulate's points were decided by the compaction; only the
             // generic draw's two field-testing callers turn the vertex-stage
-            // rejection on (K-599, K-603).
+            // rejection on.
             field_mode: 0,
             field_invert: 0,
             field_threshold: 0.0,
@@ -698,7 +698,7 @@ impl ParticulatePipelines {
                         count: None,
                     },
                     // The picture the points were thrown at, read in the
-                    // **vertex** stage by Scatter's rejection (K-599). Every
+                    // **vertex** stage by Scatter's rejection. Every
                     // other caller binds its own input here and never looks.
                     wgpu::BindGroupLayoutEntry {
                         binding: 3,

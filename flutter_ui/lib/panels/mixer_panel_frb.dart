@@ -1,4 +1,4 @@
-// The Mixer panel (docs/09 §3.1, K-690/K-691, the approved AudioWorkspace
+// The Mixer panel (docs/09 §3.1, the approved AudioWorkspace
 // board): one strip per audible row of the fronted comp, in comp order, and
 // the Master strip at the right-hand edge.
 //
@@ -11,7 +11,7 @@
 // **The meters animate; nothing else does.** One [AudioMeterFeed] polls the
 // engine's tap and the meter *painters* listen to its frame directly, each
 // inside its own RepaintBoundary — a tick repaints the bars and rebuilds no
-// widget at all, which is what keeps the K-681 redraw gates green
+// widget at all, which is what keeps the redraw gates green
 // (docs/impl/ui-performance.md WP-2). Everything else draws from the held comp
 // model and rebuilds only when the document moves.
 
@@ -64,8 +64,8 @@ class MixerPanelFrb extends StatefulWidget {
 class _MixerPanelFrbState extends State<MixerPanelFrb> {
   late final AudioMeterFeed _feed = widget.feed ?? AudioMeterFeed();
 
-  /// Which layers can make a sound, probed once per layer and remembered —
-  /// the K-435 question, asked exactly as the Timeline asks it.
+  /// Which layers can make a sound, probed once per layer and remembered,
+  /// asked exactly as the Timeline asks it.
   final Map<String, bool> _hasAudio = {};
 
   @override
@@ -201,7 +201,7 @@ class _MixerStripState extends State<_MixerStrip> {
     // Keyframed Volume or Pan reads at the playhead, exactly as the Timeline's
     // own rows do — only then does the strip listen to it. A strip whose sound
     // controls are static cannot change with the playhead, so it never
-    // rebuilds for one (the K-681 discipline).
+    // rebuilds for one.
     final animated = info.volumeDb is! BridgeScalar_Static ||
         info.pan is! BridgeScalar_Static;
 
@@ -372,7 +372,7 @@ class _MixerStripState extends State<_MixerStrip> {
   }
 }
 
-/// The Master strip (K-691): the fader is a gain stage on the sum, the lamp is
+/// The Master strip: the fader is a gain stage on the sum, the lamp is
 /// the limiter's sticky clip light, and the LUFS readout is the muted
 /// placeholder the board draws — loudness measurement is post-v1 (docs/09 §8).
 class _MasterStrip extends StatefulWidget {
@@ -444,7 +444,7 @@ class _MasterStripState extends State<_MasterStrip> {
   }
 }
 
-/// The limiter's lamp (K-535/K-691): LIM, lit while the sticky clip flag is
+/// The limiter's lamp: LIM, lit while the sticky clip flag is
 /// up. Clicking it is the desk's "I have seen it" — the lights go out, the mix
 /// is untouched. Its own tiny widget under the clip listenable, so a tick of
 /// the meters never rebuilds it and a clip lights it without touching the
@@ -489,7 +489,7 @@ class _LimiterLamp extends StatelessWidget {
 ///
 /// A [RepaintBoundary] around a [CustomPaint] whose painter repaints off the
 /// feed's frame notifier directly — a meter tick is a repaint of this band
-/// and a rebuild of nothing (the K-681 shape).
+/// and a rebuild of nothing.
 class MeterBand extends StatelessWidget {
   final String stripId;
   final AudioMeterFeed feed;
@@ -663,7 +663,7 @@ class _FaderPainter extends CustomPainter {
 }
 
 /// The pan pot: a small dial, −100 full left through centre to +100 full
-/// right (K-694). Vertical drag turns it; double-click recentres. Public
+/// right. Vertical drag turns it; double-click recentres. Public
 /// because the board draws the same pot on the Audio panel's Pan row, and one
 /// dial must turn the same way everywhere.
 class PanPot extends StatelessWidget {
@@ -711,7 +711,7 @@ class PanPot extends StatelessWidget {
   }
 }
 
-/// The pan value as the well reads it (K-694): "C", "L 50", "R 30" — a
+/// The pan value as the well reads it: "C", "L 50", "R 30" — a
 /// percentage of the way to one side, no arithmetic required.
 String panLabel(double pan) {
   final rounded = pan.round();

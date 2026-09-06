@@ -1,7 +1,7 @@
-//! Visual proof for K-408's three consumers (docs/08 §3.78 Scribble, §3.79
-//! Stroke, §3.76 Vegas' Mask/Path source): render one frame through each of
-//! them on a **real masked layer**, so the kernels can be judged by eye rather
-//! than asserted.
+//! Visual proof for the mask path's three consumers (docs/08 §3.78 Scribble,
+//! §3.79 Stroke, §3.76 Vegas' Mask/Path source): render one frame through each
+//! of them on a **real masked layer**, so the kernels can be judged by eye
+//! rather than asserted.
 //!
 //! # In plain terms
 //!
@@ -211,8 +211,8 @@ fn render_the_three_mask_path_effects() {
     reveal.paint_style = 2;
     shot("9-stroke-reveal", &reveal.packed(&notched, 1.0));
 
-    // ---- Vegas on Mask/Path: the dashes it could not march before K-408. Look
-    // at the spacing where the notched mask curves hardest.
+    // ---- Vegas on Mask/Path: the dashes it could not march until the mask
+    // path arrived. Look at the spacing where the notched mask curves hardest.
     let mut v = Vegas::read(Params::EMPTY);
     v.source = Vegas::SOURCE_MASK_PATH;
     v.width = 7.0;

@@ -1,4 +1,4 @@
-// The parked measurement probe behind docs/impl/ui-performance.md (K-676):
+// The parked measurement probe behind docs/impl/ui-performance.md:
 // the manual instrument for docs/13's B1/B2 until a real-window harness
 // exists. Activated only when the build passes
 // --dart-define=LUMIT_PROBE_PROJECT=<path-to-.lum> (see main.dart); an
@@ -80,7 +80,7 @@ class CountingBridgeHandler extends BaseHandler {
 /// [FrameTiming] stamps carry).
 ///
 /// The probe's fps is counted over these and only these. Counting whatever
-/// landed in the bucket instead — as the probe did until K-733 — mixes in
+/// landed in the bucket instead — as the probe once did — mixes in
 /// frames from the settle either side of the gesture, misses whatever the
 /// engine's timings batch (flushed up to a second late) had not delivered
 /// when the bucket closed, and divides by a wall clock that includes the
@@ -241,8 +241,7 @@ class _Probe {
     // scrub's last ~20 frames arrived after the old 300 ms tail closed the
     // bucket). The fps column counts only frames whose vsync falls inside
     // [t0, t1], so neither this tail nor the old one pads the denominator —
-    // the old wall clock included its tail and read every gesture ~15% slow
-    // (K-733).
+    // the old wall clock included its tail and read every gesture ~15% slow.
     await Future<void>.delayed(const Duration(milliseconds: 1300));
     _bucket = null;
     final after = bridge?.snapshot();
@@ -373,7 +372,7 @@ class _Probe {
 
     // The conditions: window pixels, scale, and whether the preview is live.
     // The owner's condition is the window maximised on the 164 Hz monitor with
-    // media resolving; the agent trap is a 1280x720 window over missing media.
+    // media resolving; the small-window trap is a 1280x720 window over missing media.
     final view = WidgetsBinding.instance.platformDispatcher.views.first;
     out.writeln('window physical=${view.physicalSize.width.toStringAsFixed(0)}'
         'x${view.physicalSize.height.toStringAsFixed(0)} '
@@ -432,7 +431,7 @@ class _Probe {
     // scrollable, and the wheel legs sized to stay inside it. The original
     // gesture scrolled 3,600 px into ~1,180 px of extent, so two-thirds of its
     // notches ground against the stops — where drawing nothing is the *correct*
-    // answer (idle is zero frames) — and the row read "12 fps" (K-733). A leg
+    // answer (idle is zero frames) — and the row read "12 fps". A leg
     // that stays in range measures scrolling, not the stop.
     var vExtent = 0.0;
     for (final e in _elements((e) =>

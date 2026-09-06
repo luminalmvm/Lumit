@@ -76,7 +76,7 @@ bool get engineAvailable => File(_libraryPath).existsSync();
 
 /// True when this machine cannot hand the Viewer a frame at all.
 ///
-/// Zero-copy is the only Viewer transport (K-183): a frame reaches Dart as a
+/// Zero-copy is the only Viewer transport: a frame reaches Dart as a
 /// platform texture handle or it does not reach Dart. On a machine whose Vulkan
 /// driver cannot export the shared image — Mesa's lavapipe, the software
 /// rasteriser the Linux CI runner has instead of a GPU, where
@@ -112,15 +112,15 @@ Widget hostPanel({
 
   /// How much motion the panel under test is allowed. None by default, so a
   /// test asserts a finished state rather than racing an animation; a test
-  /// that is *about* the motion (the Viewer's zoom flight, K-218) asks for it.
+  /// that is *about* the motion (the Viewer's zoom flight) asks for it.
   AnimationLevel animationLevel = AnimationLevel.none,
 
   /// Which shape's chrome the panel is dressed in. Sharp by default, because
   /// that is what every behaviour test wants to assert against; a test about
-  /// Round's own geometry (K-394) asks for it.
+  /// Round's own geometry asks for it.
   ThemeShape shape = ThemeShape.sharp,
 
-  /// How much room a row gets (K-454). Regular by default, because that is
+  /// How much room a row gets. Regular by default, because that is
   /// what the editor ships as and what every mockup renders; a test about the
   /// **Compact** setting passes `DensityTokens.compact` and asserts the
   /// tighter column of §12A.6's table.
@@ -142,7 +142,7 @@ Widget hostPanel({
               // The application's root is a MaterialApp, which puts one of
               // these above everything; without it `onTapOutside` never fires
               // and a test cannot see an inline editor commit on a click
-              // elsewhere (K-243).
+              // elsewhere.
               // For the same reason: a MaterialApp puts WidgetsLocalizations
               // above everything, and the widgets library's own reorderable
               // list asks for them by name (the export queue's draggable
@@ -341,7 +341,7 @@ Future<void> _settleProgress(WidgetTester tester, Duration slice) async {
 /// hundreds of milliseconds therefore cannot be met however healthy the engine
 /// is, and the tests that wait for a picture fail on the machine rather than on
 /// the code — which is exactly how they read. The build may also queue behind
-/// one other worker's (K-434), which is what stops a file of them exhausting
+/// one other worker's, which is what stops a file of them exhausting
 /// the card — so the ceiling covers a turn as well as a build.
 ///
 /// Ten seconds of ceiling costs nothing where the frame is quick: [settleFrb]
@@ -368,7 +368,7 @@ double stillValue(BridgeScalar scalar) => switch (scalar) {
       _ => throw StateError('expected a still scalar, got $scalar'),
     };
 
-/// The Viewer bottom bar's controls, left to right, by key (K-466).
+/// The Viewer bottom bar's controls, left to right, by key.
 ///
 /// The bar's arrangement is a decision rather than a look, so what asserts it
 /// is the order of the keys and not a picture. Only the keys that name a

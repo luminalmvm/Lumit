@@ -1,5 +1,5 @@
 // The painting tools over the picture: brush, eraser and clone stamp
-// (K-227, docs/07 §2.3.4).
+// (docs/07 §2.3.4).
 //
 // **In plain terms.** With a painting tool in hand, dragging over the picture
 // leaves a mark on the **selected layer**. The brush lays down the toolbar's
@@ -16,7 +16,7 @@
 //
 // **A stylus presses.** On a pen tablet each point also carries how hard it was
 // pressed, and the brush's "pressure controls size" toggle decides whether that
-// widens the mark (K-583). With a mouse — or with the toggle off — every point
+// widens the mark. With a mouse — or with the toggle off — every point
 // is a full press, which the engine stores as no pressures at all, so nothing
 // about the stroke changes.
 //
@@ -57,8 +57,7 @@ const double paintSampleDistance = 2;
 /// The mark drawn where a clone stamp will copy from.
 const double cloneSourceMarkSize = 7;
 
-/// What a brush shape is called in the tool options and on a stroke's row
-/// (K-548).
+/// What a brush shape is called in the tool options and on a stroke's row.
 String brushShapeLabel(BridgeBrushShape shape) => switch (shape) {
       BridgeBrushShape.round => l10n.brushShapeRound,
       BridgeBrushShape.square => l10n.brushShapeSquare,
@@ -83,7 +82,7 @@ List<Offset> thinStroke(List<Offset> points,
 /// Which of [points] [thinStroke] keeps, by index — the same thinning, said in
 /// a way anything travelling *beside* the path can follow.
 ///
-/// The stylus pressures are that beside-the-path list (K-583): a pressure has
+/// The stylus pressures are that beside-the-path list: a pressure has
 /// to be dropped with the point it belongs to, and a second thinning that
 /// happened to agree would be a second thinning that one day did not.
 List<int> thinStrokeIndices(List<Offset> points,
@@ -124,7 +123,7 @@ Paint strokePaint(Color colour, double width) => Paint()
 
 /// How hard the stylus is pressing, 0..1, or **1.0 for anything that is not a
 /// stylus** — a mouse, a finger, a tablet that reports no range. That is the
-/// whole of "if no stylus is present nothing changes" (K-583): a full press
+/// whole of "if no stylus is present nothing changes": a full press
 /// everywhere is stored as no pressures at all.
 double stylusPressure(PointerEvent event) {
   if (event.kind != PointerDeviceKind.stylus &&
@@ -177,7 +176,7 @@ class _ViewerPaintLayerState extends State<ViewerPaintLayer> {
   /// The stroke in flight, in screen coordinates.
   final List<Offset> _stroke = [];
 
-  /// How hard the stylus was pressing at each of those points, 0..1 (K-583).
+  /// How hard the stylus was pressing at each of those points, 0..1.
   /// Parallel to [_stroke], and all 1.0 when there is no stylus.
   final List<double> _pressures = [];
 
@@ -188,8 +187,8 @@ class _ViewerPaintLayerState extends State<ViewerPaintLayer> {
   double _pressure = 1.0;
 
   /// Where the press landed. The framework only reports a drag once it has
-  /// travelled its slop, and a stroke that began 18px along is the wrong stroke
-  /// (K-217's trap, and every tool since).
+  /// travelled its slop, and a stroke that began 18px along is the wrong
+  /// stroke.
   Offset? _downAt;
 
   /// The clone stamp's source, in the *layer's* coordinates, so it stays put on
@@ -261,12 +260,12 @@ class _ViewerPaintLayerState extends State<ViewerPaintLayer> {
     final tools = widget.uiState.tools;
     final box = _target;
     return Positioned.fill(
-      // The hardware crosshair leads (K-724): the OS moves it at input rate
+      // The hardware crosshair leads: the OS moves it at input rate
       // whatever the application's frame rate is doing, so it is the thing to
       // aim with; the ring below is decoration — the size of the mark, drawn
       // by the app and honestly a frame behind. Through the shared region
       // rather than a `MouseRegion` of its own, so the clone stamp's
-      // `Alt`-click cannot swap the pointer under the ring (K-235) — the
+      // `Alt`-click cannot swap the pointer under the ring — the
       // fault the Zoom tool had, and this had for the same reason.
       child: DrawnPointerRegion(
         cursor: SystemMouseCursors.precise,
@@ -386,7 +385,7 @@ class _ViewerPaintLayerState extends State<ViewerPaintLayer> {
     // The pressures are thinned with the points they belong to, and a brush
     // with the toggle off commits a full press throughout — which the engine
     // stores as no pressures at all, so the stroke is the stroke it would have
-    // been (K-583).
+    // been.
     final points = [
       for (final i in thinStrokeIndices(screenPoints))
         () {
@@ -427,12 +426,12 @@ class _ViewerPaintLayerState extends State<ViewerPaintLayer> {
           shape: tools.brushShape,
           opacity: tools.brushOpacity,
           // A fresh stroke is drawn whole; Start and End are trimmed
-          // afterwards, on their own Timeline rows (K-549).
+          // afterwards, on their own Timeline rows.
           start: const BridgeScalar.static_(0),
           end: const BridgeScalar.static_(100),
           mode: paintModeFor(widget.tool),
           // A fresh mark lays its colour down; the blend is chosen after the
-          // fact on the stroke's own row (K-550). Index 0 is Normal.
+          // fact on the stroke's own row. Index 0 is Normal.
           blend: 0,
           cloneOffsetX: offsetX,
           cloneOffsetY: offsetY,

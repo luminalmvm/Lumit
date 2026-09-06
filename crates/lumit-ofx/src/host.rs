@@ -74,6 +74,10 @@ pub struct HostState {
 
 impl HostState {
     fn new() -> Self {
+        // The C half of the parameter suite learns where its Rust half is
+        // here, on the first touch of the state, because there is no earlier
+        // moment: the host struct a plugin is handed is built from this.
+        suites::parameter::bind();
         let mut props = HandleRegistry::new(HandleKind::PropertySet);
         // The host's own set is the first thing in the registry; if that
         // insert could fail the registry would have to be full, which it
@@ -182,9 +186,11 @@ unsafe extern "C" fn fetch_suite(
         (suite_names::PROPERTY, 1) => std::ptr::from_ref(&suites::property::SUITE).cast(),
         (suite_names::MEMORY, 1) => std::ptr::from_ref(&suites::memory::SUITE).cast(),
         (suite_names::MESSAGE, 1) => std::ptr::from_ref(&suites::message::SUITE).cast(),
+        (suite_names::MESSAGE, 2) => std::ptr::from_ref(&suites::message::SUITE_V2).cast(),
         (suite_names::IMAGE_EFFECT, 1) => std::ptr::from_ref(&suites::image_effect::SUITE).cast(),
         (suite_names::PARAMETER, 1) => std::ptr::from_ref(&suites::parameter::SUITE).cast(),
         (suite_names::MULTI_THREAD, 1) => std::ptr::from_ref(&suites::multi_thread::SUITE).cast(),
+        (suite_names::INTERACT, 1) => std::ptr::from_ref(&suites::interact::SUITE).cast(),
         _ => std::ptr::null(),
     }
 }
@@ -197,6 +203,30 @@ unsafe extern "C" fn fetch_suite(
 /// retimer-class plugins cannot work without it; the depth is float and only
 /// float, and the components are RGBA and only RGBA, which is what the
 /// working space converts to at the boundary (docs/12 §2.1).
+/// `kOfxPropName` as Lumit gives it: who this host is.
+pub const HOST_NAME: &str = "com.lumitlab.Lumit";
+
+/// Present the host to the next bundle under another name.
+///
+/// Some vendors' plugins read `kOfxPropName` and refuse any host they were
+/// not tested against — Red Giant Universe answers `kOfxStatErrMissingHostFeature`
+/// to every name but a handful of products'. The name is data in
+/// `quirks.json`, per plugin, and this is what applies it: the host property
+/// set's name changes before the bundle's `setHost`, and back to
+/// [`HOST_NAME`] when asked with `None`. Everything else the host says about
+/// itself stays true.
+///
+/// # Errors
+///
+/// [`Status::ErrBadHandle`] if the host has no property set, which is the
+/// state before the host exists.
+pub fn present_as(name: Option<&str>) -> Result<(), Status> {
+    let handle = host_props_handle()?;
+    let value = PropValue::string(name.unwrap_or(HOST_NAME))?;
+    state().props.get_mut(handle)?.set(keys::NAME, value);
+    Ok(())
+}
+
 fn host_property_set() -> PropertySet {
     /// A key or value with a NUL in it would be a literal in this file with a
     /// NUL in it; there is nothing to report to and nothing to do, so the
@@ -209,7 +239,7 @@ fn host_property_set() -> PropertySet {
 
     let mut set = PropertySet::new();
     seed_string(&mut set, keys::TYPE, values::TYPE_IMAGE_EFFECT_HOST);
-    seed_string(&mut set, keys::NAME, "com.lumitlab.Lumit");
+    seed_string(&mut set, keys::NAME, HOST_NAME);
     seed_string(&mut set, keys::LABEL, "Lumit");
     seed_string(&mut set, keys::VERSION_LABEL, env!("CARGO_PKG_VERSION"));
 
@@ -232,24 +262,34 @@ fn host_property_set() -> PropertySet {
         set.seed(keys::SUPPORTED_CONTEXTS, contexts);
     }
 
-    // The GPU render extensions, answered as the false they are. Saying nothing
-    // is worse than saying no: a plugin whose framework cannot read the answer
-    // does not fall back, it simply stops drawing (see `render_args`).
-    for key in [
-        keys::CUDA_RENDER_SUPPORTED,
-        keys::CUDA_STREAM_SUPPORTED,
-        keys::OPENCL_RENDER_SUPPORTED,
-        keys::OPENCL_SUPPORTED,
-        keys::METAL_RENDER_SUPPORTED,
-    ] {
-        seed_string(&mut set, key, "false");
-    }
-
     // Lumit is an interactive application, not a render farm node.
     set.seed(keys::HOST_IS_BACKGROUND, PropValue::int(0));
     // No interact suite yet, so no overlays. Saying otherwise would have
     // plugins draw into a viewer that never asks them to.
     set.seed(keys::SUPPORTS_OVERLAYS, PropValue::int(0));
+    // What the OFX 1.3 to 1.5 additions ask a host, answered honestly: no GPU
+    // render of any flavour, pictures bottom-up, no window handle.
+    // Every one of these is read by the stock support library during
+    // describe, and a host that answers "unknown property" to it is a host
+    // "missing a feature" — which is how HitFilm and Red Giant Universe
+    // refused to describe at all.
+    seed_string(
+        &mut set,
+        keys::HOST_NATIVE_ORIGIN,
+        values::NATIVE_ORIGIN_BOTTOM_LEFT,
+    );
+    set.seed(keys::HOST_OS_HANDLE, PropValue::Pointer(vec![0]));
+    set.seed(keys::PARAM_SUPPORTS_STR_CHOICE_ANIMATION, PropValue::int(0));
+    set.seed(keys::RENDER_QUALITY_DRAFT, PropValue::int(0));
+    for key in [
+        keys::OPENGL_RENDER_SUPPORTED,
+        keys::CUDA_RENDER_SUPPORTED,
+        keys::CUDA_STREAM_SUPPORTED,
+        keys::METAL_RENDER_SUPPORTED,
+        keys::OPENCL_RENDER_SUPPORTED,
+    ] {
+        seed_string(&mut set, key, values::FALSE);
+    }
     set.seed(keys::SUPPORTS_MULTI_RESOLUTION, PropValue::int(0));
     set.seed(keys::SUPPORTS_TILES, PropValue::int(0));
     set.seed(keys::TEMPORAL_CLIP_ACCESS, PropValue::int(1));

@@ -7,7 +7,7 @@
 //! VST3 folders (and anything `CLAP_PATH` or `VST3_PATH` adds), opens each
 //! plugin file it finds, asks every plugin in it to describe itself, and hands
 //! back a list plus a report. **One scan, one report, one switched-off list**
-//! for both standards (K-707).
+//! for both standards.
 //! After that a plugin is an effect like any other — it goes in the layer's
 //! effect stack, its knobs keyframe, and the Graph panel draws it as a node.
 //!
@@ -92,8 +92,7 @@ pub fn clap_search_paths() -> Vec<PathBuf> {
     paths
 }
 
-/// The standard VST3 folders on this platform, plus whatever `VST3_PATH` adds
-/// (K-707).
+/// The standard VST3 folders on this platform, plus whatever `VST3_PATH` adds.
 ///
 /// The same two shapes as CLAP's — one shared, one per-user — at the locations
 /// Steinberg's own module locator uses. `VST3_PATH` is the SDK's own extra-paths
@@ -138,7 +137,7 @@ pub fn vst3_search_paths() -> Vec<PathBuf> {
     paths
 }
 
-/// Every folder a scan looks in: CLAP's, then VST3's (K-707).
+/// Every folder a scan looks in: CLAP's, then VST3's.
 ///
 /// One list rather than two calls, because there is one scan. A folder that does
 /// not exist costs a failed `read_dir` and nothing else, which is what a machine
@@ -160,7 +159,7 @@ pub fn search_paths() -> Vec<PathBuf> {
 /// inside it belongs to this machine is a question with a platform-shaped
 /// answer, and [`crate::vst3::payload`] is the one place that answers it. The
 /// bundle is also the thing a person points at, and the key one broker process
-/// is kept per (K-592).
+/// is kept per.
 ///
 /// Sorted, so two runs discover plugins in the same order — which is what makes
 /// an effect list stable between sessions.
@@ -205,7 +204,7 @@ pub struct ScanOptions {
     pub paths: Vec<PathBuf>,
     /// Plugin identifiers the user has switched off. Consulted before a plugin
     /// is described, so a disabled plugin's code never runs. The same list the
-    /// OFX host reads (K-594).
+    /// OFX host reads.
     pub disabled: BTreeSet<String>,
 }
 
@@ -224,7 +223,7 @@ impl ScanOptions {
 /// One plugin that became an effect.
 pub struct DiscoveredPlugin {
     /// The name the catalogue answers to — the standard's prefix and the
-    /// plugin's own id: `clap:<id>` or `vst3:<class id>` (K-707).
+    /// plugin's own id: `clap:<id>` or `vst3:<class id>`.
     pub match_name: String,
     /// The plugin's own identifier, which is what the switched-off list names.
     pub identifier: String,
@@ -234,7 +233,7 @@ pub struct DiscoveredPlugin {
     pub vendor: String,
     /// Which `.clap` file or `.vst3` bundle it came out of.
     pub module: PathBuf,
-    /// The definition everything downstream sees (K-593).
+    /// The definition everything downstream sees.
     pub def: AudioEffectDef,
 }
 

@@ -18,8 +18,8 @@
 //! rule rather than a gap — docs/11 §5 is explicit that an unmapped match name
 //! becomes a placeholder and **never the closest guess**.
 //!
-//! **A third-party effect is the one exception, and it has two roads** (K-655,
-//! docs/11 §5). Somebody else's plug-in has internals nobody here can
+//! **A third-party effect is the one exception, and it has two roads**
+//! (docs/11 §5). Somebody else's plug-in has internals nobody here can
 //! re-implement, so an equivalent is never on offer — but two lesser things
 //! are, and which one applies is a fact about the machine doing the import:
 //!
@@ -32,7 +32,7 @@
 //!   across a vendor boundary, because a guessed dial is a silently wrong
 //!   picture where a default is a visible one — the report says which effect it
 //!   is standing in for, and it is dialled once. **A Sapphire dissolve is the
-//!   one exception** (K-660): its Dissolve Percent is the transition itself, so
+//!   one exception**: its Dissolve Percent is the transition itself, so
 //!   it crosses through the owner's own curve on both roads.
 //!
 //! Both roads report. The rule that survives untouched is the one that matters:
@@ -99,10 +99,10 @@ pub fn map_effect(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Mapp
 /// name wins.
 fn claim(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
     // The two third-party roads come first, and in this order: the vendor's own
-    // plug-in beats Lumit's nearest likeness, because it is the effect itself
-    // (K-655). Neither road can fire on a row that names neither an `ofx`
-    // identifier nor the `nearest` conversion, so Adobe's own effects reach
-    // the two halves below exactly as they always have.
+    // plug-in beats Lumit's nearest likeness, because it is the effect itself.
+    // Neither road can fire on a row that names neither an `ofx` identifier nor
+    // the `nearest` conversion, so Adobe's own effects reach the two halves
+    // below exactly as they always have.
     if let Some(row) = super::table::table().row(match_name_of(node)) {
         if let Some(mapped) = direct(conv, path, node, row) {
             return Some(mapped);
@@ -118,7 +118,7 @@ fn claim(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Effect
 }
 
 /// **The vendor's own OFX build of this same plug-in, if it is installed**
-/// (K-655, docs/11 §5).
+/// (docs/11 §5).
 ///
 /// The match rule is equality: the row lists the plug-in identifiers this After
 /// Effects effect *is*, and one of them either answers in the catalogue this
@@ -300,7 +300,7 @@ fn amount_leaf(node: &Property) -> Option<&Property> {
     })
 }
 
-/// **The owner's dissolve curve** (K-660, docs/11 §5a).
+/// **The owner's dissolve curve** (docs/11 §5a).
 ///
 /// A Sapphire dissolve's Dissolve Percent is not our amount and copying it
 /// across would over-drive the first half of every transition. The owner's
@@ -314,9 +314,9 @@ fn dissolve_curve(percent: f64) -> f64 {
     }
 }
 
-/// The curve applied to a whole property, **key by key** — the K-625
-/// precedent: each key's value is mapped and its ease is kept, because an ease
-/// describes the shape of the move and the move is still the same one.
+/// The curve applied to a whole property, **key by key**: each key's value is
+/// mapped and its ease is kept, because an ease describes the shape of the
+/// move and the move is still the same one.
 ///
 /// What that costs is worth saying out loud, and the report says it: the curve
 /// has a corner at 50 %, and between two keys Lumit draws the line through the
@@ -347,7 +347,7 @@ fn curved(conv: &mut Conv<'_>, here: &ItemPath, effect: &str, p: LumProperty) ->
     p
 }
 
-/// **The closest Lumit effect, at its own defaults** (K-655, docs/11 §5).
+/// **The closest Lumit effect, at its own defaults** (docs/11 §5).
 ///
 /// For a third-party effect with no OFX build installed. The effect arrives in
 /// the stack, in the right place, switched on or off as it was — and dialled to
@@ -356,7 +356,7 @@ fn curved(conv: &mut Conv<'_>, here: &ItemPath, effect: &str, p: LumProperty) ->
 /// The report names both sides so the one dial-in is somewhere the reader can
 /// find it.
 ///
-/// **A Sapphire dissolve is the one exception** (K-660): its Dissolve Percent
+/// **A Sapphire dissolve is the one exception**: its Dissolve Percent
 /// *is* the transition rather than a dial on one, so it comes across through
 /// [`dissolve_curve`] rather than being left behind at Completion's default.
 fn nearest(
@@ -443,10 +443,10 @@ fn placeholder(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> EffectI
         sample_temporally: true,
         roto: None,
         // docs/11 §6: the placeholder keeps the name the user was looking at,
-        // which is what `custom_name` is for (K-321).
+        // which is what `custom_name` is for.
         custom_name: Some(name),
         // Nothing to link: a placeholder carries no schema, so it has no
-        // `_x`/`_y` pairs for a chain to tie together (K-443).
+        // `_x`/`_y` pairs for a chain to tie together.
         linked_pairs: Vec::new(),
         plugin_state: None,
         extra: ae_map(vec![("params", serde_json::Value::Array(carried))]),

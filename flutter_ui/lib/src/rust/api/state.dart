@@ -27,7 +27,7 @@ abstract class LumitBridgeState implements RustOpaqueInterface {
       BridgeLib.instance.api.crateApiStateLumitBridgeStateGetCurrentProject();
 
   /// Import an After Effects project and make it the open one — either front
-  /// door (K-418): an `.aep` read directly, or a Lumit Bridge bundle as a
+  /// door: an `.aep` read directly, or a Lumit Bridge bundle as a
   /// `.lum-bundle` folder or a zip of one. `lumit_import::open_ae` decides
   /// which by the bytes, so this is one call and one report whichever the
   /// user picked.
@@ -63,7 +63,7 @@ abstract class LumitBridgeState implements RustOpaqueInterface {
   /// took. Async puts it on a worker thread, which is what lets Dart hold the
   /// previous document on screen behind a progress bar until this returns.
   ///
-  /// `on_progress_stream` is how the opening card stops guessing (K-628): each
+  /// `on_progress_stream` is how the opening card stops guessing: each
   /// phase says it has begun, and the frontend draws the share of the whole
   /// open that is behind it. Optional, because nothing about opening a project
   /// depends on someone watching.
@@ -196,7 +196,7 @@ class BridgeLayerTiming {
 }
 
 /// Where the Viewer cuts a layer's effect stack short — the "at effect" chip's
-/// point (K-528, superseding K-486's thumbnail seam).
+/// point.
 ///
 /// **In plain terms.** Picking an effect and turning the chip on shows the
 /// composition rendered with that layer's stack stopping after the picked
@@ -291,7 +291,7 @@ class BridgeRenderProgress {
 
 /// A small still picture as plain pixels — the thumbnail payload
 /// (`FootageReference::thumbnail`). **Not a Viewer transport**: the read-back
-/// frame path was deleted in K-183, so the only pixel payloads that cross the
+/// frame path was deleted, so the only pixel payloads that cross the
 /// bridge are these thumbnails, the scope traces and the dropper's windows,
 /// each small by construction.
 class BridgeRenderedFrame {
@@ -335,7 +335,7 @@ class BridgeRenderedFrame {
 /// into a handful.
 ///
 /// Small by construction — 129×129 is 66 KiB, against a 1080p frame's 8 MiB —
-/// so it crosses the boundary as plain pixels without breaking the K-183 rule
+/// so it crosses the boundary as plain pixels without breaking the rule
 /// that *frames* only ever cross as GPU handles. It is the answer to a question
 /// about a few pixels, not a picture to display.
 class BridgeSampledPixels {
@@ -410,13 +410,13 @@ class BridgeSampledPixels {
 ///
 /// The one place pixels still cross the boundary, and small enough not to
 /// matter — 256 KiB against a 1080p frame's 8 MiB. Viewer frames themselves
-/// only ever cross as GPU handles (K-183): flutter_rust_bridge's SSE codec
+/// only ever cross as GPU handles: flutter_rust_bridge's SSE codec
 /// serialises a `Vec<u8>` one byte at a time, measured at 8.8 ms for a 1080p
 /// frame, which is why the read-back frame transport was deleted.
 class BridgeScopeTrace {
   /// The trace this picture *is*, echoed back from the request: 0 waveform,
   /// 1 parade, 2 vectorscope, 3 histogram. Two panels may want traces at
-  /// once — the Scopes panel and the Levels row's histogram (K-413) — and
+  /// once — the Scopes panel and the Levels row's histogram — and
   /// they share one response stream, so each has to be able to tell whether
   /// the picture that just arrived is the one it asked for.
   final int kind;
@@ -439,7 +439,7 @@ class BridgeScopeTrace {
           rgba == other.rgba;
 }
 
-/// The Windows zero-copy Viewer frame (K-177): an NT handle to a shared D3D12
+/// The Windows zero-copy Viewer frame: an NT handle to a shared D3D12
 /// texture the Flutter runner imports directly, so no pixels cross the FFI
 /// boundary. The handle is stable for the session and changes only when the
 /// comp's dimensions do. The format is always RGBA8, so it is not carried.
@@ -561,7 +561,7 @@ class BridgeSharedFrameInfoLinux {
           tier == other.tier;
 }
 
-/// Which part of opening a project is under way (K-628).
+/// Which part of opening a project is under way.
 ///
 /// In plain terms: opening a `.lum` is a short run of jobs, and the card over
 /// the shell says which one is happening rather than sweeping a bar that knows
@@ -587,7 +587,7 @@ enum OpenPhase {
   ;
 }
 
-/// How far opening a project has got (K-628).
+/// How far opening a project has got.
 class OpenProgress {
   final OpenPhase phase;
 
@@ -698,7 +698,7 @@ sealed class WorkerResponse with _$WorkerResponse {
   ) = WorkerResponse_FrameProfile;
 
   /// The graphics device was lost and a new one has been built in its place
-  /// (K-585, budget B9). Carries nothing: the worker has already put the
+  /// (budget B9). Carries nothing: the worker has already put the
   /// picture back, and the frontend's whole part is one calm line in the
   /// status bar saying why the preview blinked.
   const factory WorkerResponse.deviceReset() = WorkerResponse_DeviceReset;

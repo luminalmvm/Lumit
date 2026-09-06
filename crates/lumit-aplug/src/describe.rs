@@ -11,7 +11,7 @@
 //! away. It happens once per plugin, at scan time, before any copy of the effect
 //! exists on any layer.
 //!
-//! **One answer for both** (K-707): everything below is written once and filled
+//! **One answer for both**: everything below is written once and filled
 //! by either front end, so nothing downstream of this file knows which standard
 //! a plugin speaks except by the [`Abi`] on the descriptor, which exists for one
 //! reason — the prefix its match name is spelled with.
@@ -163,7 +163,7 @@ impl ParamDescription {
 /// Everything one plugin said about itself.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct PluginDescriptor {
-    /// Which standard it speaks (K-707). The one fact about a plugin's
+    /// Which standard it speaks. The one fact about a plugin's
     /// provenance that survives describe, because the effect's match name is
     /// spelled from it and a saved project has to name the plugin it wants back.
     #[serde(default)]
@@ -270,7 +270,7 @@ pub fn describe_module(module: &AnyModule) -> ScanReport {
 /// switched off.
 ///
 /// The list is consulted *before* describe rather than after, so a switched-off
-/// plugin is never created and its code never runs at all (K-594). That is the
+/// plugin is never created and its code never runs at all. That is the
 /// whole difference between a disable that means something and a filter on a
 /// list.
 #[must_use]

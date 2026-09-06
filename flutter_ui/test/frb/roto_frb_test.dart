@@ -1,5 +1,5 @@
 // The Roto brush's seam: strokes down, the status up, and the words a refusal
-// is shown in (K-713, docs/08 §3.96).
+// is shown in (docs/08 §3.96).
 //
 // Every document operation here is genuine; see frb_test_support.dart. What is
 // *not* genuine is a propagated matte, and it cannot be: a matte is the answer

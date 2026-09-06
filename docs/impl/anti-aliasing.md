@@ -4,7 +4,7 @@ Feeds [06-RENDER-PIPELINE.md](../06-RENDER-PIPELINE.md) §1 (the composite step)
 [03-DATA-MODEL.md](../03-DATA-MODEL.md) (the project property). The spec says *what*;
 this note is the authoritative *how*: which stage aliases, why multisampling rather
 than supersampling, the four traps in the composite loop as it stands, and the test
-plan. Written from K-274's decision before the code; **now built** — the sections below
+plan. Written from the owner's decision before the code; **now built** — the sections below
 describe what is there, and §5's test plan is implemented alongside it.
 
 ## In plain terms
@@ -29,13 +29,13 @@ vertical sub-samples and exact horizontal coverage per scanline; `lumit-text` ge
 coverage in the glyph's alpha). What stair-steps today is the **quad edge**: the
 boundary of the layer's own rectangle, wherever the transform turns it off-axis.
 
-## 1. The decision (K-274, owner)
+## 1. The decision (owner)
 
 - **A project property, not a preference.** The sample count changes what a comp
   looks like, so it travels in the `.lum` and matches on another machine.
 - **On by default.**
 - **One value for preview and export.** A preview that anti-aliased differently
-  from the file would break the K-031 preview-equals-export identity, which is the
+  from the file would break the preview-equals-export identity, which is the
   promise the whole render path is built around.
 
 Consequences that follow and are therefore also binding: the value is a
@@ -52,7 +52,7 @@ living in the workspace file, and export reads the same field the Viewer does.
 | Fixes interior resampling | no | yes |
 | Fragment cost | one shade per pixel | k² shades per pixel, over the whole composite |
 | Interaction with reduced-resolution preview | none (orthogonal) | fights it — the preview scale and the AA scale multiply |
-| Interaction with px@comp rescaling (K-266, K-268) | none (the layer rasters are untouched) | every px parameter needs the AA factor folded in too |
+| Interaction with px@comp rescaling | none (the layer rasters are untouched) | every px parameter needs the AA factor folded in too |
 
 MSAA wins on the two rows that matter here: the artefact being fixed *is* a
 coverage problem, and SSAA would multiply against `render_scale` and against the
@@ -121,8 +121,8 @@ its own, so it stays single-sample and reads resolved inputs.
 
 Both paths run the same `Realiser`, so the count must reach it the same way
 `render_scale` does — a field on the realiser, read from the project. Export builds
-with `render_scale` 1.0 and the *same* sample count; that is what makes the K-031
-identity hold at full resolution with AA on.
+with `render_scale` 1.0 and the *same* sample count; that is what makes the
+preview-equals-export identity hold at full resolution with AA on.
 
 Reduced-resolution preview is orthogonal and must stay so: the count does not
 change with the scale. A half-resolution preview is a smaller picture with the same
@@ -140,7 +140,7 @@ always meant.
    **bit-identically** at count 1 and count 4 — MSAA may not soften an edge that
    lands exactly on a pixel boundary, and if it does, something is drawing at
    half-pixel offsets.
-3. **Preview equals export.** Add an AA row to the K-031 matrix
+3. **Preview equals export.** Add an AA row to the preview-equals-export matrix
    (`the_preview_and_export_paths_agree_across_the_matrix`), so the two walks are
    compared with the setting on.
 4. **Snapshot blends survive.** A comp with an Overlay layer over a rotated solid:
@@ -157,7 +157,7 @@ always meant.
 
 ## 6. What landed, and where
 
-- **The setting.** `Document::anti_aliasing` (`AntiAliasing::{Off,X2,X4,X8}`, default `X8` — K-286)
+- **The setting.** `Document::anti_aliasing` (`AntiAliasing::{Off,X2,X4,X8}`, default `X8`)
   in `lumit-core/src/model.rs`, written through `Op::SetAntiAliasing` so it is undoable and
   journalled. Across the bridge as `ProjectReference::{anti_aliasing, set_anti_aliasing}`,
   with `anti_aliasing_in_use` reporting what the adapter will actually give — the two are
@@ -180,14 +180,14 @@ always meant.
   frame banked before this was made without anti-aliasing and may not be served again.
 - **The interface.** The **Project settings** window (`File ▸ Project settings…`,
   `Mod+Alt+Shift+K`), which exists to keep the project's own values out of Settings — where
-  everything else belongs to this machine and neither travels nor undoes (K-286).
+  everything else belongs to this machine and neither travels nor undoes.
 
 Not built, and deliberately: nothing anti-aliases the *interior* of a layer's picture (that
 is the sampler's business, §In plain terms), and there is no per-comp override — the count is
-one project-wide value, which is what K-274 decided.
+one project-wide value, which is what the owner decided.
 
 ## Feeds
 
 [06-RENDER-PIPELINE.md](../06-RENDER-PIPELINE.md) §1, [03-DATA-MODEL.md](../03-DATA-MODEL.md),
 [10-FILE-FORMAT.md](../10-FILE-FORMAT.md) §1.1, [13-PERFORMANCE-RULES.md](../13-PERFORMANCE-RULES.md)
-(the count is a per-frame cost worth a budget line), K-274.
+(the count is a per-frame cost worth a budget line).

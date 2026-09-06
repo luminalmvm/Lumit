@@ -11,7 +11,7 @@ then the registry declaration, kernel pair and oracle like every existing effect
 
 Three scope rules, all deliberate:
 
-- **Parity is a floor, not a ceiling (K-401).** Every effect carries AE's parts with
+- **Parity is a floor, not a ceiling.** Every effect carries AE's parts with
   mappable semantics so the import converts cleanly - and goes beyond them wherever
   that genuinely improves the effect, with the extras defaulting neutral so an
   imported instance is faithful.
@@ -50,8 +50,8 @@ Three scope rules, all deliberate:
 
 Every one of these is either named in docs/11's seed table as a Lumit target that does
 not exist yet, or is so common in real AE projects that import without it is theatre.
-All are GPU-shaped, single-image, side-table-free (post-K-387 they can also take the
-K-395 matte for free).
+All are GPU-shaped, single-image, side-table-free (they can also take the universal
+matte for free).
 
 | AE effect | Lumit name (docs/01 voice) | Sketch |
 |---|---|---|
@@ -68,14 +68,14 @@ K-395 matte for free).
 | ~~Optics Compensation~~ | **Lens distort** (§3.42) | barrel/pincushion with FOV |
 | ~~Drop Shadow~~ | **Drop shadow** (§3.43) | the most-used effect in AE full stop |
 | ~~Noise~~ | **Noise** (§3.36) | per-pixel uniform/gaussian noise, mono/colour |
-| ~~Linear Wipe / Radial Wipe~~ | **Linear wipe** (§3.46), **Radial wipe** (§3.47) | transitions; trivial kernels, high import hit-rate — and the new **Transition** category (K-400) |
-| ~~Set Matte~~ | **Set matte** (§3.44) | reads naturally as a K-395 sibling, and is one: the sixth override, where the matte *is* the alpha |
+| ~~Linear Wipe / Radial Wipe~~ | **Linear wipe** (§3.46), **Radial wipe** (§3.47) | transitions; trivial kernels, high import hit-rate — and the new **Transition** category |
+| ~~Set Matte~~ | **Set matte** (§3.44) | reads naturally as a matte-override sibling, and is one: the sixth override, where the matte *is* the alpha |
 | ~~Channel Blur~~ | **Channel blur** (§3.45) | per-channel gaussian radii |
 
 ## Tier B — the second wave (real but rarer)
 
 Bezier Warp, ~~Corner Pin~~, ~~Displacement Map~~ (arbitrary-layer displacement — subsumes some
-of Turbulent Displace's uses; needs the K-395 carriage), ~~Polar Coordinates~~, Ripple,
+of Turbulent Displace's uses; needs the matte carriage), ~~Polar Coordinates~~, Ripple,
 ~~Twirl~~, ~~Spherize~~, Wave Warp, Warp (mesh styles), Roughen Edges, Posterize, Threshold,
 Tritone, Photo Filter, Black & White, Shadow/Highlight, Broadcast Colors (report-only?),
 Grain family (Add Grain / Remove Grain — heavy, temporal), ~~Median~~, ~~Mosaic~~,
@@ -94,7 +94,7 @@ particle system).
 
 Batches, in build order:
 
-1. ~~**Distort I** — Corner pin, Displacement map (rides the K-395 carriage), Polar
+1. ~~**Distort I** — Corner pin, Displacement map (rides the matte carriage), Polar
    coordinates, Twirl, Spherize.~~ **Complete, 2026-08-20** — see below.
 2. ~~**Distort II** — Ripple, Wave warp, Bezier warp, Warp (the style presets), Roughen
    edges.~~ **Complete, 2026-08-20** — see below.
@@ -109,7 +109,7 @@ Batches, in build order:
 6. ~~**Draw and grain** — Beam, Lightning, Radio waves, Scribble, Stroke, Vegas,
    Add grain (reuses the fractal noise core per channel).~~ **Complete, 2026-08-20** — see
    below. Wave 2 is complete with it. Scribble, Stroke and Vegas' Mask/Path half
-   stopped on the mask seam and landed with it a day later (K-408, and the section
+   stopped on the mask seam and landed with it a day later (see the section
    below).
 
 Recorded skips, with reasons: **Remove grain** (a denoiser is its own programme, not
@@ -138,7 +138,7 @@ what made the seam the right shape:
   a schema tweak — it needs a stored form, an animation story (`mask::PathKeyframe` already has
   one, per mask) and a bridge shape (docs/17).
 - **Pictures.** The other half of an effect's input is `AuxSlot`
-  (`crates/lumit-render/src/gpufx.rs`): the K-395 matte, layer inputs, temporal neighbours, a
+  (`crates/lumit-render/src/gpufx.rs`): the matte, layer inputs, temporal neighbours, a
   flow field, a lens prescription. Every one of them is a texture or a file handle.
 - **Where the masks actually are.** They live on the layer — `Layer::masks`, of
   `lumit_core::mask::Mask`, each with a `path_at(t)` resolving its keyframes to a `BezierPath`
@@ -161,7 +161,7 @@ properly, and the only things it still reports against this seam are AE's **All 
 **Stroke Sequentially** and Scribble's two multi-mask Fill Types, which want a row that
 names a *set* of masks rather than one.
 
-**Built, 2026-08-21 (K-408) — the seam, ahead of its consumers.** The gap above is closed
+**Built, 2026-08-21 — the seam, ahead of its consumers.** The gap above is closed
 piece for piece, and the three effects are now blocked on nothing but themselves.
 `ParamKind::MaskPath { self_default }` is the parameter (`#[mask_path]` in the derive; the
 value is `EffectValue::MaskPath(Option<Uuid>)`, a mask id or the "First mask" entry, static
@@ -171,7 +171,7 @@ points plus cumulative arc length, closed flag — within `MASK_PATH_TOLERANCE_P
 a constant so the polyline cannot vary a frame's identity). `build.rs`'s `mask_paths_for`
 fills one slot per op whose schema answers `EffectSchema::mask_path()`, `fxops::run_ops`
 consumes one per such op on its own counter, and it arrives on `AuxSlot::mask_path()` beside
-the K-395 matte. Empty polyline = the documented no-op.
+the matte. Empty polyline = the documented no-op.
 
 **What the consumers did with it, 2026-08-21.** All three landed on the same day as each
 other: **Scribble** (§3.78), **Stroke** (§3.79) and **Vegas' Mask/Path source** (§3.76).
@@ -213,7 +213,7 @@ in the carriage; nobody has asked for it, so it has not been built.
 
 The Cycore set (`CC Particle World`, `CC Ball Action`, …), Particle Playground, Shatter,
 Caustics, Wave World, Foam, Mesh Warp's advanced modes, Puppet (its engine is a Lumit
-roadmap item of its own), Rotobrush (models — plugin era, K-390's rule).
+roadmap item of its own), Rotobrush (models — plugin era by rule).
 
 ## The build order
 
@@ -225,7 +225,7 @@ roadmap item of its own), Rotobrush (models — plugin era, K-390's rule).
    noise core.~~ **Complete, 2026-08-20** — all eighteen, in four batches, listed below.
 2. Each batch: docs/08 sections first (the spec pins parameters, defaults, units in
    px@comp per §2.3), then declaration + CPU reference + WGSL kernel + oracle +
-   manual page prose, K-303 strings, the K-395 matte free or overridden as fits.
+   manual page prose, engine-label strings, the universal matte free or overridden as fits.
 3. docs/11's seed table gets its Lumit column trued as each target becomes real.
 4. Tier B by demand once Wave 1 ships; Tier C is not scheduled.
 
@@ -233,14 +233,14 @@ roadmap item of its own), Rotobrush (models — plugin era, K-390's rule).
 
 - ~~Whether Brightness & Contrast folds into the existing Contrast as a mode rather
   than a sibling (AE-import fidelity says sibling; menu hygiene says mode).~~
-  **RESOLVED (K-397): sibling.** It is **Brightness**, carrying both of AE's sliders
+  **RESOLVED: sibling.** It is **Brightness**, carrying both of AE's sliders
   under AE's names and neutral point (docs/08 §3.32); Contrast is untouched. The
   deciding reason was neither of the two above: one control cannot be both a per cent
   where 100 is neutral and a signed amount where 0 is, and a mode switch that re-scales
   a stored slider reads fine in a menu and wrong in a project file.
-- ~~Whether Set matte belongs in Utility or as a documented pattern of K-395's row.~~
-  **RESOLVED (K-400): both, and those were never two answers.** Set matte is an effect in
-  **Utility** whose source *is* the universal Matte row, under K-395's `Own` role
+- ~~Whether Set matte belongs in Utility or as a documented pattern of the universal Matte row.~~
+  **RESOLVED: both, and those were never two answers.** Set matte is an effect in
+  **Utility** whose source *is* the universal Matte row, under the row's `Own` role
   (docs/08 §3.44). What settled it was noticing that the question assumed the row and the
   effect were alternatives: the row says *which layer*, the effect says *what to do with
   it*, and "take its red channel as my alpha, intersected with what I already had" is not
@@ -249,7 +249,7 @@ roadmap item of its own), Rotobrush (models — plugin era, K-390's rule).
 
 ## What has landed
 
-- **The Expression Controls family (2026-08-21, K-414), pending audit** — Slider control
+- **The Expression Controls family (2026-08-21), pending audit** — Slider control
   (§3.80), Angle control (§3.81), Checkbox control (§3.82), Colour control (§3.83) and
   Point control (§3.84), in a new **Controls** category, taking **the catalogue to 90**.
   They are the first effects that declare no image operation because they draw nothing
@@ -263,19 +263,19 @@ roadmap item of its own), Rotobrush (models — plugin era, K-390's rule).
   next sitting confirms them. Shipping a pending row is safe here for the reason docs/11 §6
   gives: a match name this table has wrong is a name nothing claims, and an unclaimed name
   takes the placeholder road with every parameter kept.
-  It also landed `ParamKind::Slider` (K-414's other half): a closed range drawn as a track
-  and thumb, whose value side is an ordinary float exactly as Int's and Angle's are. The
-  four wipes' **Completion** adopted it and nothing moved — no stored value, no keyframe,
-  no pixel. **Temperature was K-414's named first candidate and declined it**: its ±150
-  slider runs to a ±200 hard range, so there is a picture beyond the slider's end and the
-  range is not the parameter's nature.
-- **The mask seam and the three path effects (2026-08-21, K-408/K-409)** — the mask-path
+  It also landed `ParamKind::Slider` (the other half of the same change): a closed range
+  drawn as a track and thumb, whose value side is an ordinary float exactly as Int's and
+  Angle's are. The four wipes' **Completion** adopted it and nothing moved — no stored
+  value, no keyframe, no pixel. **Temperature was the named first candidate and declined
+  it**: its ±150 slider runs to a ±200 hard range, so there is a picture beyond the
+  slider's end and the range is not the parameter's nature.
+- **The mask seam and the three path effects (2026-08-21)** — the mask-path
   input kind (`ParamKind::MaskPath`, the arc-length polyline carriage, the panel's mask
   picker) plus Scribble (§3.78), Stroke (§3.79) and Vegas' Mask/Path half, all three riding
-  one shared path-drawing kernel (K-409: 512-piece uniform, coarsen never truncate). Import
+  one shared path-drawing kernel (512-piece uniform, coarsen never truncate). Import
   substitutes retired; **the catalogue stands at 85**. The full story is in the mask-seam
   section above.
-- **Wave 2, Draw and grain (2026-08-20, K-407)** — Beam (§3.73), Lightning (§3.74), Radio
+- **Wave 2, Draw and grain (2026-08-20)** — Beam (§3.73), Lightning (§3.74), Radio
   waves (§3.75), Vegas (§3.76) and Add grain (§3.77), with their WGSL kernels, CPU oracles,
   manual pages and docs/11 seed-table entries. **The catalogue stands at 83**, all five are
   **Generate** — §3.36 Noise's reason, that what they do is put something *on* a frame rather
@@ -283,7 +283,7 @@ roadmap item of its own), Rotobrush (models — plugin era, K-390's rule).
   **Scribble and Stroke did not land in this batch**, and Vegas landed on its Image Contours
   half only: all three wanted their layer's mask *geometry*, and no seam carried it. That was
   written up above rather than worked around, because the shape of the missing thing was the
-  useful part — and a day later it was built (K-408) and all three landed, taking the
+  useful part — and a day later it was built and all three landed, taking the
   catalogue to 85.
   Five things came out of it beyond the five effects.
   **If the randomness does not vary per pixel, it does not belong in the kernel.** Lightning's
@@ -297,8 +297,8 @@ roadmap item of its own), Rotobrush (models — plugin era, K-390's rule).
   an ordinary parameter in seconds, with Frequency, Expansion, Lifespan and Spin measured
   against it. Keyframed linearly it is AE's effect exactly, held it freezes the waves
   mid-flight, scrubbed back it restores them — and unlike AE's rate it can be varied. Third
-  time a missing rate has been the faithful conversion (K-403's Wave Speed twice, §3.63's Auto
-  Amounts); first time the replacement can do something the original cannot.
+  time a missing rate has been the faithful conversion (Distort II's Wave Speed twice,
+  §3.63's Auto Amounts); first time the replacement can do something the original cannot.
   **A contour is a level set, and a stroke on one needs its direction as well as its
   position.** Vegas divides the value's distance from the threshold by the gradient's
   magnitude, which turns it into a distance in *pixels* — so Width is a width, and the effect
@@ -318,16 +318,16 @@ roadmap item of its own), Rotobrush (models — plugin era, K-390's rule).
   colour would name a colour nobody ever sees.
   Five deliberate divergences from AE, all recorded in docs/08: **Beam's thicknesses, Add
   grain's Size and Radio waves' Expansion are px@comp**; **Beam's 3D Perspective is not
-  carried** (K-406's camera ruling again); **four of AE's eight Lightning Types are built** and
+  carried** (Card wipe's camera ruling again); **four of AE's eight Lightning Types are built** and
   Alpha Obstacle is not carried at all; **Radio waves ships one Stroke width** where AE tapers,
   and only its Polygon wave type; and **Vegas' Segments count becomes a Segment length**, since
   an effect that never traces a path has no arc length to count round. All five took the
   generic strength matte — what a matte says on a draw effect is *where the drawing is*.
-- **Wave 2, Transitions (2026-08-20, K-406)** — Venetian blinds (§3.70), Iris wipe (§3.71)
+- **Wave 2, Transitions (2026-08-20)** — Venetian blinds (§3.70), Iris wipe (§3.71)
   and Card wipe (§3.72), with their WGSL kernels, CPU oracles, manual pages and docs/11
   seed-table entries. **The catalogue stands at 78**, and all three are **Transition**, which
-  finishes the category K-400 opened for exactly them. Four things came out of it beyond the
-  three effects.
+  finishes the category the Wave 1 wipes opened for exactly them. Four things came out of it
+  beyond the three effects.
   **A gather can hold a camera, provided the projection inverts.** Card wipe is the first
   kernel in the catalogue to put one in front of a pixel, and the obvious build — transform the
   rectangle, rasterise, composite — is a scatter, which Lumit's effects are not. A one-point
@@ -356,13 +356,13 @@ roadmap item of its own), Rotobrush (models — plugin era, K-390's rule).
   far end of the range.
   Three deliberate divergences from AE, all recorded in docs/08: **Venetian blinds' Width is a
   length in px@comp** where AE's is raster pixels; **Iris wipe's two radii are lengths in px@comp
-  while its centre is a place** (§3.51's split of a size from a place; both px@comp since K-419); and **Card wipe loses AE's
+  while its centre is a place** (§3.51's split of a size from a place; both px@comp now); and **Card wipe loses AE's
   Gradient flip order**, which needs a gradient *layer* — §3.68's test says a card wipe has a
   second thing to say about *where*, so its one layer row stays the universal Matte, and
   Randomness plus Seed covers the intent that is left. All three took the generic strength
   matte: a transition is already a statement about how much of a pixel there is, and a matte on
   one says *where the transition is*, which is what a dissolve says.
-- **Wave 2, Stylise II (2026-08-20, K-405)** — Median (§3.64), Mosaic (§3.65), Find edges
+- **Wave 2, Stylise II (2026-08-20)** — Median (§3.64), Mosaic (§3.65), Find edges
   (§3.66), Emboss (§3.67), Texturize (§3.68) and Broadcast safe (§3.69), with their WGSL
   kernels, CPU oracles, manual pages and docs/11 seed-table entries. **The catalogue stands at
   75.** Five of the six are **Stylise** — this is the batch the name finally fits, since what
@@ -384,13 +384,13 @@ roadmap item of its own), Rotobrush (models — plugin era, K-390's rule).
   §1.2's "a slider may be exceeded by typing" is deliberately not true, because a control that
   silently clamps answers a different question from the one it was asked. It makes the AE
   import's first conversion limited by a **budget** rather than by a semantic.
-  **K-399's rule about a threshold reaches a *coordinate*** (§3.65 note 1). Mosaic decides which
+  **The Distort batch's threshold rule reaches a *coordinate*** (§3.65 note 1). Mosaic decides which
   block a pixel is in, and `floor(x ÷ block_width)` in floating point puts a pixel in different
   blocks on the two paths wherever the division is exact. Every boundary and sample position is
   integer arithmetic instead. Its companion: **the averaged mode samples the block rather than
   reading it**, at most 8×8, which is the same flat colour on any block worth mosaicking and an
   *exact* mean on any block under eight pixels across.
-  **A gradient belongs on the perceptual value too** — K-404's rule arriving on two effects
+  **A gradient belongs on the perceptual value too** — Stylise I's rule arriving on two effects
   that are not grades. Find edges and Emboss both difference their neighbours in `√` light,
   because a Sobel taken in scene-linear draws the specular highlights and nothing else and a
   relief taken there is all highlight and no shadow. It is what makes the two read as AE's
@@ -408,7 +408,7 @@ roadmap item of its own), Rotobrush (models — plugin era, K-390's rule).
   the alpha; and **`target` is a WGSL reserved keyword**, which compiles into a texture of
   zeros rather than into an error — the §1.6 oracle caught it at 15 584 fp16 ULP.
 
-- **Wave 2, Stylise I (2026-08-20, K-404)** — Posterize (§3.58), Threshold (§3.59), Tritone
+- **Wave 2, Stylise I (2026-08-20)** — Posterize (§3.58), Threshold (§3.59), Tritone
   (§3.60), Photo filter (§3.61), Black and white (§3.62) and Shadow highlight (§3.63), with
   their WGSL kernels, CPU oracles, manual pages and docs/11 seed-table entries. **The
   catalogue stands at 69**, and all six are **Colour** effects rather than Stylise ones —
@@ -423,7 +423,7 @@ roadmap item of its own), Rotobrush (models — plugin era, K-390's rule).
   in §3.58 decision 1 and cited from the other three.
   **That curve is a `sqrt`, and the reason is the oracle rather than the picture** (§3.58
   decision 2). A quantiser's output is a step, so one bit of disagreement about which side of
-  a rung a value falls on is a whole rung of colour — K-399's threshold rule arriving on an
+  a rung a value falls on is a whole rung of colour — the threshold rule arriving on an
   effect where nothing moves. `sqrt` is one correctly-rounded instruction on both paths;
   `pow(u, 1/2.2)` is a per-vendor polynomial. The rounding is written `floor(x + ½)` in both
   paths for the same reason: WGSL's `round` breaks a tie to even and Rust's away from zero.
@@ -447,8 +447,8 @@ roadmap item of its own), Rotobrush (models — plugin era, K-390's rule).
   through by its own luma**, so it tints rather than darkens; and **Shadow highlight ships one
   Radius where AE ships two**, the import averaging them. All six took the generic strength
   matte: a tone or colour operation dissolved by a matte is exactly that operation applied
-  where the matte is bright, which is the colour batch's reasoning (K-396) a second time.
-- **Wave 2, Distort II (2026-08-20, K-403)** — Ripple (§3.53), Wave warp (§3.54), Bezier warp
+  where the matte is bright, which is the colour batch's reasoning a second time.
+- **Wave 2, Distort II (2026-08-20)** — Ripple (§3.53), Wave warp (§3.54), Bezier warp
   (§3.55), Warp (§3.56) and Roughen edges (§3.57), with their WGSL kernels, CPU oracles,
   manual pages and docs/11 seed-table entries. **The catalogue stands at 63**, and Roughen
   edges is the batch's one Stylise effect — nothing inside the shape moves, only its
@@ -483,7 +483,7 @@ roadmap item of its own), Rotobrush (models — plugin era, K-390's rule).
   these is saying *where the effect is*, which is what a dissolve says. To paint a warp's
   strength per pixel, §3.38 is still the effect that does it.
   Four deliberate divergences from AE, all recorded in docs/08: **Ripple's three lengths and
-  Wave warp's two are px@comp** (% diag until K-419) (§2.3, §3.37 decision 1's reasoning a fourth
+  Wave warp's two are px@comp** (% diag until a later change) (§2.3, §3.37 decision 1's reasoning a fourth
   and fifth time); **Wave warp ships all eight Pinning combinations** where §3.38 ships four
   and reports the rest, the ramp being per edge here rather than per axis; **Warp's thirteen
   styles are Lumit's own curves** under AE's names, a look-for-look conversion the import
@@ -497,7 +497,7 @@ roadmap item of its own), Rotobrush (models — plugin era, K-390's rule).
   Polar coordinates (§3.50), Twirl (§3.51) and Spherize (§3.52), with their WGSL kernels,
   CPU oracles, manual pages and docs/11 seed-table entries. **Wave 2's first batch, and the
   catalogue stands at 58.** Four things came out of it beyond the five effects.
-  **Displacement map is the seventh matte override** (K-395), and the second — after Set
+  **Displacement map is the seventh matte override**, and the second — after Set
   matte — for which the matte is the effect's *subject* rather than a modifier of one: the
   layer on the Matte row **is** the displacement field. That also disposes of AE's
   Displacement Map Behaviour entirely, since the matte carriage renders the referenced
@@ -527,19 +527,19 @@ roadmap item of its own), Rotobrush (models — plugin era, K-390's rule).
 - **Utility and transition batch (2026-08-20)** — Drop shadow (§3.43), Set matte (§3.44),
   Channel blur (§3.45), Linear wipe (§3.46) and Radial wipe (§3.47), with their WGSL
   kernels, CPU oracles, manual pages and docs/11 seed-table entries. **Wave 1 is complete
-  with it.** Three things came out of it beyond the five effects, all recorded as K-400.
+  with it.** Three things came out of it beyond the five effects.
   **An eighth category, Transition**, for the two wipes and for the Tier B wipes that will
-  join them — the same bar K-398's Generate cleared, and the same one-variant cost.
+  join them — the same bar Generate cleared, and the same one-variant cost.
   **Set matte is the sixth matte override**, which resolves this note's own open question
   above: the matte *is* the alpha, so an effect that dissolved its result would produce a
   frame with a faint ring in it rather than a frame cut to the matte's shape, and the
-  proof is a picture. And **the wipes are judged on K-399's metric extended one step** —
-  their real output is a *threshold on a position*, which magnifies a fused multiply-add
-  exactly as a sample position does. Two reuses worth noting for the next batch: Drop
-  shadow's softening is the shipped §3.8 gaussian called twice (the blur and the offset
-  commute, so no resample is needed), while Channel blur needed a kernel of its own —
-  four radii cannot share one weight table, and widening the shipped blur's uniform would
-  have risked its byte-for-byte guarantee for nothing.
+  proof is a picture. And **the wipes are judged on the Distort batch's metric extended
+  one step** — their real output is a *threshold on a position*, which magnifies a fused
+  multiply-add exactly as a sample position does. Two reuses worth noting for the next
+  batch: Drop shadow's softening is the shipped §3.8 gaussian called twice (the blur and
+  the offset commute, so no resample is needed), while Channel blur needed a kernel of its
+  own — four radii cannot share one weight table, and widening the shipped blur's uniform
+  would have risked its byte-for-byte guarantee for nothing.
 - **Distort batch (2026-08-20)** — Turbulent displace (§3.38), Tile (§3.39), Offset
   (§3.40), Mirror (§3.41) and Lens distort (§3.42), with their WGSL kernels, CPU oracles,
   manual pages and docs/11 seed-table entries. Three things came out of it beyond the five
@@ -547,26 +547,26 @@ roadmap item of its own), Rotobrush (models — plugin era, K-390's rule).
   (`crates/lumit-gpu/src/fx_noise_core.wgsl`), prepended to both `fx_fractal_noise.wgsl`
   and `fx_turbdisplace.wgsl` at pipeline build — WGSL has no `include`, and two copies of
   a hash that must agree to the bit is exactly the arrangement the module was created to
-  avoid. **Turbulent displace is the fifth matte override** (K-395, recounted in K-399): its matte scales the
+  avoid. **Turbulent displace is the fifth matte override**: its matte scales the
   displacement vector, which is the owner's own example, and it is proved by picture as
   well as by ULP (a quarter matte must move a pixel about a quarter as far, which a
   dissolve cannot do). And **the batch's oracles are judged on absolute difference over a
   smooth corpus, not fp16 ULPs over the hard-edged one** — every effect here computes a
   *sample position*, and where the two paths contract a multiply-add differently the
   position moves in its last bits, which a hard edge magnifies into a whole pixel of
-  colour. Offset alone kept the ULP metric: its arithmetic has no expression to fuse. Both are recorded as K-399.
+  colour. Offset alone kept the ULP metric: its arithmetic has no expression to fuse.
   One deliberate divergence from AE survives: **Turbulent displace's Amount is a length in
   px@comp** (§3.38 decision 5, §3.37 decision 1's reasoning again). The second, **Tile's
-  default tiles** (§3.39), was **withdrawn by K-542**: §1.2 asks that an effect look right
+  default tiles** (§3.39), has **since been withdrawn**: §1.2 asks that an effect look right
   when it lands, and for an effect whose whole subject is *where the picture is repeated to*
   the answer is that it looks unchanged — AE's own default, and §3.5's Transform reasoning.
-  K-542 also fills in the half of Motion Tile that was missing: Output width and height
-  above 100 % grow the working raster, so the copies land past the layer's edges and the
-  effects after Tile in the stack see them.
+  The same change also fills in the half of Motion Tile that was missing: Output width and
+  height above 100 % grow the working raster, so the copies land past the layer's edges and
+  the effects after Tile in the stack see them.
 - **Generate batch (2026-08-20)** — Fill (§3.34), Gradient (§3.35), Noise (§3.36) and
   Fractal noise (§3.37), with their WGSL kernels, CPU oracles (worst 1 fp16 ULP measured
   across the whole sweep, the noise core included), manual pages and docs/11 seed-table
-  entries. Two things came out of it beyond the four effects. **K-398 added a seventh
+  entries. Two things came out of it beyond the four effects. **The batch added a seventh
   category, Generate**, because three of the four never read the incoming picture and no
   existing category describes that. And the **noise core is a module of its own**
   (`lumit-core/src/fx/noise.rs` and its WGSL twin): seeded 3-D value and Perlin noise plus
@@ -581,12 +581,12 @@ roadmap item of its own), Rotobrush (models — plugin era, K-390's rule).
 - **Colour batch (2026-08-20)** — Curves (§3.30), Levels (§3.31), Brightness (§3.32) and
   Hue and saturation (§3.33), all four with their WGSL kernels, CPU oracles (worst 1 fp16
   ULP measured), manual pages and docs/11 seed-table entries. Two decisions came out of
-  it: K-396 (Curves stores five fixed knots a channel, because AE's point blob has no
-  animatable form here) and K-397 above. **K-396 has since been superseded by K-412**
-  (2026-08-22): Curves stores a real point list — 2 to 16 points a channel on five
-  channels including Alpha, static for AE's own reason — so the import's ceiling rose
-  from a five-point sample to the whole curve, and Levels grew the histogram behind its
-  handles (K-413). The row itself is unmoved: the blob is still unreadable through the
+  it: Curves storing five fixed knots a channel, because AE's point blob has no
+  animatable form here, and the Brightness ruling above. **The five knots have since
+  been superseded** (2026-08-22): Curves stores a real point list — 2 to 16 points a
+  channel on five channels including Alpha, static for AE's own reason — so the import's
+  ceiling rose from a five-point sample to the whole curve, and Levels grew the histogram
+  behind its handles. The row itself is unmoved: the blob is still unreadable through the
   Bridge, so Curves still imports as a placeholder. The four **took the generic strength matte**:
   none of them wanted the matte inside its maths, since a colour grade dissolved by a
   matte is exactly a colour grade applied where the matte is bright.

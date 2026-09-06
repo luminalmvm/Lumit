@@ -1,4 +1,4 @@
-//! Particulate (K-446, K-474, K-475): a particle system that is arithmetic
+//! Particulate: a particle system that is arithmetic
 //! rather than history, and a points stream beside its picture.
 //!
 //! **In plain terms.** Sparks, dust, snow, streaks — many small things born
@@ -11,7 +11,7 @@
 //! **Nothing is remembered between frames.** The maths that decides where a
 //! particle is lives in [`crate::fx::points`], and it answers "where is
 //! particle 5 000 at frame 500?" without computing frame 499 — which is what
-//! makes scrubbing instant and export equal to preview (K-474). This file is
+//! makes scrubbing instant and export equal to preview. This file is
 //! the *declaration*: the controls, what they mean, and the reduction from the
 //! resolved bag to the numbers those formulas read.
 //!
@@ -21,7 +21,7 @@
 //! the op. The Points socket is declared but nothing may wire it until PS3
 //! lands the edge.
 //!
-//! **The particles live in three axes** (K-561). Position z, Depth, Direction
+//! **The particles live in three axes.** Position z, Depth, Direction
 //! z, Spread z and Wind z are the five new rows, every one of them defaulting
 //! to the flat behaviour — so a 2D layer, and every project saved before the
 //! axis existed, draws the picture it always drew. What makes the depth
@@ -35,7 +35,7 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Particulate's declared **data** output (K-472, K-492): the same particles it
+/// Particulate's declared **data** output: the same particles it
 /// draws, offered as a stream. Teal, like every geometry socket, and drawn from
 /// the signature rather than from anything Particulate-specific at the seam.
 const POINTS_OUT: &[Port] = &[Port::new("points", "Points", PortType::Points)];
@@ -151,7 +151,7 @@ pub const PARTICULATE_ENABLED_WHEN: &[EnabledWhen] = &[
     label = "Particulate",
     version = 1,
     category = Generate,
-    // A playback-class effect, not a simulation-class one (K-475): the budget
+    // A playback-class effect, not a simulation-class one: the budget
     // is the user's own Max particles dial.
     cost = Moderate,
     // A particle may travel anywhere, so no padding covers it.
@@ -166,7 +166,7 @@ pub const PARTICULATE_ENABLED_WHEN: &[EnabledWhen] = &[
 pub struct Particulate {
     /// Where particles are born. Area shapes emit uniformly over their
     /// interior, Line along its segment, Mask path along the arc-length
-    /// polyline (K-408).
+    /// polyline.
     ///
     /// The option list is [`EmitterShape::OPTIONS`] rather than a second copy
     /// of the words, so the labels and `EmitterShape::from_code` cannot come to
@@ -174,7 +174,7 @@ pub struct Particulate {
     #[choice(label = "Shape", options = *EmitterShape::OPTIONS, default = 0)]
     pub shape: u32,
 
-    /// The emitter's centre, px@comp (K-260: point parameters are PIXELS).
+    /// The emitter's centre, px@comp (point parameters are PIXELS).
     #[slider(label = "Position x", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
     pub position_x: f32,
 
@@ -183,7 +183,7 @@ pub struct Particulate {
     pub position_y: f32,
 
     /// The emitter's depth, px@comp: how far in front of the layer's own plane
-    /// the particles are born (K-561). **Nought is the plane**, which is what a
+    /// the particles are born. **Nought is the plane**, which is what a
     /// 2D layer draws and what every project made before the axis existed
     /// reads as; it means something only when the layer is 3D and the
     /// composition has a camera to see it with.
@@ -199,7 +199,7 @@ pub struct Particulate {
     #[slider(min = 0.0, max = 2000.0, default = 400.0, hard_min = 0.0, unit = Px)]
     pub height: f32,
 
-    /// The emitter's extent **through** the plane, px@comp (K-561): a Point
+    /// The emitter's extent **through** the plane, px@comp: a Point
     /// becomes a segment of particles receding from the camera, an Ellipse a
     /// cylinder, a Rectangle a box. Line and Mask path stay flat.
     #[slider(min = 0.0, max = 2000.0, default = 0.0, hard_min = 0.0, unit = Px)]
@@ -210,7 +210,7 @@ pub struct Particulate {
     pub emitter_angle: f32,
 
     /// Which of the layer's masks particles are born along, when Shape is Mask
-    /// path (K-408). An empty polyline emits nothing — the documented no-op.
+    /// path. An empty polyline emits nothing — the documented no-op.
     #[mask_path(label = "Mask path")]
     pub mask_path: bool,
 
@@ -224,9 +224,9 @@ pub struct Particulate {
     #[dial(label = "Direction", default = -90.0)]
     pub direction: f32,
 
-    /// How far particles lean **out of** that plane as they leave, degrees
-    /// (K-561): positive throws them away from the camera, negative towards it.
-    /// Nought is flat, which is what a 2D layer draws.
+    /// How far particles lean **out of** that plane as they leave, degrees:
+    /// positive throws them away from the camera, negative towards it. Nought
+    /// is flat, which is what a 2D layer draws.
     #[dial(label = "Direction z", default = 0.0)]
     pub direction_z: f32,
 
@@ -241,7 +241,7 @@ pub struct Particulate {
     )]
     pub spread: f32,
 
-    /// The cone about Direction z, degrees (K-561) — the lean's own spread, a
+    /// The cone about Direction z, degrees — the lean's own spread, a
     /// row of its own so that a full turn of in-plane Spread stays a disc of
     /// directions rather than quietly becoming a sphere. At nought every
     /// particle leaves in the plane, which is the flat behaviour exactly.
@@ -312,12 +312,12 @@ pub struct Particulate {
     )]
     pub size_jitter: f32,
 
-    /// Multiplies Size by normalised age (K-412). Flat by default: a particle
+    /// Multiplies Size by normalised age. Flat by default: a particle
     /// is the size it was born, all its life.
     #[curve(label = "Size over life", default = [[0.0, 1.0], [1.0, 1.0]])]
     pub size_over_life: CurvePoints,
 
-    /// Multiplies opacity by normalised age (K-412). Born solid, dies faded —
+    /// Multiplies opacity by normalised age. Born solid, dies faded —
     /// which is most of why the default look reads as motes rather than dots.
     #[curve(label = "Opacity over life", default = [[0.0, 1.0], [1.0, 0.0]])]
     pub opacity_over_life: CurvePoints,
@@ -337,7 +337,7 @@ pub struct Particulate {
     pub rotation: f32,
 
     /// How much particles differ from one another in Rotation, degrees: each
-    /// takes a draw of ±half of this about it, from the seed (K-507).
+    /// takes a draw of ±half of this about it, from the seed.
     ///
     /// A whole turn by default, because that is what a field of sprites wants —
     /// a hundred identical stamps all facing the same way reads as a mistake.
@@ -374,8 +374,8 @@ pub struct Particulate {
     #[slider(label = "Wind y", min = -2000.0, max = 2000.0, default = 0.0, unit = Px)]
     pub wind_y: f32,
 
-    /// The air's own speed **through** the layer's plane, px@comp per second
-    /// (K-561) — the third axis of the same wind, carried by the same drag.
+    /// The air's own speed **through** the layer's plane, px@comp per second —
+    /// the third axis of the same wind, carried by the same drag.
     #[slider(label = "Wind z", min = -2000.0, max = 2000.0, default = 0.0, unit = Px)]
     pub wind_z: f32,
 
@@ -437,7 +437,7 @@ pub struct Particulate {
     )]
     pub feather: f32,
 
-    /// The layer drawn per particle in Sprite mode (K-123, K-142). **Unset
+    /// The layer drawn per particle in Sprite mode. **Unset
     /// draws discs** — a render mode must always draw something, which is this
     /// effect's documented deviation from the unset-is-identity convention.
     #[layer(label = "Sprite layer")]
@@ -455,10 +455,10 @@ pub struct Particulate {
     )]
     pub streak_length: f32,
 
-    /// **The budget dial** (K-475): the most particles that may be live at
+    /// **The budget dial**: the most particles that may be live at
     /// once, and the peak scratch the governor grants against. Over budget the
     /// newest survive. Deliberately **not animatable** — it is a capacity
-    /// declaration, like the flare's ray budget (K-265), and animating a
+    /// declaration, like the flare's ray budget, and animating a
     /// capacity would re-key the governor every frame.
     #[counter(
         label = "Max particles",
@@ -488,9 +488,9 @@ pub struct Particulate {
 }
 
 impl Particulate {
-    /// The raster factor, for the one input the declaration cannot scale
-    /// (K-385): the mask path arrives in px@comp, and a Mask path emitter has
-    /// to place its births in the pixels the frame is actually being drawn at.
+    /// The raster factor, for the one input the declaration cannot scale: the
+    /// mask path arrives in px@comp, and a Mask path emitter has to place its
+    /// births in the pixels the frame is actually being drawn at.
     /// Stroke's and Scribble's row, for their reason.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
@@ -548,7 +548,7 @@ impl Particulate {
             },
             cap: self.max_particles.clamp(1, points::CAP_HARD as i32) as u32,
             seed: self.seed,
-            // **Flat until somebody says otherwise** (K-561): a bag of
+            // **Flat until somebody says otherwise**: a bag of
             // parameters cannot know what the composition is looking with, so
             // the caller that does — the renderer, or the driver walk — pins it
             // with `PointsParams::projected`.
@@ -612,7 +612,7 @@ impl EffectDef for ParticulateDef {
         &<Particulate as EffectMetadata>::SCHEMA
     }
 
-    /// The picture *and* the data (K-472): a stack effect that declares an
+    /// The picture *and* the data: a stack effect that declares an
     /// output beside its image, which is the first of its kind.
     fn signature(&self) -> Signature {
         Signature::Image {
@@ -622,7 +622,7 @@ impl EffectDef for ParticulateDef {
     }
 
     /// The raster factor, so a Mask path emitter's px@comp vertices reach the
-    /// pixels this frame is drawn at (K-385).
+    /// pixels this frame is drawn at.
     fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
         push(Particulate::DERIVED_PX_SCALE, Value::Float(cx.px_scale));
     }

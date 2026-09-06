@@ -3,7 +3,7 @@
 // **Why this file exists.** `project_panel_frb_test` is about what the panel
 // *does* — what a click selects, what a rename commits, what a drag carries.
 // This one is about what it *looks like*, and specifically about the numbers
-// the mockups' own computed styles resolved to (K-451, K-454): every row
+// the mockups' own computed styles resolved to: every row
 // height, every column width, every face, every colour token. Nothing here
 // names a private widget class, because none of these claims is about how the
 // panel is built — each is something a person could point at on screen and
@@ -83,7 +83,7 @@ void main() {
       expect(band(tester, 'project-scroll-strip').height,
           projectScrollStripHeight);
       expect(band(tester, 'project-footer').height, projectFooterHeight,
-          reason: 'the mockup renders the bottom bar at 20, not 18 (K-454)');
+          reason: 'the mockup renders the bottom bar at 20, not 18');
 
       final row = band(tester, 'project-row-${p.compId}');
       expect(row.height, projectRowHeight, reason: 'an outline row is 22');
@@ -92,7 +92,7 @@ void main() {
     /// 1b. **Compact takes the pixel back, and takes nothing else.** The only
     /// band the setting moves in this panel is the column header, because it
     /// is the only secondary row here; the item rows, the search row and the
-    /// bottom bar measure the same either way (K-454, §12A.6's two columns).
+    /// bottom bar measure the same either way (§12A.6's two columns).
     testWidgets('Compact slims the column header and nothing else',
         (tester) async {
       final p = withItems();
@@ -181,7 +181,7 @@ void main() {
     });
 
     /// 3b. **The glyphs are the mockup's sizes, and the row cluster with
-    /// them** (K-456: the 16 grid is what a glyph is drawn on, not what it
+    /// them** (the 16 grid is what a glyph is drawn on, not what it
     /// displays at). A row's twirl slot and type mark are 13 square, so a name
     /// starts at 8 + 13 + 8 + 13 + 8 = 50, and a child sits one indent step
     /// further in. The bottom bar's controls draw at 13 too.
@@ -278,7 +278,7 @@ void main() {
 
     /// 6. **The resting panel shows three greys.** The selected row and the
     /// bottom bar both take `surface_2`; nothing at rest paints `surface_3`
-    /// (§2.1, K-439).
+    /// (§2.1).
     testWidgets('selection and the bottom bar rest on surface 2',
         (tester) async {
       final p = withItems();
@@ -657,9 +657,9 @@ void main() {
     });
 
     /// 8d. **The swatch filter is one 10px square inside the search well**
-    /// (K-726, replacing K-634's row of dots): the owner's ask — a single
-    /// square that opens the eight-colour picker, rather than a strip of
-    /// choices standing in the well.
+    /// (replacing the old row of dots): the owner's ask, a single square that
+    /// opens the eight-colour picker, rather than a strip of choices standing
+    /// in the well.
     testWidgets('the filter is one 10px square inside the search well',
         (tester) async {
       final p = withItems();
@@ -686,10 +686,10 @@ void main() {
     });
 
     /// 8e. **The search row measured at the mockup's own width** (owner,
-    /// 2026-08-24), as the swatch filter's move inside the well leaves it
-    /// (K-634). The artboard is 360 across and the row is padded 8 either
-    /// side, so the well is the whole 344 of what is left rather than the
-    /// 279 it kept while a chip strip stood beside it.
+    /// 2026-08-24), as the swatch filter's move inside the well leaves it.
+    /// The artboard is 360 across and the row is padded 8 either side, so the
+    /// well is the whole 344 of what is left rather than the 279 it kept while
+    /// a chip strip stood beside it.
     ///
     /// The filter square sits one border and one 6px inset in from the well's
     /// left edge, with the well's usual 5 between it and the text.

@@ -1,25 +1,25 @@
-// Lens flare (docs/08-EFFECTS.md §3.27, docs/impl/lens-flare.md, K-261,
-// K-366). Two compute entry points of the per-frame ghost pipeline:
+// Lens flare (docs/08-EFFECTS.md §3.27, docs/impl/lens-flare.md). Two compute
+// entry points of the per-frame ghost pipeline:
 //   trace        — one thread per pupil-grid ray, each taking its light from
-//                  its own point of the source's emitting rectangle (K-367,
-//                  `source_jitter`): refract the ray through
-//                  the prescription with the FlareSim three-phase walk
+//                  its own point of the source's emitting rectangle
+//                  (`source_jitter`): refract the ray through the
+//                  prescription with the FlareSim three-phase walk
 //                  (reflecting at the pair's two surfaces), carry eight
-//                  spectral throughputs through the per-surface reflectance
-//                  (K-364), land on the sensor and band-integrate them into
-//                  the ray's rgb; the weight the ray keeps is geometry
+//                  spectral throughputs through the per-surface reflectance,
+//                  land on the sensor and band-integrate them into the
+//                  ray's rgb; the weight the ray keeps is geometry
 //                  alone — housing feather × iris mask. Mirrors lumit_core's
 //                  `trace_splat_spectral` op-for-op; the dead sentinel is
 //                  weight −1 (the CPU returns None).
-//   build_splats — one thread per RAY (K-366): the ray's own footprint, by
+//   build_splats — one thread per RAY: the ray's own footprint, by
 //                  central differences over its neighbours' landings
 //                  (lumit_core `ray_axes`), and the peak of the tent it
 //                  deposits its pupil cell's flux over (lumit_core
 //                  `splat_ray`'s arithmetic up to the divide). Rays are
 //                  never connected to one another, so a caustic fold is
 //                  just splats piling up — the correct integral — and the
-//                  sliver/inflate/pull-in machinery of K-261..K-264 has
-//                  nothing left to rescue.
+//                  old sliver/inflate/pull-in machinery has nothing left
+//                  to rescue.
 // The additive raster lives in fx_lens_flare_draw.wgsl (one instanced quad
 // per splat), the box blur in fx_lens_flare_blur.wgsl, detection in
 // fx_lens_flare_detect.wgsl and the combine in fx_lens_flare_combine.wgsl.
@@ -37,18 +37,17 @@ struct Surface {
 
 // One (path × wavelength) combo: the bounce surfaces, the wavelength the
 // GEOMETRY is traced at, and the band's index into `band_subs` — the
-// radiometric sub-samples the energy is carried at (K-364).
+// radiometric sub-samples the energy is carried at.
 //
 // `bounce_c`/`bounce_d` are the third and fourth bounces of a four-bounce
-// path (K-368); `NO_BOUNCE` in `bounce_c` marks the two-bounce ghosts that
+// path; `NO_BOUNCE` in `bounce_c` marks the two-bounce ghosts that
 // were all this struct carried before, and they walk exactly the phases they
 // always did. The two fields took two of the padding slots, so the layout
 // mirrors lumit-gpu's `GpuCombo` at the size it always had.
 //
-// `ring_fresnel` is this ghost's own Fresnel number (K-369, re-derived
-// K-370), which sets how fine the diffraction fringes on its rim are; 0
-// leaves the plain analytic polygon. It took the struct's last padding slot,
-// so the layout is again unchanged.
+// `ring_fresnel` is this ghost's own Fresnel number, which sets how fine the
+// diffraction fringes on its rim are; 0 leaves the plain analytic polygon. It
+// took the struct's last padding slot, so the layout is again unchanged.
 struct Combo {
     bounce_a: u32,
     bounce_b: u32,
@@ -63,7 +62,7 @@ struct Combo {
 // The empty bounce slot — lumit_core's `NO_BOUNCE`.
 const NO_BOUNCE: u32 = 0xffffffffu;
 
-// One radiometric sub-sample of a band (K-364): where in the baked
+// One radiometric sub-sample of a band: where in the baked
 // reflectance table its wavelength sits, and its RGB weight, already
 // multiplied by the exposure gain and Ghost intensity. Eight per band,
 // at `band * 8 + k`.
@@ -76,8 +75,8 @@ struct BandSub {
 
 // One traced corner: raster position (flare-buffer px), the GEOMETRIC weight
 // (housing feather × iris mask; weight < 0 = dead) and the band-integrated
-// energy the ray carries. Since K-364 the two are separate — the throughput
-// is spectral and the weight is not — where one scalar carried both.
+// energy the ray carries. The two are separate — the throughput is spectral
+// and the weight is not — where one scalar once carried both.
 struct Ray {
     pos_x: f32,
     pos_y: f32,
@@ -89,13 +88,13 @@ struct Ray {
     _pad2: f32,
 };
 
-// One ray's deposit (K-366): where it landed, the two half-axes of the
+// One ray's deposit: where it landed, the two half-axes of the
 // parallelogram footprint it spreads over, and the PEAK of the separable
 // tent — its flux already divided by the density-capped footprint area, so
 // the deposit only has to evaluate the tent. `live` is 1.0 for a ray with
 // flux and 0.0 for a dead or unlit one, which the deposit skips (the slot
 // must still be written: the batch's splats are one contiguous range, and
-// K-375's deposit indexes it by thread).
+// the deposit indexes it by thread).
 struct Splat {
     cx: f32,
     cy: f32,
@@ -113,7 +112,7 @@ struct Splat {
 
 // One flare source (see fx_lens_flare_detect.wgsl): position as a raster
 // fraction, colour already multiplied by its gate weight, and the half-extent
-// of its emitting area as a raster fraction (K-367 — zero is a point source).
+// of its emitting area as a raster fraction (zero is a point source).
 // All-zero rgb is a dead slot the passes skip.
 struct Light {
     pos_x: f32,
@@ -138,32 +137,32 @@ struct TraceParams {
     raster_w: f32,
     raster_h: f32,
     light_count: u32,
-    sensor_shift_mm: f32,  // focus shift (K-260)
+    sensor_shift_mm: f32,  // focus shift
     pupil_mm: f32,         // spray radius, already × the f-stop scale
     start_z_mm: f32,
     sensor_z_mm: f32,
     stop_scale: f32,       // scales the stop surface's semi-aperture
     cell_area_px: f32,     // launch cell area in flare-buffer px²
-    ray_stride: u32,       // rays per slot — THIS batch's grid² (K-263)
-    // Keeps the uniform struct a multiple of 16 bytes; held the per-slot
-    // quad count until K-366 dropped quads for per-ray splats.
+    ray_stride: u32,       // rays per slot — THIS batch's grid²
+    // Keeps the uniform struct a multiple of 16 bytes; it held the per-slot
+    // quad count back when a splat was a quad.
     _pad_stride: u32,
     blades: u32,
     rot_rad: f32,
     roundness: f32,        // effective (wide-open blended)
     softness: f32,
-    light_offset: u32,     // first light of this chunk (K-263)
+    light_offset: u32,     // first light of this chunk
 };
 
 @group(0) @binding(0) var<storage, read> surfaces: array<Surface>;
 @group(0) @binding(1) var<storage, read> combos: array<Combo>;
 @group(0) @binding(2) var<storage, read_write> rays: array<Ray>;
-// Binding 3 held the per-cell landed areas until K-366; the numbering is
+// Binding 3 once held the per-cell landed areas; the numbering is
 // left alone so the rest of the bindings keep their places.
 @group(0) @binding(4) var<storage, read_write> splats: array<Splat>;
 @group(0) @binding(5) var<uniform> tp: TraceParams;
 @group(0) @binding(6) var<storage, read> lights: array<Light>;
-// The baked per-surface reflectance table (K-364), laid out
+// The baked per-surface reflectance table, laid out
 // [surface][direction 0=fwd,1=rev][lambda][cos] — see lumit_core's
 // `FlareBaked::reflectance`.
 @group(0) @binding(7) var<storage, read> reflectance: array<f32>;
@@ -184,18 +183,18 @@ fn light_dead(l: Light) -> bool {
     return l.r <= 0.0 && l.g <= 0.0 && l.b <= 0.0;
 }
 
-// Per-ray source integration (K-367, re-chosen K-378) — the WGSL twin of
+// Per-ray source integration — the WGSL twin of
 // lumit_core's `source_jitter`, op for op, with the three constants pinned
 // against it by test. Each ray takes its light from its OWN point of the
 // source's ±extent rectangle, so a source of any size costs exactly the rays
-// a point does and the per-ray splat footprints (K-366/K-378) inflate to
-// cover the spacing between neighbours — which is what makes the replicated
-// ghost copies of K-355 impossible rather than merely rare. Each BAND
-// re-samples the source at its own phase (K-378), so the bands' summed
-// pictures average each other's residual ripple away.
+// a point does and the per-ray splat footprints inflate to cover the spacing
+// between neighbours — which is what makes the replicated ghost copies
+// impossible rather than merely rare. Each BAND re-samples the source at its
+// own phase, so the bands' summed pictures average each other's residual
+// ripple away.
 // 1/rho of the plastic constant and 1/psi of the supergolden ratio — two
 // rationally independent cubic units, each a good 1D rotation alone
-// (lumit_core `PHI_U`'s comment tells the K-378 story) — and the golden
+// (lumit_core `PHI_U`'s comment tells the story) — and the golden
 // per-band phase step, at the digits an f32 holds.
 const PHI_U: f32 = 0.7548777;
 const PHI_V: f32 = 0.6823278;
@@ -241,7 +240,7 @@ fn pupil_mask(u: f32, v: f32) -> f32 {
     return 1.0 - t * t * (3.0 - 2.0 * t);
 }
 
-// Ghost-edge diffraction (K-369, re-derived K-370) — the op-for-op twins of
+// Ghost-edge diffraction — the op-for-op twins of
 // lumit_core's `fresnel_cs`, `knife_edge_intensity` and `ghost_mask`.
 //
 // A ghost's rim is not a clean cut: light bends round the blade and lays down
@@ -333,7 +332,7 @@ fn fresnel_cos(cos_i_in: f32, n1: f32, n2: f32) -> f32 {
     return 0.5 * (rs * rs + rp * rp);
 }
 
-// Grid of the baked reflectance table (K-364) — must equal lumit_core's
+// Grid of the baked reflectance table — must equal lumit_core's
 // `REFL_LAMBDA_BINS` / `REFL_COS_BINS`, which a test pins.
 const REFL_LAMBDA_BINS: u32 = 69u;
 const REFL_COS_BINS: u32 = 16u;
@@ -346,7 +345,7 @@ const SPECTRAL_SUB: u32 = 8u;
 // already on the grid). lumit_core `refl_lookup`, op for op.
 //
 // This replaced an inline thin-film stack solved per ray per surface at the
-// band's single wavelength (K-356). A stack's reflectance oscillates several
+// band's single wavelength. A stack's reflectance oscillates several
 // times across the visible, so one wavelength a band could not see the shape
 // it was sampling; baked at 5 nm and read eight times a band, it can — and
 // the lookup is cheaper than the transfer matrix it replaced.
@@ -365,7 +364,7 @@ fn refl_lookup(surf: u32, reverse: u32, lambda_idx: u32, cos_i: f32) -> f32 {
     return a + (b - a) * f;
 }
 
-// Ray–surface intersection (lumit_core `intersect`, K-264): flat plane at
+// Ray–surface intersection (lumit_core `intersect`): flat plane at
 // the vertex z, else ray–sphere picking the intersection closest to the
 // vertex. A ray that MISSES the sphere (or finds it behind) continues
 // VIRTUALLY through the vertex plane instead of dying — physically the
@@ -459,7 +458,7 @@ fn reflect_dir(dir: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
     return normalize(dir - n * (2.0 * dot(dir, n)));
 }
 
-// One surface event's radiometry (K-364, lumit_core `trace_splat_spectral`'s
+// One surface event's radiometry (lumit_core `trace_splat_spectral`'s
 // inner loop): plain Fresnel at the band's own wavelength is computed once by
 // the caller, then each sub-sample blends it toward the baked coating at ITS
 // wavelength by the Coating dial and multiplies the throughput it keeps —
@@ -530,7 +529,7 @@ fn trace(@builtin(global_invocation_id) gid: vec3<u32>) {
     let g1 = f32(max(tp.grid, 2u) - 1u);
     let u = (f32(gi) / g1) * 2.0 - 1.0;
     let v = (f32(gj) / g1) * 2.0 - 1.0;
-    // A masked-out corner still traces (K-264): weight zero, geometry
+    // A masked-out corner still traces: weight zero, geometry
     // real, so iris edges fade inside their cell instead of quantising to
     // it — unless it sits so far outside the iris (zero beyond radius 1)
     // that no cell touching it can hold any lit corner; the CPU twin's
@@ -542,25 +541,25 @@ fn trace(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     // The shape of the hole the light comes through, with this ghost's own
-    // edge diffraction ringing its rim (K-369, re-derived K-370). `spacing`
-    // is the ray grid's step, and it is what decides whether fringes this
+    // edge diffraction ringing its rim. `spacing` is the ray grid's step,
+    // and it is what decides whether fringes this
     // fine can be drawn at all rather than aliased into a pattern across the
     // whole ghost.
     let mask = ghost_mask(u, v, combo.ring_fresnel, spacing);
 
     var pos = vec3<f32>(u * tp.pupil_mm, v * tp.pupil_mm, tp.start_z_mm);
-    // The ray's own point of the source (K-367): a point source jitters by
+    // The ray's own point of the source: a point source jitters by
     // zero and this is bit-identical to the single direction it always had.
     let jit = source_jitter(gi, gj, combo.band, vec2<f32>(light.ext_x, light.ext_y));
     var dir = dir_of(light.pos_x + jit.x, light.pos_y + jit.y);
-    // Per-sub-sample energy throughput (K-364): the geometry is shared, the
+    // Per-sub-sample energy throughput: the geometry is shared, the
     // radiometry is not — the coating's reflectance swings across a band
     // that a single traced wavelength cannot resolve.
     var thru = array<f32, 8u>(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0);
     var current = 1.0;
-    // Worst relative aperture crossing (K-261): grazing rays fade via the
+    // Worst relative aperture crossing: grazing rays fade via the
     // 0.95..1 feather below instead of the hard clip alone. Tracked SQUARED
-    // and rooted once at the end (K-263) — `max` and `sqrt` commute for
+    // and rooted once at the end — `max` and `sqrt` commute for
     // non-negative values, so it is the same number for one square root a ray
     // instead of one per surface crossed, on the effect's hottest loop.
     var rrel2 = 0.0;
@@ -578,7 +577,7 @@ fn trace(@builtin(global_invocation_id) gid: vec3<u32>) {
         if (hit.missed) {
             rrel2 = max(rrel2, 4.0);
         }
-        // min(clear aperture, glass extent): see the CPU twin (K-264).
+        // min(clear aperture, glass extent): see the CPU twin.
         var semi_r = max(semi_of(s), 1e-6);
         if (abs(s.radius_mm) >= 1e-6) {
             semi_r = max(min(semi_r, abs(s.radius_mm)), 1e-6);
@@ -594,7 +593,7 @@ fn trace(@builtin(global_invocation_id) gid: vec3<u32>) {
         } else {
             let refr = refract_dir(dir, hit.normal, current / n2);
             if (refr.w < 0.5) {
-                // TIR: continue straight, weight zero (K-264; the CPU
+                // TIR: continue straight, weight zero (the CPU
                 // twin's comment tells the story).
                 rrel2 = max(rrel2, 4.0);
             } else {
@@ -605,7 +604,7 @@ fn trace(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
 
     // Phase 2: backward through b-1..=a, reflecting at a. This is the one
-    // leg that reads the reflectance table REVERSED (K-364): the ray crosses
+    // leg that reads the reflectance table REVERSED: the ray crosses
     // each surface back to front, so the two media swap.
     for (var k = b_idx; k > a_idx; k = k - 1u) {
         let s_idx = k - 1u;
@@ -619,7 +618,7 @@ fn trace(@builtin(global_invocation_id) gid: vec3<u32>) {
         if (hit.missed) {
             rrel2 = max(rrel2, 4.0);
         }
-        // min(clear aperture, glass extent): see the CPU twin (K-264).
+        // min(clear aperture, glass extent): see the CPU twin.
         var semi_r = max(semi_of(s), 1e-6);
         if (abs(s.radius_mm) >= 1e-6) {
             semi_r = max(min(semi_r, abs(s.radius_mm)), 1e-6);
@@ -640,7 +639,7 @@ fn trace(@builtin(global_invocation_id) gid: vec3<u32>) {
         } else {
             let refr = refract_dir(dir, hit.normal, current / n2);
             if (refr.w < 0.5) {
-                // TIR: continue straight, weight zero (K-264; the CPU
+                // TIR: continue straight, weight zero (the CPU
                 // twin's comment tells the story).
                 rrel2 = max(rrel2, 4.0);
             } else {
@@ -651,7 +650,7 @@ fn trace(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
 
     // Phase 3: forward through a+1.., reflecting at c if the path has a
-    // third bounce (K-368). Without one the end is the surface count and
+    // third bounce. Without one the end is the surface count and
     // `c_idx` the sentinel no index can equal, so a two-bounce ghost runs
     // exactly the phase it always did.
     let end3 = select(tp.surface_count, c_idx + 1u, four);
@@ -666,7 +665,7 @@ fn trace(@builtin(global_invocation_id) gid: vec3<u32>) {
         if (hit.missed) {
             rrel2 = max(rrel2, 4.0);
         }
-        // min(clear aperture, glass extent): see the CPU twin (K-264).
+        // min(clear aperture, glass extent): see the CPU twin.
         var semi_r = max(semi_of(s), 1e-6);
         if (abs(s.radius_mm) >= 1e-6) {
             semi_r = max(min(semi_r, abs(s.radius_mm)), 1e-6);
@@ -682,7 +681,7 @@ fn trace(@builtin(global_invocation_id) gid: vec3<u32>) {
         } else {
             let refr = refract_dir(dir, hit.normal, current / n2);
             if (refr.w < 0.5) {
-                // TIR: continue straight, weight zero (K-264).
+                // TIR: continue straight, weight zero.
                 rrel2 = max(rrel2, 4.0);
             } else {
                 dir = refr.xyz;
@@ -692,7 +691,7 @@ fn trace(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
 
     if (four) {
-        // Phase 4 (K-368): backward through c-1..=d, reflecting at d —
+        // Phase 4: backward through c-1..=d, reflecting at d —
         // phase 2's walk again, one leg further in, table read reversed.
         for (var k = c_idx; k > d_idx; k = k - 1u) {
             let s_idx = k - 1u;
@@ -782,7 +781,7 @@ fn trace(@builtin(global_invocation_id) gid: vec3<u32>) {
         rays[slot] = dead;
         return;
     }
-    // Band-integrate (K-364): rgb = sum over subs of throughput × CIE weight.
+    // Band-integrate: rgb = sum over subs of throughput × CIE weight.
     // A throughput that has gone non-finite is dead, as it is on the CPU.
     var rgb = vec3<f32>(0.0);
     for (var k = 0u; k < SPECTRAL_SUB; k = k + 1u) {
@@ -794,9 +793,9 @@ fn trace(@builtin(global_invocation_id) gid: vec3<u32>) {
         let sub = band_subs[combo.band * SPECTRAL_SUB + k];
         rgb = rgb + t * vec3<f32>(sub.r, sub.g, sub.b);
     }
-    // Housing feather: full inside 0.95, gone at 1.0 (smoothstep). Since
-    // K-364 the weight is geometry ALONE — feather × iris mask, as the CPU
-    // twin's caller folds it — and the energy travels in rgb.
+    // Housing feather: full inside 0.95, gone at 1.0 (smoothstep). The
+    // weight is geometry ALONE — feather × iris mask, as the CPU twin's
+    // caller folds it — and the energy travels in rgb.
     let ft = clamp((1.0 - sqrt(rrel2)) / 0.05, 0.0, 1.0);
     var out: Ray;
     out.pos_x = px;
@@ -811,7 +810,7 @@ fn trace(@builtin(global_invocation_id) gid: vec3<u32>) {
 }
 
 // ---------------------------------------------------------------------------
-// Per-ray splatting (K-366) — the WGSL twin of lumit_core's `ray_axes` and
+// Per-ray splatting — the WGSL twin of lumit_core's `ray_axes` and
 // the front half of `splat_ray`, op for op.
 // ---------------------------------------------------------------------------
 
@@ -833,8 +832,8 @@ fn landing_at(base: u32, x: u32, y: u32) -> vec3<f32> {
 }
 
 // One axis of the footprint: the LONGER one-sided difference where both
-// neighbours live (K-378 — under an area source the two sides disagree by
-// design, and averaging them let a splat collapse between two wide gaps),
+// neighbours live (under an area source the two sides disagree by design,
+// and averaging them let a splat collapse between two wide gaps),
 // one-sided where only one survives, absent where neither does.
 fn axis_diff(lo: vec3<f32>, here: vec2<f32>, hi: vec3<f32>) -> vec3<f32> {
     if (lo.z > 0.5 && hi.z > 0.5) {
@@ -868,7 +867,7 @@ fn floor_axis(a: vec2<f32>, fallback: vec2<f32>) -> vec2<f32> {
 
 @compute @workgroup_size(64)
 fn build_splats(@builtin(global_invocation_id) gid: vec3<u32>) {
-    // Dispatched over THIS batch's rays (K-263): one thread per ray, so the
+    // Dispatched over THIS batch's rays: one thread per ray, so the
     // splats index exactly as the rays do.
     if (gid.x >= tp.ray_stride || gid.y >= tp.combo_count || gid.z >= tp.light_count) {
         return;
@@ -955,8 +954,7 @@ fn build_splats(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let area = max(abs(det), 1e-6);
     // The density cap: the divisor never drops below the launch cell's
-    // capped fraction, so a fold brightens to 333× and stops (K-262's rule,
-    // carried over unchanged).
+    // capped fraction, so a fold brightens to 333× and stops.
     let divisor = max(area, MIN_AREA_FRAC * tp.cell_area_px);
     // The ray's flux is its launch cell's, weighted by geometry; its colour
     // is the band-integrated throughput (gain already folded into the band
@@ -964,7 +962,7 @@ fn build_splats(@builtin(global_invocation_id) gid: vec3<u32>) {
     // with nothing to do but the tent.
     let light = lights[tp.light_offset + gid.z];
     let flux = ray.weight * tp.cell_area_px;
-    // Divided by four beside the quad's doubled reach (K-373): the tent over
+    // Divided by four beside the quad's doubled reach: the tent over
     // a full step each way integrates to 4x the parallelogram's area, so the
     // flux the ray deposits is exactly what it was.
     let peak = (flux * vec3<f32>(ray.r, ray.g, ray.b) * vec3<f32>(light.r, light.g, light.b))

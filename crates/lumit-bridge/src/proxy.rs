@@ -1,5 +1,5 @@
 //! MAKE-PROXY from Flutter — starting one transcode, reporting how it is
-//! getting on, and attaching the finished file to its item (K-501).
+//! getting on, and attaching the finished file to its item.
 //!
 //! # In plain terms
 //!

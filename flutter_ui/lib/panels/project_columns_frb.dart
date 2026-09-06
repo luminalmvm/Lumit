@@ -11,7 +11,7 @@
 // browser's own resolved numbers, not a reading of the CSS — so the comments
 // quote real pixels rather than intentions. Where a number disagreed with
 // docs/15-DESIGN.md §12A.6's table the mockup won and the table was corrected
-// in the same commit (K-450, K-454).
+// in the same commit.
 
 import 'dart:math' as math;
 
@@ -27,9 +27,9 @@ import '../theme/theme.dart';
 // docked at 260), and the two agree everywhere they overlap.
 // ---------------------------------------------------------------------------
 
-/// The column-header row: a **secondary row**, and so a density token
-/// (K-454) — 19 under Regular, where the hairline beneath it is counted in,
-/// and 18 under Compact.
+/// The column-header row: a **secondary row**, and so a density token — 19
+/// under Regular, where the hairline beneath it is counted in, and 18 under
+/// Compact.
 double projectColumnHeaderHeight(LumitTheme t) => t.density.secondaryRow;
 
 /// One item row. The mockup draws the Project panel's rows without the seam
@@ -120,7 +120,7 @@ double minProjectColumnWidth(ProjectColumn column) => switch (column) {
 /// The gap between every element in a row, headers included.
 const double projectRowGap = 8;
 
-/// What a glyph in this panel draws at (K-456). The set is still drawn on the
+/// What a glyph in this panel draws at. The set is still drawn on the
 /// 16 grid — that is the drawing grid, not the display size — and each panel
 /// renders it at the size its own mockup computed: **13 in the tree's rows,
 /// 14 on the bottom bar**. The slight softening of a 1.5-unit stroke at these

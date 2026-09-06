@@ -340,6 +340,7 @@ fn the_property_suite_reads_and_writes_through_c() {
 
 #[test]
 fn the_host_property_table_says_only_true_things() {
+    let _name = host_name_lock();
     let handle = host_props_handle().expect("the host has its own property set");
     let state = state();
     let set = state.props.get(handle).expect("the host set is live");
@@ -347,13 +348,15 @@ fn the_host_property_table_says_only_true_things() {
     let expected = format!(
         "\
 OfxImageEffectHostPropIsBackground = 0
+OfxImageEffectHostPropNativeOrigin = \"OfxImageEffectHostPropNativeOriginBottomLeft\"
 OfxImageEffectInstancePropSequentialRender = 0
 OfxImageEffectPropCudaRenderSupported = \"false\"
 OfxImageEffectPropCudaStreamSupported = \"false\"
 OfxImageEffectPropMetalRenderSupported = \"false\"
 OfxImageEffectPropMultipleClipDepths = 0
 OfxImageEffectPropOpenCLRenderSupported = \"false\"
-OfxImageEffectPropOpenCLSupported = \"false\"
+OfxImageEffectPropOpenGLRenderSupported = \"false\"
+OfxImageEffectPropRenderQualityDraft = 0
 OfxImageEffectPropSetableFielding = 0
 OfxImageEffectPropSetableFrameRate = 0
 OfxImageEffectPropSupportedComponents = \"OfxImageComponentRGBA\"
@@ -374,8 +377,10 @@ OfxParamHostPropSupportsChoiceAnimation = 0
 OfxParamHostPropSupportsCustomAnimation = 0
 OfxParamHostPropSupportsCustomInteract = 0
 OfxParamHostPropSupportsParametricAnimation = 0
+OfxParamHostPropSupportsStrChoiceAnimation = 0
 OfxParamHostPropSupportsStringAnimation = 0
 OfxPropAPIVersion = 1, 4
+OfxPropHostOSHandle = 0x0
 OfxPropLabel = \"Lumit\"
 OfxPropName = \"com.lumitlab.Lumit\"
 OfxPropType = \"OfxTypeImageEffectHost\"
@@ -391,35 +396,14 @@ OfxPropVersionLabel = \"{version}\"
     // The two that would break plugins if they were ever quietly flipped.
     assert_eq!(set.get_int(keys::SUPPORTS_TILES, 0), Ok(0));
     assert_eq!(set.get_int(keys::TEMPORAL_CLIP_ACCESS, 0), Ok(1));
-
-    // **The GPU extensions are answered, and the answer is no** (K-756). Saying
-    // nothing is a different thing to a plugin than saying no: Red Giant's own
-    // validation log carried twenty-four thousand failed property reads per
-    // session against this host before these five were declared, six thousand
-    // of them per frame inside the render itself. What matters is that the
-    // fetch **succeeds**; that it succeeds with "false" keeps the table honest.
-    for key in [
-        keys::CUDA_RENDER_SUPPORTED,
-        keys::CUDA_STREAM_SUPPORTED,
-        keys::OPENCL_RENDER_SUPPORTED,
-        keys::OPENCL_SUPPORTED,
-        keys::METAL_RENDER_SUPPORTED,
-    ] {
-        assert_eq!(
-            set.get_string(key, 0)
-                .map(|text| text.to_string_lossy().into_owned()),
-            Ok("false".to_owned()),
-            "{key} must be answered, not left unknown"
-        );
-    }
 }
 
 /// **Six OFX properties are not named after their macros**, and a host that
 /// seeds the macro's own name puts the property where no plugin will ever look
 /// for it — silently, because a property nobody finds is a property nobody
 /// complains about. ntsc-rs refuses to load without the first of them; the
-/// conformance bench is what found that, and this is the list it came back with
-/// (K-595). Each line is `ofxImageEffect.h`'s `#define`, verbatim.
+/// conformance bench is what found that, and this is the list it came back
+/// with. Each line is `ofxImageEffect.h`'s `#define`, verbatim.
 #[test]
 fn the_properties_whose_names_are_not_their_macros_are_spelled_the_headers_way() {
     for (macro_name, string, ours) in [
@@ -489,9 +473,11 @@ fn fetch_suite_answers_for_what_exists_and_null_for_what_does_not() {
     assert!(!ask(c"OfxParameterSuite", 1).is_null());
     assert!(!ask(c"OfxMultiThreadSuite", 1).is_null());
 
-    // Not built yet, and an honest null is the whole point: overlays degrade
-    // to no overlay rather than to a crash.
-    assert!(ask(c"OfxInteractSuite", 1).is_null());
+    // Served so the stock support library will describe at all; there is
+    // never an interact for it to act on. And the message suite's
+    // second version, which HitFilm will not load without.
+    assert!(!ask(c"OfxInteractSuite", 1).is_null());
+    assert!(!ask(c"OfxMessageSuite", 2).is_null());
 
     // A version we do not have is a null, not the version we do have.
     assert!(ask(c"OfxPropertySuite", 2).is_null());
@@ -601,6 +587,110 @@ fn the_shipped_quirks_file_parses_and_promises_nothing() {
     assert_eq!(quirks.render_timeout.as_secs(), 10);
     assert_eq!(quirks.control_timeout.as_secs(), 2);
     assert!(quirks.suite_versions.is_empty());
+}
+
+/// A family of plugins under one prefix is one entry, and the host name it is
+/// shown is that entry's `present_as`.
+#[test]
+fn a_quirks_entry_may_name_a_family_and_who_the_host_says_it_is() {
+    let table = QuirksTable::parse(
+        r#"{ "plugins": [ {
+            "identifier": "com.example.suite.*",
+            "present_as": "SomeOtherHost",
+            "note": "refuses every host it has not heard of"
+        } ] }"#,
+    )
+    .map_err(|error| error.to_string())
+    .expect("a well-formed table parses");
+
+    let matched = table.for_plugin("com.example.suite.Glow", 3);
+    assert_eq!(matched.present_as.as_deref(), Some("SomeOtherHost"));
+    assert_eq!(matched.render_timeout.as_secs(), 10, "nothing else changed");
+
+    assert_eq!(
+        table.for_plugin("com.example.suitecase", 3).present_as,
+        None,
+        "a prefix is a prefix, not a substring"
+    );
+    assert_eq!(
+        table.for_plugin("com.example.suite", 3).present_as,
+        None,
+        "the family, not the name the star hangs off"
+    );
+}
+
+/// The shipped table presents Lumit to Red Giant Universe as DaVinci Resolve,
+/// because Universe reads `kOfxPropName` in `describeInContext` and answers
+/// `kOfxStatErrMissingHostFeature` to every host but a handful.
+#[test]
+fn the_shipped_quirks_file_presents_the_host_to_universe_as_resolve() {
+    let table = QuirksTable::shipped();
+    assert_eq!(
+        table
+            .for_plugin("com.redgiantsoftware.Universe_Glow_Glow_OFX", 3)
+            .present_as
+            .as_deref(),
+        Some("DaVinciResolve")
+    );
+    assert_eq!(
+        table.for_plugin("com.redgiant.MBFilm.ofx", 5).present_as,
+        None,
+        "Magic Bullet takes Lumit's own name"
+    );
+}
+
+/// What the host's property set says its name and label are, right now.
+fn host_name_and_label() -> (String, String) {
+    let handle = host_props_handle().expect("the host has its own property set");
+    let state = state();
+    let set = state.props.get(handle).expect("the host set is live");
+    let read = |key: &str| {
+        set.get_string(key, 0)
+            .expect("a string")
+            .to_string_lossy()
+            .into_owned()
+    };
+    (read(keys::NAME), read(keys::LABEL))
+}
+
+/// Presenting the host under another name changes `kOfxPropName` and nothing
+/// else, and `None` puts Lumit's own name back.
+#[test]
+fn the_host_presents_itself_under_a_quirks_name_and_takes_it_back() {
+    let _name = host_name_lock();
+    crate::host::present_as(Some("SomeOtherHost")).expect("the host exists");
+    assert_eq!(
+        host_name_and_label(),
+        ("SomeOtherHost".to_owned(), "Lumit".to_owned()),
+        "the name changes and the label stays Lumit's own"
+    );
+    crate::host::present_as(None).expect("the host exists");
+    assert_eq!(host_name_and_label().0, crate::host::HOST_NAME);
+}
+
+/// Loading a bundle applies its quirks entry: the name the plugin reads from
+/// the host during load is the entry's.
+#[test]
+fn a_bundle_loads_under_the_name_its_quirks_entry_says() {
+    let _name = host_name_lock();
+    let root = tempfile::tempdir().expect("a temp dir");
+    let Some(binary) = a_bundle_in(root.path()) else {
+        skipped("a_bundle_loads_under_the_name_its_quirks_entry_says");
+        return;
+    };
+    let table = QuirksTable::parse(
+        r#"{ "plugins": [ {
+            "identifier": "com.lumitlab.testplug",
+            "present_as": "SomeOtherHost"
+        } ] }"#,
+    )
+    .expect("a well-formed table parses");
+    let mut bundle = Bundle::open(&binary).expect("the bundle opens");
+    bundle.load_with(&table);
+    assert_eq!(host_name_and_label().0, "SomeOtherHost");
+
+    bundle.unload();
+    crate::host::present_as(None).expect("the host exists");
 }
 
 #[test]
@@ -806,6 +896,8 @@ fn the_host_is_given_to_a_plugin_once_before_it_is_loaded() {
     // Opening is not loading: nothing has been said to the plugin yet.
     assert_eq!(read(b"LumitTestPlugSetHostCalls\0"), 0);
 
+    // Loading sets the process-wide host name, so it takes the name lock.
+    let _name = host_name_lock();
     bundle.load();
     assert_eq!(bundle.plugins()[0].load_status, Some(Status::Ok));
     assert_eq!(
@@ -821,14 +913,15 @@ fn the_host_is_given_to_a_plugin_once_before_it_is_loaded() {
         lumit_ofx_testplug::PLUGIN_COUNT
     );
 
-    // The plugin got the five suites this host has and not the one it has not,
+    // The plugin got the six suites this host has and nothing it has not,
     // which is the whole of `fetchSuite` proved from the plugin's side.
     let mask = read(b"LumitTestPlugSuiteMask\0");
     let expected = lumit_ofx_testplug::SUITE_PROPERTY
         | lumit_ofx_testplug::SUITE_MEMORY
         | lumit_ofx_testplug::SUITE_MESSAGE
         | lumit_ofx_testplug::SUITE_IMAGE_EFFECT
-        | lumit_ofx_testplug::SUITE_PARAMETER;
+        | lumit_ofx_testplug::SUITE_PARAMETER
+        | lumit_ofx_testplug::SUITE_INTERACT;
     assert_eq!(u32::try_from(mask), Ok(expected));
 
     // And its load message came back through the message suite.
@@ -882,7 +975,12 @@ fn a_loaded_bundle(test: &str) -> Option<(tempfile::TempDir, Bundle)> {
         return None;
     };
     let mut bundle = Bundle::open(&binary).ok()?;
-    bundle.load();
+    // Loading sets the process-wide host name from the quirks table, so it
+    // takes the same lock the tests that read that name hold.
+    {
+        let _name = host_name_lock();
+        bundle.load();
+    }
     Some((root, bundle))
 }
 
@@ -999,7 +1097,7 @@ group Files | [\"lutPath\", \"trigger\"] | collapsed false
     assert_eq!(render(&full.schema), expected);
 
     // A point is two adjacent number rows, which is what makes the panel fold
-    // it into one (K-443), and the convention applies to a plugin's rows
+    // it into one, and the convention applies to a plugin's rows
     // unchanged. The 3-D Offset folds its x and y and leaves z beside them,
     // which is what the rule says and what a built-in with those three ids
     // would get.
@@ -1233,7 +1331,7 @@ fn an_unbuilt_parameter_entry_point_still_tells_a_bad_handle_apart() {
         // none to read. On an instance this is a real write; see
         // `a_plugin_writes_its_own_control_while_it_is_being_built`.
         assert_eq!(
-            (params.param_set_value)(handle, 0_i32),
+            (params.param_set_value)(handle, 0.0_f64),
             Status::ErrUnsupported.code()
         );
         assert_eq!(
@@ -1257,11 +1355,11 @@ fn an_unbuilt_parameter_entry_point_still_tells_a_bad_handle_apart() {
             Status::ErrBadHandle.code()
         );
         assert_eq!(
-            (params.param_set_value)(forged, 0_i32),
+            (params.param_set_value)(forged, 0.0_f64),
             Status::ErrBadHandle.code()
         );
         assert_eq!(
-            (params.param_set_value_at_time)(forged, 0.0, 0_i32),
+            (params.param_set_value_at_time)(forged, 0.0, 0.0_f64),
             Status::ErrBadHandle.code()
         );
         assert_eq!(
@@ -1550,6 +1648,14 @@ fn a_probe(bundle: &Bundle) -> Option<libloading::Library> {
 /// plugin takes this first. It is the only lock in the suite, it is held for
 /// the length of one test, and a test that fails while holding it poisons
 /// nothing worth keeping.
+/// The host's name is one process-wide property: a test that changes
+/// it, and the golden that reads it, take this so neither sees the other's.
+fn host_name_lock() -> std::sync::MutexGuard<'static, ()> {
+    static NAME: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    NAME.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 fn image_ledger() -> std::sync::MutexGuard<'static, ()> {
     static LEDGER: std::sync::Mutex<()> = std::sync::Mutex::new(());
     LEDGER
@@ -1635,7 +1741,7 @@ fn a_frame_goes_through_a_plugin_and_comes_out_scaled() {
 /// its clips in time for `kOfxImageEffectActionRender` and no earlier answers
 /// "there is no image" to all of that. The plugin then fails the action, and the
 /// whole render fails for a reason that has nothing to do with pixels. The
-/// conformance bench is what found it (K-595); this is the small version.
+/// conformance bench is what found it; this is the small version.
 #[test]
 fn a_clip_can_be_measured_before_the_render_action() {
     let _ledger = image_ledger();
@@ -1679,7 +1785,7 @@ fn a_clip_can_be_measured_before_the_render_action() {
 /// it while it is being constructed: the project's size and extent, how long the
 /// effect runs, whether tiles are on. A plugin that cannot find one of them
 /// throws before it exists — six of the conformance bench's plugins died on
-/// `ProjectExtent` alone, and none of them had done anything wrong (K-595).
+/// `ProjectExtent` alone, and none of them had done anything wrong.
 ///
 /// The size is the frame being rendered, not a standing default, because a
 /// generator places itself by it.
@@ -1724,14 +1830,15 @@ fn an_instance_knows_how_big_the_project_is_and_the_render_keeps_it_true() {
 /// running; a host that answers `kOfxStatErrUnsupported` there has the library
 /// throw, the action fail, and the instance never exist. From a layer that is
 /// every plugin refusing to apply, each with a different status — whichever one
-/// the vendor's own handler turned the exception into (K-595,
-/// docs/impl/ofx-host.md §5).
+/// the vendor's own handler turned the exception into (docs/impl/ofx-host.md
+/// §5).
 ///
-/// So the write is accepted, into the instance's snapshot, and reads back. The
-/// three shapes are here together because they are three different registers:
-/// an integer, a double whose bits arrive in a general-purpose register beside
-/// the vector one, and a pointer to a string
-/// ([`crate::ffi::OfxParamSlot`]).
+/// So the write is accepted, into the instance's snapshot, and reads back.
+/// **Every call here is a real C-variadic call** through the suite's own
+/// function pointers (an `int`, a `double`, two doubles, a `const char *`),
+/// so this one test proves the C shim (`suites/variadic.c`) pulls the right
+/// number of the right kind on whichever platform the suite is running on,
+/// including the one whose ABI puts variadic arguments somewhere else.
 #[test]
 fn a_plugin_writes_its_own_control_while_it_is_being_built() {
     let _ledger = image_ledger();
@@ -1767,13 +1874,7 @@ fn a_plugin_writes_its_own_control_while_it_is_being_built() {
             Status::Ok.code()
         );
 
-        // A double, passed the way a plugin passes one: **one** trailing
-        // argument, of the type the parameter declares (K-756). Until the C
-        // shim landed this test handed the double's *bits* over in a machine
-        // word — which is what the fixed-arity declaration read, and which is
-        // why the suite agreed with this test on a platform where it agreed
-        // with no real plugin. Every call below is a genuine variadic call, so
-        // these assertions fail on Apple silicon without the shim.
+        // A double.
         let amount = handle_of(param_set, c"gain");
         assert_eq!(
             (params.param_set_value)(amount, 0.75_f64),
@@ -1789,10 +1890,12 @@ fn a_plugin_writes_its_own_control_while_it_is_being_built() {
             "the double came back {read}"
         );
 
-        // An integer, as a C `int` — which is what a bool and a choice arrive
-        // as too, C having promoted them before the push.
+        // An integer.
         let count = handle_of(param_set, c"count");
-        assert_eq!((params.param_set_value)(count, 7_i32), Status::Ok.code());
+        assert_eq!(
+            (params.param_set_value)(count, c_int::from(7_i16)),
+            Status::Ok.code()
+        );
         let mut read: c_int = 0;
         assert_eq!(
             (params.param_get_value)(count, std::ptr::from_mut(&mut read).cast::<c_void>()),
@@ -1800,19 +1903,19 @@ fn a_plugin_writes_its_own_control_while_it_is_being_built() {
         );
         assert_eq!(read, 7);
 
-        // Two doubles. **This is the pair that catches the ABI**: a second
-        // trailing argument only lands where the host reads it if the host
-        // walked the argument list the way this platform built it, so a
-        // 2D read is where a wrong walk shows up first.
+        // Two doubles, which proves the second argument is pulled and not
+        // assumed, and at a time, which proves the shim skips the named
+        // argument before the list.
         let centre = handle_of(param_set, c"centre");
         assert_eq!(
-            (params.param_set_value)(centre, 3.0_f64, 4.0_f64),
+            (params.param_set_value_at_time)(centre, 12.0, 3.0_f64, 4.0_f64),
             Status::Ok.code()
         );
         let (mut x, mut y) = (0.0_f64, 0.0_f64);
         assert_eq!(
-            (params.param_get_value)(
+            (params.param_get_value_at_time)(
                 centre,
+                12.0,
                 std::ptr::from_mut(&mut x).cast::<c_void>(),
                 std::ptr::from_mut(&mut y).cast::<c_void>(),
             ),
@@ -1836,12 +1939,9 @@ fn a_plugin_writes_its_own_control_while_it_is_being_built() {
 
         // A push button has no value, so writing one is still the honest no —
         // and it is `kOfxStatErrUnsupported`, not a bad handle.
-        // A push button has nothing to pull, so the shim's arity question
-        // refuses and whatever the plugin passed is never read — the refusal
-        // still comes from the one place that decides it.
         let button = handle_of(param_set, c"trigger");
         assert_eq!(
-            (params.param_set_value)(button, 0_i32),
+            (params.param_set_value)(button),
             Status::ErrUnsupported.code()
         );
     }
@@ -1851,8 +1951,7 @@ fn a_plugin_writes_its_own_control_while_it_is_being_built() {
 
 /// `clipGetHandle`'s property set is **optional** — the header says "if not
 /// null" — and answering `kOfxStatErrValue` to a plugin that passed null for it
-/// failed an action the plugin had done nothing wrong in. ntsc-rs passes null
-/// (K-595).
+/// failed an action the plugin had done nothing wrong in. ntsc-rs passes null.
 #[test]
 fn a_clip_handle_can_be_asked_for_without_its_property_set() {
     let _ledger = image_ledger();
@@ -1951,6 +2050,27 @@ fn a_negative_row_bytes_image_comes_back_the_right_way_up() {
     // is testing what it says it is.
     let image = Image::from_frame(&source, RowOrder::TopDown).expect("an image");
     assert!(image.row_bytes() < 0, "top-down means negative row bytes");
+}
+
+/// What the host actually hands a plugin is the bottom-up layout, with
+/// **positive** row bytes. Both layouts are legal and the test above proves
+/// both work through a plugin that honours the sign; this one pins that the
+/// negative sign is never sent, because a shipped plugin gets it wrong.
+/// ntsc-rs 0.9.4 computes its first-row offset for a negative stride in pixel
+/// units and applies it in bytes, so a top-down fp32 frame has it write three
+/// quarters of a frame past the end of the block: a heap corruption in the
+/// broker, and a mostly transparent picture in the viewer with no error to
+/// show for it.
+#[test]
+fn a_filter_request_hands_the_plugin_positive_row_bytes() {
+    let source = a_test_frame(6, 7);
+    let request = RenderRequest::filter(0.0, source.clone());
+    assert_eq!(request.order, RowOrder::BottomUp);
+    let image = Image::from_frame(&source, request.order).expect("an image");
+    assert!(
+        image.row_bytes() > 0,
+        "the layout a plugin is handed has positive row bytes"
+    );
 }
 
 /// The action order, verbatim: the sequence the plugin observed against the
@@ -2408,7 +2528,7 @@ fn the_thread_suite_table_is_laid_out_as_c_lays_it_out() {
     );
 }
 
-// ------------------------------------------ a plugin as an effect (K-593) --
+// -------------------------------------------------- a plugin as an effect --
 
 use crate::def::{LocalHost, OfxEffectDef, PluginHost, Rendering};
 use crate::describe::PluginDescriptor;
@@ -2454,7 +2574,7 @@ fn a_leaked_schema(report: &ScanReport, identifier: &str, major: u32) -> &'stati
 ///
 /// The bundle is handed to the host, and the definition is leaked into the
 /// catalogue, so both live as long as the process — which is what registration
-/// means (K-593).
+/// means.
 fn a_registered_plugin(test: &str, identifier: &str, major: u32) -> Option<&'static EffectSchema> {
     let (root, bundle, report) = a_described_bundle(test)?;
     let schema = a_leaked_schema(&report, identifier, major);
@@ -2502,7 +2622,7 @@ fn a_plugin_registers_and_is_found_by_the_catalogue() {
     assert_eq!(inst.effect.match_name, "ofx:com.lumitlab.testplug");
     assert!(inst.params.iter().any(|p| p.id == "gain"));
 
-    // The built-in menu order is untouched by its arrival (K-137).
+    // The built-in menu order is untouched by its arrival.
     let order: Vec<&str> = lumit_core::fx::BUILTIN_DEFS
         .iter()
         .map(|d| d.schema().match_name)
@@ -2562,9 +2682,9 @@ fn a_plugin_definition_renders_from_the_resolved_bag() {
     }
 }
 
-/// **A disabled plugin renders identity, byte for byte** (K-258's shape,
-/// docs/12 §2.3): the layer keeps compositing and wears a badge, and the
-/// picture is not so much as rounded on its way past.
+/// **A disabled plugin renders identity, byte for byte** (docs/12 §2.3): the
+/// layer keeps compositing and wears a badge, and the picture is not so much
+/// as rounded on its way past.
 #[test]
 fn a_disabled_plugin_renders_identity_byte_for_byte() {
     // A declaration of its own, so this test needs no bundle at all: what is
@@ -2645,5 +2765,39 @@ fn the_broker_is_spawned_without_a_console_window() {
     assert!(
         source.contains("command.creation_flags(CREATE_NO_WINDOW);"),
         "no_console must be CREATE_NO_WINDOW and nothing else"
+    );
+}
+
+/// The host keeps its brokers in a static, and a static is never dropped, so
+/// a ring file only ever went away by luck. The maker's handle now carries
+/// delete-on-close: the file must be gone once the process that made it has
+/// ended, dropped or not. The probe is a child copy of this test binary that
+/// makes a ring, forgets it, and exits.
+#[cfg(windows)]
+#[test]
+fn a_forgotten_ring_goes_with_its_process() {
+    const PROBE: &str = "LUMIT_OFX_RING_PROBE";
+    if let Ok(path) = std::env::var(PROBE) {
+        let ring = crate::ipc::shm::Ring::create(Path::new(&path), 8, 8).expect("a ring");
+        std::mem::forget(ring);
+        std::process::exit(0);
+    }
+    let path = std::env::temp_dir().join(format!("lumit-ofx-probe-{}.ring", std::process::id()));
+    let status = std::process::Command::new(std::env::current_exe().expect("this test binary"))
+        .args([
+            "a_forgotten_ring_goes_with_its_process",
+            "--exact",
+            "--test-threads=1",
+        ])
+        .env(PROBE, &path)
+        .status()
+        .expect("the probe runs");
+    assert!(status.success(), "the probe made its ring and exited");
+    let leaked = path.exists();
+    let _ = std::fs::remove_file(&path);
+    assert!(
+        !leaked,
+        "the ring file outlived the process that made it: {}",
+        path.display()
     );
 }

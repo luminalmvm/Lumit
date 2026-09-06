@@ -1,5 +1,5 @@
-//! The cache crate — **Nebula** (K-083): byte-budgeted stores per
-//! docs/06-RENDER-PIPELINE.md §5 (K-016). The RAM tier ([`ByteLru`]) is a
+//! The cache crate — **Nebula**: byte-budgeted stores per
+//! docs/06-RENDER-PIPELINE.md §5. The RAM tier ([`ByteLru`]) is a
 //! byte-budget store with cost-aware (GreedyDual-style) eviction and pinning
 //! (§5.3); the disk tier ([`disk`]) parks frames in a cache folder and keeps an
 //! [`index`] of them. The governor joins as the evaluator grows.

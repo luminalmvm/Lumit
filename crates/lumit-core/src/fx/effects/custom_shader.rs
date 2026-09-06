@@ -1,4 +1,4 @@
-//! Custom shader (docs/08 §3.95, docs/impl/custom-shader.md, K-650): the one
+//! Custom shader (docs/08 §3.95, docs/impl/custom-shader.md): the one
 //! effect in the catalogue whose program the user writes.
 //!
 //! **In plain terms.** Drop it on a layer and it does nothing, because it has no
@@ -47,9 +47,9 @@ pub const EXTRA_KEY: &str = "shader";
 ///
 /// It is deliberately **neutral** - gain 1 and a white tint pass the picture
 /// through untouched. docs/08 §1.2 says an effect whose default state is a
-/// no-op is a bug, and this is K-111's stated exception: the thing the effect
-/// does is the thing the user has to write. A starter that visibly changed
-/// the picture the moment it landed would be the worse surprise.
+/// no-op is a bug, and this is that rule's stated exception: the thing the
+/// effect does is the thing the user has to write. A starter that visibly
+/// changed the picture the moment it landed would be the worse surprise.
 ///
 /// Every line is checked against the host's own refusals in
 /// `crate::fx::shader`: the two rows parse, `shade` exists, `lumit_sample`
@@ -100,14 +100,14 @@ pub const COMP_SCALE: ParamId = ParamId::new("derived.shader_comp_scale");
     premultiplied = true,
 )]
 pub struct CustomShader {
-    /// The one extra picture, on the existing auxiliary-layer carriage (K-429).
+    /// The one extra picture, on the existing auxiliary-layer carriage.
     /// One, not many: the carriage is one slot per op walked by a shared
     /// counter. A shader that genuinely needs three inputs wants three shaders
     /// and a stack, which is what the stack is for.
     #[layer(label = "Second input", self_default = false)]
     pub input2: bool,
 
-    /// Open the editor surface. A button, not a value (K-417) — the source is
+    /// Open the editor surface. A button, not a value — the source is
     /// not a parameter, so neither of these two rows carries one.
     #[action(label = "Edit shader…")]
     pub edit: (),
@@ -119,7 +119,7 @@ pub struct CustomShader {
     pub load_from_file: (),
 
     /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
-    /// It earns the injected Blend row (K-425), so a custom shader gets a blend
+    /// It earns the injected Blend row, so a custom shader gets a blend
     /// mode for free on the same seam every other effect uses, and none of it
     /// reaches the user's code.
     #[slider(
@@ -137,7 +137,7 @@ pub struct CustomShader {
 ///
 /// A fresh instance is an identity passthrough with no badge: a thing the user
 /// must supply cannot have a tasteful default, and an empty effect is not a
-/// failed one (K-111).
+/// failed one.
 #[must_use]
 pub fn source_of(inst: &EffectInstance) -> Option<&str> {
     inst.extra.get(EXTRA_KEY)?.get("source")?.as_str()

@@ -2,10 +2,10 @@
 //! through the compositor at full resolution and encode to H.264/mp4.
 //!
 //! In plain terms: the same pixels the Viewer shows, written to a file — the
-//! preview-equals-export promise (K-031) holds because this path reuses the
+//! preview-equals-export promise holds because this path reuses the
 //! identical colour engine and compositor. Precomp layers render recursively:
 //! the nested comp becomes a texture the parent composites like any other
-//! source. Runs on its own thread with its own decoders (K-017); progress
+//! source. Runs on its own thread with its own decoders; progress
 //! streams back; cancel is checked every frame.
 
 use lumit_core::model::{Document, LayerKind, ProjectItem};
@@ -45,7 +45,7 @@ impl ExportHandle {
 #[derive(Clone)]
 pub struct ItemInfo {
     /// Where the pixels come from: one file, or the numbered run of stills the
-    /// item names one file of (K-539).
+    /// item names one file of.
     pub source: lumit_media::MediaSource,
     pub fps: f64,
     pub frames: usize,
@@ -54,7 +54,7 @@ pub struct ItemInfo {
     /// dimensions — the preview sizes a missing layer the same way, since a
     /// file we cannot open has no size of its own, and the two must agree or
     /// the layer's geometry would differ between them. Export must match the
-    /// preview (K-031): an export that quietly dropped a missing layer to
+    /// preview: an export that quietly dropped a missing layer to
     /// black while the Viewer showed bars would hide the mistake in the
     /// delivered file, which is precisely what the slate prevents.
     pub missing: Option<(u32, u32)>,
@@ -69,7 +69,7 @@ pub struct AudioJob {
     /// to reuse an already-decoded buffer instead of re-decoding the file.
     pub item: uuid::Uuid,
     /// **The mixer strip this sound belongs to**: the layer *of the comp
-    /// being mixed* that carries it (docs/09 §3.1, K-690).
+    /// being mixed* that carries it (docs/09 §3.1).
     ///
     /// For a footage layer that is its own id. For sound arriving through a
     /// Precomp layer it is the **Precomp layer's** id, not the inner
@@ -85,14 +85,14 @@ pub struct AudioJob {
     /// The layer's Volume property (dB, docs/09 §6): static values become a
     /// constant gain; keyframed ones bake to a control-rate envelope.
     pub volume: lumit_core::anim::Property,
-    /// The layer's Pan property (−100..+100, docs/09 §6, K-694): a
+    /// The layer's Pan property (−100..+100, docs/09 §6): a
     /// constant-power stereo balance, folded into the same gain stage the
     /// Volume rides.
     pub pan: lumit_core::anim::Property,
     /// Enclosing Precomp layers, outermost first — a precomp's Volume and
     /// Pan act on everything inside it, so both multiply through the chain.
     pub carriers: Vec<Carrier>,
-    /// The head and tail ramps of a **Sequence clip** (K-695). `None` for a
+    /// The head and tail ramps of a **Sequence clip**. `None` for a
     /// whole-layer job, which has no join to fade across.
     pub fade: Option<ClipFade>,
     /// The layer's driver chain, where one is wired onto the Layer out's
@@ -100,7 +100,7 @@ pub struct AudioJob {
     /// whose Volume keyframes answer as ever.
     pub driven: Option<Arc<DrivenVolume>>,
     /// The layer's **audio insert chain** — the audio-typed effects in its
-    /// stack, ahead of Volume and Pan (K-700). `None` for a layer carrying no
+    /// stack, ahead of Volume and Pan. `None` for a layer carrying no
     /// effects at all, which is what keeps every mix without a plugin
     /// byte-identical to the one before this field existed.
     pub chain: Option<Arc<AudioChain>>,
@@ -164,8 +164,8 @@ impl PartialEq for DrivenVolume {
     }
 }
 
-/// A layer's **audio insert chain**, as the mixer needs it (K-700,
-/// docs/impl/audio-plugins.md §2).
+/// A layer's **audio insert chain**, as the mixer needs it
+/// (docs/impl/audio-plugins.md §2).
 ///
 /// # In plain terms
 ///
@@ -195,7 +195,7 @@ pub struct AudioChain {
     pub effects: Vec<lumit_core::model::EffectInstance>,
     /// The layer's driver graph, so a **wired** plugin parameter reads the wire
     /// instead of its keyframes, exactly as a wired effect parameter in the
-    /// picture does (K-471).
+    /// picture does.
     pub graph: lumit_core::graph::LayerGraph,
     /// Comp time where the layer's own time 0 sits, so `t − offset_s` is the
     /// layer time its rows are read at.
@@ -220,7 +220,7 @@ impl PartialEq for AudioChain {
 /// Open the chain and play `samples` (interleaved stereo, the job's placed
 /// span) through it — the **one** function the live plan and the export both
 /// call, which is what makes preview == export a fact about the code rather
-/// than an argument about it (K-031).
+/// than an argument about it.
 ///
 /// `start_frame` is where the span lands on the mixed timeline, and is what the
 /// per-block parameter values are read at. `offline` says this is an export: no
@@ -308,7 +308,7 @@ pub fn chain_bake(
 ///
 /// A row reads its own keyframes unless a wire feeds it, in which case it reads
 /// the wire — the same substitution the picture's resolve makes, held to the
-/// same declared hard range (K-471, K-510), so a plugin parameter is driven
+/// same declared hard range, so a plugin parameter is driven
 /// like everything else. An instance with nothing animated and nothing wired
 /// bakes **one** entry, which the chain then holds past the end: an
 /// un-automated plugin costs no per-block work at all.
@@ -399,7 +399,7 @@ fn bake_values(
         .collect()
 }
 
-/// A Sequence clip's own fade ramps, in **comp time** (K-695).
+/// A Sequence clip's own fade ramps, in **comp time**.
 ///
 /// Absolute times rather than durations measured from the job's audible span,
 /// because a clip's span can be trimmed by the layer's in and out points
@@ -462,7 +462,7 @@ pub struct Carrier {
 /// control-rate curve, each property sampled in its own layer time
 /// (`lt = comp time − its offset`).
 ///
-/// **One stage for both** (K-694). A balance is a pair of per-channel gains,
+/// **One stage for both**. A balance is a pair of per-channel gains,
 /// so it multiplies into the Volume's gain rather than needing a stage of its
 /// own — which is also what makes a Precomp layer's balance compose with the
 /// balances inside it, channel by channel.
@@ -474,7 +474,7 @@ pub fn volume_bake(
 ) -> ([f32; 2], Option<lumit_audio::mix::GainEnvelope>) {
     let gain_at = |t: f64| {
         // A wired Volume overrides its keyframes, exactly as a wired effect
-        // parameter does (K-471); a broken or bypassed chain answers `None`
+        // parameter does; a broken or bypassed chain answers `None`
         // and the keyframes come back.
         let volume_db = job
             .driven
@@ -525,7 +525,7 @@ pub fn volume_bake(
 
 /// Delivery presets (docs/06-RENDER-PIPELINE.md §7.5): frame, codec, and
 /// bitrates as data, not code. Custom keeps the comp's own size and the
-/// dialogue's choices; it is also the default (Settings → Export, K-119),
+/// dialogue's choices; it is also the default (Settings → Export),
 /// matching the implicit behaviour every "Export…" action had before that
 /// setting existed.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
@@ -721,7 +721,7 @@ impl AudioFormat {
     }
 }
 
-/// What the export writes: a video file, one still image per frame (K-201), or
+/// What the export writes: a video file, one still image per frame, or
 /// sound with no picture at all.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, serde::Serialize, serde::Deserialize)]
 pub enum ExportFormat {
@@ -894,7 +894,7 @@ pub enum AlphaMode {
 #[derive(Clone, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub enum ColourSpace {
     /// sRGB — Rec.709 primaries with the sRGB transfer curve (IEC 61966-2-1).
-    /// The Viewer's own encode (K-031), so this is a pass-through: the frame
+    /// The Viewer's own encode, so this is a pass-through: the frame
     /// arrives in it and is written untouched. The default, and what every
     /// Lumit export before the family existed wrote.
     #[default]
@@ -985,7 +985,7 @@ impl ColourSpace {
     /// The inverse of [`Self::stored_name`]. An unrecognised name is an OCIO
     /// space — which `check` then refuses — rather than a silent fall back to
     /// the default: a file delivered in the wrong space is worse than an
-    /// export that did not run (K-479).
+    /// export that did not run.
     pub fn from_stored_name(name: &str) -> Self {
         match name {
             "" => ColourSpace::SrgbRec709,
@@ -1006,7 +1006,7 @@ impl ColourSpace {
             ColourSpace::Rec709 => ColourTags::Bt709,
             ColourSpace::Rec2020 => ColourTags::Bt2020,
             ColourSpace::DisplayP3 => ColourTags::DisplayP3,
-            // **Untagged, deliberately** (K-490, docs/impl/ocio.md §5.2). A
+            // **Untagged, deliberately** (docs/impl/ocio.md §5.2). A
             // config's name has no reliable primaries or transfer metadata in
             // general — the config author may have composed anything — so a
             // file written through one carries no colour tag rather than a
@@ -1030,8 +1030,8 @@ impl ColourSpace {
             // load-bearing one: its transform ran on the graphics card, in the
             // same display blit the Viewer presents through (§5.2). A second
             // transform here would be a second implementation of one transform
-            // in the delivery path, which is the exact structure K-031 exists
-            // to forbid.
+            // in the delivery path, which is the exact structure the
+            // preview-equals-export promise forbids.
             ColourSpace::SrgbRec709 | ColourSpace::Ocio(_) => return None,
             ColourSpace::Linear => (None, Transfer::Linear),
             ColourSpace::Rec709 => (None, Transfer::Bt709),
@@ -1256,7 +1256,7 @@ impl ColourTransform {
 }
 
 /// A crop applied on the way out, as pixel insets from each edge of the
-/// composition (K-419: distances are pixels at composition size, never a
+/// composition (distances are pixels at composition size, never a
 /// percentage). `Crop::NONE` is no crop.
 ///
 /// In plain terms: the four numbers are how much to take off the top, the
@@ -1335,7 +1335,7 @@ impl Crop {
 
     /// The crop equivalent to the Viewer's region of interest — the rectangle
     /// the user swept on the picture, which crosses every boundary as
-    /// fractions `[x0, y0, x1, y1]` rather than pixels (K-362: which pixel a
+    /// fractions `[x0, y0, x1, y1]` rather than pixels (which pixel a
     /// point is depends on the raster, and the raster changes with the preview
     /// resolution).
     ///
@@ -1366,7 +1366,7 @@ pub enum Bitrate {
     #[default]
     Auto,
     /// Set no bitrate at all and let the encoder pick its own quality. What a
-    /// blank bitrate field has always meant (K-119), kept as its own answer
+    /// blank bitrate field has always meant, kept as its own answer
     /// rather than folded into `Auto`, because the two produce different
     /// files and a preset saved under one must not silently become the other.
     EncoderDefault,
@@ -1433,7 +1433,7 @@ pub enum DiskCachePolicy {
 
 /// The export's answer for motion blur (docs/15 §12A.4, the Time section's
 /// first row). Blur passes two gates — the composition's master switch and
-/// each layer's own switch (docs/06 §4, K-120) — so the three answers are the
+/// each layer's own switch (docs/06 §4) — so the three answers are the
 /// three useful things to say about the master while the checks stand.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub enum MotionBlurOverride {
@@ -1489,11 +1489,11 @@ pub struct RenderOptions {
     /// Run each layer's effect stack. Off exports the layers unaffected —
     /// the export-time twin of the per-layer fx switch (docs/08 §1.5).
     pub effects: bool,
-    /// Honour solo switches (K-105). Off exports every visible layer even
+    /// Honour solo switches. Off exports every visible layer even
     /// when one is soloed for working on — an export of a soloed comp is
     /// almost never what was wanted, but it must be *askable*, not assumed.
     pub honour_solo: bool,
-    /// Deliver the guide layers too (K-497). Off — the default — is what a
+    /// Deliver the guide layers too. Off — the default — is what a
     /// guide layer *is*: reference-only, drawn in the Viewer and absent from
     /// the file, at every depth. On overrides that for the one export that
     /// wants the reference in the picture.
@@ -1504,16 +1504,16 @@ pub struct RenderOptions {
     /// Force Retime blend off for the whole walk, or leave each layer's own
     /// policy alone ([`RetimeBlendOverride`]).
     pub retime_blend: RetimeBlendOverride,
-    /// Read the proxies instead of the originals (K-501). **Off by default,
+    /// Read the proxies instead of the originals. **Off by default,
     /// whatever the project is set to**: a proxy is a working convenience, and
     /// delivery is the one moment it must not apply, so an export takes the
     /// full-resolution files unless it is explicitly asked not to — a draft for
     /// review being the only export a proxy is right for.
     ///
     /// The override lives here rather than being read off the Viewer's state
-    /// precisely so K-031 keeps holding in the direction that matters: what is
-    /// delivered is decided by the export, and turning proxies on to work
-    /// cannot quietly ship the small picture.
+    /// precisely so the preview-equals-export promise keeps holding in the
+    /// direction that matters: what is delivered is decided by the export, and
+    /// turning proxies on to work cannot quietly ship the small picture.
     pub use_proxies: bool,
 }
 
@@ -1545,7 +1545,7 @@ impl RenderOptions {
     }
 }
 
-/// Whether any comp in `doc` holds a guide layer (K-497).
+/// Whether any comp in `doc` holds a guide layer.
 fn has_guide_layer(doc: &Document) -> bool {
     doc.items.iter().any(|item| {
         matches!(item, ProjectItem::Composition(c) if c.layers.iter().any(|l| l.switches.guide))
@@ -1562,13 +1562,13 @@ fn has_guide_layer(doc: &Document) -> bool {
 /// nothing. The copy is thrown away when the export finishes and never
 /// reaches the project (docs/06 §7.2: baking is invisible).
 pub fn apply_render_overrides(doc: &Arc<Document>, opts: &RenderOptions) -> Option<Arc<Document>> {
-    // Guide layers leave the delivery the same way (K-497): not by a second
+    // Guide layers leave the delivery the same way: not by a second
     // flag threaded through every walk, but by leaving this snapshot — so the
     // draw builder, the decode planner, the occlusion cull and the frame key
     // all agree, at every depth, that the layer is not there. The Viewer never
     // takes this path, so it keeps drawing them.
     let drop_guides = !opts.render_guides && has_guide_layer(doc);
-    // Proxies leave the delivery by the same route (K-501), and for the same
+    // Proxies leave the delivery by the same route, and for the same
     // reason it worked for guide layers: the project's own master switch is one
     // field on the snapshot, so clearing it here makes the decode planner, the
     // frame key and every nested walk agree — at every depth, and without a
@@ -1762,8 +1762,8 @@ pub fn pack_frame<C: lumit_core::pixels::Channel>(
 /// region of interest* is ticked and a region is set.
 ///
 /// The region wins when it is asked for and exists; otherwise the typed crop
-/// stands. A region that is not four finite, increasing fractions is no region
-/// (K-362), and answers the typed crop rather than nothing.
+/// stands. A region that is not four finite, increasing fractions is no
+/// region, and answers the typed crop rather than nothing.
 pub fn crop_for(
     explicit: Crop,
     use_region: bool,
@@ -1801,12 +1801,12 @@ pub struct ExportSpec {
     /// The video bitrate: worked out from the size and rate, or the number
     /// that was typed. Meaningless — and unread — for the lossless formats.
     pub bitrate: Bitrate,
-    /// Output frame rate; None = the composition's own (K-201). A different
+    /// Output frame rate; None = the composition's own. A different
     /// rate resamples by nearest comp frame — the honest thing without optical
     /// flow in the export path — and the file is stamped with the chosen rate.
     pub fps: Option<f64>,
     /// The export range in comp frames, end exclusive; None = the work area
-    /// when one is set, else the whole comp (the standing K-037 behaviour).
+    /// when one is set, else the whole comp (the standing behaviour).
     pub range: Option<(usize, usize)>,
     pub include_audio: bool,
     pub audio_bit_rate: i64,
@@ -1841,7 +1841,7 @@ pub struct ExportSpec {
 
 impl Default for ExportSpec {
     /// A comp-sized H.264 mp4 with sound — what a plain "Export…" has always
-    /// meant (K-119) — at every setting's own default.
+    /// meant — at every setting's own default.
     fn default() -> Self {
         Self {
             format: ExportFormat::Video(lumit_media::encode::VideoCodec::H264),
@@ -1872,8 +1872,7 @@ impl ExportSpec {
     /// rendered. A setting a format cannot carry is a mistake worth naming —
     /// silently ignoring it would deliver a file that is not what was asked
     /// for, and the user would find out from someone else.
-    /// [`Self::check`], with the project's loaded colour config to hand
-    /// (K-479, K-490).
+    /// [`Self::check`], with the project's loaded colour config to hand.
     ///
     /// This is the delivery half of the asymmetry. A preview whose config has
     /// gone missing degrades calmly to the built-in transform and still shows a
@@ -1966,11 +1965,11 @@ impl ExportSpec {
     /// It matters because two of them did reach the mix. `honour_solo: false`
     /// clears every layer's solo switch, and the mixer counts solos with
     /// [`lumit_core::model::any_solo`] — every soloed layer, audio-only ones
-    /// included (K-435) — so a picture setting was deciding what a `.wav`
+    /// included — so a picture setting was deciding what a `.wav`
     /// contained. The defaults are the two rules that are *not* picture
-    /// settings: solos are honoured, exactly as playback honours them (K-031),
+    /// settings: solos are honoured, exactly as playback honours them,
     /// and a guide layer stays reference-only at every depth, its sound no more
-    /// delivered than its picture (K-497).
+    /// delivered than its picture.
     pub fn render_options(&self) -> RenderOptions {
         match self.format {
             ExportFormat::Audio(_) => RenderOptions::default(),
@@ -2076,8 +2075,8 @@ pub fn mixdown(jobs: &[AudioJob], rate: u32, duration_s: f64) -> Vec<f32> {
     mixdown_at(jobs, rate, duration_s, 1.0)
 }
 
-/// As [`mixdown`], through a composition's **master fader** (linear gain,
-/// K-691) — what the export writes and what playback hears. `mixdown` itself
+/// As [`mixdown`], through a composition's **master fader** (linear gain) —
+/// what the export writes and what playback hears. `mixdown` itself
 /// stays at unity for the reader that wants the mix *before* the desk: beat
 /// detection, whose onsets are relative, and which must not lose its beats
 /// because somebody pulled the master down.
@@ -2209,7 +2208,7 @@ fn run(
     let fps = comp.frame_rate.fps().max(1.0);
     let comp_frames = (comp.duration.0.to_f64() * fps).round().max(1.0) as usize;
     // The range: the dialogue's own when it set one, else the work area, else
-    // the whole comp (docs/01-GLOSSARY.md; K-037 relies on the work-area rule).
+    // the whole comp (docs/01-GLOSSARY.md).
     let (first, end) = match spec.range {
         Some((a, b)) => {
             let s = a.min(comp_frames.saturating_sub(1));
@@ -2290,7 +2289,7 @@ fn run(
     }
 
     // The export renders through the SAME walk the Viewer does — the headless
-    // preview at full decode quality (K-031: preview == export by
+    // preview at full decode quality (preview == export by
     // construction, gated by the bit-identity matrix in `headless::tests`).
     // Its own renderer on its own device, so an export never contends with the
     // Viewer's GPU work.
@@ -2304,14 +2303,14 @@ fn run(
     // A config's space is delivered by binding its baked table to the SAME
     // display blit the Viewer presents through (docs/impl/ocio.md §5.2). Not a
     // second transform at the pack stage: that would be a second implementation
-    // of one transform in the delivery path, which is the exact structure K-031
-    // exists to forbid.
+    // of one transform in the delivery path, which is the exact structure the
+    // preview-equals-export promise forbids.
     renderer.set_colour_output(spec.colour_space.ocio_name().map(str::to_owned));
     let (out_num, out_den) = fps_rational(out_fps);
     // One sink, two shapes: the mp4 muxer, or one image file per frame. The
     // loop below is shared — a second frame loop would be a second chance to
     // disagree about sampling, cancellation or progress.
-    // The crop happens in composition pixels (K-419), so the picture that
+    // The crop happens in composition pixels, so the picture that
     // leaves the compositor is cropped first and sized afterwards. When the
     // delivery size *is* the comp's own — every Custom export — the cropped
     // size becomes the file's size, which is what cropping is for; a preset
@@ -2589,7 +2588,7 @@ pub fn mask_rgba(coverage: &[u8]) -> Vec<u8> {
 }
 
 /// CameraPose (core model) -> GPU camera matrix: the single conversion both
-/// the preview and the export path share, so they cannot disagree (K-031).
+/// the preview and the export path share, so they cannot disagree.
 pub fn camera_mat(
     comp_w: u32,
     comp_h: u32,
@@ -2642,7 +2641,7 @@ pub fn item_infos(
             );
         } else if probe.slates() {
             // Missing/unreadable media is carried, not skipped, so export
-            // renders the same slate the Viewer shows (K-031). Audio-only and
+            // renders the same slate the Viewer shows. Audio-only and
             // unprobed items are simply absent: no picture, and — crucially —
             // no slate over a perfectly healthy sound file.
             map.insert(
@@ -2800,7 +2799,7 @@ mod tests {
     }
 
     /// An explicit range exports exactly its frames — here comp frames 10..20
-    /// as a PNG sequence, so the file count *is* the assertion (K-201).
+    /// as a PNG sequence, so the file count *is* the assertion.
     #[test]
     fn an_explicit_range_exports_exactly_its_frames_as_stills() {
         let (doc, comp) = solid_doc(32, 16);
@@ -2952,7 +2951,7 @@ mod tests {
         let (_, env) = volume_bake(&fading_carrier, 0, 48_000, 48_000);
         assert!(env.is_some(), "an animated carrier forces the envelope");
 
-        // **Pan is the same stage** (K-694): a hard-right balance silences the
+        // **Pan is the same stage**: a hard-right balance silences the
         // left channel and lifts the right by the constant-power √2, and a
         // Precomp layer's own balance multiplies channel by channel.
         let mut right = job(Property::fixed(0.0), 0.0);
@@ -2991,7 +2990,7 @@ mod tests {
         );
     }
 
-    /// A **clip crossfade** is two opposed equal-power ramps (K-695): each
+    /// A **clip crossfade** is two opposed equal-power ramps: each
     /// clip's own envelope, so sliding one moves its ramp with it, and the
     /// pair holds level across the join rather than dipping in the middle the
     /// way a straight line would.
@@ -3032,9 +3031,9 @@ mod tests {
         assert_eq!(ClipFade::default().gain_at(5.0), 1.0);
     }
 
-    /// **Preview and export hear the same mix** (K-031), with a pan sweep and
-    /// a clip crossfade ramp on it — the two things K-694 and K-695 added to
-    /// the gain stage.
+    /// **Preview and export hear the same mix**, with a pan sweep and
+    /// a clip crossfade ramp on it — the two later additions to the gain
+    /// stage.
     ///
     /// One job, one bake, and then the two mixers that exist: the exporter's
     /// `mix_stereo_at` over a `PlacedAudio`, and playback's `MixPlan` over the
@@ -3179,7 +3178,7 @@ mod tests {
         }
     }
 
-    /// K-119: `ExportPreset::default()` must be Custom, so a fresh Settings →
+    /// `ExportPreset::default()` must be Custom, so a fresh Settings →
     /// Export default-preset field reproduces today's implicit behaviour
     /// (every generic "Export…" action stamping Custom) until the user
     /// changes it. Also proves the type round-trips through JSON, which
@@ -3509,7 +3508,7 @@ mod tests {
     }
 
     /// The capability table states which spaces a format can *name*, and the
-    /// spec refuses one the container could not carry — the K-479 rule, now
+    /// spec refuses one the container could not carry — the refusal rule, now
     /// covering colour.
     #[test]
     fn a_format_refuses_a_colour_space_it_cannot_state() {
@@ -3566,7 +3565,7 @@ mod tests {
         assert_eq!(spec.resample, lumit_core::pixels::Resample::Fast);
     }
 
-    /// Crop arithmetic, in pixels at composition size (K-419): the size it
+    /// Crop arithmetic, in pixels at composition size: the size it
     /// leaves, the window it keeps, and the pixels it actually copies.
     #[test]
     fn crop_maths_keeps_the_window_it_says_it_keeps() {
@@ -3624,7 +3623,7 @@ mod tests {
         assert!(one_off_each_side.apply::<u8>(&[], 4, 0, 4).is_empty());
     }
 
-    /// The region of interest crosses as fractions (K-362) and becomes pixel
+    /// The region of interest crosses as fractions and becomes pixel
     /// insets here; degenerate input is a gesture, not an error.
     #[test]
     fn a_region_of_interest_becomes_pixel_insets() {
@@ -3916,7 +3915,7 @@ mod tests {
             .unwrap()
     }
 
-    /// A guide layer leaves the delivery snapshot at every depth (K-497): the
+    /// A guide layer leaves the delivery snapshot at every depth: the
     /// outer one and the one inside the nested comp both stop drawing and stop
     /// sounding, and the project itself is untouched.
     #[test]
@@ -3949,7 +3948,7 @@ mod tests {
         assert!(delivery.comp(outer_id).unwrap().layers[1].switches.visible);
     }
 
-    /// *Render guide layers* is the export's override (K-497): with it on the
+    /// *Render guide layers* is the export's override: with it on the
     /// snapshot is left alone, and a document with no guide layer is never
     /// copied either way.
     #[test]
@@ -4034,7 +4033,7 @@ mod tests {
         (Arc::new(doc), outer_id, inner_id)
     }
 
-    /// The blur the one shared helper (K-031) works out for a comp and a
+    /// The blur the one shared helper works out for a comp and a
     /// layer: what the preview draws and what the export draws, from the same
     /// call, so this test reads the picture rather than the switches.
     fn blur_samples(doc: &Document, comp_id: Uuid) -> usize {
@@ -4171,7 +4170,7 @@ mod tests {
         (Arc::new(doc), comp_id, probes)
     }
 
-    /// Whether the decode plan the one walk builds (K-031) asks for a blended
+    /// Whether the decode plan the one walk builds asks for a blended
     /// pair of source frames — the picture Retime blend makes, read where both
     /// the preview and the export read it.
     fn plan_blends(
@@ -4276,10 +4275,10 @@ mod tests {
         );
     }
 
-    /// Guide-ness governs the file, solo governs which layers are looked at
-    /// (K-497): a soloed guide layer is still absent from the delivery, and it
-    /// takes its solo with it — so the comp delivers as though the guide layer
-    /// were not there, rather than delivering nothing at all.
+    /// Guide-ness governs the file, solo governs which layers are looked at: a
+    /// soloed guide layer is still absent from the delivery, and it takes its
+    /// solo with it — so the comp delivers as though the guide layer were not
+    /// there, rather than delivering nothing at all.
     #[test]
     fn a_soloed_guide_layer_is_still_absent_from_the_file() {
         let (doc, outer_id, outer_guide, _inner) = nested_guide_doc();
@@ -4317,7 +4316,7 @@ mod tests {
 
     /// The draw list is where it shows: the Viewer's walk draws a guide layer
     /// at both depths, and the delivery walk — the same builder over the
-    /// delivery snapshot — draws neither (K-497).
+    /// delivery snapshot — draws neither.
     #[test]
     fn the_viewer_draws_guide_layers_and_the_delivery_walk_does_not() {
         let (doc, outer_id, outer_guide, inner_guide) = nested_guide_doc();
@@ -4346,9 +4345,9 @@ mod tests {
         );
     }
 
-    /// K-031 with a guide layer present: the file an export writes is the file
-    /// it would have written had the guide layer never been in the document —
-    /// byte for byte, at both depths.
+    /// Preview equals export with a guide layer present: the file an export
+    /// writes is the file it would have written had the guide layer never been
+    /// in the document — byte for byte, at both depths.
     #[test]
     fn an_export_writes_the_same_file_as_if_the_guide_layers_were_not_there() {
         let (with_guides, outer_id, outer_guide, inner_guide) = nested_guide_doc();
@@ -4422,7 +4421,7 @@ mod tests {
     ///
     /// The one that actually reached the file was solo: `honour_solo: false`
     /// clears every layer's solo switch, and the mixer counts solos across
-    /// *all* layers (K-435), so a picture setting decided what a `.wav`
+    /// *all* layers, so a picture setting decided what a `.wav`
     /// contained. An audio-only spec now runs at the defaults, so the solos
     /// stand and the mix is the mix.
     #[test]
@@ -4755,7 +4754,7 @@ mod tests {
     /// A smooth float gradient exported at sixteen bits carries **more than
     /// 256 distinct values a channel** — the assertion that fails on the old
     /// widened path, where every value was a multiple of 257 and there were
-    /// never more than 256 of them (K-479's recorded ceiling).
+    /// never more than 256 of them (the recorded ceiling).
     ///
     /// These are the two calls `run`'s frame loop makes at that depth, in that
     /// order, so the bytes counted here are the bytes the file gets; the file
@@ -4763,7 +4762,7 @@ mod tests {
     #[test]
     fn a_sixteen_bit_export_carries_more_than_eight_bits_of_a_gradient() {
         let (doc, comp_id) = gradient_doc(512, 512);
-        let mut renderer = match crate::headless::HeadlessRenderer::new() {
+        let mut renderer = match crate::headless::HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();

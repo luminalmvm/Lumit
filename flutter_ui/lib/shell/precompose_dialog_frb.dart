@@ -29,7 +29,7 @@ import '../widgets/controls.dart';
 /// Show the dialogue and, on confirm, precompose. Returns when it closes.
 ///
 /// [group] names the layer group being packed when the command came from a
-/// group header's *Pre-compose group* (K-731): the engine moves the header's
+/// group header's *Pre-compose group*: the engine moves the header's
 /// effect stack onto the new Precomp layer and takes the emptied band away in
 /// the same undo step.
 Future<void> showPrecomposeDialogFrb({
@@ -177,7 +177,7 @@ class _PrecomposeBodyState extends State<_PrecomposeBody> {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     // The dialogue takes focus when it opens, and `Enter` is Pre-compose
-    // wherever that focus sits (K-243) — the button at the bottom is the
+    // wherever that focus sits — the button at the bottom is the
     // default action, so the keyboard should be able to say yes without first
     // having to find it. Typing a name is one click into the field.
     return Focus(

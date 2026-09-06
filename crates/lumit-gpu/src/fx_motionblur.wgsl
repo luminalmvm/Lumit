@@ -1,5 +1,5 @@
-// Fast motion blur (docs/08-EFFECTS.md §3.2), Guertin-class reconstruction
-// (docs/impl/optical-flow.md §4.5 item 3, K-390). Mirrors
+// Motion blur (docs/08-EFFECTS.md §3.2), Guertin-class reconstruction
+// (docs/impl/optical-flow.md §4.5 item 3). Mirrors
 // lumit_core::fx::cpu::motion_blur op-for-op (§1.6: the CPU is the oracle) —
 // the same tile reduction, the same tap count, the same weights accumulated in
 // the same order, edges clamped.
@@ -43,7 +43,7 @@ struct Params {
     view: i32,         // 0 Rendered, 1 Motion vectors, 2 Confidence, 3 Dominant motion
     tile: i32,         // MB_TILE: tile side in pixels
     quality: i32,      // 0 Normal, 1 High (curved trails, half the tap spacing)
-    matte_on: f32,     // 1 = the matte scales Shutter angle per pixel (K-429)
+    matte_on: f32,     // 1 = the matte scales Shutter angle per pixel
     pad1: i32,
 };
 
@@ -53,14 +53,14 @@ struct Params {
 @group(0) @binding(3) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(4) var<uniform> p: Params;
 
-// The Matte (K-395, docs/08 §2.6) on this kernel's own layout, read only
+// The Matte (docs/08 §2.6) on this kernel's own layout, read only
 // under `matte_on` — bound to `src` when there is none, since a texture
 // binding cannot be left empty.
 @group(0) @binding(5) var matte: texture_2d<f32>;
 
 // This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
 // luma, clamped. The Channel pick and Invert already happened, once, at the
-// seam (fx_matte_prepare.wgsl, K-425).
+// seam (fx_matte_prepare.wgsl).
 fn matte_k(xy: vec2<i32>) -> f32 {
     let m = textureLoad(matte, xy, 0);
     return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
@@ -164,7 +164,7 @@ fn tile_bilinear(pos: vec2<f32>, tdim: vec2<i32>) -> vec2<f32> {
 // learn that sample's reach, so both sides of the weighting speak the same
 // language about how far a thing moves. `lend` is the borrowed motion, never
 // the neighbour-max.
-// `sf` is this pixel's shutter fraction, which the matte scales (K-429).
+// `sf` is this pixel's shutter fraction, which the matte scales.
 fn blended(uv: vec2<f32>, c: f32, lend: vec2<f32>, sf: f32) -> vec2<f32> {
     let cc = clamp(c, 0.0, 1.0);
     let borrow = DOM_TEMPER * (1.0 - cc);
@@ -174,7 +174,7 @@ fn blended(uv: vec2<f32>, c: f32, lend: vec2<f32>, sf: f32) -> vec2<f32> {
 // Spelled out rather than `length()` so the arithmetic is literally the CPU
 // oracle's `sqrt(x*x + y*y)` — a driver is free to lower `length` to a fused
 // or reassociated form, and this kernel is judged bit-for-bit against an f32
-// reference (the trap K-379's flare bake was bitten by).
+// reference (the trap the flare bake was bitten by).
 fn mb_len(v: vec2<f32>) -> f32 {
     return sqrt(v.x * v.x + v.y * v.y);
 }
@@ -231,7 +231,7 @@ fn motion_blur(@builtin(global_invocation_id) gid: vec3<u32>) {
         textureStore(dst, xy, vec4<f32>(r, g, 0.5, 1.0));
         return;
     }
-    // The matte scales Shutter angle per pixel (K-429), read at the destination
+    // The matte scales Shutter angle per pixel, read at the destination
     // and spent everywhere the shutter is: this pixel's own vector, the
     // neighbourhood's dominant sweep, and every tap's reach. k = 1 multiplies
     // by one, so an unbound row is the unmatted picture to the bit.

@@ -6,7 +6,7 @@
 //! runs, font selection, shaping/kerning via a full text stack (cosmic-text)
 //! and per-character animators follow the data model doc.
 //!
-//! **A line can also run along a path** (K-607). The advance walk is the same
+//! **A line can also run along a path**. The advance walk is the same
 //! one — each glyph steps the pen by its own advance — but the pen measures
 //! **arc length along a curve** instead of a distance to the right, and each
 //! glyph is stamped turned to the direction the curve is running in there. The
@@ -123,7 +123,7 @@ pub fn path_box(path: &MaskPolyline, size: f32) -> (u32, u32) {
 }
 
 /// Lay `text` along `path` and stamp it into a `width` × `height` buffer —
-/// straight-alpha RGBA8, the layer's own pixels (K-607).
+/// straight-alpha RGBA8, the layer's own pixels.
 ///
 /// `offset` slides the whole line along the curve in the same pixels the curve
 /// is measured in (px@comp). A **closed** path wraps, so sliding a ring of type
@@ -272,7 +272,7 @@ fn sample_coverage(bitmap: &[u8], bw: usize, bh: usize, fx: f32, fy: f32) -> u8 
     (top * (1.0 - ty) + bottom * ty).round().clamp(0.0, 255.0) as u8
 }
 
-// ---- Text animators (K-609) ---------------------------------------------
+// ---- Text animators -----------------------------------------------------
 
 /// The room an animated line is given round the words, in pixels a side.
 ///
@@ -414,12 +414,12 @@ fn tinted(fill: LinearColour, x: &GlyphXform) -> [u8; 3] {
     [rgba[0], rgba[1], rgba[2]]
 }
 
-/// A straight line with its animators applied (K-609).
+/// A straight line with its animators applied.
 ///
 /// **With no animators this is [`rasterise_line`], byte for byte** — it calls
 /// it, rather than taking a second path that happens to agree. That is the
-/// K-258 guarantee: adding the feature cannot change one pixel of a layer
-/// nobody has animated, and cannot retire one frame anybody has cached.
+/// guarantee: adding the feature cannot change one pixel of a layer nobody
+/// has animated, and cannot retire one frame anybody has cached.
 ///
 /// With animators the box grows by [`animator_margin`] a side and the words sit
 /// that far in, so a letter dropping in from above has somewhere to drop from.
@@ -491,7 +491,7 @@ pub fn rasterise_line_animated(
     }
 }
 
-/// A line on a path with its animators applied (K-609).
+/// A line on a path with its animators applied.
 ///
 /// With no animators this is [`rasterise_on_path`], byte for byte, for the
 /// reason [`rasterise_line_animated`] gives. The box is the one `path_box`
@@ -566,7 +566,7 @@ pub fn rasterise_on_path_animated(
     }
 }
 
-// ---- Glyph outlines (K-608) ---------------------------------------------
+// ---- Glyph outlines -----------------------------------------------------
 
 /// One glyph's curves, in the same layer pixels the raster would be drawn into.
 ///
@@ -601,7 +601,7 @@ impl Frame {
 }
 
 /// The outlines of `text` at `size`, laid out **exactly where the rasteriser
-/// would put the ink** — straight, or along `path` when one is given (K-608).
+/// would put the ink** — straight, or along `path` when one is given.
 ///
 /// The same advance walk as [`rasterise_line`] and [`rasterise_on_path`], read
 /// from the same metrics, so a converted layer sits on top of the layer it came
@@ -820,7 +820,7 @@ impl ttf_parser::OutlineBuilder for Outliner {
     }
 }
 
-/// The shape items a Type layer converts to (K-608): its glyph outlines, in the
+/// The shape items a Type layer converts to: its glyph outlines, in the
 /// layer's own pixels, painted with the layer's fill.
 ///
 /// **A letter's counter is a hole because the contours are combined `Xor`.**
@@ -879,7 +879,7 @@ mod tests {
         assert!(large.height > small.height * 3);
     }
 
-    // ---- Text on a path (K-607) ------------------------------------------
+    // ---- Text on a path --------------------------------------------------
 
     /// A polyline through `points`, arc-length measured the way `flatten_path`
     /// measures one.
@@ -1020,7 +1020,7 @@ mod tests {
         assert_eq!(go(), go());
     }
 
-    // ---- Glyph outlines (K-608) ------------------------------------------
+    // ---- Glyph outlines --------------------------------------------------
 
     /// **The outlines land where the ink lands.** A converted layer that sat a
     /// few pixels off the words it came from would be useless, so the two are
@@ -1158,15 +1158,15 @@ mod tests {
         assert!(glyph_outlines("   ", 48.0, None, 0.0).is_empty());
     }
 
-    // ---- Text animators (K-609) ------------------------------------------
+    // ---- Text animators --------------------------------------------------
 
     fn white() -> lumit_core::model::LinearColour {
         lumit_core::model::LinearColour([1.0, 1.0, 1.0, 1.0])
     }
 
     /// **A layer with no animators draws exactly what it always drew.** This is
-    /// the K-258 gate for the whole feature: adding animators to the model must
-    /// not change one byte of a line nobody has animated, or every frame every
+    /// the gate for the whole feature: adding animators to the model must not
+    /// change one byte of a line nobody has animated, or every frame every
     /// project has banked is quietly wrong.
     #[test]
     fn a_line_with_no_animators_is_byte_identical() {

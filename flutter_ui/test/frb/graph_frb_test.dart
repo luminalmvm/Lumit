@@ -1,4 +1,4 @@
-// The layer driver graph as Dart sees it (K-471, K-472; docs/17, docs/impl/node-graph.md §5).
+// The layer driver graph as Dart sees it (docs/17, docs/impl/node-graph.md §5).
 //
 // What is asserted here is the *contract*: that the shapes the Graph panel will
 // be built on cross the bridge intact, that reading a layer's whole graph is one
@@ -48,12 +48,12 @@ void main() {
       expect(p.layer.getGraphDrivers(), isEmpty);
 
       // A socket carries its type, never a colour: the frontend maps the type
-      // to a `port.*` theme token itself (K-472).
+      // to a `port.*` theme token itself.
       final out = graph.nodes[1].outputs.single;
       expect(out.id, 'output');
       expect(out.portType, BridgePortType.image);
 
-      // Every word the engine sent has a translation entry (K-303).
+      // Every word the engine sent has a translation entry.
       for (final node in graph.nodes) {
         expect(hasEngineLabel(node.label), isTrue,
             reason: '"${node.label}" has no entry in engine_labels.dart');
@@ -152,7 +152,7 @@ void main() {
       expect(
         listEffects().map((e) => e.name),
         contains('wiggle'),
-        reason: 'one search surface offers a driver beside an effect (K-645)',
+        reason: 'one search surface offers a driver beside an effect',
       );
     });
   });

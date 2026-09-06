@@ -2,7 +2,7 @@
 // channel of which picture it comes from. Mirrors
 // lumit_core::fx::cpu::set_channels op-for-op (§1.6: the CPU is the oracle).
 //
-// The Source layer is this effect's OWN layer input (K-429), not a matte, so it
+// The Source layer is this effect's OWN layer input, not a matte, so it
 // arrives on binding 4 through the same dispatch_matted seam Set matte's source
 // uses. The universal Matte row stays beside the effect and does the generic
 // strength dissolve outside this kernel — nothing here reads it.

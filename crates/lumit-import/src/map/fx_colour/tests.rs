@@ -220,7 +220,7 @@ fn linear(v: f64) -> f64 {
 
 /// **A blur radius carries as pixels — on the still value, on every key, and
 /// on the handles.** After Effects' raster pixels are Lumit's px@comp (docs/08
-/// §2.3, K-419): the number is the same, and Lumit's preview scaling is what
+/// §2.3): the number is the same, and Lumit's preview scaling is what
 /// keeps a Half preview looking like the export.
 #[test]
 fn gaussian_blur_carries_its_radius_and_its_keyframes() {
@@ -279,9 +279,9 @@ fn directional_blur_keeps_the_angle_and_the_length() {
     assert!(!ran.rebased("Blur Length"));
 }
 
-/// **Radial blur's centre is a point on both sides since K-558**, so the two
-/// numbers copy across — AE's layer pixels are Lumit's px@comp — and nothing
-/// is rebased any more.
+/// **Radial blur's centre is a point on both sides**, so the two numbers copy
+/// across — AE's layer pixels are Lumit's px@comp — and nothing is rebased
+/// any more.
 #[test]
 fn radial_blur_carries_its_centre_as_pixels() {
     let mut centre = leaf("ADBE Radial Blur-0002", serde_json::json!([480.0, 810.0]));
@@ -405,7 +405,7 @@ fn hue_saturation_writes_one_range_and_refuses_colorize() {
 }
 
 /// **Brightness & Contrast is one Lumit effect carrying both sliders under
-/// AE's names and AE's neutral point** (K-397), so both numbers cross
+/// AE's names and AE's neutral point**, so both numbers cross
 /// unchanged.
 #[test]
 fn brightness_and_contrast_carry_both_sliders_unchanged() {
@@ -803,7 +803,7 @@ fn beam_converts_its_points_its_per_cents_and_reports_the_perspective() {
     ));
     assert_eq!(ran.inst.effect.match_name, "beam");
     assert!(close(ran.f("start_x"), 120.0) && close(ran.f("end_y"), 800.0));
-    // AE's Length is a fraction of the run and Lumit's is px@comp (K-558), so
+    // AE's Length is a fraction of the run and Lumit's is px@comp, so
     // both keys are multiplied by the run these two points describe:
     // hypot(1580, 500) = 1657.2266.
     let run = 1580.0f64.hypot(500.0);
@@ -1059,7 +1059,7 @@ fn add_grain_converts_multipliers_to_per_cents_and_speed_to_a_switch() {
     assert!(!still.flag("animate"));
 }
 
-/// **Scribble carries the mask reference across (K-408)** and maps Wiggle Type
+/// **Scribble carries the mask reference across** and maps Wiggle Type
 /// option for option — the one exact parity in the pair.
 #[test]
 fn scribble_carries_the_mask_and_the_wiggle_type() {
@@ -1222,7 +1222,7 @@ fn posterize_time_carries_its_rate_and_leaves_phase_alone() {
 // ---------------------------------------------------------------------------
 
 /// **Curves imports as a placeholder because its point list is the one
-/// property After Effects' own scripting cannot read** (K-410), and the report
+/// property After Effects' own scripting cannot read**, and the report
 /// says which property it was rather than leaving a silent gap.
 #[test]
 fn curves_imports_as_a_placeholder_with_its_unreadable_named() {
@@ -1317,13 +1317,13 @@ fn the_two_deliberate_placeholders_name_what_to_use_instead() {
 }
 
 // ---------------------------------------------------------------------------
-// Third-party effects: the two roads (K-655, docs/11 §5a)
+// Third-party effects: the two roads (docs/11 §5a)
 // ---------------------------------------------------------------------------
 
-/// A definition that arrived at run time, the way a scanned OFX plug-in's does
-/// (K-593). Declared here rather than driven by a real bundle because what is
-/// under test is the *importer's* half of the seam: given a catalogue entry
-/// under a plug-in identifier, does an After Effects match name find it.
+/// A definition that arrived at run time, the way a scanned OFX plug-in's does.
+/// Declared here rather than driven by a real bundle because what is under
+/// test is the *importer's* half of the seam: given a catalogue entry under a
+/// plug-in identifier, does an After Effects match name find it.
 struct PluginDef(&'static lumit_core::fx::EffectSchema);
 
 impl lumit_core::fx::EffectDef for PluginDef {
@@ -1394,7 +1394,7 @@ const GLOW_CONTROLS: &[lumit_core::fx::ParamSchema] = &[
     control("centre_x", "Centre", 0.5),
 ];
 
-/// S_DissolveLuma's one that matters: the transition itself (K-660).
+/// S_DissolveLuma's one that matters: the transition itself.
 const DISSOLVE_CONTROLS: &[lumit_core::fx::ParamSchema] =
     &[control("dissolve_percent", "Dissolve Percent", 0.0)];
 
@@ -1411,7 +1411,7 @@ fn vendor_leaf(match_name: &str, name: &str, kind: &str, value: serde_json::Valu
 }
 
 /// **The user has the vendor's own OFX build installed, so the effect imports
-/// as that plug-in** — the same effect rather than a likeness (K-655). The
+/// as that plug-in** — the same effect rather than a likeness. The
 /// controls the two builds share by displayed name come across; the one named
 /// alike and shaped unlike is reported rather than coerced.
 #[test]
@@ -1471,7 +1471,7 @@ fn a_third_party_effect_maps_direct_to_the_ofx_plugin_the_user_has_installed() {
 }
 
 /// **No installed build, so the closest Lumit effect stands in, at its own
-/// defaults** (K-655). The vendor's numbers mean the vendor's algorithm, so not
+/// defaults**. The vendor's numbers mean the vendor's algorithm, so not
 /// one of them is guessed across — the report names both sides so the single
 /// dial-in is findable.
 #[test]
@@ -1517,7 +1517,7 @@ fn a_third_party_effect_with_no_plugin_installed_takes_the_tables_nearest_row() 
     );
 }
 
-// --- the owner's dissolve curve (K-660) ------------------------------------
+// --- the owner's dissolve curve --------------------------------------------
 
 /// The owner's curve, hand-computed: at and above 50 % fully on, below it a
 /// straight line down to nothing at 0 %.
@@ -1556,7 +1556,7 @@ fn completion(inst: &EffectInstance) -> Option<LumProperty> {
         })
 }
 
-/// **The owner's dissolve curve, on both roads** (K-660).
+/// **The owner's dissolve curve, on both roads.**
 ///
 /// One test rather than three, and the order inside it is the point: the OFX
 /// catalogue is a process-global, so registering the dissolve plug-in closes
@@ -1565,9 +1565,9 @@ fn completion(inst: &EffectInstance) -> Option<LumProperty> {
 /// plug-in, then with it — instead of racing each other across threads.
 #[test]
 fn a_sapphire_dissolve_carries_its_amount_through_the_owners_curve_on_both_roads() {
-    // --- the nearest road: every other control is still at Lumit's default
-    // (K-655), and this one is the exception, because a Sapphire dissolve *is*
-    // its Dissolve Percent and a transition standing in without it would sit
+    // --- the nearest road: every other control is still at Lumit's default,
+    // and this one is the exception, because a Sapphire dissolve *is* its
+    // Dissolve Percent and a transition standing in without it would sit
     // half-complete for the whole shot.
     for (input, expected) in CURVE {
         let ran = run(&a_dissolve(*input));
@@ -1587,10 +1587,10 @@ fn a_sapphire_dissolve_carries_its_amount_through_the_owners_curve_on_both_roads
         );
     }
 
-    // --- a keyframed dissolve converts key by key and keeps its eases, the
-    // K-625 precedent: each key's value goes through the curve and the shape of
-    // the move around it is left alone. What that costs between two keys either
-    // side of 50 % is what the report row says.
+    // --- a keyframed dissolve converts key by key and keeps its eases: each
+    // key's value goes through the curve and the shape of the move around it is
+    // left alone. What that costs between two keys either side of 50 % is what
+    // the report row says.
     let mut amount = keyed(
         "S_DissolveLuma-0052",
         &[(0.0, 0.0, 3.0), (1.0, 25.0, 3.0), (2.0, 60.0, 3.0)],
@@ -1649,7 +1649,7 @@ fn a_sapphire_dissolve_carries_its_amount_through_the_owners_curve_on_both_roads
 }
 
 /// **A third-party match name the table does not name is untouched by both
-/// roads** (K-655): the closest guess is offered only where §5 has named one,
+/// roads**: the closest guess is offered only where §5 has named one,
 /// so everything else keeps §6's placeholder with every parameter preserved.
 #[test]
 fn an_unmapped_third_party_effect_still_becomes_a_placeholder() {
@@ -1961,8 +1961,8 @@ fn exposure_carries_its_stops_and_reports_the_grade_beside_them() {
 
 /// **Apply Color LUT arrives as the LUT effect with its file row empty and a
 /// report row saying so.** After Effects' own scripting cannot read the chosen
-/// cube (K-410's trap); the alternative is an inert placeholder, which is worse,
-/// because then the stack would not even say a LUT belonged there.
+/// cube; the alternative is an inert placeholder, which is worse, because then
+/// the stack would not even say a LUT belonged there.
 #[test]
 fn apply_colour_lut_becomes_the_lut_effect_and_names_the_file_it_cannot_bring() {
     let ran = run(&effect(

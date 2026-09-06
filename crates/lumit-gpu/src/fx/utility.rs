@@ -4,7 +4,7 @@
 //! what colour it is.
 //!
 //! Each op mirrors its `lumit_core::fx::cpu` parameter struct field-for-field so
-//! the kernel and the CPU oracle consume the identical numbers (K-031). Nothing
+//! the kernel and the CPU oracle consume the identical numbers. Nothing
 //! here does arithmetic; every sine and radian conversion was taken once,
 //! host-side, in the effect's own `packed`.
 
@@ -20,7 +20,7 @@ pub struct SetMatteOp {
     pub channel: u32,
     /// Intersect with the layer's own alpha instead of replacing it.
     pub combine: bool,
-    /// The Matte's Invert switch (K-395). Read only when a matte is bound.
+    /// The Matte's Invert switch. Read only when a matte is bound.
     pub invert: bool,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
@@ -80,7 +80,7 @@ struct LinearWipeParams {
     completion: f32,
     band: f32,
     mix_amt: f32,
-    /// 1 = the matte scales Completion per pixel (K-429).
+    /// 1 = the matte scales Completion per pixel.
     matte_on: f32,
 }
 
@@ -112,7 +112,7 @@ struct RadialWipeParams {
     completion: f32,
     feather: f32,
     mix_amt: f32,
-    /// 1 = the matte scales Completion per pixel (K-429).
+    /// 1 = the matte scales Completion per pixel.
     matte_on: f32,
 }
 
@@ -120,7 +120,7 @@ impl FxEngine {
     /// Apply one Set matte (docs/08 §3.44) to a linear working texture,
     /// returning a new texture of the same size. One pass.
     ///
-    /// **The matte is the effect** (K-395/K-400), so it goes into the kernel and
+    /// **The matte is the effect**, so it goes into the kernel and
     /// no dissolve runs beside this op. With none bound the kernel is a
     /// passthrough — the labelled no-op every layer-input effect follows — and
     /// the pass still runs, because a stack that skipped it would have to know
@@ -159,7 +159,7 @@ impl FxEngine {
     /// Apply one Set channels (docs/08 §3.94) to a linear working texture,
     /// returning a new texture of the same size. One pass.
     ///
-    /// `source` is this effect's **own** layer row (K-429), not a matte: it
+    /// `source` is this effect's **own** layer row, not a matte: it
     /// rides the ordinary auxiliary-layer carriage and reaches the kernel
     /// through the same optional-second-texture seam a matte does. With none
     /// bound every `Source …` pick reads zero, and the four `This layer` picks
@@ -286,7 +286,7 @@ struct VenetianBlindsParams {
     completion: f32,
     band: f32,
     mix_amt: f32,
-    /// 1 = the matte scales Completion per pixel (K-429).
+    /// 1 = the matte scales Completion per pixel.
     matte_on: f32,
     _pad0: f32,
 }
@@ -325,7 +325,7 @@ struct IrisWipeParams {
     band: f32,
     active: f32,
     mix_amt: f32,
-    /// 1 = the matte scales the polygon's radius per pixel (K-429).
+    /// 1 = the matte scales the polygon's radius per pixel.
     matte_on: f32,
 }
 
@@ -375,7 +375,7 @@ struct CardWipeParams {
     randomness: f32,
     seed: u32,
     mix_amt: f32,
-    /// 1 = the matte scales Completion per pixel (K-429).
+    /// 1 = the matte scales Completion per pixel.
     matte_on: f32,
     _pad: [f32; 2],
 }

@@ -1,5 +1,5 @@
 //! The roto propagation job, the `roto/` sidecar, and the store the render path
-//! reads (docs/impl/roto.md §5–§8, K-710 stage 2).
+//! reads (docs/impl/roto.md §5–§8).
 //!
 //! # In plain terms
 //!
@@ -17,12 +17,12 @@
 //! disk and one graphics card and halve each other.
 //!
 //! **It can be stopped, and stopping keeps what it had.** This is the one place
-//! this job differs from the camera tracker's, and it is deliberate (the K-540
-//! pattern). A cancelled *track* throws its half-solve away, because half a
-//! camera path adjusted toward an answer it never reached is not an answer. A
-//! cancelled *propagation* has fifty finished mattes, each correct, each
-//! correctly named — so they are written, the span says how far it got, and a
-//! later Propagate carries on from them instead of starting again.
+//! this job differs from the camera tracker's, and it is deliberate. A
+//! cancelled *track* throws its half-solve away, because half a camera path
+//! adjusted toward an answer it never reached is not an answer. A cancelled
+//! *propagation* has fifty finished mattes, each correct, each correctly
+//! named — so they are written, the span says how far it got, and a later
+//! Propagate carries on from them instead of starting again.
 //!
 //! **It is not done twice.** A matte depends on the file's bytes, the settings,
 //! the base frame and the strokes between the base and that frame
@@ -139,7 +139,7 @@ pub struct RotoJob {
     /// which must never start propagating a shot nobody asked about.
     pub propagate: bool,
     /// Solve no further than this **source** frame — the release-time "show me
-    /// this frame now" a committed scribble asks for (K-723). The walk runs
+    /// this frame now" a committed scribble asks for. The walk runs
     /// toward it from the base and stops the moment it is filed; the other
     /// direction only *copies* frames an earlier run can lend, so one frame's
     /// feedback never turns into a propagation nobody pressed for. `None` — a
@@ -171,8 +171,7 @@ pub enum Progress {
 
 /// Why a propagation did not produce mattes. Every variant is a refusal rather
 /// than a fault, and every one is a **closed** enum with no free text in it, so
-/// the bridge can hand the interface a reason rather than an English sentence
-/// (K-303).
+/// the bridge can hand the interface a reason rather than an English sentence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum RotoFailure {
     /// No resolved media fingerprint — nothing to key a cache with.
@@ -473,7 +472,7 @@ fn lendable(dir: &Path, key: RotoKey) -> HashMap<[u8; 32], FrameRecord> {
         // frame safe to borrow is its chain hash, which already covers the
         // settings, the base and every stroke that decides it. Reading the
         // same key's earlier file back is exactly what resuming a partial run
-        // is (K-723).
+        // is.
         let Some(record) = decode(&bytes, None) else {
             continue;
         };
@@ -675,7 +674,7 @@ pub fn request(job: RotoJob) -> Requested {
 }
 
 /// Stop `instance`'s propagation. The flag is raised and the run ends **between
-/// frames**, keeping and filing every frame it had finished (K-540).
+/// frames**, keeping and filing every frame it had finished.
 pub fn cancel(instance: Uuid) {
     let Ok(mut held) = jobs().lock() else {
         return;
@@ -734,7 +733,7 @@ fn run(job: RotoJob, cancel: &AtomicBool) {
         // A whole run answers anybody, and a partial one answers a warm pass
         // and a stop-after ask it already reaches. A **Propagate** over a
         // partial run falls through instead: the resume §6 promises, with the
-        // file's own frames lent back by chain hash (K-723) — a cancelled or
+        // file's own frames lent back by chain hash — a cancelled or
         // stopped-early run used to answer `Done` here and never carry on.
         let satisfied = match job.stop_after {
             Some(s) => hit.chain(s).is_some(),
@@ -853,7 +852,7 @@ fn propagate(
     // oracle, which is exactly what this job may not use (§8). Not opened at all
     // when no step could need a warp — a stop-after run ending at the base, or a
     // one-frame clip — which is why the release-time solve of the scribbled base
-    // frame works on a machine with no GPU flow (K-723).
+    // frame works on a machine with no GPU flow.
     let needs_flow = count > 1 && stop != Some(base);
     let mut flow = needs_flow.then(lumit_flow::FlowEngine::new_auto);
     if let Some(engine) = &flow {
@@ -924,7 +923,7 @@ fn propagate(
         // A stop-after run *solves* only toward its frame. The other side is
         // copied as far as an earlier run can lend it — those frames' chain
         // hashes still hold, and dropping them because a scribble landed on
-        // the far side would retire mattes nothing invalidated (K-723).
+        // the far side would retire mattes nothing invalidated.
         let copy_only = stop.is_some_and(|s| (s - base).signum() != direction);
         let mut prev_plane = base_plane.clone();
         let mut prev_rgba: Option<Vec<u8>> = None;
@@ -1033,7 +1032,7 @@ fn propagate(
             });
             if stop == Some(cursor) {
                 // The frame the release asked for is filed; Propagate is the
-                // road to the rest of the shot (K-723).
+                // road to the rest of the shot.
                 break;
             }
         }
@@ -1116,7 +1115,7 @@ impl RotoFrames for MediaRgba {
     }
 
     fn rgba(&mut self, n: usize) -> Option<Vec<u8>> {
-        // **The source's own raster, never a preview tier** (K-248): a stroke is
+        // **The source's own raster, never a preview tier**: a stroke is
         // in source pixels and a matte describes the file's frames.
         let frame = self.decoder.frame_rgba(n, None).ok()?;
         (frame.width == self.width && frame.height == self.height).then_some(frame.rgba)

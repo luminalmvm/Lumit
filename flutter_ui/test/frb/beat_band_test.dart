@@ -1,4 +1,4 @@
-// The beat band (K-698, docs/09 §5): bar numbers from the confirmed grid in
+// The beat band (docs/09 §5): bar numbers from the confirmed grid in
 // the ruler's lower row, and a gold tick per detected beat where an ordinary
 // marker wears a flag.
 //
@@ -22,7 +22,7 @@ import 'frb_test_support.dart';
 void main() {
   setUpAll(initEngineForTests);
 
-  group('beatBarLabels (K-698)', () {
+  group('beatBarLabels', () {
     const grid = BridgeBeatGrid(bpm: 120, phaseSeconds: 0);
 
     test('a wide bar is labelled every bar, from bar one', () {
@@ -75,7 +75,7 @@ void main() {
     });
   });
 
-  group('The beat band on the ruler (K-698)', () {
+  group('The beat band on the ruler', () {
     testWidgets(
         'detection ticks the beats, numbers the bars, and Clear takes both',
         (tester) async {

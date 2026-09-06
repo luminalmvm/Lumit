@@ -1,4 +1,4 @@
-// Lumit's Flutter frontend (K-174, the frontend alternative experiment).
+// Lumit's Flutter frontend (the frontend alternative experiment).
 // The engine stays in the Rust crates; this application is the chrome —
 // see docs/archive/flutter-port/ for the plan and the parity checklist.
 
@@ -31,7 +31,7 @@ export 'package:lumit_flutter/state/ui_state.dart';
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Before anything that could fault (K-741). A widget whose build throws is
+  // Before anything that could fault. A widget whose build throws is
   // replaced by Flutter with a blank grey rectangle in a release build, and the
   // exception is printed to a console a windowed Windows build does not have —
   // so until this line existed, a broken panel and an empty one looked the
@@ -53,7 +53,7 @@ Future<void> main(List<String> args) async {
 
 /// Everything that has to happen before the shell can go on screen.
 Future<void> _start(List<String> args) async {
-  // Sweep up after an update before anything else happens (K-297): delete the
+  // Sweep up after an update before anything else happens: delete the
   // version we have just replaced, now that nothing is holding its files, and
   // put it back if a swap was cut in half. Never throws and never blocks — a
   // tidying problem is not a reason for an editor not to open.
@@ -82,7 +82,7 @@ Future<void> _start(List<String> args) async {
   final fromArgs = projectPathFromArgs(args) ??
       (probeProjectPath.isEmpty ? null : probeProjectPath);
   if (fromArgs != null) state.openProject(fromArgs);
-  // The one start-up plugin scan (docs/12 §2.6, K-594). Not awaited: opening
+  // The one start-up plugin scan (docs/12 §2.6). Not awaited: opening
   // other people's bundles and spawning a broker apiece takes as long as it
   // takes, and the shell must come up whether the machine has eighty plugins on
   // it or none. The effects added arrive in the browser's next read, and a
@@ -93,7 +93,7 @@ Future<void> _start(List<String> args) async {
         skipped: const [],
       )));
   // Somebody who double-clicked a `.lum` has already answered the welcome
-  // screen's question, so it is not put to them (K-464).
+  // screen's question, so it is not put to them.
   final ui = LumitUiState(state);
   runApp(LumitAppNew(state, ui, welcome: fromArgs == null));
   // The probe drives the measured gestures and writes its table, only when

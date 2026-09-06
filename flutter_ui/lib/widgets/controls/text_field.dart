@@ -20,14 +20,14 @@ class HouseTextField extends StatefulWidget {
   /// A pointer went down somewhere that is not this field. What an inline
   /// rename commits on: clicking away is a person finishing the edit, and a
   /// field that kept what was typed only when `Enter` was pressed threw the
-  /// work away for everyone who clicks instead (K-243).
+  /// work away for everyone who clicks instead.
   final VoidCallback? onTapOutside;
 
   /// `Escape`: throw the edit away and close the editor, keeping what the
   /// thing was called before. The counterpart to [onSubmitted] — every other
-  /// way out of an inline rename *commits* (Enter, clicking away, K-243), so
-  /// without this there is no way to change your mind, and Escape fell through
-  /// to the modal dismissal that an inline editor has no modal for.
+  /// way out of an inline rename *commits* (Enter, clicking away), so without
+  /// this there is no way to change your mind, and Escape fell through to the
+  /// modal dismissal that an inline editor has no modal for.
   ///
   /// Handled on the field's own focus node, ahead of the shortcut system, so
   /// it cannot be swallowed by `EditableText`'s own `DismissIntent` handling.
@@ -42,8 +42,8 @@ class HouseTextField extends StatefulWidget {
 
   /// The field's focus, owned by the caller — for a caller that has to steer
   /// it after build (the FX console keeps its field focused for its whole
-  /// life, K-328). Null and the field makes and disposes its own, as every
-  /// other caller wants.
+  /// life). Null and the field makes and disposes its own, as every other
+  /// caller wants.
   final FocusNode? focusNode;
 
   /// Muted placeholder shown while the field is empty — what the field is
@@ -69,8 +69,8 @@ class HouseTextField extends StatefulWidget {
   final TextAlign textAlign;
 
   /// The well's own inset. Overridden by the one caller that has to fit a
-  /// **secondary row** (K-451: 18 px — the Timeline's timecode/search/mode
-  /// row), where the default 3 px above and below would burst it.
+  /// **secondary row** (18 px — the Timeline's timecode/search/mode row), where
+  /// the default 3 px above and below would burst it.
   final EdgeInsets padding;
 
   /// Many lines instead of one, filling the height the parent gives it —
@@ -90,9 +90,9 @@ class HouseTextField extends StatefulWidget {
   /// default `surface0` is the recess every well takes (§2.1) — the Timeline's
   /// layer search, the ease popup's fields, an inline rename. A search well
   /// that sits *on* `surface1` with nothing else in its row takes `surface2`
-  /// instead, which is the Project panel's (K-454: the manifests decide, and
-  /// they disagree about this one on purpose — a well over a busy row has to
-  /// sink, a well alone in its own row only has to be a well).
+  /// instead, which is the Project panel's (the manifests decide, and they
+  /// disagree about this one on purpose — a well over a busy row has to sink, a
+  /// well alone in its own row only has to be a well).
   final Color? fill;
 
   /// No well at all: bare text on whatever surface the caller sits it on, for
@@ -352,7 +352,7 @@ class _HouseTextFieldState extends State<HouseTextField>
             // Focus on the *down* stroke, not the resolved tap: a press that
             // slides straight into a drag is someone selecting text in one
             // motion, and the field must already be theirs when the drag's
-            // highlight starts (K-319).
+            // highlight starts.
             Listener(
               onPointerDown: (_) {
                 if (!_focus.hasFocus) _focus.requestFocus();
@@ -402,9 +402,9 @@ class _HouseTextFieldState extends State<HouseTextField>
                       if (widget.submitOnLostFocus) {
                         widget.onSubmitted?.call(widget.controller.text);
                       }
-                      // K-243: clicking away is a person finishing the edit, so an
-                      // inline rename commits on it rather than throwing the work
-                      // away for everyone who does not press Enter.
+                      // Clicking away is a person finishing the edit, so an
+                      // inline rename commits on it rather than throwing the
+                      // work away for everyone who does not press Enter.
                       widget.onTapOutside?.call();
                       _focus.unfocus();
                       hideOverlay();

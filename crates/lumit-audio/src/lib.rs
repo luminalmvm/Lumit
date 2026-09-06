@@ -62,7 +62,7 @@ fn plan_of(buffer: Arc<AudioBuffer>) -> Arc<mix::MixPlan> {
     })
 }
 
-/// One output the machine offers (K-586, docs/09 §3.1).
+/// One output the machine offers (docs/09 §3.1).
 ///
 /// The **id is the name the sound system reports**, because cpal offers no
 /// other handle that survives a restart — and a name is what the user picked

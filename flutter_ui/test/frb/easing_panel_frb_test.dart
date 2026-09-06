@@ -1,4 +1,4 @@
-// The Easing panel (K-349): the editor with somewhere to live.
+// The Easing panel: the editor with somewhere to live.
 //
 // What the panel is *for* is that it outlasts a selection change, so these ask
 // the two questions a popup could not be asked — does the drawn shape survive
@@ -43,7 +43,7 @@ void main() {
   }
 
   group('Easing panel (frb)', () {
-    testWidgets('a preset tile applies its curve in one click (K-726)',
+    testWidgets('a preset tile applies its curve in one click',
         (tester) async {
       final m = await mount(tester, claimed: true);
 

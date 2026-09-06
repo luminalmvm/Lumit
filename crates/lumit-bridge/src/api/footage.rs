@@ -47,7 +47,7 @@ pub struct BridgeMediaInfo {
     pub duration: crate::api::effect::BridgeRational,
     /// The picture stream's codec as the container names it (`h264`, `png`),
     /// or `None` when there is no picture. The *user's* word for the file, not
-    /// a display string of ours, so it crosses untranslated (K-303).
+    /// a display string of ours, so it crosses untranslated.
     pub video_codec: Option<String>,
     /// The sound stream's codec, or `None` when the file is silent.
     pub audio_codec: Option<String>,
@@ -55,8 +55,8 @@ pub struct BridgeMediaInfo {
     /// sound — the panel says nothing rather than "0 channels".
     pub channels: u32,
     pub sample_rate: u32,
-    /// Whether the picture is a **still** rather than something that runs
-    /// (K-246). A still probes with a video stream too — one frame of it — so
+    /// Whether the picture is a **still** rather than something that runs.
+    /// A still probes with a video stream too — one frame of it — so
     /// the question is whether the stream lasts, and the engine
     /// ([`lumit_media::MediaProbe::runs_as_video`]) is the one place it is
     /// asked, so the panel cannot call a file a still while the Timeline cuts
@@ -130,7 +130,7 @@ impl FootageReference {
     }
 
     /// [`Self::resolve_path`] together with what kind of media the item says it
-    /// is: one file, or the numbered run that file belongs to (K-539).
+    /// is: one file, or the numbered run that file belongs to.
     ///
     /// Everything that probes, indexes or decodes footage asks for this rather
     /// than the bare path, because for an image sequence the two are different
@@ -202,7 +202,7 @@ impl FootageReference {
             }
 
             // **Relinking an image sequence by any of its files relinks the
-            // run** (K-539). A sequence item points at the run's *first* file,
+            // run**. A sequence item points at the run's *first* file,
             // so a user who picks frame 42 out of the picker is answered with
             // frame 1 of the run that frame 42 is in — before anything else
             // reads `picked`. Without this the path rewrite below would compare
@@ -459,7 +459,7 @@ impl FootageReference {
     }
 
     /// Where this item's file is, as the *project* records it: the relative
-    /// path a saved project actually carries (K-173), falling back to the
+    /// path a saved project actually carries, falling back to the
     /// absolute one only when the project has never been saved and there is
     /// nothing to be relative to.
     ///
@@ -493,7 +493,7 @@ impl FootageReference {
                 };
                 // Whether a file is *there* is not a question for the decoder,
                 // and a media-less build used to answer "ready" for a path that
-                // plainly was not on disk (K-273). Asking the filesystem costs
+                // plainly was not on disk. Asking the filesystem costs
                 // one stat and gives both builds the same answer.
                 if !path.exists() {
                     return Ok(LumitMediaStatus::Missing);
@@ -527,12 +527,12 @@ impl FootageReference {
 }
 
 // ---------------------------------------------------------------------------
-// Proxies (K-501): the second media reference, its two switches, and the
+// Proxies: the second media reference, its two switches, and the
 // MAKE-PROXY job that fills it in.
 // ---------------------------------------------------------------------------
 
 /// The stand-in file attached to one footage item, as the Project panel's row
-/// reads it (K-501).
+/// reads it.
 ///
 /// Three row states, all readable from here: no proxy at all (`None` from
 /// [`FootageReference::get_proxy`]), one attached and being read (`in_use`), and
@@ -549,7 +549,7 @@ impl FootageReference {
 pub struct BridgeProxy {
     /// Where the stand-in is, in the same form the Path column shows for the
     /// original: the relative path a saved project carries, else the absolute
-    /// one (K-173).
+    /// one.
     pub path: String,
     /// This item's own *use proxy* tick.
     pub enabled: bool,
@@ -686,8 +686,8 @@ impl FootageReference {
 
 /// A reference to a file on disk, built the way a relink builds one: the
 /// absolute path for this session, the project-relative path where there is a
-/// project directory to be relative to (the only one a saved `.lum` carries,
-/// K-173), and a content fingerprint so a moved file can be found again.
+/// project directory to be relative to (the only one a saved `.lum` carries),
+/// and a content fingerprint so a moved file can be found again.
 ///
 /// Every second file a project can name goes through here — a proxy, and the
 /// colour config — so none of them can quietly disagree about what gets written

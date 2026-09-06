@@ -32,7 +32,7 @@ import 'timeline_outline_row_frb.dart';
 /// `RawScrollbar` learns where its scrollable is from `ScrollNotification`s
 /// rising through *its own* subtree. Sat in a gutter beside the scroll view,
 /// it receives none — so it never repainted and the thumb was simply
-/// invisible (K-192). This listens to the controller instead, which is the
+/// invisible. This listens to the controller instead, which is the
 /// thing it actually needs to know about, and drags it directly.
 class GutterScrollbar extends StatelessWidget {
   final ScrollController controller;
@@ -121,7 +121,7 @@ class GutterScrollbar extends StatelessWidget {
                         child: thumb)
                     : Positioned(
                         left: offset,
-                        // The mockups' 7px bar (K-451, docs/15 §12A.6),
+                        // The mockups' 7px bar (docs/15 §12A.6),
                         // centred in whatever bar carries it — not a thumb
                         // grown from the bar's own height, which is how it
                         // came out 14 and read as a second toolbar.
@@ -259,22 +259,22 @@ class _GroupSeamState extends State<_GroupSeam> {
 /// The column-group header (docs/07 §4.2): **one kicker word per column**,
 /// grouped into the clusters, each cluster draggable as a unit to reorder them.
 ///
-/// Words, not icons (§12A.1, K-451). A column header names a container, and
+/// Words, not icons (§12A.1). A column header names a container, and
 /// §7.1 sets every container label as a kicker; a row of small glyphs made the
 /// reader work out what each column *was* from the same marks the cells below
 /// already carry. The switch cells still wear their icons — those are the
 /// controls; this is the legend.
 ///
 /// The second of the outline's two chrome rows, and so
-/// `t.density.timelineHeaderRow` — **23** under Regular, 18 under Compact
-/// (K-512). A shade shorter than the row above it, because that row is aimed
+/// `t.density.timelineHeaderRow` — **23** under Regular, 18 under Compact.
+/// A shade shorter than the row above it, because that row is aimed
 /// at and this one is mostly read.
 class ColumnHeader extends StatelessWidget {
   final List<TimelineGroup> order;
   final Map<TimelineGroup, double> widths;
 
-  /// Whether the compose group's width carries the matte mode toggles' room
-  /// (K-463): the same answer the rows are given, so the MATTE and BLEND
+  /// Whether the compose group's width carries the matte mode toggles' room:
+  /// the same answer the rows are given, so the MATTE and BLEND
   /// kickers stand over the cells below them either way.
   final bool matteToggles;
   final void Function(TimelineGroup dragged, TimelineGroup target) onReorder;
@@ -404,7 +404,7 @@ class ColumnHeader extends StatelessWidget {
       TimelineGroup.identity => Row(
           children: [
             // The twirl has no heading of its own, so the blank before the `#`
-            // is the row's own twirl slot and gap (K-461).
+            // is the row's own twirl slot and gap.
             const SizedBox(width: 16 + identityGap),
             title(l10n.columnNumber, l10n.columnNumber, numberCellWidth),
             const SizedBox(width: identityGap),
@@ -475,11 +475,10 @@ String keysNumberText(double v) =>
 /// What rides beside a graph channel's value, or null for a number with no
 /// unit — the readout row's answer to §12A.3's rule.
 ///
-/// An effect parameter's unit is its **declaration's** (K-443), never its id.
+/// An effect parameter's unit is its **declaration's**, never its id.
 /// A transform axis has no declaration to ask, so it is read off the property
 /// itself: the two scales and opacity are per cent, the three rotations are
-/// degrees, and everything else is a distance — pixels at composition size
-/// (K-419).
+/// degrees, and everything else is a distance — pixels at composition size.
 String? graphChannelUnit(GraphChannel channel) {
   if (channel.param case final param?) return unitRiderText(param.unit);
   if (channel.retime) return l10n.unitSymbolSeconds;
@@ -665,7 +664,7 @@ class TimelineSelection {
   });
 
   /// The selected **layers**, as their ids in string form — the shell's list
-  /// (K-217) as the rows read it.
+  /// as the rows read it.
   ///
   /// It travels here rather than down the build as a set, because a row that
   /// takes its lit state as a build-time flag can only be lit by rebuilding the
@@ -806,7 +805,7 @@ class _LayerBlockState extends State<LayerBlock> {
 
   /// **The block paints on its own layer.** Rebuilding one block is cheap
   /// (0.1 ms measured), but the band behind it sits on a single repaint
-  /// boundary (K-649), so one dirty row made the whole three-screenful picture
+  /// boundary, so one dirty row made the whole three-screenful picture
   /// re-record: 10–15 ms of the click frame with nothing else in it
   /// (docs/impl/ui-performance.md §4.3). With a layer per block the click
   /// re-records the two blocks whose light moved and the rest translate.
@@ -830,7 +829,7 @@ class Outline extends StatelessWidget {
   final Map<TimelineGroup, double> widths;
 
   /// Whether the compose group's width carries the matte mode toggles' room —
-  /// the panel's one answer for the whole outline (K-463).
+  /// the panel's one answer for the whole outline.
   final bool matteToggles;
 
   /// Which layers and rows are picked and which layer is marked — listened to
@@ -840,7 +839,7 @@ class Outline extends StatelessWidget {
   final ValueChanged<String> onSelectProperty;
   final ValueChanged<String> onEditProperty;
 
-  /// Open or close a Sequence layer's view (K-248).
+  /// Open or close a Sequence layer's view.
   final void Function(BridgeLayerEntry entry)? onOpenSequence;
   final ValueChanged<String> onToggle;
   final int playheadFrame;
@@ -850,14 +849,14 @@ class Outline extends StatelessWidget {
   final VoidCallback onChanged;
 
   /// The drag in flight and the block heights it slides by — the panel's, so
-  /// the lanes are working from the same two values (K-208).
+  /// the lanes are working from the same two values.
   final ValueNotifier<LayerDrag?> layerDrag;
   final List<double> blockHeights;
 
-  /// The layer `Enter` has just asked to rename (K-243).
+  /// The layer `Enter` has just asked to rename.
   final ValueNotifier<UuidValue?> renameRequest;
 
-  /// What a group header row can be asked to do (K-702) — the panel's, so the
+  /// What a group header row can be asked to do — the panel's, so the
   /// lane half's combined bar and this half's header act on one set.
   final GroupActions groupActions;
 
@@ -907,7 +906,7 @@ class Outline extends StatelessWidget {
     // stack open, so the outline costs what is on screen rather than what the
     // comp has.
     return LazyBlocks(
-      // Named for the same reason the lane half's band is (K-293): a zoom is
+      // Named for the same reason the lane half's band is: a zoom is
       // the lanes' business, so a budget test needs to be able to read this
       // half's paint count and find it unmoved.
       key: const ValueKey<String>('tl-outline-blocks'),
@@ -928,7 +927,7 @@ class Outline extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // The group's header row, when this layer is the topmost member
-              // of one (K-702) — drawn *inside* the carrier's block, which is
+              // of one — drawn *inside* the carrier's block, which is
               // why the row list is still one entry per layer and every drag
               // and window below it kept its shape.
               if (rows[i].groupHeader != null)
@@ -941,7 +940,7 @@ class Outline extends StatelessWidget {
                   actions: groupActions,
                   renameRequest: renameRequest,
                 ),
-              // The header's own effect lanes (K-731), under the header and
+              // The header's own effect lanes, under the header and
               // above the carrier's body — the same FoldRow the layer fold
               // draws, with the carrier's layer as the write road (the engine
               // routes a group instance by its shared lookup).
@@ -995,7 +994,7 @@ class Outline extends StatelessWidget {
                 renameRequest: renameRequest,
                 blockHeights: blockHeights,
               ),
-              // The room the lanes draw an open sequence view in (K-248). The
+              // The room the lanes draw an open sequence view in. The
               // outline has nothing to put here — the clips and their envelope are
               // the lane's to draw — but it must leave exactly the same gap, or
               // every row below this one sits at a different height on the two

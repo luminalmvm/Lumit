@@ -1,7 +1,7 @@
 # The websites: web/ and web-docs/
 
 Two small Astro sites. They live in the repo but outside the Cargo workspace, and
-nothing depends on them (K-279). You can change either without touching the app.
+nothing depends on them. You can change either without touching the app.
 
 | Directory | Site | Stack |
 |---|---|---|
@@ -52,8 +52,8 @@ The translate page is the other way round: it is built from files outside `web/`
 `src/pages/translate.astro` reads `flutter_ui/lib/l10n/app_en.arb`, the five
 translation files and `translation-state.json` at build time, works out what each
 language is missing or has gone stale on, and ships the lot inline — so the page is
-exactly as current as the deploy, and there is no runtime and nothing to fetch
-(K-653). Cloudflare clones the whole repository, so the relative path up out of
+exactly as current as the deploy, and there is no runtime and nothing to fetch.
+Cloudflare clones the whole repository, so the relative path up out of
 `web/` holds there as well as locally; a string added to `app_en.arb` is offered to
 translators on the next push.
 

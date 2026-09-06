@@ -1,5 +1,5 @@
 //! The macOS zero-copy Viewer target: a GPU texture Flutter samples directly
-//! via an IOSurface (K-195, the macOS sibling of [`crate::shared`] and
+//! via an IOSurface (the macOS sibling of [`crate::shared`] and
 //! [`crate::shared_linux`]).
 //!
 //! # In plain terms
@@ -47,7 +47,7 @@
 //! Same as the other two paths: after the copy we `poll(Wait)` so the GPU has
 //! finished writing before Flutter is told the frame is ready. We render into the
 //! *same* surface each frame; a fence handshake is the robust follow-up if
-//! tearing ever shows (recorded with K-177).
+//! tearing ever shows.
 
 #![allow(unsafe_code)]
 // `objc`'s `sel!` expansion tests `feature = "cargo-clippy"`, a feature no crate

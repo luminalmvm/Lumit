@@ -1,4 +1,4 @@
-// What app_en.arb is allowed to say (K-303, docs/07-UI-SPEC.md §13.2).
+// What app_en.arb is allowed to say (docs/07-UI-SPEC.md §13.2).
 //
 // The .arb is the one file a translator reads, so the rules that used to live in
 // reviewers' heads live here instead: a tooltip is the control's name, not a
@@ -12,7 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 /// The longest a tooltip may be, in words.
 ///
-/// **There is no exception list, and one may not be added** (K-482). This file
+/// **There is no exception list, and one may not be added**. This file
 /// used to keep nine names that were allowed a sentence each — the cache
 /// meters, the playback modes, the Flow switches, the preview-view badge —
 /// under docs/07-UI-SPEC.md §13.2's reserved "rich" tooltip. The reservation is
@@ -21,7 +21,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// empty state, or nowhere.
 ///
 /// The limit is **two**, which is what docs/07-UI-SPEC.md §13.2 and
-/// docs/15-DESIGN.md have said since K-440 — "one or two words, never more".
+/// docs/15-DESIGN.md both say — "one or two words, never more".
 /// It stood at five here for as long as the copy did, so the gate agreed with
 /// the older rule and let a sentence through as long as it was a short one.
 /// A shortcut no longer fits beside the name; the keymap teaches those, and
@@ -46,14 +46,14 @@ const _banned = {
 /// about tracking as a verb (§9), and these are features whose names contain
 /// it: following a camera, following motion, and the matte that After Effects
 /// calls a track matte. The menu rows are for work not built yet;
-/// `fxCameraTrack` is the effect itself (K-417), which is built.
+/// `fxCameraTrack` is the effect itself, which is built.
 const _bannedWordIsAnotherSense = {
   'menuTrackCamera',
   'menuTrackMotion',
   'menuTrackMatte',
   'toolCameraPan',
   'fxCameraTrack',
-  // The planar tracker (K-579) is the same verb sense as the camera's.
+  // The planar tracker is the same verb sense as the camera's.
   'fxPlanarTrack',
 };
 
@@ -96,7 +96,7 @@ void main() {
       long,
       isEmpty,
       reason: 'a tooltip is the control\'s name '
-          '(docs/07-UI-SPEC.md §13.2, K-482) — one word where one will do, and '
+          '(docs/07-UI-SPEC.md §13.2) — one word where one will do, and '
           'never more than $_tooltipWordLimit. Shorten these; there is '
           'no exception list to add them to.',
     );
@@ -161,7 +161,7 @@ void main() {
   test('the target languages have a file to be translated into', () {
     // The ingest tool writes these; a short one is normal and means the
     // language is part-way done. Every key it lacks falls back to English.
-    for (final tag in ['de', 'kk', 'uk', 'zh', 'zh_Hant']) {
+    for (final tag in ['de', 'es', 'kk', 'pl', 'uk', 'zh', 'zh_Hant']) {
       expect(File('lib/l10n/app_$tag.arb').existsSync(), isTrue,
           reason: 'app_$tag.arb is missing — it is a target language');
     }
@@ -171,7 +171,7 @@ void main() {
     // Flutter's generator refuses to run when these disagree, and it runs on
     // `flutter pub get` — so a file called app_zh.arb that says
     // `"@@locale": "zh-CN"` takes down every Flutter job in CI before a single
-    // test is reached. It has happened twice (K-311), which is why this is a
+    // test is reached. It has happened twice, which is why this is a
     // test and not a convention.
     final wrong = <String>[];
     for (final file in _arbFiles()) {
@@ -189,11 +189,11 @@ void main() {
   });
 
   test('there is no en-US', () {
-    // K-303: British English is the source and stays the source. An
+    // British English is the source and stays the source. An
     // app_en_US.arb is a copy of the source under another name — an American
     // spelling of Lumit is not a translation, it is a second source to keep
     // level with the first.
     expect(File('lib/l10n/app_en_US.arb').existsSync(), isFalse,
-        reason: 'British English is the source and there is no en-US (K-303)');
+        reason: 'British English is the source and there is no en-US');
   });
 }

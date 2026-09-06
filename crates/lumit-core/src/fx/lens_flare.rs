@@ -1,11 +1,11 @@
 //! Lens flare — the physically-based built-in (docs/08-EFFECTS.md §3.27,
-//! docs/impl/lens-flare.md; K-256..K-261).
+//! docs/impl/lens-flare.md).
 //!
 //! In plain terms: a camera lens is a stack of glass surfaces with an iris
 //! somewhere in the middle. A tiny fraction of the light reflects off the
 //! inside of one surface, bounces backward, reflects off another, and lands
 //! on the sensor anyway — one faint "ghost" per such two-bounce pair. This
-//! module simulates that literally, in the FlareSim manner (K-261): for each
+//! module simulates that literally, in the FlareSim manner: for each
 //! light source it fires a quasi-random spray of parallel rays across the
 //! front of a real lens prescription, refracts each ray surface by surface
 //! (reflecting at the pair's two surfaces), and SPLATS every survivor onto
@@ -18,8 +18,8 @@
 //! prescription, enumerates and ranks every ghost pair, measures each pair's
 //! defocus spread, renders a thumbnail to close the auto-exposure loop, and
 //! bakes the starburst. The per-frame splat runs on the GPU with this CPU
-//! implementation as its reference (§1.6 staged oracle, K-114 pattern for
-//! the CPU rung).
+//! implementation as its reference (§1.6 staged oracle, the usual pattern
+//! for the CPU rung).
 
 use super::cie;
 use super::fft::{fft2_inplace, fftshift2, Cx};
@@ -29,7 +29,7 @@ use super::lens_library::LENS_LIBRARY;
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LensFlareParams {
     /// Light position in RASTER PIXELS (px@comp converted through the §2.3
-    /// preview factor at resolve, the Transform-anchor convention — K-260;
+    /// preview factor at resolve, the Transform-anchor convention;
     /// point parameters are pixels, never % of frame). May leave the frame —
     /// an off-frame light keeps flaring.
     pub light: [f32; 2],
@@ -41,7 +41,7 @@ pub struct LensFlareParams {
     /// The working f-stop: stops the iris down from the lens's native
     /// f-number (scales the stop and the pupil mask together).
     pub fstop: f32,
-    /// Focus distance, metres (K-260): shifts the sensor plane by the
+    /// Focus distance, metres: shifts the sensor plane by the
     /// thin-lens image shift `f²/(1000·d − f)` mm. Real flares change shape
     /// dramatically with focus. Frame-time (animatable, no rebake); large
     /// values are infinity.
@@ -57,8 +57,8 @@ pub struct LensFlareParams {
     pub aperture_softness: f32,
     /// Gain on the ghost train alone.
     pub ghost_intensity: f32,
-    /// Softens the rendered ghosts (K-261): a box-blur radius in raster
-    /// pixels (3 passes approximate a Gaussian), px@comp since K-558.
+    /// Softens the rendered ghosts: a box-blur radius in raster
+    /// pixels (3 passes approximate a Gaussian), px@comp.
     /// This is FlareSim's Ghost Blur — a touch of out-of-focus softness
     /// that also hides the point-splat grain at lower qualities.
     pub ghost_softness: f32,
@@ -69,12 +69,12 @@ pub struct LensFlareParams {
     pub dispersion: f32,
     /// 0..1: blends every reflection from plain Fresnel (uncoated, bright
     /// neutral ghosts) toward each surface's anti-reflective coating
-    /// (K-261: per-surface layer counts from the lens file; K-371: or the
-    /// palette entry that element was set to).
+    /// (per-surface layer counts from the lens file, or the palette entry
+    /// that element was set to).
     pub coating: f32,
-    /// The coating on each glass element, by [`coating_design`] palette index
-    /// (K-371); [`COATING_AS_FILE`] leaves the prescription's own column
-    /// alone, which is what every element defaults to.
+    /// The coating on each glass element, by [`coating_design`] palette index;
+    /// [`COATING_AS_FILE`] leaves the prescription's own column alone, which
+    /// is what every element defaults to.
     ///
     /// Element 0 is the front piece of glass. Entries past the lens's own
     /// element count are ignored, and a lens with more elements than
@@ -90,14 +90,14 @@ pub struct LensFlareParams {
     /// (prepared for light layers; resolves as Manual until they land).
     pub source: u32,
     /// Manual mode: the half-width and half-height of the emitting area, in
-    /// raster pixels (px@comp, K-260). Zero — the default — is the point
-    /// source the effect has always had; anything larger is an AREA source,
-    /// whose emitting rectangle every ray integrates a different point of
-    /// (K-367), so its ghosts take the shape of the source rather than of a
-    /// point and cost no extra rays. Matte mode measures this
-    /// from the detected source instead and ignores the dial.
+    /// raster pixels (px@comp). Zero — the default — is the point source the
+    /// effect has always had; anything larger is an AREA source, whose
+    /// emitting rectangle every ray integrates a different point of, so its
+    /// ghosts take the shape of the source rather than of a point and cost no
+    /// extra rays. Matte mode measures this from the detected source instead
+    /// and ignores the dial.
     pub source_size: [f32; 2],
-    /// **Lights mode** (`source == 2`, K-360): the comp's own Light layers,
+    /// **Lights mode** (`source == 2`): the comp's own Light layers,
     /// resolved at this frame and already in raster fractions. Filled by the
     /// draw builder, which is the only place that can see the rest of the
     /// composition; empty in every other mode, and an empty list in Lights
@@ -115,7 +115,7 @@ pub struct LensFlareParams {
     /// Matte mode: half-width of the soft gate around the threshold.
     pub threshold_softness: f32,
     /// Scene-linear RGB multiplying every light's colour, in every source
-    /// mode (K-259): in Manual it *is* the flare's colour (the light is
+    /// mode: in Manual it *is* the flare's colour (the light is
     /// otherwise white); in Matte it tints what the sources contribute.
     pub light_tint: [f32; 3],
     /// Matte/Lights: whether a detected source's own colour tints its flare.
@@ -124,8 +124,8 @@ pub struct LensFlareParams {
     /// (there is no source colour to take).
     pub use_source_colour: bool,
     /// Matte mode: read the matte inverted (`1 − rgb`), so its DARK parts are
-    /// the lights — the uniform matte row's Invert (K-395). Off is every flare
-    /// saved before the switch existed (K-258).
+    /// the lights — the uniform matte row's Invert. Off is every flare
+    /// saved before the switch existed.
     pub matte_invert: bool,
     /// Horizontal stretch of the whole flare about the frame centre
     /// (1 = spherical, 1.33/2 = anamorphic looks).
@@ -134,13 +134,13 @@ pub struct LensFlareParams {
     /// wavelength count; Draft renders the flare buffer at half resolution).
     pub quality: u32,
     /// Ray-budget multiplier on the Quality tier's pupil grid, 0.25..4
-    /// (K-265, owner-asked): the tiers pick a sensible base, and this dial
+    /// (owner-asked): the tiers pick a sensible base, and this dial
     /// hands the trade to the user when a lens needs more (or a preview
     /// less) without changing wavelength count or buffer resolution.
     /// Frame-time — never rebakes.
     pub detail: f32,
     /// How the flare element combines with the layer under it — an index
-    /// into [`BLEND_OPTIONS`] (K-289, replacing the old Transparent/Black
+    /// into [`BLEND_OPTIONS`] (replacing the old Transparent/Black
     /// Background choice). Default [`BLEND_ADD`], the old Transparent
     /// behaviour exactly; [`BLEND_NORMAL`] shows the flare alone on its own
     /// opaque black background, which is what the old Black option was for.
@@ -151,12 +151,12 @@ pub struct LensFlareParams {
     pub mix: f32,
 }
 
-/// The Blend menu's options, in code order (K-289, docs/08 §3.27). The
+/// The Blend menu's options, in code order (docs/08 §3.27). The
 /// flare is a black-backed light *element*: everything the effect renders
 /// lands on a frame that is pure black where there is no flare, and this
 /// menu says how that element combines with the layer beneath it — the same
 /// question a layer's own Mode dropdown asks, and the same curated set Echo
-/// offers for the same reason (K-149, T21: the HSL / burn / dodge modes are
+/// offers for the same reason (T21: the HSL / burn / dodge modes are
 /// ill-defined on a premultiplied light overlay, so they are not listed).
 ///
 /// [`BLEND_NORMAL`] heads the list because it is the odd one out: the flare
@@ -192,7 +192,7 @@ pub const BLEND_ADD: u32 = 1;
 /// arithmetic order so the two agree bit-for-bit (§1.6).
 ///
 /// Both sides are **premultiplied linear RGBA** and every mode runs per
-/// channel on all four, exactly as Echo's combine does (K-149) and for the
+/// channel on all four, exactly as Echo's combine does and for the
 /// same reason: this is light being added to light, not a perceptual
 /// re-encode of a finished picture. `e` is the flare element — its RGB is
 /// what the trace and starburst put on the frame, its alpha the coverage
@@ -205,7 +205,7 @@ pub fn flare_blend(mode: u32, d: [f32; 4], e: [f32; 4]) -> [f32; 4] {
         // Normal: the element replaces the layer, on the opaque black it
         // was rendered against. The old Background = Black, as a blend.
         BLEND_NORMAL => [e[0], e[1], e[2], 1.0],
-        // 1..: the light-combine table Echo's combine shares (K-149), the
+        // 1..: the light-combine table Echo's combine shares, the
         // layer as backdrop. Index 1 (Add) is bit-identical to the pre-menu
         // behaviour, so a project that never touched this renders the same.
         m => super::cpu::light_blend(m - 1, d, e),
@@ -221,7 +221,7 @@ pub fn quality_ladder(quality: u32) -> (u32, u32, u32) {
         0 => (32, 3, 2),
         2 => (96, 16, 1),
         3 => (144, 32, 1),
-        // Normal must stand on its own as the working tier (K-262): the
+        // Normal must stand on its own as the working tier: the
         // adaptive per-pair budget spends most of this on the big
         // defocused ghosts, where the cell facets used to show.
         _ => (64, 8, 1),
@@ -246,7 +246,7 @@ pub const APERTURE_RES: u32 = 256;
 /// ndc 0.75.
 pub const APERTURE_SIZE: f32 = 0.75;
 
-/// The wavelength the ghost-edge ringing is scaled at, µm (K-370).
+/// The wavelength the ghost-edge ringing is scaled at, µm.
 ///
 /// The rim fringes are a single achromatic profile rather than one per
 /// wavelength: their spacing goes as `√λ`, so across the visible band it
@@ -255,31 +255,31 @@ pub const APERTURE_SIZE: f32 = 0.75;
 /// arithmetic per ray.
 pub const RING_LAMBDA_UM: f32 = 0.55;
 
-/// Field-angle slices the starburst is baked at (K-365).
+/// Field-angle slices the starburst is baked at.
 ///
 /// Off-axis the diffracting hole is not the iris alone: the front and rear
 /// mechanical stops clip it into a **cat's-eye**, so the starburst squashes
 /// and leans as the light moves out towards the frame corner. The bake
 /// therefore renders the aperture at `STARBURST_FIELDS` field angles —
-/// slice 0 on-axis (the picture the effect drew before K-365), slice
-/// `STARBURST_FIELDS − 1` at the sensor-corner field angle — and the
-/// combine blends the two slices bracketing each light's own field
+/// slice 0 on-axis (the picture the effect drew before these slices
+/// existed), slice `STARBURST_FIELDS − 1` at the sensor-corner field angle —
+/// and the combine blends the two slices bracketing each light's own field
 /// fraction. Eight is the point where doubling the count stops changing the
 /// blended sprite (the vignette varies smoothly in the field) while the
 /// bake still parallelises one slice per core.
 pub const STARBURST_FIELDS: usize = 8;
 
 /// Distinct sources a frame detects (Matte mode's top-K cap; Manual is one),
-/// and — since K-367 — the light slots the trace carries, because the two are
-/// again the same number: one source is one light, whatever its size.
-/// 16 since K-267: area sources anchor on one slot each, and eight anchors
-/// starved scenes with several practicals plus an area source.
+/// and the light slots the trace carries, because the two are the same
+/// number: one source is one light, whatever its size. 16 because area
+/// sources anchor on one slot each, and eight anchors starved scenes with
+/// several practicals plus an area source.
 ///
-/// K-355 briefly split this into a separate `MAX_LIGHTS` of 64, because an
-/// area source was then rendered by REPLICATING itself into up to 5×5 point
-/// lights. K-367 integrates the source inside the ray loop instead, so the
-/// replication — and the four-times-larger slot table that existed only to
-/// hold it — is gone.
+/// An earlier version briefly split this into a separate `MAX_LIGHTS` of 64,
+/// because an area source was then rendered by REPLICATING itself into up to
+/// 5×5 point lights. The trace integrates the source inside the ray loop
+/// instead, so the replication is gone, and with it the four-times-larger
+/// slot table that existed only to hold the copies.
 pub const MAX_SOURCES: usize = 16;
 
 /// Detection tile side, raster pixels (impl note §6).
@@ -292,20 +292,20 @@ pub const SUPPRESS_TILES: i64 = 2;
 /// (FlareSim's `min_intensity`).
 pub const PAIR_MIN_INTENSITY: f32 = 1e-7;
 
-/// The empty bounce slot (K-368): a ghost path is `[a, b, c, d]` and a
-/// two-bounce path — every ghost the effect traced before K-368 — is
-/// `[a, b, NO_BOUNCE, NO_BOUNCE]`.
+/// The empty bounce slot: a ghost path is `[a, b, c, d]` and a
+/// two-bounce path — every ghost the effect traced before four-bounce paths
+/// were added — is `[a, b, NO_BOUNCE, NO_BOUNCE]`.
 ///
-/// **The path model.** Slot 0 and slot 1 keep exactly the meaning K-261 gave
-/// them: the ray runs forward to `b` and reflects there, back to `a` and
-/// reflects there, then forward to the sensor, so `a < b` always. A
-/// four-bounce path adds the same figure once more: forward from `a` to `c`
-/// and reflect, back to `d` and reflect, then forward to the sensor. Hence
-/// `a < c` (the third bounce is past the second) and `d < c`, while `c` may
-/// sit anywhere relative to `b` and `d` may be `a` itself.
+/// **The path model.** Slot 0 and slot 1 keep their original meaning: the
+/// ray runs forward to `b` and reflects there, back to `a` and reflects
+/// there, then forward to the sensor, so `a < b` always. A four-bounce path
+/// adds the same figure once more: forward from `a` to `c` and reflect, back
+/// to `d` and reflect, then forward to the sensor. Hence `a < c` (the third
+/// bounce is past the second) and `d < c`, while `c` may sit anywhere
+/// relative to `b` and `d` may be `a` itself.
 pub const NO_BOUNCE: u32 = u32::MAX;
 
-/// Four-bounce candidates the bake ray-probes (K-368).
+/// Four-bounce candidates the bake ray-probes.
 ///
 /// There are about N⁴/4 four-bounce paths on an N-interface prescription —
 /// a hundred thousand on a normal lens, a couple of million on a zoom — and
@@ -319,7 +319,7 @@ pub const FOUR_BOUNCE_PROBE_CAP: usize = 1500;
 
 /// Ranked pairs a frame can ever render — the Max ghosts parameter's own
 /// ceiling (docs/08 §3.27), and so the number of pairs the bake measures an
-/// image spread for (K-263). A pair past it keeps the neutral spread of 1.0
+/// image spread for. A pair past it keeps the neutral spread of 1.0
 /// and would render at the Quality ladder's base grid, which is what an
 /// unmeasurable pair has always done.
 pub const MAX_RENDERED_PAIRS: usize = 200;
@@ -335,15 +335,15 @@ pub struct FlareLight {
     pub pos: [f32; 2],
     /// Source colour times gate weight; all-zero entries are dead slots.
     pub rgb: [f32; 3],
-    /// Half-extent of the emitting area, as a fraction of the raster (K-355).
+    /// Half-extent of the emitting area, as a fraction of the raster.
     /// Zero is a point source and behaves exactly as it always did; anything
     /// larger is an AREA source, whose emitting rectangle each ray integrates
-    /// a different point of — see [`source_jitter`] (K-367).
+    /// a different point of — see [`source_jitter`].
     pub extent: [f32; 2],
 }
 
-/// Irrational rotations for the two source-integration axes (K-367,
-/// re-chosen K-378), driven by the ray's own pupil-grid indices.
+/// Irrational rotations for the two source-integration axes, driven by the
+/// ray's own pupil-grid indices.
 ///
 /// **Two different irrationals, one per axis.** A single constant would put
 /// every ray's offset on one diagonal of the source rectangle, sampling a
@@ -351,9 +351,9 @@ pub struct FlareLight {
 /// (u, v) pairs cover the rectangle evenly and stay uncorrelated however many
 /// rays the grid has.
 ///
-/// **Each must also be a good rotation ALONE** (K-378), because each drives
-/// its own axis by its own index. K-367 took the plastic constant's 2D pair
-/// (1/ρ, 1/ρ²), whose second number is what a low-discrepancy POINT SET
+/// **Each must also be a good rotation ALONE**, because each drives its own
+/// axis by its own index. An earlier version took the plastic constant's 2D
+/// pair (1/ρ, 1/ρ²), whose second number is what a low-discrepancy POINT SET
 /// wants — but 1/ρ² = 0.5698 is within 0.002 of 4/7, so as a 1D rotation it
 /// lays its samples into seven combs that drift too slowly to wash out
 /// across a pupil grid, and every area source wore them as stripes. The
@@ -369,12 +369,12 @@ pub const PHI_U: f32 = 0.754_877_7;
 /// See [`PHI_U`].
 pub const PHI_V: f32 = 0.682_327_8;
 
-/// Phase step between wavelength bands in the source rectangle (K-378): band
+/// Phase step between wavelength bands in the source rectangle: band
 /// `b` samples the source shifted by `b` golden-ratio turns. Bands trace and
 /// splat independently and their pictures sum, so giving each its own phase
 /// multiplies the effective source sampling by the band count for free and
 /// averages each band's residual reconstruction ripple toward the mean —
-/// which is what buried what remained of the K-367 stripes. A point source
+/// which is what buried the stripes that remained. A point source
 /// shifts a zero extent by any phase and stays exactly zero.
 pub const PHI_BAND: f32 = 0.618_034;
 
@@ -383,7 +383,7 @@ pub const PHI_BAND: f32 = 0.618_034;
 /// **Why a triangle wave rather than plain `fract`.** `fract` is the usual
 /// low-discrepancy trick, but it JUMPS the whole range each time it wraps,
 /// and two rays adjacent in the pupil grid can land either side of a wrap.
-/// K-366's splat footprints are central differences over exactly those
+/// The splat footprints are central differences over exactly those
 /// neighbours, so a jump there inflates one splat by the entire width of the
 /// source and stamps a bright bar across the ghost. A triangle wave is
 /// continuous at every wrap, still uniform, and just as deterministic.
@@ -392,11 +392,10 @@ fn tri(x: f32) -> f32 {
 }
 
 /// Where in its source's emitting rectangle the ray at pupil-grid `(i, j)`,
-/// tracing band `band`, takes its light from (K-367, K-378), as an offset
-/// from the source centre in the same raster fractions [`FlareLight::pos`]
-/// uses.
+/// tracing band `band`, takes its light from, as an offset from the source
+/// centre in the same raster fractions [`FlareLight::pos`] uses.
 ///
-/// This is what replaced K-355's replication. An area source used to be split
+/// This is what replaced the old replication. An area source used to be split
 /// into up to 5×5 point lights and the whole ray pipeline run once per
 /// sample: 25× the rays, and — wherever a ghost was smaller than the sample
 /// spacing — N visibly separate copies of the aperture instead of one smeared
@@ -408,9 +407,9 @@ fn tri(x: f32) -> f32 {
 ///
 /// The offsets hop by more than the whole source between neighbouring rays —
 /// that is what equidistributes them — so the reconstruction leans on two
-/// K-378 properties: [`ray_axes`] covers the WIDER of each ray's two gaps,
-/// and each band re-samples the source at its own [`PHI_BAND`] phase so the
-/// bands' summed ripple averages out.
+/// properties: [`ray_axes`] covers the WIDER of each ray's two gaps, and each
+/// band re-samples the source at its own [`PHI_BAND`] phase so the bands'
+/// summed ripple averages out.
 ///
 /// A zero extent gives a zero offset for every `(i, j)` at every band, so a
 /// point source is bit-identical to what it rendered before this existed.
@@ -423,12 +422,12 @@ pub(crate) fn source_jitter(i: usize, j: usize, band: usize, extent: [f32; 2]) -
 }
 
 /// The fraction of the raster below which a source's starburst is a single
-/// stamp — that is, below which the source is a point of light (K-367).
+/// stamp — that is, below which the source is a point of light.
 pub const SB_MIN_EXTENT: f32 = 0.004;
 /// Starburst stamps per axis across a source wider than [`SB_MIN_EXTENT`].
 pub const SB_STAMPS: u32 = 3;
 
-/// How many starburst stamps a source spends on each axis (K-367).
+/// How many starburst stamps a source spends on each axis.
 ///
 /// The ghosts integrate the source per ray, but the **starburst** cannot: it
 /// is a baked sprite, not a traced path. It is also *shift-invariant* — the
@@ -436,7 +435,7 @@ pub const SB_STAMPS: u32 = 3;
 /// only where it is centred — so the starburst of an extended source is
 /// exactly the point starburst convolved with the source. This is that
 /// convolution in quadrature form: a fixed 3×3 grid spanning ±extent, each
-/// stamp carrying `1/(nx·ny)` of the light, which is what K-355's per-sample
+/// stamp carrying `1/(nx·ny)` of the light, which is what the old per-sample
 /// stamping did as a side effect and what the per-ray integration would
 /// otherwise have thrown away. A softbox's spike smears across the softbox;
 /// a point's does not move, and stamps once at full strength — bit-identical
@@ -470,11 +469,11 @@ pub const DEAD_LIGHT: FlareLight = FlareLight {
 ///
 /// Manual is one source at the parameter position (raster pixels over the
 /// raster `w × h` — the fraction the trace consumes), carrying the Light tint
-/// and the Source size dial's half-extent (K-355; zero is the point source it
-/// has always been). **Lights mode** (K-360) hands back the comp's own Light
+/// and the Source size dial's half-extent (zero is the point source it
+/// has always been). **Lights mode** hands back the comp's own Light
 /// layers instead, which the draw builder resolved into `p.lights`; an area
 /// light arrives with a real extent and so flares as its own shape through
-/// exactly the per-ray integration K-367 gave detected sources.
+/// exactly the per-ray integration detected sources use.
 ///
 /// Matte mode never reaches here — its lights are found GPU-side.
 pub fn manual_light(p: &LensFlareParams, w: u32, h: u32) -> Vec<FlareLight> {
@@ -503,7 +502,7 @@ pub fn manual_light(p: &LensFlareParams, w: u32, h: u32) -> Vec<FlareLight> {
     }]
 }
 
-/// The sensor shift for a focus distance (K-260): the thin-lens image shift
+/// The sensor shift for a focus distance: the thin-lens image shift
 /// from the infinity position, `f²/(1000·d − f)` mm, clamped so a degenerate
 /// distance cannot fling the sensor. Shared by the CPU reference and the GPU
 /// uniform fill.
@@ -515,7 +514,7 @@ pub fn focus_shift_mm(focus_m: f32, efl_mm: f32) -> f32 {
     (efl_mm * efl_mm / denom).clamp(0.0, efl_mm)
 }
 
-/// The soft threshold gate (K-363): 0 at and below `threshold`, 1 at
+/// The soft threshold gate: 0 at and below `threshold`, 1 at
 /// `threshold + softness`, smoothstep between. **One-sided by decision**: the
 /// threshold is the absolute scene-linear luma a pixel must EXCEED to flare
 /// at all. At 1.0 only over-range highlights flare; at 0.0 anything brighter
@@ -540,13 +539,13 @@ pub fn threshold_gate(luma: f32, threshold: f32, softness: f32) -> f32 {
 /// construction — no float reduction order depends on threading.
 ///
 /// Each light's colour is the summed flux of every gated tile nearest it —
-/// `(use_source ? tile rgb : white) × gate` per tile, times the tint
-/// (K-259/K-267) — so the same function serves "the practical's own colour
-/// flares", "this matte only says *where*", and area sources whose light
-/// is their whole lit extent rather than one pixel.
-/// What one detection tile knows about the light inside it (K-355).
+/// `(use_source ? tile rgb : white) × gate` per tile, times the tint — so the
+/// same function serves "the practical's own colour flares", "this matte only
+/// says *where*", and area sources whose light is their whole lit extent
+/// rather than one pixel.
+/// What one detection tile knows about the light inside it.
 ///
-/// Through K-354 a tile was a single pair — its brightest pixel's luma and
+/// A tile used to be a single pair — its brightest pixel's luma and
 /// index — and everything downstream used that one pixel for the tile's
 /// position AND its colour. That is what made a flare *jump* on real footage:
 /// inside a practical, which pixel is brightest changes frame to frame with
@@ -600,7 +599,7 @@ pub fn detect_lights(
     let tx = w.div_ceil(DETECT_TILE) as usize;
     let ty = h.div_ceil(DETECT_TILE) as usize;
     let mut tiles: Vec<TileStat> = vec![TileStat::EMPTY; tx * ty];
-    // The Matte row's Invert (K-395), and the only place the flare's matte is
+    // The Matte row's Invert, and the only place the flare's matte is
     // read — so `1 − rgb` here IS the switch, for luma, gate and source colour
     // alike. The WGSL twin inverts at the same two loads.
     let rgb = |i: usize| {
@@ -624,7 +623,7 @@ pub fn detect_lights(
                 tile.luma_max = luma;
                 tile.index = y * w + x;
             }
-            // Every lit pixel contributes, not just the brightest (K-355):
+            // Every lit pixel contributes, not just the brightest:
             // `w` is the pixel's own gate, `f` its gated flux.
             let g = threshold_gate(luma, threshold, softness);
             if g > 0.0 {
@@ -671,11 +670,11 @@ pub fn detect_lights(
             }
         }
     }
-    // Area sources (K-267): every gated tile's flux — its brightest pixel's
+    // Area sources: every gated tile's flux — its brightest pixel's
     // colour (or white) times its gate — lands on the NEAREST anchor
     // (Chebyshev in tiles; ties to the lowest anchor index), tile order
     // fixed for determinism. A one-tile point source is its own anchor's
-    // only contributor, so it reads exactly as before K-267; a practical
+    // only contributor, so it reads exactly as it always did; a practical
     // spanning many tiles finally weighs as its whole lit area instead of
     // one pixel.
     let mut acc = vec![[0.0_f32; 3]; anchors.len()];
@@ -705,7 +704,7 @@ pub fn detect_lights(
                 }
             }
             // The tile's MEAN colour over its lit pixels, not its brightest
-            // pixel's (K-355). One sparkle among a thousand lit pixels now
+            // pixel's. One sparkle among a thousand lit pixels now
             // shifts the colour by a thousandth instead of defining it.
             let src = if !use_source_colour {
                 [1.0, 1.0, 1.0]
@@ -742,12 +741,12 @@ pub fn detect_lights(
         .iter()
         .zip(acc.iter().zip(centroid.iter().zip(&spread)))
         .map(|(&(_, idx), (rgb, (cen, spr)))| {
-            // **Where the light IS, is the centre of its light** (K-354, and
-            // K-355 made it immovable by any one pixel). Pinning the anchor to
-            // its brightest pixel quantised the light to one pixel of a source
-            // that may span hundreds, and on FOOTAGE that pixel wanders:
-            // sensor noise and specular sparkle move it frame to frame, so the
-            // whole flare jittered even though the practical had not moved.
+            // **Where the light IS, is the centre of its light**, and no one
+            // pixel can move it. Pinning the anchor to its brightest pixel
+            // quantised the light to one pixel of a source that may span
+            // hundreds, and on FOOTAGE that pixel wanders: sensor noise and
+            // specular sparkle move it frame to frame, so the whole flare
+            // jittered even though the practical had not moved.
             let (px, py) = if cen[2] > 0.0 {
                 (cen[0] / cen[2], cen[1] / cen[2])
             } else {
@@ -774,7 +773,7 @@ pub fn detect_lights(
 }
 
 // ---------------------------------------------------------------------------
-// The lens prescription (K-261: parsed from the embedded .lens library).
+// The lens prescription (parsed from the embedded .lens library).
 // ---------------------------------------------------------------------------
 
 /// One optical surface, flattened for the trace and mirrored field-for-field
@@ -798,7 +797,7 @@ pub struct FlareSurface {
     pub coating_layers: f32,
     /// 1.0 on the aperture-stop surface, else 0.0 (the f-stop scales it).
     pub is_stop: f32,
-    /// Which [`coating_design`] this surface is coated with (K-371), as f32
+    /// Which [`coating_design`] this surface is coated with, as f32
     /// for the POD mirror: [`COATING_AS_FILE`] means "whatever the
     /// prescription's own column says", which is what every surface held
     /// before per-element coatings existed.
@@ -827,7 +826,7 @@ pub struct FlareBaked {
     pub native_fstop: f32,
     /// Front-element clear semi-aperture, mm.
     pub front_semi_ap: f32,
-    /// The pupil spray's radius, mm (K-261): the entrance pupil
+    /// The pupil spray's radius, mm: the entrance pupil
     /// `focal / (2 · native_fstop)` with half again as margin (ghost paths
     /// accept rays the imaging pupil rejects), clamped to the front
     /// element. Spraying the whole front bezel instead wastes most rays —
@@ -837,14 +836,14 @@ pub struct FlareBaked {
     pub start_z_mm: f32,
     /// Ranked ghost paths, brightest first; the frame renders the first
     /// `max_ghosts`. Two-bounce and four-bounce paths share one list and one
-    /// ranking (K-368) — see [`NO_BOUNCE`] for the layout.
+    /// ranking — see [`NO_BOUNCE`] for the layout.
     pub pairs: Vec<[u32; 4]>,
     /// Each pair's on-axis image extent as a fraction of the sensor
-    /// diagonal, parallel to `pairs` (K-262): what [`pair_grid`] spends the
+    /// diagonal, parallel to `pairs`: what [`pair_grid`] spends the
     /// ray budget by. A tight 5%-of-frame ghost needs a fraction of the
     /// grid a frame-filling defocused one does.
     pub spreads: Vec<f32>,
-    /// Per-surface spectral reflectance (K-364, entry A2): the thin-film
+    /// Per-surface spectral reflectance (entry A2): the thin-film
     /// stack's R evaluated on a fixed (lambda, cos theta) grid at bake time,
     /// so the per-frame trace reads a table instead of chaining 2x2 complex
     /// matrices per ray. Layout `[surface][direction][lambda][cos]` with
@@ -856,10 +855,10 @@ pub struct FlareBaked {
     /// [`REFL_COS_BINS`] bin centres. Uncoated surfaces store plain Fresnel
     /// at the same grid, so the trace has one path.
     pub reflectance: Vec<f32>,
-    /// The auto-exposure gain (closed loop, K-258): multiplies every splat
+    /// The auto-exposure gain (closed loop): multiplies every splat
     /// so all bundled lenses read comparably at default Intensity.
     pub energy_gain: f32,
-    /// The starburst sprite at [`STARBURST_FIELDS`] field angles (K-365),
+    /// The starburst sprite at [`STARBURST_FIELDS`] field angles,
     /// slice-major: `STARBURST_FIELDS × STARBURST_RES² × 3` floats, slice
     /// 0 on-axis and slice `STARBURST_FIELDS − 1` at the sensor corner,
     /// each peak-normalised. One azimuth only (the cat's-eye leans along
@@ -877,7 +876,7 @@ pub struct Prescription {
     pub sensor_z_mm: f32,
 }
 
-/// Parse a .lens text (K-261, the FlareSim/PhotonsToPhotos format): metadata
+/// Parse a .lens text (the FlareSim/PhotonsToPhotos format): metadata
 /// lines (`name:`, `focal_length:`), then `surfaces:` rows of
 /// `radius thickness ior abbe semi_ap coating` with `stop`/`inf` keywords.
 /// Malformed rows are skipped; a file with under 3 surfaces is rejected.
@@ -988,7 +987,7 @@ pub fn cauchy_ior(a: f32, b: f32, lambda_nm: f32) -> f32 {
 }
 
 /// Unpolarised Fresnel reflectance at a dielectric interface, by incidence
-/// cosine (K-261, the FlareSim formulation the WGSL mirrors).
+/// cosine (the FlareSim formulation the WGSL mirrors).
 pub fn fresnel_cos(cos_i: f32, n1: f32, n2: f32) -> f32 {
     let cos_i = cos_i.abs();
     let eta = n1 / n2;
@@ -1050,7 +1049,7 @@ pub const MAX_COATING_LAYERS: usize = 6;
 ///
 /// A lens prescription publishes a layer *count*, never the recipe: real
 /// coating designs are manufacturer secrets, and the literature is unanimous
-/// that they can only be measured, not predicted (K-356). What a renderer can
+/// that they can only be measured, not predicted. What a renderer can
 /// do is use the textbook design of each order, which is what these are:
 ///
 /// - **1 layer** — MgF₂ quarter wave, the classic single coating. One
@@ -1096,17 +1095,17 @@ pub fn coating_stack(layers: f32) -> [(f32, f32); MAX_COATING_LAYERS] {
 }
 
 /// The palette entry meaning "leave this surface's coating as the `.lens`
-/// prescription describes it" (K-371) — the default, and what every surface
+/// prescription describes it" — the default, and what every surface
 /// held before per-element coatings existed.
 pub const COATING_AS_FILE: u32 = 0;
 
 /// How many entries [`coating_design`] offers, including [`COATING_AS_FILE`].
 pub const COATING_DESIGNS: u32 = 7;
 
-/// Most glass elements a lens may have its coatings set on individually
-/// (K-371). The bundled library runs 4 to 18; a user `.lens` file with more
-/// elements than this keeps its own coating column on the rest, which is the
-/// same fallback an unset row takes.
+/// Most glass elements a lens may have its coatings set on individually. The
+/// bundled library runs 4 to 18; a user `.lens` file with more elements than
+/// this keeps its own coating column on the rest, which is the same fallback
+/// an unset row takes.
 pub const MAX_COATING_ELEMENTS: usize = 20;
 
 /// One coating design: the layer stack, outermost first, and the wavelength
@@ -1120,7 +1119,7 @@ pub struct CoatingDesign {
     pub design_nm: f32,
 }
 
-/// The coating on one glass element (K-371), by palette index.
+/// The coating on one glass element, by palette index.
 ///
 /// # In plain terms
 ///
@@ -1137,7 +1136,7 @@ pub struct CoatingDesign {
 /// reflectance minimum sits there, so what the surface *does* reflect is the
 /// complement — and shifting the design wavelength is the honest way to get a
 /// differently coloured ghost, because it is what real coating runs differ in.
-/// Every entry here is a textbook design of its order (K-356: real recipes are
+/// Every entry here is a textbook design of its order (real recipes are
 /// manufacturer secrets and can only be measured), chosen by **measuring** the
 /// residual across 420–680 nm at normal incidence and keeping the ones that
 /// are both distinctly coloured and, like a real coating, dimmer than bare
@@ -1221,7 +1220,7 @@ pub fn coating_design(choice: u32, file_layers: f32) -> CoatingDesign {
     CoatingDesign { stack, design_nm }
 }
 
-/// The parameter id of each element's coating row (K-371), element 0 first.
+/// The parameter id of each element's coating row, element 0 first.
 /// Spelled out rather than formatted so the schema, the resolve step and the
 /// tests all name the same strings and a typo is a compile error.
 pub const COATING_ELEMENT_IDS: [&str; MAX_COATING_ELEMENTS] = [
@@ -1247,8 +1246,8 @@ pub const COATING_ELEMENT_IDS: [&str; MAX_COATING_ELEMENTS] = [
     "coating_el20",
 ];
 
-/// How many glass elements each bundled lens has, in [`LENS_LIBRARY`] order
-/// (K-371) — what the panel turns each element row's threshold into.
+/// How many glass elements each bundled lens has, in [`LENS_LIBRARY`] order —
+/// what the panel turns each element row's threshold into.
 ///
 /// Parsed rather than tabulated: the library is generated, and a hand-kept
 /// second table would be one import away from lying about it.
@@ -1264,8 +1263,8 @@ pub fn library_element_counts() -> Vec<u32> {
         .collect()
 }
 
-/// Which lenses have at least `n` glass elements, as [`LENS_LIBRARY`] indices
-/// (K-371): the set an element row's group is shown for.
+/// Which lenses have at least `n` glass elements, as [`LENS_LIBRARY`]
+/// indices: the set an element row's group is shown for.
 #[must_use]
 pub fn lenses_with_at_least(n: u32) -> Vec<u32> {
     library_element_counts()
@@ -1288,7 +1287,7 @@ pub const COATING_DESIGN_OPTIONS: &[&str] = &[
     "Broadband, blue",
 ];
 
-/// Which glass element each surface belongs to (K-371), parallel to
+/// Which glass element each surface belongs to, parallel to
 /// `surfaces`; `−1` for a surface that bounds no glass (the aperture stop,
 /// and the last air gap).
 ///
@@ -1326,14 +1325,14 @@ pub fn surface_elements(surfaces: &[FlareSurface]) -> Vec<i32> {
     out
 }
 
-/// How many glass elements a surface table has (K-371) — what the panel shows
+/// How many glass elements a surface table has — what the panel shows
 /// a coating row for.
 #[must_use]
 pub fn element_count(surfaces: &[FlareSurface]) -> usize {
     surfaces.iter().filter(|s| s.cauchy_a > 1.0001).count()
 }
 
-/// Stamp each surface with the palette entry its element was set to (K-371).
+/// Stamp each surface with the palette entry its element was set to.
 /// Surfaces belonging to no element, and elements past
 /// [`MAX_COATING_ELEMENTS`] or left at [`COATING_AS_FILE`], keep the
 /// prescription's own coating column.
@@ -1357,7 +1356,7 @@ fn cmul(a: (f32, f32), b: (f32, f32)) -> (f32, f32) {
 
 /// Reflectance of a multi-layer thin-film stack by the **characteristic
 /// transfer matrix** — the standard treatment, and the one thing that gets
-/// ghost colour right (K-356).
+/// ghost colour right.
 ///
 /// Per layer the phase thickness is `δ = 2π n d cos θ / λ` and the optical
 /// admittance `η = n cos θ` (s polarisation) or `n / cos θ` (p); the layer's
@@ -1459,10 +1458,10 @@ pub fn stack_reflectance(
 
 /// Reflectance of one lens surface: uncoated Fresnel blended toward that
 /// surface's AR coating by the Coating dial. The design comes from the
-/// surface's own [`FlareSurface::coating_design`] (K-371) — the element's
+/// surface's own [`FlareSurface::coating_design`] — the element's
 /// palette choice, or the prescription's own column where the row is left as
 /// the file — resolved by [`coating_design`] and evaluated by
-/// [`stack_reflectance`] (K-356, superseding the single-layer-times-a-quarter
+/// [`stack_reflectance`] (superseding the single-layer-times-a-quarter
 /// approximation).
 pub fn surface_reflectance(
     cos_i: f32,
@@ -1485,7 +1484,7 @@ pub fn surface_reflectance(
     (plain + (coated - plain) * coating_mix.clamp(0.0, 1.0)).clamp(0.0, 1.0)
 }
 
-/// One surface's resolved coating design (K-371) — the palette entry its
+/// One surface's resolved coating design — the palette entry its
 /// element was set to, falling back to the prescription's own column.
 #[must_use]
 pub fn surface_design(s: &FlareSurface) -> CoatingDesign {
@@ -1525,7 +1524,7 @@ pub(crate) fn reflect3(i: [f32; 3], n: [f32; 3]) -> [f32; 3] {
     [v[0] / len, v[1] / len, v[2] / len]
 }
 
-/// Intersect a ray with one surface (K-261, the FlareSim rule): flat plane
+/// Intersect a ray with one surface (the FlareSim rule): flat plane
 /// at the vertex z, else ray–sphere picking the intersection closest to the
 /// vertex. The clear semi-aperture clips with a 10% skirt: rays inside it
 /// stay formally alive (the housing feather zeroes their weight), so quads
@@ -1592,7 +1591,7 @@ fn intersect(
     }
     if t <= 0.0 {
         // The ray misses the sphere (or it lies behind): continue VIRTUALLY
-        // through the surface's vertex plane instead of dying (K-264). A
+        // through the surface's vertex plane instead of dying. A
         // miss means the ray is outside the element's glass — physically it
         // hits the mount and is absorbed, so its weight is forced to zero by
         // the caller — but killing it also killed every grid cell touching
@@ -1645,9 +1644,9 @@ pub fn light_direction(light: [f32; 2], aspect_h_over_w: f32, focal_mm: f32) -> 
     [v[0] / len, v[1] / len, v[2] / len]
 }
 
-/// Where one light sits in the field, for the starburst's cat's-eye slice
-/// (K-365): `(field fraction, azimuth)` for a light at `light` (raster
-/// fraction) on a raster of aspect `h/w`.
+/// Where one light sits in the field, for the starburst's cat's-eye slice:
+/// `(field fraction, azimuth)` for a light at `light` (raster fraction) on a
+/// raster of aspect `h/w`.
 ///
 /// The field fraction is the light's offset in sensor millimetres — the
 /// same convention [`light_direction`] projects with, the x fraction against
@@ -1672,13 +1671,13 @@ pub fn starburst_field(light: [f32; 2], aspect_h_over_w: f32) -> (f32, f32) {
 }
 
 /// Trace one pupil sample through one ghost path at one wavelength — the
-/// FlareSim three-phase walk (K-261) with K-368's two extra phases, the CPU
-/// twin the WGSL splat kernel mirrors op-for-op. `origin` is the ray start
-/// (mm), `dir` the unit beam direction; the ray transmits through every
+/// FlareSim three-phase walk with the four-bounce path's two extra phases,
+/// the CPU twin the WGSL splat kernel mirrors op-for-op. `origin` is the ray
+/// start (mm), `dir` the unit beam direction; the ray transmits through every
 /// surface except the path's bounces, where it reflects (weight × R;
 /// transmits weight × (1−R)). Returns the sensor landing (mm, y up) and the
 /// accumulated Fresnel weight. A two-bounce path — `[a, b, NO_BOUNCE,
-/// NO_BOUNCE]` — executes exactly the statements it did before K-368.
+/// NO_BOUNCE]` — executes exactly the statements it always did.
 #[allow(clippy::too_many_arguments)]
 // Negated comparisons deliberate: NaN reads as dead (see `intersect`).
 #[allow(clippy::neg_cmp_op_on_partial_ord)]
@@ -1705,14 +1704,13 @@ pub fn trace_splat(
     }
     /// The walking ray: position, direction, surviving energy, the medium it
     /// is in, and its worst relative aperture crossing so far. `rrel2` is
-    /// tracked SQUARED and rooted once at the end (K-263): the worst crossing
+    /// tracked SQUARED and rooted once at the end: the worst crossing
     /// is the largest ratio either way — `max` and `sqrt` commute for
     /// non-negative values — so this is the same number for one square root a
     /// ray instead of one per surface, on the hottest loop the effect has.
     /// Rays that graze a housing edge fade smoothly through the 0.95..1
     /// feather at the end instead of the hard clip alone — without it, a
-    /// defocused ghost's cull boundary shows as giant staircase quads (K-261,
-    /// the K-256 rrel feather reinstated).
+    /// defocused ghost's cull boundary shows as giant staircase quads.
     struct Ray {
         pos: [f32; 3],
         dir: [f32; 3],
@@ -1752,11 +1750,11 @@ pub fn trace_splat(
         if missed {
             // Outside the element's glass entirely: the mount absorbs it.
             // Weight goes to zero through the housing feather; the ray
-            // itself continues so its grid cells stay whole (K-264).
+            // itself continues so its grid cells stay whole.
             ray.rrel2 = ray.rrel2.max(4.0);
         }
         // The feather's denominator is the smaller of the clear aperture
-        // and the glass's own lateral extent (K-264): a transcribed
+        // and the glass's own lateral extent: a transcribed
         // prescription can claim a clear aperture wider than the sphere it
         // sits on, and rays then MISSED the glass while their feather still
         // read "well inside" — a one-cell hard step at the ghost's bore
@@ -1789,7 +1787,7 @@ pub fn trace_splat(
                 // Total internal reflection: the transmitted energy is
                 // already ~0 (Fresnel reaches 1 smoothly on approach), so
                 // the ray continues STRAIGHT with its weight forced to
-                // zero (K-264) — the last cell-killer with no feather, and
+                // zero — the last cell-killer with no feather, and
                 // the stair-steps on hard vignetted ghost edges.
                 None => ray.rrel2 = ray.rrel2.max(4.0),
             }
@@ -1815,14 +1813,14 @@ pub fn trace_splat(
     }
     // Phase 3: forward through a+1.., reflecting at c if the path has a
     // third bounce. Without one `end3` is n and `c_idx` the sentinel, which
-    // no surface index can equal — so a two-bounce path runs K-261's phase 3
-    // statement for statement.
+    // no surface index can equal — so a two-bounce path runs the original
+    // phase 3 statement for statement.
     let end3 = if four { c_idx + 1 } else { n };
     for (s_idx, s) in surfs.iter().enumerate().take(end3).skip(a_idx + 1) {
         step(&mut ray, s, ior_at(s), s_idx == c_idx)?;
     }
     if four {
-        // Phase 4 (K-368): backward through c-1..=d, reflecting at d. Phase
+        // Phase 4: backward through c-1..=d, reflecting at d. Phase
         // 2's walk again, one leg further in — same reversed media, same
         // hand-back of the ior at the mirror.
         for s_idx in (d_idx..c_idx).rev() {
@@ -1857,7 +1855,7 @@ pub fn trace_splat(
     Some(([x, y], ray.weight * (ft * ft * (3.0 - 2.0 * ft))))
 }
 
-/// The STRAIGHT imaging path through the whole stack (K-365): no
+/// The STRAIGHT imaging path through the whole stack: no
 /// reflections, every surface refracted front to back, returning the same
 /// housing/vignette feather [`trace_splat`] applies at the sensor — 1 for a
 /// ray that clears every clear aperture comfortably, falling smoothly to 0
@@ -1896,7 +1894,7 @@ pub fn trace_transmit(
         if s.is_stop <= 0.5 {
             // The feather denominator is `trace_splat`'s exactly: the
             // smaller of the clear aperture and the glass's own lateral
-            // extent (K-264).
+            // extent.
             let semi_r = if s.radius_mm.abs() < 1e-6 {
                 s.semi_ap_mm.max(1e-6)
             } else {
@@ -1916,7 +1914,7 @@ pub fn trace_transmit(
     Some(ft * ft * (3.0 - 2.0 * ft))
 }
 
-/// [`trace_splat`]'s spectral sibling (K-364, entry A2): the identical
+/// [`trace_splat`]'s spectral sibling (entry A2): the identical
 /// three-phase walk at the band's geometry wavelength, but the ray's energy
 /// is carried per radiometric sub-sample — [`SPECTRAL_SUB`] throughputs, one
 /// per 1/8th of the band, each reading the baked reflectance table at its
@@ -2049,7 +2047,7 @@ pub fn trace_splat_spectral(
         }
     }
     // Phase 3: forward through a+1.., reflecting at c if the path has a
-    // third bounce (K-368) — the geometry `trace_splat` walks, as this
+    // third bounce — the geometry `trace_splat` walks, as this
     // sibling's contract requires.
     let end3 = if four { c_idx + 1 } else { n };
     for s_idx in (a_idx + 1)..end3 {
@@ -2105,7 +2103,7 @@ pub fn trace_splat_spectral(
 }
 
 // ---------------------------------------------------------------------------
-// Pupil sampling (K-261): deterministic Halton spray over the front element,
+// Pupil sampling: deterministic Halton spray over the front element,
 // masked by the iris polygon with roundness and softness.
 // ---------------------------------------------------------------------------
 
@@ -2132,44 +2130,43 @@ pub fn pupil_mask(u: f32, v: f32, blades: u32, rot_rad: f32, roundness: f32, sof
 }
 
 /// The pupil grid one ghost pair gets, from the Quality ladder's base
-/// (times the Detail dial) and the pair's image spread (K-262, retuned
-/// K-265). A frame-filling defocused ghost is undersampled by a flat grid
-/// and shows its cell facets, so big spreads earn more. The K-262 HALF
-/// rung for tight blobs is gone (K-265): a small ghost is not a cheap
-/// ghost — its caustic rim carries structure the blob-size probe cannot
-/// see, and the owner's EF 70-200 rendered that rim as sunflower teeth at
-/// Ultra. Shared by the CPU reference and the GPU dispatch so both trace
-/// the same rays.
-/// The Quality tier's grid base scaled by the Detail dial (K-265), the
+/// (times the Detail dial) and the pair's image spread. A frame-filling
+/// defocused ghost is undersampled by a flat grid and shows its cell facets,
+/// so big spreads earn more. The HALF rung for tight blobs is gone: a small
+/// ghost is not a cheap ghost — its caustic rim carries structure the
+/// blob-size probe cannot see, and the owner's EF 70-200 rendered that rim as
+/// sunflower teeth at Ultra. Shared by the CPU reference and the GPU dispatch
+/// so both trace the same rays.
+/// The Quality tier's grid base scaled by the Detail dial, the
 /// one place the multiplication lives so the CPU reference and the GPU
 /// dispatch cannot disagree about rounding.
 pub fn detail_base(tier_base: u32, detail: f32) -> u32 {
     ((tier_base as f32 * detail.clamp(0.25, 4.0)).round() as u32).max(8)
 }
 
-/// The Quality tier's traced wavelength count scaled by the Detail dial
-/// (K-265). The dial must scale BOTH axes of the budget: the owner's
-/// EF 70-200 wore a toothed corona that more rays barely touched, because
-/// each of Ultra's 32 discrete wavelengths paints its own rim and the
-/// teeth were the 32 rims fanned radially — spectral banding, dissolved
-/// only by more bands. Capped at 64: combos scale linearly with it.
+/// The Quality tier's traced wavelength count scaled by the Detail dial. The
+/// dial must scale BOTH axes of the budget: the owner's EF 70-200 wore a
+/// toothed corona that more rays barely touched, because each of Ultra's 32
+/// discrete wavelengths paints its own rim and the teeth were the 32 rims
+/// fanned radially — spectral banding, dissolved only by more bands. Capped
+/// at 64: combos scale linearly with it.
 pub fn detail_lambda(tier_lambda: u32, detail: f32) -> u32 {
     ((tier_lambda as f32 * detail.clamp(0.25, 4.0)).round() as u32).clamp(3, 64)
 }
 
 /// The largest quad cell a frame tolerates, as a fraction of the sensor
-/// diagonal (K-267): the frame-time probe below raises a pair's grid until
+/// diagonal: the frame-time probe below raises a pair's grid until
 /// its worst cell sits under this. 0.005 of the diagonal is ~5.5 px at
 /// 1080p — under the eye's line-detection threshold once 4×MSAA feathers
 /// the edge.
 pub const FRAME_CELL_FRAC: f32 = 0.005;
 
 /// How far past the bake-spread grid the frame-time probe may push one
-/// pair (K-267): a fold can demand an unbounded grid, and ray cost is
+/// pair: a fold can demand an unbounded grid, and ray cost is
 /// quadratic in the side, so the boost is capped at 3× the rung grid.
 pub const FRAME_BOOST_CAP: u32 = 3;
 
-/// Per-pair grid NEED for THIS FRAME's light (K-267). The bake spread is a
+/// Per-pair grid NEED for THIS FRAME's light. The bake spread is a
 /// global bounding-box measure and misses folds: a pair whose image stays
 /// the same overall size can still stretch 6× locally near a caustic at a
 /// corner light, and those cells were the owner's choppy polyline edges.
@@ -2252,7 +2249,7 @@ pub(crate) fn frame_grid_needs(
         .collect()
 }
 
-/// Apply one pair's frame-time grid need to its bake-spread grid (K-267):
+/// Apply one pair's frame-time grid need to its bake-spread grid:
 /// never below the bake floor, never past [`FRAME_BOOST_CAP`]× it, always
 /// inside `pair_grid`'s 8..512 clamp.
 pub(crate) fn boost_grid(pair_grid: u32, need: f32) -> u32 {
@@ -2261,12 +2258,12 @@ pub(crate) fn boost_grid(pair_grid: u32, need: f32) -> u32 {
 }
 
 /// Extra rays the frame-time probe may add, as a fraction of the frame's
-/// rung baseline (K-267). Uncapped, the probe septupled a frame's cost —
+/// rung baseline. Uncapped, the probe septupled a frame's cost —
 /// every fold demanded its 3× grid at once. Half again over the baseline
 /// keeps the boost a bounded, predictable spend.
 pub const FRAME_RAY_HEADROOM: f32 = 0.5;
 
-/// The frame's final per-pair grids (K-267): each pair's K-262 rung grid,
+/// The frame's final per-pair grids: each pair's rung grid,
 /// raised toward its [`frame_grid_needs`] want under a shared ray budget —
 /// [`FRAME_RAY_HEADROOM`] extra over the rung baseline, spent worst local
 /// stretch first (ties keep rank order, §2.4 determinism), partial grants
@@ -2310,7 +2307,7 @@ pub fn plan_frame_grids(base_side: u32, spreads: &[f32], needs: &[f32]) -> Vec<u
 }
 
 /// [`frame_grid_needs`] from the plain buffers the GPU seam carries (the
-/// `FlareBakeData` shape — K-267): lumit-render runs the probe against the
+/// `FlareBakeData` shape): lumit-render runs the probe against the
 /// GPU's cached bake without re-baking, so the surface table arrives as raw
 /// rows. Fields the probe never reads (native f-stop, front aperture, gain,
 /// starburst) are zeroed in the view.
@@ -2368,13 +2365,13 @@ pub fn pair_grid(base: u32, spread: f32) -> u32 {
     ((base as f32 * mult).round() as u32).clamp(8, 512)
 }
 
-/// The flare buffer's dimensions once padding for Squeeze/Scale is applied
-/// (K-267). A squeeze or Scale below 1 samples PAST the base buffer in the
-/// combine, and K-266's zero-outside tap honestly showed nothing there —
-/// the owner's "cuts to black at the edges". The buffer renders larger
-/// instead, up to 2× per axis (the working Squeeze floor is 0.5), with the
-/// geometry centred so the combine only adds a constant offset. Mirrored
-/// in lumit-gpu (pinned by test); the clamps match `cpu_combine`'s.
+/// The flare buffer's dimensions once padding for Squeeze/Scale is applied. A
+/// squeeze or Scale below 1 samples PAST the base buffer in the combine, and
+/// the zero-outside tap honestly showed nothing there — the owner's "cuts to
+/// black at the edges". The buffer renders larger instead, up to 2× per axis
+/// (the working Squeeze floor is 0.5), with the geometry centred so the
+/// combine only adds a constant offset. Mirrored in lumit-gpu (pinned by
+/// test); the clamps match `cpu_combine`'s.
 pub fn flare_pad_dims(fw: u32, fh: u32, squeeze: f32, scale: f32) -> (u32, u32) {
     let squeeze = squeeze.clamp(0.25, 4.0);
     let fscale = scale.clamp(0.05, 20.0);
@@ -2386,7 +2383,7 @@ pub fn flare_pad_dims(fw: u32, fh: u32, squeeze: f32, scale: f32) -> (u32, u32) 
     )
 }
 
-/// The effective iris roundness for a working f-stop (K-260): wide open a
+/// The effective iris roundness for a working f-stop: wide open a
 /// real iris retracts behind the housing's circular bore, so ghosts go
 /// round whatever the blade count; two stops down the polygon is fully
 /// back.
@@ -2421,7 +2418,7 @@ fn snap(v: f32, step: f32) -> f32 {
     (v / step).round() * step + 0.0
 }
 
-/// The aperture the **bake** sees (K-431), which is the frame's aperture with
+/// The aperture the **bake** sees, which is the frame's aperture with
 /// its continuous dials snapped to a step fine enough not to be seen.
 ///
 /// In plain terms: the bake precomputes two things that depend on the iris —
@@ -2435,7 +2432,7 @@ fn snap(v: f32, step: f32) -> f32 {
 ///
 /// What is *not* snapped is everything the frame itself computes — the ghost
 /// trace's own stop scale, the iris mask it draws each ghost's rim with, the
-/// K-260 wide-open blend it applies there. Those stay continuous, so the
+/// wide-open blend it applies there. Those stay continuous, so the
 /// ghosts move and shrink smoothly as the iris closes; what steps is the
 /// starburst's shape and the exposure, by about 1.7% a step.
 ///
@@ -2468,11 +2465,11 @@ pub fn bake_key(p: &LensFlareParams) -> u64 {
     bake_key_with(p, None)
 }
 
-/// [`bake_key`] with a custom prescription in play (K-264): the `lens_file`
+/// [`bake_key`] with a custom prescription in play: the `lens_file`
 /// override's content hash folds in, so editing the file (or clearing it)
 /// rebakes and two different files never share a cache slot.
 pub fn bake_key_with(p: &LensFlareParams, lens_text_hash: Option<u64>) -> u64 {
-    // The aperture as the bake will see it (K-431), never as the frame holds
+    // The aperture as the bake will see it, never as the frame holds
     // it: two f-stops inside one step bake identically, so they must key
     // identically or the cache would hand one of them the other's optics.
     let p = &bake_params(p);
@@ -2487,7 +2484,7 @@ pub fn bake_key_with(p: &LensFlareParams, lens_text_hash: Option<u64>) -> u64 {
     fold(p.aperture_rotation_deg.to_bits() as u64);
     fold(p.roundness.to_bits() as u64);
     fold(p.aperture_softness.to_bits() as u64);
-    // The per-element coatings (K-371): a bake input, since the reflectance
+    // The per-element coatings: a bake input, since the reflectance
     // table is built from them.
     for c in p.coating_elements {
         fold(u64::from(c));
@@ -2511,7 +2508,7 @@ pub fn lens_text_hash(text: &str) -> u64 {
     h
 }
 
-/// The aperture image for the starburst FFT at one field angle (K-365): the
+/// The aperture image for the starburst FFT at one field angle: the
 /// pupil mask (iris at 0.75 of the half-extent, leaving rim room for the
 /// diffraction spread), multiplied by the **imaging path's vignette** at
 /// that angle — which is what turns the iris polygon into the off-axis
@@ -2525,7 +2522,7 @@ pub fn lens_text_hash(text: &str) -> u64 {
 /// meridional plane, so one azimuth is the whole family and the combine
 /// rotates the sprite to each light instead.
 ///
-/// At `field_frac == 0` this is the pre-K-365 aperture image times the
+/// At `field_frac == 0` this is the original aperture image times the
 /// on-axis vignette, which a sane prescription passes at ~1 inside its own
 /// pupil — so slice 0 is the picture the effect has always drawn.
 pub(crate) fn bake_aperture_field(
@@ -2624,7 +2621,7 @@ pub(crate) fn bake_starburst(aperture: &[f32], res: u32) -> Vec<f32> {
         let b = pattern[y1 * n + x0] * (1.0 - tx) + pattern[y1 * n + x1] * tx;
         a * (1.0 - ty) + b * ty
     };
-    // The spectral ladder, built ONCE (K-263): its chromatic scale and its
+    // The spectral ladder, built ONCE: its chromatic scale and its
     // colour-matching weights are the same for every texel of the sprite, but
     // they used to be derived inside the per-texel loop — so the CIE table was
     // interpolated 6.5 million times to produce a hundred distinct answers.
@@ -2664,7 +2661,7 @@ pub(crate) fn bake_starburst(aperture: &[f32], res: u32) -> Vec<f32> {
     for v in out.iter_mut() {
         *v /= peak;
     }
-    // Fade the sprite to zero inside its own border (K-264). The
+    // Fade the sprite to zero inside its own border. The
     // diffraction halo's pedestal ran right to the texture edge, and the
     // combine stamps the sprite as a quad — so on a dark scene every
     // starburst sat in a hard-edged grey SQUARE. The window is RADIAL, not
@@ -2689,10 +2686,10 @@ pub(crate) fn bake_starburst(aperture: &[f32], res: u32) -> Vec<f32> {
 }
 
 // ---------------------------------------------------------------------------
-// Ghost-edge Fresnel ringing (K-369, re-derived K-370): the knife-edge rim.
+// Ghost-edge Fresnel ringing: the knife-edge rim.
 // ---------------------------------------------------------------------------
 
-/// The **Fresnel number** of one ghost's own edge diffraction (K-370).
+/// The **Fresnel number** of one ghost's own edge diffraction.
 ///
 /// # In plain terms
 ///
@@ -2718,18 +2715,18 @@ pub(crate) fn bake_starburst(aperture: &[f32], res: u32) -> Vec<f32> {
 /// `spread` is the measured image **diameter** as a fraction of the sensor
 /// diagonal, so `a = spread · diagonal / 2`.
 ///
-/// **This is why K-369's ladder had to go.** Put real numbers in: a 5%-of-
+/// **This is why the baked ladder had to go.** Put real numbers in: a 5%-of-
 /// frame ghost at f/2.8 is `F ≈ 350`, a frame-filling one `F ≈ 7000`, and the
-/// widest washes on the bundled lenses reach `F ≈ 50 000`. K-369 baked its
-/// masks at `F` of 2 to 64 — the ceiling a 256² single-FFT propagator can
-/// reach, since its output window is `±(N−1)/(4F)` aperture units and has to
-/// cover the aperture. Every visible ghost therefore landed on the bottom
-/// three rungs, where the near field is not an edge effect at all but a
-/// whole-aperture pattern: measured on the bundled default, the interior of
-/// an `F 2` slice ran 4.7× bright at the centre falling to 0.3 at the rim,
-/// 2.4× the flat mask's interior on average. Painted across ghosts that fill
-/// the frame, that is a broad concentric interference pattern over the whole
-/// picture — which is exactly what it looked like.
+/// widest washes on the bundled lenses reach `F ≈ 50 000`. The old ladder
+/// baked its masks at `F` of 2 to 64 — the ceiling a 256² single-FFT
+/// propagator can reach, since its output window is `±(N−1)/(4F)` aperture
+/// units and has to cover the aperture. Every visible ghost therefore landed
+/// on the bottom three rungs, where the near field is not an edge effect at
+/// all but a whole-aperture pattern: measured on the bundled default, the
+/// interior of an `F 2` slice ran 4.7× bright at the centre falling to 0.3 at
+/// the rim, 2.4× the flat mask's interior on average. Painted across ghosts
+/// that fill the frame, that is a broad concentric interference pattern over
+/// the whole picture — which is exactly what it looked like.
 ///
 /// At the real Fresnel numbers no FFT can reach the fringes are a rim effect
 /// a few percent of the pupil wide, and the correct model for them is the
@@ -2806,15 +2803,15 @@ pub fn knife_edge_intensity(v: f32) -> f32 {
 ///
 /// Fringes narrower than the thing sampling them do not appear — they
 /// **alias**, and an aliased fringe train is a beat pattern spread across the
-/// whole ghost, which is the other half of what K-369 put on screen. The
-/// honest answer when they cannot be resolved is their average, and a
-/// diffraction profile averages to the geometric edge it surrounds. So the
-/// mask crosses from one to the other over this window rather than drawing
-/// fringes it cannot carry.
+/// whole ghost, which is the other half of what the baked masks put on
+/// screen. The honest answer when they cannot be resolved is their average,
+/// and a diffraction profile averages to the geometric edge it surrounds. So
+/// the mask crosses from one to the other over this window rather than
+/// drawing fringes it cannot carry.
 const RING_WASH: (f32, f32) = (0.5, 2.0);
 
-/// The iris mask one ray sees, with the ghost's own edge diffraction on it
-/// (K-370) — the shared twin of `fx_lens_flare_trace.wgsl`'s `ghost_mask`.
+/// The iris mask one ray sees, with the ghost's own edge diffraction on it —
+/// the shared twin of `fx_lens_flare_trace.wgsl`'s `ghost_mask`.
 ///
 /// `fresnel` is the path's [`ghost_fresnel_number`]; at 0 this is exactly
 /// [`pupil_mask`] and nothing changes. `blur` is how far apart, in pupil
@@ -2869,11 +2866,11 @@ pub fn ghost_mask(
 
 /// The mean flare-buffer brightness the auto-exposure steers every lens
 /// toward, measured by actually rendering the CPU reference at thumbnail
-/// size inside the bake (K-258). Cheaper proxies mispredicted real lenses
+/// size inside the bake. Cheaper proxies mispredicted real lenses
 /// by orders of magnitude; the closed loop cannot.
 const TARGET_PROBE_MEAN: f32 = 0.010;
 
-/// The four-bounce paths worth ray-probing (K-368), best bound first.
+/// The four-bounce paths worth ray-probing, best bound first.
 ///
 /// In plain terms: a ghost is light that bounced off two surfaces on its way
 /// through. Some of it bounces twice more and still lands on the sensor —
@@ -2966,22 +2963,21 @@ fn four_bounce_candidates(
     out
 }
 
-/// Run the full bake for a params bundle — pure, deterministic, CPU-only
-/// (K-261): parse the prescription, enumerate and rank the ghost pairs,
-/// measure per-pair defocus boosts, bake the starburst, close the exposure
-/// loop.
+/// Run the full bake for a params bundle — pure, deterministic, CPU-only:
+/// parse the prescription, enumerate and rank the ghost pairs, measure
+/// per-pair defocus boosts, bake the starburst, close the exposure loop.
 pub fn bake(p: &LensFlareParams) -> FlareBaked {
     bake_with(p, None)
 }
 
-/// [`bake`] with an optional custom .lens text (K-264, the `lens_file`
+/// [`bake`] with an optional custom .lens text (the `lens_file`
 /// parameter): parsed, it replaces the library pick entirely — its native
 /// f-number estimated from the geometry, since only the bundled collection
 /// carries one in its filename. Unparsable (or absent) degrades to the
 /// picked library lens: a labelled fallback, never a fault, and exactly
 /// what an unset parameter renders.
 pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
-    // The snapped aperture (K-431), matching what `bake_key_with` hashed —
+    // The snapped aperture, matching what `bake_key_with` hashed —
     // the two must read the same dials or a cache slot would hold optics its
     // name does not describe.
     let quantised = bake_params(p);
@@ -3035,7 +3031,7 @@ pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
             sensor_z_mm: 55.0,
         });
     let mut lens = lens;
-    // The per-element coatings are a bake input (K-371): they change what
+    // The per-element coatings are a bake input: they change what
     // every surface reflects, so they are resolved into the surface table
     // before the reflectance table is built from it, and `bake_key` folds
     // them in so a change here rebakes exactly as a lens change does.
@@ -3064,7 +3060,7 @@ pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
 
     // Enumerate every a<b pair where both surfaces actually change medium
     // (a reflection needs an interface; the stop is air-air and drops out),
-    // add the four-bounce paths the K-368 prefilter picked out, probe each
+    // add the four-bounce paths the prefilter picked out, probe each
     // on-axis, and rank the two kinds together in ONE list — the ranking
     // cannot tell them apart, and on a lens with few pairs (the bundled
     // Biotar runs out after 45) the four-bounce paths reach the rendered
@@ -3100,7 +3096,7 @@ pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
         .filter_map(|&path| {
             // On-axis brightness probe at the R/G/B wavelengths, full file
             // coating (the Coating dial is frame-time). Four-bounce paths
-            // face exactly this probe and exactly this floor (K-368): the
+            // face exactly this probe and exactly this floor: the
             // enumeration bound decided only which of them got here.
             let mut est = 0.0_f32;
             for nm in [650.0, 550.0, 450.0] {
@@ -3121,12 +3117,12 @@ pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
     });
     baked.pairs = ranked.iter().map(|&(g, _)| g).collect();
     // Image extent per pair: an 8×8 on-axis spray's landing bounding box
-    // against the sensor diagonal (K-262) — the adaptive grid budget's input.
+    // against the sensor diagonal — the adaptive grid budget's input.
     //
-    // Measured AFTER the ranking and only for the pairs a frame can reach
-    // (K-263). It costs 64 traced rays a pair, and a 60-surface prescription
-    // leaves well over a thousand surviving pairs of which a frame renders at
-    // most `MAX_RENDERED_PAIRS` — so probing them all spent most of the bake
+    // Measured AFTER the ranking and only for the pairs a frame can reach. It
+    // costs 64 traced rays a pair, and a 60-surface prescription leaves well
+    // over a thousand surviving pairs of which a frame renders at most
+    // `MAX_RENDERED_PAIRS` — so probing them all spent most of the bake
     // measuring ghosts nothing would ever draw. Beyond the cap the spread is
     // the neutral 1.0, the same value an unmeasurable pair has always had.
     let mut spreads = vec![1.0_f32; baked.pairs.len()];
@@ -3137,8 +3133,8 @@ pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
         .take(MAX_RENDERED_PAIRS)
         .copied()
         .collect();
-    // Two probe directions per pair (K-264): on-axis, and a representative
-    // off-axis beam (a light a third of the way into the frame). The K-262
+    // Two probe directions per pair: on-axis, and a representative
+    // off-axis beam (a light a third of the way into the frame). The earlier
     // probe was on-axis only, and some designs land a COMPACT on-axis ghost
     // that fills the frame the moment the light moves off-centre — those
     // pairs were handed the half grid and rendered their wash as 9 px
@@ -3161,7 +3157,7 @@ pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
                             continue;
                         }
                         let o = [u * baked.pupil_mm, v * baked.pupil_mm, baked.start_z_mm];
-                        // Zero-weight rays are K-264's virtual continuations —
+                        // Zero-weight rays are virtual continuations —
                         // real geometry, no light — and must not widen the
                         // measured image extent.
                         if let Some((pos, wgt)) =
@@ -3193,7 +3189,7 @@ pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
     }
     baked.spreads = spreads;
 
-    // The aperture image per field angle (K-365). This is the expensive half
+    // The aperture image per field angle. This is the expensive half
     // of the starburst — one traced ray per texel through the whole
     // prescription — so the slices go wide across the pool.
     let apertures: Vec<Vec<f32>> = (0..STARBURST_FIELDS)
@@ -3204,7 +3200,7 @@ pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
         })
         .collect();
 
-    // The starburst, once per field-angle slice (K-365) — the slices are
+    // The starburst, once per field-angle slice — the slices are
     // independent FFTs, so they go wide, and `collect` puts them back in
     // slice order whatever order the pool finished them in (determinism).
     let mut slices: Vec<Vec<f32>> = apertures
@@ -3226,7 +3222,7 @@ pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
     }
     baked.starburst = slices.concat();
 
-    // Closed-loop auto exposure (K-258): render the reference thumbnail with
+    // Closed-loop auto exposure: render the reference thumbnail with
     // gain 1 at FIXED frame-time settings — only bake-key inputs may steer
     // the gain, or animating a frame-time dial would rebake — and normalise
     // the mean to the target. Deterministic, and a few milliseconds.
@@ -3245,15 +3241,15 @@ pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
         light_count: 0,
         intensity: 1.0,
         lens: p.lens,
-        // The probe is shot at the lens's NATIVE stop, never the working one
-        // (K-432): the gain is a property of the glass, not of how far the
-        // iris is closed. Reading the working stop made the gain roughly
-        // `(f/native)²` and it cancelled the stop-down — a lens rendered the
-        // same brightness at f/16 as wide open, which no lens does — and it
-        // put the working f-number under the exposure half of the bake, so a
-        // ramped aperture stepped the whole flare's brightness at every
-        // snapped step. Stopped down, the flare now dims as the light the
-        // iris passes dims; Intensity is the dial that puts it back.
+        // The probe is shot at the lens's NATIVE stop, never the working one:
+        // the gain is a property of the glass, not of how far the iris is
+        // closed. Reading the working stop made the gain roughly `(f/native)²`
+        // and it cancelled the stop-down — a lens rendered the same brightness
+        // at f/16 as wide open, which no lens does — and it put the working
+        // f-number under the exposure half of the bake, so a ramped aperture
+        // stepped the whole flare's brightness at every snapped step. Stopped
+        // down, the flare now dims as the light the iris passes dims;
+        // Intensity is the dial that puts it back.
         fstop: native_fstop,
         focus_m: 100.0,
         blades: p.blades,
@@ -3294,7 +3290,7 @@ pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
         &manual_light(&probe_frame, pw, ph),
     );
     let mean: f32 = thumb.iter().sum::<f32>() / thumb.len().max(1) as f32;
-    // The gain ceiling matters (K-261): a lens whose every ghost is an
+    // The gain ceiling matters: a lens whose every ghost is an
     // extreme defocused wash has almost no probe energy after the
     // giant-quad fade, and an unbounded loop would amplify the residue into
     // a lit-up artefact field. Capped, such a lens renders honestly dim —
@@ -3357,7 +3353,7 @@ pub fn lambda_weights(count: u32, dispersion: f32) -> Vec<(f32, [f32; 3])> {
 }
 
 // ---------------------------------------------------------------------------
-// Spectral radiometry (K-364, entry A2)
+// Spectral radiometry (entry A2)
 // ---------------------------------------------------------------------------
 
 /// Lambda samples in the baked reflectance table: [`cie::LAMBDA_MIN`] to
@@ -3368,7 +3364,7 @@ pub const REFL_LAMBDA_BINS: usize = 69;
 /// cos theta bins in the baked reflectance table (bin centres, linear).
 pub const REFL_COS_BINS: usize = 16;
 
-/// Radiometric sub-samples per traced wavelength band (K-364). Geometry
+/// Radiometric sub-samples per traced wavelength band. Geometry
 /// varies slowly with lambda (dispersion is smooth), so the ray path is
 /// traced once per band - but the coating reflectance oscillates several
 /// times across the visible, so each ray's *energy* is integrated at 8
@@ -3376,7 +3372,7 @@ pub const REFL_COS_BINS: usize = 16;
 /// spectrum 24 times where it sampled 3.
 pub const SPECTRAL_SUB: usize = 8;
 
-/// One traced wavelength band with its radiometric sub-samples (K-364):
+/// One traced wavelength band with its radiometric sub-samples:
 /// the geometry wavelength, and per sub-sample the reflectance table's
 /// lambda index plus the CIE weight (already through XYZ to RGB and the
 /// ladder's Y-normalisation). The sub-weights of a band sum to what
@@ -3396,7 +3392,7 @@ pub struct SpectralBand {
 }
 
 /// The traced bands with their radiometric sub-samples - [`lambda_weights`]
-/// refined (K-364). Same geometry ladder, same total normalisation; each
+/// refined. Same geometry ladder, same total normalisation; each
 /// band's single RGB weight becomes [`SPECTRAL_SUB`] weights whose sum is
 /// the old value (XYZ to RGB is linear, so splitting the band's CIE
 /// integral splits its RGB weight exactly).
@@ -3529,30 +3525,29 @@ pub fn screen_transform(w: u32) -> f32 {
 
 // ---------------------------------------------------------------------------
 // CPU reference renderer (the §1.6 staged oracle's frame side; not a
-// production path — the CPU degradation rung renders the effect as identity,
-// the K-114/K-256 pattern).
+// production path — the CPU degradation rung renders the effect as identity).
 // ---------------------------------------------------------------------------
 
 /// Floor on a ray's landed footprint as a fraction of its launch cell —
-/// which is really a **cap on caustic density** (K-262, kept by K-366). At
-/// a fold the density `cell ÷ landed` genuinely diverges, but the *integral*
-/// over a pixel is finite: a discrete ray concentrates that divergence into
-/// a few pixels, so an uncapped splat drew a hard chromatic line. Capping at
-/// 1/3e-3 ≈ 333× keeps the bright rims and arcs and removes the spikes.
+/// which is really a **cap on caustic density**. At a fold the density
+/// `cell ÷ landed` genuinely diverges, but the *integral* over a pixel is
+/// finite: a discrete ray concentrates that divergence into a few pixels, so
+/// an uncapped splat drew a hard chromatic line. Capping at 1/3e-3 ≈ 333×
+/// keeps the bright rims and arcs and removes the spikes.
 pub const MIN_AREA_FRAC: f32 = 3e-3;
 
-/// Shortest half-axis a splat's footprint may have, px (K-366): the
-/// anti-alias floor. A ray whose local footprint collapses below a pixel
-/// still deposits over roughly one, so a caustic line is a line and not a
-/// row of dropped sub-pixel points — the job [`MIN_QUAD_PX`]'s inflation
-/// used to do, without the sliver cases that came with connecting rays.
+/// Shortest half-axis a splat's footprint may have, px: the anti-alias floor.
+/// A ray whose local footprint collapses below a pixel still deposits over
+/// roughly one, so a caustic line is a line and not a row of dropped
+/// sub-pixel points — the job [`MIN_QUAD_PX`]'s inflation used to do, without
+/// the sliver cases that came with connecting rays.
 pub const MIN_SPLAT_AXIS_PX: f32 = 0.75;
 
 /// One traced corner: landing px, geometric weight (housing feather × iris
-/// mask) and band-integrated rgb (K-364); the splat path's working type.
+/// mask) and band-integrated rgb; the splat path's working type.
 pub(crate) type Corner = ([f32; 2], f32, [f32; 3]);
 
-/// Widest kernel span, px, a splat deposits at full resolution (K-380).
+/// Widest kernel span, px, a splat deposits at full resolution.
 /// Past this it moves to a coarser accumulator level — halved once per
 /// doubling — so one splat never costs more than about this many pixels
 /// squared, however large the ghost. The smoothing that costs is about a
@@ -3562,14 +3557,14 @@ pub(crate) type Corner = ([f32; 2], f32, [f32; 3]);
 /// `fx_lens_flare_deposit.wgsl` too, pinned by test.
 pub const DEPOSIT_SPAN_PX: f32 = 48.0;
 
-/// Most accumulator levels a deposit pyramid holds (K-380) — level 11 is a
+/// Most accumulator levels a deposit pyramid holds — level 11 is a
 /// 2048-fold reduction, past any raster the engine renders. Pinned against
 /// the shader's array size by test.
 pub const MAX_DEPOSIT_LEVELS: usize = 12;
 
-/// The deposit pyramid's level dimensions for a `w × h` flare buffer
-/// (K-380): level 0 is the buffer itself, each next level halves both axes
-/// (rounding up), stopping once a level fits 32 px or the table is full.
+/// The deposit pyramid's level dimensions for a `w × h` flare buffer: level 0
+/// is the buffer itself, each next level halves both axes (rounding up),
+/// stopping once a level fits 32 px or the table is full.
 /// The GPU mirrors this (`deposit_levels_of`, pinned by test) so the two
 /// twins can never disagree about where a level's pixels sit.
 pub fn deposit_levels(w: u32, h: u32) -> Vec<(u32, u32)> {
@@ -3584,7 +3579,7 @@ pub fn deposit_levels(w: u32, h: u32) -> Vec<(u32, u32)> {
 }
 
 /// Which pyramid level a splat with kernel reach `ext` (px each way, level
-/// 0) deposits at (K-380): the shallowest whose span is within
+/// 0) deposits at: the shallowest whose span is within
 /// [`DEPOSIT_SPAN_PX`]. By repeated exact halving, not a logarithm — the
 /// shader does the identical loop, and halving is exact in floating point,
 /// so the two twins pick the same level for every splat.
@@ -3598,7 +3593,7 @@ pub fn deposit_level(ext_x: f32, ext_y: f32, level_count: u32) -> u32 {
     level
 }
 
-/// The CPU reference's deposit pyramid (K-380): one f32 RGB buffer per
+/// The CPU reference's deposit pyramid: one f32 RGB buffer per
 /// level of [`deposit_levels`]. The GPU's is one flat fixed-point buffer
 /// with per-level offsets; same shape, same arithmetic per level.
 pub(crate) struct DepositLevels {
@@ -3647,17 +3642,17 @@ impl DepositLevels {
     }
 }
 
-/// A ray's local footprint axes (K-366, widened K-378): the image of one
+/// A ray's local footprint axes: the image of one
 /// pupil-grid step under the ghost map, read off the neighbouring rays'
 /// landings — one-sided at the grid edge or beside a dead ray, and the
 /// anti-alias floor when no neighbour survives at all. Half-steps, so the
 /// parallelogram `centre ± a1 ± a2` tiles the grid exactly once.
 ///
-/// **The LONGER of the two one-sided differences, not their average**
-/// (K-378). On a smooth map the two sides agree and this is the central
-/// difference it always was. Under an area source they do not: the source
-/// offsets hop by design, and wherever the two neighbours happened to land
-/// on the same side their average cancelled toward zero — a collapsed splat
+/// **The LONGER of the two one-sided differences, not their average**. On a
+/// smooth map the two sides agree and this is the central difference it
+/// always was. Under an area source they do not: the source offsets hop by
+/// design, and wherever the two neighbours happened to land on the same side
+/// their average cancelled toward zero — a collapsed splat
 /// sitting between two wide gaps, quasi-periodically across the whole
 /// ghost, which is exactly the woven mesh the owner photographed. Taking
 /// the longer side makes under-coverage impossible; the cost is overlap,
@@ -3671,7 +3666,7 @@ pub(crate) fn ray_axes(
     let at = |x: usize, y: usize| corners[y * side + x].map(|(p, _, _)| p);
     let axis = |lo: Option<[f32; 2]>, here: [f32; 2], hi: Option<[f32; 2]>| -> Option<[f32; 2]> {
         match (lo, hi) {
-            // Both neighbours live: the longer one-sided step (K-378).
+            // Both neighbours live: the longer one-sided step.
             (Some(a), Some(b)) => {
                 let lov = [here[0] - a[0], here[1] - a[1]];
                 let hiv = [b[0] - here[0], b[1] - here[1]];
@@ -3722,7 +3717,7 @@ pub(crate) fn ray_axes(
     }
 }
 
-/// The quadratic B-spline, in units of one grid step (K-376).
+/// The quadratic B-spline, in units of one grid step.
 ///
 /// `3/4 − t²` inside a half step, `(3/2 − |t|)²/2` out to one and a half, zero
 /// beyond. It sums to one over any lattice of unit spacing — a partition of
@@ -3749,17 +3744,17 @@ fn bspline_q(t: f32) -> f32 {
     }
 }
 
-/// Deposit one ray's flux over its footprint (K-366, reconstruction fixed
-/// K-373): a separable tent centred on the ray, reaching **one full grid step**
-/// in each direction, so the tents of neighbouring rays overlap and sum to
-/// one. Flux is conserved exactly — except at a caustic, where the density cap
-/// (see [`MIN_AREA_FRAC`]) deliberately sheds the divergence. The WGSL splat
-/// quad and fragment mirror this arithmetic op for op.
+/// Deposit one ray's flux over its footprint: a separable tent centred on the
+/// ray, reaching **one full grid step** in each direction, so the tents of
+/// neighbouring rays overlap and sum to one. Flux is conserved exactly —
+/// except at a caustic, where the density cap (see [`MIN_AREA_FRAC`])
+/// deliberately sheds the divergence. The WGSL splat quad and fragment mirror
+/// this arithmetic op for op.
 ///
 /// # Why the kernel reaches past its own cell
 ///
 /// `a1` and `a2` are **half**-axes: a full step between neighbouring rays is
-/// `2·a1`. K-366 gave the tent a support of `±a1`, which is half a step — so
+/// `2·a1`. The tent used to have a support of `±a1`, half a step — so
 /// two neighbouring tents met exactly at the point where both had fallen to
 /// zero. That is not a partition of unity; it is a lattice of separate
 /// pyramids with a seam of zero along every cell boundary. Summed over the
@@ -3773,19 +3768,19 @@ fn bspline_q(t: f32) -> f32 {
 /// spacing — tents at spacing `h` reaching `±h`. Here the spacing is `2·a1`,
 /// so the reach is `±2·a1`, which is what the kernel below evaluates. The
 /// integral grows by 4 with it, so the peak is divided by 4 and the deposited
-/// flux is unchanged; `area` and the density cap keep their K-366 meaning in
+/// flux is unchanged; `area` and the density cap keep their meaning in
 /// half-axis units, untouched.
 ///
-/// K-376 then widened it again, to the quadratic B-spline's one and a half
+/// The kernel widened again, to the quadratic B-spline's one and a half
 /// steps, because a tent is only C⁰ and the crease at each cell boundary is
 /// itself visible. Nine cells a splat against the original one, and that is
 /// the price of a reconstruction that does not print its own sampling grid on
 /// the picture.
 ///
-/// K-380 caps what one splat may COST: a splat whose kernel span exceeds
-/// [`DEPOSIT_SPAN_PX`] deposits into a coarser level of the pyramid instead
-/// — same kernel, same peak (a density per level-0 pixel is a density at
-/// any level), evaluated at texels a power of two apart and read back
+/// A span cap limits what one splat may COST: a splat whose kernel span
+/// exceeds [`DEPOSIT_SPAN_PX`] deposits into a coarser level of the pyramid
+/// instead — same kernel, same peak (a density per level-0 pixel is a density
+/// at any level), evaluated at texels a power of two apart and read back
 /// through the resolve's bilinear upsample. The floors, the guard and the
 /// density cap all run at level 0 BEFORE the level is chosen, exactly as
 /// the GPU's `build_splats` runs them before its deposit.
@@ -3830,8 +3825,7 @@ pub(crate) fn splat_ray(
     }
     let area = det.abs().max(1e-6);
     // The density cap: the divisor never drops below the launch cell's
-    // capped fraction, so a fold brightens to 333× and stops (K-262's rule,
-    // carried over unchanged).
+    // capped fraction, so a fold brightens to 333× and stops.
     let divisor = area.max(MIN_AREA_FRAC * cell_area_px);
     // Divided by four beside the reach doubling above: the tent over ±2 in
     // each axis integrates to 4x the parallelogram's area, so the flux the
@@ -3844,7 +3838,7 @@ pub(crate) fn splat_ray(
     // Bounding box of the kernel's REACH, which is three half-axes each way.
     let ext_x = 3.0 * (a1[0].abs() + a2[0].abs());
     let ext_y = 3.0 * (a1[1].abs() + a2[1].abs());
-    // The pyramid level this splat can afford (K-380), and everything
+    // The pyramid level this splat can afford, and everything
     // scaled into its pixels. The kernel below is unchanged by the scale:
     // (u, v) solve the same system whether both sides carry the 1/s, and
     // `peak` is a density per level-0 pixel, which the resolve's upsample
@@ -3874,7 +3868,7 @@ pub(crate) fn splat_ray(
             let u = (dx * a2[1] - dy * a2[0]) * inv_det;
             let v = (dy * a1[0] - dx * a1[1]) * inv_det;
             // The quadratic B-spline, in half-axis units where a full grid
-            // step is 2 (K-376). Support is 1.5 steps each way.
+            // step is 2. Support is 1.5 steps each way.
             if u.abs() >= 3.0 || v.abs() >= 3.0 {
                 continue;
             }
@@ -3890,7 +3884,7 @@ pub(crate) fn splat_ray(
 }
 
 /// Render the ghost train alone into an RGB flare buffer (`w × h × 3`),
-/// mirroring the GPU chain (K-261): a REGULAR grid of rays over the pupil
+/// mirroring the GPU chain: a REGULAR grid of rays over the pupil
 /// square is traced through each ranked pair per wavelength (the FlareSim
 /// optics), and each live grid cell draws as two triangles whose density is
 /// the energy-conservation ratio `launch cell area ÷ landed area` — smooth
@@ -3905,7 +3899,7 @@ pub fn cpu_flare(
     h: u32,
     lights: &[FlareLight],
 ) -> Vec<f32> {
-    // The rendered raster is the PADDED buffer (K-267): larger than the
+    // The rendered raster is the PADDED buffer: larger than the
     // base `w × h` when Squeeze/Scale under 1 will sample past it, with the
     // optics centred in it. The screen transform and the light direction's
     // aspect stay derived from the base dims — padding adds border, it
@@ -3915,12 +3909,12 @@ pub fn cpu_flare(
     if w == 0 || h == 0 || p.ghost_intensity <= 0.0 {
         return out;
     }
-    // The deposit pyramid (K-380): splats land at the level their size
+    // The deposit pyramid: splats land at the level their size
     // affords, and the resolve below sums the levels into `out`.
     let mut deposit = DepositLevels::new(rw, rh);
     let (tier_base, tier_lambda, _) = quality_ladder(p.quality);
     // The Detail dial scales the tier's base AND its wavelength count
-    // before the per-pair budget (K-265); both the CPU reference and the
+    // before the per-pair budget; both the CPU reference and the
     // GPU dispatch derive the same numbers, so the oracle holds at any
     // setting.
     let base_side = detail_base(tier_base, p.detail);
@@ -3934,7 +3928,7 @@ pub fn cpu_flare(
     let st = screen_transform(w);
     let gain = p.ghost_intensity * baked.energy_gain;
     let pair_count = baked.pairs.len().min(p.max_ghosts as usize);
-    // Manual mode's frame-time grid probe (K-267): the bake spreads are a
+    // Manual mode's frame-time grid probe: the bake spreads are a
     // floor, and a pair folded tight by this frame's light earns more grid
     // under the frame's bounded ray headroom. Matte lights exist GPU-side
     // only, so Matte mode keeps the bake grids on both twins and parity
@@ -3959,20 +3953,19 @@ pub fn cpu_flare(
     };
 
     // Per-corner trace results for one (pair, band): landing px, geometric
-    // weight (housing feather × iris mask) and band-integrated rgb (K-364);
+    // weight (housing feather × iris mask) and band-integrated rgb;
     // None = dead. Sized for the widest grid in play.
     let mut corners: Vec<Option<Corner>> = Vec::new();
     // The pair's iris mask per pupil corner — wavelength-independent, so it
-    // is computed once a pair and read by every wavelength (K-263).
+    // is computed once a pair and read by every wavelength.
     let mut masks: Vec<f32> = Vec::new();
     for light in lights {
         if light.rgb[0] <= 0.0 && light.rgb[1] <= 0.0 && light.rgb[2] <= 0.0 {
             continue;
         }
         for (pi, pair) in baked.pairs.iter().take(pair_count).enumerate() {
-            // The pair's own grid (K-262), by its measured image spread,
-            // raised — never lowered — by this frame's budgeted probe
-            // (K-267).
+            // The pair's own grid, by its measured image spread,
+            // raised — never lowered — by this frame's budgeted probe.
             let rung = pair_grid(base_side, baked.spreads.get(pi).copied().unwrap_or(1.0));
             let side = frame_grids.get(pi).copied().unwrap_or(rung).max(2) as usize;
             let unit = |i: usize| (i as f32 / (side - 1) as f32) * 2.0 - 1.0;
@@ -3980,18 +3973,18 @@ pub fn cpu_flare(
             let cell_area_px = cell_mm * cell_mm * st * st;
             corners.clear();
             corners.resize(side * side, None);
-            // The iris mask per pupil corner, computed ONCE for the pair
-            // (K-263). It does not depend on the wavelength — it is the shape
-            // of the hole the light comes through — but it used to be
-            // recomputed inside the wavelength loop, so every corner paid for
-            // an `atan2` and a `cos` three to thirty-two times over depending
-            // on the Quality tier. Same numbers, computed once.
+            // The iris mask per pupil corner, computed ONCE for the pair. It
+            // does not depend on the wavelength — it is the shape of the hole
+            // the light comes through — but it used to be recomputed inside
+            // the wavelength loop, so every corner paid for an `atan2` and a
+            // `cos` three to thirty-two times over depending on the Quality
+            // tier. Same numbers, computed once.
             //
             // The shape is not quite the analytic polygon either: the ghost's
-            // own edge diffraction rings the rim (K-369, re-derived K-370).
-            // Its Fresnel number is worked out here rather than baked because
-            // it moves with the working stop — a stopped-down iris makes both
-            // a smaller ghost and a coarser fringe.
+            // own edge diffraction rings the rim. Its Fresnel number is worked
+            // out here rather than baked because it moves with the working
+            // stop — a stopped-down iris makes both a smaller ghost and a
+            // coarser fringe.
             let fresnel = ghost_fresnel_number(
                 baked.spreads.get(pi).copied().unwrap_or(1.0) * stop_scale,
                 p.fstop,
@@ -4044,7 +4037,7 @@ pub fn cpu_flare(
                             *corner = None;
                             return;
                         }
-                        // A masked-out corner still TRACES (K-264): its
+                        // A masked-out corner still TRACES: its
                         // weight is zero but its geometry is real, so the
                         // cell it belongs to draws and the iris edge fades
                         // INSIDE the cell. Killing the ray instead killed
@@ -4056,7 +4049,7 @@ pub fn cpu_flare(
                             v * baked.pupil_mm * stop_scale,
                             baked.start_z_mm,
                         ];
-                        // **Each ray integrates the source itself** (K-367).
+                        // **Each ray integrates the source itself**.
                         // The ray takes its light from its own point of the
                         // source's ±extent rectangle, so the source integral
                         // is absorbed into the pupil quadrature rather than
@@ -4086,14 +4079,14 @@ pub fn cpu_flare(
                             )
                         });
                     });
-                // Per-ray splatting (K-366). Each traced ray deposits its
+                // Per-ray splatting. Each traced ray deposits its
                 // pupil cell's flux over its own local footprint — the image
                 // of the launch cell under this ghost's map, read off the
                 // neighbouring rays as a 2×2 Jacobian. Rays are never
                 // connected across a fold the way the old quads were, so a
-                // caustic is just splats piling up (the correct integral)
-                // and the whole sliver/inflate/pull-in rescue machinery of
-                // K-261..K-264 has nothing left to rescue.
+                // caustic is just splats piling up (the correct integral) and
+                // the whole sliver/inflate/pull-in rescue machinery has
+                // nothing left to rescue.
                 for j in 0..side {
                     for i in 0..side {
                         let Some((pos, wgt, rgb)) = corners[j * side + i] else {
@@ -4121,10 +4114,10 @@ pub fn cpu_flare(
             }
         }
     }
-    // The pyramid's levels sum into the flat buffer (K-380) — the WGSL
+    // The pyramid's levels sum into the flat buffer — the WGSL
     // resolve, op for op.
     deposit.resolve(&mut out);
-    // The radius is a distance the padding does not change (K-267), applied
+    // The radius is a distance the padding does not change, applied
     // over the padded raster; the flare buffer's own divisor is what it is
     // measured in.
     blur_flare(
@@ -4138,7 +4131,7 @@ pub fn cpu_flare(
 }
 
 /// Separable box blur over an RGB buffer, `passes` times (3 passes
-/// approximate a Gaussian) — FlareSim's Ghost Blur (K-261), shared by the
+/// approximate a Gaussian) — FlareSim's Ghost Blur, shared by the
 /// CPU reference and mirrored by the WGSL blur kernel. `radius_px` 0 is a
 /// no-op.
 pub(crate) fn blur_flare(buf: &mut [f32], w: u32, h: u32, radius_px: u32, passes: u32) {
@@ -4188,14 +4181,14 @@ pub(crate) fn blur_flare(buf: &mut [f32], w: u32, h: u32, radius_px: u32, passes
 
 /// The Ghost-softness blur radius, whole pixels of the flare buffer.
 ///
-/// The dial is px@comp since K-558 — a blur radius is a distance, so it is
+/// The dial is px@comp — a blur radius is a distance, so it is
 /// pixels — and by the time it is here it is already raster pixels, the preview
 /// factor included. `flare_div` is the flare buffer's own divisor (2 on Draft,
 /// else 1): the buffer is that much smaller than the raster, so the radius over
 /// it is that much smaller too, and Draft softens by the same distance as the
 /// tier above it rather than twice as much.
 ///
-/// Capped at [`MAX_BLUR_RADIUS_PX`] (K-262): the box blur is a naive
+/// Capped at [`MAX_BLUR_RADIUS_PX`]: the box blur is a naive
 /// `2r+1`-tap loop run six times, so an uncapped radius of a couple of hundred
 /// pixels submits ~1000 taps per pixel — firmly in GPU-timeout territory. Three
 /// passes of an 80 px box already read as a heavy defocus, so the cap
@@ -4216,9 +4209,9 @@ pub const MAX_BLUR_RADIUS_PX: u32 = 80;
 /// staying anchored on its light. `flare` is the ghost buffer at `fw × fh`
 /// (Draft renders it at half size; sampling is resolution-relative so both
 /// agree). Operates on the premultiplied working buffer in place.
-/// One starburst deposit in [`cpu_combine`] (K-367): where the sprite is
+/// One starburst deposit in [`cpu_combine`]: where the sprite is
 /// centred (raster fraction), the colour it carries — the light's, times its
-/// share of the stamp grid — and the K-365 field terms for that position.
+/// share of the stamp grid — and the field terms for that position.
 struct SbStamp {
     pos: [f32; 2],
     rgb: [f32; 3],
@@ -4253,11 +4246,11 @@ pub fn cpu_combine(
     // sampler below indexes by slice. No slices, no starburst — the same
     // labelled no-op an intensity of zero gives.
     let sb_ready = baked.starburst.len() >= STARBURST_FIELDS * sb_res * sb_res * 3;
-    // The frame's starburst stamps (K-367): one per light for a point, a 3×3
+    // The frame's starburst stamps: one per light for a point, a 3×3
     // grid across the source for an area light — the shift-invariant
     // convolution of the sprite with the source, in quadrature form (see
     // [`starburst_stamp_grid`]). Each stamp's cat's-eye slice pair and sprite
-    // rotation (K-365) belong to the STAMP, not to the light: a smeared
+    // rotation belong to the STAMP, not to the light: a smeared
     // starburst near the frame edge leans a little differently at each end of
     // itself, which is the physical picture. All of it is a property of where
     // the stamp is rather than of the pixel, so it is worked out once here
@@ -4290,14 +4283,14 @@ pub fn cpu_combine(
             }
         }
     }
-    // The flare buffer arrives PADDED (K-267): `cpu_flare` renders it at
+    // The flare buffer arrives PADDED: `cpu_flare` renders it at
     // `flare_pad_dims`, geometry centred, so the resolution-relative tap
     // only shifts by the border. Unpadded, the constant is zero and the
-    // maths is K-266's exactly.
+    // maths is unchanged.
     let (rw, rh) = flare_pad_dims(fw, fh, p.anamorphic, p.scale);
     let sample_flare = |x: f32, y: f32| -> [f32; 3] {
         // Resolution-relative bilinear tap of the flare buffer. OUTSIDE it
-        // there is no flare (K-266): a squeeze or scale below 1 asks for
+        // there is no flare: a squeeze or scale below 1 asks for
         // coordinates past the buffer, and clamp-addressing repeated the
         // edge row outward — the owner's "dreadful" anamorphic smear. Half
         // a texel of grace keeps the true border texels filtered.
@@ -4345,7 +4338,7 @@ pub fn cpu_combine(
                     let light_px = [stamp.pos[0] * w as f32, stamp.pos[1] * h as f32];
                     let rel_x = x as f32 + 0.5 - light_px[0];
                     let rel_y = y as f32 + 0.5 - light_px[1];
-                    // The cat's-eye (K-365): the sprite is turned so the
+                    // The cat's-eye: the sprite is turned so the
                     // baked +x lean points along the stamp's own radial
                     // direction, and read from the two field slices
                     // bracketing the stamp's field fraction. On-axis the
@@ -4393,7 +4386,7 @@ pub fn cpu_combine(
             let luma = super::cpu::LUMA[0] * add[0]
                 + super::cpu::LUMA[1] * add[1]
                 + super::cpu::LUMA[2] * add[2];
-            // The flare element (K-289): the light this frame drew, with the
+            // The flare element: the light this frame drew, with the
             // coverage that light implies as its alpha — a premultiplied
             // black-backed overlay. Blend it with the layer, then saturate
             // alpha at 1. Add reduces to `o + add` with alpha `min(o.a +

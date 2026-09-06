@@ -1,4 +1,4 @@
-// Round v2 review shots (K-394, docs/15-DESIGN.md §12.1).
+// Round v2 review shots (docs/15-DESIGN.md §12.1).
 //
 // Not manual shots: these are review artefacts, so they go to
 // `C:/tmp/lumit-shots/round-v2` and never near `web-docs`. The sweep refuses
@@ -154,7 +154,7 @@ Future<void> main() async {
   // ---- Shot: capsule bars, and a Sequence's clips -------------------------
   // Added after the workspace shot so that frame is the manual's scene. A
   // Sequence layer cut into three is the only way to have clips on screen, and
-  // double-clicking the row is how the program opens their view (K-248).
+  // double-clicking the row is how the program opens their view.
   comp.addFootageLayer(
     footage: project.importFootage(path: '$fixtures/Gameplay.mp4'),
     asSequence: true,

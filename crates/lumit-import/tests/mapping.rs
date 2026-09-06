@@ -213,7 +213,7 @@ fn the_layer_stack_keeps_its_order_kinds_parenting_and_switches() {
     assert!(solid.switches.locked);
 }
 
-/// **A keyframed curve is copied, not recomputed** (K-025).
+/// **A keyframed curve is copied, not recomputed**.
 ///
 /// The three things that would each silently ruin an animation: reading one
 /// interpolation type per key rather than per *side* (every hold key becomes a
@@ -234,7 +234,7 @@ fn a_bezier_and_a_hold_key_come_across_side_by_side() {
     };
 
     // Blurriness is raster pixels in After Effects and px@comp in Lumit
-    // (docs/08 §2.3, K-419), so the values and the handle speeds — which are
+    // (docs/08 §2.3), so the values and the handle speeds — which are
     // value-units a second — arrive unchanged.
     let k = 1.0;
 
@@ -331,7 +331,7 @@ fn an_expression_drives_the_property_only_when_it_was_switched_on() {
 
     // Switched on, and written in After Effects' language: `wiggle` is not a
     // word Lumit's expressions know, so installing it would answer the same
-    // wrong number on every frame. It is switched off instead (K-625), the
+    // wrong number on every frame. It is switched off instead, the
     // text is kept, and the report says so.
     let clip = layer(comp(&doc, "Main"), "clip.mp4");
     assert_eq!(clip.transform.opacity.animation, Animation::Static(100.0));
@@ -518,9 +518,9 @@ fn an_unmapped_effect_imports_as_a_placeholder_keeping_its_parameters() {
     assert_eq!(blur.effect.match_name, "blur");
     assert!(blur.enabled);
 
-    // Curves' point list is the one property After Effects itself cannot read
-    // (K-410), so the effect keeps its slot and the report names the property
-    // rather than shipping a Curves with no curve.
+    // Curves' point list is the one property After Effects itself cannot read,
+    // so the effect keeps its slot and the report names the property rather
+    // than shipping a Curves with no curve.
     let curves = &clip.effects[0];
     assert_eq!(curves.effect.namespace, EffectNamespace::Placeholder);
     assert_eq!(curves.effect.match_name, "ADBE CurvesCustom");
@@ -550,10 +550,10 @@ fn an_unmapped_effect_imports_as_a_placeholder_keeping_its_parameters() {
 /// **A placeholder's parameters are real Lumit properties: they animate, and
 /// what has no property shape is kept verbatim.**
 ///
-/// docs/11 §6 in full, on a third-party effect that will never be in the table
-/// (K-060): the keyframed Speed becomes a keyframed property, the colour
-/// becomes a colour, the unreadable blob and the layer reference are kept in
-/// the `ae` namespace, and the whole thing is switched off exactly as it was.
+/// docs/11 §6 in full, on a third-party effect that will never be in the table:
+/// the keyframed Speed becomes a keyframed property, the colour becomes a
+/// colour, the unreadable blob and the layer reference are kept in the `ae`
+/// namespace, and the whole thing is switched off exactly as it was.
 #[test]
 fn a_placeholders_parameters_animate_and_nothing_is_dropped() {
     let (doc, report) = mapped("edges.lum-bundle");
@@ -768,7 +768,7 @@ fn key_times_are_measured_from_the_layers_own_start() {
 /// **Every mask mode comes across, and an animated path keeps its keys.**
 ///
 /// Lighten was the mode this fixture was picked for: it used to arrive as Add
-/// with a row apologising, and since K-545 it arrives as itself. Everything
+/// with a row apologising, and now it arrives as itself. Everything
 /// else about the mask — feather, opacity, expansion, the animated shape —
 /// comes across too, and AE's two feather axes average into Lumit's one width
 /// with a row saying so.
@@ -878,7 +878,7 @@ fn the_layer_kinds_lumit_has_map_and_the_rest_keep_their_slot() {
 /// **A guide layer crosses over; a draft quality and preserve-underlying-
 /// transparency are reported rather than dropped in silence.**
 ///
-/// AE's guide flag is Lumit's own switch (K-497). The other two have no Lumit
+/// AE's guide flag is Lumit's own switch. The other two have no Lumit
 /// counterpart, and each changes what a comp looks like, so each is a row.
 #[test]
 fn the_switches_with_no_counterpart_are_reported() {
@@ -1037,7 +1037,7 @@ fn the_report_summarises_and_reads_as_sentences() {
 ///
 /// The whole point of importing into an ordinary [`Document`]: `lumit-project`
 /// carries it, placeholders and `ae` namespaces included, with no second
-/// dialect of the Lumit format to maintain (K-410). What this proves is that
+/// dialect of the Lumit format to maintain. What this proves is that
 /// nothing the mapping puts in the document is a shape the file format cannot
 /// hold — the placeholder effect and the carried-through AE data being the two
 /// that could plausibly have been.
@@ -1131,7 +1131,7 @@ fn an_item_with_no_name_of_its_own_is_labelled_rather_than_left_blank() {
     assert_eq!(footage.media.relative_path, r"C:\Shoot\clip.mov");
 }
 
-/// **An After Effects image sequence becomes a Lumit image sequence** (K-539).
+/// **An After Effects image sequence becomes a Lumit image sequence**.
 ///
 /// The mapping is small but load-bearing in two directions. It has to carry
 /// the fact through — a run of stills that imports as a single still shows one
@@ -1170,7 +1170,7 @@ fn an_after_effects_image_sequence_maps_to_a_sequence_item() {
         run.sequence_fps(),
         Some((25, 1)),
         "stills carry no rate, and the .aep's conform rate is a preference \
-         rather than a fact in the file — so it is the default (K-539)"
+         rather than a fact in the file — so it is the default"
     );
     assert_eq!(
         run.media.relative_path, "/media/Cine3/Depth",
@@ -1190,7 +1190,7 @@ fn an_after_effects_image_sequence_maps_to_a_sequence_item() {
     );
 }
 
-/// **A tracked camera arrives with its motion** (docs/11 Â§3, K-625).
+/// **A tracked camera arrives with its motion** (docs/11 Â§3).
 ///
 /// The camera every tracker writes â€” HLAE, SynthEyes, a 3D application's
 /// exporter â€” keys three things and only three: Position, Orientation and
@@ -1371,8 +1371,7 @@ fn camera_capture() -> lumit_import::capture::Capture {
     .expect("the capture parses")
 }
 
-/// **An effect is measured against the layer, not against the composition**
-/// (K-636).
+/// **An effect is measured against the layer, not against the composition**.
 ///
 /// After Effects runs an effect on the layer's own raster, so Motion Tile's
 /// four per cents are per cents of *that* frame and its Tile Center is a point

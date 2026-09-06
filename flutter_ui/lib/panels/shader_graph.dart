@@ -1,5 +1,5 @@
 // The inner shader graph — the inside of one Custom shader, drawn in the
-// Graph panel (K-642, docs/impl/custom-shader.md §4, CS4/CS5).
+// Graph panel (docs/impl/custom-shader.md §4, CS4/CS5).
 //
 // **In plain terms.** A Custom shader can hold a graph instead of typed code:
 // boxes for the picture coming in, boxes for adding and multiplying, one box
@@ -53,7 +53,7 @@ import 'graph_panel.dart'
         graphWireWidth;
 
 /// The engine's word for a box, in the user's language. The kinds cross the
-/// bridge as ids, never as English (K-303) — these words are the frontend's.
+/// bridge as ids, never as English — these words are the frontend's.
 String shaderNodeWord(String kind) => switch (kind) {
       'picture' => l10n.shaderNodePicture,
       'picture2' => l10n.shaderNodePicture2,
@@ -127,7 +127,7 @@ String shaderPortWord(String id) => switch (id) {
 
 /// Which theme token a shader port type draws in: the widths one to three are
 /// numbers, a vec4 is a colour, and a picture is the image family — the same
-/// legend the outer canvas keeps (K-472).
+/// legend the outer canvas keeps.
 Color shaderPortColour(LumitTheme t, BridgeShaderTy ty) => switch (ty) {
       BridgeShaderTy.f32 ||
       BridgeShaderTy.vec2 ||
@@ -138,7 +138,7 @@ Color shaderPortColour(LumitTheme t, BridgeShaderTy ty) => switch (ty) {
     };
 
 /// The stored graph as this canvas holds it: the parsed JSON, kept as maps so
-/// keys this build has never heard of ride through a commit unharmed (K-065).
+/// keys this build has never heard of ride through a commit unharmed.
 class _Inner {
   final List<Map<String, dynamic>> nodes;
   final List<Map<String, dynamic>> edges;
@@ -257,7 +257,7 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel> {
   LumitUiState? _ui;
 
   /// The held graph and the engine's reading of it. One read on entry and on
-  /// document change — never in a rebuild (K-183).
+  /// document change — never in a rebuild.
   _Inner? _graph;
   BridgeShaderGraphView? _view;
 
@@ -291,8 +291,8 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel> {
     _ui?.model.removeListener(_reload);
     _ui = ui;
     ui.model.addListener(_reload);
-    // While the inner graph is the panel's face, Ctrl+Space adds a shader box
-    // (K-673) — the owner's "can't add options in the custom shader view".
+    // While the inner graph is the panel's face, Ctrl+Space adds a shader
+    // box — the owner's "can't add options in the custom shader view".
     // Chained over the outer canvas's own claim, which stands down while a
     // shader is entered.
     if (ui.consoleClaim != _consoleClaim) _priorConsoleClaim = ui.consoleClaim;
@@ -332,7 +332,7 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel> {
     return true;
   }
 
-  /// The Ctrl+Space console, wearing the shader vocabulary (K-673): every box
+  /// The Ctrl+Space console, wearing the shader vocabulary: every box
   /// the engine lists — the Parameter box included — and picking one drops it
   /// at [at]. A wire let go over empty canvas opens the same surface, exactly
   /// as the outer graph's does.
@@ -775,7 +775,7 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel> {
             widget.onExit();
             return KeyEventResult.handled;
           }
-          // No Tab door (K-673): Ctrl+Space is the console's one key,
+          // No Tab door: Ctrl+Space is the console's one key,
           // answered through [_consoleClaim].
           if (event.logicalKey == LogicalKeyboardKey.delete ||
               event.logicalKey == LogicalKeyboardKey.backspace) {
@@ -923,7 +923,7 @@ class _ShaderNodeCard extends StatelessWidget {
               decoration: BoxDecoration(
                 // Every box in here is shader vocabulary, so every header
                 // wears the same viz tint the Custom shader box wears
-                // outside (K-675) — one colour, one meaning, both graphs.
+                // outside — one colour, one meaning, both graphs.
                 color: graphShaderHeader(t),
                 border: Border(bottom: BorderSide(color: t.hairline)),
               ),

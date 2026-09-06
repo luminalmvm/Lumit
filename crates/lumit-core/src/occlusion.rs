@@ -1,4 +1,4 @@
-//! Occlusion culling (K-423, docs/06-RENDER-PIPELINE.md §1.1): when a layer
+//! Occlusion culling (docs/06-RENDER-PIPELINE.md §1.1): when a layer
 //! provably paints every pixel of the frame, the layers beneath it are never
 //! seen and need not be decoded, uploaded, effected or composited.
 //!
@@ -37,7 +37,7 @@ pub fn occluder_index(doc: &Document, comp: &Composition, t: f64) -> Option<usiz
     if comp.active_camera(t).is_some() {
         return None;
     }
-    // A live group header (docs/impl/group-effects.md, K-731) can reach any
+    // A live group header (docs/impl/group-effects.md) can reach any
     // pixel: its unit re-composites the members, its stack can thin their
     // coverage (a blur's soft edge on a full-frame solid), and its layer
     // inputs can read a layer below. Over-cautious by design, like everything
@@ -48,7 +48,7 @@ pub fn occluder_index(doc: &Document, comp: &Composition, t: f64) -> Option<usiz
     }
     let any_solo = crate::model::any_picture_solo(comp);
     let drawn = |l: &Layer| {
-        // An Audio layer never draws (K-435), so it is never an occluder and
+        // An Audio layer never draws, so it is never an occluder and
         // never one of the layers above one that could spoil the cull.
         !l.audio_only
             && l.switches.visible
@@ -58,7 +58,7 @@ pub fn occluder_index(doc: &Document, comp: &Composition, t: f64) -> Option<usiz
     };
     let candidate = comp.layers.iter().enumerate().find(|(_, l)| {
         drawn(l)
-            // A solid acting as an adjustment (K-537) has set its own colour
+            // A solid acting as an adjustment has set its own colour
             // aside — it shows what is under it, so it hides nothing.
             && !l.is_adjustment()
             && matches!(l.kind, LayerKind::Solid { .. })
@@ -407,7 +407,7 @@ mod tests {
                 Box::new(|c| c.layers.insert(0, layer(LayerKind::Adjustment, 1, 1))),
             ),
             (
-                // A live group header (K-731) can thin its members' coverage
+                // A live group header can thin its members' coverage
                 // — a blur's soft edge on a full-frame solid — so no header
                 // may be live anywhere while the cull stands.
                 "live group header",

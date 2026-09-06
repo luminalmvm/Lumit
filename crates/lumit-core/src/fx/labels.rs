@@ -1,6 +1,6 @@
 //! Every user-facing word the effects schema can hand to the interface, as one
 //! walk of the catalogue — so the translation gate reads the engine's own list
-//! instead of scraping source text (K-303).
+//! instead of scraping source text.
 //!
 //! # In plain terms
 //!
@@ -26,7 +26,7 @@ use super::schema::{FxCategory, ParamKind};
 #[must_use]
 pub fn user_facing_labels() -> BTreeSet<String> {
     let mut out = BTreeSet::new();
-    // The catalogue, then the **layer styles** (K-706): a style is not in the
+    // The catalogue, then the **layer styles**: a style is not in the
     // catalogue on purpose — the Add-effect menu must never offer "Drop shadow
     // (style)" beside the Drop shadow effect — but its name, its parameter
     // labels and its Choice options reach the Timeline fold and the Effect
@@ -64,9 +64,9 @@ pub fn user_facing_labels() -> BTreeSet<String> {
     for category in FxCategory::ALL {
         out.insert(category.label().to_owned());
     }
-    // The graph canvas's own words (K-471): the two derived nodes, the ports
+    // The graph canvas's own words: the two derived nodes, the ports
     // no schema declares, and every declared data port — a driver's outputs, a
-    // driver's wire-only inputs (K-492), and a picture operation's data outputs
+    // driver's wire-only inputs, and a picture operation's data outputs
     // such as Particulate's Points. The bridge draws a socket from each, so
     // each is a word the engine can send.
     out.insert(crate::graph::SOURCE_LABEL.to_owned());
@@ -103,7 +103,7 @@ mod tests {
     fn rendered() -> String {
         let mut s = String::new();
         s.push_str(
-            "# Every user-facing label the effects schema can send (K-303).\n\
+            "# Every user-facing label the effects schema can send.\n\
              # Generated - do not edit. To refresh after a schema change:\n\
              #   cargo test -p lumit-core regenerate_fx_label_fixture -- --ignored\n",
         );

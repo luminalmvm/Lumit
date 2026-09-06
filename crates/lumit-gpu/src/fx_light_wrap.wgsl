@@ -1,4 +1,4 @@
-// Light wrap (docs/08 §3.28, K-358) — two small passes over blurs the ordinary
+// Light wrap (docs/08 §3.28) — two small passes over blurs the ordinary
 // gaussian has already made.
 //
 // The effect needs three pictures: the foreground, the background softened

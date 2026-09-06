@@ -1,5 +1,5 @@
-//! The pure realtime tier controller for playback (K-030,
-//! docs/impl/playback-scheduler.md §5 "Realtime mode").
+//! The pure realtime tier controller for playback
+//! (docs/impl/playback-scheduler.md §5 "Realtime mode").
 //!
 //! In plain terms: adaptive playback promises to keep time, and pays for it
 //! with resolution. This module watches how long frames have actually been
@@ -57,8 +57,8 @@ pub const FLAP_WINDOW_FRAMES: u32 = 48;
 /// Starting point — tune on reference hardware.
 pub const COST_EWMA_ALPHA: f64 = 0.3;
 
-/// The realtime-mode resolution picker (K-030,
-/// docs/impl/playback-scheduler.md §5 "Realtime mode").
+/// The realtime-mode resolution picker
+/// (docs/impl/playback-scheduler.md §5 "Realtime mode").
 ///
 /// In plain terms: realtime mode promises smooth motion and pays for it with
 /// resolution. This controller watches a smoothed average of how long frames

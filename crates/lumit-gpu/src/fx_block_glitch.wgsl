@@ -1,6 +1,6 @@
 // Block glitch — standalone block displacement (docs/08-EFFECTS.md §3.12,
-// split out of the old combined Glitch effect by K-107: one of three
-// now-separate one-thing effects, alongside Scanlines and Datamosh).
+// split out of the old combined Glitch effect: one of three now-separate
+// one-thing effects, alongside Scanlines and Datamosh).
 // Mirrors lumit_core::fx::cpu::block_glitch op-for-op (§1.6: the CPU is the
 // oracle). The per-block hash runs here too, not host-precomputed: the
 // block index is a per-pixel quantity (there are too many blocks to fit a
@@ -18,7 +18,7 @@ struct Params {
     chan: f32,
     slice_frac: f32,
     mix_amt: f32,
-    matte_on: f32,  // 1 = the matte scales Intensity (K-427)
+    matte_on: f32,  // 1 = the matte scales Intensity
     _pad1: f32,
     _pad2: f32,
 };
@@ -28,14 +28,14 @@ struct Params {
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
 
-// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// The Matte (docs/08 §2.6), bound for every kernel on this layout and
 // read only under `matte_on` — bound to `src` when there is none, since a
 // texture binding cannot be left empty.
 @group(0) @binding(4) var matte: texture_2d<f32>;
 
 // This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
 // luma, clamped. The Channel pick and Invert already happened, once, at the
-// seam (fx_matte_prepare.wgsl, K-425).
+// seam (fx_matte_prepare.wgsl).
 fn matte_k(xy: vec2<i32>) -> f32 {
     let m = textureLoad(matte, xy, 0);
     return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
@@ -107,8 +107,8 @@ fn block_glitch(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     let pos = vec2<f32>(xy) + vec2<f32>(0.5);
     let bw = max(p.block_size, 1.0);
-    // The matte scales Intensity per pixel, before any hash is read (K-427,
-    // == cpu::block_glitch_matted); the short-circuit above read the host's.
+    // The matte scales Intensity per pixel, before any hash is read
+    // (== cpu::block_glitch_matted); the short-circuit above read the host's.
     var intensity = p.intensity;
     if (p.matte_on != 0.0) {
         intensity = intensity * matte_k(xy);

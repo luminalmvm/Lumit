@@ -8,11 +8,11 @@ license = "GPL-3.0-only"
 publish = false
 
 [dependencies]
-# The flattened path a line can run along is the mask's own polyline (K-607):
+# The flattened path a line can run along is the mask's own polyline:
 # one arc-length walk in this engine, not a second one written here.
 lumit-core = { path = "../lumit-core" }
 fontdue = "0.9"
-# The glyph *outlines* Text to shapes needs (K-608). fontdue rasterises and
+# The glyph *outlines* Text to shapes needs. fontdue rasterises and
 # hands back bitmaps only; the curves come from the font parser fontdue itself
 # is built on, so this is the same crate at the same version, named directly.
 ttf-parser = "0.21"

@@ -17,11 +17,11 @@ struct Params {
     opacity: f32,          // 0..1
     mix_amt: f32,          // 0..1, blended against the unprocessed input
     shadow_only: u32,
-    matte_on: f32,         // 1 = the matte scales the shadow's Opacity (K-428)
-    spread_scale: f32,     // Spread's threshold-remap slope (K-706); 1 = none
-    knockout: u32,         // 1 = the layer's shape knocks the shadow out (K-706)
-    invert: u32,           // 1 = read the coverage from the inverted alpha (K-706)
-    inner: u32,            // 1 = composite inside the shape and over it (K-706)
+    matte_on: f32,         // 1 = the matte scales the shadow's Opacity
+    spread_scale: f32,     // Spread's threshold-remap slope; 1 = none
+    knockout: u32,         // 1 = the layer's shape knocks the shadow out
+    invert: u32,           // 1 = read the coverage from the inverted alpha
+    inner: u32,            // 1 = composite inside the shape and over it
     _pad0: u32,
     _pad1: u32,
 };
@@ -31,14 +31,14 @@ struct Params {
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
 
-// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// The Matte (docs/08 §2.6), bound for every kernel on this layout and
 // read only under `matte_on` — bound to `src` when there is none, since a
 // texture binding cannot be left empty.
 @group(0) @binding(4) var matte: texture_2d<f32>;
 
 // This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
 // luma, clamped. The Channel pick and Invert already happened, once, at the
-// seam (fx_matte_prepare.wgsl, K-425).
+// seam (fx_matte_prepare.wgsl).
 fn matte_k(xy: vec2<i32>) -> f32 {
     let m = textureLoad(matte, xy, 0);
     return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
@@ -87,7 +87,7 @@ fn drop_shadow(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let o = textureLoad(src, xy, 0);
     // The matte pulls the shadow's Opacity toward 0 per pixel, read where the
-    // shadow FALLS rather than where the shape stands (K-428), so the matte's
+    // shadow FALLS rather than where the shape stands, so the matte's
     // own picture is the picture of where the shadow lands.
     var opacity = p.opacity;
     if (p.matte_on != 0.0) {
@@ -96,19 +96,19 @@ fn drop_shadow(@builtin(global_invocation_id) gid: vec3<u32>) {
     var cover = bilinear_transparent(f32(xy.x) + 0.5 - p.offset.x,
                                      f32(xy.y) + 0.5 - p.offset.y,
                                      size).a;
-    // Inverted alpha (K-706, == cpu::drop_shadow_matted): the softened picture
+    // Inverted alpha (== cpu::drop_shadow_matted): the softened picture
     // of what the shape is NOT. Outside the frame the sample is 0, so this reads
     // 1 there — which is right, because outside the frame is outside the shape.
     if (p.invert != 0u) {
         cover = 1.0 - cover;
     }
-    // Spread (K-706, == cpu::drop_shadow_matted): the gaussian's ramp re-cut
+    // Spread (== cpu::drop_shadow_matted): the gaussian's ramp re-cut
     // about its half-way line, which is where the original edge was. Skipped
     // whole at slope 1, so a shadow with no spread is the bytes it always was.
     if (p.spread_scale != 1.0) {
         cover = clamp((cover - 0.5) * p.spread_scale + 0.5, 0.0, 1.0);
     }
-    // Layer knocks out shadow (K-706): the shape takes the shadow away first,
+    // Layer knocks out shadow: the shape takes the shadow away first,
     // and the composite below then puts the layer over what is left.
     if (p.knockout != 0u) {
         cover = cover * (1.0 - o.a);
@@ -121,7 +121,7 @@ fn drop_shadow(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (p.shadow_only != 0u) {
         over = shadow;
     }
-    // Interior (K-706): the layer's colour carried toward the style's by the
+    // Interior: the layer's colour carried toward the style's by the
     // coverage, alpha untouched. Both sides already carry the layer's alpha, so
     // an interior style cannot put a pixel where the layer was not.
     if (p.inner != 0u) {

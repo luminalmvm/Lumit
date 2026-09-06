@@ -1,4 +1,4 @@
-//! Scatter (K-599): points thrown at the picture, kept where there is alpha.
+//! Scatter: points thrown at the picture, kept where there is alpha.
 //!
 //! **In plain terms.** Grid puts points where the arithmetic says; Scatter
 //! throws them at random and keeps the ones that land on something. "Something"
@@ -17,8 +17,7 @@
 //! change with the preview resolution is whether a candidate on a **soft edge**
 //! is accepted, because the alpha it reads is the picture at the raster being
 //! drawn, and a half-resolution picture is a different picture. At full
-//! resolution preview and export are the same by construction (K-031), which is
-//! where that guarantee is actually made.
+//! resolution preview and export are the same by construction.
 //!
 //! **Its stream cannot be sampled by a driver**, and that is the recorded
 //! answer to points-stream.md §2.2's constraint: the stream is a function of
@@ -34,7 +33,7 @@ use crate::fx::{
 use lumit_fx_macros::Effect;
 
 /// Scatter's declared **data** output — the same port Particulate and Grid
-/// declare (K-472, K-492).
+/// declare.
 const POINTS_OUT: &[Port] = &[Port::new("points", "Points", PortType::Points)];
 
 const fn group(label: &'static str, params: &'static [&'static str]) -> ParamGroup {
@@ -84,13 +83,13 @@ mod attr {
     cost = Moderate,
     roi = FullFrame,
     premultiplied = true,
-    // Not seeded, for Grid's reason (K-598): `seeded` says the pixels are a
+    // Not seeded, for Grid's reason: `seeded` says the pixels are a
     // function of *time* under constant parameters. Scatter's are a function
     // of its **input**, which the frame key already covers.
     seeded = false,
-    // **The K-395 override.** The matte is not a strength here — it is *where
-    // the points go*, consumed inside the effect's own maths, so the generic
-    // dissolve must not run as well.
+    // **The matte-rule override.** The matte is not a strength here — it is
+    // *where the points go*, consumed inside the effect's own maths, so the
+    // generic dissolve must not run as well.
     matte = (
         "matte",
         "chooses which layer's alpha the points land inside, instead of this layer's own"
@@ -133,7 +132,7 @@ pub struct Scatter {
     #[colour(default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
     pub colour: [f32; 4],
 
-    /// **The budget dial** (K-475), as Grid's is: the most **candidates** that
+    /// **The budget dial**, as Grid's is: the most **candidates** that
     /// may be thrown, and the peak scratch the governor grants against. What
     /// stands is a subset of that, so the cap is a ceiling on the work and not
     /// on the look. Not animatable — it is a capacity declaration.
@@ -163,10 +162,10 @@ pub struct Scatter {
 }
 
 impl Scatter {
-    /// The raster factor, for the two things the declaration cannot scale
-    /// (K-385): the composition's camera, and the **count** — Density is per
-    /// area of the composition, so it is measured against the comp's own size
-    /// and not against whatever raster is previewing.
+    /// The raster factor, for the two things the declaration cannot scale: the
+    /// composition's camera, and the **count** — Density is per area of the
+    /// composition, so it is measured against the comp's own size and not
+    /// against whatever raster is previewing.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
     /// This instance's raster factor, read back out of a resolved bag.
@@ -193,7 +192,7 @@ impl Scatter {
     /// Every candidate, accepted or not — where each falls, and how it would be
     /// drawn.
     ///
-    /// **The candidate set is what the card is given** (K-599): the rejection
+    /// **The candidate set is what the card is given**: the rejection
     /// happens in the vertex stage, because that is the only place a host-built
     /// set can meet a picture that exists only on the card. The accepted subset
     /// — the *stream* — is [`stream`](Self::stream), and it is what the CPU
@@ -267,7 +266,7 @@ impl Scatter {
         }
     }
 
-    /// The points that stand: the **stream** (K-599).
+    /// The points that stand: the **stream**.
     ///
     /// `rgba` is the field's own picture, premultiplied linear — the effect's
     /// input, or the bound matte's frame — at the same `w × h` raster the
@@ -332,7 +331,7 @@ impl EffectDef for ScatterDef {
         &<Scatter as EffectMetadata>::SCHEMA
     }
 
-    /// The picture *and* the data (K-472), exactly as Particulate and Grid
+    /// The picture *and* the data, exactly as Particulate and Grid
     /// declare it — and see this file's header on why a **driver** may not
     /// sample it.
     fn signature(&self) -> Signature {
@@ -343,7 +342,7 @@ impl EffectDef for ScatterDef {
     }
 
     /// The raster factor: the camera, and the count Density means per
-    /// composition area (K-385).
+    /// composition area.
     fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
         push(Scatter::DERIVED_PX_SCALE, Value::Float(cx.px_scale));
     }

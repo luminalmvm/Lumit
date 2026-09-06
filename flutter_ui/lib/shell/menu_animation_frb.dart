@@ -1,10 +1,10 @@
-// The Animation menu's built rows (K-244).
+// The Animation menu's built rows.
 //
 // In plain terms: everything here acts on **the property rows the Timeline has
-// picked** (`selectedProperties`, K-341) and on the keys those rows carry
-// under the playhead. That is the whole of the menu's idea of a selection, and
-// it is deliberate: the keyframe selection itself belongs to the panel holding
-// it and is never published (see `LumitUiState.easingApply`), so a menu that
+// picked** (`selectedProperties`) and on the keys those rows carry under the
+// playhead. That is the whole of the menu's idea of a selection, and it is
+// deliberate: the keyframe selection itself belongs to the panel holding it
+// and is never published (see `LumitUiState.easingApply`), so a menu that
 // claimed to act on "the selected keys" would be guessing. The playhead is a
 // place both the menu and the user can see.
 //
@@ -68,8 +68,8 @@ List<GraphChannel> selectedChannels(LumitUiState ui) => graphChannels(
 /// playhead, because a side's speed is worked out from its *neighbours* — a
 /// key on its own does not know what an automatic tangent should aim at.
 ///
-/// A mask's **shape** row is skipped: a path key holds a whole path rather than
-/// a number, and the mask's own control is what plants and eases one (K-340).
+/// A mask's **shape** row is skipped: a path key holds a whole path rather
+/// than a number, and the mask's own control is what plants and eases one.
 /// Returns whether anything was written.
 bool editKeysAtPlayhead(
   LumitUiState ui,
@@ -156,7 +156,7 @@ BridgeKeyframe _keyWith(
 /// Animation ▸ Set keyframe: plant one at the playhead on every picked row.
 ///
 /// A row with nothing keyed is left alone — turning a static property into an
-/// animated one is the stopwatch's job (K-447: there is no auto-key, and the
+/// animated one is the stopwatch's job (there is no auto-key, and the
 /// stopwatch is the whole model) — and so is a row that already has a key
 /// there, because two keys at one time is not a curve the engine will take.
 MenuEntry setKeyframeRow(LumitState app, LumitUiState ui) {
@@ -240,7 +240,7 @@ MenuEntry keyframeInterpolationRow(
   );
 }
 
-/// Animation ▸ Keyframe speed…: how far each side's handle reaches (K-505).
+/// Animation ▸ Keyframe speed…: how far each side's handle reaches.
 ///
 /// A side that was straight becomes a curve that looks exactly as it did — the
 /// only way to give a straight side a reach at all — because the speed comes
@@ -276,9 +276,9 @@ MenuEntry keyframeSpeedRow(
   );
 }
 
-/// Animation ▸ Animate text (K-609): one more animator on every selected Text
-/// layer, each arriving with its five property groups and its one range
-/// selector already on it.
+/// Animation ▸ Animate text: one more animator on every selected Text layer,
+/// each arriving with its five property groups and its one range selector
+/// already on it.
 MenuEntry animateTextRow(LumitState app, LumitUiState ui) => MenuEntry(
       l10n.menuAnimateText,
       onSelection(
@@ -289,8 +289,8 @@ MenuEntry animateTextRow(LumitState app, LumitUiState ui) => MenuEntry(
       ),
     );
 
-/// Animation ▸ Add expression (K-305): a Rhai expression on every picked
-/// property row, replacing whatever it held.
+/// Animation ▸ Add expression: a Rhai expression on every picked property row,
+/// replacing whatever it held.
 MenuEntry addExpressionRow(
     BuildContext context, LumitState app, LumitUiState ui) {
   final channels = [
@@ -321,8 +321,8 @@ MenuEntry addExpressionRow(
   );
 }
 
-/// Animation ▸ Track camera (K-417): the tracker is an **effect**, so this
-/// applies it and presses its own Analyse.
+/// Animation ▸ Track camera: the tracker is an **effect**, so this applies it
+/// and presses its own Analyse.
 ///
 /// Only on the two kinds that have footage to track — a solve is keyed to the
 /// unaltered source, and a Null has none. A layer that already carries the
@@ -365,9 +365,9 @@ Future<String?> Function(String suggested) animationPresetSavePicker =
         pickPresetSaveLocation(suggested, initialDirectory: presetsDirPath());
 Future<String?> Function() animationPresetOpenPicker = pickPresetToOpen;
 
-/// Animation ▸ Save animation preset (K-244): the selected layer's effect
-/// stack written out as the `.lumfx` document the Effects & presets panel's
-/// own **Save preset…** writes, through the same engine call.
+/// Animation ▸ Save animation preset: the selected layer's effect stack
+/// written out as the `.lumfx` document the Effects & presets panel's own
+/// **Save preset…** writes, through the same engine call.
 ///
 /// The engine hands back the text and never opens a dialogue; where it goes is
 /// the picker's business and writing it is Dart's. The preset's display name is
@@ -394,8 +394,8 @@ MenuEntry saveAnimationPresetRow(LumitUiState ui) {
   );
 }
 
-/// Animation ▸ Apply animation preset (K-244): a saved `.lumfx` onto **every**
-/// selected layer (K-523), read once and applied per layer as one undo step.
+/// Animation ▸ Apply animation preset: a saved `.lumfx` onto **every**
+/// selected layer, read once and applied per layer as one undo step.
 ///
 /// A layer's refusal leaves the rest of the batch standing, and a file that is
 /// not a preset at all is a normal thing for a picker to hand back rather than

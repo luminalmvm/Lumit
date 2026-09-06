@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reject the two Icon Composer settings that actool cannot compile (K-312).
+"""Reject the two Icon Composer settings that actool cannot compile.
 
 In plain terms: the macOS application icon is not a picture but a small stack of
 layers, described by `assets/brand/lumit-icon.icon/icon.json`, which Apple's
@@ -56,7 +56,7 @@ def main() -> int:
     found = problems(json.loads(ICON.read_text()))
     if not found:
         return 0
-    print(f"{ICON} uses Icon Composer settings actool cannot compile (K-312):")
+    print(f"{ICON} uses Icon Composer settings actool cannot compile:")
     for line in found:
         print(f"  - {line}")
     print()

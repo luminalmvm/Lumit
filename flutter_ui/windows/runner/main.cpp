@@ -20,10 +20,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   flutter::DartProject project(L"data");
 
   // Lumit ships on Skia, pinned here so the shipped binary does not depend on
-  // how it was launched (K-732, superseding K-677's shipping clause). Impeller
-  // on Windows is GLES over ANGLE with no partial repaint: it costs ~25 ms of
-  // raster thread per maximised frame against Skia's ~5 ms and measures 20-36 fps
-  // where Skia measures 99-146, so it cannot meet the 60 fps mandate
+  // how it was launched. Impeller on Windows is GLES over ANGLE with no
+  // partial repaint: it costs ~25 ms of raster thread per maximised frame
+  // against Skia's ~5 ms and measures 20-36 fps where Skia measures 99-146,
+  // so it cannot meet the 60 fps mandate
   // (docs/impl/ui-performance.md 2.4/4.1/7.2). Flip this back to
   // ImpellerSwitch::Default the day a Flutter upgrade's re-run of the 2.4 A/B
   // shows Impeller clearing the mandate in the owner's conditions.

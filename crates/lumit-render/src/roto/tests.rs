@@ -329,7 +329,7 @@ fn a_cancel_keeps_the_prefix_it_finished() {
     assert!(run.is_partial());
 }
 
-/// K-723: the release-time solve of a scribbled frame. A `stop_after` at the
+/// The release-time solve of a scribbled frame. A `stop_after` at the
 /// base files exactly that frame — with no walk there is no flow pair to ask
 /// for, which is what lets the feedback work on a machine with no GPU flow —
 /// and a `stop_after` further along walks toward it and no further.
@@ -359,7 +359,7 @@ fn a_stop_after_run_files_the_asked_frame_and_no_further() {
     );
 }
 
-/// K-723: a Propagate over a partial run **carries on from it** rather than
+/// A Propagate over a partial run **carries on from it** rather than
 /// reading it back as the whole answer — the resume §6 promises. The partial
 /// run here is a release-time solo; a cancelled run resumes the same way, the
 /// two being the same shape of sidecar.

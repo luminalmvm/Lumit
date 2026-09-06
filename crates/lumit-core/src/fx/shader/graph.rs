@@ -1,5 +1,5 @@
 //! The Custom shader's inner node graph: the stored shape and the v1 node
-//! vocabulary (docs/impl/custom-shader.md §4, K-642, CS4).
+//! vocabulary (docs/impl/custom-shader.md §4, CS4).
 //!
 //! # In plain terms
 //!
@@ -37,7 +37,7 @@ pub struct ShaderGraph {
 
 /// One box: a stable small id, what it is, and — for the few kinds that carry
 /// facts of their own (a Parameter's five facts, a swizzle's pattern, a blend's
-/// mode) — a settings bag that unknown keys ride through unharmed (K-065).
+/// mode) — a settings bag that unknown keys ride through unharmed.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ShaderNode {
     pub id: u32,

@@ -1,5 +1,5 @@
 // The easing editor: a unit box you shape an ease in, and a button that stamps
-// it onto the selected keyframes (docs/07 §5.3 and §5.4, K-348 and K-349).
+// it onto the selected keyframes (docs/07 §5.3 and §5.4).
 //
 // In plain terms: the graph editor shapes one span at a time, in the units that
 // span happens to use. This is the same shape drawn once, in the abstract — the
@@ -8,7 +8,7 @@
 // Apply puts it on every span the selection covers, whatever those spans move
 // by (`applyEasingToSelection`, the per-span conversion it leans on).
 //
-// **One editor, shown two ways** (K-349). By default it is the *Easing panel*
+// **One editor, shown two ways**. By default it is the *Easing panel*
 // (`easing_panel_frb.dart`), which stays on screen while the selection changes
 // underneath it — that is the whole reason to prefer a panel. Settings ▸
 // Interface ▸ Editing turns it back into a popup that opens from the graph's
@@ -88,7 +88,7 @@ const double _thumbHeight = 32;
 
 /// Open the easing editor at [position] as a popup, and call [onApply] with the
 /// shape each time Apply is pressed — the *inline* mode of Settings ▸ Interface
-/// ▸ Editing (K-349).
+/// ▸ Editing.
 ///
 /// The popup stays up across an Apply — shaping an ease is a "try it, nudge it,
 /// try it again" job, and a box that vanished on first use would make the
@@ -345,7 +345,7 @@ class _EasingEditorState extends State<EasingEditor> {
     );
   }
 
-  /// The preset library (K-726): the shipped shapes and the user's own, each a
+  /// The preset library: the shipped shapes and the user's own, each a
   /// tile drawing its curve with its name under it — the grid the panel is
   /// mostly made of, the way Flow's library is.
   ///

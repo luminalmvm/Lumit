@@ -1,4 +1,4 @@
-//! What the machine has, for the settings that spend it (K-194).
+//! What the machine has, for the settings that spend it.
 //!
 //! The cache budgets in Settings → Performance are typed numbers now rather
 //! than a pick from a fixed list, so they need a real ceiling: asking for more
@@ -8,8 +8,8 @@
 //! pretending, so a platform without an implementation is honest rather than
 //! wrong.
 //!
-//! Windows is the shipped target (K-033), but installed RAM is answerable on
-//! every supported desktop target (K-082), so all three answer it (K-204):
+//! Windows is the shipped target, but installed RAM is answerable on
+//! every supported desktop target, so all three answer it:
 //! `GlobalMemoryStatusEx` on Windows, `MemTotal:` from `/proc/meminfo` on
 //! Linux, and the `hw.memsize` sysctl on macOS. Windows and macOS report the
 //! installed total; Linux's `MemTotal` is *usable* RAM, which excludes what
@@ -17,7 +17,7 @@
 //! 15.5 GB on a 16 GB host). That errs low, which is the safe direction for a
 //! budget ceiling — the same choice `video_memory_bytes` makes below.
 //!
-//! Video memory is answered on all three too (K-582): the first DXGI adapter's
+//! Video memory is answered on all three too: the first DXGI adapter's
 //! dedicated video memory on Windows, and on the other two through the graphics
 //! API the engine already links — see [`video_memory_bytes`].
 
@@ -27,11 +27,11 @@ use flutter_rust_bridge::frb;
 /// asked — the number the operating system's own monitor shows.
 ///
 /// **Why this exists.** Lumit has now twice been reported holding tens of
-/// gigabytes (K-277, and again after it), and each time the first question took
-/// days to answer: is a cache doing exactly what it was told, or is something
-/// holding memory nobody is counting? Every tier already reports its own bytes;
-/// what was missing was the total to weigh them against. The difference between
-/// the two is the whole diagnosis, so it is worth one syscall.
+/// gigabytes, and each time the first question took days to answer: is a cache
+/// doing exactly what it was told, or is something holding memory nobody is
+/// counting? Every tier already reports its own bytes; what was missing was the
+/// total to weigh them against. The difference between the two is the whole
+/// diagnosis, so it is worth one syscall.
 ///
 /// Each platform's nearest equivalent of "what the task manager says":
 /// `PROCESS_MEMORY_COUNTERS.WorkingSetSize` on Windows, `VmRSS` from
@@ -274,7 +274,7 @@ pub fn video_memory_bytes() -> u64 {
 }
 
 /// Where the pointer was when a drag took hold of it, for the tools that hold
-/// it still (K-230).
+/// it still.
 ///
 /// **In plain terms.** Dragging a camera about is not a gesture with a *place*
 /// — nothing on the picture is being aimed at, only the movement matters — so
@@ -368,7 +368,7 @@ mod tests {
         restore_frozen_cursor();
     }
 
-    /// Video memory is answered on all three desktops (K-582) — but not all
+    /// Video memory is answered on all three desktops — but not all
     /// three answer at the same *moment*, which is the part worth pinning.
     /// Windows asks DXGI and macOS asks Metal, and both work with no renderer
     /// open, so a zero there is a broken implementation rather than a machine

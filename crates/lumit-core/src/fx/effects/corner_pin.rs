@@ -18,7 +18,7 @@ use lumit_fx_macros::Effect;
 
 /// Corner pin's controls.
 ///
-/// Every point is px@comp (§2.3, K-260 — point parameters are pixels, never per
+/// Every point is px@comp (§2.3 — point parameters are pixels, never per
 /// cent). The schema defaults are a nominal 1080p keystone; a fresh instance is
 /// put on the actual comp by
 /// [`instantiate_for_raster`](crate::fx::instantiate_for_raster), because a
@@ -36,7 +36,7 @@ use lumit_fx_macros::Effect;
     // Four points anywhere: the output pixel can come from anywhere in the input.
     roi = FullFrame,
     premultiplied = true,
-    // K-427: the matte scales the displacement, inside the kernel (the
+    // The matte scales the displacement, inside the kernel (the
     // owner's rule for mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",

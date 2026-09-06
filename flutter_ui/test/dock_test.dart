@@ -31,8 +31,8 @@ void main() {
 
     expect((upper.children[1] as DockPane).panel, Panel.viewer);
     // The right column carries Effects & presets fronted (docs/07 §1.6's
-    // Edit workspace), with Scopes tabbed behind it. Debug left every shipped
-    // arrangement with K-739.
+    // Edit workspace), with Scopes tabbed behind it. Debug is in no shipped
+    // arrangement.
     final right = upper.children[2] as DockTabs;
     expect(
       [for (final c in right.children) c.panel],
@@ -52,11 +52,10 @@ void main() {
   /// Seven panels are deliberately not in the default arrangement, and all
   /// for the same reason (docs/07 §1.6): a panel nobody asked for should not
   /// appear in an arrangement they already know. **Easing** belongs to
-  /// Retiming (K-349); the **Graph** and **Node** panels to Nodes (K-445,
-  /// K-471); the **Mixer** and **Audio** panels to the Audio workspace (the
-  /// AudioWorkspace board); and **Hierarchy** (K-614) and **Debug** (K-739)
-  /// belong to no shipped arrangement at all. All seven are one tick away in
-  /// the Window menu.
+  /// Retiming; the **Graph** and **Node** panels to Nodes; the **Mixer** and
+  /// **Audio** panels to the Audio workspace (the AudioWorkspace board); and
+  /// **Hierarchy** and **Debug** belong to no shipped arrangement at all. All
+  /// seven are one tick away in the Window menu.
   test(
       'no panel appears twice in the default workspace, and only the '
       'specialist panels are absent', () {
@@ -76,7 +75,7 @@ void main() {
           ]));
   });
 
-  /// **No shipped arrangement carries the Hierarchy panel** (K-614) — not the
+  /// **No shipped arrangement carries the Hierarchy panel** — not the
   /// default and not one preset, which is the owner's standing instruction
   /// and the thing a new preset is most likely to reintroduce by copying an
   /// old one.
@@ -88,7 +87,7 @@ void main() {
     }
   });
 
-  /// **Nor the Debug panel** (K-739). It fronted the right column once and was
+  /// **Nor the Debug panel**. It fronted the right column once and was
   /// a tab behind Effects & presets until the owner measured the arrangements
   /// off their own screen; a developer's readout is not what a workspace opens
   /// on. The Window menu keeps its own row for it.
@@ -101,9 +100,9 @@ void main() {
   });
 
   /// The Effects workspace's right-hand column, now that the Node preview is
-  /// the Viewer's own chip (K-528) and Debug is in no arrangement (K-739):
-  /// Effects & presets fronted with Scopes behind it. Nothing took either
-  /// folded panel's slot, because nothing was waiting for one.
+  /// the Viewer's own chip and Debug is in no arrangement: Effects & presets
+  /// fronted with Scopes behind it. Nothing took either folded panel's slot,
+  /// because nothing was waiting for one.
   test('the Effects workspace sidebar is Effects and Scopes', () {
     final root = presetLayout(WorkspacePreset.effects);
     final upper = root.children[0] as DockSplit;
@@ -116,7 +115,7 @@ void main() {
         reason: 'the sidebar still opens on Effects & presets');
   });
 
-  /// **One Timeline height** (K-739). Edit, Effects and Colour all split down
+  /// **One Timeline height**. Edit, Effects and Colour all split down
   /// the middle of the window, and the owner asked for the same band in each
   /// so that changing workspace leaves the lanes where the pointer left them.
   /// Nodes agrees by its graph column (tested with that preset); Audio and
@@ -131,11 +130,11 @@ void main() {
   });
 
   /// **A panel that has been folded away must not cost anyone their
-  /// arrangement** (K-528). Every workspace saved while the Node preview
-  /// existed still names it, and the pane lookup used to be a bare `!` — so
-  /// reading one back threw, and the stored layout took the settings with it.
-  /// A pane naming a panel this build does not have is dropped instead, and
-  /// what is left opens as it was.
+  /// arrangement**. Every workspace saved while the Node preview existed still
+  /// names it, and the pane lookup used to be a bare `!` — so reading one back
+  /// threw, and the stored layout took the settings with it. A pane naming a
+  /// panel this build does not have is dropped instead, and what is left opens
+  /// as it was.
   test('a saved layout naming a panel that has gone opens without it', () {
     final saved = {
       'kind': 'split',
@@ -234,7 +233,7 @@ void main() {
       final root = defaultLayout();
       final before = root.toJson();
       // One bare pane and one tabbed panel, both already there. (Debug used
-      // to stand for the tabbed case; it is in no arrangement now — K-739.)
+      // to stand for the tabbed case; it is in no arrangement now.)
       setPanelVisible(root, Panel.viewer, true);
       setPanelVisible(root, Panel.scopes, true);
       expect(root.toJson(), before);
@@ -260,7 +259,7 @@ void main() {
     });
   });
 
-  /// The Easing panel is Retiming's alone (K-349): a new panel that appeared in
+  /// The Easing panel is Retiming's alone: a new panel that appeared in
   /// the four arrangements people already know would be a rearrangement nobody
   /// asked for. Anywhere else it is opened deliberately.
   group('the Retiming preset', () {
@@ -299,11 +298,10 @@ void main() {
     });
   });
 
-  /// The Nodes preset (K-445, K-471): the Graph panel large with the Timeline
-  /// under it, a small Viewer upper right and the Node panel beneath that.
-  /// The shares are the owner's own, measured off their screen and
-  /// superseding the drawing's (K-739), pinned here because "roughly like the
-  /// picture" is not a test.
+  /// The Nodes preset: the Graph panel large with the Timeline under it, a
+  /// small Viewer upper right and the Node panel beneath that. The shares are
+  /// the owner's own, measured off their screen and superseding the drawing's,
+  /// pinned here because "roughly like the picture" is not a test.
   group('the Nodes preset', () {
     test('splits across, not down: the Timeline is under the graph only', () {
       final root = presetLayout(WorkspacePreset.nodes);
@@ -317,7 +315,7 @@ void main() {
       expect([for (final c in graphColumn.children) (c as DockPane).panel],
           [Panel.graph, Panel.timeline]);
       expect(graphColumn.shares, [0.68, 0.32],
-          reason: "the Timeline stands at Edit's height here too (K-739)");
+          reason: "the Timeline stands at Edit's height here too");
 
       final rightColumn = root.children[1] as DockSplit;
       expect(rightColumn.axis, DockAxis.vertical);
@@ -338,7 +336,7 @@ void main() {
       expect(
         (nodes.children[0] as DockSplit).shares[1],
         presetLayout(WorkspacePreset.edit).shares[1],
-        reason: 'K-739: Edit, Effects, Nodes and Colour give the Timeline the '
+        reason: 'Edit, Effects, Nodes and Colour give the Timeline the '
             'same height, so changing workspace does not move the lanes',
       );
     });
@@ -383,7 +381,7 @@ void main() {
   });
 
   group('Panels declare a minimum, and the seam respects it', () {
-    /// **A subtree's minimum is its panels'** (K-451). Across a row the floors
+    /// **A subtree's minimum is its panels'**. Across a row the floors
     /// add up, because every pane in it needs its own width at the same time;
     /// down a column they do not, because those panes share one.
     test('a subtree is as wide as the panels in it need', () {

@@ -31,7 +31,7 @@ const shots = [
   },
   {
     src: nodeGraphShot,
-    alt: "Lumit's node graph: a layer wired through two Glows, Add grain, a LUT, Levels and Fast motion blur",
+    alt: "Lumit's node graph: a layer wired through two Glows, Add grain, a LUT, Levels and Motion blur",
     h: "Dynamic effects.",
     p: "Effects can be driven by expressions, altered in the node graph, or simply in the effect controls. You decide.",
   },
@@ -377,7 +377,7 @@ const roadmap = [
   </section>
 
   {/* ---------- roadmap ---------- */}
-  <section id="roadmap" class="border-t border-line bg-ink-2 py-20 sm:py-24">
+  <section id="roadmap" class="border-t border-line py-20 sm:py-24">
     <div class="wrap">
       <div data-reveal>
         <p class="kicker">Roadmap</p>
@@ -600,7 +600,7 @@ const roadmap = [
   // because changing them after this module loads would move the layout.
   //
   // No platform is "coming": release.yml builds a Windows .exe, a macOS .dmg
-  // and a Linux .flatpak on every tag and every job gates the release (K-304),
+  // and a Linux .flatpak on every tag and every job gates the release,
   // so all three exist whenever any of them does.
   const ASSET: Record<string, RegExp> = {
     Windows: /windows.*\.exe$/i,

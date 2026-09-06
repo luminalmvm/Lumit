@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 512 512" fill="none">
   <!-- Right keyframe, on its own as an Icon Composer layer (docs/15-DESIGN.md,
-       brand; K-251). The whole mark is lumit-mark.svg; this is one of its three
+       brand). The whole mark is lumit-mark.svg; this is one of its three
        shapes, on the same 512 canvas so the layers stack in register.
 
        No drop shadow, no glow and no outline: Icon Composer applies its own

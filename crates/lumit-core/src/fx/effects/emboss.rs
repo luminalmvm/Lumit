@@ -30,7 +30,7 @@ use lumit_fx_macros::Effect;
     // §2.2: a difference of premultiplied colour is a difference of the coverage
     // wherever the coverage moves.
     premultiplied = false,
-    // K-428: the matte scales the amount, inside the kernel (the owner's rule
+    // The matte scales the amount, inside the kernel (the owner's rule
     // for mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",

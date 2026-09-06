@@ -1,4 +1,4 @@
-// The engine's own words have to reach the translators too (K-303).
+// The engine's own words have to reach the translators too.
 //
 // Effect names, parameter names, choice options and the Add-effect menu's
 // category headings are written in Rust, in `crates/lumit-core/src/fx/`, and
@@ -25,7 +25,7 @@ Set<String> _engineLabels() {
 
   // The effects schema's words come from the engine's own walk of the
   // catalogue, not from scraping source text: since the derive macro started
-  // generating labels (K-381), most of them never appear as string literals
+  // generating labels, most of them never appear as string literals
   // anywhere, so a scrape reads a fraction of the truth and cannot know it.
   // `crates/lumit-core/fx-labels.txt` is written by the catalogue itself and
   // `the_fx_label_fixture_matches_the_catalogue` keeps it honest; a schema
@@ -57,7 +57,7 @@ Set<String> _engineLabels() {
       in RegExp(r'KeyContext::\w+\s*=>\s*"([^"]+)"').allMatches(keymapSrc)) {
     labels.add(m.group(1)!);
   }
-  // Edit -> History: what each edit calls itself (K-688). `Op::name` is one
+  // Edit -> History: what each edit calls itself. `Op::name` is one
   // match arm per operation — `Op::AddLayer { .. } => "Add layer"` — and an op
   // added to the engine brings a phrase with it, which is the same silent
   // failure the keymap's descriptions have: the row would simply read English
@@ -250,7 +250,7 @@ void main() {
   test('a config supplies the names, and its names are never translated', () {
     // "Alpha" is an effect parameter this application translates. A colour
     // space of that name in somebody's config file is not that word, and must
-    // come back exactly as it arrived (K-303).
+    // come back exactly as it arrived.
     expect(hasEngineLabel('Alpha'), isTrue);
     expect(
       colourProblem('unknown_colour_space', const {'name': 'Alpha'}),

@@ -1,4 +1,4 @@
-// The volume rubber band (K-695, the AudioWorkspace board): the Volume curve
+// The volume rubber band (the AudioWorkspace board): the Volume curve
 // drawn on the waveform lane, grabbable near its own line — a drag writes
 // volume keyframes through the same `setVolumeDb` every other control uses.
 //

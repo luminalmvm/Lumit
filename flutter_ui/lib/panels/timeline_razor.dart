@@ -1,4 +1,4 @@
-// The Razor tool over the Timeline's lanes (K-220, docs/07 §4.4): the blade
+// The Razor tool over the Timeline's lanes (docs/07 §4.4): the blade
 // pointer, the line that shows where the cut lands, and which layers a click
 // actually cuts.
 //
@@ -63,7 +63,7 @@ List<BridgeLayerEntry> razorTargets(
 ///
 /// A refusal is silence, not an error. An eased speed ramp is no longer one of
 /// them — the engine splits the map's curve and both halves play what the whole
-/// clip played (K-573) — so what is left to refuse is a click on an edit point
+/// clip played — so what is left to refuse is a click on an edit point
 /// that is already there, and a razor that threw a dialogue at the user for
 /// clicking slightly wrong would be worse than one that does nothing.
 bool razorCut(List<BridgeLayerEntry> targets, int frame) {
@@ -131,8 +131,8 @@ class _RazorOverlayState extends State<RazorOverlay> {
   Widget build(BuildContext context) {
     if (!widget.active) return widget.child;
     return MouseRegion(
-      // Hidden and replaced, for the same reason the Rotation tool's is
-      // (K-219): no platform ships a razor, and a system arrow inside the drawn
+      // Hidden and replaced, for the same reason the Rotation tool's is:
+      // no platform ships a razor, and a system arrow inside the drawn
       // blade would read as two pointers.
       cursor: SystemMouseCursors.none,
       onEnter: (event) => setState(() => _pointer = event.localPosition),
@@ -191,7 +191,7 @@ class _RazorOverlayState extends State<RazorOverlay> {
   }
 }
 
-/// The line down the lanes that says where the cut lands (K-235).
+/// The line down the lanes that says where the cut lands.
 ///
 /// **This is the mark that matters**, and it is now the only one drawn here:
 /// the pointer itself is the application's own scissors, placed as a widget

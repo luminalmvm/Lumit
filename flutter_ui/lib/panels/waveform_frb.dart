@@ -1,5 +1,5 @@
 // Drawing a waveform: the single wave, the multiwave stack, and the rule that
-// decides which stretch of audio to ask the engine for (K-280).
+// decides which stretch of audio to ask the engine for.
 //
 // In plain terms: the engine hands back a *summary* of a stretch of sound —
 // for each bucket, how far the signal swung down, how far it swung up, and how
@@ -49,7 +49,7 @@
 // default because it is what the eye expects of a *wave*; from the bottom is
 // there for anyone who would rather have the height.
 //
-// **How much room it has** is the last of it (K-437). A waveform lane in the
+// **How much room it has** is the last of it. A waveform lane in the
 // Timeline is only ever open under its own **Waveform** twirl, and that twirl's
 // own row is empty lane space — so the lane is drawn twice a row tall, standing
 // on its own floor and reaching up through the row above. A centred wave then
@@ -208,7 +208,7 @@ class WaveformPainter extends CustomPainter {
   /// The wave is anchored to the **bottom** of `size` and reaches up past its
   /// top; null means the row's own height, which is what a clip uses.
   ///
-  /// The Timeline's lane passes twice a row here (K-437). A waveform row is
+  /// The Timeline's lane passes twice a row here. A waveform row is
   /// only ever there under its own **Waveform** twirl, and that twirl's row is
   /// empty lane space — so the wave is given both rows and a centred one is
   /// drawn about the divider between them, which is the line silence actually

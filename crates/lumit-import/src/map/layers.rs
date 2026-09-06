@@ -112,18 +112,18 @@ pub(crate) fn map_layer(
 
     let kind = layer_kind(conv, &path, ae, items, props);
     let masks = masks(conv, &path, props);
-    // Masks before effects, because an effect parameter can name one (K-408).
+    // Masks before effects, because an effect parameter can name one.
     conv.masks = super::fx_colour::mask_refs(&masks);
     // Which layer an effect parameter means by "this one" (docs/11 §5's Set
     // Channels row).
     conv.self_index = index;
-    // **An effect is measured against the layer, not the composition**
-    // (K-636). After Effects runs an effect on the layer's own raster, so
-    // Motion Tile's per cents are per cents of *that* frame and its Tile
-    // Center is a point in it; a 2560 × 1088 precomp sitting in a 1920 × 816
-    // comp took the comp's numbers and imported with its tile cut from up and
-    // to the left of the middle. A layer with no source of its own — text, a
-    // shape, a null — draws at the comp's size, which is what the fallback is.
+    // **An effect is measured against the layer, not the composition**. After
+    // Effects runs an effect on the layer's own raster, so Motion Tile's per
+    // cents are per cents of *that* frame and its Tile Center is a point in it;
+    // a 2560 × 1088 precomp sitting in a 1920 × 816 comp took the comp's
+    // numbers and imported with its tile cut from up and to the left of the
+    // middle. A layer with no source of its own — text, a shape, a null — draws
+    // at the comp's size, which is what the fallback is.
     let comp_size = conv.size;
     conv.size = ae
         .source_id
@@ -168,8 +168,8 @@ pub(crate) fn map_layer(
         puppet: None,
         effects,
         styles,
-        // AE has no driver graph, so an import never produces one (K-471 §4);
-        // the round trip is untouched.
+        // AE has no driver graph, so an import never produces one; the round
+        // trip is untouched.
         graph: Default::default(),
         switches: switches(conv, &path, ae),
         extra: ae_map(vec![
@@ -389,7 +389,7 @@ fn transform(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Transf
         rotation_x: scalar(conv, path, props, "ADBE Rotate X", 0, 0.0),
         rotation_y: scalar(conv, path, props, "ADBE Rotate Y", 0, 0.0),
         opacity: scalar(conv, path, props, "ADBE Opacity", 0, 100.0),
-        // An imported layer lands on the house defaults (K-571): AE records its
+        // An imported layer lands on the house defaults: AE records its
         // own separated-dimensions and proportional-scale flags, and reading
         // them is a follow-up — the axes' values and keyframes are already
         // faithful either way, because both editors store them per axis.
@@ -401,7 +401,7 @@ fn transform(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Transf
 }
 
 /// After Effects gives a 3D layer *two* sets of angles — Orientation and the
-/// X/Y/Z Rotation trio — and composes them. Lumit has the one trio (K-023), so
+/// X/Y/Z Rotation trio — and composes them. Lumit has the one trio, so
 /// an orientation has somewhere to go only when the rotations are still sitting
 /// at zero, which is the ordinary case and every tracked camera's case: an
 /// orientation on its own is exactly the rotation the trio describes, in the
@@ -409,7 +409,7 @@ fn transform(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Transf
 ///
 /// When both carry angles the sum of two Euler triples is not the rotation
 /// either of them meant, so nothing is invented: the rotations stay as they
-/// are and the orientation is reported (K-625).
+/// are and the orientation is reported.
 fn orientation(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property], out: &mut TransformGroup) {
     let Some(node) = child(props, "ADBE Orientation") else {
         return;
@@ -470,7 +470,7 @@ fn volume(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> LumProper
 }
 
 /// The layer's switches. Lumit has no draft/wireframe quality, so that one is
-/// reported rather than dropped in silence; the guide flag maps 1:1 (K-497).
+/// reported rather than dropped in silence; the guide flag maps 1:1.
 fn switches(conv: &mut Conv<'_>, path: &ItemPath, ae: &AeLayer) -> Switches {
     let s = ae.switches.clone().unwrap_or_default();
     if let Some(quality) = s.quality.as_deref().filter(|q| *q != "BEST") {
@@ -790,7 +790,7 @@ fn mask(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Mask> {
         mode,
         feather: LumProperty::fixed((fx + fy) / 2.0),
         // AE's variable feather is a second point set with positions of its
-        // own, which Lumit's per-vertex widths (K-545) are not a place to put:
+        // own, which Lumit's per-vertex widths are not a place to put:
         // no fixture proves the layout, and guessing one would draw a shape
         // nobody asked for. The single width above stands, as it always has.
         vertex_feather: Vec::new(),

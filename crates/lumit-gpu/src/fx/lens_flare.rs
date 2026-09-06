@@ -1,8 +1,8 @@
-//! The Lens flare GPU pipeline (docs/08 §3.27, docs/impl/lens-flare.md,
-//! K-256/K-257, K-366): per-frame ray-trace compute, splat-build compute, an
-//! additive hardware raster of one small quad per ray, the Matte-mode source
-//! detection, and the combine kernel. The engine-pure maths and the bake live
-//! in `lumit_core::fx::lens_flare`; this module consumes pre-baked data
+//! The Lens flare GPU pipeline (docs/08 §3.27, docs/impl/lens-flare.md):
+//! per-frame ray-trace compute, splat-build compute, an additive hardware
+//! raster of one small quad per ray, the Matte-mode source detection, and
+//! the combine kernel. The engine-pure maths and the bake live in
+//! `lumit_core::fx::lens_flare`; this module consumes pre-baked data
 //! through [`FlareBakeData`] (the caller converts, keeping this crate
 //! lumit-core-free in production, exactly as the effect op structs do).
 //!
@@ -30,7 +30,7 @@ use super::{work_texture, FxEngine};
 /// The CPU bake, as something another thread can own and run.
 ///
 /// An `Arc` rather than a borrowed `&dyn Fn` because the bake may be handed to
-/// the bake thread and outlive the frame that asked for it (K-350). The caller
+/// the bake thread and outlive the frame that asked for it. The caller
 /// builds one per flare op per frame — a single small allocation beside a
 /// pass that traces hundreds of thousands of rays.
 pub type FlareBake = Arc<dyn Fn() -> FlareBakeData + Send + Sync>;
@@ -41,31 +41,31 @@ pub type FlareBake = Arc<dyn Fn() -> FlareBakeData + Send + Sync>;
 #[derive(Debug, Clone)]
 pub struct LensFlareOp {
     /// Manual light position as a fraction of the raster (x right, y down)
-    /// — the caller divides its raster-pixel parameter by the raster (K-260).
+    /// — the caller divides its raster-pixel parameter by the raster.
     /// Still the position the frame-grid probe reasons about, and the centre
     /// of [`Self::manual_lights`].
     pub light_frac: [f32; 2],
-    /// Manual mode's light list — one entry per light, whatever its size
-    /// (K-367). Each entry is `[x, y, r, g, b, ext_x, ext_y]`: position and
+    /// Manual mode's light list — one entry per light, whatever its size.
+    /// Each entry is `[x, y, r, g, b, ext_x, ext_y]`: position and
     /// half-extent as raster fractions, colour in scene-linear RGB. A zero
     /// extent is a point source; a larger one is an AREA source, which the
-    /// trace integrates per ray rather than replicating into samples (that
-    /// was K-355, and it is what this layout's two extra floats replaced).
+    /// trace integrates per ray rather than replicating into samples (the
+    /// earlier way, and what this layout's two extra floats replaced).
     /// Empty falls back to a single white light at [`Self::light_frac`].
     pub manual_lights: Vec<[f32; 7]>,
     /// Master gain; 0 short-circuits to the identity.
     pub intensity: f32,
     /// Traced wavelength bands with their radiometric sub-samples
-    /// (lumit_core `spectral_bands`, K-364).
+    /// (lumit_core `spectral_bands`).
     pub bands: Vec<FlareBand>,
     /// How many ranked ghosts render.
     pub max_ghosts: u32,
     /// 0..1 coating blend.
     pub coating: f32,
-    /// Focus distance, metres (K-260); the sensor shift derives from it and
+    /// Focus distance, metres; the sensor shift derives from it and
     /// the bake's focal length inside the apply.
     pub focus_m: f32,
-    /// Working f-stop (K-261): the stop-down scale derives from it and the
+    /// Working f-stop: the stop-down scale derives from it and the
     /// bake's native f-number inside the apply.
     pub fstop: f32,
     /// Iris blade count for the in-shader pupil mask.
@@ -76,7 +76,7 @@ pub struct LensFlareOp {
     pub roundness: f32,
     /// 0..1 iris edge softness.
     pub aperture_softness: f32,
-    /// Ghost blur radius in raster pixels (K-261, px@comp since K-558).
+    /// Ghost blur radius in raster pixels (px@comp).
     pub ghost_softness: f32,
     /// Pupil-grid side for this quality.
     pub grid: u32,
@@ -93,21 +93,21 @@ pub struct LensFlareOp {
     /// Horizontal squeeze about the frame centre.
     pub anamorphic: f32,
     /// Source mode: 0 Manual, 1 Matte, 2 Lights (resolves as Manual until
-    /// light layers land — K-257).
+    /// light layers land).
     pub source: u32,
     /// Matte mode's soft luma gate (lumit_core `threshold_gate`).
     pub threshold: f32,
     /// See `threshold`.
     pub threshold_softness: f32,
-    /// Scene-linear RGB multiplying every light's colour (K-259).
+    /// Scene-linear RGB multiplying every light's colour.
     pub light_tint: [f32; 3],
     /// Matte/Lights: whether a detected source's own colour tints its flare.
     pub use_source_colour: bool,
     /// Matte mode: read the matte inverted (`1 − rgb`) when detecting, so its
-    /// dark parts are the lights — the uniform matte row's Invert (K-395).
+    /// dark parts are the lights — the uniform matte row's Invert.
     pub matte_invert: bool,
     /// How the flare element combines with the layer under it — an index
-    /// into `lumit_core::fx::lens_flare::BLEND_OPTIONS` (K-289).
+    /// into `lumit_core::fx::lens_flare::BLEND_OPTIONS`.
     pub blend: u32,
     /// 0..1.
     pub mix: f32,
@@ -115,7 +115,7 @@ pub struct LensFlareOp {
     pub bake_key: u64,
 }
 
-/// One traced wavelength band with its radiometric sub-samples (K-364) —
+/// One traced wavelength band with its radiometric sub-samples —
 /// restated from `lumit_core::fx::lens_flare::SpectralBand` because this
 /// crate does not depend on lumit-core. The geometry is traced once at
 /// [`Self::traced_nm`]; the energy is carried at the eight sub-samples,
@@ -139,12 +139,12 @@ pub struct FlareBand {
 #[derive(Debug, Clone)]
 pub struct FlareBakeData {
     /// Surface rows: radius, z, semi_ap, cauchy_a, cauchy_b,
-    /// coating_layers, is_stop, pad — the WGSL `Surface` layout (K-261).
+    /// coating_layers, is_stop, pad — the WGSL `Surface` layout.
     pub surfaces: Vec<[f32; 8]>,
     /// Ranked ghost pairs, brightest first.
     pub ghosts: Vec<[u32; 4]>,
     /// Each pair's image spread (fraction of the sensor diagonal), parallel
-    /// to `ghosts` — the adaptive grid budget's input (K-262).
+    /// to `ghosts` — the adaptive grid budget's input.
     pub spreads: Vec<f32>,
     /// Sensor plane z, mm.
     pub sensor_z_mm: f32,
@@ -158,7 +158,7 @@ pub struct FlareBakeData {
     pub start_z_mm: f32,
     /// The bake's auto-exposure gain, multiplied into every ghost's energy.
     pub energy_gain: f32,
-    /// The K-364 per-surface spectral reflectance table, flat in the
+    /// The per-surface spectral reflectance table, flat in the
     /// lumit-core layout: `[surface][direction 0 = forward, 1 = reverse]
     /// [lambda 69][cos 16]`. The trace kernel reads it in place of solving a
     /// thin-film stack per ray.
@@ -167,7 +167,7 @@ pub struct FlareBakeData {
     pub starburst: Vec<f32>,
     /// See `starburst`.
     pub sb_res: u32,
-    /// Field-angle slices in `starburst` (K-365): the sprite is baked at
+    /// Field-angle slices in `starburst`: the sprite is baked at
     /// several field angles, because the mechanical stops clip the iris
     /// into a cat's-eye off-axis, and the combine blends the two slices
     /// bracketing each light. Uploaded as one atlas `sb_res` wide by
@@ -175,7 +175,7 @@ pub struct FlareBakeData {
     pub sb_fields: u32,
 }
 
-/// What the frame-time spread probe (K-267) reads from a cached bake,
+/// What the frame-time spread probe reads from a cached bake,
 /// handed back across the crate seam to the caller's `probe` closure (the
 /// same lazy-callback pattern as the bake itself — the formulas stay in
 /// lumit-core, which this crate deliberately does not depend on).
@@ -204,11 +204,11 @@ pub struct FlareProbeBake<'a> {
 /// One cached GPU-side bake: uploaded textures and the surface buffer.
 struct GpuBaked {
     surfaces: wgpu::Buffer,
-    /// The baked reflectance table (K-364), as the trace kernel's storage
+    /// The baked reflectance table, as the trace kernel's storage
     /// binding.
     reflectance: wgpu::Buffer,
     surface_count: u32,
-    /// The raw surface rows, retained for [`FlareProbeBake`] (K-267) —
+    /// The raw surface rows, retained for [`FlareProbeBake`] —
     /// a few hundred bytes beside the uploaded buffer.
     surface_rows: Vec<[f32; 8]>,
     ghosts: Vec<[u32; 4]>,
@@ -223,7 +223,7 @@ struct GpuBaked {
 }
 
 /// The per-frame scratch one flare render works through: the ray landings and
-/// the splats the raster pulls from (K-263, K-366).
+/// the splats the raster pulls from.
 ///
 /// **Why this is pooled rather than allocated per frame.** These are the two
 /// big buffers in the effect — tens of megabytes at working qualities — and a
@@ -237,7 +237,7 @@ struct GpuBaked {
 struct Scratch {
     rays: wgpu::Buffer,
     splats: wgpu::Buffer,
-    /// The f32 splat accumulator (K-375), three channels a pixel, pooled with
+    /// The f32 splat accumulator, three channels a pixel, pooled with
     /// the rest because it is the same shape of per-frame scratch.
     accum: wgpu::Buffer,
     ray_bytes: u64,
@@ -252,7 +252,7 @@ pub struct LensFlareFx {
     build_splats: wgpu::ComputePipeline,
     detect_tiles: wgpu::ComputePipeline,
     detect_pick: wgpu::ComputePipeline,
-    /// The splat deposit and its resolve (K-375): the accumulation moved off
+    /// The splat deposit and its resolve: the accumulation moved off
     /// the raster blender, which could only sum in the flare buffer's fp16.
     deposit: wgpu::ComputePipeline,
     resolve: wgpu::ComputePipeline,
@@ -271,7 +271,7 @@ pub struct LensFlareFx {
     /// case worth holding memory for, so a second render makes its own and
     /// whichever finishes first keeps the slot.
     scratch: Mutex<Option<Scratch>>,
-    /// The off-thread bake (K-350), when this engine is allowed one. `None`
+    /// The off-thread bake, when this engine is allowed one. `None`
     /// until the first deferred miss, and never built at all on an engine
     /// whose bakes must be exact — the exporter's (see
     /// [`FxEngine::set_deferred_flare_bakes`]).
@@ -283,7 +283,7 @@ pub struct LensFlareFx {
     /// picture by omission.
     pub(super) deferred: std::sync::atomic::AtomicBool,
     /// The key of the last bake a frame actually drew with, which is what a
-    /// frame whose own bake is not ready falls back to (K-350).
+    /// frame whose own bake is not ready falls back to.
     last_drawn: Mutex<Option<u64>>,
     /// Bakes handed to the baker and not yet collected.
     in_flight: Mutex<HashSet<u64>>,
@@ -303,7 +303,7 @@ pub struct LensFlareFx {
     pub(super) generation: AtomicU64,
     /// Bumped each time a frame actually drew **something other than** the
     /// bake its parameters name — the deferred fallback to the previous lens,
-    /// or no flare at all because there is no previous lens yet (K-431).
+    /// or no flare at all because there is no previous lens yet.
     ///
     /// This is the precise form of the question the generation could only
     /// answer roughly. The generation moves when a bake is *queued*, which
@@ -380,9 +380,9 @@ impl Baker {
     }
 }
 
-/// A bounded, oldest-first cache of bakes by parameter hash (K-263).
+/// A bounded, oldest-first cache of bakes by parameter hash.
 ///
-/// **Why oldest-first and not clear-the-lot.** Through K-262 the map simply
+/// **Why oldest-first and not clear-the-lot.** Earlier the map simply
 /// emptied when it overflowed. A bake is the effect's one slow, blocking,
 /// CPU-side step, and the way the lens picker is used is to try lenses — so
 /// every ninth pick threw away the eight bakes just paid for, and stepping
@@ -438,13 +438,13 @@ impl<T: Clone> BakeCache<T> {
 }
 
 /// How many blend modes the combine kernel's `flare_blend` implements — the
-/// length of `lumit_core::fx::lens_flare::BLEND_OPTIONS` (K-289), pinned by
+/// length of `lumit_core::fx::lens_flare::BLEND_OPTIONS`, pinned by
 /// test. An index past the last option clamps rather than faulting.
 pub const BLEND_COUNT: u32 = 13;
 
 /// Distinct sources detection may find, and so the light slots the trace
 /// carries — must equal `lumit_core::fx::lens_flare::MAX_SOURCES` (pinned by
-/// test). One source is one slot however large it is: since K-367 an area
+/// test). One source is one slot however large it is: an area
 /// source is integrated inside the ray loop, not replicated into samples.
 pub const MAX_SOURCES: u32 = 16;
 
@@ -453,23 +453,23 @@ pub const MAX_SOURCES: u32 = 16;
 const DETECT_TILE: u32 = 32;
 
 /// Byte budget for the per-frame trace scratch — rays and splats
-/// together (K-263). A **hard** cap, not a hint: where K-262's batch size
+/// together. A **hard** cap, not a hint: where the earlier batch size
 /// bottomed out at one combo and then let eight lights at an Ultra grid ask
 /// for a hundred megabytes anyway, the light dimension now splits too, so no
 /// setting can push the allocation past this.
 pub(super) const SCRATCH_BYTE_BUDGET: u64 = 48_000_000;
 
 /// Bytes one traced ray occupies (WGSL `Ray`: pos.xy, weight, pad, rgb,
-/// pad — the rgb since K-364, where the weight alone carried the energy).
+/// pad — the rgb added where the weight alone once carried the energy).
 pub(super) const RAY_BYTES: u64 = 32;
 
-/// Bytes one splat occupies (K-366, WGSL `Splat`: centre, two half-axes,
+/// Bytes one splat occupies (WGSL `Splat`: centre, two half-axes,
 /// peak rgb, live, two pads). One per RAY, where the drawn cell it replaces
 /// was one per (grid−1)² quad.
 pub(super) const SPLAT_BYTES: u64 = 48;
 
 /// Ray–surface steps one command buffer may hold before the frame submits
-/// what it has and opens another (K-263).
+/// what it has and opens another.
 ///
 /// **Why a frame is split at all.** Every operating system kills a graphics
 /// submission that runs too long — macOS and Windows both watch for it — and
@@ -506,7 +506,7 @@ struct TraceParams {
     cell_area_px: f32,
     ray_stride: u32,
     /// Padding that keeps the uniform a multiple of 16 bytes; held the
-    /// per-slot quad count until K-366 replaced quads with per-ray splats.
+    /// per-slot quad count until per-ray splats replaced quads.
     _pad_stride: u32,
     blades: u32,
     rot_rad: f32,
@@ -516,10 +516,10 @@ struct TraceParams {
 }
 
 /// The frame-time optics both the production trace and the §8.5 debug hook
-/// derive before filling [`TraceParams`] — shared with the CPU reference
-/// (K-261): the stop-down scale, the wide-open roundness blend, and the
-/// thin-lens focus shift (K-260's f²/(1000·d − f), exactly as the CPU
-/// reference computes it). One place, so the two fills cannot drift.
+/// derive before filling [`TraceParams`] — shared with the CPU reference:
+/// the stop-down scale, the wide-open roundness blend, and the thin-lens
+/// focus shift (f²/(1000·d − f), exactly as the CPU reference computes
+/// it). One place, so the two fills cannot drift.
 struct FrameOptics {
     stop_scale: f32,
     wide_open: f32,
@@ -548,10 +548,10 @@ fn frame_optics(native_fstop: f32, focal_mm: f32, fstop: f32, focus_m: f32) -> F
 }
 
 /// What the deposit and resolve stages need beyond the splats: the flare
-/// buffer's size, because a splat's centre and axes are in its PIXELS
-/// (K-366), how many splats the dispatch covers (K-375), and the deposit
-/// pyramid's level table (K-380) — per level `[width, height, pixel offset
-/// into the accumulator, 0]`, level 0 the raster itself.
+/// buffer's size, because a splat's centre and axes are in its PIXELS, how
+/// many splats the dispatch covers, and the deposit pyramid's level table —
+/// per level `[width, height, pixel offset into the accumulator, 0]`,
+/// level 0 the raster itself.
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct DepositDims {
@@ -569,7 +569,7 @@ struct DepositDims {
 /// array size, pinned by test.
 pub const MAX_DEPOSIT_LEVELS: usize = 12;
 
-/// The deposit pyramid's level dimensions (K-380) — the exact twin of
+/// The deposit pyramid's level dimensions — the exact twin of
 /// `lumit_core::fx::lens_flare::deposit_levels` (lumit-gpu stays
 /// lumit-core-free in production, so the formula is mirrored and a test
 /// pins the two together).
@@ -606,8 +606,8 @@ struct DetectParams {
     threshold: f32,
     softness: f32,
     use_source_colour: u32,
-    /// 1 = read the matte inverted (`1 − rgb`), the Matte row's Invert
-    /// (K-395); mirrors `lumit_core`'s `detect_lights` argument.
+    /// 1 = read the matte inverted (`1 − rgb`), the Matte row's Invert;
+    /// mirrors `lumit_core`'s `detect_lights` argument.
     invert: u32,
     tint: [f32; 3],
     _pad1: f32,
@@ -646,23 +646,23 @@ struct GpuCombo {
     bounce2: u32,
     lambda_nm: f32,
     _pad: f32,
-    /// Index into the band table (K-364): the combo names the band, the
+    /// Index into the band table: the combo names the band, the
     /// band's eight sub-samples carry the colour the combo used to.
     band: u32,
-    /// The third and fourth bounces of a four-bounce path (K-368), or
+    /// The third and fourth bounces of a four-bounce path, or
     /// `NO_BOUNCE` for the two-bounce ghosts that were all this struct held
     /// until then. They took two of the padding slots, so the layout — and
     /// every stride around it — is unchanged.
     bounce3: u32,
     bounce4: u32,
-    /// This ghost's own **Fresnel number** (K-369, re-derived K-370), which
-    /// sets how fine the diffraction fringes on its rim are; `0` leaves the
-    /// plain analytic polygon. It took the struct's last padding slot, so the
-    /// layout — and every stride around it — is again unchanged.
+    /// This ghost's own **Fresnel number**, which sets how fine the
+    /// diffraction fringes on its rim are; `0` leaves the plain analytic
+    /// polygon. It took the struct's last padding slot, so the layout — and
+    /// every stride around it — is again unchanged.
     ring_fresnel: f32,
 }
 
-/// One radiometric sub-sample in the WGSL `BandSub` layout (K-364), at
+/// One radiometric sub-sample in the WGSL `BandSub` layout, at
 /// `band * 8 + k`: where in the reflectance table its wavelength sits, and
 /// its RGB weight with the frame's energy gain already folded in.
 #[repr(C)]
@@ -699,7 +699,7 @@ struct GpuSurface {
 }
 
 /// One flare source in the WGSL `Light` layout: pos.xy, rgb, the source's
-/// half-extent as a raster fraction (K-367), one pad.
+/// half-extent as a raster fraction, one pad.
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct GpuLight {
@@ -794,10 +794,21 @@ impl LazyFlare {
             lf.deferred.store(deferred, Ordering::Relaxed);
         }
     }
+
+    /// Forget every bake, count and policy a previous test left here, so a
+    /// shared engine (`crate::test_support`) starts each test the way a new
+    /// one would. An engine still building has nothing to forget.
+    #[cfg(any(test, feature = "test-fixtures"))]
+    pub(super) fn reset_for_tests(&self) {
+        self.deferred.store(false, Ordering::Relaxed);
+        if let Some(lf) = self.ready.get() {
+            lf.reset_for_tests();
+        }
+    }
 }
 
 impl LensFlareFx {
-    /// See [`Self::cache`]. Raised from eight at K-263: a bake is a surface
+    /// See [`Self::cache`]. Raised from eight: a bake is a surface
     /// buffer and one 256² sprite, about a megabyte, so holding a couple of
     /// dozen costs less than one preview frame's working set and covers
     /// trying lenses — the way the picker is actually used.
@@ -845,18 +856,18 @@ impl LensFlareFx {
                 storage_entry(0, true, c),
                 storage_entry(1, true, c),
                 storage_entry(2, false, c),
-                // Binding 3 held the per-cell landed areas until K-366; the
+                // Binding 3 held the per-cell landed areas once; the
                 // numbering is left alone so nothing else has to move.
                 storage_entry(4, false, c),
                 uniform_entry(5, c),
                 storage_entry(6, true, c),
-                // The K-364 spectral pair: the baked reflectance table and
+                // The spectral pair: the baked reflectance table and
                 // the frame's band sub-samples.
                 storage_entry(7, true, c),
                 storage_entry(8, true, c),
-                // Binding 9 held the K-369 ring masks until K-370 replaced
-                // them with a closed form; the numbering is left alone so
-                // nothing else has to move.
+                // Binding 9 held the ring masks until a closed form
+                // replaced them; the numbering is left alone so nothing
+                // else has to move.
             ],
         });
         let detect_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -993,7 +1004,7 @@ impl LensFlareFx {
             bind_group_layouts: &[&deposit_layout],
             push_constant_ranges: &[],
         });
-        // Two entry points over one layout (K-375): the scatter, then the
+        // Two entry points over one layout: the scatter, then the
         // single write into the fp16 texture. There is no raster pipeline any
         // more — the blender was the thing that could not add in f32.
         let deposit = compute(
@@ -1061,7 +1072,7 @@ impl LensFlareFx {
     ///   and now, outside the lock, exactly as it always did. A racing
     ///   double-build is harmless — the bake is a pure function — and the
     ///   insert keeps whichever landed first.
-    /// - **Deferred** (the Viewer, K-350): a miss hands the bake to the bake
+    /// - **Deferred** (the Viewer): a miss hands the bake to the bake
     ///   thread and answers with the lens the last frame drew, so choosing a
     ///   lens is a wait you can watch rather than half a second of stopped
     ///   picture. With nothing drawn yet the answer is `None` and the flare
@@ -1100,7 +1111,7 @@ impl LensFlareFx {
         self.queue(op.bake_key, bake);
 
         // From here the frame draws something its parameters do not name, so
-        // it is not a frame anybody may bank (K-431). Counted once, whether a
+        // it is not a frame anybody may bank. Counted once, whether a
         // previous lens stands in or nothing does.
         self.substitutions.fetch_add(1, Ordering::Relaxed);
 
@@ -1152,6 +1163,32 @@ impl LensFlareFx {
         } else if let Ok(mut flight) = self.in_flight.lock() {
             flight.remove(&key);
         }
+    }
+
+    /// See [`LazyFlare::reset_for_tests`]. A bake still on the thread is
+    /// waited for first, so it cannot surface in a later test as a lens
+    /// nobody there asked for.
+    #[cfg(any(test, feature = "test-fixtures"))]
+    pub(super) fn reset_for_tests(&self) {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while self.bake_pending() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        if let Ok(mut cache) = self.cache.lock() {
+            *cache = BakeCache::new(Self::CACHE_CAP);
+        }
+        if let Ok(mut landed) = self.landed.lock() {
+            landed.clear();
+        }
+        if let Ok(mut flight) = self.in_flight.lock() {
+            flight.clear();
+        }
+        if let Ok(mut last) = self.last_drawn.lock() {
+            *last = None;
+        }
+        self.generation.store(0, Ordering::Relaxed);
+        self.substitutions.store(0, Ordering::Relaxed);
+        self.deferred.store(false, Ordering::Relaxed);
     }
 
     /// Take everything the bake thread has finished off its channel: clear
@@ -1297,7 +1334,7 @@ impl LensFlareFx {
     }
 }
 
-/// The splat accumulator (K-375; a level pyramid since K-380). Cleared to
+/// The splat accumulator (a level pyramid). Cleared to
 /// zero each frame, so it needs `COPY_DST` beside the storage binding.
 ///
 /// NOT clamped to [`SCRATCH_BYTE_BUDGET`]: that budget bounds the per-batch
@@ -1341,19 +1378,19 @@ pub fn pair_grid_of(base: u32, spread: f32) -> u32 {
     ((base as f32 * mult).round() as u32).clamp(8, 512)
 }
 
-/// Fixed-point steps in one unit of radiance in the splat accumulator (K-375)
+/// Fixed-point steps in one unit of radiance in the splat accumulator
 /// — the twin of `ACCUM_SCALE` in `fx_lens_flare_deposit.wgsl`, pinned against
 /// the shader text by test.
 pub const ACCUM_SCALE: f32 = 16777216.0;
 
-/// The radiance one accumulator channel may reach before its u32 wraps
-/// (K-375): `u32::MAX / ACCUM_SCALE`. A test measures the CPU reference's
+/// The radiance one accumulator channel may reach before its u32 wraps:
+/// `u32::MAX / ACCUM_SCALE`. A test measures the CPU reference's
 /// brightest pixel against it.
 pub const ACCUM_CEILING: f32 = 255.99998;
 
 /// One ghost's Fresnel number from its image spread and the working stop —
-/// the exact twin of `lumit_core::fx::lens_flare::ghost_fresnel_number`
-/// (K-370), pinned by test.
+/// the exact twin of `lumit_core::fx::lens_flare::ghost_fresnel_number`,
+/// pinned by test.
 ///
 /// `spread` is the bake's measured spread already scaled by the frame's
 /// `stop_scale`, since stopping down shrinks the ghost as well as the pupil.
@@ -1371,11 +1408,11 @@ pub fn ghost_fresnel_of(spread: f32, fstop: f32) -> f32 {
 pub const SENSOR_MM: [f32; 2] = [36.0, 24.0];
 
 /// The wavelength the ghost-edge ringing is scaled at, µm — the twin of
-/// `lumit_core::fx::lens_flare::RING_LAMBDA_UM` (K-370).
+/// `lumit_core::fx::lens_flare::RING_LAMBDA_UM`.
 pub const RING_LAMBDA_UM: f32 = 0.55;
 
 /// The flare buffer's padded dimensions for Squeeze/Scale under 1 — the
-/// exact twin of `lumit_core::fx::lens_flare::flare_pad_dims` (K-267),
+/// exact twin of `lumit_core::fx::lens_flare::flare_pad_dims`,
 /// pinned by test.
 pub fn flare_pad_dims_of(fw: u32, fh: u32, squeeze: f32, scale: f32) -> (u32, u32) {
     let squeeze = squeeze.clamp(0.25, 4.0);
@@ -1389,7 +1426,7 @@ pub fn flare_pad_dims_of(fw: u32, fh: u32, squeeze: f32, scale: f32) -> (u32, u3
 }
 
 /// One dispatch of the trace → splats → raster chain: a run of combos that
-/// share a pupil grid, and a chunk of the frame's lights (K-263).
+/// share a pupil grid, and a chunk of the frame's lights.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct Batch {
     /// The pupil grid every combo in the batch traces at.
@@ -1402,7 +1439,7 @@ pub(super) struct Batch {
     pub(super) light_offset: u32,
     /// How many lights.
     pub(super) lights: u32,
-    /// Scratch the batch needs: ray landings and their splats (K-366).
+    /// Scratch the batch needs: ray landings and their splats.
     pub(super) ray_bytes: u64,
     pub(super) splat_bytes: u64,
 }
@@ -1422,8 +1459,8 @@ impl Batch {
             * 3
     }
 
-    /// The deposit's cost for this batch, in the same step-shaped units
-    /// (K-379): the pixels its splats touch, summed from the per-combo
+    /// The deposit's cost for this batch, in the same step-shaped units:
+    /// the pixels its splats touch, summed from the per-combo
     /// estimates. Independent of the ray count — the splats of a coarser
     /// grid are individually larger, so a ghost's deposit always costs its
     /// own image area times the kernel overlap, however it is sampled.
@@ -1438,7 +1475,7 @@ impl Batch {
     }
 }
 
-/// One combo's deposit cost estimate (K-379): the pixels its splats will
+/// One combo's deposit cost estimate: the pixels its splats will
 /// touch, from the pair's bake-time image spread. The quadratic B-spline
 /// reaches one and a half grid steps each way, so each splat covers about
 /// nine times its own cell of the ghost — nine times the ghost's area in
@@ -1451,7 +1488,7 @@ pub(super) fn combo_deposit_cost(spread: f32, diag_px: f32) -> u64 {
     (9.0 * extent * extent) as u64
 }
 
-/// Which batches of a plan end a command buffer (K-263): `true` at index `i`
+/// Which batches of a plan end a command buffer: `true` at index `i`
 /// means the frame hands over what it has encoded after batch `i` and opens a
 /// fresh encoder.
 ///
@@ -1460,8 +1497,8 @@ pub(super) fn combo_deposit_cost(spread: f32, diag_px: f32) -> u64 {
 /// system to kill, taking the device with it) is precisely the thing a test
 /// cannot afford to reproduce.
 ///
-/// Paced by the trace's ray–surface steps AND the deposit's pixels (K-379):
-/// through K-375 only the trace was counted, and the deposit — nine times
+/// Paced by the trace's ray–surface steps AND the deposit's pixels:
+/// earlier only the trace was counted, and the deposit — nine times
 /// each ghost's image area in atomic adds, per combo per light — rode along
 /// unmetered, so a frame of big defocused ghosts packed *seconds* of scatter
 /// into one submission. That is the shape of submission the watchdog kills,
@@ -1482,8 +1519,8 @@ pub(super) fn plan_flushes(plan: &[Batch], surface_count: u32, combo_costs: &[u6
 }
 
 /// Cut the frame's grid-major combo table into [`Batch`]es that each fit
-/// [`SCRATCH_BYTE_BUDGET`] (K-263) and stay under one submission's worth of
-/// deposit work (K-379).
+/// [`SCRATCH_BYTE_BUDGET`] and stay under one submission's worth of
+/// deposit work.
 ///
 /// The combo table is sorted by grid, so equal grids are contiguous: each run
 /// becomes one or more batches, split by however many (light × combo) slots
@@ -1494,7 +1531,7 @@ pub(super) fn plan_flushes(plan: &[Batch], surface_count: u32, combo_costs: &[u6
 /// light-major within a batch, exactly as it was.
 ///
 /// `combo_costs` (parallel to `combo_grids`, [`combo_deposit_cost`] each) is
-/// the K-379 half: a batch is the atomic unit of encoding, so a flush
+/// the other half: a batch is the atomic unit of encoding, so a flush
 /// between batches cannot save a frame whose ONE batch holds sixty-four
 /// frame-filling deposits. The slot count is therefore also capped so a
 /// batch's deposit stays about one [`STEPS_PER_SUBMIT`] — a batch of one
@@ -1516,13 +1553,13 @@ pub(super) fn plan_batches(
             .map(|n| offset + n)
             .unwrap_or(combo_grids.len());
         let rays = u64::from(grid) * u64::from(grid);
-        // One splat per RAY since K-366, not one drawn cell per quad.
+        // One splat per RAY, not one drawn cell per quad.
         let per_slot = rays * (RAY_BYTES + SPLAT_BYTES);
         // At least one slot always runs: a single (light × combo) pair at the
         // widest grid is 27 MB, inside the budget, so this floor is a
         // formality that keeps the loop total rather than a silent overrun.
         let slots = (SCRATCH_BYTE_BUDGET / per_slot.max(1)).max(1);
-        // The K-379 cap: the run's worst deposit sets how many slots one
+        // The deposit cap: the run's worst deposit sets how many slots one
         // submission can afford.
         let worst_cost = combo_costs
             .get(offset..run_end.min(combo_costs.len()))
@@ -1616,7 +1653,7 @@ fn upload_bake(ctx: &GpuContext, data: &FlareBakeData) -> GpuBaked {
         rgba.extend_from_slice(rgb);
         rgba.push(0.0f32);
     }
-    // One atlas, the field slices stacked vertically (K-365), so `sb_tex`
+    // One atlas, the field slices stacked vertically, so `sb_tex`
     // stays a plain 2D texture and the combine offsets its taps by slice.
     let starburst = float_texture(
         "fx-lens-flare-starburst",
@@ -1680,7 +1717,7 @@ impl FxEngine {
         // A deferred bake that has nothing to fall back on yet leaves the
         // frame with no flare at all rather than a wrong one: `live` is
         // "there is something to draw", and everything below already reads it
-        // as that (K-350).
+        // as that.
         let live = baked.is_some();
 
         // Matte mode runs with MAX_SOURCES candidate slots (dead ones carry
@@ -1688,7 +1725,7 @@ impl FxEngine {
         // run one.
         let matte_mode = op.source == 1;
         // The frame's light list. Manual fills its slots from the CPU — one
-        // per light, size and all (K-367); Matte mode overwrites the buffer
+        // per light, size and all; Matte mode overwrites the buffer
         // with the detection kernels below and may fill any of them, so it
         // always dispatches the lot.
         let mut light_rows = vec![GpuLight { row: [0.0; 8] }; MAX_SOURCES as usize];
@@ -1737,20 +1774,20 @@ impl FxEngine {
                 usage: wgpu::BufferUsages::STORAGE,
             });
 
-        // Flare buffer (half size on Draft), and its 4x multisample target
-        // (K-264): the ghost raster draws into the multisampled texture and
+        // Flare buffer (half size on Draft), and its 4x multisample target:
+        // the ghost raster draws into the multisampled texture and
         // resolves into `flare_tex`, which everything downstream (blur,
         // combine) reads exactly as before. The multisample texture exists
         // only while a live frame draws.
         let div = op.flare_div.max(1);
         let (fw, fh) = ((w / div).max(1), (h / div).max(1));
-        // The buffer renders PADDED for Squeeze/Scale under 1 (K-267): the
+        // The buffer renders PADDED for Squeeze/Scale under 1: the
         // combine samples past the base extent there, and the padding puts
-        // real flare where K-266's zero-outside tap showed black. Geometry
+        // real flare where a zero-outside tap showed black. Geometry
         // is centred; the screen transform stays derived from the base.
         let (fpw, fph) = flare_pad_dims_of(fw, fh, op.anamorphic, op.scale);
         let flare_tex = work_texture(ctx, fpw, fph, "fx-lens-flare-buffer");
-        // No multisample target since K-353 — the raster antialiases itself.
+        // No multisample target — the raster antialiases itself.
         let _ = live;
 
         let mut encoder = ctx.encoder("fx-lens-flare-enc");
@@ -1764,7 +1801,7 @@ impl FxEngine {
                 let tiles_y = mh.div_ceil(DETECT_TILE);
                 let tiles_buf = ctx.device.create_buffer(&wgpu::BufferDescriptor {
                     label: Some("fx-lens-flare-tiles"),
-                    // Ten words per tile since K-355: the brightest pixel's
+                    // Ten words per tile: the brightest pixel's
                     // luma and index, then the gated coverage, colour and
                     // flux moments that describe the whole lit area of it.
                     size: u64::from(tiles_x * tiles_y) * 40,
@@ -1837,7 +1874,7 @@ impl FxEngine {
         }
 
         // Always clear the flare buffer (a zero-ghost frame must not read
-        // stale memory). A live frame overwrites every texel in K-375's
+        // stale memory). A live frame overwrites every texel in the
         // resolve, so this is what covers the idle one — and the frame that
         // plans no batches at all, whose resolve writes the cleared
         // accumulator's zeros.
@@ -1863,7 +1900,7 @@ impl FxEngine {
             // only known GPU-side in Matte mode).
             let ghost_count = (ghost_count_max as usize).min(baked.ghosts.len());
             let gain = baked.energy_gain;
-            // Manual mode's frame-time grid probe (K-267): ask the caller
+            // Manual mode's frame-time grid probe: ask the caller
             // (who owns the lumit-core maths) for the frame's final per-pair
             // grids — each pair's rung floor raised toward its need under
             // the frame's bounded ray headroom. Matte lights exist GPU-side
@@ -1885,16 +1922,15 @@ impl FxEngine {
                 Vec::new()
             };
             // Each pair gets its own pupil grid by its measured image spread
-            // (K-262, mirroring `lumit_core::fx::lens_flare::pair_grid`), so
+            // (mirroring `lumit_core::fx::lens_flare::pair_grid`), so
             // combos are sorted grid-major: a run of equal-grid combos is one
             // dispatch batch, and the scratch is sized for the widest grid.
             // The working stop shrinks the pupil, and with it every ghost —
-            // which is what each path's rim-fringe scale is derived from
-            // (K-370).
+            // which is what each path's rim-fringe scale is derived from.
             let stop_scale =
                 frame_optics(baked.native_fstop, baked.focal_mm, op.fstop, op.focus_m).stop_scale;
             // The flare buffer's diagonal scales each pair's bake spread
-            // into the deposit-cost estimate the flush pacing reads (K-379).
+            // into the deposit-cost estimate the flush pacing reads.
             let diag_px = ((fpw * fpw + fph * fph) as f32).sqrt();
             let mut tagged: Vec<(u32, u64, GpuCombo)> =
                 Vec::with_capacity(ghost_count * op.bands.len());
@@ -1926,11 +1962,11 @@ impl FxEngine {
             let combo_costs: Vec<u64> = tagged.iter().map(|&(_, c, _)| c).collect();
             let combos: Vec<GpuCombo> = tagged.into_iter().map(|(_, _, c)| c).collect();
             if !combos.is_empty() {
-                // The frame's dispatch plan (K-263). Combos are sorted
+                // The frame's dispatch plan. Combos are sorted
                 // grid-major, so the table falls into runs of one grid; each
                 // run is cut into batches of combos and chunks of lights that
                 // fit the scratch budget, and every batch strides the scratch
-                // by ITS OWN grid. Through K-262 one stride served the whole
+                // by ITS OWN grid. One stride once served the whole
                 // frame — the widest grid in it — so a single frame-filling
                 // ghost made every compact ghost dispatch and draw at that
                 // ghost's ray count, tens of times the rays they own.
@@ -1942,7 +1978,7 @@ impl FxEngine {
                         contents: bytemuck::cast_slice(&combos),
                         usage: wgpu::BufferUsages::STORAGE,
                     });
-                // The bands' sub-samples (K-364), carrying the exposure
+                // The bands' sub-samples, carrying the exposure
                 // gain the combo colour used to. Non-empty whenever the
                 // combo table is: a combo exists only per band.
                 let band_subs = band_subs_of(&op.bands, gain);
@@ -1959,7 +1995,7 @@ impl FxEngine {
                     (r.max(b.ray_bytes), s.max(b.splat_bytes))
                 });
                 // Three fixed-point channels a pixel, across every level of
-                // the deposit pyramid (K-380).
+                // the deposit pyramid.
                 let (level_count, accum_px) = deposit_pyramid_of(fpw, fph);
                 let accum_bytes = accum_px * 3 * 4;
                 let scratch = lf.take_scratch(ctx, need_rays, need_splats, accum_bytes);
@@ -1967,7 +2003,7 @@ impl FxEngine {
                 // frame's sums are still in it.
                 encoder.clear_buffer(&scratch.accum, 0, Some(accum_bytes));
 
-                // The resolve writes it once, at the end (K-375).
+                // The resolve writes it once, at the end.
                 let flare_view = flare_tex.create_view(&Default::default());
                 // Where the frame breaks its work into separate submissions.
                 let flushes = plan_flushes(&plan, baked.surface_count, &combo_costs);
@@ -1981,8 +2017,8 @@ impl FxEngine {
                         ..
                     } = *job;
                     let batch_rays = grid * grid;
-                    // Frame-time optics shared with the CPU reference
-                    // (K-261), plus the launch cell area in flare-buffer px².
+                    // Frame-time optics shared with the CPU reference,
+                    // plus the launch cell area in flare-buffer px².
                     let FrameOptics {
                         stop_scale,
                         wide_open,
@@ -2013,7 +2049,7 @@ impl FxEngine {
                                 sensor_z_mm: baked.sensor_z_mm,
                                 stop_scale,
                                 cell_area_px: cell_mm * cell_mm * st_flare * st_flare,
-                                // This batch's own stride (K-263).
+                                // This batch's own stride.
                                 ray_stride: batch_rays,
                                 _pad_stride: 0,
                                 blades: op.blades.clamp(3, 16),
@@ -2062,7 +2098,7 @@ impl FxEngine {
                             },
                         ],
                     });
-                    // The deposit's own view of the frame (K-375): the flare
+                    // The deposit's own view of the frame: the flare
                     // buffer's size, and EXACTLY how many splats this batch
                     // filled. It has to be exact — the dispatch's last
                     // workgroup runs a tail of up to 63 idle threads, and a
@@ -2102,8 +2138,8 @@ impl FxEngine {
                     });
                     // Each stage in its own pass: the pass boundary is the
                     // write-then-read barrier between them. The splat stage
-                    // reads its NEIGHBOURS' landings for the footprint
-                    // (K-366), and a neighbour traced by another workgroup
+                    // reads its NEIGHBOURS' landings for the footprint,
+                    // and a neighbour traced by another workgroup
                     // needs a pass boundary to be visible.
                     let stages: [(&wgpu::ComputePipeline, u32, &str); 2] = [
                         (&lf.trace, batch_rays, "fx-lens-flare-trace-pass"),
@@ -2119,7 +2155,7 @@ impl FxEngine {
                         cpass.dispatch_workgroups(x_items.div_ceil(64), batch, light_chunk);
                     }
                     {
-                        // The deposit (K-375): one thread per splat, scattering
+                        // The deposit: one thread per splat, scattering
                         // into the f32 accumulator. This is where the raster
                         // pass used to be, and the reason it is not one any
                         // more is that the blender could only sum in fp16.
@@ -2147,7 +2183,7 @@ impl FxEngine {
                     }
                 }
                 // One write into the fp16 texture, now that every batch has
-                // added its light in f32 (K-375). `splat_count` is nothing to
+                // added its light in f32. `splat_count` is nothing to
                 // the resolve, which walks the raster rather than the splats.
                 let resolve_dims =
                     ctx.device
@@ -2192,16 +2228,16 @@ impl FxEngine {
                 lf.put_scratch(scratch);
             }
 
-            // Ghost blur (K-261, FlareSim's Ghost Blur): 3 separable box
+            // Ghost blur (FlareSim's Ghost Blur): 3 separable box
             // passes over the flare buffer, ping-ponging through a scratch
             // texture — an even pass count lands the result back in
             // `flare_tex` for the combine.
             // Mirrors `lumit_core::fx::lens_flare::ghost_blur_radius`,
-            // cap included (K-262: an uncapped radius on a 4K frame is a
+            // cap included (an uncapped radius on a 4K frame is a
             // thousand taps per pixel across six passes — a GPU timeout).
-            // Ghost softness is px@comp (K-558) and already raster pixels
+            // Ghost softness is px@comp and already raster pixels
             // here, so the radius is the number itself over the flare
-            // buffer's own divisor — a distance the K-267 padding does not
+            // buffer's own divisor — a distance the padding does not
             // change; the passes run over the padded buffer.
             let radius = {
                 let r = op.ghost_softness.max(0.0) / op.flare_div.max(1) as f32;
@@ -2258,7 +2294,7 @@ impl FxEngine {
                         cpass.set_pipeline(&lf.blur);
                         cpass.set_bind_group(0, &bind, &[]);
                         // x runs ALONG the blur axis in tiles of 64, y across
-                        // it — the shape the line cache needs (K-263).
+                        // it — the shape the line cache needs.
                         let (along, across) = if dir == 0 { (fpw, fph) } else { (fph, fpw) };
                         cpass.dispatch_workgroups(along.div_ceil(64), across, 1);
                     }
@@ -2354,7 +2390,7 @@ impl FxEngine {
     /// op's MANUAL light and read the ray buffer back — the whole WGSL `Ray`
     /// per corner, combo-major: `[pos_x, pos_y, weight, pad, r, g, b, pad]`,
     /// weight −1 being the GPU's dead sentinel where the CPU returns None.
-    /// Since K-364 the weight is geometry (feather × iris mask) and the rgb
+    /// The weight is geometry (feather × iris mask) and the rgb
     /// is the band-integrated energy, so the two halves of
     /// `trace_splat_spectral` can be checked apart. `w`/`h` feed the aspect
     /// the in-shader light direction uses. Diagnostics and tests only; no

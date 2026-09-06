@@ -19,7 +19,7 @@ const Map<ShortcutActivator, Intent> _activateShortcuts = {
 };
 
 
-/// The house button, in the three faces docs/15-DESIGN.md gives it (K-439):
+/// The house button, in the three faces docs/15-DESIGN.md gives it:
 ///
 /// - **Secondary** (the default): an outline and nothing else — a
 ///   `hairline_strong` border with the panel's own surface showing through, so
@@ -40,8 +40,8 @@ class HouseButton extends StatefulWidget {
   final bool small;
   final EdgeInsets? padding;
 
-  /// The default action of the window it sits in — what `Enter` presses
-  /// (K-243), and the one filled button the surface is allowed (§3.1).
+  /// The default action of the window it sits in — what `Enter` presses, and
+  /// the one filled button the surface is allowed (§3.1).
   final bool primary;
 
   /// The closed face of a dropdown: `surface2` and a plain hairline rather
@@ -50,17 +50,17 @@ class HouseButton extends StatefulWidget {
   final bool dropdown;
 
   /// Take keyboard focus on first build — for the default button of a
-  /// confirmation window, so `Enter` presses it the moment the window opens
-  /// (K-319). Pair it with [primary] so what Enter will do is visible.
+  /// confirmation window, so `Enter` presses it the moment the window opens.
+  /// Pair it with [primary] so what Enter will do is visible.
   final bool autofocus;
 
   /// The chosen one of a set — a tab, a mode chip, a segmented option.
   ///
-  /// Under Round this is K-394's **filled accent pill**: `accent` fill and the
+  /// Under Round this is the **filled accent pill**: `accent` fill and the
   /// label in `surface0`, the far end of the ramp from the text, which is the
   /// dark label on a dark scheme and the light one on a light scheme without
-  /// either being spelled out twice. Under Sharp it stays the accent *tint*
-  /// the tool bar already arms a tool with — the state contrast is the shape's
+  /// either being spelled out twice. Under Sharp it stays the accent *tint* the
+  /// tool bar already arms a tool with — the state contrast is the shape's
   /// difference, not a colour change (Sharp's geometry and treatment are
   /// untouched).
   ///
@@ -281,10 +281,10 @@ class _HouseCheckboxState extends State<HouseCheckbox> {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final onChanged = widget.onChanged;
-    // The mockups' checkbox (K-450): a 9px outlined box whose checked state is
-    // a 5px block of the primary text colour — no accent, which also puts the
-    // control inside §3.1's accent discipline. The 14px container stays as the
-    // hit target around the smaller mark; the focus ring reads in the animated
+    // The mockups' checkbox: a 9px outlined box whose checked state is a 5px
+    // block of the primary text colour — no accent, which also puts the control
+    // inside §3.1's accent discipline. The 14px container stays as the hit
+    // target around the smaller mark; the focus ring reads in the animated
     // token, like a focused value well.
     final mark = SizedBox(
       width: 14,

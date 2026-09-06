@@ -9,7 +9,7 @@
 //!
 //! **A line is a capsule, and a capsule is a disc that has been stretched.**
 //! Nothing new is drawn here: the shared points draw already runs a dab from a
-//! head to a tail (K-601), so a segment is one entry in an ordinary stream whose
+//! head to a tail, so a segment is one entry in an ordinary stream whose
 //! tail is somewhere other than its head. Three effects and one rasteriser,
 //! still.
 //!
@@ -24,7 +24,7 @@
 //! any scrub direction.
 //!
 //! **Nothing wired draws nothing** — the picture passes through, and the box
-//! wears the "no stream" mark K-509 gave the family.
+//! wears the family's "no stream" mark.
 
 use std::collections::HashMap;
 
@@ -41,7 +41,7 @@ pub const POINTS_PORT: &str = "points";
 /// What this effect consumes. Not `three_d`: a web is drawn on the layer's own
 /// flat picture, and "near enough to join" is a nearness *in that picture* —
 /// the same reading, and for the same reason, that makes Points sample's
-/// Nearest distance a distance on the frame (K-561).
+/// Nearest distance a distance on the frame.
 const POINTS_IN: &[Port] = &[Port::new(POINTS_PORT, "Points", PortType::Points)];
 
 const fn group(label: &'static str, params: &'static [&'static str]) -> ParamGroup {
@@ -164,7 +164,7 @@ pub struct ConnectPoints {
     #[colour(default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
     pub colour: [f32; 4],
 
-    /// **The budget dial** (K-475), the family's row: the most **points** that
+    /// **The budget dial**, the family's row: the most **points** that
     /// may be considered. A stream longer than this is trimmed to its newest by
     /// birth index — the producer's own cap rule applied a second time — which
     /// is what bounds the pairing as well as the drawing. Not animatable: it is
@@ -193,9 +193,9 @@ pub struct ConnectPoints {
 }
 
 impl ConnectPoints {
-    /// The raster factor, for the one input the declaration cannot scale
-    /// (K-385): a stream read off a wire is in px@comp and has to be rearranged
-    /// into the pixels the frame is drawn at.
+    /// The raster factor, for the one input the declaration cannot scale: a
+    /// stream read off a wire is in px@comp and has to be rearranged into the
+    /// pixels the frame is drawn at.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
     /// This instance's raster factor, read back out of a resolved bag.
@@ -224,8 +224,8 @@ impl ConnectPoints {
     pub fn links(self, in_stream: &PointsStream) -> (PointsStream, Vec<[f32; 3]>) {
         let mut points = in_stream.clone();
         // The newest by birth index, which is the cap rule the whole family
-        // applies (K-475) — and here it is the ceiling on the pairing as much
-        // as on the drawing.
+        // applies — and here it is the ceiling on the pairing as much as on
+        // the drawing.
         points.keep_newest(self.max_points.clamp(0, points::CAP_HARD as i32) as usize);
         let mut out = PointsStream {
             projection: points.projection,
@@ -238,8 +238,8 @@ impl ConnectPoints {
         if reach <= 0.0 || links == 0 || n < 2 {
             return (out, tails);
         }
-        // Where each point is *seen*, which is where "near enough" is judged
-        // (K-561). On a 2D layer this is the pair the stream already holds.
+        // Where each point is *seen*, which is where "near enough" is judged.
+        // On a 2D layer this is the pair the stream already holds.
         let seen: Vec<[f32; 2]> = (0..n).map(|i| points.projected(i)).collect();
         let cells = Self::buckets(&seen, reach);
 
@@ -373,8 +373,8 @@ impl ConnectPoints {
         cells
     }
 
-    /// How the web is drawn — capsules through the shared kernel, and the host
-    /// Mix (K-425).
+    /// How the web is drawn — capsules through the shared kernel, and the
+    /// host Mix.
     #[must_use]
     pub fn draw_style(self) -> points::DrawStyle {
         points::DrawStyle {
@@ -404,7 +404,7 @@ impl EffectDef for ConnectPointsDef {
         &<ConnectPoints as EffectMetadata>::SCHEMA
     }
 
-    /// A picture in, a picture out, and a **stream in** beside it (K-492).
+    /// A picture in, a picture out, and a **stream in** beside it.
     fn signature(&self) -> Signature {
         Signature::Image {
             inputs: POINTS_IN,
@@ -413,7 +413,7 @@ impl EffectDef for ConnectPointsDef {
     }
 
     /// The raster factor, so a px@comp stream reaches the pixels this frame is
-    /// drawn at (K-385).
+    /// drawn at.
     fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
         push(ConnectPoints::DERIVED_PX_SCALE, Value::Float(cx.px_scale));
     }

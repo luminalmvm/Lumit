@@ -344,7 +344,7 @@ pub(crate) fn over(px: &mut [u8], rgb: [u8; 3], a: f32) {
 /// Per-channel linear crossfade of two equal-length RGBA8 buffers:
 /// `a·(1−t) + b·t`. `t` is clamped to 0..1 (0 = all `a`). The shared frame-blend
 /// used by both preview and export so a blended slow-mo frame is identical in
-/// each (K-031). Blends in sRGB bytes — standard NLE frame blending.
+/// each. Blends in sRGB bytes — standard NLE frame blending.
 pub fn blend_rgba(a: &[u8], b: &[u8], t: f32) -> Vec<u8> {
     let t = t.clamp(0.0, 1.0);
     let n = a.len().min(b.len());
@@ -379,7 +379,7 @@ pub fn frame_pick(
         let pos = (source_time * fps).max(0.0);
         return ((pos.round() as usize).min(last), None);
     }
-    // The sampling rate: a conform rate below the native one (K-095) makes
+    // The sampling rate: a conform rate below the native one makes
     // flow bracket source frames spaced further apart — real motion for
     // high-fps footage. None, or a rate at/above native, samples adjacent
     // native frames exactly as before.
@@ -407,7 +407,7 @@ pub fn frame_pick(
 mod tests {
     use super::*;
 
-    /// K-095's conform, from the other end: animation drawn on 2s.
+    /// The conform rate, from the other end: animation drawn on 2s.
     ///
     /// A 24 fps anime cut animated on 2s holds each drawing for two frames —
     /// A A B B C C. Interpolating natively, half the pairs bracket a frame and
@@ -461,7 +461,7 @@ mod tests {
         // An exact frame doesn't blend; past the end clamps to the last frame.
         assert_eq!(frame_pick(1.0, 30.0, 100, true, None), (30, None));
         assert_eq!(frame_pick(100.0, 30.0, 100, true, None), (99, None));
-        // Conform (K-095): a 60fps clip conformed to 15fps brackets frames
+        // Conform: a 60fps clip conformed to 15fps brackets frames
         // spaced 4 native frames apart. At source_time 0.05s the 15fps
         // virtual index is 0.75, so it blends native frames 0 and 4 at 0.75.
         let (f, b) = frame_pick(0.05, 60.0, 100, true, Some(15.0));

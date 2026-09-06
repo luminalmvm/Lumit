@@ -1,4 +1,4 @@
-// Rulers, guides and snapping on the picture (K-689, docs/07 §2.2 item 6).
+// Rulers, guides and snapping on the picture (docs/07 §2.2 item 6).
 //
 // Three things are worth checking and each is checked where it lives: the
 // ruler's arithmetic and the magnet's are pure, so they are computed by hand
@@ -270,10 +270,10 @@ void main() {
     });
   });
 
-  /// **The overlays and the guides ride the session** (K-689, doing what K-416
-  /// said was owed): they are written with the rest of where the user was, and
-  /// read back with it. A session from a build that had neither reads as a
-  /// comp with nothing drawn on it rather than failing to open.
+  /// **The overlays and the guides ride the session**: they are written with
+  /// the rest of where the user was, and read back with it. A session from a
+  /// build that had neither reads as a comp with nothing drawn on it rather
+  /// than failing to open.
   test('the session carries the overlays and the guides', () {
     const session = SavedSession(
       activeComp: 'a',

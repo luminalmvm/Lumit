@@ -1,8 +1,8 @@
-// The Skia pin, on all three runners (K-754, superseding K-748's mechanism).
+// The Skia pin, on all three runners.
 //
 // In plain terms: Lumit tells Flutter to draw with Skia rather than Impeller,
 // and each platform's runner has to say so in a way the *shipped* build hears.
-// K-748 said it on Linux and macOS through the FLUTTER_ENGINE_SWITCHES
+// An earlier pin said so on Linux and macOS through the FLUTTER_ENGINE_SWITCHES
 // environment variables `flutter run` uses — and the engine reads those only
 // under `#ifndef FLUTTER_RELEASE` (shell/platform/common/engine_switches.cc),
 // so the pin held while developing and evaporated in the release build users

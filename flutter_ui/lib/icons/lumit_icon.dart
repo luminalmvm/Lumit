@@ -1,4 +1,4 @@
-// Draws one glyph of Lumit's own icon set (docs/15-DESIGN.md §5, K-440).
+// Draws one glyph of Lumit's own icon set (docs/15-DESIGN.md §5).
 //
 // The glyphs are inline SVG documents in lumit_icons.dart, generated from
 // tool/icons/glyphs.json. Each is drawn in `currentColor`, so a glyph takes
@@ -14,7 +14,7 @@ class LumitIcon extends StatelessWidget {
   final String glyph;
 
   /// Side of the square box, in logical pixels. 16 is the floor the set is
-  /// drawn to, not a preference (K-209).
+  /// drawn to, not a preference.
   final double size;
 
   /// Overrides the ambient colour. Left null, the glyph follows the

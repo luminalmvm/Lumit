@@ -4,13 +4,13 @@
 // ends an Alt+wheel gesture is often swallowed before the app sees it. Flutter
 // then believes Alt is still down — and `syncKeyboardState` cannot put that
 // right, because it re-asks the same embedding that missed the key-up. The only
-// honest witness is the OS itself (K-334).
+// honest witness is the OS itself.
 //
 // **`GetAsyncKeyState`, not `GetKeyState`.** The first fix asked `GetKeyState`,
 // which reads the keyboard state of the *calling thread's* message queue — and
 // Dart's UI thread is not the Win32 thread that receives keyboard messages, so
 // the answer was as stale as the one it was meant to correct. `GetAsyncKeyState`
-// reads the physical key state, whoever asks (K-335).
+// reads the physical key state, whoever asks.
 //
 // Only ever corrects a FALSE POSITIVE: when the framework already says Alt is
 // up, that answer stands without a call. Under `flutter test` there is no real

@@ -1,9 +1,9 @@
 # Audio
 
-**Status: implementation-ready for v1; the Composer is design intent.** Implements K-050:
-v1 audio is a **sync toolkit** — everything a montage editor needs to cut to music — and
-the **Composer** workspace comes later. Terminology per [01-GLOSSARY.md](01-GLOSSARY.md);
-playback architecture per [06-RENDER-PIPELINE.md](06-RENDER-PIPELINE.md) and K-013/K-017;
+**Status: implementation-ready for v1; the Composer is design intent.** v1 audio is a
+**sync toolkit** — everything a montage editor needs to cut to music — and the
+**Composer** workspace comes later. Terminology per [01-GLOSSARY.md](01-GLOSSARY.md);
+playback architecture per [06-RENDER-PIPELINE.md](06-RENDER-PIPELINE.md);
 panel layout per [07-UI-SPEC.md](07-UI-SPEC.md).
 
 ---
@@ -11,29 +11,29 @@ panel layout per [07-UI-SPEC.md](07-UI-SPEC.md).
 ## 1. Scope of v1
 
 In: import, sample-accurate playback, timeline waveforms, manual and automatic beat
-markers, beat snapping, volume keyframes, **pan** (K-694), mute/solo, multiple audio layers
+markers, beat snapping, volume keyframes, **pan**, mute/solo, multiple audio layers
 per comp, audio from video footage, audio scrubbing, audio in export, **level meters and a
-master fader** (K-690, K-691), and **fade in / fade out and clip crossfades** (K-695).
+master fader**, and **fade in / fade out and clip crossfades**.
 
 Out (explicitly, §7): audio effects, mixer **buses and sends**, and audio retiming.
 
 The engine layer (`lumit-audio`, `lumit-bridge`) is built, and so are the Flutter **Mixer**
 and **Audio** panels with the Audio workspace preset that hosts them (the approved
 AudioWorkspace board). Applying that preset also opens the Audio group and the Waveform
-lane on every layer that carries sound (K-728), so the Timeline shows the board's own
+lane on every layer that carries sound, so the Timeline shows the board's own
 picture — waves, rubber bands, lane chips — rather than a stack of shut rows.
 [TODO.md](TODO.md) is the one document that says what remains.
 
 ## 2. Import and decode
 
-- Lumit MUST import any ffmpeg-decodable audio (via rsmpeg, K-013): mp3, AAC/m4a, wav,
+- Lumit MUST import any ffmpeg-decodable audio (via rsmpeg): mp3, AAC/m4a, wav,
   flac, ogg/opus, and the audio streams of any importable video container.
 - Audio items decode to **fp32 interleaved PCM at the engine's session sample rate**
   (default 48 kHz; resampled on decode via soxr-quality resampling). Source sample rate,
   channel count, and duration are stored as interpretation metadata on the asset.
 - Decoded audio for layers near the playhead is held in a RAM ring; full decode is lazy.
   A whole-file decode pass runs once at import to build peak files (§4) and beat analysis
-  (§5), in the background, cancellable, per K-017 (never on the UI thread).
+  (§5), in the background, cancellable, never on the UI thread.
 
 ## 3. Playback and sync
 
@@ -52,7 +52,7 @@ with no output at all is the calm terminal no-device state of §3.1: no sound, n
 the picture on its own clock. Changing the device closes the open stream (a cpal stream
 cannot be moved), so sound stops until the next play.
 
-**What the mix is doing** is read off that same callback (K-690). Once per buffer — about
+**What the mix is doing** is read off that same callback. Once per buffer — about
 ten milliseconds — it publishes, for every **mixer strip** and for the master, the loudest
 sample it just wrote (peak) and the root-mean-square of it (RMS), plus a sticky flag saying
 something reached the ceiling and the limiter had to hold it. A strip is **a row of the
@@ -70,13 +70,13 @@ Output runs through **cpal** into the OS device (WASAPI on Windows). During prev
 **audio clock is the master**: the video system schedules frames against the audio
 device's sample position, not a wall-clock timer. The audio callback MUST be real-time
 safe: no locks shared with the UI or render threads, no allocation; it reads from a
-pre-mixed ring buffer filled by a dedicated audio thread (K-017).
+pre-mixed ring buffer filled by a dedicated audio thread.
 
-Mixing model in v1: per-layer **audio insert chain** (K-700 — the audio-typed entries of
+Mixing model in v1: per-layer **audio insert chain** (the audio-typed entries of
 the layer's own effect stack, in stack order; empty on every layer that carries no audio
 plugin, and byte-identically absent when it is) → per-layer gain (volume keyframes, §6) →
 sum of all audible layers →
-**master fader** (K-691, amending this section: one gain stage on the sum,
+**master fader** (one gain stage on the sum,
 `Composition.master_volume_db`, 0 dB unity with the same −100 dB knee a layer's Volume has)
 → master limiter (a hard safety clip at −0.3 dBFS; the *limiter* remains not
 user-adjustable — v1 clamps sample peaks to that ceiling,
@@ -101,7 +101,7 @@ Consumer audio devices do not run at exactly their nominal rate. Strategy:
 1. Video chases audio: each displayed frame is chosen from the audio clock's current
    comp time. Video can never drift — it has no independent clock.
 2. If preview rendering falls behind, frames are skipped to stay on the audio clock
-   (latest-wins, K-017); audio MUST NOT pause or stutter to wait for video.
+   (latest-wins); audio MUST NOT pause or stutter to wait for video.
 3. On device sample-rate mismatch or device change (headphones unplugged), the engine
    rebuilds the stream and resumes from the playhead; a device glitch MUST NOT desync — the
    audio clock restarts as master and video re-chases.
@@ -128,7 +128,7 @@ same decoded ring, so it is warm wherever the cache bar is warm.
 ## 4. Waveforms
 
 - Waveform peaks (min/max/RMS per block) are **computed on demand** from the decoded audio
-  and held as a multi-zoom **peak pyramid** (`lumit-audio::peaks::PeakPyramid`, K-280): one
+  and held as a multi-zoom **peak pyramid** (`lumit-audio::peaks::PeakPyramid`): one
   pass over the samples fills the finest tier and the coarser ones fold down from it, at the
   samples-per-block sizes 256 / 4 096 / 65 536. The pyramid is built once per file and kept
   for the session by the bridge's own bounded cache (`lumit-bridge::peaks`, keyed by path so
@@ -137,13 +137,13 @@ same decoded ring, so it is warm wherever the cache bar is warm.
   built** ([TODO.md](TODO.md)) — so it is rebuilt the next time the project opens.
 - Waveforms render 0(pixels) from the peak buckets - never from raw decode. Rendering follows
   [15-DESIGN.md](15-DESIGN.md): filled min/max body with RMS core, no per-sample spikes.
-- **The resolution follows the zoom** (K-280). A lane asks for the stretch of source it is
+- **The resolution follows the zoom**. A lane asks for the stretch of source it is
   currently showing, at one bucket per pixel column, and asks again when a zoom or a scroll
   moves that window far enough to matter; the pyramid answers from whichever tier is coarse
   enough that a bucket costs a handful of block merges. Zooming in therefore *gains* detail
   rather than stretching a summary taken at import — the failure the original fixed
   2 048-bucket strip had.
-- **Past the finest tier, the samples answer** (K-284). A summary runs out somewhere: below
+- **Past the finest tier, the samples answer**. A summary runs out somewhere: below
   one block per column, neighbouring columns share a block and the wave becomes a staircase
   of flat slabs. So a short source keeps its **mono mixdown** beside the pyramid (16-bit, at
   the peak rate — `SAMPLE_KEEP_SECONDS`, about ten minutes, past which the 64× zoom ceiling
@@ -153,14 +153,14 @@ same decoded ring, so it is warm wherever the cache bar is warm.
   three bands are filtered on the fly over the same pass, run up from
   `SAMPLE_PREROLL` samples before the window so the filters are settled by the time it
   starts.
-- **Multiwave** (K-280, redrawn by K-284): alongside the plain wave, the sound is split into
-  three bands — bass (below 200 Hz), middle, treble (above 2 kHz) — with 24 dB/octave
-  filters, and each is summarised the same way. The lane draws all three **over one another
-  in one lane**, ranked dim to bright as the frequency climbs. So what is in a loud passage is
+- **Multiwave**: alongside the plain wave, the sound is split into three bands — bass
+  (below 200 Hz), middle, treble (above 2 kHz) — with 24 dB/octave filters, and each is
+  summarised the same way. The lane draws all three **over one another in one lane**,
+  ranked dim to bright as the frequency climbs. So what is in a loud passage is
   visible where one wave would be a solid block, and a cut can be aimed at the kick or at the
   hats. Overlaid rather than in three separate lanes, because the point is to see inside the
   wave you are already reading, and because three lanes in a 22 px row are six pixels each and
-  say nothing. Two rules keep three overlaid waves legible (K-382): they are drawn **treble
+  say nothing. Two rules keep three overlaid waves legible: they are drawn **treble
   first and bass last**, so the pale end of the ramp sits behind and each darker band lands in
   front of a paler one (a dark shape on a pale one reads as two shapes; the reverse swallows
   what is under it), and **each is lifted slightly above the one behind it** — proportional to
@@ -169,7 +169,7 @@ same decoded ring, so it is warm wherever the cache bar is warm.
   top of the row. On by default;
   Settings ▸ Interface ▸ Editing ▸ *Waveforms show the frequency stack* returns the single
   wave.
-- **Where the wave sits** is a second, independent choice (K-285). Centred about silence by
+- **Where the wave sits** is a second, independent choice. Centred about silence by
   default; Settings ▸ Interface ▸ Editing ▸ *Waveforms rise from the bottom* stands it on the
   floor of its row instead, rectified — each column reaching up by how far the signal swung
   either way, whichever was further. Half of a centred wave is a mirror of the other half, so
@@ -177,7 +177,7 @@ same decoded ring, so it is warm wherever the cache bar is warm.
   better in a short row. It applies to the single wave and the stack alike, and it changes
   nothing about what is fetched: the peaks are the same either way, so switching it repaints
   and asks the engine for nothing.
-- **A retimed layer's wave stretches with its map** (K-436). A lane's window is in the
+- **A retimed layer's wave stretches with its map**. A lane's window is in the
   **layer's own clock**, and each bucket's edges are mapped through the layer's Retime
   (`Layer::source_time_at`) before the pyramid is asked — the same shape a clip's buckets
   already had through `Clip::source_time`. Bucketed evenly in source time instead, a layer
@@ -187,7 +187,7 @@ same decoded ring, so it is warm wherever the cache bar is warm.
   window to `PeakPyramid::range` in one pass, so only a layer that has actually been
   retimed pays for the per-bucket walk. A reshaped map changes the answer without moving
   the window, so a retimed layer's fetch key carries the document revision as well.
-- **The lane is drawn across both of its rows** (K-437). A waveform lane only ever exists
+- **The lane is drawn across both of its rows**. A waveform lane only ever exists
   under its own **Waveform** twirl, whose row is empty lane space — so the lane paints at
   twice the row height, standing on its own floor and reaching up through the row above. A
   centred wave then sits on the **divider** between the two, which is a line that is really
@@ -195,14 +195,14 @@ same decoded ring, so it is warm wherever the cache bar is warm.
   rise through. Only the painting reaches up: the row keeps its height, so the outline and
   the lanes stay level. A Sequence clip's wave is unchanged — it is drawn inside the clip's
   own box, which has no empty row beside it to borrow.
-- **The lane has three modes, per layer** (K-699, the AudioWorkspace canvas note's
+- **The lane has three modes, per layer** (the AudioWorkspace canvas note's
   decision 3): the plain wave, the multiwave stack, or a **spectrogram** — time along the
   lane, frequency up it (40 log bands, 40 Hz to 12 kHz), brightness the level in dB. A
   chip on the layer's Waveform row cycles them; the choice is session state, like a
   twirl. The spectrogram is built once per file from the beat detector's own STFT
   sizing and kept in a bounded session cache beside the peaks, at three levels of
   detail folded down by maximum — so it answers the same window-fetch the peaks answer
-  (one column per pixel, K-280), gains detail as the zoom closes in, and a transient
+  (one column per pixel), gains detail as the zoom closes in, and a transient
   survives every zoom.
 - Waveforms appear: on Audio layers (always), on Footage layers with audio (expandable
   lane), and **inside Sequence layer clips** — each clip draws the waveform of its own
@@ -210,7 +210,7 @@ same decoded ring, so it is warm wherever the cache bar is warm.
   waveforms account for the clip's trim and its speed map (they are bucketed in the clip's
   own placed time, so a ramp's transients land where they are heard) and travel with the
   clip when it is slid; they are the primary visual for beat-checking an edit.
-- **A clip join's crossfade is drawn and handled where it happens** (K-695): where two
+- **A clip join's crossfade is drawn and handled where it happens**: where two
   clips overlap, the open Sequence view draws the opposed-fades pair across the overlap
   — the board's X — with a small handle at either end. Each handle drags the edge of the
   clip whose ramp it is (the incoming clip's start, the outgoing clip's end), so
@@ -241,7 +241,7 @@ same decoded ring, so it is warm wherever the cache bar is warm.
     worse grid), enforce a minimum spacing (the more confident of a crowded pair stands),
     and nudge the whole generated set by a phase offset. One options block over the bridge
     (`BridgeBeatOptions`), whose defaults are the one-click detection every menu entry runs.
-  - **A source picked by name is always heard** (K-718, owner). Naming a layer in *Source*
+  - **A source picked by name is always heard** (the owner's ruling). Naming a layer in *Source*
     is asking to listen to that layer, so it sounds for detection through its own mute and
     through a solo on any other row; the dropdown therefore offers every layer of the comp
     that can make a sound, silenced or not. The **comp mix** is the other question and keeps
@@ -249,7 +249,7 @@ same decoded ring, so it is warm wherever the cache bar is warm.
     name carries what it carries when it plays, its own inner switches included.
 - Beat markers are ordinary markers with a `beat` label: deletable, draggable, and stored
   in the project file. Re-running detection offers replace or merge.
-- **The confirmed grid is kept, and the ruler wears it** (K-698). A detection that used a
+- **The confirmed grid is kept, and the ruler wears it**. A detection that used a
   grid stores its tempo and phase on the composition (`Composition.beat_grid`,
   `Op::SetBeatGrid`) in the same undo step as the markers it placed, and *Clear generated*
   takes both away. The Timeline's ruler draws the **beat band** from the pair, in its own
@@ -278,18 +278,18 @@ same decoded ring, so it is warm wherever the cache bar is warm.
 - **Multiple audio layers per comp**; audio layers mix per §3.1. There is no layer-count
   audio limit beyond CPU.
 - **Volume** is an animatable property per audio-capable layer (dB scale, −∞..+50 dB,
-  default 0 dB; the owner raised the ceiling from the original +12 — K-172), keyframable
+  default 0 dB; the owner raised the ceiling from the original +12), keyframable
   and expression-visible like any property. −100 dB is the −∞ knee: at or below it the
   gain is exactly zero (the UI reads "−inf"), never a denormal whisper. Fades are volume
   keyframes; the fade-in/fade-out commands that write eased keyframe pairs are still to
-  come. **Shipped (K-172):** `Layer.volume_db` + `Op::SetLayerVolume`; an animated volume
+  come. **Shipped:** `Layer.volume_db` + `Op::SetLayerVolume`; an animated volume
   bakes to a ~10 ms control-rate gain envelope applied identically by the live mix plan
   and the baked mixdown (playback == export, pinned by test); it lives in the layer's
   **Audio** group in the timeline outline, beside a **Waveform** twirl that draws that
   layer's own peaks in its lane (replacing the comp-wide strip — the per-layer lane
   follows a dragged bar in realtime, where the strip only refreshed on re-mix). `L` opens
   that group on the selected layers, `LL` opens the waveform lane inside it, `LLL` shuts
-  them again (K-281). **The waveform lane wears the volume rubber band** (K-695, the
+  them again. **The waveform lane wears the volume rubber band** (the
   AudioWorkspace board): the Volume curve as a line over the wave with a diamond per
   keyframe and a dB readout, grabbable only near itself so the lane keeps its other
   gestures. A vertical drag moves the grabbed key's value — or the whole level while the
@@ -300,21 +300,21 @@ same decoded ring, so it is warm wherever the cache bar is warm.
 - **Mute / solo** via the audible and solo switches ([01-GLOSSARY.md](01-GLOSSARY.md) §2).
   Solo on any layer silences non-soloed audio, matching video solo semantics.
 - **Audio from video footage**: a Footage layer with audio exposes its audio as part of
-  the same layer (audible switch, volume property, waveform lane). **Shipped (K-435):**
+  the same layer (audible switch, volume property, waveform lane). **Shipped:**
   *Add audio only* on a footage item places that item's sound as its own **Audio layer** —
   a Footage layer with `audio_only` set (docs/03 §5.7), which never draws. Media with no
   picture becomes one on placement whichever route placed it.
-- **Detach audio** (K-701): *Layer ▸ Audio ▸ Detach audio*, and the same row on a layer's
+- **Detach audio**: *Layer ▸ Audio ▸ Detach audio*, and the same row on a layer's
   right-click, separates a layer that is already placed. It adds an Audio layer over the
   **same** source directly below — same span, offset, retime, volume, pan, effects and
   graph, **copied** — and turns the original layer's audible switch off, as one op batch
   and so one undo step. The comp sounds exactly as it did; what changes is which row the
   sound is cut and ridden on. A **Precomp** layer detaches the same way, its sibling
-  naming the same nested comp. The pair is **not linked** (K-701): trimming one afterwards
+  naming the same nested comp. The pair is **not linked**: trimming one afterwards
   does not trim the other, which is the point of separating them. A layer that makes no
   sound, or one that is already nothing but sound, is refused with one calm line in the
   status bar.
-- **Switches show only what a layer can do** (K-435): an Audio layer is offered no
+- **Switches show only what a layer can do**: an Audio layer is offered no
   visibility switch, and a layer that can never be heard — a solid, a title, a shape,
   image-only footage — is offered no audible switch. The same reasoning that decides
   whether the Audio group appears under a layer at all (§4.3 of
@@ -322,7 +322,7 @@ same decoded ring, so it is warm wherever the cache bar is warm.
 - **An Audio layer is never in the picture's frame key**, so muting, hiding, soloing or
   shying one retires no rendered frame; soloing it silences other audio without blanking
   the picture (docs/03 §5.7).
-- **Pan** is an animatable property per audio-capable layer (K-694, **reversing** this
+- **Pan** is an animatable property per audio-capable layer (**reversing** this
   section's original "Pan is not in v1"): a **constant-power stereo balance**, −100 full
   left, 0 centre, +100 full right — a percentage of the way to one side, so a value well
   reads "L 50" without arithmetic. The law walks a quarter circle (`cos` left, `sin` right),
@@ -334,13 +334,13 @@ same decoded ring, so it is warm wherever the cache bar is warm.
   is **folded into the same gain stage** — by the time the mixer sees a clip, Volume and Pan
   are one `[left, right]` pair, which is what makes a Precomp layer's balance compose with
   the balances inside it (per-channel multiplication) and what keeps preview and export
-  reading the same numbers (K-031).
-- **Volume can be driven by a wire** (K-697): the node graph's Layer out box carries a
+  reading the same numbers.
+- **Volume can be driven by a wire**: the node graph's Layer out box carries a
   Number socket named Volume, and a driver chain wired onto it overrides the Volume
   keyframes in both mixers — evaluated per ~10 ms control step, clamped to the property's
   own range, keyframes returning the moment the wire breaks or bypasses. This is the
   landing for the Audio panel's *Lower behind…* template (Audio level → Remap inverted →
-  Smooth) — the ducking move, labelled in plain words (K-730). The chain's own comp-mix
+  Smooth) — the ducking move, labelled in plain words. The chain's own comp-mix
   tap reads the **pre-duck** mix, so one level of ducking is heard and a duck driven by
   a duck terminates.
 - Stereo is the v1 channel model; mono sources upmix centred.
@@ -351,7 +351,7 @@ same decoded ring, so it is warm wherever the cache bar is warm.
   audio effects until the Composer phase; the [12-PLUGINS.md](12-PLUGINS.md) LFX surface
   reserves an audio-effect extension so the ABI does not need breaking later.
 - **Mixing console** — *partly reversed by the Audio workspace board.* A **Mixer** panel of
-  layer strips plus a master strip ships (the board's four decisions, K-691); what stays out
+  layer strips plus a master strip ships (the board's four decisions); what stays out
   is **buses and sends**, which have nowhere to go until audio effects exist. So: per-layer
   volume and pan, a master fader, meters, and the limiter — no bus architecture.
 - **Audio retiming.** Retime is video-only in v1: a retimed Footage layer's own audio is
@@ -409,7 +409,7 @@ with Lumit under a clear licence.
 **Sequencing.** The Composer ships after v1 ([16-ROADMAP.md](16-ROADMAP.md)); the only v1
 obligations it imposes are the ones already met above: property-shaped audio model, mixing
 engine that sums arbitrary sources, and a file format that tolerates new property groups
-(K-040 versioned schema).
+(versioned schema).
 
 ---
 
@@ -421,7 +421,7 @@ engine that sums arbitrary sources, and a file format that tolerates new propert
 2. **Onset algorithm ceiling.** Spectral flux is fine for percussive genre music; melodic
    onsets (piano edits, some phonk) may need a complex-domain or ML detector later. Is
    detector pluggability worth designing in now, or is replace-when-needed acceptable?
-3. **Detached audio linking.** Detach ships **unlinked** (K-701): the sibling is a copy,
+3. **Detached audio linking.** Detach ships **unlinked**: the sibling is a copy,
    and nothing keeps the two rows in step afterwards. Should it later keep a persistent
    sync-lock badge with "resync" (Premiere-style), or is no link at all enough for the
    audience? Needs a quick user test with a montage editor.

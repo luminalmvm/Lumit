@@ -1,10 +1,10 @@
-; Lumit Windows installer (Inno Setup, K-252). Build with:
+; Lumit Windows installer (Inno Setup). Build with:
 ;   packaging/windows/build-installer.ps1
 ; or by hand: flutter build windows --release (from flutter_ui/), then
 ;   iscc packaging\windows\lumit.iss
 ;
 ; Registers the .lum, .lumfx and .lumtheme associations with their document icons
-; (assets/brand, K-251) and an open command; Lumit itself reads the document
+; (assets/brand) and an open command; Lumit itself reads the document
 ; path from the command line (projectPathFromArgs in flutter_ui/lib/main.dart).
 
 ; Keep in step with flutter_ui/pubspec.yaml `version:` when cutting a release.
@@ -20,7 +20,7 @@ AppName=Lumit
 AppVersion={#MyAppVersion}
 AppPublisher=Lumit
 AppPublisherURL=https://github.com/luminalmvm/Lumit
-; Per user, not per machine (K-297). This is what lets Lumit update itself the
+; Per user, not per machine. This is what lets Lumit update itself the
 ; way Chrome and VS Code do: {localappdata} belongs to the person running it, so
 ; the application can put a new version down beside the old one and swap them
 ; over without an administrator and without running this installer again.
@@ -46,7 +46,7 @@ SolidCompression=yes
 [Files]
 ; The whole runner directory, recursively — which is how `lumit-ofx-broker.exe`
 ; and `lumit-aplug-broker.exe` ship without rules of their own: the Windows CMake
-; install step puts them beside the runner (docs/12 §2.3, K-696), and everything
+; install step puts them beside the runner (docs/12 §2.3), and everything
 ; beside the runner is copied here.
 Source: "..\..\flutter_ui\build\windows\x64\runner\Release\*"; DestDir: "{app}"; \
   Flags: recursesubdirs ignoreversion
@@ -76,7 +76,7 @@ Root: HKA; Subkey: "Software\Classes\Lumit.Preset"; ValueType: string; \
   ValueData: "Lumit preset"; Flags: uninsdeletekey
 Root: HKA; Subkey: "Software\Classes\Lumit.Preset\DefaultIcon"; ValueType: string; \
   ValueData: "{app}\icons\lumit-preset.ico"
-; .lumtheme — shared colour themes (K-298). No open verb either: a theme is
+; .lumtheme — shared colour themes. No open verb either: a theme is
 ; taken in from Settings → Appearance → Import…, not opened as a document.
 Root: HKA; Subkey: "Software\Classes\.lumtheme"; ValueType: string; \
   ValueData: "Lumit.Theme"; Flags: uninsdeletevalue
@@ -86,7 +86,7 @@ Root: HKA; Subkey: "Software\Classes\Lumit.Theme\DefaultIcon"; ValueType: string
   ValueData: "{app}\icons\lumit-theme.ico"
 
 [Run]
-; No `skipifsilent` (K-745). `/SILENT` is how Lumit runs this installer on
+; No `skipifsilent`. `/SILENT` is how Lumit runs this installer on
 ; itself to apply an update: it quits, the installer replaces it, and
 ; without this line nothing starts again — a "Restart now" button that does
 ; not restart, which is exactly the complaint. Interactive installs are

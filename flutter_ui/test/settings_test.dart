@@ -18,10 +18,10 @@ String _scratchStore(String name) =>
 void main() {
   test('performance defaults are the shipped ones', () {
     final p = PerformanceSettings();
-    // Every frame, not adaptive (K-670): a fresh install shows the picture it
+    // Every frame, not adaptive: a fresh install shows the picture it
     // was asked for rather than a softened one.
     expect(p.playback, PlaybackMode.everyFrame);
-    // The drag budget stays on unless asked otherwise (K-744): it is what keeps
+    // The drag budget stays on unless asked otherwise: it is what keeps
     // a dragged value attached to the pointer on a heavy composition.
     expect(p.fullResDragPreviews, isFalse);
   });
@@ -42,12 +42,12 @@ void main() {
     final i = InterfaceSettings();
     expect(i.uiScale, 1.0);
     expect(i.showTooltips, isTrue);
-    // The Vegas pair (K-246) defaults off: the shipped behaviour is the
+    // The Vegas pair defaults off: the shipped behaviour is the
     // After Effects one, and a new setting must never change an editor on
     // somebody who has not asked for it.
     expect(i.retimeOpensToSpeed, isFalse);
     expect(i.videoAsSequenceLayer, isFalse);
-    // The Retime row reads as a clock by default (K-287); seconds are the
+    // The Retime row reads as a clock by default; seconds are the
     // deviation, not the shipped state.
     expect(i.retimeInSeconds, isFalse);
   });
@@ -60,11 +60,12 @@ void main() {
     expect(i.retimeInSeconds, isFalse);
   });
 
-  /// K-560's one migration. `ui_scale` held the whole scale; the user's own
-  /// factor is now `ui_scale_user`, drawn over the ×1.1 presentation baseline.
-  /// A file from before the rebase must come back the same *size* it was —
-  /// which means a smaller number, exactly once, and never again.
-  group('the scale rebase (K-560)', () {
+  /// The scale rebase's one migration. `ui_scale` held the whole scale; the
+  /// user's own factor is now `ui_scale_user`, drawn over the ×1.1
+  /// presentation baseline. A file from before the rebase must come back the
+  /// same *size* it was — which means a smaller number, exactly once, and
+  /// never again.
+  group('the scale rebase', () {
     test('a stored scale from before the baseline divides by it once', () {
       final old = InterfaceSettings.fromJson(const {'ui_scale': 1.0});
       expect(old.uiScale, closeTo(1 / uiScaleBaseline, 1e-9));
@@ -93,7 +94,7 @@ void main() {
     });
   });
 
-  /// The tone map button is asked for (K-314): hidden by default, and hidden
+  /// The tone map button is asked for: hidden by default, and hidden
   /// for a settings file written before the field existed.
   test('the tone map button is hidden unless a settings file asks for it', () {
     expect(InterfaceSettings().showToneMap, isFalse);
@@ -103,8 +104,8 @@ void main() {
     expect(InterfaceSettings.fromJson(on.toJson()).showToneMap, isTrue);
   });
 
-  /// K-349. The panel is the default, so the flag is the *deviation* — same
-  /// shape as the playhead and waveform preferences above.
+  /// The panel is the default, so the flag is the *deviation* — same shape as
+  /// the playhead and waveform preferences above.
   test('the easing editor is a panel unless a settings file asks otherwise',
       () {
     expect(InterfaceSettings().easingInPopup, isFalse);
@@ -115,9 +116,9 @@ void main() {
     expect(InterfaceSettings.fromJson(popup.toJson()).easingInPopup, isTrue);
   });
 
-  /// K-454. Regular is the default and Compact is the deviation, so a
-  /// settings file written by a build that only ever drew the tight rows
-  /// opens roomy — the mockups' room is the decision, not an opt-in.
+  /// Regular is the default and Compact is the deviation, so a settings file
+  /// written by a build that only ever drew the tight rows opens roomy — the
+  /// mockups' room is the decision, not an opt-in.
   test('rows are roomy unless a settings file asks for Compact', () {
     expect(InterfaceSettings().compact, isFalse);
     expect(
@@ -127,9 +128,9 @@ void main() {
     expect(InterfaceSettings.fromJson(tight.toJson()).compact, isTrue);
   });
 
-  /// K-514, the owner's explicit default: the mockups draw a layer's name on
-  /// every bar in the lane area, and the ruling from desktop testing is that
-  /// the editor should not — the outline is already a column of exactly those
+  /// The owner's explicit default: the mockups draw a layer's name on every
+  /// bar in the lane area, and the ruling from desktop testing is that the
+  /// editor should not — the outline is already a column of exactly those
   /// names. Off unless a settings file asks, including for every file written
   /// by a build that always drew them.
   test('bars carry no layer name unless a settings file asks for one', () {
@@ -142,10 +143,10 @@ void main() {
     expect(InterfaceSettings.fromJson(named.toJson()).layerNamesOnBars, isTrue);
   });
 
-  /// K-448's arrangement choice, settled by K-466's drawing. Split is the
-  /// default because it is what the drawing draws; the other two gather the
-  /// chrome into one strip. Stored by name, so a reordered enum cannot
-  /// silently rearrange somebody's Viewer.
+  /// The arrangement choice, settled by the drawing. Split is the default
+  /// because it is what the drawing draws; the other two gather the chrome
+  /// into one strip. Stored by name, so a reordered enum cannot silently
+  /// rearrange somebody's Viewer.
   test("the Viewer's bars are split unless a settings file says otherwise", () {
     expect(InterfaceSettings().viewerBars, ViewerBars.split);
     expect(InterfaceSettings.fromJson(const {'ui_scale': 1.25}).viewerBars,
@@ -183,9 +184,9 @@ void main() {
     expect(DensityTokens.compact.propertyRow, 26);
   });
 
-  /// K-512, the owner's ruling from desktop testing: the Timeline's own two
-  /// chrome rows are no longer plain secondary rows. Regular grew them — the
-  /// row that is aimed at all day most — and states a height for the controls
+  /// The owner's ruling from desktop testing: the Timeline's own two chrome
+  /// rows are no longer plain secondary rows. Regular grew them — the row
+  /// that is aimed at all day most — and states a height for the controls
   /// standing in them, so the hit targets grew with the row. **Compact keeps
   /// exactly what it drew**, which is the half of this that a test has to
   /// hold: a ruling about Regular that quietly moved Compact would be a
@@ -211,7 +212,7 @@ void main() {
     }
   });
 
-  /// The rebuild's own guard (K-465): the Settings window was taken apart and
+  /// The rebuild's own guard: the Settings window was taken apart and
   /// put back to a new drawing, and the one thing that must not have happened
   /// is a setting quietly going missing. Every field of the interface settings
   /// is moved off its default here and read back, so a field dropped from the
@@ -263,7 +264,7 @@ void main() {
     expect(InterfaceSettings.fromJson(i.toJson()).retimeInSeconds, isTrue);
   });
 
-  /// The returning playhead is the *new* default (K-254), so unlike the Vegas
+  /// The returning playhead is the *new* default, so unlike the Vegas
   /// pair it does not defer to what a settings file leaves out — an install
   /// that predates the field adopts the new behaviour rather than being pinned
   /// to the old one by its own silence.
@@ -346,7 +347,7 @@ void main() {
     Workspace.storeOverride = null;
   });
 
-  // Automatic update checks (K-296): on by default, for a fresh install and
+  // Automatic update checks: on by default, for a fresh install and
   // for a settings file written before the setting existed alike.
   test('update checks default to on and survive a restart', () {
     expect(Workspace().autoUpdate, isTrue);
@@ -365,7 +366,7 @@ void main() {
     Workspace.storeOverride = null;
   });
 
-  // The welcome screen on launch (K-481): on by default, off survives the
+  // The welcome screen on launch: on by default, off survives the
   // restart it is about — a setting that forgot itself would be a poor joke.
   test('the welcome screen defaults to on and survives a restart', () {
     expect(Workspace().showWelcomeOnLaunch, isTrue);
@@ -436,9 +437,9 @@ void main() {
     expect(p.vramBudgetBytes, isNull);
   });
 
-  test('a settings file written before K-670 loads as every frame', () {
+  test('a settings file written before the every-frame default loads as every frame', () {
     // The store is what an upgraded install actually has: version 1, holding
-    // the old default. Every frame is what it must open on (K-742).
+    // the old default. Every frame is what it must open on.
     final back = Workspace()
       ..applyJson(const {
         'version': 1,
@@ -502,7 +503,7 @@ void main() {
         isNull);
   });
 
-  /// **The autosave cadence is settings, not project data** (K-587, docs/10
+  /// **The autosave cadence is settings, not project data** (docs/10
   /// §4): how often this machine copies your work is a property of the machine.
   /// Zero minutes is off and must survive the round trip as zero — a file that
   /// read it back as the default would turn autosave on again behind the user.

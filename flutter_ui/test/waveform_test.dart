@@ -1,4 +1,4 @@
-// What a waveform lane asks for, and what it draws (K-280).
+// What a waveform lane asks for, and what it draws.
 //
 // No engine here: the request rule and the painter are both plain arithmetic
 // over data the bridge hands over, and both are the parts that decide whether
@@ -46,7 +46,7 @@ void main() {
           lessThan(wide.endSeconds - wide.startSeconds));
       // Roughly a bucket per pixel either way — the detail comes from the
       // window shrinking, which is exactly what the old fixed-bucket lane
-      // could not do (K-172, superseded).
+      // could not do.
       expect(wide.buckets, greaterThanOrEqualTo(800));
       expect(close.buckets, greaterThanOrEqualTo(800));
       // And the close view has far more buckets per second of audio.
@@ -314,7 +314,7 @@ void main() {
       }
     });
 
-    /// Standing on the floor (K-285): every column starts at the baseline and
+    /// Standing on the floor: every column starts at the baseline and
     /// reaches up, so the whole row's height carries signal instead of half of
     /// it mirroring the other half.
     test('from the bottom, every column stands on the baseline', () {
@@ -411,7 +411,7 @@ void main() {
       }
     });
 
-    /// Both rows (K-437). A Timeline lane hands the painter twice its own
+    /// Both rows. A Timeline lane hands the painter twice its own
     /// height, so a centred wave sits **on the divider** between the empty
     /// Waveform-twirl row above and the lane's own row: the divider is the
     /// bottom of the drawn band less one row, which is canvas y 0 here.

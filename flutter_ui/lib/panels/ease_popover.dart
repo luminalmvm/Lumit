@@ -1,5 +1,5 @@
 // The Ease popover: the small box that eases a block of selected keyframes
-// where they stand (K-458, the approved Keys drawing; docs/15 §12A.1a).
+// where they stand (the approved Keys drawing; docs/15 §12A.1a).
 //
 // In plain terms: pick several keyframes and this is the quick way to shape
 // how the movement between them runs. Choose a curve by name, adjust how far

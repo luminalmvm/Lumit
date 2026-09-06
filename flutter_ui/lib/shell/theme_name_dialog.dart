@@ -1,4 +1,4 @@
-// Ask what a theme is called (K-202, K-298).
+// Ask what a theme is called.
 //
 // One small dialogue with three callers — the editor's first Save, Rename, and
 // Save a copy — because a theme's name is its identity: the picker shows it,
@@ -56,7 +56,7 @@ Future<String?> askThemeName(
                 HouseButton(
                   key: const ValueKey('theme-name-ok'),
                   small: true,
-                  // The default action (K-319). The name field holds focus, so
+                  // The default action. The name field holds focus, so
                   // Enter lands there and submits — the edge just says what
                   // Enter will do.
                   primary: true,

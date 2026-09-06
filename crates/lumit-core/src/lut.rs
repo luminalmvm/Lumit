@@ -218,7 +218,7 @@ pub fn parse_cube(text: &str) -> Result<Lut, LutError> {
 }
 
 /// The transfer function a `.cube` was authored against — the LUT effect's
-/// **Input space** row (docs/08 §3.11, K-543).
+/// **Input space** row (docs/08 §3.11).
 ///
 /// In plain terms: a LUT is a table of "this colour in, that colour out", and
 /// the colourist who baked it was looking at a particular kind of number. Most
@@ -232,11 +232,12 @@ pub fn parse_cube(text: &str) -> Result<Lut, LutError> {
 ///
 /// [`Linear`](Self::Linear) is the default and is the identity in both
 /// directions — no arithmetic at all — so a LUT saved before this row existed
-/// renders the bits it always did (K-258).
+/// renders the bits it always did.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum LutSpace {
-    /// Apply the cube to the working picture as-is: what the effect did before
-    /// K-543, and the right answer for a cube baked from scene-linear input.
+    /// Apply the cube to the working picture as-is: what the effect did
+    /// before the Input space row existed, and the right answer for a cube
+    /// baked from scene-linear input.
     #[default]
     Linear,
     /// The sRGB transfer function (IEC 61966-2-1) — the same curve
@@ -325,7 +326,7 @@ impl LutSpace {
 }
 
 impl Lut3d {
-    /// The cube applied through an input space (K-543): linear → `space`,
+    /// The cube applied through an input space: linear → `space`,
     /// trilinear lookup, `space` → linear. The §1.6 oracle the LUT shader is
     /// checked against; [`LutSpace::Linear`] makes it [`Self::sample`] with no
     /// arithmetic either side, bit for bit.
@@ -769,9 +770,9 @@ LUT_3D_SIZE 2
         assert!(!err.to_string().is_empty());
     }
 
-    /// The Input space (K-543). Linear is the exact identity in both directions
+    /// The Input space. Linear is the exact identity in both directions
     /// and `sample_in` through it is bit-for-bit `sample`, which is the whole
-    /// compatibility promise (K-258); the other two are real, invertible curves
+    /// compatibility promise; the other two are real, invertible curves
     /// that leave a negative working-space value finite rather than NaN.
     #[test]
     fn input_space_linear_is_the_identity_and_the_curves_invert() {

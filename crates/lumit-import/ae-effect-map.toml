@@ -27,20 +27,20 @@
 #                  becomes a placeholder, and the report names what does the job
 #                  in Lumit (§5's "placeholder + report" rows).
 #   ofx            The vendor's own OFX build of this same plug-in, by plug-in
-#                  identifier (K-655). If one of them is installed, the effect
+#                  identifier. If one of them is installed, the effect
 #                  maps straight to it — the plug-in IS the effect — and its
 #                  controls carry across by name where the types agree. Equality
 #                  with a discovered identifier, never a resemblance between
 #                  labels. A wrong identifier matches nothing and the row's
 #                  `lumit`/`conversion` road is taken instead.
 #   conversion =   The row maps to the CLOSEST Lumit effect rather than to an
-#     "nearest"    equivalent (K-655): a third-party effect whose internals are
+#     "nearest"    equivalent: a third-party effect whose internals are
 #                  the vendor's. The Lumit effect arrives in the right place in
 #                  the stack at its own defaults and the report says so — no
 #                  control is guessed across, because a guessed dial is a
 #                  silently wrong picture where a default is a visible one.
 #   pending_audit  The match name is the famous one but was not in the audited
-#                  set (K-414). Safe to ship: a match name this table has wrong
+#                  set. Safe to ship: a match name this table has wrong
 #                  is a name nothing claims, and an unclaimed name becomes a
 #                  placeholder with every parameter kept.
 
@@ -101,7 +101,7 @@ lumit = "levels"
 conversion = "levels"
 
 # Curves' five point lists live in an arbitrary-data blob After Effects' own
-# scripting will not hand over (K-410, K-639). The direct .aep route reads it out of
+# scripting will not hand over. The direct .aep route reads it out of
 # the file, so this row maps the effect there; on a Bridge bundle there are no
 # bytes to decode and the conversion falls through to the placeholder road,
 # where the report's PropertyUnreadable row says why.
@@ -456,7 +456,7 @@ name = "Card Wipe"
 lumit = "card_wipe"
 conversion = "card_wipe"
 
-# --- Controls (K-414) ------------------------------------------------------
+# --- Controls --------------------------------------------------------------
 
 [[effect]]
 ae = "ADBE Slider Control"
@@ -505,7 +505,7 @@ ae = "ADBE Timewarp"
 name = "Timewarp"
 suggest = "Retime with flow frame interpolation does the same job"
 
-# --- Third-party effects (docs/11 §5, K-655) --------------------------------
+# --- Third-party effects (docs/11 §5) --------------------------------------
 #
 # The vendor's internals are the vendor's, so none of these is an equivalent.
 # Each row says where the effect goes: to the vendor's own OFX build of it when
@@ -543,7 +543,7 @@ ofx = [
 ]
 pending_audit = true
 
-# Sapphire's dissolve transitions (K-660). The reference project uses exactly
+# Sapphire's dissolve transitions. The reference project uses exactly
 # one of the family — S_DissolveLuma, whose Dissolve Percent is keyframed on
 # every instance — so that is the row seeded here; a sibling is one more row and
 # no code, the curve being keyed off the `S_Dissolve` prefix rather than off a

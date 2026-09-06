@@ -102,7 +102,7 @@ pub(crate) fn plugin_id(kind: Kind) -> String {
 ///
 /// The path matters: the loader keys a module by file, so the `.clap` copy and
 /// the `.vst3` copy of the same library are two modules with two sets of
-/// statics, and a test must read the one its host loaded (K-707).
+/// statics, and a test must read the one its host loaded.
 pub(crate) fn read_export(path: &Path, symbol: &[u8]) -> Vec<String> {
     // SAFETY: the same file the host loaded; the loader answers with the same
     // module, and the symbol is one this crate's own test plugin exports.
@@ -206,7 +206,7 @@ fn the_search_paths_are_the_standard_ones_plus_clap_path() {
     );
     assert_eq!(widened.last(), Some(&extra));
 
-    // And one scan looks in both standards' folders, in that order (K-707).
+    // And one scan looks in both standards' folders, in that order.
     let both = search_paths();
     assert!(
         both.len() > standard.len(),
@@ -710,5 +710,39 @@ fn the_broker_is_spawned_without_a_console_window() {
     assert!(
         source.contains("command.creation_flags(CREATE_NO_WINDOW);"),
         "no_console must be CREATE_NO_WINDOW and nothing else"
+    );
+}
+
+/// The host keeps its brokers in a static, and a static is never dropped, so
+/// a ring file only ever went away by luck. The maker's handle now carries
+/// delete-on-close: the file must be gone once the process that made it has
+/// ended, dropped or not. The probe is a child copy of this test binary that
+/// makes a ring, forgets it, and exits.
+#[cfg(windows)]
+#[test]
+fn a_forgotten_ring_goes_with_its_process() {
+    const PROBE: &str = "LUMIT_APLUG_RING_PROBE";
+    if let Ok(path) = std::env::var(PROBE) {
+        let ring = crate::ipc::ring::Ring::create(Path::new(&path)).expect("a ring");
+        std::mem::forget(ring);
+        std::process::exit(0);
+    }
+    let path = std::env::temp_dir().join(format!("lumit-aplug-probe-{}.ring", std::process::id()));
+    let status = std::process::Command::new(std::env::current_exe().expect("this test binary"))
+        .args([
+            "a_forgotten_ring_goes_with_its_process",
+            "--exact",
+            "--test-threads=1",
+        ])
+        .env(PROBE, &path)
+        .status()
+        .expect("the probe runs");
+    assert!(status.success(), "the probe made its ring and exited");
+    let leaked = path.exists();
+    let _ = std::fs::remove_file(&path);
+    assert!(
+        !leaked,
+        "the ring file outlived the process that made it: {}",
+        path.display()
     );
 }

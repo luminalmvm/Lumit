@@ -1,7 +1,6 @@
 //! The property system: the `tdgp`/`tdbs`/`tdb4` trees, their static values,
 //! their keyframes, and the specialised nodes hanging off them — effects,
-//! masks, shapes, markers, expressions (K-418 phase B,
-//! docs/impl/ae-import.md §7.2).
+//! masks, shapes, markers, expressions (docs/impl/ae-import.md §7.2).
 //!
 //! # In plain terms
 //!
@@ -90,7 +89,7 @@ const PARAM_TOPIC: &[u8] = &[13, 14, 15];
 
 /// The SDK parameter type for arbitrary data: Curves' point list, Levels'
 /// histogram, Hue/Saturation's channel ranges. The DOM cannot read these at
-/// all (K-410); the file can, and does, so the bytes come through.
+/// all; the file can, and does, so the bytes come through.
 const PARAM_ARBITRARY: u8 = 11;
 
 /// One effect's parameter definitions, by match name — the `pard` records in
@@ -693,9 +692,9 @@ fn read_leaf(
     }
 
     // An arbitrary-data parameter — Curves' point list, Levels' histogram. The
-    // DOM cannot read it at all (K-410), but the bytes *are* in the file, so
+    // DOM cannot read it at all, but the bytes *are* in the file, so
     // they are carried as hex beside a note saying what they are. Decoding them
-    // is a stretch goal (K-412), not a promise.
+    // is a stretch goal, not a promise.
     let animated = u8_at(m, tdb4::ANIMATED).is_some_and(|flag| flag != 0);
     if no_value || declared == Some(PARAM_ARBITRARY) {
         if let Some(blob) = run.iter().find(|chunk| chunk.is_list(b"aRbs")) {
@@ -787,7 +786,7 @@ fn read_leaf(
 ///
 /// - a **percent** property (Opacity, Scale, Mask Opacity) is a fraction on
 ///   disk;
-/// - an **effect's point** is a fraction of the *layer's* frame (K-636). After
+/// - an **effect's point** is a fraction of the *layer's* frame. After
 ///   Effects runs an effect on the layer, so an effect's point is a point in
 ///   the layer's own raster and the file normalises it against that raster —
 ///   the same rule the anchor point and the mask path below already follow,
@@ -1489,8 +1488,7 @@ mod tests {
         assert_eq!(read.properties[2].value, Some(json!(0)), "None stays None");
     }
 
-    /// **An effect's point is a fraction of the layer, not of the composition**
-    /// (K-636).
+    /// **An effect's point is a fraction of the layer, not of the composition.**
     ///
     /// The Transform effect is where this is felt: its Anchor Point sits at the
     /// layer's centre by default and is therefore *absent* from the file, so

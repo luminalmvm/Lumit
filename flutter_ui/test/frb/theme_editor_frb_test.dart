@@ -1,5 +1,5 @@
 // Settings → Appearance: the theme picker, the customise window, and the
-// scopes toggle (K-202).
+// scopes toggle.
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -144,7 +144,7 @@ void main() {
 
     /// Duplicating is how a built-in becomes editable without the editor
     /// having to ask for a name first, and renaming is how a copy stops being
-    /// called "copy" (K-298).
+    /// called "copy".
     testWidgets('a theme can be duplicated and renamed from Settings',
         (tester) async {
       final p = await openAppearance(tester);
@@ -247,7 +247,7 @@ void main() {
     /// The Viewer's surround is neutral for the same reason the scopes are:
     /// a grade cannot be judged against a tinted ground (docs/15-DESIGN
     /// §2.1/§11). It had been painting the theme's own surface — the defect
-    /// K-203 fixes — so this pins the default and the way out of it.
+    /// an earlier fix removed — so this pins the default and the way out.
     testWidgets('the Viewer surround is neutral until switched on',
         (tester) async {
       final p = await openAppearance(tester);
@@ -259,7 +259,7 @@ void main() {
       expect(dark.viewerSurround.r, dark.viewerSurround.g,
           reason: 'and that grey really is neutral');
 
-      // A choice of two words now, not a switch (K-465): the drawing gives the
+      // A choice of two words now, not a switch: the drawing gives the
       // surround a dropdown, and its two options are the bool's two values.
       final surround = find.byKey(const ValueKey('settings-themed-surround'));
       await tester.ensureVisible(surround);
@@ -281,8 +281,8 @@ void main() {
       final p = await openAppearance(tester);
       expect(p.uiState.workspace.smoothZoomedViewer, isFalse);
 
-      // On the Viewer page since K-465: Appearance keeps what the Viewer looks
-      // like, and this is about the picture itself.
+      // On the Viewer page: Appearance keeps what the Viewer looks like, and
+      // this is about the picture itself.
       await tester.tap(find.byKey(const ValueKey('settings-page-viewer')));
       await tester.pumpAndSettle();
       await tester

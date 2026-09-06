@@ -1,4 +1,4 @@
-// Opening a web page in the machine's own browser (K-279).
+// Opening a web page in the machine's own browser.
 //
 // In plain terms: Lumit has no browser of its own and is never going to grow
 // one. Help ▸ Lumit help hands a web address to the desktop and lets whatever
@@ -15,7 +15,7 @@
 import 'dart:io';
 
 /// The documentation site, and the page that walks a newcomer through their
-/// first composition. Both are real pages on `web-docs/` (K-279); the sidebar
+/// first composition. Both are real pages on `web-docs/`; the sidebar
 /// sections themselves have no index page, so a link must name a page.
 const String lumitDocsUrl = 'https://docs.lumitlab.com/';
 const String lumitGuidesUrl =
@@ -23,7 +23,7 @@ const String lumitGuidesUrl =
 
 /// What shipped in each version — the welcome screen's *What's new*. It is on
 /// the main site rather than the documentation one, because the release notes
-/// are `web/src/pages/releases/` (K-279), not a docs page.
+/// are `web/src/pages/releases/`, not a docs page.
 const String lumitReleasesUrl = 'https://lumitlab.com/releases/';
 
 /// How Lumit opens a web page, and the seam a test replaces.

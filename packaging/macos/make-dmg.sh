@@ -1,5 +1,5 @@
 #!/bin/sh
-# Builds the macOS disk image (K-252): a release build, the Homebrew FFmpeg
+# Builds the macOS disk image: a release build, the Homebrew FFmpeg
 # dylibs bundled INTO the .app (so the image runs on machines without
 # Homebrew), a re-sign, then a DMG laid out by create-dmg: white
 # background (dmg-background.png), the app on the left, an Applications
@@ -8,7 +8,7 @@
 #   packaging/macos/make-dmg.sh [version]
 #
 # Needs: flutter, rust, `brew install dylibbundler create-dmg`, and an FFmpeg
-# 8 keg (see below and K-736; `brew install ffmpeg` alone is 9.x now, which
+# 8 keg (see below; `brew install ffmpeg` alone is 9.x now, which
 # this refuses). create-dmg is optional - without it the image has no
 # drag-to-Applications window dressing.
 #
@@ -19,7 +19,7 @@
 # codesign afterwards is mandatory - macOS kills a process whose binaries
 # changed after signing.
 #
-# Signing and notarisation are opt-in through the environment (K-309), so this
+# Signing and notarisation are opt-in through the environment, so this
 # script does the same thing on a laptop as it does under CI minus the parts a
 # certificate pays for:
 #
@@ -46,7 +46,7 @@ command -v dylibbundler >/dev/null || {
 # bindings from (crates/lumit-media pins rsmpeg's ffmpeg8 feature). A mismatch
 # does not announce itself - it ships an .app that reads FFmpeg's structures at
 # the wrong offsets - so find 8.x on purpose rather than take whatever `ffmpeg`
-# resolves to today, which is already 9.x (K-389).
+# resolves to today, which is already 9.x.
 #
 # Three places 8.x can live, in order of preference: a real ffmpeg@8 keg if
 # Homebrew ever ships one, the 8.1.2 formula extracted out of homebrew-core's
@@ -66,8 +66,8 @@ for p in "$(brew --prefix)/opt/ffmpeg@8" \
 done
 [ -n "$ffprefix" ] || {
     echo "No FFmpeg 8 keg found (looked for libavutil 60.x under ffmpeg@8," >&2
-    echo "ffmpeg@8.1.2 and ffmpeg). See docs/02-DECISIONS.md K-736 - the route" >&2
-    echo "is 'brew extract --version=8.1.2 ffmpeg <tap>' then a source build." >&2
+    echo "ffmpeg@8.1.2 and ffmpeg). The route is 'brew extract --version=8.1.2" >&2
+    echo "ffmpeg <tap>' then a source build; see docs/GUIDE.md." >&2
     exit 1
 }
 
@@ -77,7 +77,7 @@ done
 # architecture Homebrew has no FFmpeg for, and rusty_ffmpeg's pkg-config
 # probe dies. FLUTTER_XCODE_* variables are Flutter's own escape hatch:
 # they are appended as build settings AFTER Flutter's, and the last ARCHS
-# wins. One architecture per machine until K-033 takes on universal builds.
+# wins. One architecture per machine until universal builds are taken on.
 FLUTTER_XCODE_ARCHS="$arch"
 export FLUTTER_XCODE_ARCHS
 
@@ -95,7 +95,7 @@ mkdir -p "$app/Contents/Resources/colour"
 cp "$root/crates/lumit-colour/vendored/"*.artefact "$app/Contents/Resources/colour/"
 
 # The plugin brokers: the second processes third-party plugins live in
-# (docs/12 §2.3) — one per OFX bundle, one per CLAP module (K-696) — which each
+# (docs/12 §2.3) — one per OFX bundle, one per CLAP module — which each
 # host spawns from beside its own executable, so Contents/MacOS, where
 # executables do belong. Built here rather than by the podspec, which knows how
 # to build one static library and nothing else. Before the signing loop below, so
@@ -226,7 +226,7 @@ for f in "$app/Contents/Frameworks/"*; do
     # shellcheck disable=SC2086 # $signopts is a flag list, not a filename
     codesign --force $signopts --sign "$identity" "$f"
 done
-# The brokers are executables of their own in Contents/MacOS (K-592, K-696),
+# The brokers are executables of their own in Contents/MacOS,
 # not libraries in Frameworks, and an outer bundle signature does not cover a
 # nested executable: notarisation named both by path and refused the whole app
 # for a Developer ID, a timestamp and a hardened runtime each of them lacked.
@@ -248,7 +248,7 @@ codesign --force $signopts --sign "$identity" \
 # `stapler` attaches that ticket to the file so a machine that has never been
 # online can still see it. A ticket covers exactly what was submitted, which is
 # why this happens twice — once for the .app the updater downloads as a bare
-# .zip (K-297), once for the .dmg below.
+# .zip, once for the .dmg below.
 # `notarytool submit --wait` exits 0 whenever it managed to *ask* Apple, whatever
 # Apple said, so the status has to be read. Without this an Invalid submission
 # walks on to `stapler`, which fails with "Record not found" - a message about a

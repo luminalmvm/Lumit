@@ -382,7 +382,7 @@ void main() {
 }
 
 // ---------------------------------------------------------------------------
-// The Vegas speed envelope (K-247).
+// The Vegas speed envelope.
 // ---------------------------------------------------------------------------
 
 /// Tangent modes — Auto / Clamp / Free (docs/impl/keyframe-eval.md §6,
@@ -579,8 +579,8 @@ void envelopeTests() {
       expect(hi, greaterThan(850),
           reason: 'a fast ramp is framed, not clipped');
       expect(lo, -25.0, reason: 'the floor did not move');
-      // The headroom above normal playback is the point of the top figure
-      // (K-250): a flat 100% line must not sit on the graph's own edge.
+      // The headroom above normal playback is the point of the top figure:
+      // a flat 100% line must not sit on the graph's own edge.
       expect(envelopeDefaultRange.$2, 125.0);
 
       final reversed = setEnvelopeSpeed(flat, 1, -400);

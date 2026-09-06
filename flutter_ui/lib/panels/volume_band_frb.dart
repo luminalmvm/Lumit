@@ -1,4 +1,4 @@
-// The volume rubber band (K-695, the AudioWorkspace board): the layer's
+// The volume rubber band (the AudioWorkspace board): the layer's
 // Volume drawn ON the waveform lane as a line the pointer can take hold of,
 // with a diamond per keyframe and a dB readout while a drag runs.
 //
@@ -108,7 +108,7 @@ class VolumeBandState extends State<VolumeBand> {
     return volumeBandTopDb - (y - 1) / (widget.rowHeight - 2) * span;
   }
 
-  /// A key's x, on the comp clock its times cross in (K-213), carried along
+  /// A key's x, on the comp clock its times cross in, carried along
   /// by a bar move in flight.
   double _xOfKey(BridgeKeyframe key) =>
       widget.axis.xOf(laneKeyFrame(key, widget.fps) + widget.barShift);

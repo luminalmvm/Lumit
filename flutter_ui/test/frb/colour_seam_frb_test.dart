@@ -1,4 +1,4 @@
-// The colour seam (K-489, K-490, docs/impl/ocio.md §6.1).
+// The colour seam (docs/impl/ocio.md §6.1).
 //
 // What only Dart can prove is asserted here; the engine's own tests cover the
 // behaviour behind each call. Two things, and both would compile away silently
@@ -6,7 +6,7 @@
 //
 // * **The summary arrives whole and holds the config's own words** — the names
 //   a picker is built from cross verbatim and are never put through the
-//   translation table (K-303).
+//   translation table.
 // * **A refusal arrives as an id plus its facts, and Dart writes the
 //   sentence.** That is the whole point of the shape: the engine's English is
 //   a fallback, not the text on screen.

@@ -1,5 +1,5 @@
 //! lumit-bench: the headless performance harness (docs/13-PERFORMANCE-RULES.md
-//! §7.3, K-389).
+//! §7.3).
 //!
 //! # In plain terms
 //!
@@ -21,10 +21,9 @@
 //! - [`comp`] builds docs/13 §1's composition over that media, through the same
 //!   document model the application edits.
 //! - [`scenarios`] drives the engine through it with a stopwatch: B3, B4, B5,
-//!   B6, B7 and B11, plus [`scenarios::particulate`] for the three *per-effect*
-//!   numbers K-475 gave Particulate (B12–B14), which need no comp and no media.
-//!   K-389 records which budgets a headless harness can reach and which stay
-//!   manual or real-window (B1/B2, B8–B10).
+//!   B6, B7 and B11, plus [`scenarios::particulate`] for Particulate's own
+//!   three *per-effect* numbers (B12–B14), which need no comp and no media.
+//!   B1/B2 and B8–B10 stay manual or real-window.
 //! - [`baseline`] is the gate — the checked-in numbers a run is compared with,
 //!   per operating system, and the factor that separates a regression from a
 //!   noisy runner.

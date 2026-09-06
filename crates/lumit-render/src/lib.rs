@@ -6,8 +6,8 @@
 //! This crate is the part of Lumit that actually makes pictures. It is an
 //! *engine* crate: it knows nothing about egui, Flutter, the bridge, or windows.
 //! Both frontends drive it, which is the point — a comp must look the same in
-//! the egui Viewer, in the Flutter Viewer, and in the exported file (K-031), and
-//! the surest way to guarantee that is for there to be only one implementation.
+//! the egui Viewer, in the Flutter Viewer, and in the exported file, and the
+//! surest way to guarantee that is for there to be only one implementation.
 //!
 //! ## The five steps of a frame
 //!
@@ -92,8 +92,8 @@ pub use profile::{
 };
 pub use realise::Realiser;
 
-/// The anti-aliasing count this machine will actually give for `requested`
-/// (K-274), or `None` before any adapter has been opened.
+/// The anti-aliasing count this machine will actually give for `requested`, or
+/// `None` before any adapter has been opened.
 ///
 /// Re-exported so callers that already depend on the renderer — the bridge,
 /// reporting what the Settings row is really drawing at — need not take a
@@ -105,15 +105,15 @@ pub use lumit_gpu::adapter_sample_count;
 /// direct `lumit-gpu` dependency to ask.
 pub use lumit_gpu::video_memory_bytes;
 
-/// The Viewer's display view (K-314), re-exported for the same reason: the
-/// bridge sets it on [`HeadlessRenderer::set_display_view`] and would otherwise
-/// need a `lumit-gpu` dependency to name the type it is passing.
+/// The Viewer's display view, re-exported for the same reason: the bridge sets
+/// it on [`HeadlessRenderer::set_display_view`] and would otherwise need a
+/// `lumit-gpu` dependency to name the type it is passing.
 pub use lumit_gpu::DisplayParams;
 
 /// Whether an assembled Custom shader compiles (docs/impl/custom-shader.md
 /// §2.1), re-exported for the same reason again: the panel seam asks it to draw
-/// the calm badge, and it is a **CPU** answer — naga on K-263's settings, no
-/// graphics card involved — so a bridge that has never opened an adapter can
-/// still tell the user their shader has a typo on line three.
+/// the calm badge, and it is a **CPU** answer — naga on the engine's own
+/// settings, no graphics card involved — so a bridge that has never opened an
+/// adapter can still tell the user their shader has a typo on line three.
 pub use lumit_gpu::fx::validate as validate_shader;
 pub use source::{SourceProbe, SourceProbes};

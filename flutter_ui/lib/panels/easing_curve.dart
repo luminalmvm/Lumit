@@ -1,6 +1,5 @@
-// The easing curve: one normalised bezier shape, reusable across keyframes
-// (K-348). Pure, so it unit-tests without a widget tree and never crosses the
-// bridge.
+// The easing curve: one normalised bezier shape, reusable across keyframes.
+// Pure, so it unit-tests without a widget tree and never crosses the bridge.
 //
 // In plain terms: the graph editor shapes one span at a time, by dragging the
 // tangent handles of two particular keyframes. An *easing curve* is the same
@@ -141,7 +140,7 @@ class EasingPreset {
 }
 
 /// The shipped shapes: five house basics, then the standard cubic-bezier
-/// families the rest of the trade ships (K-726) — the grid the Easing panel
+/// families the rest of the trade ships — the grid the Easing panel
 /// draws, and the very curves Apply stamps, one list for both.
 ///
 /// The first is the F9 easy ease exactly: speed 0 at both ends, influence one
@@ -152,8 +151,7 @@ class EasingPreset {
 /// *side* here. The families wear the web's names — `Sine in` is
 /// easings.net's `easeInSine`, a slow start — because those names are what
 /// the family shapes are known by everywhere else, and every tile draws its
-/// curve, so which end is slow is shown rather than argued (K-726, which
-/// supersedes K-348's names-only rule for the drawn grid).
+/// curve, so which end is slow is shown rather than argued.
 ///
 /// The family numbers are easings.net's, with the Back family's vertical
 /// points written pre-clamped to [easingHandleReach] so the value stated here

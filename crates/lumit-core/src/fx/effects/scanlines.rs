@@ -5,9 +5,9 @@
 //! controls. The roll offset is *where the pattern has scrolled to by now*, a
 //! product of the roll speed, the clock and the line period — and the darkening
 //! strength has a migration folded into it, because a project saved before
-//! FX-13/K-147 carries a separate Darkness dial that no longer exists as a row.
+//! FX-13 carries a separate Darkness dial that no longer exists as a row.
 //! Both are worked out at resolve time through the one hook that sees the clock
-//! and the stored instance ([`EffectDef::resolve_derived`], K-385) and handed to
+//! and the stored instance ([`EffectDef::resolve_derived`]) and handed to
 //! the kernel as plain numbers, exactly as the hand-written resolve arm handed
 //! them over before.
 
@@ -25,8 +25,8 @@ use lumit_fx_macros::Effect;
     // never a neighbour, so the region of interest is exact.
     cost = Cheap,
     roi = Exact,
-    // K-427: the matte scales the displacement, inside the kernel (the
-    // owner's rule for mattes); the generic strength dissolve does not also run.
+    // The matte scales the displacement, inside the kernel (the owner's rule
+    // for mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "widens Line period per pixel: white keeps the set period, grey spreads \
@@ -34,7 +34,7 @@ use lumit_fx_macros::Effect;
     ),
 )]
 pub struct Scanlines {
-    /// The single dial (FX-13, K-147): 0..1 is how dark the dark lines get — 0
+    /// The single dial (FX-13): 0..1 is how dark the dark lines get — 0
     /// is the bit-exact passthrough (pinned by test), 1 takes them to black.
     /// Collapses the old Intensity × Darkness pair into one control; an old
     /// project's Darkness folds into it at resolve, which is why the number the
@@ -48,8 +48,8 @@ pub struct Scanlines {
     /// rescale_spatial) moves it again if the stack is reused at another size —
     /// which the old `rescale_px` did *not* do for this effect, so a scanlined
     /// adjustment layer under a reduced-resolution preview kept comp-sized lines
-    /// while every other spatial value shrank (the K-266 shape). The unit states
-    /// it once and the generic pass cannot forget it.
+    /// while every other spatial value shrank. The unit states it once and the
+    /// generic pass cannot forget it.
     #[slider(
         label = "Line period",
         min = 1.0,
@@ -60,7 +60,7 @@ pub struct Scanlines {
     )]
     pub scanline_period: f32,
 
-    /// Lines (periods) per second; either direction (K-090). What it *produces*
+    /// Lines (periods) per second; either direction. What it *produces*
     /// — the pattern's pixel offset this frame — is
     /// [`Scanlines::DERIVED_ROLL_PX`].
     #[slider(label = "Roll speed", min = -30.0, max = 30.0, default = 0.0, unit = Raw)]
@@ -85,7 +85,7 @@ pub struct Scanlines {
 
 impl Scanlines {
     /// The darkening strength this instance actually renders with, 0..1 — the
-    /// Intensity row with an old project's Darkness folded in (K-385). Never a
+    /// Intensity row with an old project's Darkness folded in. Never a
     /// panel row: it is what the stored parameters *produce*.
     pub const DERIVED_INTENSITY: ParamId = ParamId::new("derived.intensity");
 
@@ -140,7 +140,7 @@ impl EffectDef for ScanlinesDef {
     }
 
     /// The folded intensity and the rolled offset — the whole of what the old
-    /// resolve arm did beyond reading its rows, moved unchanged (K-385).
+    /// resolve arm did beyond reading its rows, moved unchanged.
     ///
     /// The fold: an old project also carried a separate Darkness parameter
     /// (0..100), which is **not** a schema row and so cannot come out of the

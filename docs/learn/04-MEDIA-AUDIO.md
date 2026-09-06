@@ -69,23 +69,23 @@ bytes.
 - **Save** is atomic: temp file in the same directory, `sync_all`, rename.
 - **Open** gates on `min_reader` (a newer file returns `TooNew`), then walks
   `MIGRATIONS` over raw JSON *before* typing. One migration exists today: 0.1.0 →
-  0.2.0, segment Retime → property Retime (K-249).
+  0.2.0, segment Retime → property Retime.
 - **Journal**: every committed `Op` appends one JSONL line with `sync_data`.
   Recovery replays last save + journal. It tolerates a torn final line (crash
   mid-append), but it stops at a malformed line mid-file.
 - **Autosaves** rotate `<stem>.autosave-1..N.lum`, 1 = newest.
-- **Relink**: saved files carry relative paths plus fingerprints (K-173). Resolution
+- **Relink**: saved files carry relative paths plus fingerprints. Resolution
   order is relative → legacy absolute → fingerprint search → `Missing`. Missing
   never blocks opening.
 
 ## lumit-keymap
 
-A plain `Vec<Binding { context, chord, action }>` plus a list of deliberate unbinds
-(K-302). `lookup` tries the exact context, then `Global`.
+A plain `Vec<Binding { context, chord, action }>` plus a list of deliberate unbinds.
+`lookup` tries the exact context, then `Global`.
 
 Clash rules: two bindings on one chord in the **same** context are a `Conflict`. A
 panel binding over a Global one is a `Shadow`. Precedence resolves a `Shadow`, and it
-is reported rather than flagged (K-281). Every `ActionId` needs a `description()`.
+is reported rather than flagged. Every `ActionId` needs a `description()`.
 Each description needs both an `engine_labels.dart` entry and an `app_en.arb` key.
 
 ## lumit-text

@@ -5,7 +5,7 @@
 // (`BridgeError::NoAudio`, docs/09 §5) — and the three call sites that ask for
 // it used to swallow that with `onError: (_) {}`, so Generate placed no
 // markers, cleared the grid, and said nothing at all. A soloed picture row
-// (K-435) silences the mix, which is the everyday way to reach it by accident.
+// silences the mix, which is the everyday way to reach it by accident.
 //
 // The panel does not draw the notice — the status line does — so what is
 // asserted here is the notice landing on the shell state, which is the road it
@@ -63,7 +63,7 @@ void main() {
     });
 
     // A layer picked by name is heard through a mute and through somebody
-    // else's solo (K-718), so a named source that still finds nothing has
+    // else's solo, so a named source that still finds nothing has
     // nothing in it — and blaming the switches would send the reader off to
     // press one that changes nothing.
     testWidgets('a named source that has no sound blames the layer, not a mute',

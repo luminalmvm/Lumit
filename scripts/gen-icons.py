@@ -1,5 +1,5 @@
 # Regenerates every raster icon from the SVG sources in assets/brand/
-# (docs/15-DESIGN.md, brand section; decision K-251).
+# (docs/15-DESIGN.md, brand section).
 #
 # In plain terms: the SVGs are the only artwork anyone edits. The operating
 # systems want pixels, not drawings — Windows wants one .ico holding several
@@ -8,7 +8,7 @@
 # from a big render), which is what keeps the small sizes crisp.
 #
 # The macOS APPLICATION icon is NOT made here: it is the layered Icon Composer
-# document assets/brand/lumit-icon.icon, compiled by Xcode (K-309). Everything
+# document assets/brand/lumit-icon.icon, compiled by Xcode. Everything
 # below is Windows, Linux, and the document icons.
 #
 #   pip install resvg-py pillow

@@ -133,7 +133,7 @@ impl Quality {
     }
 }
 
-/// The nested-frame question a plan asks (K-422, [`PlanContext::held`]):
+/// The nested-frame question a plan asks ([`PlanContext::held`]):
 /// "is this comp's frame at this layer time already a finished texture?"
 pub type HeldNested<'a> = &'a dyn Fn(&Composition, f64) -> bool;
 
@@ -145,7 +145,7 @@ pub struct PlanContext<'a> {
     pub quality: Quality,
     pub probes: &'a dyn SourceProbes,
     /// Answers "is this nested comp's frame, at this layer time, already held
-    /// as a finished texture?" (K-422). When it is, the planner asks for none
+    /// as a finished texture?". When it is, the planner asks for none
     /// of that comp's decodes: the realiser will serve the texture and never
     /// look at the pixels. This is the one place planning knows a cache exists
     /// — the module header's "pure and cheap" is kept by making it a question
@@ -158,8 +158,8 @@ pub struct PlanContext<'a> {
 }
 
 /// The decode source for one footage item: the file its pixels are read from
-/// (already resolved through the proxy rule, K-501) and — for a numbered run of
-/// stills — the rate to read the run at (K-539).
+/// (already resolved through the proxy rule) and — for a numbered run of
+/// stills — the rate to read the run at.
 ///
 /// The rate rides only when the file *is* the item's own media. A proxy is one
 /// file standing in for the whole run, so reading it as a sequence would be
@@ -189,7 +189,7 @@ fn media_source(
 /// contributes no job at all and is retried once its probe lands.
 ///
 /// `spliced` says this comp is being spliced into its parent by a collapsed
-/// Precomp layer, where the occlusion cull (K-423) does not apply — the same
+/// Precomp layer, where the occlusion cull does not apply — the same
 /// flag the draw builder takes, so the two skip exactly the same layers.
 pub fn collect_comp_jobs(
     ctx: &PlanContext<'_>,
@@ -207,14 +207,14 @@ pub fn collect_comp_jobs(
     } = *ctx;
     let in_span =
         |l: &lumit_core::model::Layer| t >= l.in_point.0.to_f64() && t < l.out_point.0.to_f64();
-    // Occlusion cull (K-423, docs/06 §1.1): the layers under a full-frame
+    // Occlusion cull (docs/06 §1.1): the layers under a full-frame
     // opaque layer are never seen, so their footage is never decoded. The
     // predicate refuses whenever anything above could reach a layer below,
     // so nothing a wanted layer references is ever culled.
     let occluder = (!spliced)
         .then(|| lumit_core::occlusion::occluder_index(doc, comp, t))
         .flatten();
-    // Solo / isolate (K-105, K-435): while a layer that *draws* is soloed, only
+    // Solo / isolate: while a layer that *draws* is soloed, only
     // soloed layers reach the picture — so only they are worth decoding. The
     // same question the draw builder, the frame key and the occlusion cull all
     // ask, asked here too, on the rule the occlusion comment above states: a
@@ -230,12 +230,12 @@ pub fn collect_comp_jobs(
         if occluder.is_some_and(|o| idx > o) {
             continue;
         }
-        // An Audio layer decodes for the mixer, never for the picture (K-435).
+        // An Audio layer decodes for the mixer, never for the picture.
         if l.audio_only {
             continue;
         }
         if l.switches.visible && in_span(l) && !(any_solo && !l.switches.solo) {
-            // A layer acting as an adjustment (K-537) draws the composite
+            // A layer acting as an adjustment draws the composite
             // beneath it, so its OWN frames are never asked for — decoding them
             // would be a video decode nobody looks at. Only its own frames,
             // though: it still gates by a matte and still feeds its effects'
@@ -252,7 +252,7 @@ pub fn collect_comp_jobs(
                     wanted.push(m.layer);
                 }
             }
-            // Layer-input references (K-123, e.g. a DoF depth pass) decode
+            // Layer-input references (e.g. a DoF depth pass) decode
             // exactly like matte sources: the referenced layer is usually
             // hidden (you don't want the depth map rendering), but its
             // pixels still feed the effect.
@@ -274,6 +274,11 @@ pub fn collect_comp_jobs(
     // held comp time for `comp.layers[idx]`; equal to `t` for every layer
     // when no Posterize is live, so an ordinary comp is unchanged.
     let sample_times = lumit_core::fx::posterize_sample_times(&comp.layers, t);
+    // Accumulation motion blur (docs/08 §3.26): the sub-frame moments each
+    // layer's footage is wanted at by the adjustments above it, in comp
+    // frames. Empty everywhere in an ordinary comp.
+    let shutter_offsets = lumit_core::fx::accumulation_shutter_offsets(&comp.layers, t);
+    let comp_dt = 1.0 / comp.frame_rate.fps().max(1.0);
     for (idx, layer) in comp.layers.iter().enumerate() {
         if !wanted.contains(&layer.id) || !in_span(layer) {
             continue;
@@ -295,7 +300,7 @@ pub fn collect_comp_jobs(
                 if let Some((_id, lumit_core::sequence::ClipSource::Footage(item), st)) =
                     lumit_core::sequence::resolve(clips, lt)
                 {
-                    // The one proxy resolution point (K-501): which file this
+                    // The one proxy resolution point: which file this
                     // item's pixels come from, and the probe to believe about
                     // them (always the original's — see `effective_media`).
                     let Some((media, probe)) = crate::source::effective_media(doc, probes, item)
@@ -307,7 +312,7 @@ pub fn collect_comp_jobs(
                     };
                     use lumit_core::retime::Interpolation;
                     let clip = lumit_core::sequence::active_clip(clips, lt);
-                    // Same engagement gate as a Footage layer (K-331); the
+                    // Same engagement gate as a Footage layer; the
                     // clip's own retime supplies the speed.
                     let comp_fps = comp.frame_rate.fps();
                     let flow = match clip.map(|c| (&c.interpolation, c.retime.as_ref())) {
@@ -323,7 +328,7 @@ pub fn collect_comp_jobs(
                             || flow.is_some();
                     let sample_fps = flow.as_ref().and_then(|p| p.input_fps_at(lt));
                     let target_width = if flow.is_some() {
-                        None // flow decodes natively (K-331)
+                        None // flow decodes natively
                     } else {
                         quality.target_width(nat_w)
                     };
@@ -341,10 +346,13 @@ pub fn collect_comp_jobs(
                         flow,
                         // Temporal effects on Sequence clips are a later
                         // refinement (clip-relative neighbour resolution);
-                        // footage layers first.
+                        // footage layers first. The accumulation shutter
+                        // takes the same boundary: a clip under one is held.
                         temporal: Vec::new(),
                         flow_neighbours: Vec::new(),
                         slate: false,
+                        shutter: Vec::new(),
+                        shutter_flow: None,
                     });
                 }
             }
@@ -353,7 +361,7 @@ pub fn collect_comp_jobs(
                     continue; // cycle guard
                 }
                 if let Some(nested) = doc.comp(*nested_id) {
-                    // A held nested frame wants no decodes (K-422). Asked only
+                    // A held nested frame wants no decodes. Asked only
                     // where the builder will ask by the same name: at the live
                     // time (a Posterize-held layer is built at another time,
                     // by a walk with no keyer) and for a Precomp that is not
@@ -372,7 +380,7 @@ pub fn collect_comp_jobs(
                 }
             }
             LayerKind::Footage { item } => {
-                // The one proxy resolution point (K-501): which file this
+                // The one proxy resolution point: which file this
                 // item's pixels come from, and the probe to believe about them
                 // (always the original's — see `effective_media`).
                 let Some((media, probe)) = crate::source::effective_media(doc, probes, *item)
@@ -397,6 +405,8 @@ pub fn collect_comp_jobs(
                         temporal: Vec::new(),
                         flow_neighbours: Vec::new(),
                         slate: true,
+                        shutter: Vec::new(),
+                        shutter_flow: None,
                     });
                     continue;
                 }
@@ -407,12 +417,12 @@ pub fn collect_comp_jobs(
                 };
                 // Retime maps local time → source time before frame pick; the
                 // Retime maps local time → source time before the frame pick
-                // (K-249: the layer's own property is the only map). Its
+                // (the layer's own property is the only map). Its
                 // interpolation policy, which sits beside that map rather than
                 // inside it, decides nearest vs blend.
                 let source_time = layer.source_time_at(lt);
                 use lumit_core::retime::Interpolation;
-                // Flow only engages where it can help (K-088, built in K-331):
+                // Flow only engages where it can help:
                 // at 100% or faster every comp frame lands on a source frame,
                 // so there is no in-between frame to invent and the policy
                 // degrades to Nearest. `always` overrides.
@@ -430,7 +440,7 @@ pub fn collect_comp_jobs(
                 let flow_neighbours =
                     lumit_core::fx::stack_flow_neighbours(&layer.effects, layer.switches.fx);
                 // A layer that needs flow decodes at its own width whatever the
-                // preview tier says (K-331): flow measured on a shrunk decode is
+                // preview tier says: flow measured on a shrunk decode is
                 // a different measurement, not the same one smaller. Must match
                 // `Stamper::stamp`'s `native` exactly, or the frame's name lies
                 // about the width of the pixels in it.
@@ -471,6 +481,35 @@ pub fn collect_comp_jobs(
                     } else {
                         Vec::new()
                     };
+                // Accumulation motion blur above this layer (docs/08 §3.26):
+                // the clip at each moment of the open shutter, so the
+                // sub-frame re-renders smear footage motion and not only
+                // transforms. Each moment is picked the way the Blend policy
+                // picks, so a moment on a real frame is that frame alone and
+                // one between two is synthesised from both, by the layer's own
+                // Flow settings where its Retime uses Flow and the defaults
+                // otherwise. Empty for every layer no such adjustment covers.
+                let shutter: Vec<crate::decode::ShutterSample> = shutter_offsets[idx]
+                    .iter()
+                    .map(|&off| {
+                        let slt = lumit_core::time::layer_time(
+                            sample_times[idx] + off * comp_dt,
+                            layer.start_offset.0,
+                        );
+                        let sst = layer.source_time_at(slt);
+                        let (source_frame, blend) =
+                            lumit_core::pixels::frame_pick(sst, fps, src_frames, true, sample_fps);
+                        crate::decode::ShutterSample {
+                            offset: off,
+                            source_frame,
+                            blend,
+                        }
+                    })
+                    .collect();
+                let shutter_flow = (!shutter.is_empty()).then(|| match &layer.interpolation {
+                    Interpolation::Flow(p) => p.clone(),
+                    _ => lumit_core::retime::FlowParams::default(),
+                });
                 jobs.push(CompJob {
                     layer: layer.id,
                     item: *item,
@@ -484,10 +523,12 @@ pub fn collect_comp_jobs(
                     temporal,
                     // Flow motion blur / Datamosh measure motion between
                     // this frame and their requested neighbour (already
-                    // in `temporal`) — one entry each when both are live
-                    // (K-544), since they want opposite directions.
+                    // in `temporal`) — one entry each when both are live,
+                    // since they want opposite directions.
                     flow_neighbours,
                     slate: false,
+                    shutter,
+                    shutter_flow,
                 });
             }
         }
@@ -507,8 +548,7 @@ pub fn plan_comp_frame(
     plan_comp_frame_held(doc, comp, t, quality, probes, None)
 }
 
-/// [`plan_comp_frame`] with the nested-frame answerer (K-422,
-/// [`PlanContext::held`]).
+/// [`plan_comp_frame`] with the nested-frame answerer ([`PlanContext::held`]).
 #[must_use]
 pub fn plan_comp_frame_held(
     doc: &Document,
@@ -551,11 +591,13 @@ pub fn same_decode(a: &[CompJob], b: &[CompJob]) -> bool {
                 && x.flow == y.flow
                 && x.temporal == y.temporal
                 && x.flow_neighbours == y.flow_neighbours
+                && x.shutter == y.shutter
+                && x.shutter_flow == y.shutter_flow
         })
 }
 
 impl CompJob {
-    /// The content name of the pixels this job decodes (K-421): a hash of
+    /// The content name of the pixels this job decodes: a hash of
     /// exactly the fields [`same_decode`] compares, so two jobs that would
     /// decode the same pixels have the same name. The layer id is left out on
     /// purpose — a name is about content, never about which row asked — and
@@ -568,7 +610,7 @@ impl CompJob {
         h.update(self.item.as_bytes());
         h.update(self.source.path.to_string_lossy().as_bytes());
         // A run of stills read at a different rate is a different picture at
-        // the same frame number, so the rate is part of the name (K-539).
+        // the same frame number, so the rate is part of the name.
         let (num, den) = self.source.sequence_fps.unwrap_or((0, 0));
         h.update(&num.to_le_bytes());
         h.update(&den.to_le_bytes());
@@ -589,12 +631,27 @@ impl CompJob {
         }
         // `i32::MIN` is not a reachable offset, so "no flow consumer" cannot
         // collide with a real one — and a stack with a single consumer keeps
-        // exactly the name it had before K-544 made this a list.
+        // exactly the name it had before this became a list.
         if self.flow_neighbours.is_empty() {
             h.update(&i32::MIN.to_le_bytes());
         }
         for offset in &self.flow_neighbours {
             h.update(&offset.to_le_bytes());
+        }
+        // The shutter moments are content too: the same frame decoded for a
+        // wider shutter carries different in-between pictures.
+        for s in &self.shutter {
+            h.update(b"shutter/");
+            h.update(&s.offset.to_le_bytes());
+            h.update(&s.source_frame.to_le_bytes());
+            if let Some((ceil, weight)) = s.blend {
+                h.update(&ceil.to_le_bytes());
+                h.update(&weight.to_le_bytes());
+            }
+        }
+        if let Some(flow) = &self.shutter_flow {
+            h.update(b"shutter-flow/");
+            h.update(&bincode::serialize(flow).unwrap_or_default());
         }
         let mut k = [0u8; 16];
         k.copy_from_slice(&h.finalize().as_bytes()[..16]);
@@ -778,6 +835,8 @@ mod tests {
             temporal: Vec::new(),
             flow_neighbours: Vec::new(),
             slate: false,
+            shutter: Vec::new(),
+            shutter_flow: None,
         }
     }
 
@@ -802,16 +861,16 @@ mod tests {
     }
 
     /// **Footage inside a precomp that is referenced only as a matte still gets
-    /// decoded** (K-268).
+    /// decoded**.
     ///
-    /// K-266 recorded this as an open boundary — "the decode planner never
-    /// visits a matte-only precomp" — and taught the draw builder to render the
-    /// nested comp anyway. The planner turned out to walk the reference
-    /// already: a matte source and a layer-input reference are both `wanted`
-    /// whether or not the layer is visible, and a Precomp among them recurses.
-    /// So the boundary was the *draw* side, which K-266 and K-268 have now
-    /// closed at both ends — and this test is what keeps the planner honest, so
-    /// nobody has to re-derive it from a black matte.
+    /// An earlier fix recorded this as an open boundary — "the decode planner
+    /// never visits a matte-only precomp" — and taught the draw builder to
+    /// render the nested comp anyway. The planner turned out to walk the
+    /// reference already: a matte source and a layer-input reference are both
+    /// `wanted` whether or not the layer is visible, and a Precomp among them
+    /// recurses. So the boundary was the *draw* side, which two fixes have
+    /// now closed at both ends — and this test is what keeps the planner
+    /// honest, so nobody has to re-derive it from a black matte.
     ///
     /// Both shapes of reference are checked: the track matte (`Layer::matte`)
     /// and the layer-input parameter a flare's Matte source or a DoF depth pass
@@ -1108,7 +1167,7 @@ mod tests {
         }
     }
 
-    /// **Footage under a full-frame opaque solid plans no decode** (K-423) —
+    /// **Footage under a full-frame opaque solid plans no decode** —
     /// unless something above the solid reaches it: a matte on the
     /// solid's upper neighbour keeps the footage wanted, so the matte still
     /// renders. Fails without the occluder gate on the wanted list.
@@ -1229,7 +1288,7 @@ mod tests {
         }
     }
 
-    /// **A held nested frame wants no decodes** (K-422). A Precomp whose frame
+    /// **A held nested frame wants no decodes**. A Precomp whose frame
     /// the store already holds contributes none of its footage jobs — that is
     /// what makes a parent edit free of the nested comp's decodes — while a
     /// collapsed Precomp (spliced in, never named) still decodes whatever the
@@ -1359,7 +1418,7 @@ mod tests {
         assert_eq!(asked.get(), 1, "and is never asked about");
     }
 
-    /// **A soloed row is the only row decoded** (K-105, K-435). The draw
+    /// **A soloed row is the only row decoded**. The draw
     /// builder, the frame key and the occlusion cull all stop at a layer that
     /// is not soloed while something that draws is; the decode planner did not,
     /// so a comp with one row soloed still fetched every other visible row's
@@ -1482,7 +1541,7 @@ mod tests {
         doc.comp_mut(comp_id).unwrap().layers[2].switches.solo = true;
         assert_eq!(plan(&doc), 2, "both soloed rows decode");
 
-        // An Audio row's solo says nothing about the picture (K-435), so every
+        // An Audio row's solo says nothing about the picture, so every
         // drawing row is decoded exactly as it was before the switch moved.
         for layer in &mut doc.comp_mut(comp_id).unwrap().layers {
             layer.switches.solo = false;
@@ -1494,5 +1553,160 @@ mod tests {
             2,
             "soloing a music row leaves the picture's decodes alone"
         );
+    }
+
+    /// **A clip under an accumulation motion blur is planned at every moment
+    /// of the shutter** (docs/08 §3.26): one shutter sample per offset, each
+    /// picked between the two source frames the moment falls between, with the
+    /// flow settings the in-betweens are made with. A layer above the
+    /// adjustment plans none, and its job keeps the name it always had.
+    #[test]
+    fn a_clip_under_accumulation_mb_is_planned_at_every_shutter_moment() {
+        use lumit_core::model::{
+            Composition, Document, FootageItem, Layer, LayerKind, LinearColour, MediaRef, Switches,
+            TransformGroup,
+        };
+        use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
+        use std::collections::HashMap;
+
+        let layer = |kind: LayerKind| Layer {
+            graph: Default::default(),
+            markers: Vec::new(),
+            id: Uuid::now_v7(),
+            name: "l".into(),
+            kind,
+            in_point: CompTime(Rational::ZERO),
+            out_point: CompTime(Rational::new(10, 1).unwrap()),
+            start_offset: CompTime(Rational::ZERO),
+            transform: TransformGroup::default(),
+            matte: None,
+            parent: None,
+            label: 0,
+            volume_db: lumit_core::anim::Property::zero(),
+            pan: lumit_core::anim::Property::zero(),
+            audio_only: false,
+            adjustment: false,
+            retime: None,
+            interpolation: lumit_core::retime::Interpolation::default(),
+            parked_flow: None,
+            blend: lumit_core::model::BlendMode::default(),
+            masks: Vec::new(),
+            paint: Vec::new(),
+            puppet: None,
+            effects: Vec::new(),
+            styles: Vec::new(),
+            switches: Switches::default(),
+            extra: serde_json::Map::new(),
+        };
+        let mut doc = Document::new();
+        let footage = |doc: &mut Document| {
+            let item = Uuid::now_v7();
+            doc.items.push(ProjectItem::Footage(FootageItem {
+                sequence: None,
+                id: item,
+                name: "f".into(),
+                media: MediaRef {
+                    relative_path: "f.mp4".into(),
+                    absolute_path: "/f.mp4".into(),
+                    fingerprint: None,
+                    extra: serde_json::Map::new(),
+                },
+                extra: serde_json::Map::new(),
+                colour_space: None,
+            }));
+            item
+        };
+        let (above_item, below_item) = (footage(&mut doc), footage(&mut doc));
+        // Four samples over a whole frame, centred: offsets -3/8, -1/8, 1/8,
+        // 3/8 of a comp frame.
+        let mut adjust = layer(LayerKind::Adjustment);
+        let mut mb = lumit_core::fx::instantiate("accumulation_mb").unwrap();
+        for p in &mut mb.params {
+            let v = match p.id.as_str() {
+                "samples" => 4.0,
+                "shutter_angle" => 360.0,
+                "shutter_phase" => -180.0,
+                _ => continue,
+            };
+            p.value = lumit_core::model::EffectValue::Float(lumit_core::anim::Property::fixed(v));
+        }
+        adjust.effects = vec![mb];
+        let above = layer(LayerKind::Footage { item: above_item });
+        let below = layer(LayerKind::Footage { item: below_item });
+        let (above_id, below_id) = (above.id, below.id);
+        // A 30 fps comp over 60 fps clips: a quarter of a comp frame is half a
+        // source frame, so every moment lands between two frames.
+        let comp = Composition {
+            master_volume_db: 0.0,
+            groups: Vec::new(),
+            beat_grid: None,
+            id: Uuid::now_v7(),
+            name: "c".into(),
+            width: 64,
+            height: 64,
+            frame_rate: FrameRate::new(30, 1).unwrap(),
+            duration: Duration(Rational::new(10, 1).unwrap()),
+            background: LinearColour::BLACK,
+            work_area: None,
+            layers: vec![above, adjust, below],
+            markers: Vec::new(),
+            motion_blur: lumit_core::model::MotionBlur::default(),
+            extra: serde_json::Map::new(),
+        };
+        let probe = crate::SourceProbe::Video {
+            fps: 60.0,
+            width: 64,
+            height: 64,
+            frames: 600,
+            audio: false,
+        };
+        let probes: HashMap<Uuid, crate::SourceProbe> = [(above_item, probe), (below_item, probe)]
+            .into_iter()
+            .collect();
+        let jobs = plan_comp_frame(&doc, &comp, 1.0, Quality::default(), &probes);
+        let job_for = |id: Uuid| jobs.iter().find(|j| j.layer == id).expect("planned");
+
+        let covered = job_for(below_id);
+        assert_eq!(
+            covered.source_frame, 60,
+            "frame 30 of the comp is frame 60 of the clip"
+        );
+        let moment = |offset: f64, source_frame: usize, ceil: usize, weight: f32| {
+            crate::decode::ShutterSample {
+                offset,
+                source_frame,
+                blend: Some((ceil, weight)),
+            }
+        };
+        assert_eq!(
+            covered.shutter,
+            vec![
+                moment(-0.375, 59, 60, 0.25),
+                moment(-0.125, 59, 60, 0.75),
+                moment(0.125, 60, 61, 0.25),
+                moment(0.375, 60, 61, 0.75),
+            ],
+            "each shutter moment is the pair of source frames it falls between"
+        );
+        assert_eq!(
+            covered.shutter_flow,
+            Some(lumit_core::retime::FlowParams::default()),
+            "a Nearest clip makes its in-betweens with the default flow settings"
+        );
+
+        let clear = job_for(above_id);
+        assert!(
+            clear.shutter.is_empty(),
+            "a layer above the adjustment is not covered"
+        );
+        assert_eq!(clear.shutter_flow, None);
+        // The moments are content: the covered job cannot share a name with an
+        // uncovered decode of the same frame, or a cached decode would serve a
+        // shutterless picture to the samples.
+        assert_ne!(covered.source_key(), clear.source_key());
+        assert!(!same_decode(
+            std::slice::from_ref(covered),
+            std::slice::from_ref(clear)
+        ));
     }
 }

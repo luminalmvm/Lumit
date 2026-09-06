@@ -96,7 +96,7 @@ static RENDER_FAILS: AtomicUsize = AtomicUsize::new(0);
 ///
 /// A real plugin asks that question there — most of openfx-misc does — and a
 /// host that has not bound its clips until the render action answers "there is
-/// no image", which is why this is worth a probe of its own (K-595).
+/// no image", which is why this is worth a probe of its own.
 static ROD_SAW_SOURCE: AtomicU32 = AtomicU32::new(0);
 
 /// How long a render waits at the rendezvous before giving up. A host that
@@ -1029,13 +1029,11 @@ fn param_double(
         return fallback;
     }
     let mut value = fallback;
-    // SAFETY: the host declares this entry point as the header declares it —
-    // variadic — so a double passes **exactly one** out-pointer, which is what
-    // a plugin nobody here wrote passes (K-756). Passing four, the arity this
-    // host used to declare, is what made the suite agree with itself on a
-    // platform where it agreed with no real plugin: both sides read four
-    // registers, so both sides were wrong in the same direction and the tests
-    // stayed green.
+    // A real C-variadic call, as a plugin compiled against the header makes
+    // it: one trailing pointer, because a double is one dimension. This is
+    // what proves the host's shim on every platform the suite runs on.
+    // SAFETY: the host's own entry point, given a live handle and a pointer to
+    // a double, which is what it declares the parameter to be.
     let read = unsafe {
         (param_suite.param_get_value_at_time)(
             param,

@@ -22,8 +22,8 @@ use lumit_fx_macros::Effect;
     // maximum in px@comp, exactly as the Gaussian blur declares its own (§3.8).
     roi = PaddedPx(2000.0),
     premultiplied = true,
-    // K-395: the matte scales the amount, inside the kernel (the owner's
-    // rule for mattes); the generic strength dissolve does not also run.
+    // The matte scales the amount, inside the kernel (the owner's rule for
+    // mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales all four blur radii per pixel: white blurs each channel at \

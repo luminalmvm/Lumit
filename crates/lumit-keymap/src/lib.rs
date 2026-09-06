@@ -51,7 +51,7 @@ impl ActionId {
         if let Some(n) = self.0.strip_prefix("workspace.switch.") {
             return format!("Switch to workspace {n}");
         }
-        // The numbered markers (K-254). Twenty actions, so they are described by
+        // The numbered markers. Twenty actions, so they are described by
         // their shape rather than listed one by one below — a table of twenty
         // near-identical rows is exactly what this prefix form is for.
         if let Some(n) = self.0.strip_prefix("marker.add.") {
@@ -341,7 +341,7 @@ pub struct Binding {
     pub action: ActionId,
 }
 
-/// One chord a panel takes over from an app-wide binding (K-281).
+/// One chord a panel takes over from an app-wide binding.
 ///
 /// Not a conflict: [`Keymap::lookup`] resolves it by a stated rule — the
 /// focused panel gets first refusal, and `Global` is the fallback — so the
@@ -375,7 +375,7 @@ pub struct Conflict {
 pub struct Keymap {
     pub bindings: Vec<Binding>,
 
-    /// Actions deliberately left with **no** chord (K-302), so a stored keymap
+    /// Actions deliberately left with **no** chord, so a stored keymap
     /// can tell "I took that key away" apart from "that action did not exist
     /// when I was written". [`with_new_defaults`] needs the difference: the
     /// first must stay unbound, the second must pick up its default.
@@ -428,14 +428,14 @@ impl Keymap {
             // Collect the distinct actions that can genuinely collide: two
             // bindings in the *same* context, which nothing can tell apart.
             //
-            // A `Global` binding under a scoped one is **not** one of those
-            // (K-281, superseding the original rule): `lookup` resolves it by a
-            // stated precedence — the focused panel first, `Global` as the
-            // fallback — so the chord runs one action and which one is never
-            // ambiguous. Flagging it as a clash made the shipped default
-            // unable to give a panel a plain letter that transport already
-            // used, which is how `L` could not mean "reveal Audio" in the
-            // Timeline while J/K/L still shuttled everywhere else.
+            // A `Global` binding under a scoped one is **not** one of those:
+            // `lookup` resolves it by a stated precedence — the focused panel
+            // first, `Global` as the fallback — so the chord runs one action
+            // and which one is never ambiguous. Flagging it as a clash made
+            // the shipped default unable to give a panel a plain letter that
+            // transport already used, which is how `L` could not mean "reveal
+            // Audio" in the Timeline while J/K/L still shuttled everywhere
+            // else.
             // [`Keymap::shadows`] reports those pairs instead.
             let mut per_context: std::collections::HashMap<KeyContext, usize> =
                 std::collections::HashMap::new();
@@ -458,7 +458,7 @@ impl Keymap {
         out
     }
 
-    /// Every chord a panel takes over from an app-wide binding (K-281) — what
+    /// Every chord a panel takes over from an app-wide binding — what
     /// Settings → Keymap says beside the row rather than flagging as a clash.
     #[must_use]
     pub fn shadows(&self) -> Vec<Shadow> {
@@ -513,7 +513,7 @@ impl Keymap {
     /// The chord currently bound to `action` in `context`, if any. The table in
     /// Settings → Keymap is one row per (context, action), so this is what fills
     /// its right-hand column — one action, one chord, like everything else
-    /// (K-200 settled that Retime is no exception).
+    /// (Retime is no exception).
     #[must_use]
     pub fn binding_for(&self, context: KeyContext, action: &ActionId) -> Option<&Chord> {
         self.bindings
@@ -548,16 +548,16 @@ impl Keymap {
         self.bindings
             .retain(|b| !(b.context == context && &b.action == action));
         // It has a key again, so it is no longer one of the deliberately
-        // silent ones (K-302).
+        // silent ones.
         self.unbound
             .retain(|(c, a)| !(*c == context && a == action));
         self.bind(context, chord, action.clone());
     }
 
-    /// Leave `action` with no chord at all, and **remember that it was meant**
-    /// (K-302) — otherwise the next start would hand it its default back, since
-    /// a missing binding is also what an action added since this file was
-    /// written looks like.
+    /// Leave `action` with no chord at all, and **remember that it was meant** —
+    /// otherwise the next start would hand it its default back, since a missing
+    /// binding is also what an action added since this file was written looks
+    /// like.
     pub fn unbind_action(&mut self, context: KeyContext, action: &ActionId) {
         self.bindings
             .retain(|b| !(b.context == context && &b.action == action));
@@ -613,7 +613,7 @@ pub fn default_keymap() -> Keymap {
         row(Global, "J", "playback.shuttle.reverse"),
         row(Global, "K", "playback.shuttle.pause"),
         row(Global, "L", "playback.shuttle.forward"),
-        // Stepping a frame is `Mod`+arrow, not the bare arrow (K-282). The
+        // Stepping a frame is `Mod`+arrow, not the bare arrow. The
         // bare arrows used to do it, which meant the app-wide transport owned
         // the two keys every list, field and canvas wants for moving *within*
         // itself — so nothing else could ever be given them. `Mod` is the
@@ -638,7 +638,7 @@ pub fn default_keymap() -> Keymap {
         row(Global, "B", "workarea.set.start"),
         row(Global, "N", "workarea.set.end"),
         row(Global, "*", "marker.add"),
-        // `Shift+M` is the second way in (K-254). Premiere and Vegas both drop a
+        // `Shift+M` is the second way in. Premiere and Vegas both drop a
         // marker on `M`, which is the habit the owner arrives with — but `M`
         // reveals Masks in the Timeline and that is After Effects' oldest
         // reflex, so the letter stays where it is and the marker takes Shift.
@@ -649,7 +649,7 @@ pub fn default_keymap() -> Keymap {
         // selected, else the selected layer. Backspace is its usual sibling.
         row(Global, "Delete", "edit.delete.selection"),
         row(Global, "Backspace", "edit.delete.selection"),
-        // Cut, copy and paste had menu rows and no chords at all (K-300): the
+        // Cut, copy and paste had menu rows and no chords at all: the
         // three keys everyone's fingers reach for first did nothing to a
         // selected layer. Global, because what they act on is whatever is
         // selected — keyframes in the Timeline, else an effect, else the layer.
@@ -657,7 +657,7 @@ pub fn default_keymap() -> Keymap {
         row(Global, "Mod+C", "edit.copy"),
         row(Global, "Mod+V", "edit.paste"),
         row(Global, "Mod+Shift+P", "palette.open"),
-        // The FX console (K-324): Video Copilot's own chord, and the one the
+        // The FX console: Video Copilot's own chord, and the one the
         // owner asked for.
         row(Global, "Mod+Space", "console.open"),
         row(Global, "Mod+M", "export.queue.add"),
@@ -665,7 +665,7 @@ pub fn default_keymap() -> Keymap {
         row(Global, "Mod+Z", "edit.undo"),
         row(Global, "Mod+Shift+Z", "edit.redo"),
         row(Global, "Mod+S", "file.save"),
-        // The rest of the menu bar's own commands (K-244). After Effects'
+        // The rest of the menu bar's own commands. After Effects'
         // chords where it has one and Lumit has not already spent the key:
         // Mod+N makes a *composition* there and Mod+Alt+N a project, which is
         // the pair anyone arriving from AE has in their fingers. Settings is
@@ -688,9 +688,9 @@ pub fn default_keymap() -> Keymap {
         // panel is fronted, and Composition ▸ Enable Retime carries the same
         // command. Mod+Alt+T is After Effects' own Time Remap chord, and it is
         // also one Windows cannot steal — the briefly-shipped Alt+Shift+T was
-        // a misremembering (K-200, superseding that half of K-198), and it
-        // collided with the Windows input-language switch anyway. One chord,
-        // like every other action; anyone who wants a second can bind it.
+        // a misremembering, and it collided with the Windows input-language
+        // switch anyway. One chord, like every other action; anyone who wants
+        // a second can bind it.
         row(Global, "Mod+Alt+T", "layer.retime.enable"),
         // --- Tools ---
         row(Tools, "V", "tool.select"),
@@ -700,7 +700,7 @@ pub fn default_keymap() -> Keymap {
         row(Tools, "C", "tool.razor"),
         row(Tools, "Q", "tool.shape"),
         row(Tools, "G", "tool.pen"),
-        // The rest of the toolbar (K-216). After Effects' own chords wherever
+        // The rest of the toolbar. After Effects' own chords wherever
         // Lumit has not already spent the key: W rotates and Alt+W is the roto
         // brush there too. Its camera cycle is `C`, which docs/07 §15 gave to
         // the razor long before there was a camera tool, so the camera group
@@ -721,7 +721,7 @@ pub fn default_keymap() -> Keymap {
         row(Timeline, "M", "reveal.masks"),
         row(Timeline, "U", "reveal.animated"),
         // `L` opens a layer's Audio group; a second `L` adds its waveform lane,
-        // a third shuts the layer again (K-281). It shadows the J/K/L shuttle
+        // a third shuts the layer again. It shadows the J/K/L shuttle
         // inside the Timeline and nowhere else — the panel where you reach for
         // a layer's sound is the panel where you are least often shuttling.
         // `Shift+L` keeps the After Effects habit pointed at the same cycle.
@@ -735,7 +735,7 @@ pub fn default_keymap() -> Keymap {
         row(Timeline, "Mod+D", "layer.duplicate"),
         row(Timeline, "Mod+Shift+C", "layer.precompose"),
         // Ctrl+G folds the selected run into a group and Ctrl+Shift+G takes the
-        // fold away (K-702) — the chord every editor with groups in it uses,
+        // fold away — the chord every editor with groups in it uses,
         // and free in Lumit: `G` alone is the pen in the Tools context, which
         // is a different context and an unmodified key. It sits beside
         // Pre-compose deliberately: the two are the light fold and the heavy
@@ -746,7 +746,7 @@ pub fn default_keymap() -> Keymap {
         row(Timeline, "-", "timeline.zoom.out"),
         row(Timeline, "\\", "timeline.zoom.fit"),
         row(Timeline, "Enter", "layer.rename"),
-        // Enter renames the selected thing wherever one is selected (K-321):
+        // Enter renames the selected thing wherever one is selected:
         // the item in the Project panel, the effect in Effect controls — the
         // same key the Timeline has always used for its layers.
         row(Project, "Enter", "item.rename"),
@@ -782,7 +782,7 @@ pub fn default_keymap() -> Keymap {
             bindings.push(b);
         }
     }
-    // Numbered markers (K-254): `Shift+N` drops marker *N* at the playhead and
+    // Numbered markers: `Shift+N` drops marker *N* at the playhead and
     // the bare digit jumps back to it — After Effects' own pairing. The pairing
     // is the point: the key that sets a cue is the key that returns to it, with
     // the modifier as the only difference.
@@ -800,7 +800,7 @@ pub fn default_keymap() -> Keymap {
     }
 }
 
-/// A **stored** keymap laid over the shipped defaults (K-302): the file's chord
+/// A **stored** keymap laid over the shipped defaults: the file's chord
 /// wins for every action it names, and an action it never heard of — one added
 /// to Lumit after that file was written — keeps its default binding.
 ///
@@ -919,7 +919,7 @@ mod tests {
 
     #[test]
     fn the_fx_console_has_its_own_chord_and_does_not_clash() {
-        // K-324: Ctrl+Space opens the console. Video Copilot's own chord, and
+        // Ctrl+Space opens the console. Video Copilot's own chord, and
         // the shipped map must stay conflict-free with it in.
         let km = default_keymap();
         assert_eq!(
@@ -936,7 +936,7 @@ mod tests {
 
     #[test]
     fn enter_renames_the_selection_in_each_panel_that_has_one() {
-        // K-321: the same key the Timeline always used for its layers is
+        // The same key the Timeline always used for its layers is
         // bound for the Project panel's items and Effect controls' effects.
         let km = default_keymap();
         let enter: Chord = "Enter".parse().unwrap();
@@ -986,9 +986,9 @@ mod tests {
         });
         assert_eq!(km.conflicts().len(), 1);
 
-        // Global under a scoped binding on the same chord → NOT a conflict
-        // (K-281): the panel gets first refusal and Global is the fallback, so
-        // the chord runs one action and which one is never in doubt. It is
+        // Global under a scoped binding on the same chord → NOT a conflict:
+        // the panel gets first refusal and Global is the fallback, so the
+        // chord runs one action and which one is never in doubt. It is
         // reported as a *shadow* instead, because the app-wide meaning does
         // stop working in that one panel.
         let mut km = Keymap::default();
@@ -1024,7 +1024,7 @@ mod tests {
         assert!(km.shadows().is_empty());
     }
 
-    /// Stepping a frame is `Mod`+arrow (K-282), and the bare arrows are free.
+    /// Stepping a frame is `Mod`+arrow, and the bare arrows are free.
     #[test]
     fn a_frame_step_takes_the_primary_modifier() {
         let km = default_keymap();
@@ -1047,7 +1047,7 @@ mod tests {
     }
 
     /// `L` reveals a layer's Audio in the Timeline and shuttles forward
-    /// everywhere else (K-281) — the one shadow the default ships with, and it
+    /// everywhere else — the one shadow the default ships with, and it
     /// is deliberate.
     #[test]
     fn the_default_gives_the_timeline_l_and_leaves_the_shuttle_elsewhere() {
@@ -1139,7 +1139,7 @@ mod tests {
         }
     }
 
-    /// The numbered markers (K-254). `Shift+N` sets and the bare `N` returns, for
+    /// The numbered markers. `Shift+N` sets and the bare `N` returns, for
     /// all ten digits including zero — and `M` must still reveal Masks in the
     /// Timeline, which is the whole reason the marker key is `Shift+M`.
     #[test]
@@ -1167,11 +1167,11 @@ mod tests {
         );
     }
 
-    /// **A keymap stored by an older build must not hide a new action**
-    /// (K-302). This is the bug the owner hit: `Ctrl+C` did nothing in their
-    /// app while every test passed, because their saved keymap — written before
-    /// `edit.copy` existed — replaced the whole map on start, and an action
-    /// that is not in the file had no chord at all.
+    /// **A keymap stored by an older build must not hide a new action**. This
+    /// is the bug the owner hit: `Ctrl+C` did nothing in their app while every
+    /// test passed, because their saved keymap — written before `edit.copy`
+    /// existed — replaced the whole map on start, and an action that is not in
+    /// the file had no chord at all.
     #[test]
     fn a_stored_keymap_keeps_the_defaults_for_actions_it_never_heard_of() {
         // Their file, in miniature: today's map with the copy family removed,
@@ -1382,7 +1382,7 @@ mod tests {
 
         // Across contexts: a Global binding stays live everywhere else, so both
         // survive — and the panel taking the chord over is reported as a shadow
-        // rather than a clash (K-281), because which action fires is never in
+        // rather than a clash, because which action fires is never in
         // doubt.
         let mut km = Keymap::default();
         km.bind(KeyContext::Global, chord("D"), "global.thing".into());

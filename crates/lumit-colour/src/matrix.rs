@@ -24,7 +24,7 @@ use crate::error::{ColourError, Result};
 /// inverse to `f32` before composing leaves a residue of about 3 × 10⁻¹⁰ in the
 /// product, which a clamped 65504 in one channel turns into 2 × 10⁻⁵ of error in
 /// another — ACEScc → ACEScg, measured against the reference library, is exactly
-/// that. Composed in double the residue is 10⁻¹⁶ and the pair cancels (K-516).
+/// that. Composed in double the residue is 10⁻¹⁶ and the pair cancels.
 pub type Matrix34 = [f64; 12];
 
 /// The matrix that changes nothing.
@@ -36,7 +36,7 @@ pub const IDENTITY: Matrix34 = [
 
 /// The coefficients as the samplers see them: single precision, exactly what
 /// [`crate::bake`] hands the graphics card. Every evaluation goes through this,
-/// so the processor and the card multiply the same twelve numbers (K-031).
+/// so the processor and the card multiply the same twelve numbers.
 #[must_use]
 pub fn single(m: &Matrix34) -> [f32; 12] {
     let mut out = [0.0_f32; 12];
@@ -187,7 +187,7 @@ pub struct Chromaticities {
     pub white: [f64; 2],
 }
 
-/// Rec.709 / sRGB primaries with a D65 white — Lumit's fixed working space (K-490).
+/// Rec.709 / sRGB primaries with a D65 white — Lumit's fixed working space.
 pub const REC709: Chromaticities = Chromaticities {
     red: [0.640, 0.330],
     green: [0.300, 0.600],

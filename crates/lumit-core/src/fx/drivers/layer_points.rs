@@ -24,13 +24,13 @@
 //! what that layer draws — but a tap on the far side reads the documented empty
 //! stream rather than hopping again. That is the whole of the recursion
 //! argument: two layers naming each other stop at the second hop, calmly, with
-//! no visited set and no cycle to detect (K-604).
+//! no visited set and no cycle to detect.
 //!
 //! **Everything absent is the empty stream**, which is the labelled no-op a
 //! dangling layer reference has always been: no layer named, a layer somebody
 //! deleted, a layer with no producer on it, a bypassed producer, a producer
-//! whose stream depends on a picture (Scatter and Emit from image, K-599 and
-//! K-603), or a second hop. Never a fault.
+//! whose stream depends on a picture (Scatter and Emit from image), or a
+//! second hop. Never a fault.
 
 use crate::fx::{
     DriverCx, EffectDef, EffectMetadata, EffectSchema, Port, PortType, Signature, Value,
@@ -38,7 +38,7 @@ use crate::fx::{
 use lumit_fx_macros::Effect;
 
 /// The port the tapped stream leaves by — the same `points`/`Points` pair every
-/// producer declares (K-472), so a wire cannot tell a tap from a Particulate.
+/// producer declares, so a wire cannot tell a tap from a Particulate.
 pub const POINTS_PORT: &str = "points";
 
 /// The layer-reference row the tap reads, by parameter id.
@@ -64,7 +64,7 @@ const OUTPUTS: &[Port] = &[Port::new(POINTS_PORT, "Points", PortType::Points)];
 pub struct LayerPoints {
     /// The layer whose points are tapped — an ordinary layer-reference
     /// parameter (docs/03 §8), with the ordinary degrade-to-nothing on a
-    /// dangling id. **Edges never cross layers** (K-471): the canvas draws the
+    /// dangling id. **Edges never cross layers**: the canvas draws the
     /// referenced layer as a derived source node and the wire from it renders
     /// this parameter, exactly as Audio level's Audio row works.
     #[layer(label = "Points layer", self_default = false)]
@@ -83,9 +83,9 @@ impl EffectDef for LayerPointsDef {
         false
     }
 
-    /// The first driver whose output is a **stream** rather than a number
-    /// (K-604). No inputs at all: what it reads is named by a parameter, not
-    /// fed by a wire, because a wire would have to cross a layer boundary.
+    /// The first driver whose output is a **stream** rather than a number. No
+    /// inputs at all: what it reads is named by a parameter, not fed by a
+    /// wire, because a wire would have to cross a layer boundary.
     fn signature(&self) -> Signature {
         Signature::Data {
             inputs: &[],

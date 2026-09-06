@@ -32,7 +32,7 @@ part 'effect.freezed.dart';
 List<BridgeEffectInfo> listEffects() =>
     BridgeLib.instance.api.crateApiEffectListEffects();
 
-/// **All nine layer styles** (docs/impl/layer-styles.md §1, K-706), in §2's
+/// **All nine layer styles** (docs/impl/layer-styles.md §1), in §2's
 /// pinned painting order.
 ///
 /// Deliberately **not** part of [`list_effects`]: the effect browser, the
@@ -54,7 +54,7 @@ List<BridgeEffectInfo> listEffects() =>
 List<BridgeStyleInfo> listStyles() =>
     BridgeLib.instance.api.crateApiEffectListStyles();
 
-/// The Drivers family (K-471 §1.3) — the Graph panel's own search list, in the
+/// The Drivers family — the Graph panel's own search list, in the
 /// same shape and the same schema order as [`list_effects`].
 ///
 /// Its own listing rather than a filter the frontend applies, because the
@@ -76,7 +76,7 @@ List<BridgeEffectInfo> listDrivers() =>
 /// it — the start-up scan and the rescan command are the same call.
 ///
 /// Registration is additive and idempotent: calling this twice registers each
-/// plugin once (K-593), so a rescan after installing something new is safe at
+/// plugin once, so a rescan after installing something new is safe at
 /// any moment.
 Future<BridgePluginScan> rescanPlugins() =>
     BridgeLib.instance.api.crateApiEffectRescanPlugins();
@@ -124,8 +124,8 @@ List<String> pluginMessages() =>
 List<BridgePresetInfo> listPresets() =>
     BridgeLib.instance.api.crateApiEffectListPresets();
 
-/// Every `.lumgrp` **node group** in the same library folder, sorted by name
-/// (K-651) — what the graph canvas's search offers beside the drivers.
+/// Every `.lumgrp` **node group** in the same library folder, sorted by name —
+/// what the graph canvas's search offers beside the drivers.
 ///
 /// The same folder as the effect presets, because it is the same kind of thing:
 /// something this person saved to use again, on any project.
@@ -196,7 +196,7 @@ List<BridgeParamInfo> listParameters({required String effect}) =>
 
 /// An effect's vector pairs, in schema order — the fourth static list beside
 /// [`list_parameters`], and memoised on the Dart side for the same reason
-/// (K-183: the schema never changes, and a fetch per card per rebuild is
+/// (the schema never changes, and a fetch per card per rebuild is
 /// exactly the traffic the budget test forbids).
 ///
 /// An unknown match name is an empty list rather than an error, like every
@@ -229,9 +229,9 @@ List<BridgeShaderNodeKind> listShaderNodes() =>
 /// A pure question — nothing is staged and no document moves — which is also
 /// how the canvas refuses a drop: build the candidate graph, ask, and decline
 /// visually when the answer names a mismatch or a cycle. The engine stays the
-/// single validator; the panel never learns the type rules (K-183's spirit:
-/// display and forward, decide in Rust). Called on gestures and reloads, never
-/// in a rebuild.
+/// single validator; the panel never learns the type rules (display and
+/// forward, decide in Rust). Called on gestures and reloads, never in a
+/// rebuild.
 BridgeShaderGraphView shaderGraphView({required String graph}) =>
     BridgeLib.instance.api.crateApiEffectShaderGraphView(graph: graph);
 
@@ -281,16 +281,16 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
 
   String name();
 
-  /// Whether the vector pair keyed by `stem` is chained (K-443). A stem this
+  /// Whether the vector pair keyed by `stem` is chained. A stem this
   /// effect has no pair for is unlinked, never an error.
   bool pairLinked({required String stem});
 
-  /// Add one stroke to this Roto brush, on the **staged** copy (K-713).
+  /// Add one stroke to this Roto brush, on the **staged** copy.
   ///
   /// `points` are `[x0, y0, x1, y1, …]` in **source raster pixels** on the
   /// unaltered footage — the viewer converts, because only it knows the chain
   /// of transforms the pointer came through, and the matte has to describe the
-  /// file's frames rather than this comp's (K-248). `frame` is the source
+  /// file's frames rather than this comp's. `frame` is the source
   /// frame the stroke was drawn on.
   ///
   /// **The first stroke sets the base frame**, which is what makes Propagate
@@ -321,16 +321,15 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// the shot to be re-decided from somewhere else means.
   void rotoSetBaseFrame({PlatformInt64? frame});
 
-  /// Every stroke this instance holds, for the overlay to draw (K-713).
+  /// Every stroke this instance holds, for the overlay to draw.
   ///
   /// Read on the gesture that needs it and on a document revision moving —
-  /// never per rebuild, which is the contract every other panel read has
-  /// (K-681).
+  /// never per rebuild, which is the contract every other panel read has.
   List<BridgeRotoStroke> rotoStrokes();
 
   String serialize();
 
-  /// Stage the user's own name for this instance (K-321) — an empty or
+  /// Stage the user's own name for this instance — an empty or
   /// whitespace name clears it back to the effect's label. Staging only, like
   /// `set_value`: `LayerReference::set_effects` is the commit.
   void setCustomName({required String name});
@@ -377,7 +376,7 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// `origin` is the file the text was read from, or `None` for text the user
   /// typed — which is the honest answer once they have typed it, since it no
   /// longer says what that file says. An empty `source` clears the block back
-  /// to a fresh instance: a passthrough with no badge (K-111).
+  /// to a fresh instance: a passthrough with no badge.
   ///
   /// The rows the new source declares are **offered**, not adopted: the
   /// document keeps the values it has, an id that has gone keeps its row and
@@ -391,8 +390,8 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// Refused when `value` is of a different kind from the parameter, so a
   /// control can never quietly change what a parameter *is*.
   ///
-  /// **The hard range is enforced here, not in the panel** (docs/08 §1.2,
-  /// K-620). Every way a number reaches an effect parameter — typed, scrubbed,
+  /// **The hard range is enforced here, not in the panel** (docs/08 §1.2).
+  /// Every way a number reaches an effect parameter — typed, scrubbed,
   /// dragged in the graph editor, picked off the Viewer, wired from a node,
   /// pasted, loaded from a preset — passes through this one call, and both the
   /// preview and the commit stage through it, so clamping once here is what
@@ -520,7 +519,7 @@ class BridgeColour {
 /// One built-in effect as the Add-effect menu needs it: the stable `name` to
 /// pass to [`crate::api::layer::LayerReference::add_effect`], the sentence-case
 /// `label` to draw, and the category to group under. `category` is a stable
-/// machine key the menu sorts by; `category_label` is its heading (K-090).
+/// machine key the menu sorts by; `category_label` is its heading.
 class BridgeEffectInfo {
   final String name;
   final String label;
@@ -537,7 +536,7 @@ class BridgeEffectInfo {
   final String namespace;
 
   /// The sockets an instance of this entry would draw, from its declaration
-  /// alone (K-471 §1.3) — the parameters that can take a wire.
+  /// alone — the parameters that can take a wire.
   ///
   /// Here because the Graph panel has to know an entry's ports *before* it is
   /// in the document: it is what lets adding a driver and joining it to the
@@ -584,7 +583,7 @@ class BridgeEffectInfo {
           outputs == other.outputs;
 }
 
-/// Everything a panel draws for one effect instance, in one crossing (K-183):
+/// Everything a panel draws for one effect instance, in one crossing:
 /// its id, match name, bypass state, and every parameter's current value. The
 /// instance is an opaque handle, so `id()`/`name()`/`get_value()` each cross
 /// the bridge — a card that read them one at a time cost a call per field per
@@ -593,14 +592,14 @@ class BridgeEffectInstanceInfo {
   final UuidValue id;
   final String name;
 
-  /// The user's own name for the instance (K-321), or `None` to show the
+  /// The user's own name for the instance, or `None` to show the
   /// effect's label. `name` stays the `match_name` either way — it is the
   /// schema key, not a display string.
   final String? customName;
   final bool enabled;
   final List<BridgeParamValue> values;
 
-  /// The stems of the vector pairs this instance has chained (K-443), sorted.
+  /// The stems of the vector pairs this instance has chained, sorted.
   /// Empty is "every pair unlinked", which is what every older project means.
   ///
   /// In the read model rather than asked per pair, for the reason every other
@@ -612,7 +611,7 @@ class BridgeEffectInstanceInfo {
   /// §2.3) — one of [`BADGE_REASONS`], or `None` for the ordinary case.
   ///
   /// A **key**, not a sentence: the panel draws the calm badge in the user's
-  /// own language (K-303). Four things it can say — the plugin failed, the
+  /// own language. Four things it can say — the plugin failed, the
   /// plugin is switched off, the plugin is not installed on this machine, or
   /// this build has never heard of the effect at all. The last two are the
   /// placeholder docs/12 §1 requires: the instance is kept, values and all,
@@ -706,14 +705,14 @@ sealed class BridgeEffectValue with _$BridgeEffectValue {
     UuidValue? field0,
   ]) = BridgeEffectValue_Layer;
 
-  /// Which of the owning layer's masks an effect walks (K-408): the mask id,
+  /// Which of the owning layer's masks an effect walks: the mask id,
   /// or `None` for "First mask". The *geometry* never crosses — the render
   /// flattens it engine-side, beside the op.
   const factory BridgeEffectValue.maskPath([
     UuidValue? field0,
   ]) = BridgeEffectValue_MaskPath;
 
-  /// A tone curve as its own control points (K-412): 2..=16 `[x, y]` pairs
+  /// A tone curve as its own control points: 2..=16 `[x, y]` pairs
   /// in the unit square, in x order. Crosses as written — the engine
   /// straightens what it reads (`CurvePoints::sanitised`), so a panel
   /// mid-drag need not, and a curve is never refused for being momentarily
@@ -777,7 +776,7 @@ class BridgeEnabledWhen {
 
 /// A file parameter: the paths it references, and the index that selects which
 /// one is live. Two paths cannot be blended, so the index only ever steps
-/// (hold keyframes, K-111); the common case is one path and a static index.
+/// (hold keyframes); the common case is one path and a static index.
 /// An empty `paths` means unset, which the consuming effect treats as identity.
 class BridgeFileParam {
   final List<String> paths;
@@ -833,7 +832,7 @@ class BridgeKeyframe {
           interpOut == other.interpOut;
 }
 
-/// One collapsible parameter group of an effect (docs/08 §1.2, K-145/K-257):
+/// One collapsible parameter group of an effect (docs/08 §1.2):
 /// the panel tucks the named member rows behind a twirl. An empty `label`
 /// renders headerless (the rows appear in place, no twirl) — the shape a
 /// conditional run of parameters takes. `visible_when_param` with a
@@ -897,7 +896,7 @@ class BridgeParamInfo {
   final String label;
   final BridgeParamKind kind;
 
-  /// What the number *is* (K-443): the rider the row draws beside the value,
+  /// What the number *is*: the rider the row draws beside the value,
   /// and — on a point pair — the unit a Viewer pick has to write in. Declared
   /// per parameter engine-side, so a row's unit travels with the row rather
   /// than with its id and the panel never has to guess.
@@ -937,7 +936,7 @@ sealed class BridgeParamKind with _$BridgeParamKind {
     required double sliderMin,
     required double sliderMax,
 
-    /// Hard bounds, either side open (K-090: a threshold clamps at zero
+    /// Hard bounds, either side open (a threshold clamps at zero
     /// below and runs unbounded above).
     double? hardMin,
     double? hardMax,
@@ -994,17 +993,17 @@ sealed class BridgeParamKind with _$BridgeParamKind {
   const factory BridgeParamKind.layer() = BridgeParamKind_Layer;
 
   /// One of the **owning layer's masks**, whose geometry the effect walks
-  /// (K-408, docs/08 §1.2). The panel draws the layer's masks by name, with
+  /// (docs/08 §1.2). The panel draws the layer's masks by name, with
   /// "First mask" as the unset entry; the mask names come from the read model
   /// the panel already holds, so the row costs no call of its own.
   const factory BridgeParamKind.maskPath() = BridgeParamKind_MaskPath;
 
-  /// A tone curve, drawn as a curve editor (K-412). The panel edits the
+  /// A tone curve, drawn as a curve editor. The panel edits the
   /// point list itself; there is no range to declare, because the points
   /// live in the unit square by definition.
   const factory BridgeParamKind.curve() = BridgeParamKind_Curve;
 
-  /// A closed range (K-414), drawn as a track and thumb with the value
+  /// A closed range, drawn as a track and thumb with the value
   /// beside it. `min`/`max` are the travel *and* the hard bound — that is
   /// what closed means — so the row refuses a typed value outside them.
   ///
@@ -1018,7 +1017,7 @@ sealed class BridgeParamKind with _$BridgeParamKind {
     required double max,
   }) = BridgeParamKind_Slider;
 
-  /// A **button** (K-417), drawn as one and pressed through
+  /// A **button**, drawn as one and pressed through
   /// [`crate::api::layer::LayerReference::fire_effect_action`]. It carries no
   /// value at all — no default, no range, nothing in
   /// [`BridgeEffectInstanceInfo::values`] — because a press is an event and
@@ -1027,7 +1026,7 @@ sealed class BridgeParamKind with _$BridgeParamKind {
 }
 
 /// One **vector pair** of an effect: two adjacent `_x`/`_y` Float parameters
-/// the panel draws as one row of two wells with a chain between them (K-443).
+/// the panel draws as one row of two wells with a chain between them.
 ///
 /// The convention used to be read off the ids at the seam, by whoever needed
 /// it; [`lumit_core::fx::EffectSchema::pairs`] is the declaration answering it
@@ -1321,7 +1320,7 @@ class BridgeShaderPort {
 ///
 /// Somebody typed a program. Either it works, or the compiler has something to
 /// say about it — and the words are the compiler's own, untranslated, because it
-/// is somebody else's sentence about somebody else's code (K-303). The line
+/// is somebody else's sentence about somebody else's code. The line
 /// numbers in it have been moved back onto the text the user is looking at, so
 /// "line 3" means the third line they typed rather than the third line of the
 /// wrapper Lumit put around it.
@@ -1416,12 +1415,12 @@ class BridgeStyleInfo {
           offered == other.offered;
 }
 
-/// The unit a parameter's number is in (K-443) — what the row draws as its
+/// The unit a parameter's number is in — what the row draws as its
 /// rider beside the value, and what a point pick has to write in.
 ///
 /// Mirrors [`lumit_core::fx::Unit`] with the two the seam has no use for
 /// folded away: `Unset` is a build failure engine-side, so nothing that ships
-/// can carry it, and `PctDiag` is forbidden to every parameter (K-419). Both
+/// can carry it, and `PctDiag` is forbidden to every parameter. Both
 /// arrive here as [`BridgeUnit::Raw`] — the panel draws no rider, which is the
 /// honest answer for a unit that must not exist.
 enum BridgeUnit {
@@ -1431,7 +1430,7 @@ enum BridgeUnit {
   /// Per cent, where 100 is the whole of whatever it is a share of.
   percent,
 
-  /// Pixels at composition size (px@comp) — the one spatial unit (K-419).
+  /// Pixels at composition size (px@comp) — the one spatial unit.
   px,
   degrees,
   seconds,

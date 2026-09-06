@@ -1,4 +1,4 @@
-// Animation ▸ Add expression (K-305, on the K-444 dialogue pattern).
+// Animation ▸ Add expression (on the shared dialogue pattern).
 //
 // In plain terms: instead of keyframes, a property can be given a small
 // program that works its value out every frame — the language is Rhai, and the

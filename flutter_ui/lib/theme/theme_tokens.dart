@@ -1,4 +1,4 @@
-// Every colour a theme carries, as a list you can walk (K-202).
+// Every colour a theme carries, as a list you can walk.
 //
 // **Why this exists.** `LumitTheme` is a struct of named fields, which is the
 // right shape for *drawing* — `t.accent` reads better than a map lookup and

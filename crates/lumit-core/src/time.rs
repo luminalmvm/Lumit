@@ -312,7 +312,7 @@ impl FrameRate {
     /// there are two honest answers — the frame it is inside, and the frame it
     /// is closest to. [`Self::frame_at`] gives the first, which is what drawing
     /// a keyframe wants. This gives the second, which is what the **playhead**
-    /// wants when the composition's rate changes under it (K-572): the moment
+    /// wants when the composition's rate changes under it: the moment
     /// it sits at has to be re-expressed on a grid that does not contain it,
     /// and always taking the frame before would drag the playhead earlier every
     /// time the rate was touched.
@@ -366,7 +366,7 @@ mod tests {
         assert!((q.to_f64() - t.0.to_f64()).abs() < 1e-9);
     }
 
-    /// The playhead's arithmetic when a comp's rate changes under it (K-572):
+    /// The playhead's arithmetic when a comp's rate changes under it:
     /// the same moment, on the nearest frame of the new grid.
     #[test]
     fn the_nearest_frame_rounds_rather_than_floors() {

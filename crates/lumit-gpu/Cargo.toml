@@ -19,20 +19,20 @@ pollster = "0.4"
 thiserror = "2"
 # `counters` turns on wgpu's live-object tallies — how many textures and
 # buffers the driver is holding right now, which is what says whether a frame
-# the engine dropped was actually destroyed (K-294). Every backend keeps them;
+# the engine dropped was actually destroyed. Every backend keeps them;
 # unlike the allocator report, which is Vulkan and D3D12 only and answers
 # nothing at all on Metal, where the memory question was asked.
 wgpu = { version = "24", features = ["counters"] }
-# The shader front end wgpu itself is built on. The Custom shader (K-650) parses
+# The shader front end wgpu itself is built on. The Custom shader parses
 # and validates a user's text through it BEFORE a pipeline is built, on
-# `Capabilities::empty()` — the settings the shipped kernels are held to (K-263)
+# `Capabilities::empty()` — the settings the shipped kernels are held to
 # — because that is the only road that produces a sentence a person can act on
 # rather than a device error on a stranger's adapter. Pinned to wgpu 24's own
 # naga so the two agree about what is valid. It was a dev-dependency until this
 # effect wanted it at run time; `tests/wgsl_validates.rs` reads the same one.
 naga = { version = "24", features = ["wgsl-in"] }
 
-# The Windows-only, zero-copy Viewer path (K-177). Off by default so every
+# The Windows-only, zero-copy Viewer path. Off by default so every
 # existing build is byte-for-byte unchanged; the bridge turns it on to build the
 # shipped `.dll`. It pulls the `windows` crate (pinned to 0.58 so its
 # `ID3D12Device`/`ID3D12Resource` types unify with the ones wgpu-hal's D3D12
@@ -40,15 +40,15 @@ naga = { version = "24", features = ["wgsl-in"] }
 # hal hand-off would not compile). The actual D3D code is additionally
 # `cfg(windows)`-gated, so enabling the feature on a non-Windows target is inert.
 #
-# `shared-texture-linux` (K-177-linux) is the Vulkan/DMA-BUF sibling for the
-# owner's Linux collaborator. Off by default; the bridge turns it on to build the
+# `shared-texture-linux` is the Vulkan/DMA-BUF sibling for the owner's Linux
+# collaborator. Off by default; the bridge turns it on to build the
 # shipped Linux `.so`. It pulls `ash` (pinned to 0.38 so its `vk::*` handle types
 # unify with the ones wgpu-hal's Vulkan backend already uses — the same
 # major-version-must-match reasoning the `windows` pin documents). The Vulkan
 # interop is additionally `cfg(target_os = "linux")`-gated, so enabling the
 # feature off Linux is inert.
 #
-# `shared-texture-macos` (K-195) is the Metal/IOSurface sibling. Off by default;
+# `shared-texture-macos` is the Metal/IOSurface sibling. Off by default;
 # the bridge turns it on to build the shipped `.dylib`. It pulls `metal` (pinned
 # to 0.31, the version wgpu-hal 24's Metal backend already links, so `MTLTexture`
 # and `MTLDevice` unify with the ones the hal hands us — the same
@@ -57,6 +57,9 @@ naga = { version = "24", features = ["wgsl-in"] }
 # property dictionary. The Metal interop is additionally
 # `cfg(target_os = "macos")`-gated, so enabling the feature off macOS is inert.
 [features]
+# The shared test device and engines (src/test_support.rs), for downstream
+# crates' tests. Test-only by construction: no shipped path enables it.
+test-fixtures = []
 shared-texture = ["dep:windows"]
 shared-texture-linux = ["dep:ash"]
 shared-texture-macos = ["dep:metal", "dep:objc", "dep:core-foundation"]
@@ -95,6 +98,10 @@ objc = { version = "0.2", optional = true }
 core-foundation = { version = "0.9", optional = true }
 
 [dev-dependencies]
+# The crate itself, with the shared-device fixture on, so the integration
+# tests under tests/ borrow one device and one set of compiled engines the
+# way the unit tests do (src/test_support.rs).
+lumit-gpu = { path = ".", features = ["test-fixtures"] }
 # The CPU oracle the WGSL kernels are held to (docs/08 §1.6).
 lumit-core = { path = "../lumit-core" }
 # The walking-skeleton proof that the eval executor drives these kernels

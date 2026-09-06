@@ -19,20 +19,20 @@ import '../theme/theme.dart';
 import 'dock.dart';
 import 'settings.dart';
 
-/// How the Viewer is looking at one composition (K-314): exposure in stops and
-/// whether the tone map is engaged. A record rather than a class because it is
-/// two numbers with no behaviour, and records compare by value — which is what
+/// How the Viewer is looking at one composition: exposure in stops and whether
+/// the tone map is engaged. A record rather than a class because it is two
+/// numbers with no behaviour, and records compare by value — which is what
 /// [SavedSession]'s equality needs.
 typedef ViewerLook = ({double stops, bool toneMap});
 
 /// Neither control engaged: the picture is the export.
 const ViewerLook neutralLook = (stops: 0.0, toneMap: false);
 
-/// Where the user was in one composition when they last left it (K-624): the
-/// playhead frame, the Timeline's magnification, and how far through its
-/// scrollable range the lanes were scrolled (0 at the left, 1 at the right —
-/// a fraction rather than a pixel offset so the view comes back to the same
-/// stretch of time whatever width the panel has since been dragged to).
+/// Where the user was in one composition when they last left it: the playhead
+/// frame, the Timeline's magnification, and how far through its scrollable
+/// range the lanes were scrolled (0 at the left, 1 at the right — a fraction
+/// rather than a pixel offset so the view comes back to the same stretch of
+/// time whatever width the panel has since been dragged to).
 ///
 /// A record for the same reason [ViewerLook] is: three numbers with no
 /// behaviour, compared by value.
@@ -41,9 +41,9 @@ typedef CompView = ({int frame, double zoom, double scroll});
 /// A comp nobody has been in yet: frame one, fitted, at the left.
 const CompView newCompView = (frame: 0, zoom: 1.0, scroll: 0.0);
 
-/// Which of the Viewer's marks are drawn over one composition (K-416, K-689):
-/// the proportional grid, the title/action safe rectangles, and the rulers
-/// along the picture's top and left edges.
+/// Which of the Viewer's marks are drawn over one composition: the proportional
+/// grid, the title/action safe rectangles, and the rulers along the picture's
+/// top and left edges.
 ///
 /// A record for [ViewerLook]'s reason — three switches with no behaviour,
 /// compared by value, which is what [SavedSession]'s equality needs.
@@ -53,8 +53,8 @@ typedef ViewerOverlays = ({bool grid, bool safeAreas, bool rulers});
 const ViewerOverlays noViewerOverlays =
     (grid: false, safeAreas: false, rulers: false);
 
-/// One guide dragged out of a ruler (K-689): where it sits in **comp pixels**,
-/// and which way it runs.
+/// One guide dragged out of a ruler: where it sits in **comp pixels**, and
+/// which way it runs.
 ///
 /// [vertical] is the line's own direction, so a vertical guide is a constant
 /// *x* and a horizontal one a constant *y* — the same reading Photoshop and
@@ -75,54 +75,53 @@ class SavedSession {
   final int frame;
   final String? selectedLayer;
 
-  /// The Viewer's exposure and tone map, per composition id (K-314). A way of
+  /// The Viewer's exposure and tone map, per composition id. A way of
   /// *looking*, not an edit to the work: it rides in the session (and thus in
-  /// the `.lum`'s `ui_state` blob, K-245) rather than in the document, so
-  /// Ctrl+Z never undoes an exposure nudge and setting one does not make the
-  /// project dirty. Comps looking at neutral are simply absent.
+  /// the `.lum`'s `ui_state` blob) rather than in the document, so Ctrl+Z never
+  /// undoes an exposure nudge and setting one does not make the project dirty.
+  /// Comps looking at neutral are simply absent.
   final Map<String, ViewerLook> viewerLooks;
 
-  /// The preview resolution of each composition, by id (K-357, docs/07 §2.2
-  /// item 2), as the enum's name. Session state for the same reason the looks
-  /// are: choosing how coarsely to preview a shot is a way of working on it,
-  /// not an edit to it, and it must never reach an export (glossary §5).
-  /// Comps previewing at Auto — the default — are simply absent.
+  /// The preview resolution of each composition, by id (docs/07 §2.2 item 2),
+  /// as the enum's name. Session state for the same reason the looks are:
+  /// choosing how coarsely to preview a shot is a way of working on it, not an
+  /// edit to it, and it must never reach an export (glossary §5). Comps
+  /// previewing at Auto — the default — are simply absent.
   final Map<String, String> previewResolutions;
 
-  /// The region of interest of each composition, by id (K-362, docs/07 §2.2
-  /// item 7), as comp fractions `[u0, v0, u1, v1]`. Session state for the same
-  /// reason the resolutions are: choosing which corner to work on is a way of
-  /// working, not an edit, and it must never reach an export. Comps looking at
-  /// the whole frame — the default — are simply absent.
+  /// The region of interest of each composition, by id (docs/07 §2.2 item 7),
+  /// as comp fractions `[u0, v0, u1, v1]`. Session state for the same reason
+  /// the resolutions are: choosing which corner to work on is a way of working,
+  /// not an edit, and it must never reach an export. Comps looking at the whole
+  /// frame — the default — are simply absent.
   final Map<String, List<double>> regionsOfInterest;
 
-  /// Which marks the Viewer draws over each composition, by id (K-416, K-689):
-  /// the grid, the safe rectangles and the rulers.
+  /// Which marks the Viewer draws over each composition, by id: the grid, the
+  /// safe rectangles and the rulers.
   ///
-  /// **Session state, and this is where K-416 said it would end up.** Which
-  /// scaffolding you want over a shot is a way of looking at it rather than an
-  /// edit to it: it never reaches an op, Ctrl+Z never undoes a tick, and no
-  /// export has ever seen one. Comps with nothing drawn — the default — are
-  /// simply absent.
+  /// **Session state.** Which scaffolding you want over a shot is a way of
+  /// looking at it rather than an edit to it: it never reaches an op, Ctrl+Z
+  /// never undoes a tick, and no export has ever seen one. Comps with nothing
+  /// drawn — the default — are simply absent.
   final Map<String, ViewerOverlays> viewerOverlays;
 
-  /// The guides dragged out of each composition's rulers, by id (K-689), in
-  /// comp pixels. Session state for the overlays' reason, and kept beside them
+  /// The guides dragged out of each composition's rulers, by id, in comp
+  /// pixels. Session state for the overlays' reason, and kept beside them
   /// because a guide is a mark over the picture like any other. Comps with no
   /// guides are simply absent.
   final Map<String, List<ViewerGuide>> guides;
 
-  /// Where the user was in each composition, by id (K-624) — the playhead and
-  /// the Timeline's view. Session state for the same reason the looks are:
-  /// standing somewhere in a comp is not an edit to it, so it never reaches an
-  /// op and Ctrl+Z never undoes a scrub. The comp fronted when the session was
-  /// written is also in [frame], which stays the answer for a session written
-  /// by a build that had none of this.
+  /// Where the user was in each composition, by id — the playhead and the
+  /// Timeline's view. Session state for the same reason the looks are: standing
+  /// somewhere in a comp is not an edit to it, so it never reaches an op and
+  /// Ctrl+Z never undoes a scrub. The comp fronted when the session was written
+  /// is also in [frame], which stays the answer for a session written by a
+  /// build that had none of this.
   final Map<String, CompView> compViews;
 
-  /// How the panels were arranged for this project, as [DockSplit.toJson]
-  /// (K-245) — the arrangement itself, not the name of a preset, because the
-  /// sizes and positions a user drags to are the arrangement.
+  /// How the panels were arranged for this project, as [DockSplit.toJson] — the
+  /// arrangement itself, not the name of a preset, because the sizes and
+  /// positions a user drags to are the arrangement.
   ///
   /// Held as raw JSON rather than as a [DockSplit], because this class is
   /// compared to decide whether anything needs writing, and a dock tree is
@@ -327,9 +326,9 @@ Map<String, CompView> _compViewsFromJson(Object? raw) {
   return out;
 }
 
-/// The per-comp overlays out of a session's JSON (K-689). A missing or
-/// malformed switch reads as off, which is what a session written by a build
-/// that had fewer of them gets: the marks it did ask for, and nothing invented.
+/// The per-comp overlays out of a session's JSON. A missing or malformed switch
+/// reads as off, which is what a session written by a build that had fewer of
+/// them gets: the marks it did ask for, and nothing invented.
 Map<String, ViewerOverlays> _overlaysFromJson(Object? raw) {
   if (raw is! Map) return const {};
   final out = <String, ViewerOverlays>{};
@@ -347,9 +346,9 @@ Map<String, ViewerOverlays> _overlaysFromJson(Object? raw) {
   return out;
 }
 
-/// The per-comp guides out of a session's JSON (K-689), keeping only entries
-/// that are a finite position — a hand-edited or truncated session leaves the
-/// comp with the guides that did read, and an app that opens.
+/// The per-comp guides out of a session's JSON, keeping only entries that are a
+/// finite position — a hand-edited or truncated session leaves the comp with
+/// the guides that did read, and an app that opens.
 Map<String, List<ViewerGuide>> _guidesFromJson(Object? raw) {
   if (raw is! Map) return const {};
   final out = <String, List<ViewerGuide>>{};
@@ -450,11 +449,11 @@ class UserWorkspace {
   }
 }
 
-/// Where a floating window was left (K-242): how far it was dragged from the
-/// centre of the app window, and how big it was made when it is one of the
-/// resizable ones. Stored as an offset from centre rather than as a corner
-/// position so a window opened on a smaller monitor than it was left on still
-/// lands somewhere sensible.
+/// Where a floating window was left: how far it was dragged from the centre of
+/// the app window, and how big it was made when it is one of the resizable
+/// ones. Stored as an offset from centre rather than as a corner position so a
+/// window opened on a smaller monitor than it was left on still lands somewhere
+/// sensible.
 class WindowPlacement {
   final Offset offset;
   final Size? size;
@@ -493,7 +492,7 @@ class Workspace extends ChangeNotifier {
   Color? accentOverride;
   AnimationLevel animationLevel = AnimationLevel.all;
 
-  /// The themes the user has made (K-202), in the order they were saved.
+  /// The themes the user has made, in the order they were saved.
   List<CustomTheme> customThemes = [];
 
   /// The custom theme in use, by name, or null for the built-in
@@ -515,9 +514,9 @@ class Workspace extends ChangeNotifier {
   }
 
   /// Whether the Scopes panel draws in the theme's colours rather than the
-  /// standard broadcast set (K-202). Off by default: a scope is read on a
-  /// near-black graticule whatever the chrome, which is the same
-  /// grading-accuracy reasoning that keeps the Viewer surround neutral
+  /// standard broadcast set. Off by default: a scope is read on a near-black
+  /// graticule whatever the chrome, which is the same grading-accuracy
+  /// reasoning that keeps the Viewer surround neutral
   /// (docs/15-DESIGN §8, §2.1). On, because it does look good.
   bool themedScopes = false;
 
@@ -555,8 +554,8 @@ class Workspace extends ChangeNotifier {
   double curvePlotSize = 150;
 
   /// Whether the Viewer's surround takes the theme's own surface rather than
-  /// the neutral grey (K-203). Off by default, and for the same reason the
-  /// scopes toggle is: a grade cannot be judged against a tinted surround
+  /// the neutral grey. Off by default, and for the same reason the scopes
+  /// toggle is: a grade cannot be judged against a tinted surround
   /// (docs/15-DESIGN §2.1/§11). Offered anyway, because a neutral rectangle in
   /// the middle of a themed shell is a thing people want to turn off.
   bool themedViewerSurround = false;
@@ -578,7 +577,7 @@ class Workspace extends ChangeNotifier {
   PerformanceSettings performance = PerformanceSettings();
   InterfaceSettings interface = InterfaceSettings();
 
-  /// Whether Lumit looks for a newer version on launch (K-296).
+  /// Whether Lumit looks for a newer version on launch.
   ///
   /// On by default, and offered on the setup screen as well as in Settings: an
   /// editor that quietly falls years behind is how people end up reporting bugs
@@ -587,7 +586,7 @@ class Workspace extends ChangeNotifier {
   /// anybody a surprise few hundred megabytes.
   bool autoUpdate = true;
 
-  /// Whether the welcome screen opens on launch (K-481).
+  /// Whether the welcome screen opens on launch.
   ///
   /// On by default. Off is for somebody who always starts from the same
   /// project, or simply does not want to be asked: Lumit then opens straight
@@ -599,7 +598,7 @@ class Workspace extends ChangeNotifier {
   /// Zero means never. Kept so six launches in a morning ask GitHub once.
   int lastUpdateCheckMs = 0;
 
-  /// Whether the first-run screen has had its answer (K-246, docs/07 §13.1).
+  /// Whether the first-run screen has had its answer (docs/07 §13.1).
   ///
   /// **True unless [load] finds no settings file.** Only loading can tell a
   /// genuine first run from a `Workspace` built for some other reason — every
@@ -609,9 +608,9 @@ class Workspace extends ChangeNotifier {
   /// they came from after months of work would be absurd.
   bool firstRunDone = true;
 
-  /// Take the Vegas answer, or the After Effects one, from the first-run screen
-  /// (K-246). Both settings move together here and separately in Settings —
-  /// this is the pair the screen offers, not a mode the rest of the code reads.
+  /// Take the Vegas answer, or the After Effects one, from the first-run
+  /// screen. Both settings move together here and separately in Settings — this
+  /// is the pair the screen offers, not a mode the rest of the code reads.
   /// Marks the screen answered, so it is asked exactly once.
   void setEditingStyle({required bool vegas}) {
     interface.retimeOpensToSpeed = vegas;
@@ -628,10 +627,10 @@ class Workspace extends ChangeNotifier {
   }
 
   /// The keymap as the engine last serialised it, stored verbatim and never
-  /// read here (docs/07 §15, K-199). A keymap is machine-local settings and
-  /// this is the machine-local settings file; the *rules* stay in Rust, so what
-  /// sits in this field is an opaque blob the frontend only ferries. Null until
-  /// the user changes a binding, which is what makes the shipped defaults the
+  /// read here (docs/07 §15). A keymap is machine-local settings and this is
+  /// the machine-local settings file; the *rules* stay in Rust, so what sits in
+  /// this field is an opaque blob the frontend only ferries. Null until the
+  /// user changes a binding, which is what makes the shipped defaults the
   /// default rather than a copy of them written out at first launch.
   String? keymapJson;
 
@@ -666,7 +665,7 @@ class Workspace extends ChangeNotifier {
   }
 
   /// The output the user chose to hear Lumit through, by the engine's own id,
-  /// or null to follow whatever the machine plays through (K-586, docs/09 §3.1).
+  /// or null to follow whatever the machine plays through (docs/09 §3.1).
   ///
   /// A sound card is a property of the machine, not of the work, so it lives in
   /// the settings file rather than in a project — and it is stored by id rather
@@ -728,9 +727,9 @@ class Workspace extends ChangeNotifier {
 
   /// Rebuild the theme from the current appearance fields — the single funnel
   /// every Appearance control uses (`Shell::recompose`).
-  /// A theme shown but not saved — the customise window's live preview
-  /// (K-202). It overrides everything while set, and clearing it recomposes
-  /// from the stored selection, so a discarded edit leaves nothing behind.
+  /// A theme shown but not saved — the customise window's live preview. It
+  /// overrides everything while set, and clearing it recomposes from the stored
+  /// selection, so a discarded edit leaves nothing behind.
   LumitTheme? _preview;
 
   void previewTheme(LumitTheme theme) {
@@ -827,7 +826,7 @@ class Workspace extends ChangeNotifier {
   /// same with a number after it. Two themes cannot share a name — the name
   /// *is* the identity, both in the picker and in the workspace file — so
   /// every route that adds one comes through here rather than overwriting
-  /// somebody's work by accident (K-298).
+  /// somebody's work by accident.
   String availableThemeName(String wanted) {
     final base = wanted.trim().isEmpty ? l10n.themeUnnamed : wanted.trim();
     var tried = base;
@@ -837,8 +836,8 @@ class Workspace extends ChangeNotifier {
     return tried;
   }
 
-  /// Copy the theme in use into one of the user's own, and select it (K-298).
-  /// Returns the name it landed under.
+  /// Copy the theme in use into one of the user's own, and select it. Returns
+  /// the name it landed under.
   ///
   /// Works from a built-in scheme as well as from a custom theme: "start from
   /// this one and change a few things" is the same wish either way, and it is
@@ -850,9 +849,9 @@ class Workspace extends ChangeNotifier {
     return name;
   }
 
-  /// Take an imported theme in and select it (K-298). Returns the name it
-  /// landed under, which differs from the file's when a theme already had it —
-  /// an import never overwrites one of the user's own.
+  /// Take an imported theme in and select it. Returns the name it landed under,
+  /// which differs from the file's when a theme already had it — an import
+  /// never overwrites one of the user's own.
   String importCustomTheme(CustomTheme imported) {
     final name = availableThemeName(imported.name);
     saveCustomTheme(imported.renamed(name));
@@ -885,15 +884,15 @@ class Workspace extends ChangeNotifier {
     save();
   }
 
-  /// Turn automatic update checks on or off (K-296). Written straight out: it
-  /// is one boolean, and a setting that did not survive the restart it is about
-  /// would be a poor joke.
+  /// Turn automatic update checks on or off. Written straight out: it is one
+  /// boolean, and a setting that did not survive the restart it is about would
+  /// be a poor joke.
   void setAutoUpdate(bool on) {
     autoUpdate = on;
     settingsChanged();
   }
 
-  /// Turn the welcome screen on or off for the next launch (K-481).
+  /// Turn the welcome screen on or off for the next launch.
   void setShowWelcomeOnLaunch(bool on) {
     showWelcomeOnLaunch = on;
     settingsChanged();
@@ -994,8 +993,8 @@ class Workspace extends ChangeNotifier {
   /// on "the user asked for this arrangement" must not fire on those; and
   /// because re-applying the preset already in force notifies nobody else.
   ///
-  /// The Timeline is the listener (K-728): the Audio arrangement's board draws
-  /// the sound lanes open, which a dock tree cannot say.
+  /// The Timeline is the listener: the Audio arrangement's board draws the
+  /// sound lanes open, which a dock tree cannot say.
   final ValueNotifier<int> presetApplied = ValueNotifier<int>(0);
 
   /// Which shipped preset the arrangement was last set to, for the toolbar's
@@ -1188,11 +1187,11 @@ class Workspace extends ChangeNotifier {
   /// not one of the workspaces on the strip — the inverse of
   /// [switchToWorkspaceSlot], and what Window ▸ Assign shortcut binds.
   ///
-  /// **The chord follows the slot, not the name** (K-574). Slots count the
-  /// presets first and then the user's own in name order, so a workspace
-  /// renamed past one of its neighbours changes slot with it. That is what
-  /// makes `Alt+Shift+7` reach the same *place* on the strip every launch, and
-  /// it is what the dialogue says out loud.
+  /// **The chord follows the slot, not the name**. Slots count the presets
+  /// first and then the user's own in name order, so a workspace renamed past
+  /// one of its neighbours changes slot with it. That is what makes
+  /// `Alt+Shift+7` reach the same *place* on the strip every launch, and it is
+  /// what the dialogue says out loud.
   int? get activeWorkspaceSlot {
     const presets = WorkspacePreset.values;
     if (activePreset case final preset?) return presets.indexOf(preset) + 1;
@@ -1296,7 +1295,7 @@ class Workspace extends ChangeNotifier {
   /// The saved session for the project at [path], or null when none is stored.
   SavedSession? sessionFor(String path) => sessions[path];
 
-  /// Where each floating window was left, keyed by the window's id (K-242).
+  /// Where each floating window was left, keyed by the window's id.
   final Map<String, WindowPlacement> windowPlacements = {};
 
   /// Remember where a window was dragged or resized to. Written straight away
@@ -1398,13 +1397,13 @@ class Workspace extends ChangeNotifier {
     if (j['performance'] is Map<String, dynamic>) {
       performance = PerformanceSettings.fromJson(j['performance']);
     }
-    // **The one-time playback reset** (K-742). Making Every frame the shipped
-    // default (K-670) changed what a machine with *no* settings file gets, and
-    // nothing else: a store written before it says `adaptive` — the old default,
-    // written out whether or not anybody chose it — and keeps saying so for
-    // ever, which is why an upgraded install still opened on Adaptive res.
-    // Version 2 takes the mode back to the default once. A store already at 2
-    // is left alone, so a choice made since is a choice.
+    // **The one-time playback reset**. Making Every frame the shipped default
+    // changed what a machine with *no* settings file gets, and nothing else: a
+    // store written before it says `adaptive` — the old default, written out
+    // whether or not anybody chose it — and keeps saying so for ever, which is
+    // why an upgraded install still opened on Adaptive res. Version 2 takes the
+    // mode back to the default once. A store already at 2 is left alone, so a
+    // choice made since is a choice.
     final version = j['version'];
     if ((version is int ? version : 1) < 2) {
       performance.playback = PerformanceSettings().playback;
@@ -1512,9 +1511,9 @@ class Workspace extends ChangeNotifier {
       final f = storeFile();
       if (!f.existsSync()) {
         // Nothing on file for this machine: that, and only that, is a first
-        // run (K-246). A corrupt file below is *not* — it belongs to somebody
-        // who has used Lumit already, and losing their settings is enough of
-        // an insult without being asked to introduce themselves again.
+        // run. A corrupt file below is *not* — it belongs to somebody who has
+        // used Lumit already, and losing their settings is enough of an insult
+        // without being asked to introduce themselves again.
         firstRunDone = false;
         return;
       }
@@ -1537,8 +1536,8 @@ class Workspace extends ChangeNotifier {
 
   // --- Project thumbnails ---------------------------------------------------
   //
-  // The picture of a project as it looked when it was last saved (K-468), shown
-  // on the welcome screen's recent rows.
+  // The picture of a project as it looked when it was last saved, shown on the
+  // welcome screen's recent rows.
   //
   // **It lives beside the settings file, not inside the `.lum`.** It is this
   // machine's snapshot of the user's own work, rewritten on every save, and a
@@ -1600,12 +1599,12 @@ class Workspace extends ChangeNotifier {
   /// The engine's own picture of [comp] at [frame] as a PNG — the road that
   /// needs no Viewer.
   ///
-  /// K-468 filed the picture by photographing the Viewer widget, because a
-  /// composition frame had no way of reaching Dart as pixels at all. It has one
-  /// now (`CompositionReference.thumbnail`), and this is the seam every save
-  /// road falls back to when there is no Viewer to photograph: a headless save,
-  /// an After Effects conversion, a workspace with the panel closed, a project
-  /// being opened for the first time since it grew a picture.
+  /// The first version filed the picture by photographing the Viewer widget,
+  /// because a composition frame had no way of reaching Dart as pixels at all.
+  /// It has one now (`CompositionReference.thumbnail`), and this is the seam
+  /// every save road falls back to when there is no Viewer to photograph: a
+  /// headless save, an After Effects conversion, a workspace with the panel
+  /// closed, a project being opened for the first time since it grew a picture.
   ///
   /// **A field rather than a function**, so a test can put its own picture here:
   /// no widget test has a graphics adapter to render one on, and the wiring is
@@ -1646,7 +1645,7 @@ class Workspace extends ChangeNotifier {
 }
 
 /// A choice in the theme picker: one of the built-in schemes, or one of the
-/// user's own themes by name (K-202).
+/// user's own themes by name.
 class ThemeChoice {
   final LumitColorScheme? scheme;
   final String? customName;

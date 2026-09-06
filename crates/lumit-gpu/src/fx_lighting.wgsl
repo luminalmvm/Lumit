@@ -1,4 +1,4 @@
-// The lighting pass (docs/06-RENDER-PIPELINE.md, K-361). Mirrors
+// The lighting pass (docs/06-RENDER-PIPELINE.md). Mirrors
 // lumit_core::lighting::shade op-for-op — that module is the oracle and
 // carries the explanation of the maths; this file is its twin, not its
 // documentation.

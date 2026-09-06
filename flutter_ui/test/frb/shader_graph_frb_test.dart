@@ -1,4 +1,4 @@
-// Entering a Custom shader's inner graph (K-642, custom-shader.md §4.2, §8
+// Entering a Custom shader's inner graph (custom-shader.md §4.2, §8
 // item 28): double-click the box, the Graph panel shows the inside with a
 // breadcrumb back; Escape returns; the view you left is the view you return
 // to, held in the session and never in the document.
@@ -128,7 +128,7 @@ void main() {
       expect(p.layer.getEffects().single.shaderGraph(), isNull);
     });
 
-    /// **Ctrl+Space adds inside a shader** (K-673; the owner's "can't add
+    /// **Ctrl+Space adds inside a shader** (the owner's "can't add
     /// options in the custom shader view"): with the inner graph the panel's
     /// face, the console lists the shader vocabulary and picking a row drops
     /// that box — committed as one undo step.
@@ -192,7 +192,7 @@ void main() {
           reason: 'no zoom moved the box: the scroll was the console\'s');
     });
 
-    /// **The inner graph wears the shader tint too** (K-675): every box in
+    /// **The inner graph wears the shader tint too**: every box in
     /// here is shader vocabulary, so every header carries the same wash the
     /// Custom shader box wears outside — one colour, one meaning.
     testWidgets('an inner box\'s header wears the shader tint',
@@ -213,7 +213,7 @@ void main() {
 
     /// A wire let go over empty canvas opens the same console, and the box
     /// lands where the wire was dropped — the road that used to raise the
-    /// inner graph's own popover (K-673 took it).
+    /// inner graph's own popover, which is gone now.
     testWidgets('a wire dropped on empty canvas opens the console',
         (tester) async {
       final p = withShader();

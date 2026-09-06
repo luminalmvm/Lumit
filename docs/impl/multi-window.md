@@ -134,7 +134,7 @@ demanded. Do not build cross-window `Draggable` glue — it fights the framework
 
 ## 4. The Viewer texture across windows (the Lumit-specific risk)
 
-How the zero-copy path hangs together today (K-177, K-183; 17-BRIDGE-CONTRACT
+How the zero-copy path hangs together today (17-BRIDGE-CONTRACT
 §transport): the engine renders into a shared D3D12 texture; Dart passes the
 handle over the `lumit/viewer_texture` channel; the runner's
 `ViewerTextureBridge` (flutter_ui/windows/runner/viewer_texture_bridge.cpp)

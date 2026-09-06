@@ -4,7 +4,7 @@
 // Each test drives the whole surface the way a person does: File ▸ Import ▸
 // After Effects project…, a file chosen, the engine reads it, the project it
 // built becomes the open one, and the report window says what did not come
-// across whole. **Both front doors are here** (K-418): the real
+// across whole. **Both front doors are here**: the real
 // `tools/ae-bridge/fixtures/fixture.aep` through the primary item, and the
 // Bridge bundle folder through the quieter second one. Both fixtures are
 // referenced where they lie rather than copied, so the fixture the Rust tests
@@ -42,7 +42,7 @@ String get _bundle =>
         .path;
 
 /// The real After Effects project the differential test measures the parser
-/// against (K-418), as an absolute path.
+/// against, as an absolute path.
 String get _aep =>
     File('../tools/ae-bridge/fixtures/fixture.aep').absolute.path;
 
@@ -103,8 +103,8 @@ void main() {
       final p = await mount(tester);
       final before = p.state.project;
 
-      // The bundle entry left the File menu (K-536 trail); the capability
-      // stays, driven directly.
+      // The bundle entry left the File menu; the capability stays, driven
+      // directly.
       final ctx = tester.element(find.byType(LumitMenuBarFrb));
       unawaited(
           importAeBundleFrb(ctx, p.state, picker: () async => elsewhere.path));
@@ -120,10 +120,10 @@ void main() {
 
     /// **A file the parser cannot read fails softly, in the calm words.**
     ///
-    /// K-418's honest half: a newer After Effects may store something this
-    /// build has not met, and the answer is a sentence naming the Bridge
-    /// route — never a lost project. The file is named `.aep` and holds
-    /// nothing of the sort, which is the same shape as that failure.
+    /// The honest half of the import promise: a newer After Effects may store
+    /// something this build has not met, and the answer is a sentence naming
+    /// the Bridge route — never a lost project. The file is named `.aep` and
+    /// holds nothing of the sort, which is the same shape as that failure.
     testWidgets('an unreadable .aep says so and the project stands',
         (tester) async {
       final rubbish = File(
@@ -168,7 +168,7 @@ void main() {
               'change in what the mapping does, not in what the panel shows');
 
       // Rows are sentences written on this side from the engine's id and its
-      // facts, not the engine's English handed through (K-303). The first row
+      // facts, not the engine's English handed through. The first row
       // is the one that reads a pair of booleans and picks its phrasing.
       expect(find.text(l10n.aeNestedPreserveRate), findsOneWidget);
       expect(find.textContaining('nested_preserve_ignored'), findsNothing,
@@ -210,7 +210,7 @@ void main() {
       expect(find.text(l10n.aeReportTitle), findsNothing);
     });
 
-    /// **The seamless front door: a real `.aep`, picked and imported (K-418).**
+    /// **The seamless front door: a real `.aep`, picked and imported.**
     ///
     /// Nothing is run inside After Effects and no bundle is involved — the
     /// file the differential test measures the parser against goes in through
@@ -235,7 +235,7 @@ void main() {
       expect(itemNames(p.state),
           containsAll(<String>['Fixture', 'Fixture inner', 'Solids']));
 
-      // 62·52·2·1 until the layer-styles map landed (K-706): the two
+      // 62·52·2·1 until the layer-styles map landed: the two
       // placeholders and the one skipped chunk were the fixture's styles,
       // which now import as real instances with three adjusted rows.
       expect(find.text(l10n.aeSummary(63, 55, 0, 0)), findsOneWidget,

@@ -14,8 +14,8 @@ use lumit_fx_macros::Effect;
     roi = Exact,
     // §2.2: grading premultiplied shifts matte edges.
     premultiplied = false,
-    // K-395: the matte scales the amount, inside the kernel (the owner's
-    // rule for mattes); the generic strength dissolve does not also run.
+    // The matte scales the amount, inside the kernel (the owner's rule for
+    // mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales Amount per pixel: white applies the full Amount, grey a \
@@ -25,7 +25,7 @@ use lumit_fx_macros::Effect;
 pub struct Vibrancy {
     /// Per cent: 0 = neutral (bit-exact identity), higher lifts the
     /// less-saturated pixels more. The slider reaches a heavy 200; typing
-    /// higher pushes further (K-135 open ceiling), floored at 0.
+    /// higher pushes further, with no ceiling, floored at 0.
     #[slider(min = 0.0, max = 200.0, default = 0.0, hard_min = 0.0, unit = Percent)]
     pub amount: f32,
 
@@ -46,7 +46,7 @@ impl Vibrancy {
     /// §2.4). Both render paths read this one method, so the CPU reference and
     /// the WGSL kernel cannot drift apart.
     ///
-    /// Floored at 0 (neutral), open above (K-135): the per-pixel factor
+    /// Floored at 0 (neutral), open above: the per-pixel factor
     /// extrapolates cleanly, so no upper clamp.
     pub fn packed(self) -> (f32, f32) {
         (

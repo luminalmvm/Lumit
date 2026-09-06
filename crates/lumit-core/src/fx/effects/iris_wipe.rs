@@ -32,14 +32,14 @@ pub const IRIS_WIPE_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     label = "Iris wipe",
     version = 1,
     category = Transition,
-    // One `atan2` a pixel — docs/08 §3.47's admission again, recorded by K-399:
-    // the angle IS a function of the pixel and cannot be lifted host-side.
+    // One `atan2` a pixel — docs/08 §3.47's admission again: the angle IS a
+    // function of the pixel and cannot be lifted host-side.
     cost = Cheap,
     roi = Exact,
     premultiplied = true,
     enabled_when = IRIS_WIPE_ENABLED_WHEN,
-    // K-429: the matte scales the amount, inside the kernel (the owner's rule
-    // for mattes); the generic strength dissolve does not also run.
+    // The matte scales the amount, inside the kernel (the owner's rule for
+    // mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales the iris radius per pixel: the polygon opens wide where the \
@@ -48,7 +48,7 @@ pub const IRIS_WIPE_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     ),
 )]
 pub struct IrisWipe {
-    /// Where the iris opens, px@comp (K-260: point parameters are PIXELS). The
+    /// Where the iris opens, px@comp (point parameters are PIXELS). The
     /// schema default is nominal 1080p centre;
     /// [`instantiate_for_raster`](crate::fx::instantiate_for_raster) centres a
     /// fresh instance on the actual comp.

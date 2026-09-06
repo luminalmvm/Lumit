@@ -1,4 +1,4 @@
-//! The seed of **Nova**'s evaluator (K-067): pure content-hash frame keys
+//! The seed of **Nova**'s evaluator: pure content-hash frame keys
 //! per docs/06-RENDER-PIPELINE.md §5.2.
 //!
 //! In plain terms: before rendering a frame, Lumit writes down everything
@@ -44,11 +44,11 @@ pub mod schedule;
 ///   [`feed_layer`]). Under version 1 a hidden parent could be moved without
 ///   renaming its children's frames, so those frames were served stale; every
 ///   version-1 entry has to stop being addressed for the fix to mean anything.
-/// * 3 — anti-aliasing (K-274). Two reasons at once, either sufficient: the key
+/// * 3 — anti-aliasing. Two reasons at once, either sufficient: the key
 ///   now covers the project's sample count, and turning the setting on by
 ///   default changes what every comp renders to. Every version-2 frame was made
 ///   without anti-aliasing, so none of them may be served again.
-/// * 5 — the Lens flare's aperture (K-431). The key now covers a file
+/// * 5 — the Lens flare's aperture. The key now covers a file
 ///   parameter's size and modification time, so an edited .lens or .cube
 ///   renames the frames that read it; and the flare's bake snaps its
 ///   continuous iris dials to a step, which moves the picture very slightly
@@ -83,7 +83,7 @@ pub trait SourceStamper {
     /// still unprobed — an unknown source makes the whole frame unkeyable.
     ///
     /// `native` asks for the source at its own width regardless of the preview
-    /// quality tier: a layer whose flow engages decodes natively (K-331),
+    /// quality tier: a layer whose flow engages decodes natively,
     /// because full-resolution flow cannot be measured on a shrunk decode. The
     /// identity this returns embeds the decode width, and **the width in the
     /// name must be the width the pixels were decoded at** — the plan and this
@@ -94,7 +94,7 @@ pub trait SourceStamper {
 
     /// The source's own frame rate, when known.
     ///
-    /// Only the flow engagement gate needs this (K-331): flow that cannot help
+    /// Only the flow engagement gate needs this: flow that cannot help
     /// renders as plain Nearest, and a key that did not know that would hash
     /// the sub-frame position of a frame which is bit-identical to its
     /// neighbours — re-rendering, on a fast section of a ramp, frames it
@@ -107,7 +107,7 @@ pub trait SourceStamper {
 
     /// The camera `comp` actually renders with at comp time `t`.
     ///
-    /// A frame drawn through a solve-linked Camera layer (K-417) is drawn with a
+    /// A frame drawn through a solve-linked Camera layer is drawn with a
     /// pose the *document does not contain* — it is derived from a camera solve
     /// held outside this crate — so a key made from the stored properties would
     /// name two different pictures the same, and the first one banked would be
@@ -139,7 +139,7 @@ pub fn comp_frame_key(
 }
 
 /// [`comp_frame_key`] with the ancestor chain threaded through, so a nested
-/// comp's own key (K-422) is made with a fresh hasher — the name it has on its
+/// comp's own key is made with a fresh hasher — the name it has on its
 /// own, the one `lumit-render` files its finished texture under — while a comp
 /// that contains itself still stops at the cycle. For an acyclic project the
 /// key this makes for a nested comp is exactly `comp_frame_key` of that comp
@@ -175,7 +175,7 @@ fn feed_comp(
     h.update(&comp.width.to_le_bytes());
     h.update(&comp.height.to_le_bytes());
     h.update(&quality.divisor.to_le_bytes());
-    // The project's anti-aliasing count (K-274). It changes the pixels of every
+    // The project's anti-aliasing count. It changes the pixels of every
     // comp, so it belongs in the name of every frame: without it a frame banked
     // before the setting moved would be handed back after it, and the picture
     // would silently disagree with the setting.
@@ -202,7 +202,7 @@ fn feed_comp(
             h.update(b"flat");
         }
     }
-    // Comp-wide motion blur (docs/06 §4, K-120): the shutter shape is content
+    // Comp-wide motion blur (docs/06 §4): the shutter shape is content
     // for every layer that blurs. Hashed only when the master is on AND at least
     // one layer actually has its motion-blur switch set — so toggling the master
     // (or nudging the shutter) in a comp where nothing blurs changes no pixels
@@ -213,7 +213,7 @@ fn feed_comp(
         feed_f64(h, comp.motion_blur.shutter_phase);
         h.update(&comp.motion_blur.samples.to_le_bytes());
     }
-    // The comp's lights (docs/06, K-361). Hashed once here rather than per
+    // The comp's lights (docs/06). Hashed once here rather than per
     // layer, because a light shades every layer that accepts it — and hashed
     // only when the comp actually has one, so every key made before lighting
     // existed stays valid. A Light layer draws no pixels of its own, so
@@ -247,13 +247,13 @@ fn feed_comp(
         }
     }
     // Draw order is content: iterate the stack as rendered. Layers outside
-    // their span, hidden, or muted by someone else's solo (K-105) contribute
+    // their span, hidden, or muted by someone else's solo contribute
     // nothing — presence is gated, never hashed, so trimming a bar without
     // crossing `t` changes no key, and soloing the only contributing layer
     // (same picture) keeps its cached frames valid.
     let any_solo = lumit_core::model::any_picture_solo(comp);
     for layer in &comp.layers {
-        // An Audio layer (K-435) is sound and nothing else, so it is skipped
+        // An Audio layer is sound and nothing else, so it is skipped
         // BEFORE the switch gate above rather than after it. That order is the
         // whole point: a layer tested for `visible` first would change this key
         // by being hidden or shown, and muting a music track would retire every
@@ -263,7 +263,7 @@ fn feed_comp(
             continue;
         }
         let in_span = t >= layer.in_point.0.to_f64() && t < layer.out_point.0.to_f64();
-        // `out_unwired` sits with the visibility switch on purpose (K-738): a
+        // `out_unwired` sits with the visibility switch on purpose: a
         // layer whose Layer out is unplugged draws nothing, so like a hidden one
         // it is fed to this key not at all - which is what makes unplugging it
         // retire the frames it used to be in.
@@ -280,7 +280,7 @@ fn feed_comp(
         let lt = lumit_core::time::layer_time(t, layer.start_offset.0);
         feed_layer(h, doc, comp, layer, t, lt, quality, stamper, visited)?;
     }
-    // **Live group headers** (docs/impl/group-effects.md §4, K-731). A group
+    // **Live group headers** (docs/impl/group-effects.md §4). A group
     // whose header stack has an enabled instance and whose drawn run is
     // non-empty renders as one wrapped unit, so the key must carry (a) which
     // members the effects reach — a member drifting out of the run changes
@@ -313,7 +313,7 @@ fn feed_comp(
     Some(())
 }
 
-/// Fold one wire into the frame key (K-471 §2.3).
+/// Fold one wire into the frame key.
 ///
 /// Where it comes from and where it goes, tag byte first so two shapes cannot
 /// hash alike, and every port id length-prefixed so `a` into `bc` and `ab` into
@@ -377,14 +377,14 @@ fn feed_edge(h: &mut blake3::Hasher, edge: &lumit_core::graph::Edge) {
 /// identity, version and evaluated parameters, plus the local time for seeded
 /// and marker-driven effects (their pixels depend on time even when parameters
 /// hold). Shared by a layer's own stack and — for an effects-and-masks matte or
-/// depth input (K-142) — a referenced layer's stack, so editing that layer's
+/// depth input — a referenced layer's stack, so editing that layer's
 /// effects invalidates the consumer's cached frames. `lt` is the local time the
 /// effects evaluate at (the referenced layer's own local time when hashing a
 /// referenced layer); `t` is comp time, threaded through only for nested
 /// layer-reference sources. `marker_layer` supplies the §1.4 marker context.
 /// When `allow_after_effects_refs` is true, a Layer parameter whose source mode
 /// (`EffectInstance::layer_source`) is `EffectsAndMasks` also folds the
-/// referenced layer's own stack (K-142); the nested fold passes false, so a
+/// referenced layer's own stack; the nested fold passes false, so a
 /// referenced layer's own layer-refs stay source-only — bounding recursion to
 /// one level and matching the v1 render, where a referenced layer's own
 /// layer-inputs render as passthrough. Emits nothing when the fx switch is off
@@ -394,8 +394,8 @@ fn feed_effect_stack(
     h: &mut blake3::Hasher,
     fx_on: bool,
     effects: &[lumit_core::model::EffectInstance],
-    // `None` for a stack with no layer at all — a group header's (K-731,
-    // docs/impl/group-effects.md §4): no driver graph to fold, and the marker
+    // `None` for a stack with no layer at all — a group header's
+    // (docs/impl/group-effects.md §4): no driver graph to fold, and the marker
     // context is the comp's own, unshifted.
     marker_layer: Option<&lumit_core::model::Layer>,
     comp: &Composition,
@@ -412,12 +412,12 @@ fn feed_effect_stack(
     }
     h.update(b"effects/");
 
-    // **The driver graph** (K-471 §2.3). A wire substitutes a value where a
-    // keyframe would have been read, so the pixels depend on it and the key
-    // must too. The drivers are hashed as the effects are — identity, version
-    // and evaluated parameters, through the very same arms below — which is
-    // what folds Audio level's referenced layer, and with it its audio
-    // fingerprint, into the key for free.
+    // **The driver graph.** A wire substitutes a value where a keyframe would
+    // have been read, so the pixels depend on it and the key must too. The
+    // drivers are hashed as the effects are — identity, version and evaluated
+    // parameters, through the very same arms below — which is what folds Audio
+    // level's referenced layer, and with it its audio fingerprint, into the key
+    // for free.
     //
     // Three things a driver needs that an effect does not:
     //
@@ -464,7 +464,7 @@ fn feed_effect_stack(
     }
 
     // The §1.4 marker context, built lazily (only marker-driven effects read
-    // it) by the same shared constructor resolution uses (K-031), so the key
+    // it) by the same shared constructor resolution uses, so the key
     // hashes exactly the beat times resolution sees.
     let mut mctx: Option<lumit_core::fx::MarkerContext> = None;
     for e in effects.iter().chain(drivers).filter(|e| e.enabled) {
@@ -476,12 +476,12 @@ fn feed_effect_stack(
             // An audio plugin changes no pixel, so it never reaches a frame
             // key in practice — it is here because the match is exhaustive and
             // a silent `_` arm would give the next namespace somebody else's
-            // number (K-700).
+            // number.
             lumit_core::model::EffectNamespace::Clap => 4,
         }]);
         h.update(e.effect.match_name.as_bytes());
         h.update(&e.effect.version.to_le_bytes());
-        // The per-effect temporal opt-out (K-132, docs/impl/temporal-rerender.md
+        // The per-effect temporal opt-out (docs/impl/temporal-rerender.md
         // §6): an effect flagged sample_temporally == false renders at the frame
         // time (not the held/sample time) inside a temporal re-render below a
         // Posterize/accumulation adjustment, so the flag is content. Feed only the
@@ -491,7 +491,7 @@ fn feed_effect_stack(
         if !e.sample_temporally {
             h.update(b"no-temporal-sample/");
         }
-        // **The Custom shader's own text** (K-650, custom-shader.md §2.4). The
+        // **The Custom shader's own text** (custom-shader.md §2.4). The
         // loop below hashes every stored parameter, which covers a shader's
         // derived controls for free; what it does not cover is the shader
         // itself, which lives in `extra` and which this walk has never looked
@@ -561,7 +561,7 @@ fn feed_effect_stack(
                     // Which file is live at this time (the hold-keyed index
                     // selects it); an unset param feeds a distinct 0 marker.
                     // The path string is hashed length-prefixed, and with it
-                    // the file's **size and last-modified time** (K-431) — so
+                    // the file's **size and last-modified time** — so
                     // editing a .lens or a .cube on disk renames every frame
                     // that reads it.
                     //
@@ -592,19 +592,19 @@ fn feed_effect_stack(
                     // shares its original's cache). The mask's own vertices are
                     // already here: `feed_layer` hashes every mask, so editing
                     // the shape renames the frame whether or not an effect
-                    // walks it. And the flattening tolerance is a constant
-                    // (K-408), so the polyline cannot vary a frame's identity
-                    // on its own — which is the whole of "the frame key covers
-                    // it for free". What is left is the choice, and a choice
-                    // that changed the picture without changing the key would
-                    // be a stale frame nobody could explain.
+                    // walks it. And the flattening tolerance is a constant, so
+                    // the polyline cannot vary a frame's identity on its own —
+                    // which is the whole of "the frame key covers it for free".
+                    // What is left is the choice, and a choice that changed the
+                    // picture without changing the key would be a stale frame
+                    // nobody could explain.
                     //
-                    // Asked of **this row**, not of the effect's first one
-                    // (K-546): the Matte key declares two path rows, and its
-                    // garbage mattes are `self_default = false` where the
-                    // line-drawing effects' single row is true — reading the
-                    // first row's answer for the second would key an unset
-                    // hold-out as though it named the layer's first mask.
+                    // Asked of **this row**, not of the effect's first one: the
+                    // Matte key declares two path rows, and its garbage mattes
+                    // are `self_default = false` where the line-drawing
+                    // effects' single row is true — reading the first row's
+                    // answer for the second would key an unset hold-out as
+                    // though it named the layer's first mask.
                     let self_default = lumit_core::fx::BUILTINS
                         .iter()
                         .find(|s| s.match_name == e.effect.match_name)
@@ -612,7 +612,7 @@ fn feed_effect_stack(
                         .is_some_and(|(_, sd)| sd);
                     match lumit_core::mask::mask_index_for_path_param(
                         // A group header owns no masks, so a path row on one
-                        // reads as unset — the documented no-op (K-731).
+                        // reads as unset — the documented no-op.
                         marker_layer.map_or(&[][..], |l| &l.masks[..]),
                         *named,
                         self_default,
@@ -641,7 +641,7 @@ fn feed_effect_stack(
                     // inside that source. An unset or dangling reference
                     // feeds a distinct 0 marker (the effect is a no-op).
                     //
-                    // **This layer** (K-288) feeds its own marker and stops.
+                    // **This layer** feeds its own marker and stops.
                     // The reference names the effect's own input, not a
                     // second render, and that input is already in the key:
                     // this layer's source and the stack above this effect
@@ -680,7 +680,7 @@ fn feed_effect_stack(
                                 feed_f64(h, v);
                             }
                             h.update(&[u8::from(src.switches.three_d)]);
-                            // Layer-input source mode (K-142): None / Masks /
+                            // Layer-input source mode: None / Masks /
                             // Effects and masks. The discriminant is content
                             // (switching modes changes the sampled input), so it
                             // joins the key.
@@ -717,7 +717,7 @@ fn feed_effect_stack(
                 }
                 EffectValue::Curve(points) => {
                     // The shape itself, straightened exactly as the render
-                    // straightens it (K-412) — so two point lists that draw
+                    // straightens it — so two point lists that draw
                     // the same curve key the same frame, and a list a hand
                     // wrote out of order does not key a second one.
                     let curve = lumit_core::fx::CurvePoints::sanitised(points);
@@ -748,7 +748,7 @@ fn feed_effect_stack(
                 // see, so its key gains the layer's local time plus
                 // the §1.4 window it consumes — the same trigger
                 // times, through the same shared context constructor,
-                // that resolution reads (K-031). The window, not the
+                // that resolution reads. The window, not the
                 // whole marker list: a marker edit that cannot change
                 // this frame's envelope leaves its key alone. A
                 // Manual-mode Flash reports no window at all and keeps
@@ -821,9 +821,9 @@ fn feed_layer(
     ] {
         feed_f64(h, v);
     }
-    // The parent chain's inherited placement (K-103 parenting): a parented layer
-    // is drawn inside its ancestors' coordinate space, so every ancestor's
-    // evaluated transform is content for THIS layer's pixels.
+    // The parent chain's inherited placement: a parented layer is drawn inside
+    // its ancestors' coordinate space, so every ancestor's evaluated transform
+    // is content for THIS layer's pixels.
     //
     // **Why it cannot be left to the ancestors' own contributions.** An ancestor
     // that draws is hashed in its own right, so moving a visible parent already
@@ -831,7 +831,7 @@ fn feed_layer(
     // as the renderer draws nothing for it — while its children still follow it.
     // Without this the pixels moved and the name did not, so the children served
     // frames from before the move. A Null is the layer a user hides most readily
-    // (K-206: there is nothing to look at), which makes that the common case
+    // (there is nothing to look at), which makes that the common case
     // rather than a corner.
     //
     // Sampled the way [`lumit_render::build::parent_world_placement`] samples —
@@ -866,7 +866,7 @@ fn feed_layer(
     }
     h.update(&[u8::from(layer.switches.three_d)]);
     h.update(&[blend_tag(layer.blend)]);
-    // Accepts lights (K-361) only matters where there is a light to accept.
+    // Accepts lights only matters where there is a light to accept.
     // Hashed only when the comp has one and the switch is OFF — the default is
     // on, so this is the state that departs from what a pre-lighting key
     // described, and gating it that way keeps every one of those keys valid.
@@ -879,14 +879,14 @@ fn feed_layer(
         h.update(b"collapsed");
     }
 
-    // Per-layer motion blur (docs/06 §4, K-120): the layer's switch is content
+    // Per-layer motion blur (docs/06 §4): the layer's switch is content
     // only while the comp master is on (else the layer renders normally). When
     // it blurs, the pixels are the layer's transform sampled across the open
     // shutter and averaged — so the evaluated sub-frame transforms join the
     // key. Two comp times sharing this frame's instantaneous transform but
     // differing in motion (a same-position/different-velocity frame) smear
     // differently and MUST key apart; hashing only the frame-time transform
-    // would collide them (the K-093 lesson, applied to the shutter samples).
+    // would collide them (the sub-frame lesson at the shutter samples).
     // Hashed only when the layer actually blurs, so every non-blurring key
     // stays valid, and a static blurring layer (constant transform) hashes the
     // same constant samples across its span — no over-invalidation.
@@ -917,7 +917,7 @@ fn feed_layer(
 
     // The effect stack (docs/08): each live effect's identity, version and
     // evaluated parameters are content — the version bump is what retires
-    // cached frames when an effect's maths change (K-016). Hashed only when
+    // cached frames when an effect's maths change. Hashed only when
     // a live stack exists, so every pre-effects key stays valid. A bypassed
     // effect (or an fx-switched-off layer) contributes nothing, exactly as
     // it renders nothing.
@@ -936,7 +936,7 @@ fn feed_layer(
         true,
     )?;
 
-    // The **style stack** (docs/impl/layer-styles.md §1, K-706), immediately
+    // The **style stack** (docs/impl/layer-styles.md §1), immediately
     // after it and through the very same fold: styles are picture, not metadata,
     // so editing one has to retire the cached frames it changed. Emits nothing
     // at all when the list is empty, which is every layer that has none — so
@@ -957,7 +957,7 @@ fn feed_layer(
     )?;
 
     // A temporal effect (echo, docs/08 §3.13) reads the layer's neighbour
-    // source frames, which are content the parameter hash cannot see (K-094):
+    // source frames, which are content the parameter hash cannot see:
     // two comp times sharing the current frame — a held/frozen leading frame —
     // can differ in their neighbours, so their echoes differ. Key the stamped
     // neighbour frames, exactly the ones the render decodes (same window, same
@@ -975,7 +975,7 @@ fn feed_layer(
                 let nlt = lt + f64::from(o) * comp_dt;
                 let nst = layer.source_time_at(nlt);
                 // These neighbours are what the flow field is measured
-                // against, so they follow the same native-decode rule (K-331).
+                // against, so they follow the same native-decode rule.
                 let native = wants_flow(layer, &layer.interpolation);
                 if let Some((identity, frame)) = stamper.stamp(*item, nst, native) {
                     h.update(&o.to_le_bytes());
@@ -987,7 +987,7 @@ fn feed_layer(
     }
 
     // Paint: strokes are stamped into the layer's own pixels before its masks
-    // gate them (K-227), so they are content in exactly the way masks are — a
+    // gate them, so they are content in exactly the way masks are — a
     // brush drag must retire the frames that were named before it.
     //
     // Hashed only when the layer carries paint, unlike masks above, which feed
@@ -1072,7 +1072,7 @@ fn feed_layer(
             h.update(&[u8::from(path.closed)]);
         }
         // The same argument, for the same reason, about the three numbers a
-        // mask can now animate (K-340): a keyed opacity serialises identically
+        // mask can now animate: a keyed opacity serialises identically
         // at every frame, so without its evaluated value here the mask would
         // hold one opacity for the whole of playback. Fed only when the
         // property actually holds keys, so a still mask keeps the exact name it
@@ -1103,9 +1103,9 @@ fn feed_layer(
                 h.update(&[
                     u8::from(matches!(mr.channel, MatteChannel::Luma)),
                     u8::from(mr.inverted),
-                    // The three-way source mode (K-142): switching None / Masks /
+                    // The three-way source mode: switching None / Masks /
                     // Effects and masks must retire stale frames, so the mode
-                    // discriminant joins the key (replacing K-125's bool byte).
+                    // discriminant joins the key (replacing the older bool byte).
                     mr.source.key_byte(),
                 ]);
                 let mlt = lumit_core::time::layer_time(t, src.start_offset.0);
@@ -1127,7 +1127,7 @@ fn feed_layer(
                     feed_f64(h, v);
                 }
                 h.update(&[u8::from(src.switches.three_d)]);
-                // Effects-and-masks matte (K-142): the matte gates by the
+                // Effects-and-masks matte: the matte gates by the
                 // source's *processed* pixels, so the source's own effect stack
                 // is content — fold it into the key at the source's local time,
                 // the same way the source's own draw would. None / Masks leave
@@ -1172,7 +1172,7 @@ fn blend_tag(b: lumit_core::model::BlendMode) -> u8 {
         BlendMode::Lighten => 7,
         BlendMode::Darken => 8,
         BlendMode::Subtract => 9,
-        // The rest of the After Effects set (K-162, T24). Never reuse a tag —
+        // The rest of the After Effects set (T24). Never reuse a tag —
         // the value is part of the frame-cache key.
         BlendMode::ColourBurn => 10,
         BlendMode::LinearBurn => 11,
@@ -1210,12 +1210,12 @@ fn feed_source(
     stamper: &dyn SourceStamper,
     visited: &mut Vec<Uuid>,
 ) -> Option<()> {
-    // The comp's own rate, which is what a flow conform rate is judged against
-    // (K-331). Read from the comp the caller passes rather than carried as a
-    // parameter of its own: one fewer thing two call paths can disagree about.
+    // The comp's own rate, which is what a flow conform rate is judged against.
+    // Read from the comp the caller passes rather than carried as a parameter
+    // of its own: one fewer thing two call paths can disagree about.
     let comp_fps = owner.frame_rate.fps();
     match &layer.kind {
-        // The adjustment switch (K-537) sets the layer's own source aside, so
+        // The adjustment switch sets the layer's own source aside, so
         // the frame's name must not mention it: a footage layer switched on
         // and off again would otherwise be served the frame it rendered before
         // the switch. It names itself exactly as the Adjustment kind below
@@ -1228,7 +1228,7 @@ fn feed_source(
             // the RETIMED source frame, so two different ramps never collide.
             let source_time = layer.source_time_at(lt);
             // Decided before the stamp, because a flow layer decodes natively
-            // and the identity embeds the width it was decoded at (K-331).
+            // and the identity embeds the width it was decoded at.
             let effective = flow_effective_at(
                 &layer.interpolation,
                 layer.retime.as_ref(),
@@ -1244,7 +1244,7 @@ fn feed_source(
             h.update(&frame.to_le_bytes());
             feed_roto(h, layer, frame);
             // A non-Nearest interpolation policy synthesises different
-            // in-between pixels (blend/flow, K-088), so it is content. Nearest
+            // in-between pixels (blend/flow), so it is content. Nearest
             // shows exactly the stamped frame — pixel-identical to no retime —
             // so it hashes nothing and those keys stay shared.
             //
@@ -1254,21 +1254,21 @@ fn feed_source(
             // different morph. `stamp` returns only the integer frame, so
             // without also hashing `source_time` every fraction across an
             // integer span collides onto one key and the cache holds a single
-            // frame per span (K-093 — the "flow only changes once in the
-            // middle" bug). Hashing the exact retimed time keys each fraction
-            // distinctly; identical times reuse, so it never over-renders a
-            // truly repeated position.
+            // frame per span (the "flow only changes once in the middle" bug).
+            // Hashing the exact retimed time keys each fraction distinctly;
+            // identical times reuse, so it never over-renders a truly repeated
+            // position.
             {
-                // Flow that cannot help renders as plain Nearest (K-331), and
+                // Flow that cannot help renders as plain Nearest, and
                 // that must be what the key says: otherwise a flow layer on a
                 // 100%-or-faster stretch would hash its sub-frame position and
                 // re-render frames identical to ones it already holds.
                 let interpolation = effective;
                 if !matches!(interpolation, lumit_core::retime::Interpolation::Nearest) {
                     // The policy and, under Flow, every parameter that shapes
-                    // the synthesised picture — including the conform rate
-                    // (K-095/K-160), which synthesises from different source
-                    // frames at the same source time.
+                    // the synthesised picture — including the conform rate,
+                    // which synthesises from different source frames at the
+                    // same source time.
                     feed_interp(h, interpolation, lt);
                     feed_f64(h, source_time);
                 }
@@ -1307,7 +1307,7 @@ fn feed_source(
             for c in document.fill.0 {
                 h.update(&c.to_le_bytes());
             }
-            // Text on a path (K-607). The mask this names is already fed to
+            // Text on a path. The mask this names is already fed to
             // the key by the layer's own mask walk, so what is left is which
             // mask it is and how far the line has been slid along it — both of
             // which change the picture without changing a single glyph.
@@ -1316,7 +1316,7 @@ fn feed_source(
                 h.update(path.as_bytes());
                 feed_f64(h, document.path_offset.value_at(lt));
             }
-            // Text animators (K-609). What is fed is what actually reaches the
+            // Text animators. What is fed is what actually reaches the
             // picture — each letter's resolved push, turn, size, opacity and
             // tint — rather than the animators' settings: two different
             // selectors that happen to move the same letters the same way draw
@@ -1348,7 +1348,7 @@ fn feed_source(
                 h.update(b"nocomp");
                 return Some(());
             };
-            // The nested comp is named on its own (K-422) and the parent
+            // The nested comp is named on its own and the parent
             // folds in that 16-byte name rather than the nested walk itself.
             // The parent's semantics are unchanged — an edit inside still
             // renames every frame that shows it — but the nested frame now
@@ -1404,13 +1404,13 @@ fn feed_source(
                     feed_roto(h, layer, frame);
                     {
                         // Gated exactly as the Footage case: flow that cannot
-                        // help keys as the Nearest it renders as (K-331). The
+                        // help keys as the Nearest it renders as. The
                         // clip's own retime supplied the speed, since a
                         // Sequence layer's clips each carry their own.
                         let interpolation = seq_interp;
                         if !matches!(interpolation, lumit_core::retime::Interpolation::Nearest) {
                             // The sub-frame position is content under blend/flow
-                            // (see the Footage case above, K-093). The flow
+                            // (see the Footage case above). The flow
                             // params — conform rate included — ride along, read
                             // at the clip's layer-local time like the footage
                             // case.
@@ -1468,11 +1468,11 @@ fn feed_source(
 /// retime Flow option engaging, or a live flow-consuming effect (Fast motion
 /// blur, Datamosh) asking for a field.
 ///
-/// Such a layer decodes at native width whatever the preview tier says (K-331).
+/// Such a layer decodes at native width whatever the preview tier says.
 /// The rule is deliberately "whoever asks", not "the retime option only": flow
 /// measured on a shrunk decode is a *different measurement*, not the same one
 /// smaller, and a preview that quietly measures differently from the export is
-/// the exact fault K-331 set out to remove. Making the rule uniform is also what
+/// the exact fault this rule exists to remove. Making it uniform is also what
 /// lets the two consumers share one cached field — they ask for the same frame
 /// pair at the same resolution, so they get the same answer once.
 fn wants_flow(
@@ -1484,7 +1484,7 @@ fn wants_flow(
 }
 
 /// The policy as it will actually render: `Flow` whose engagement gate declines
-/// at this moment (K-331) is the `Nearest` it degrades to, so it keys like one.
+/// at this moment is the `Nearest` it degrades to, so it keys like one.
 ///
 /// Returns a borrowed policy in the common case (nothing to decide) and the
 /// `Nearest` constant when the gate declines. An unknown source rate keeps the
@@ -1524,10 +1524,10 @@ fn flow_effective_at<'a>(
 /// in one knob are different pictures and must not share a name. `always` is in
 /// here too, because forcing flow on where the gate would have declined it is
 /// the difference between a synthesised frame and a plain nearest one. The
-/// conform rate is read at `lt` and hashed as the value it takes there (K-160),
+/// conform rate is read at `lt` and hashed as the value it takes there,
 /// so an animated rate keys each frame along the ramp distinctly.
 ///
-/// The **Roto brush's per-frame stamp** (K-710, docs/impl/roto.md §5).
+/// The **Roto brush's per-frame stamp** (docs/impl/roto.md §5).
 ///
 /// A frame drawn through a propagated matte is drawn with a picture the document
 /// does not contain — the matte is derived from the strokes and kept outside the
@@ -1557,7 +1557,7 @@ fn feed_roto(h: &mut blake3::Hasher, layer: &lumit_core::model::Layer, frame: u6
     }
 }
 
-/// Callers hash the sub-frame `source_time` *after* this, per K-093.
+/// Callers hash the sub-frame `source_time` *after* this.
 fn feed_interp(h: &mut blake3::Hasher, i: &lumit_core::retime::Interpolation, lt: f64) {
     use lumit_core::retime::Interpolation;
     match i {
@@ -1569,7 +1569,7 @@ fn feed_interp(h: &mut blake3::Hasher, i: &lumit_core::retime::Interpolation, lt
         }
         Interpolation::Flow(p) => {
             // Tag 3 was half-res flow and 4 full-res flow before the params
-            // existed (K-331); both are retired rather than reused, and the
+            // existed; both are retired rather than reused, and the
             // fixed-width block that follows makes a new Flow key strictly
             // longer than either, so no old key can be re-addressed.
             h.update(&[5]);
@@ -1597,7 +1597,7 @@ fn feed_f64(h: &mut blake3::Hasher, v: f64) {
 }
 
 /// A file's size and last-modified time, folded into a key so that editing
-/// the file on disk renames the frames that read it (K-431).
+/// the file on disk renames the frames that read it.
 ///
 /// A path a frame key mentions is a path some loader is about to read, so the
 /// stat is warm and costs microseconds. A file the engine cannot stat — gone,
@@ -1656,7 +1656,7 @@ mod tests {
 
     /// A Retime property from `(layer time, source time)` pairs, straight
     /// between them — the shape every constant-speed or ramped retime has once
-    /// it is keyframes rather than segments (K-249).
+    /// it is keyframes rather than segments.
     fn linear_retime(points: &[(f64, f64)]) -> lumit_core::anim::Property {
         use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};
         Property {
@@ -1751,7 +1751,7 @@ mod tests {
         .unwrap()
     }
 
-    /// **An unplugged Layer out reaches the frame key** (K-738).
+    /// **An unplugged Layer out reaches the frame key.**
     ///
     /// A layer whose output is unwired draws nothing, so every frame it used
     /// to be in is a different picture now and must have a different name.
@@ -1783,7 +1783,7 @@ mod tests {
         );
     }
 
-    /// **The driver graph reaches the frame key** (K-471 §2.3).
+    /// **The driver graph reaches the frame key.**
     ///
     /// A wire substitutes a value where a keyframe would have been read, so a
     /// frame drawn under one is a different picture and must have a different
@@ -2008,7 +2008,7 @@ mod tests {
     }
 
     /// **A cross-layer tap folds the layer it names, and that layer's stack**
-    /// (K-604, node-graph.md §2.3).
+    /// (node-graph.md §2.3).
     ///
     /// This is the one thing the tap could have got wrong quietly. What it
     /// reads off another layer is not that layer's *source* but the points its
@@ -2018,7 +2018,7 @@ mod tests {
     ///
     /// It costs no new term: a driver node is hashed exactly as an effect is,
     /// and its layer-reference row goes through the arm that already folds an
-    /// Effects-and-masks source's whole stack (K-142). Asserted here rather
+    /// Effects-and-masks source's whole stack. Asserted here rather
     /// than assumed, because "for free" is a claim and this is the test of it.
     #[test]
     fn a_cross_layer_points_tap_keys_on_the_layer_it_names() {
@@ -2178,7 +2178,7 @@ mod tests {
         assert_eq!(key(&doc, &a, 1.0), key(&doc, &a, 1.0));
     }
 
-    /// Solo changes which layers render (K-105), so it must change the key —
+    /// Solo changes which layers render, so it must change the key —
     /// the RAM/disk frame cache would otherwise replay the pre-solo picture.
     /// Gated like visibility, never hashed: soloing every contributing layer
     /// draws the same picture, so those keys (and caches) are shared.
@@ -2227,8 +2227,8 @@ mod tests {
     /// nothing, so it contributes nothing to the key — but a layer parented to
     /// it still follows it. Moving a hidden parent therefore moved the picture
     /// while leaving every name alone, and the children served frames from
-    /// before the move. K-206 makes it the common case rather than a corner: a
-    /// Null is the layer a user hides most readily, having nothing to look at.
+    /// before the move. It is the common case rather than a corner: a Null is
+    /// the layer a user hides most readily, having nothing to look at.
     ///
     /// Fails without the parent-chain fold in `feed_layer`.
     #[test]
@@ -2381,7 +2381,7 @@ mod tests {
         }
     }
 
-    /// GEN-3 (K-153): a layer may sit across the comp boundaries — starting
+    /// GEN-3: a layer may sit across the comp boundaries — starting
     /// before comp time 0 or ending past the comp duration. Only the portion
     /// overlapping [0, comp_end) is ever sampled, so the out-of-window head or
     /// tail changes no rendered frame. In/out points gate presence; they never
@@ -2559,7 +2559,7 @@ mod tests {
         // Past the last key the shape holds, so the frames there share a name.
         assert_eq!(key(&doc, &animated, 3.0), key(&doc, &animated, 4.0));
 
-        // The keys live in *layer* time (K-213): the same animation on a layer
+        // The keys live in *layer* time: the same animation on a layer
         // dragged along the timeline is the same picture, one offset later.
         let mut shifted = moving;
         shifted.start_offset = secs(1.0);
@@ -2592,14 +2592,14 @@ mod tests {
         assert_eq!(key(&doc, &plain, 1.0), key(&doc, &plain_flagged, 1.0));
     }
 
-    /// **A plugin op keys like any other op** (K-593, docs/12 §2.1,
+    /// **A plugin op keys like any other op** (docs/12 §2.1,
     /// docs/impl/effect-registry.md §4.4).
     ///
     /// A plugin's parameters are ordinary stored properties — the host owns the
     /// animation (docs/12 §2.2) — so the key that already hashes every effect's
     /// namespace, name, version, ids and values covers a plugin for free. What
     /// this pins is that it really does, in both directions: a control that
-    /// moves renames the frame, a version bump renames the frame (K-016, a
+    /// moves renames the frame, a version bump renames the frame (a
     /// plugin update is new maths under the same identifier), and nothing else
     /// does — because a key that moved for no reason would make every plugin
     /// frame a cache miss.
@@ -2662,8 +2662,8 @@ mod tests {
         assert_eq!(base, key(&doc, &bypassed, 1.0));
     }
 
-    /// The Custom shader's source is content and its origin is not (K-650,
-    /// custom-shader.md §2.4).
+    /// The Custom shader's source is content and its origin is not
+    /// (custom-shader.md §2.4).
     #[test]
     fn the_frame_key_changes_with_the_source_and_not_with_where_it_came_from() {
         use lumit_core::model::EffectInstance;
@@ -2718,8 +2718,8 @@ mod tests {
         assert_ne!(base, key(&doc, &empty, 1.0));
     }
 
-    /// The inner graph is content and its canvas positions are not (K-642,
-    /// custom-shader.md §2.4, §8 item 13): edit a wire and the frame is a
+    /// The inner graph is content and its canvas positions are not
+    /// (custom-shader.md §2.4, §8 item 13): edit a wire and the frame is a
     /// different frame; move a box and the key holds.
     #[test]
     fn the_frame_key_changes_with_the_graph_and_not_with_its_layout() {
@@ -2861,12 +2861,12 @@ mod tests {
         let mut fx_off = with_fx.clone();
         fx_off.layers[0].switches.fx = false;
         assert_eq!(base, key(&doc, &fx_off, 1.0));
-        // A version bump retires the old key (K-016).
+        // A version bump retires the old key.
         let mut v2 = with_fx.clone();
         v2.layers[0].effects[0].effect.version = 2;
         assert_ne!(fx_key, key(&doc, &v2, 1.0));
 
-        // The per-effect temporal opt-out (K-132) is content: turning
+        // The per-effect temporal opt-out is content: turning
         // sample_temporally off changes the frame under a temporal re-render, so
         // it changes the key; the default (on) keys exactly as the flagless case.
         let mut opt_out = with_fx.clone();
@@ -2999,7 +2999,7 @@ mod tests {
         );
     }
 
-    /// **Which mask an effect walks is content** (K-408).
+    /// **Which mask an effect walks is content.**
     ///
     /// The geometry needs no help from this arm — `feed_layer` already hashes
     /// every mask, so editing the shape renames the frame — and the flattening
@@ -3022,8 +3022,8 @@ mod tests {
             Mask::ellipse(40.0, 40.0, 6.0, 6.0),
         ];
         let (first, second) = (layer.masks[0].id, layer.masks[1].id);
-        // No built-in declares a path row yet (K-408 landed the seam ahead of
-        // its consumers), so the value is put on a real effect by hand — which
+        // No built-in declares a path row yet (the seam landed ahead of its
+        // consumers), so the value is put on a real effect by hand — which
         // is exactly what the hash walk sees: it reads the stored value, not
         // the schema.
         let walking = |named: Option<uuid::Uuid>| {
@@ -3056,11 +3056,11 @@ mod tests {
         assert_ne!(gone, on_first);
     }
 
-    /// An Effects-and-masks DoF depth input (K-142) folds the depth layer's own
+    /// An Effects-and-masks DoF depth input folds the depth layer's own
     /// stack into the consumer's key, so grading the depth pass invalidates its
     /// cached frames; None/Masks ignore it. The depth layer is hidden, so its
     /// stack reaches the key only through the depth reference. A project saved
-    /// with K-125's legacy `depth_after_effects` bool keys the same as the
+    /// with the legacy `depth_after_effects` bool keys the same as the
     /// current `depth_source` Choice, so old caches migrate cleanly.
     #[test]
     fn effects_and_masks_depth_input_keys_on_the_source_stack() {
@@ -3093,8 +3093,8 @@ mod tests {
         let blur = || lumit_core::fx::instantiate("blur").unwrap();
 
         // Depth source None (set explicitly — the default is now Effects and
-        // masks, K-142 follow-up): the depth is read source-only, so a blur on
-        // the hidden depth layer leaves the consumer's key untouched.
+        // masks): the depth is read source-only, so a blur on the hidden depth
+        // layer leaves the consumer's key untouched.
         let none_comp = with_source(&comp, LayerInputSource::None);
         let base = key(&doc, &none_comp, 1.0);
         let mut none_blur = none_comp.clone();
@@ -3123,7 +3123,7 @@ mod tests {
         assert_ne!(key(&doc, &masks, 1.0), key(&doc, &flag_only, 1.0));
         assert_ne!(key(&doc, &flag_only, 1.0), key(&doc, &after, 1.0));
 
-        // Legacy K-125 bool on a project with NO depth_source: it reads as
+        // Legacy bool on a project with NO depth_source: it reads as
         // Effects and masks through `layer_source`'s fallback, so the depth
         // layer's stack still folds. Proven by removing the depth stack: with
         // the bool on, that removal changes the key.
@@ -3350,7 +3350,7 @@ mod tests {
         assert_eq!(key(&doc, &comp, 1.0), key(&doc, &comp, 1.0));
     }
 
-    /// **Text on a path is in the name** (K-607). Naming a mask and sliding the
+    /// **Text on a path is in the name**. Naming a mask and sliding the
     /// line along it both change the picture without changing a single glyph,
     /// so a key that ignored them would serve the straight line back for ever.
     #[test]
@@ -3394,7 +3394,7 @@ mod tests {
         );
     }
 
-    /// An Audio layer (K-435) is sound, so it is not in the picture's name at
+    /// An Audio layer is sound, so it is not in the picture's name at
     /// all — and **none of its switches can change that name**. This is the
     /// promise docs/TODO 2.5 asks for: muting a music track, hiding it, soloing
     /// it or shying it must not retire a single rendered frame.
@@ -3461,8 +3461,8 @@ mod tests {
         );
     }
 
-    /// Soloing an Audio layer is a mixer instruction, not a picture one
-    /// (K-435): the layers that draw carry on drawing.
+    /// Soloing an Audio layer is a mixer instruction, not a picture one: the
+    /// layers that draw carry on drawing.
     #[test]
     fn soloing_an_audio_layer_does_not_blank_the_picture() {
         let doc = Document::new();
@@ -3525,7 +3525,7 @@ mod tests {
             comp_with(vec![l])
         };
         let plain = footage(None);
-        // Half speed as the property expresses it (K-249): ten seconds of
+        // Half speed as the property expresses it: ten seconds of
         // layer time reading five of source.
         let half = footage(Some(linear_retime(&[(0.0, 0.0), (10.0, 5.0)])));
         let k = |c: &Composition, t| {
@@ -3544,15 +3544,15 @@ mod tests {
         assert_ne!(k(&half, 2.0), k(&plain, 2.0));
     }
 
-    /// The frame-interpolation policy is content only when it synthesises
-    /// (K-088): Nearest keys identically to no retime at the same source
-    /// frame, while Blend and Flow (and Flow's quality) each key apart.
+    /// The frame-interpolation policy is content only when it synthesises:
+    /// Nearest keys identically to no retime at the same source frame, while
+    /// Blend and Flow (and Flow's quality) each key apart.
     #[test]
     fn interpolation_policy_keys_only_when_it_synthesises() {
         use lumit_core::retime::{FlowParams, Interpolation};
         let doc = Document::new();
         let item = Uuid::now_v7();
-        // The policy sits on the layer beside the map (K-249), so an
+        // The policy sits on the layer beside the map, so an
         // un-retimed layer has one too — which is the point: a comp and a
         // source at different rates ask for in-between frames with no retime
         // in sight.
@@ -3583,7 +3583,7 @@ mod tests {
         assert_ne!(blend, native);
         assert_ne!(native, half);
         // Every §3.1 knob is content: it changes the synthesised picture, so
-        // two frames that differ only in one must not share a name (K-331).
+        // two frames that differ only in one must not share a name.
         let knobs = [
             FlowParams {
                 detail: lumit_core::retime::VectorDetail::Ultra,
@@ -3615,13 +3615,13 @@ mod tests {
         }
     }
 
-    /// K-093: two comp times whose retimed source lands in the *same* integer
-    /// source frame (the stamper returns the same frame index) but at
-    /// different sub-frame positions. Blend and Flow synthesise a different
-    /// in-between at each position, so their keys MUST differ — otherwise the
-    /// cache holds one frame across the whole span and flow "only changes
-    /// once in the middle". Nearest shows the one stamped frame either way,
-    /// so its keys stay shared (the "Nearest keys like no-retime" law holds).
+    /// Two comp times whose retimed source lands in the *same* integer source
+    /// frame (the stamper returns the same frame index) but at different
+    /// sub-frame positions. Blend and Flow synthesise a different in-between at
+    /// each position, so their keys MUST differ — otherwise the cache holds one
+    /// frame across the whole span and flow "only changes once in the middle".
+    /// Nearest shows the one stamped frame either way, so its keys stay shared
+    /// (the "Nearest keys like no-retime" law holds).
     #[test]
     fn synthesising_interpolation_keys_each_sub_frame_position() {
         use lumit_core::retime::{FlowParams, Interpolation};
@@ -3669,11 +3669,10 @@ mod tests {
         );
     }
 
-    /// K-094: an echo (temporal) layer's key hashes the neighbour source
-    /// frames it reads, so it differs from the same layer with the echo
-    /// bypassed, and it moves with time as the neighbours change — the cache
-    /// can't hold one echo frame across a span (the failure mode the flow bug
-    /// showed).
+    /// An echo (temporal) layer's key hashes the neighbour source frames it
+    /// reads, so it differs from the same layer with the echo bypassed, and it
+    /// moves with time as the neighbours change — the cache can't hold one echo
+    /// frame across a span (the failure mode the flow bug showed).
     #[test]
     fn echo_keys_its_neighbour_frames() {
         let doc = Document::new();
@@ -3821,13 +3820,14 @@ mod tests {
         );
     }
 
-    /// K-094 covers Flow motion blur too: its temporal window is {0, 1}, so the
-    /// existing neighbour-key block already hashes the +1 source frame it reads
-    /// (the frame the flow field is measured against). A motion-blur layer's
-    /// key therefore differs from the same layer bypassed, and moves with time
-    /// as the next frame changes — the cache can't hold one motion-blurred
-    /// frame across a span. A regression pinning that the {0, 1} forward window
-    /// is covered with no motion-blur-specific plumbing.
+    /// The neighbour-frame rule covers Flow motion blur too: its temporal
+    /// window is {0, 1}, so the existing neighbour-key block already hashes the
+    /// +1 source frame it reads (the frame the flow field is measured against).
+    /// A motion-blur layer's key therefore differs from the same layer
+    /// bypassed, and moves with time as the next frame changes — the cache
+    /// can't hold one motion-blurred frame across a span. A regression pinning
+    /// that the {0, 1} forward window is covered with no motion-blur-specific
+    /// plumbing.
     #[test]
     fn motion_blur_keys_its_next_frame() {
         let doc = Document::new();
@@ -3856,13 +3856,14 @@ mod tests {
         assert_ne!(k(&layer(true), 1.0), k(&layer(true), 1.5));
     }
 
-    /// Per-layer transform motion blur (docs/06 §4, K-120) feeds the key only
+    /// Per-layer transform motion blur (docs/06 §4) feeds the key only
     /// while the comp master and the layer switch are both on: with the master
     /// off the switch is inert (every pre-motion-blur key holds); with both on,
     /// each shutter setting moves the key, and — because a blurring layer's
     /// pixels are its transform sampled across the shutter — a
     /// same-position/different-velocity frame keys apart where the frame-time
-    /// transform alone would collide (the K-093 lesson at the shutter samples).
+    /// transform alone would collide (the sub-frame lesson at the shutter
+    /// samples).
     #[test]
     fn per_layer_motion_blur_feeds_the_key() {
         use lumit_core::anim::{Animation, Keyframe, SideInterp};
@@ -3928,9 +3929,9 @@ mod tests {
         }
     }
 
-    /// K-095: a flow conform rate synthesises from different source frames at
-    /// the same time, so changing it (including to/from Native) changes the
-    /// key — the cache can't serve a frame flowed at the wrong rate.
+    /// A flow conform rate synthesises from different source frames at the same
+    /// time, so changing it (including to/from Native) changes the key — the
+    /// cache can't serve a frame flowed at the wrong rate.
     #[test]
     fn flow_conform_rate_keys_distinctly() {
         use lumit_core::retime::{FlowParams, Interpolation};

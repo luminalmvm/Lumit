@@ -2,7 +2,7 @@
 #
 # In plain terms: a Flatpak bundles the application together with the exact
 # libraries it needs, so it does not care whether the user runs Ubuntu, Fedora
-# or Arch. Unlike the buried egui-era manifest (K-182), this one does not
+# or Arch. Unlike the buried egui-era manifest, this one does not
 # build anything: CI has already built the Flutter bundle and packed the
 # FFmpeg 8.1 libraries into its lib/ directory (the launcher's rpath covers
 # them), so the manifest just repacks that staged bundle. The GNOME runtime
@@ -13,7 +13,7 @@
 # packaging/flatpak/bundle/ before running flatpak-builder; to build locally on
 # Linux, do the same with a `flutter build linux --release` bundle, with the
 # FFmpeg .so files copied into its lib/ and the share/ files staged as the job
-# does. This .flatpak is the whole Linux release (K-304).
+# does. This .flatpak is the whole Linux release.
 id: io.github.luminalmvm.Lumit
 runtime: org.gnome.Platform
 runtime-version: '49'

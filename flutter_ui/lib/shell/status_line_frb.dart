@@ -35,7 +35,7 @@ import 'cache_confirm_frb.dart';
 /// which cost the idle strip ~12 bridge calls a second for the answer "no".
 final ValueNotifier<int> statusLineExportStarted = ValueNotifier<int>(0);
 
-/// The same signal for **MAKE-PROXY** (K-501), which is background work of
+/// The same signal for **MAKE-PROXY**, which is background work of
 /// exactly the same shape — start, poll, cancel — and so is surfaced in
 /// exactly the same place rather than in a progress bar of the Project
 /// panel's own.
@@ -237,7 +237,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
           _divider(t),
           // The render-time switch, beside the meters for the same reason they
           // are here: it governs the whole session and it costs something to
-          // have on (K-276). It began life as a glyph in the Timeline's column
+          // have on. It began life as a glyph in the Timeline's column
           // header, which is where nobody found it.
           const RenderTimingsToggle(),
           _divider(t),
@@ -323,8 +323,8 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
     );
   }
 
-  /// The running MAKE-PROXY, drawn exactly as the export beside it is
-  /// (K-501): what it is doing, how far along, and a Cancel that works from
+  /// The running MAKE-PROXY, drawn exactly as the export beside it is:
+  /// what it is doing, how far along, and a Cancel that works from
   /// anywhere. It sits **before** the export section, so a long export that
   /// starts later never pushes the shorter job off the strip.
   List<Widget> _proxySection(LumitTheme t) => switch (_proxy) {

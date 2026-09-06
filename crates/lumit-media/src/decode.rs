@@ -35,7 +35,7 @@ pub struct DecodedFrame {
 
 /// A decoded frame as single-channel luma, at the file's own raster size.
 ///
-/// The tracker (K-415) reads nothing but brightness, and asking for RGBA to
+/// The tracker reads nothing but brightness, and asking for RGBA to
 /// throw two thirds of it away costs a full colour conversion and four times the
 /// bytes on every frame of a clip. Every pixel format ffmpeg decodes has a
 /// gray8 conversion, and for the planar YUV that video actually arrives in it is
@@ -114,7 +114,7 @@ fn attach_d3d11va(codec: &AVCodec, ctx: &mut AVCodecContext) -> bool {
     }
 }
 
-/// The macOS sibling is VideoToolbox and lands with the macOS pass (K-033);
+/// The macOS sibling is VideoToolbox and lands with the macOS pass;
 /// until then every other platform decodes in software, on all cores.
 #[cfg(not(windows))]
 fn attach_d3d11va(_codec: &AVCodec, _ctx: &mut AVCodecContext) -> bool {
@@ -185,7 +185,7 @@ impl VideoDecoder {
     }
 
     /// Decode exactly frame `n` as luma at the file's own raster size — the
-    /// tracker's tap (K-415, docs/impl/tracking.md §1: source raster pixels, no
+    /// tracker's tap (docs/impl/tracking.md §1: source raster pixels, no
     /// comp scaling).
     ///
     /// Deliberately unscaled: the tracker measures sub-pixel motion in *source*
@@ -268,7 +268,7 @@ impl VideoDecoder {
                     // layout change, no resampling — because swscale's nv12
                     // and yuv420p RGB conversions interpolate chroma
                     // DIFFERENTLY (measured: 9% of bytes off, up to 161, on
-                    // a test pattern's edges). Preview == export (K-031) and
+                    // a test pattern's edges). Preview == export and
                     // cross-machine determinism need one conversion, so the
                     // hardware path is made to look exactly like software
                     // before the shared RGBA step.

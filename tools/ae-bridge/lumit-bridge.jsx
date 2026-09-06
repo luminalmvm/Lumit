@@ -5,7 +5,7 @@
 // effects, expressions - into a folder of JSON files. It is a courier, not a
 // translator: it records what the scripting DOM said, in AE's own words, with
 // AE's own ids and AE's own float seconds. Every conversion happens later, in
-// Rust, where the regression suite can cover it (K-410).
+// Rust, where the regression suite can cover it.
 //
 // Spec: docs/11-AE-IMPORT.md section 2.2 (the walk). Capture schema:
 // docs/impl/ae-import.md section 2. Traps: section 3 of the same note.
@@ -316,7 +316,7 @@ var LumitBridge = (function () {
             if (valueType === "custom_blob") {
                 // AE's own scripting DOM cannot read CUSTOM_VALUE data (Curves'
                 // point list, Levels' histogram, Hue/Saturation's channel
-                // ranges) - K-410's honesty note. Say so rather than guess.
+                // ranges). Say so rather than guess.
                 throw new Error("CUSTOM_VALUE data is not readable from the scripting DOM");
             }
             var keys = prop.numKeys;

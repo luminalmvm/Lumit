@@ -328,9 +328,9 @@ void main() {
     });
   });
 
-  /// The project's colour shelf, inside the picker where K-448 put it: the
-  /// kept colours apply on a click, the plus keeps the one being edited, and
-  /// the strip is absent altogether when no project is open.
+  /// The project's colour shelf, inside the picker: the kept colours apply on
+  /// a click, the plus keeps the one being edited, and the strip is absent
+  /// altogether when no project is open.
   group('the project colour shelf', () {
     SwatchShelf recording(List<BridgeSwatch> held, List<List<BridgeSwatch>> writes) =>
         SwatchShelf(held, writes.add);

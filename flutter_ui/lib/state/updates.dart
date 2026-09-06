@@ -1,4 +1,4 @@
-// Looking for a newer Lumit, and fetching it (K-296).
+// Looking for a newer Lumit, and fetching it.
 //
 // # In plain terms
 //
@@ -14,7 +14,7 @@
 // shell does both (`shell/update_dialog_frb.dart`), because *when* to ask the
 // user something is a question about the interface, not about updating.
 //
-// **Full installers, never patches (K-296).** The download is the whole
+// **Full installers, never patches.** The download is the whole
 // installer every time. A patch system means publishing a patch per pair of
 // versions, a tool to apply them, and a fallback for when the pair is missing —
 // three new things that can go wrong to save bandwidth GitHub gives us for
@@ -32,11 +32,11 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 
+import 'cache_dir.dart';
 import 'install_site.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
 
-/// The repository releases are published from (K-279: the website reads the
-/// same one).
+/// The repository releases are published from (the website reads the same one).
 const String updatesRepository = 'luminalmvm/lumit';
 
 /// Where the newest release is described.
@@ -76,7 +76,7 @@ enum UpdateStage {
   failed,
 }
 
-/// How a downloaded release gets applied (K-297).
+/// How a downloaded release gets applied.
 enum UpdateDelivery {
   /// Unpacked beside the installation and swapped in on restart — no installer,
   /// no elevation, the way Chrome and VS Code do it. What a per-user
@@ -162,7 +162,9 @@ class UpdateRelease {
         if (raw is! Map) continue;
         final asset = raw.cast<String, dynamic>();
         final name = asset['name'];
-        if (name is String && name.toLowerCase().endsWith(suffix)) {
+        if (name is String &&
+            isPlainFileName(name) &&
+            name.toLowerCase().endsWith(suffix)) {
           chosen = asset;
           break;
         }
@@ -189,14 +191,14 @@ class UpdateRelease {
   }
 }
 
-/// Which attachments suit this machine, best first (K-297).
+/// Which attachments suit this machine, best first.
 ///
 /// A per-user installation prefers the *package* — the plain archive of the
 /// application's own files — because that can be swapped in without an
 /// installer or an administrator. An installation Lumit cannot write beside
 /// gets the installer, and gets it as the **only** candidate.
 ///
-/// **That last word is the whole of K-745.** [replaceable] used to be asked
+/// **That last word is the whole of the fix.** [replaceable] used to be asked
 /// only of the delivery, not of the download, so an older installation in
 /// `Program Files` fetched the archive — correctly, the download worked — and
 /// was then told it would be applied by "installer", which means running the
@@ -250,12 +252,18 @@ UpdateDelivery deliveryFor(
 
 /// `v0.2.0` → `0.2.0`. Anything else is handed back unchanged, so an oddly
 /// named tag is compared rather than silently treated as version zero.
+/// Whether [name] is a bare file name, so a separator, a `..` or a drive
+/// letter in it can't name a file outside the download folder.
+bool isPlainFileName(String name) => _plainFileName.hasMatch(name);
+
+final RegExp _plainFileName = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]*$');
+
 String versionFromTag(String tag) =>
     tag.startsWith('v') ? tag.substring(1) : tag;
 
 /// The version out of a boot-log line — `lumit-bridge 0.1.0` → `0.1.0`.
 ///
-/// The boot log is where this build's version already lives (K-008), so there
+/// The boot log is where this build's version already lives, so there
 /// is no second source of truth to keep in step. Null when the line is not
 /// shaped like that, which is what a test harness with no engine sees.
 String? versionFromBootLine(String line) {
@@ -343,7 +351,7 @@ class UpdateService extends ChangeNotifier {
   /// the shipped application; set outright in tests.
   final String platform;
 
-  /// Where this copy of Lumit lives and whether it may replace itself (K-297).
+  /// Where this copy of Lumit lives and whether it may replace itself.
   final InstallSite site;
 
   final ReleaseFetcher _fetch;
@@ -357,9 +365,9 @@ class UpdateService extends ChangeNotifier {
   /// be tested without waiting a day.
   final int Function() _now;
 
-  /// Where the installer is put. The system temporary folder in the shipped
-  /// application: it is a file the operating system may clean up, and once the
-  /// update is installed there is no reason to keep it.
+  /// Where the installer is put, which in the shipped application is Lumit's
+  /// own cache folder (`cache_dir.dart`), one nobody else on the machine can
+  /// write to.
   final Directory Function() _downloadFolder;
 
   UpdateService({
@@ -412,7 +420,7 @@ class UpdateService extends ChangeNotifier {
   bool get busy =>
       _stage == UpdateStage.checking || _stage == UpdateStage.downloading;
 
-  /// What the Help menu's row reads (K-296).
+  /// What the Help menu's row reads.
   ///
   /// The wording is the state: an update that has been found says so with its
   /// version in the row itself, which is the one place somebody is already
@@ -593,7 +601,7 @@ class UpdateService extends ChangeNotifier {
   bool get installQuits => delivery != UpdateDelivery.flatpakBundle;
 
   /// Apply the update that is waiting, whichever of the three ways this
-  /// installation calls for (K-297).
+  /// installation calls for.
   ///
   /// In place: unpack beside the installation, swap the two folders, start the
   /// new Lumit and leave. By installer: start it and leave, because it needs to
@@ -616,7 +624,7 @@ class UpdateService extends ChangeNotifier {
     if (delivery == UpdateDelivery.installer) _quit();
   }
 
-  /// The installer-free path: unpack, stage, swap, restart (K-297).
+  /// The installer-free path: unpack, stage, swap, restart.
   ///
   /// Every step before the swap is undoable by deleting a folder, and the swap
   /// itself puts the old version back if it cannot finish — so a failure here
@@ -675,7 +683,7 @@ class UpdateService extends ChangeNotifier {
     try {
       if (file.existsSync()) file.deleteSync();
     } catch (_) {
-      // A file we cannot delete is litter in a temporary folder, not a fault
+      // A file we cannot delete is litter in a cache folder, not a fault
       // worth showing anybody.
     }
   }
@@ -695,8 +703,7 @@ int _epochMillis() => DateTime.now().millisecondsSinceEpoch;
 void _exitProcess() => exit(0);
 
 Directory _defaultDownloadFolder() =>
-    Directory('${Directory.systemTemp.path}${Platform.pathSeparator}'
-        'lumit-update');
+    Directory('${lumitCacheDir().path}${Platform.pathSeparator}update');
 
 /// GitHub wants a user agent and answers JSON. Nothing is authenticated: the
 /// releases of a public repository are public, and asking anonymously means
@@ -765,7 +772,7 @@ Future<void> _downloadAsset(
 /// Start the installer, detached, so it outlives the process that started it —
 /// which it has to, since that process is about to end.
 ///
-/// Only reached where the update could *not* be applied in place (K-297): an
+/// Only reached where the update could *not* be applied in place: an
 /// installation somewhere Lumit cannot write, or a macOS disk image.
 Future<void> _launchInstaller(File file, String platform) async {
   switch (platform) {
@@ -786,7 +793,7 @@ Future<void> _launchInstaller(File file, String platform) async {
     default:
       // A Flatpak bundle: revealed, never run. `flatpak install` is the user's
       // to run, and a sandboxed Lumit has no business reaching the host to do
-      // it for them (K-297).
+      // it for them.
       await Process.start('xdg-open', [file.parent.path],
           mode: ProcessStartMode.detached);
   }

@@ -1,4 +1,4 @@
-// The Anchor point (pan behind) tool's two modifiers (K-220): the key points a
+// The Anchor point (pan behind) tool's two modifiers: the key points a
 // held Ctrl snaps the pivot to, and the axis a held Shift locks the drag to.
 //
 // The compensation itself — the Position that cancels the jump — is

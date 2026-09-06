@@ -1,7 +1,7 @@
 # Playback scheduler: epochs, the job pool, and the audio clock
 
-The scheduler is where "the UI thread never evaluates anything" (K-017) and "degrade,
-never crash" (K-018) become code. Its three load-bearing ideas: **epoch cancellation**,
+The scheduler is where "the UI thread never evaluates anything" and "degrade,
+never crash" become code. Its three load-bearing ideas: **epoch cancellation**,
 **bounded everything**, and **the audio clock as the only clock**.
 
 ## 1. Epochs
@@ -66,9 +66,9 @@ on one queue, so they are encoded into one buffer and handed over once.
   paths all call `flush()` before their own submission and wait.
 - **A measured frame gives the batching up.** The profiler fences on the device at each layer
   and each effect, and a fence over a queue that has not been handed over times nothing — so
-  measuring flushes as it goes. That is the cost the stopwatch already declares (K-276:
+  measuring flushes as it goes. That is the cost the stopwatch already declares:
   measuring waits for the card at each layer, which is why it is opt-in and never runs during
-  playback).
+  playback.
 
 The gate is a **count**, not a stopwatch: `GpuContext::submits_so_far` counts every submission,
 and the regression test asserts that an unmeasured frame's count does not grow with its layer
@@ -115,7 +115,7 @@ while playing:
 - **Cached mode**: render at full chosen quality; ring underruns engage the degradation
   ladder in order ([13-PERFORMANCE-RULES.md](../13-PERFORMANCE-RULES.md)) — the governor
   owns that decision, not the loop.
-- **Realtime mode (K-030)**: the loop instead picks resolution tier per frame from a
+- **Realtime mode**: the loop instead picks resolution tier per frame from a
   controller: EWMA of render cost per tier; drop a tier when `cost_ewma > 0.9/fps`, rise
   when `< 0.4/fps` sustained 12 frames (hysteresis — numbers are starting points, tune on
   reference hardware). Tier goes into the cache key as usual, so realtime playback still

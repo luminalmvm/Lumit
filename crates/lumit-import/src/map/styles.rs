@@ -1,4 +1,4 @@
-//! **Layer styles** (docs/impl/layer-styles.md §7, K-706): After Effects'
+//! **Layer styles** (docs/impl/layer-styles.md §7): After Effects'
 //! `ADBE Layer Styles` group onto [`Layer::styles`](lumit_core::model::Layer).
 //!
 //! # In plain terms
@@ -40,7 +40,7 @@
 //!
 //! **A style's blend mode is honoured on the interiors only.** The interior
 //! styles paint *on* the layer's own pixels, which is exactly what the injected
-//! Blend row does (K-425). The two outer styles composite *underneath*, where a
+//! Blend row does. The two outer styles composite *underneath*, where a
 //! Screen or an Overlay has no meaning on this seam, so those keep Normal and
 //! the report says so for anything After Effects had that is not Normal or
 //! Multiply.
@@ -486,7 +486,7 @@ fn noise(fx: &mut Fx<'_>, conv: &mut Conv<'_>, ae_id: &str) {
     }
 }
 
-/// An **interior** style's blend mode onto the injected Blend row (K-425).
+/// An **interior** style's blend mode onto the injected Blend row.
 fn interior_blend(fx: &mut Fx<'_>, ae_id: &str) {
     if let Some(mode) = fx.still(ae_id).and_then(|v| blend_mode(v.round() as i64)) {
         let index = BlendMode::ALL.iter().position(|b| *b == mode).unwrap_or(0);

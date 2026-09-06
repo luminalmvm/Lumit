@@ -48,7 +48,7 @@ internals in a debugger is unpleasant; the tests are how this project is worked 
 | Anything in the bridge crate | `cargo build -p lumit_bridge` | `target/debug/lumit_bridge.{dll,so,dylib}`, which `flutter_ui/test/frb/` loads (content-hash checked, stale = loud failure) |
 
 Codegen versions are pinned: `flutter_rust_bridge` 2.12.0 exactly, Flutter 3.47.1 in
-CI, Rust via `rust-toolchain.toml` (1.97.1). All three OSes link FFmpeg n8.1 (K-736; macOS has no Homebrew route to it yet).
+CI, Rust via `rust-toolchain.toml` (1.97.1). All three OSes link FFmpeg n8.1 (macOS has no Homebrew route to it yet).
 
 ## CI: the merge gate
 
@@ -75,7 +75,7 @@ does not compile, by policy.
 Push a `v*` tag. `release.yml` builds three artefact sets in parallel:
 
 - **Windows** — Inno Setup `.exe` (per-user install under `{localappdata}`, no UAC,
-  self-update model K-297) plus a plain `.zip` for the in-place updater. Unsigned.
+  self-update model) plus a plain `.zip` for the in-place updater. Unsigned.
 - **Linux** — one single-file `.flatpak` (GNOME 49 runtime, FFmpeg bundled,
   `--filesystem=host` so footage anywhere is readable). The only Linux artefact.
 - **macOS** — `.dmg` + `.zip`. Developer ID signed and notarised when the secrets
@@ -108,7 +108,7 @@ Rules:
 - Never hand-edit `app_<locale>.arb` files other than `app_en.arb` — the ingest tool
   writes them and the next run overwrites a hand edit. Missing translations fall back
   to English. List new keys in the commit message and pull request, so the translation
-  page is not left a release behind (K-653).
+  page is not left a release behind.
 
 ## Packaging and the websites
 
@@ -123,7 +123,7 @@ Rules:
 
 Utility scripts: `scripts/win-dev-env.ps1` (FFmpeg + LLVM env for Windows),
 `scripts/gen-icons.py` (regenerates committed icons from brand SVGs),
-`scripts/check-icon.py` (rejects icon settings that crash actool, K-312),
+`scripts/check-icon.py` (rejects icon settings that crash actool),
 `scripts/discord-release.mjs` (release announcements).
 
 ## Traps

@@ -2,7 +2,7 @@
 
 The After Effects half of AE import: a script that walks the open project and writes a
 **bundle folder** of JSON. It converts nothing — AE's ids, AE's float seconds, AE's match
-names, recorded verbatim (K-410). All the translating happens later, in Rust.
+names, recorded verbatim. All the translating happens later, in Rust.
 
 ## Export a project
 

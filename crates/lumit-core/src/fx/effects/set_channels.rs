@@ -9,7 +9,7 @@
 //!
 //! **The Source row is this effect's own layer input**, on the ordinary
 //! auxiliary-layer carriage beside Light wrap's Background and Texturize's
-//! Texture (K-429, docs/impl/layer-input.md). It is not a matte: a matte answers
+//! Texture (docs/impl/layer-input.md). It is not a matte: a matte answers
 //! "how much of me happens here" and this row answers "where do these numbers
 //! come from", so the universal Matte row (§2.6) stays beside it and does the
 //! usual strength dissolve — which is what "reassign the channels, but only over
@@ -79,7 +79,7 @@ pub struct SetChannels {
     /// The other picture the four `Source …` picks read. Unset until the owner
     /// names one, and then every `Source …` pick reads **zero**: a picture
     /// nobody has supplied contributes nothing, which is the only reading that
-    /// does not invent one. No `self_default` (K-288): this layer is already on
+    /// does not invent one. No `self_default`: this layer is already on
     /// every dropdown, under its own five names.
     #[layer(label = "Source", self_default = false)]
     pub source: bool,

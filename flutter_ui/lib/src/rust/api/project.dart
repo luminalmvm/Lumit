@@ -45,11 +45,11 @@ class BridgeHistory {
           canRedo == other.canRedo;
 }
 
-/// One row of the History list (K-688): what the step is called, and whether it
+/// One row of the History list: what the step is called, and whether it
 /// has been undone.
 ///
 /// The name is the engine's English (`Op::name`), translated on arrival like
-/// every other engine word (K-303) — an undone row is still on the list, greyed,
+/// every other engine word — an undone row is still on the list, greyed,
 /// until a fresh commit clears the forward history.
 class BridgeHistoryEntry {
   final String name;
@@ -72,7 +72,7 @@ class BridgeHistoryEntry {
           undone == other.undone;
 }
 
-/// One colour on the project's shelf (K-448): four 0–1 channels and an
+/// One colour on the project's shelf: four 0–1 channels and an
 /// optional name. Empty `name` means unnamed, which is the ordinary case — a
 /// shelf is read by eye.
 class BridgeSwatch {
@@ -115,7 +115,7 @@ class ProjectReference {
 
   /// How hard the renderer works at the edges of transformed layers, as the
   /// number of coverage samples per pixel: 1, 2, 4 or 8, where 1 is off
-  /// (K-274, docs/impl/anti-aliasing.md).
+  /// (docs/impl/anti-aliasing.md).
   ///
   /// The project's own setting, exactly as stored — **what the current
   /// machine can actually draw is a separate question**, answered by
@@ -197,15 +197,15 @@ class ProjectReference {
       );
 
   /// Whether a named colour space can actually be delivered right now — what
-  /// the export dialogue's colour dropdown enables a row on (K-485's
+  /// the export dialogue's colour dropdown enables a row on (the
   /// disabled-not-hidden rule), and the question the export itself refuses on.
   ///
   /// `false` for a config that is missing or refused and for a name it does
-  /// not have, which is the half of K-490's asymmetry that says no: a preview
-  /// degrades to the built-in transform, a delivery does not. The built-in
-  /// space names are not asked about here — they are always deliverable, and
-  /// `BridgeFormatCaps::colour_spaces` is what decides whether the *format*
-  /// can state one.
+  /// not have, which is the half of the preview/delivery asymmetry that says
+  /// no: a preview degrades to the built-in transform, a delivery does not.
+  /// The built-in space names are not asked about here — they are always
+  /// deliverable, and `BridgeFormatCaps::colour_spaces` is what decides
+  /// whether the *format* can state one.
   bool canDeliverColourSpace({required String name}) => BridgeLib.instance.api
       .crateApiProjectProjectReferenceCanDeliverColourSpace(
           that: this, name: name);
@@ -232,7 +232,7 @@ class ProjectReference {
   ///
   /// **Not for a rebuild path.** It reads the config file to see whether it
   /// has changed; the frontend asks on a document change and holds the
-  /// answer, which is what the bridge-call budget test enforces (K-183).
+  /// answer, which is what the bridge-call budget test enforces.
   BridgeColourSummary colourSummary() =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceColourSummary(
         that: this,
@@ -256,7 +256,7 @@ class ProjectReference {
         that: this,
       );
 
-  /// The History list (K-688): every step still applied, oldest first, then
+  /// The History list: every step still applied, oldest first, then
   /// every step that has been undone, in the order redoing would put them
   /// back. [`Self::applied_steps`] says where the two halves meet.
   List<BridgeHistoryEntry> historyEntries() =>
@@ -277,10 +277,10 @@ class ProjectReference {
   /// the panel root, matching the egui frontend exactly.
   ///
   /// The bare file name becomes the relative path; saving rebases it against the
-  /// project folder (K-173).
+  /// project folder.
   ///
-  /// **A still that has numbered neighbours imports as one image sequence**
-  /// (K-539), not as one item per file: picking `frames0001.png` out of a
+  /// **A still that has numbered neighbours imports as one image sequence**,
+  /// not as one item per file: picking `frames0001.png` out of a
   /// folder of two thousand brings in the whole run, named for its span and
   /// pointed at its first file. Two guards keep that from surprising anyone —
   /// only still-image formats are considered at all (a folder of numbered mp4s
@@ -301,7 +301,7 @@ class ProjectReference {
       );
 
   /// Take the document to the point where exactly `applied` steps have been
-  /// applied — what clicking a row of the History list does (K-688).
+  /// applied — what clicking a row of the History list does.
   ///
   /// Undo and redo in a loop, so a jump reaches only states the keyboard
   /// could; a number past either end stops at that end rather than failing.
@@ -329,7 +329,7 @@ class ProjectReference {
           that: this, name: name, settings: settings);
 
   /// Add a folder, as one undo step — the Project panel's bottom-bar Folder
-  /// button (K-451, docs/07 §3.1).
+  /// button (docs/07 §3.1).
   ///
   /// Both decisions are the engine's ([`lumit_core::ops::new_folder_ops`]):
   /// a blank name becomes the next unused "Folder N", counted past the names
@@ -359,7 +359,7 @@ class ProjectReference {
         that: this,
       );
 
-  /// The project's colour shelf, in the order the colours were kept (K-448).
+  /// The project's colour shelf, in the order the colours were kept.
   ///
   /// Empty for a project nobody has kept a colour in. The picker reads this
   /// when it opens — a shelf is a handful of colours, so there is nothing to
@@ -391,8 +391,8 @@ class ProjectReference {
   /// (docs/13 §2.1) asks for a stress-document save to be non-blocking, and an
   /// async frb call is that for free.
   ///
-  /// Media paths are rebased against the destination directory before writing
-  /// (K-173), so a project saved somewhere new keeps relative links that work.
+  /// Media paths are rebased against the destination directory before writing,
+  /// so a project saved somewhere new keeps relative links that work.
   /// A successful save clears the crash journal: the journal covers work
   /// *between* saves, so once the document is on disk it is redundant.
   Future<String> save({required String path}) => BridgeLib.instance.api
@@ -405,7 +405,7 @@ class ProjectReference {
   /// An ordinary op, so it is undoable, journalled and saved in the `.lum`,
   /// which is the point of it living in the document — it changes what the
   /// comp looks like, so it must travel with the file and match on another
-  /// machine (K-274).
+  /// machine.
   void setAntiAliasing({required int samples}) =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceSetAntiAliasing(
           that: this, samples: samples);
@@ -429,9 +429,9 @@ class ProjectReference {
   ///
   /// An ordinary op, so it is undoable, journalled, and travels in the `.lum`
   /// — colour management changes what a comp looks like, so it is the
-  /// project's property and not the machine's (K-490). The path is stored as
+  /// project's property and not the machine's. The path is stored as
   /// a `MediaRef` for the same reason footage is: the relative path is what a
-  /// saved project carries, the absolute one is never serialised (K-173), and
+  /// saved project carries, the absolute one is never serialised, and
   /// a config that moved relinks by fingerprint like any other file.
   void setColourConfig({String? path}) => BridgeLib.instance.api
       .crateApiProjectProjectReferenceSetColourConfig(that: this, path: path);
@@ -468,7 +468,7 @@ class ProjectReference {
       );
 
   /// How the interface was arranged when this project was last saved, as the
-  /// JSON the frontend itself wrote (K-245), or `None` for a project that has
+  /// JSON the frontend itself wrote, or `None` for a project that has
   /// never carried one.
   ///
   /// The engine never looks inside it. It is the frontend's own record,
@@ -483,7 +483,7 @@ class ProjectReference {
         that: this,
       );
 
-  /// The project-wide *use proxies* master switch (K-501).
+  /// The project-wide *use proxies* master switch.
   ///
   /// On — the default, and what every project written before proxies existed
   /// opens as — means each item's own tick decides. Off reads the originals

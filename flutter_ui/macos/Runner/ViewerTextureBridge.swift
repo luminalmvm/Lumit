@@ -3,7 +3,7 @@ import FlutterMacOS
 import Foundation
 import IOSurface
 
-// The macOS half of the zero-copy Viewer (K-195) — the sibling of
+// The macOS half of the zero-copy Viewer — the sibling of
 // `windows/runner/viewer_texture_bridge.cpp` and
 // `linux/runner/viewer_texture_bridge.cc`, on the same 'lumit/viewer_texture'
 // method channel with the same `register` / `frameReady` / `unregister` methods.

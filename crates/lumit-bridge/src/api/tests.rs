@@ -344,7 +344,7 @@ fn relinking_one_clip_rewrites_the_prefix_for_every_other_lost_clip() {
     );
 }
 
-/// **Picking any frame of a moved run relinks the run** (K-539), and takes the
+/// **Picking any frame of a moved run relinks the run**, and takes the
 /// ordinary clips beside it along in the same sweep.
 ///
 /// The failure this pins is quiet: the item points at frame 1, the user picks
@@ -535,7 +535,7 @@ fn a_footage_item_pointing_at_nothing_reports_missing() {
 
     let status = footage.get_status().expect("status");
     // The same answer in every build: whether a file is on disk is a question
-    // for the filesystem, not for the decoder (K-273). Before that, a
+    // for the filesystem, not for the decoder. Before that, a
     // media-less build called this path Ready.
     assert!(matches!(status, LumitMediaStatus::Missing));
 }
@@ -604,7 +604,7 @@ fn a_work_area_is_clamped_to_the_composition() {
     assert_eq!(comp.frame_at_time(still.in_point).expect("frame"), 0);
 }
 
-/// **A folder of numbered stills is one item, not two thousand** (K-539).
+/// **A folder of numbered stills is one item, not two thousand**.
 ///
 /// The front door's whole promise: pick any file of a run and the run comes in,
 /// named for its span, pointed at its first frame — and picking the rest of the
@@ -655,7 +655,7 @@ fn a_run_of_numbered_stills_imports_once_whichever_file_is_picked() {
 }
 
 /// A numbered file with no numbered neighbours is a still, and a folder of
-/// numbered *clips* is a folder of clips — neither becomes a sequence (K-539).
+/// numbered *clips* is a folder of clips — neither becomes a sequence.
 #[test]
 fn a_lone_still_and_a_run_of_clips_import_as_they_always_did() {
     let dir = tempfile::tempdir().expect("temp dir");
@@ -726,7 +726,7 @@ fn import_and_new_composition_land_in_the_item_tree() {
     assert_eq!(comp.get_size().expect("size").width, 1920);
 }
 
-/// The settings block carries the whole of the dialog's drawing (K-469): the
+/// The settings block carries the whole of the dialog's drawing: the
 /// background the Background row sets and the shutter the Motion blur section
 /// sets, applied with everything else as **one** undo step.
 ///
@@ -812,7 +812,7 @@ fn composition_settings_round_trip_including_a_drop_frame_rate() {
     assert_eq!(comp.duration_frames().expect("frames"), 239, "8 s at 29.97");
 }
 
-/// **The frame-rate regression (K-180).** Changing only the rate must change only
+/// **The frame-rate regression.** Changing only the rate must change only
 /// the rate: the comp keeps its real length, and a layer keeps the seconds it
 /// occupies, so nothing plays faster or slower. Before this, the dialog read the
 /// duration as a frame count and wrote the same count back at the new rate, which
@@ -1312,7 +1312,7 @@ fn a_shader_graph_commits_detaches_one_way_and_undoes_whole() {
 /// instance already carried. The row came out blank and the write was refused.
 ///
 /// Depth of field is the case that forced this: an instance saved before the
-/// aperture folded in (K-313) could not reach Blades, Roundness, Rotation or
+/// aperture folded in could not reach Blades, Roundness, Rotation or
 /// Exposure — which is the entire feature.
 #[test]
 fn an_old_instance_reaches_a_parameter_its_schema_grew_later() {
@@ -1468,8 +1468,7 @@ fn writing_the_wrong_kind_to_a_parameter_is_refused() {
     ));
 }
 
-/// **A hard range is the engine's to keep, not the panel's** (docs/08 §1.2,
-/// K-620).
+/// **A hard range is the engine's to keep, not the panel's** (docs/08 §1.2).
 ///
 /// The bounds used to cross the seam as advice and nothing more: every control
 /// clamped its own reading, and every path that did not — a keyframe dragged in
@@ -1564,7 +1563,7 @@ fn a_value_written_past_a_parameters_hard_range_is_clamped_to_it() {
         "and the high key came down to the ceiling"
     );
 
-    // **A one-sided range stays one-sided** (K-090). Glow's Threshold clamps at
+    // **A one-sided range stays one-sided**. Glow's Threshold clamps at
     // nought below and runs unbounded above — HDR values really do glow harder —
     // so the open end must not acquire a ceiling from the closed one.
     target.add_effect("glow".into()).expect("glow added");
@@ -1647,7 +1646,7 @@ fn a_keyframed_value_the_engine_could_not_evaluate_is_refused() {
 }
 
 /// The Add-effect menu's source list. It carries the label and the category keys
-/// as well as the match name, because the menu groups by category (K-090) and
+/// as well as the match name, because the menu groups by category and
 /// draws the label, and a second call to find those out would be wasted.
 #[test]
 fn list_effects_names_the_builtins_with_their_labels_and_categories() {
@@ -1974,7 +1973,7 @@ fn list_parameters_of_an_unknown_effect_is_empty() {
 #[test]
 fn every_builtin_lists_its_parameters() {
     for info in crate::api::effect::list_effects() {
-        // A discovered plugin is in this listing too (K-594) and its rows are
+        // A discovered plugin is in this listing too and its rows are
         // its own; this sweep is a statement about *Lumit's* declarations.
         if info.namespace != crate::api::effect::NAMESPACE_BUILTIN {
             continue;
@@ -1993,10 +1992,10 @@ fn every_builtin_lists_its_parameters() {
 /// The twirls and greying rules cross too, and every rule still names rows the
 /// panel will actually be drawing.
 ///
-/// `EffectSchema::groups` existed in the core schema from K-145 but never
-/// crossed the bridge, so Shake and Matte key declared twirls the panel could
-/// not know about and drew flat. This is the sweep that keeps the layout side
-/// honest now that something depends on it.
+/// `EffectSchema::groups` existed in the core schema but never crossed the
+/// bridge, so Shake and Matte key declared twirls the panel could not know
+/// about and drew flat. This is the sweep that keeps the layout side honest
+/// now that something depends on it.
 #[test]
 fn every_builtin_lists_its_layout() {
     for info in crate::api::effect::list_effects() {
@@ -2034,7 +2033,7 @@ fn every_builtin_lists_its_layout() {
 
 /// Depth of field is what the greying crossing exists for, so it is what pins
 /// it: the folded twirls and the rules that grey a row arrive on the far side
-/// intact (K-313).
+/// intact.
 #[test]
 fn dofs_twirls_and_greying_rules_cross_the_bridge() {
     use crate::api::effect::{BridgeEnabledCond, BridgeParamKind};
@@ -2088,7 +2087,7 @@ fn dofs_twirls_and_greying_rules_cross_the_bridge() {
 
 /// A closed range and a curve each cross as **their own kind**, because each
 /// draws a control no arrangement of existing rows draws — a track and thumb,
-/// and the unit square (K-412, K-414, docs/17).
+/// and the unit square (docs/17).
 ///
 /// The Slider's *value* is still an ordinary Float, which is the whole point of
 /// the arrangement: the row keeps keyframes, the graph editor and the
@@ -2203,7 +2202,7 @@ fn setting_one_property_leaves_the_others_alone_and_undoes_alone() {
     );
 }
 
-/// **Separate axes, and back again, is one undo step each way** (K-571).
+/// **Separate axes, and back again, is one undo step each way**.
 ///
 /// Separating merges nothing — the axes are already stored apart — so it is a
 /// single mode op. Recombining owes the pair a keyframe union, and that union
@@ -2309,8 +2308,8 @@ fn volume_round_trips_and_a_solid_reports_no_audio() {
     );
 }
 
-/// **Pan and the master fader round-trip like every other value** (K-691,
-/// K-694), and the fade commands write real keys on the Volume (K-695).
+/// **Pan and the master fader round-trip like every other value**, and the
+/// fade commands write real keys on the Volume.
 #[test]
 fn pan_the_master_fader_and_the_fade_commands_round_trip() {
     use crate::api::effect::BridgeScalar;
@@ -2410,7 +2409,7 @@ fn a_precomp_layer_over_footage_that_sings_says_it_has_audio() {
 }
 
 /// **Detaching audio changes where the sound is edited, never what it is**
-/// (K-701, owner). The sibling holds the same source over the same span with
+/// (owner). The sibling holds the same source over the same span with
 /// the same levels, and the original goes quiet — so the mixer's own job list,
 /// which is what decides every sample, comes out the same as it was but for
 /// which row the sound is filed under. One undo puts the pair back.
@@ -2487,7 +2486,7 @@ fn detaching_audio_leaves_the_comp_sounding_exactly_as_it_did() {
     assert!(rows[0].get_switches().expect("switches").audible);
     assert!(audible_jobs(&project, &outer) == before);
 
-    // **Somebody else's solo does not reach the sibling** (K-719). Detaching
+    // **Somebody else's solo does not reach the sibling**. Detaching
     // clones the row, solo and all; a row that was not being heard before the
     // detach must not start being heard because of it, or the command changes
     // the mix it promises to leave alone.
@@ -2528,8 +2527,8 @@ fn detaching_audio_from_something_silent_is_refused() {
     );
 }
 
-/// **A layer born into a comp that is showing one row wears solo too** (K-719,
-/// owner). Adding a solid while something is soloed used to leave an invisible
+/// **A layer born into a comp that is showing one row wears solo too**
+/// (owner). Adding a solid while something is soloed used to leave an invisible
 /// layer behind, which reads as the command having done nothing at all.
 #[test]
 fn a_layer_added_under_a_solo_arrives_soloed() {
@@ -2576,7 +2575,7 @@ fn a_layer_added_under_a_solo_arrives_soloed() {
     assert!(!null.get_switches().expect("switches").solo);
 }
 
-/// **Pre-compose asks the question of the comp it leaves behind** (K-719): a
+/// **Pre-compose asks the question of the comp it leaves behind**: a
 /// solo that stays out here hides the new Precomp layer unless it is soloed
 /// too, and a solo that moves *into* the new comp leaves nothing out here to
 /// isolate against.
@@ -2682,7 +2681,7 @@ fn wav(rate: u32, samples: &[i16]) -> Vec<u8> {
     wav
 }
 
-/// **The Audio layer (K-435).** The sound of a clip, added as its own layer:
+/// **The Audio layer.** The sound of a clip, added as its own layer:
 /// the same footage source, no picture, one undo step.
 ///
 /// The layer reads as its own kind across the seam so the Timeline can draw it
@@ -2850,7 +2849,7 @@ fn every_layer_kind_adds_and_undoes_as_one_step() {
             BridgeLayerKind::Adjustment => comp.add_adjustment_layer(),
             BridgeLayerKind::NullLayer => comp.add_null_layer(),
             BridgeLayerKind::Sequence => comp.add_sequence_layer(),
-            // The area kind (K-360) — the one with a size, and so the one
+            // The area kind — the one with a size, and so the one
             // worth checking reaches the document intact.
             BridgeLayerKind::Light => comp.add_light_layer(2),
             other => panic!("{other:?} has no Layer-menu entry"),
@@ -2875,7 +2874,7 @@ fn every_layer_kind_adds_and_undoes_as_one_step() {
 }
 
 /// `has_picture` is what fills the matte cell and every layer-valued effect
-/// parameter (K-194), so a kind with no pixels must answer false or the user is
+/// parameter, so a kind with no pixels must answer false or the user is
 /// offered a matte source that silently mattes nothing. A Camera has always
 /// answered false; a Null has to as well — it is the same "no pixels at all"
 /// case, and the catch-all arm used to hand it a picture it does not have.
@@ -2899,7 +2898,7 @@ fn the_pixel_less_kinds_report_no_picture() {
     assert!(adjustment.has_picture().expect("has_picture"));
 }
 
-/// **An effect on a Null keeps its values, animation and all** (K-274).
+/// **An effect on a Null keeps its values, animation and all**.
 ///
 /// A Null draws nothing, so an image effect on one changes no picture — which
 /// is why the drop is *labelled inert* rather than refused. The parameters are
@@ -2956,7 +2955,7 @@ fn an_effect_on_a_null_layer_keeps_its_animated_value() {
     );
 }
 
-/// **A copied layer arrives whole, and lands where the playhead is** (K-275).
+/// **A copied layer arrives whole, and lands where the playhead is**.
 ///
 /// Copy and paste is the one edit that has to carry *everything* — the transform
 /// with its keyframes, the effects with theirs, the switches, the name — because
@@ -3029,7 +3028,7 @@ fn a_copied_layer_pastes_whole_and_lands_at_the_playhead() {
 }
 
 /// A layer pasted into **another** composition keeps everything that is its own
-/// and drops what pointed at the comp it left (K-275).
+/// and drops what pointed at the comp it left.
 #[test]
 fn a_layer_pasted_into_another_comp_drops_the_references_it_left_behind() {
     let (project, layer) = project_with_layer();
@@ -3070,8 +3069,8 @@ fn a_layer_pasted_into_another_comp_drops_the_references_it_left_behind() {
     );
 }
 
-/// **A pasted effect lands with its first keyframe under the playhead** (K-275,
-/// the owner's rule). An effect copied from a layer that flashes at 4 s and
+/// **A pasted effect lands with its first keyframe under the playhead** (the
+/// owner's rule). An effect copied from a layer that flashes at 4 s and
 /// pasted while the playhead sits at 12 s must flash at 12 s.
 #[test]
 fn a_pasted_effect_starts_its_animation_at_the_playhead() {
@@ -3122,7 +3121,7 @@ fn a_pasted_effect_starts_its_animation_at_the_playhead() {
     );
 }
 
-/// **Several picked effects copy as one document, in stack order** (K-300).
+/// **Several picked effects copy as one document, in stack order**.
 /// The Effect controls panel and the Timeline both let a Shift-click take a run
 /// of headings, so the call takes a list — and what comes back is the order the
 /// stack is drawn in, not the order the clicks happened in, or a copied group
@@ -3162,7 +3161,7 @@ fn copying_several_effects_takes_them_in_stack_order() {
 }
 
 /// An effect with no animation at all pastes unchanged — there is no timing to
-/// place, and inventing one would move a look that was never in motion (K-275).
+/// place, and inventing one would move a look that was never in motion.
 #[test]
 fn a_pasted_effect_with_no_keyframes_is_left_where_it_is() {
     let (project, layer) = project_with_layer();
@@ -3207,8 +3206,8 @@ fn the_switches_are_independent_and_each_is_one_undo_step() {
         S::Shy,
         S::AcceptsLights,
         S::Guide,
-        // K-537: the switch whose write is a batch on a layer born an
-        // adjustment — still one undo step, like the ten beside it.
+        // The switch whose write is a batch on a layer born an adjustment —
+        // still one undo step, like the ten beside it.
         S::Adjustment,
     ] {
         let start = layer.get_switches().expect("switches");
@@ -3241,7 +3240,7 @@ fn the_switches_are_independent_and_each_is_one_undo_step() {
     }
 }
 
-/// The comp's master motion-blur shutter (K-120): the read model reports it,
+/// The comp's master motion-blur shutter: the read model reports it,
 /// the setter flips only the enable — angle, phase and samples keep their
 /// values — and the flip is one undo step.
 #[test]
@@ -3512,11 +3511,11 @@ fn the_sequence_ops_refuse_the_wrong_kind_of_layer() {
     );
 }
 
-/// **The Modes column's adjustment switch** (K-537) writes both ways on a
+/// **The Modes column's adjustment switch** writes both ways on a
 /// layer with a source of its own, each in one undo step, and the layer keeps
 /// everything while the switch is on — which is the whole reason it is a flag
-/// and not the kind flip K-484 built. Asking for the state the layer is
-/// already in commits nothing at all.
+/// and not a kind flip. Asking for the state the layer is already in commits
+/// nothing at all.
 #[test]
 fn the_adjustment_switch_writes_both_ways_on_a_layer_with_a_source() {
     use crate::api::layer::BridgeLayerKind;
@@ -3563,10 +3562,10 @@ fn the_adjustment_switch_writes_both_ways_on_a_layer_with_a_source() {
 }
 
 /// **A layer born an adjustment is handed a picture when its switch goes off**
-/// (K-537, keeping K-484's batch for the one case that still needs it): it has
-/// nothing of its own to give back, so it gets a fresh comp-sized white solid
-/// and becomes an ordinary solid, all in one undo step. Switching it back on
-/// never touches the kind again.
+/// (keeping the batched kind flip for the one case that still needs it): it
+/// has nothing of its own to give back, so it gets a fresh comp-sized white
+/// solid and becomes an ordinary solid, all in one undo step. Switching it
+/// back on never touches the kind again.
 #[test]
 fn a_layer_born_an_adjustment_gets_a_solid_when_it_is_switched_off() {
     use crate::api::layer::BridgeLayerKind;
@@ -3646,7 +3645,7 @@ fn the_adjustment_switch_refuses_the_kinds_with_no_picture() {
     assert!(!solid.get_switches().expect("switches").visible);
 }
 
-/// The razor goes through a speed ramp (K-573, docs/04 §8.1). It used to refuse
+/// The razor goes through a speed ramp (docs/04 §8.1). It used to refuse
 /// one — the whole point of a montage cut is to land on the beat, and a clip
 /// that had been ramped was the one place the blade would not bite.
 #[test]
@@ -3689,7 +3688,7 @@ fn the_razor_cuts_through_a_ramped_clip() {
 }
 
 /// The razor cuts in two without moving anything: a cut that shifted what comes
-/// after it would break every edit already in time with the music (K-071).
+/// after it would break every edit already in time with the music.
 #[test]
 fn the_razor_cuts_and_deletes_without_moving_the_other_clips() {
     let project = LumitBridgeState::new_project(None).expect("a new project");
@@ -3728,8 +3727,7 @@ fn the_razor_cuts_and_deletes_without_moving_the_other_clips() {
     );
 }
 
-/// The memory report answers without a project, and its arithmetic holds
-/// (K-294).
+/// The memory report answers without a project, and its arithmetic holds.
 ///
 /// The point of the report is the *unaccounted* figure — what the process holds
 /// that no tier here admits to — so what is pinned is that it is derived from
@@ -3778,7 +3776,7 @@ fn the_memory_report_answers_and_its_arithmetic_holds() {
     }
     assert!(
         report.park_queue_frames <= lumit_render::diskio::MAX_PENDING_PARKS as u64,
-        "the write-behind queue is bounded (K-277), and the report shows it"
+        "the write-behind queue is bounded, and the report shows it"
     );
 }
 
@@ -3810,7 +3808,7 @@ fn the_process_reports_its_own_size() {
 fn the_cache_readout_answers_and_the_budget_takes_effect() {
     use crate::api::cache::{cache_stats, clear_cache, set_cache_budget};
     // The cache is one per process, and `clear` below empties it for every
-    // test running alongside (K-752).
+    // test running alongside.
     let _cache = crate::framecache::test_guard();
 
     let before = cache_stats();
@@ -3837,7 +3835,7 @@ fn the_cache_readout_answers_and_the_budget_takes_effect() {
 /// A preset round-trips, and the copy it plants carries fresh instance ids —
 /// applying one preset to two layers must not give them effects that share an
 /// id, since an id is instance identity and every op that names an effect uses
-/// it (K-065).
+/// it.
 #[test]
 fn a_preset_round_trips_with_fresh_instance_ids() {
     let (project, first) = project_with_layer();
@@ -3923,7 +3921,7 @@ fn a_scope_needs_five_colour_triples() {
     ));
 }
 
-/// The Viewer's "at effect" chip rides the ordinary render request (K-528):
+/// The Viewer's "at effect" chip rides the ordinary render request:
 /// one dispatch whether the chip is on or off, because deciding what an effect
 /// id *means* needs the document and the document lives on the worker's side
 /// of this call. A point naming an effect nothing carries dispatches just the
@@ -4532,7 +4530,7 @@ fn concurrent_project_creation_and_editing_does_not_deadlock() {
     }
 }
 
-// --- Shape layers (K-237) -------------------------------------------------
+// --- Shape layers ---------------------------------------------------------
 
 use crate::api::layer::BridgeLayerKind;
 
@@ -4650,7 +4648,7 @@ fn shape_contents_are_replaced_as_a_whole_and_undone_in_one_step() {
 }
 
 /// A shape item's Trim start, end and offset round trip, animate, and are
-/// clamped to the 0..100 they mean — every key of them (K-551).
+/// clamped to the 0..100 they mean — every key of them.
 #[test]
 fn a_shapes_trim_round_trips_and_is_clamped() {
     use crate::api::effect::{BridgeKeyframe, BridgeSideInterp};
@@ -4703,7 +4701,7 @@ fn a_shapes_trim_round_trips_and_is_clamped() {
 }
 
 /// A dashed outline crosses as a list of lengths, and a negative length is a
-/// number with no meaning rather than a shorter dash (K-552).
+/// number with no meaning rather than a shorter dash.
 #[test]
 fn a_shapes_dashes_round_trip_and_are_clamped() {
     let (project, layer) = project_with_layer();
@@ -4730,9 +4728,9 @@ fn a_shapes_dashes_round_trip_and_are_clamped() {
     );
 }
 
-/// The repeater crosses as its count and the one step every copy is another of
-/// (K-553). A count below one is not a shape drawn fewer times, it is a number
-/// with no meaning; the copy offset may be negative, which is what puts copies
+/// The repeater crosses as its count and the one step every copy is another
+/// of. A count below one is not a shape drawn fewer times, it is a number with
+/// no meaning; the copy offset may be negative, which is what puts copies
 /// behind the original.
 #[test]
 fn a_shapes_repeater_round_trips_and_is_clamped() {
@@ -4766,7 +4764,7 @@ fn a_shapes_repeater_round_trips_and_is_clamped() {
     );
 }
 
-/// A gradient fill crosses as a choice, a second colour and two points (K-555).
+/// A gradient fill crosses as a choice, a second colour and two points.
 /// A choice naming neither reading is the flat fill, which draws something.
 #[test]
 fn a_shapes_gradient_round_trips_and_an_unknown_kind_is_flat() {
@@ -4803,7 +4801,7 @@ fn a_shapes_gradient_round_trips_and_an_unknown_kind_is_flat() {
 }
 
 /// A combine crosses as the choice it is, and a reading nobody wrote down is
-/// no combine at all (K-605).
+/// no combine at all.
 #[test]
 fn a_shapes_combine_round_trips_and_an_unknown_reading_draws_alone() {
     let (project, layer) = project_with_layer();
@@ -4833,7 +4831,7 @@ fn a_shapes_combine_round_trips_and_an_unknown_reading_draws_alone() {
     );
 }
 
-/// A shape item's path keys, end to end (K-606): the diamond plants a key
+/// A shape item's path keys, end to end: the diamond plants a key
 /// holding what is already showing, a point drag lands on the key under the
 /// playhead rather than on the still path, and the stopwatch off keeps the
 /// shape the playhead is over.
@@ -4856,7 +4854,7 @@ fn a_shapes_path_keys_hold_what_is_showing_and_take_the_edit_under_the_playhead(
     shape.toggle_shape_path_key(id, at(2)).expect("key at 2");
     let keys = &shape.get_shape_contents().expect("contents")[0].path_keys;
     assert_eq!(keys.len(), 2);
-    // Counted up, so the graph draws the rate the shape changes at (K-344).
+    // Counted up, so the graph draws the rate the shape changes at.
     assert_eq!(keys[0].value, 0.0);
     assert_eq!(keys[1].value, 1.0);
 
@@ -4894,7 +4892,7 @@ fn a_shapes_path_keys_hold_what_is_showing_and_take_the_edit_under_the_playhead(
 }
 
 /// An edit that is not a shape edit carries the keys through untouched — an
-/// opacity drag must not throw a morph away (K-606, K-340's rule again).
+/// opacity drag must not throw a morph away.
 #[test]
 fn a_shapes_path_keys_survive_an_edit_that_is_not_a_shape_edit() {
     let (project, layer) = project_with_layer();
@@ -4916,7 +4914,7 @@ fn a_shapes_path_keys_survive_an_edit_that_is_not_a_shape_edit() {
     assert_eq!(after.path_keys.len(), 1, "the morph is still there");
 }
 
-/// The offset crosses as one length in layer pixels, out or in (K-554).
+/// The offset crosses as one length in layer pixels, out or in.
 #[test]
 fn a_shapes_offset_round_trips_both_ways() {
     let (project, layer) = project_with_layer();
@@ -4937,7 +4935,7 @@ fn a_shapes_offset_round_trips_both_ways() {
 
 /// Dragging the left-most point left grows the art's box leftwards, and the
 /// layer's origin **is** that box's corner — so without the position following
-/// it, every point nobody touched would slide the other way (K-308).
+/// it, every point nobody touched would slide the other way.
 #[test]
 fn moving_a_point_past_the_arts_edge_leaves_the_rest_of_it_where_it_was() {
     let (project, layer) = project_with_layer();
@@ -5050,7 +5048,7 @@ fn a_shape_layer_refuses_art_that_is_not_a_shape() {
     ));
 }
 
-// --- Puppet: the block and its pins (K-704) -------------------------------
+// --- Puppet: the block and its pins ---------------------------------------
 
 fn puppet_pin(name: &str, x: f64, y: f64) -> crate::api::layer::BridgePuppetPin {
     use crate::api::effect::BridgeScalar;
@@ -5249,7 +5247,7 @@ fn a_pin_is_aimed_at_the_mesh_placed_moved_and_undone() {
     assert!(layer.get_puppet().expect("puppet").is_none());
 }
 
-// --- Paint: strokes on a layer (K-227) ------------------------------------
+// --- Paint: strokes on a layer --------------------------------------------
 
 fn stroke(name: &str, points: &[(f64, f64)]) -> crate::api::layer::BridgeStroke {
     use crate::api::layer::{BridgePaintMode, BridgeStroke, BridgeStrokePoint};
@@ -5309,7 +5307,7 @@ fn a_stroke_is_added_read_back_and_undone_in_one_step() {
     assert_eq!(layer.get_paint().expect("paint").len(), 1);
 }
 
-/// Strokes are carried in the read model beside the masks (K-184), so the
+/// Strokes are carried in the read model beside the masks, so the
 /// Timeline can list them without asking per row per frame.
 #[test]
 fn strokes_ride_the_read_model() {
@@ -5440,7 +5438,7 @@ fn every_paint_mode_round_trips() {
 }
 
 /// Both brush shapes survive the crossing, and Round is what a stroke that
-/// says nothing comes back as (K-548).
+/// says nothing comes back as.
 #[test]
 fn both_brush_shapes_round_trip() {
     use crate::api::layer::BridgeBrushShape;
@@ -5461,7 +5459,7 @@ fn both_brush_shapes_round_trip() {
 /// A stylus's pressure crosses with the point it belongs to, is clamped to the
 /// 0..1 it means, and a stroke nobody pressed is stored with no pressures at
 /// all — so a mouse-drawn stroke is byte for byte the stroke it was before
-/// there was a stylus to read (K-583).
+/// there was a stylus to read.
 #[test]
 fn stroke_pressure_round_trips_and_an_unpressed_stroke_stores_none() {
     let (_project, layer) = project_with_layer();
@@ -5492,8 +5490,7 @@ fn stroke_pressure_round_trips_and_an_unpressed_stroke_stores_none() {
 }
 
 /// A stroke's blend crosses as an index into the same list a layer's does, and
-/// an index nobody has heard of reads back as Normal rather than erroring
-/// (K-550).
+/// an index nobody has heard of reads back as Normal rather than erroring.
 #[test]
 fn a_strokes_blend_round_trips_by_index() {
     let (_project, layer) = project_with_layer();
@@ -5516,7 +5513,7 @@ fn a_strokes_blend_round_trips_by_index() {
 }
 
 /// A stroke's Start and End round trip, animate, and are clamped to the
-/// 0..100 they mean — every key of them (K-549).
+/// 0..100 they mean — every key of them.
 #[test]
 fn a_strokes_trim_round_trips_and_is_clamped() {
     use crate::api::effect::{BridgeKeyframe, BridgeScalar, BridgeSideInterp};
@@ -5559,10 +5556,10 @@ fn a_strokes_trim_round_trips_and_is_clamped() {
 
 // --- Assets: what a layer is made of --------------------------------------
 
-/// **Adding the first animator moves the anchor with it, in one undo step**
-/// (K-609). An animated line is drawn into a box one text size larger a side
-/// with the words that far in, so without the compensating shift the words
-/// would jump the moment the first animator arrived — and the shift has to
+/// **Adding the first animator moves the anchor with it, in one undo step**.
+/// An animated line is drawn into a box one text size larger a side with the
+/// words that far in, so without the compensating shift the words would jump
+/// the moment the first animator arrived — and the shift has to
 /// ride in the same `Op` as the document, or `Ctrl+Z` puts the pivot back
 /// before it takes the animator away.
 #[test]
@@ -5678,7 +5675,7 @@ fn adding_the_first_animator_moves_the_anchor_and_undoes_in_one_step() {
     );
 }
 
-/// **Text to shapes and Text to points** (K-608): each makes a copy beside the
+/// **Text to shapes and Text to points**: each makes a copy beside the
 /// original, and the original is untouched — the layer is still a Type layer
 /// still saying what it said, which is what makes the commands safe to try.
 #[test]
@@ -5967,7 +5964,7 @@ fn editing_a_solid_changes_every_layer_that_uses_it() {
     assert_eq!(solid.get_definition().expect("definition").name, "Backdrop");
 }
 
-// --- The sequence view's clip edits (K-247, K-248) ------------------------
+// --- The sequence view's clip edits ---------------------------------------
 
 /// A Sequence layer built for the clip tests: one clip spanning [0, 4).
 #[cfg(test)]
@@ -5985,7 +5982,7 @@ fn sequenced_layer() -> (ProjectReference, CompositionReference, LayerReference)
 }
 
 /// Re-speeding a clip keeps its place and pins its first frame — the two
-/// promises the whole editing surface rests on (K-022, K-070).
+/// promises the whole editing surface rests on.
 #[test]
 fn a_clips_speed_holds_its_place_and_its_first_frame() {
     let (project, _comp, layer) = sequenced_layer();
@@ -6019,7 +6016,7 @@ fn a_ramped_clip_has_no_single_speed() {
     assert!(after.retimed);
 }
 
-/// A Sequence layer's bar is its clips' extent (K-248): cutting leaves it
+/// A Sequence layer's bar is its clips' extent: cutting leaves it
 /// alone, and deleting an outermost clip brings the end in.
 #[test]
 fn the_layers_bar_follows_its_clips() {
@@ -6096,8 +6093,8 @@ fn converting_a_retimed_layer_both_ways_keeps_its_map() {
 
 /// Cutting a **retimed** clip gives each half a key at the cut, so the two
 /// ramps are independent from the moment they are made — editing one half's
-/// speed never bends the other. An un-retimed clip gains no keys at all
-/// (K-236: a map nobody has shaped is not one to put keys into).
+/// speed never bends the other. An un-retimed clip gains no keys at all (a map
+/// nobody has shaped is not one to put keys into).
 #[test]
 fn a_razor_cut_keys_a_retimed_clip_and_only_that() {
     let (_project, _comp, layer) = sequenced_layer();
@@ -6144,7 +6141,7 @@ fn a_razor_cut_keys_a_retimed_clip_and_only_that() {
 
 /// A Sequence layer converts back to plain footage — the way out of the
 /// clip-editing surface, which has to exist because the way in is offered to
-/// anyone (K-248).
+/// anyone.
 #[test]
 fn a_sequence_layer_converts_back_to_footage() {
     let (_project, comp, layer) = sequenced_layer();
@@ -6155,8 +6152,8 @@ fn a_sequence_layer_converts_back_to_footage() {
     let back = comp.get_layers().expect("layers").remove(0);
     assert_eq!(back.get_kind().expect("kind"), BridgeLayerKind::Footage);
     // The clip spanned the whole layer, so its map is the layer's map: clip
-    // time and layer time were the same clock, and K-249 made them the same
-    // kind of map, so nothing had to be converted.
+    // time and layer time were the same clock, and they are the same kind of
+    // map, so nothing had to be converted.
     assert!(
         back.get_retime_property().expect("read").is_some(),
         "the ramp came with it"
@@ -6174,7 +6171,7 @@ fn a_sequence_layer_converts_back_to_footage() {
 }
 
 /// **A layer's cuts and ramps copy onto another layer**, which is what makes a
-/// depth pass follow the footage it belongs to (K-248).
+/// depth pass follow the footage it belongs to.
 #[test]
 fn a_sequence_shape_copies_onto_another_layer() {
     let (project, comp, layer) = sequenced_layer();
@@ -6254,9 +6251,9 @@ fn one_clips_shape_copies_by_itself() {
     );
 }
 
-/// A Sequence layer has no Retime of its own (K-075): its clips carry the
-/// retiming, and a second map over the whole row would be a rival to those —
-/// exactly what K-249 spent itself ending.
+/// A Sequence layer has no Retime of its own: its clips carry the retiming,
+/// and a second map over the whole row would be a rival to those — exactly the
+/// rivalry an earlier change got rid of.
 #[test]
 fn a_sequence_layer_refuses_a_retime_of_its_own() {
     let (_project, _comp, layer) = sequenced_layer();
@@ -6291,7 +6288,7 @@ fn retime_keys(layer: &LayerReference) -> Vec<BridgeKeyframe> {
     }
 }
 
-/// **Stretch is sugar over Retime** (K-584): half speed makes the layer twice
+/// **Stretch is sugar over Retime**: half speed makes the layer twice
 /// as long, anchored at its in point, and the map that comes out plays the
 /// same stretch of source over the longer span.
 #[test]
@@ -6335,7 +6332,7 @@ fn a_stretch_halves_the_speed_and_doubles_the_length() {
     );
 }
 
-/// A Sequence layer's retiming belongs to its clips (K-075), so it has no
+/// A Sequence layer's retiming belongs to its clips, so it has no
 /// stretch of its own; and a speed that is not a positive number is refused
 /// rather than turned into a layer of no length.
 #[test]
@@ -6354,7 +6351,7 @@ fn a_stretch_refuses_a_sequence_layer_and_a_nonsense_speed() {
 }
 
 /// **Freeze at the playhead holds the frame and leaves the layer's length
-/// alone** (docs/04 §7.3, K-022): a second of hold goes in, everything after
+/// alone** (docs/04 §7.3): a second of hold goes in, everything after
 /// it is pushed later, and the tail past the out point is cropped off.
 #[test]
 fn a_freeze_holds_the_frame_and_keeps_the_length() {
@@ -6546,7 +6543,7 @@ fn a_cut_clips_map_starts_where_the_clip_does() {
     };
     assert!(
         (after.first().expect("a first key").value - opens_at).abs() < 1e-6,
-        "re-speeding pins a clip's first frame (K-070), it does not move it          back to the start of the media"
+        "re-speeding pins a clip's first frame, it does not move it          back to the start of the media"
     );
 }
 
@@ -6601,7 +6598,7 @@ fn extending_a_retimed_clip_keeps_what_it_already_played() {
 }
 
 /// Deleting a clip leaves a gap: nothing after it moves, so every edit point
-/// still standing keeps the beat it was cut to (K-022).
+/// still standing keeps the beat it was cut to.
 #[test]
 fn deleting_a_clip_leaves_a_gap() {
     let (_project, _comp, layer) = sequenced_layer();
@@ -6642,7 +6639,7 @@ fn a_clips_retime_round_trips_through_the_envelope() {
     assert_eq!(back.end_frame, clip.end_frame);
 }
 
-// --- Video arriving as a Sequence layer (K-246) ---------------------------
+// --- Video arriving as a Sequence layer -----------------------------------
 
 /// With the preference on, media that **runs** arrives as a one-clip Sequence
 /// layer — ready to be cut on its own row — while a still image does not,
@@ -6789,7 +6786,7 @@ fn unreadable_media_is_never_wrapped() {
 // --- Retime ------------------------------------------------------------
 
 /// The frame-interpolation policy is a layer's own setting, present on every
-/// layer whether or not it is retimed (K-249).
+/// layer whether or not it is retimed.
 ///
 /// It used to live inside the rival retime store this file once exercised at
 /// length — a constant speed, a reverse gate and an enable switch, all of them
@@ -6849,7 +6846,7 @@ fn every_layer_kind_has_an_interpolation_policy() {
         .expect("a solid takes one too");
 }
 
-/// The Retime *property* (K-197) is an ordinary keyframable scalar: absent
+/// The Retime *property* is an ordinary keyframable scalar: absent
 /// until the layer is given one, present on any kind, and readable from the
 /// row's read model without a second crossing.
 #[test]
@@ -6878,7 +6875,7 @@ fn the_retime_property_toggles_and_reads_back() {
     assert_eq!(keys.len(), 2);
     assert_eq!(keys[0].value, 0.0);
     assert!(keys[1].value > 0.0);
-    // The Timeline draws its row from the read model, never a getter (K-184).
+    // The Timeline draws its row from the read model, never a getter.
     assert!(layer.get_info().expect("info").retime.is_some());
     assert!(comp
         .get_model()
@@ -6944,7 +6941,7 @@ fn detecting_beats_in_a_silent_composition_says_so() {
     ));
 }
 
-/// **A layer picked as the beat Source is always heard** (K-718, owner ruling).
+/// **A layer picked as the beat Source is always heard** (owner ruling).
 ///
 /// The comp mix is what is audible — a solo takes everything else out of it,
 /// which is the whole point of a solo. Picking a layer by name is a different
@@ -7068,7 +7065,7 @@ fn clearing_beats_keeps_the_markers_a_person_made() {
     }
     let read = comp.get_markers().expect("markers");
     assert_eq!(read.len(), 2);
-    // The beat band reads the flag off the marker itself (K-698): the seeded
+    // The beat band reads the flag off the marker itself: the seeded
     // beat says it is one, and the hand-made cue says it is not.
     assert_eq!(
         read.iter().filter(|m| m.is_beat).count(),
@@ -7086,7 +7083,7 @@ fn clearing_beats_keeps_the_markers_a_person_made() {
     assert_eq!(comp.get_markers().expect("markers").len(), 1);
 }
 
-/// The confirmed beat grid (K-698): comp state the beat band numbers bars
+/// The confirmed beat grid: comp state the beat band numbers bars
 /// from. Clearing the generated markers takes the grid with them — in **one**
 /// undo step, so `Ctrl+Z` brings back the pair rather than a state nobody was
 /// shown.
@@ -7145,14 +7142,14 @@ fn the_beat_grid_clears_with_the_markers_as_one_step() {
     assert!(comp.get_beat_grid().expect("grid").is_some());
 }
 
-/// **Dragging or renaming a beat marker must leave it a beat marker** (K-270).
+/// **Dragging or renaming a beat marker must leave it a beat marker**.
 ///
 /// The regression: the panel writes the whole list back through `set_markers`,
 /// and a bridge marker carries only id, time and label — so every marker was
 /// rebuilt with the *default* kind, no duration, and an empty `extra`. Moving a
 /// detected beat one frame turned it into an ordinary cue, and *Clear beat
 /// markers* then walked straight past it: nothing was left to say it had ever
-/// been detected. K-254's ruler markers made that a drag away.
+/// been detected. The ruler's markers made that a drag away.
 ///
 /// The same merge protects a spanning marker's duration and the unknown fields
 /// a newer Lumit wrote (docs/10 §1.1), which the panel equally cannot see.
@@ -7188,9 +7185,9 @@ fn dragging_a_beat_marker_leaves_it_a_beat_marker() {
     }
 
     // The panel's write-back: the list it read, with this marker moved and
-    // renamed. Read first, exactly as the ruler does — the span crosses now
-    // (K-441), so a write built from nothing would be the panel saying "make
-    // this a moment" rather than the panel not knowing about it.
+    // renamed. Read first, exactly as the ruler does — the span crosses now,
+    // so a write built from nothing would be the panel saying "make this a
+    // moment" rather than the panel not knowing about it.
     let dragged: Vec<BridgeMarker> = comp
         .get_markers()
         .expect("markers")
@@ -7265,7 +7262,7 @@ fn a_marker_the_panel_just_made_is_a_user_marker() {
 
 /// A composition dropped into another brings its markers with it as the
 /// layer's own — **copies**, so editing them never reaches back into the
-/// composition they came from, or into anywhere else it is used (K-254).
+/// composition they came from, or into anywhere else it is used.
 #[test]
 fn dropping_a_comp_in_copies_its_markers_onto_the_layer() {
     use crate::api::composition::BridgeMarker;
@@ -7305,7 +7302,7 @@ fn dropping_a_comp_in_copies_its_markers_onto_the_layer() {
 
 /// Pre-composing carries the comp's markers into the new comp and leaves the
 /// Precomp layer bare: the same cues are on the ruler above it, and drawing
-/// them again on the layer would say it twice (K-254).
+/// them again on the layer would say it twice.
 #[test]
 fn precompose_carries_markers_in_and_leaves_the_layer_bare() {
     use crate::api::composition::BridgeMarker;
@@ -7443,7 +7440,7 @@ fn rename_label_and_matte_each_undo_in_one_step() {
         "one undo step returns the old name"
     );
 
-    // A solid starts on its kind's default label (K-188), not on 0.
+    // A solid starts on its kind's default label, not on 0.
     let default_label = layer.get_info().expect("info").label;
     assert_eq!(
         default_label, 2,
@@ -7470,7 +7467,7 @@ fn rename_label_and_matte_each_undo_in_one_step() {
 }
 
 // ---------------------------------------------------------------------------
-// The keymap (docs/07 §15, K-199)
+// The keymap (docs/07 §15)
 // ---------------------------------------------------------------------------
 
 /// The keymap is one per session by design — there is one window and one set of
@@ -7597,7 +7594,7 @@ fn a_keymap_survives_the_json_it_is_stored_as() {
     keymap_load_preset(BridgeKeymapPreset::AfterEffects);
     // The rebind is gone: the chord means what the preset says it means, not
     // what this test made it mean. It used to assert `None` here, which held
-    // only while `Mod+Shift+S` was a spare chord — Save as took it (K-244), and
+    // only while `Mod+Shift+S` was a spare chord — Save as took it, and
     // a preset's own binding proves the replacement better than a blank does.
     assert_eq!(
         keymap_lookup(BridgeKeyContext::Global, "Mod+Shift+S".into()).as_deref(),
@@ -7670,7 +7667,7 @@ fn an_unbound_action_keeps_its_row_and_loses_its_chord() {
 }
 
 // ---------------------------------------------------------------------------
-// The reveal shortcuts (docs/07 §4.3, K-199)
+// The reveal shortcuts (docs/07 §4.3)
 // ---------------------------------------------------------------------------
 
 /// `U` opens only what is keyframed. A fresh layer has nothing animated, so it
@@ -7805,7 +7802,7 @@ fn system_memory_bytes_reports_non_zero_on_supported_platforms() {
     }
 }
 
-/// Switching Retime off re-hangs the layer on its source (K-212): it keeps its
+/// Switching Retime off re-hangs the layer on its source: it keeps its
 /// in point, shows the same frame there, and runs at source rate until the
 /// source runs out — never longer than it already was.
 #[test]
@@ -7912,7 +7909,7 @@ fn switching_retime_off_re_hangs_the_layer_on_its_source() {
 /// layer", so the layer sat on a single frame for ever, with the row gone quiet
 /// and nothing on screen to say why. Both gestures mean "no more retime", so
 /// both take the Ctrl+Alt+T-off route: the property goes and the layer is
-/// re-hung on its source (K-212), in one undo step.
+/// re-hung on its source, in one undo step.
 #[test]
 fn a_flattened_retime_is_removed_rather_than_freezing_the_layer() {
     use crate::api::composition::BridgeCompSettings;
@@ -7975,8 +7972,7 @@ fn a_flattened_retime_is_removed_rather_than_freezing_the_layer() {
         .is_err());
 }
 
-/// Keyframes belong to the layer, and the seam says so in the interface's units
-/// (K-213).
+/// Keyframes belong to the layer, and the seam says so in the interface's units.
 ///
 /// The engine keys every property in the layer's **own** time, which is what
 /// makes a layer's animation travel with it when it is moved. The Timeline
@@ -8029,7 +8025,7 @@ fn keyframes_cross_on_the_comp_clock_and_travel_with_the_layer() {
     );
 }
 
-/// Switching Retime on keys the layer where it *is* (K-213): one key on its in
+/// Switching Retime on keys the layer where it *is*: one key on its in
 /// point, one on its out point, both in comp time — not at the start of the
 /// composition, and not stopping short of a trimmed layer's tail.
 #[test]
@@ -8198,7 +8194,7 @@ fn editing_a_mask_keeps_what_the_bridge_cannot_describe() {
     );
     drop(state);
 
-    // **A shape edit on a keyed mask lands on the key** (K-340). Once a path is
+    // **A shape edit on a keyed mask lands on the key**. Once a path is
     // animated `path` is not what the mask draws, so writing the dragged
     // vertices there would move nothing at all and the shape would look frozen
     // under the pointer.
@@ -8246,7 +8242,7 @@ fn editing_a_mask_keeps_what_the_bridge_cannot_describe() {
     // that takes the other side).
     drop(state);
 
-    // **And the wireframe can find that shape** (K-342). The mask still carries
+    // **And the wireframe can find that shape**. The mask still carries
     // its old static path — `path` is not what an animated mask draws — so
     // without this the Viewer drew the shape snapping back to where it began
     // the moment the drag ended, even though the render animated correctly.
@@ -8390,7 +8386,7 @@ fn turning_flow_off_parks_its_tuning_and_one_undo_restores_both() {
     assert_eq!(layer.get_flow_params().expect("read"), tuned);
 }
 
-// --- Camera track: the effect's surface across the seam (K-417) -------------
+// --- Camera track: the effect's surface across the seam -------------------
 
 /// A project, a comp, a footage layer carrying an enabled Camera track, and a
 /// written-down solve published for that footage's media.
@@ -8587,7 +8583,7 @@ fn a_linked_camera_reads_derived_and_converts_to_keyframes() {
     assert!((keys[5].value - 5.0).abs() < 1e-9, "{}", keys[5].value);
 }
 
-/// **Track once, then nudge** (K-578) across the seam: a linked camera takes a
+/// **Track once, then nudge** across the seam: a linked camera takes a
 /// transform edit, the edit reads back as a correction on top of the solve, the
 /// dot lights on both rows that draw it, and Clear corrections puts it back.
 #[test]
@@ -8708,8 +8704,8 @@ fn the_status_reads_the_solve_and_the_buttons_are_refused_honestly() {
 }
 
 // ---------------------------------------------------------------------------
-// The Project panel's five engine answers, across the seam (K-451,
-// docs/07 §3.1, docs/15 §12A.3a).
+// The Project panel's five engine answers, across the seam (docs/07 §3.1,
+// docs/15 §12A.3a).
 // ---------------------------------------------------------------------------
 
 /// The bottom bar's Folder button. One call, one undo step, and both of the
@@ -8818,12 +8814,12 @@ fn a_label_round_trips_and_untagging_leaves_no_trace() {
 }
 
 // ---------------------------------------------------------------------------
-// The Timeline's three (K-441, docs/15 §6.3, §12A.1).
+// The Timeline's three (docs/15 §6.3, §12A.1).
 // ---------------------------------------------------------------------------
 
 /// A marker's span crosses as frames and comes back unharmed, and a marker
 /// nobody resized keeps the exact duration the document holds even when the
-/// panel writes the whole list for some other reason (K-270).
+/// panel writes the whole list for some other reason.
 #[test]
 fn a_markers_span_crosses_as_frames_and_survives_a_rename() {
     use crate::api::composition::BridgeMarker;
@@ -8904,15 +8900,14 @@ fn the_cache_strip_crosses_with_both_nibbles() {
 }
 
 // ---------------------------------------------------------------------------
-// The Effect controls' unit rider and vector-pair chain (K-443,
-// docs/15 §12A.3).
+// The Effect controls' unit rider and vector-pair chain (docs/15 §12A.3).
 // ---------------------------------------------------------------------------
 
 /// Every declared parameter says what its number is, so the row's rider is
 /// read off the declaration rather than off a table keyed by parameter id.
 /// Two rows of the same effect disagree — a Mix is a per cent and a Radius is
 /// pixels — which is reason enough on its own; and Radial blur's Centre, the
-/// one `centre_x` that was a per cent, crossed to px@comp with K-558.
+/// one `centre_x` that was a per cent, crossed to px@comp.
 #[test]
 fn a_parameter_declares_its_unit_across_the_seam() {
     use crate::api::effect::{list_parameters, BridgeUnit};
@@ -8990,7 +8985,7 @@ fn vector_pairs_and_their_chains_cross_the_seam() {
 }
 
 // ---------------------------------------------------------------------------
-// The layer driver graph (K-471, K-472; docs/impl/node-graph.md §5).
+// The layer driver graph (docs/impl/node-graph.md §5).
 // ---------------------------------------------------------------------------
 
 use crate::api::graph::{
@@ -9148,13 +9143,13 @@ fn a_layer_nobody_has_wired_reports_the_bare_chain() {
             // §7: drawn, unfilled, honest — audio comes only from a footage
             // layer's own stream, so nothing may be wired here in this phase.
             ("audio", BridgePortType::Audio, false),
-            // The one writable property socket (K-697): Duck under's landing.
+            // The one writable property socket: Duck under's landing.
             ("volume", BridgePortType::Number, false),
         ],
     );
 }
 
-/// **Wired means in the chain** (K-738).
+/// **Wired means in the chain**.
 ///
 /// A bypassed effect is not in it: the picture goes past it, so its own image
 /// sockets report unwired and the panel draws them hollow. The Source's and
@@ -9244,7 +9239,7 @@ fn a_driver_is_added_wired_and_undone_in_one_step() {
         .find(|n| n.node == BridgeNodeRef::Driver(wiggle))
         .expect("the driver is drawn");
     assert_eq!(node.match_name, "wiggle");
-    assert_eq!(node.label, "Wiggle", "English on the wire (K-303)");
+    assert_eq!(node.label, "Wiggle", "English on the wire");
     assert!(node.enabled);
     assert_eq!(
         node.outputs
@@ -9431,7 +9426,7 @@ fn a_colour_and_a_number_refuse_each_other() {
 }
 
 // ---------------------------------------------------------------------------
-// The points edge (K-492; docs/impl/points-stream.md §1, §4.2).
+// The points edge (docs/impl/points-stream.md §1, §4.2).
 // ---------------------------------------------------------------------------
 
 /// **Particulate's teal Points socket reaches the canvas** (§4.2), and it does
@@ -9462,7 +9457,7 @@ fn an_effect_box_draws_the_data_outputs_its_signature_declares() {
     assert_eq!(outputs[1].id, "points");
     assert_eq!(
         outputs[1].label, "Points",
-        "declared beside the port in the engine, so it rides the K-303 chain"
+        "declared beside the port in the engine, so it rides the engine-labels chain"
     );
     assert_eq!(outputs[1].port_type, BridgePortType::Points);
     assert!(!outputs[1].wired, "nothing reads it yet");
@@ -9580,9 +9575,9 @@ fn a_points_stream_into_a_number_socket_is_refused() {
     );
 }
 
-/// The K-492 carve-out at the seam: a stack-to-stack points wire drawn back
-/// **up** the stack is refused, with the loop sentence — because that is what it
-/// asks for, the consumer's own output being part of its input.
+/// The points edge's carve-out at the seam: a stack-to-stack points wire drawn
+/// back **up** the stack is refused, with the loop sentence — because that is
+/// what it asks for, the consumer's own output being part of its input.
 #[test]
 fn a_points_wire_drawn_up_the_stack_is_refused() {
     let (_project, layer) = layer_to_wire();
@@ -9618,10 +9613,10 @@ fn a_points_wire_drawn_up_the_stack_is_refused() {
     );
 }
 
-/// **A consumer's teal socket reaches the canvas too** (K-600, §4.2), and the
+/// **A consumer's teal socket reaches the canvas too** (§4.2), and the
 /// wire between two stack effects commits through `set_graph` like any other.
 ///
-/// The socket is what the "no stream" mark reads (K-509): an unwired Points
+/// The socket is what the "no stream" mark reads: an unwired Points
 /// input on a box is exactly the structural question the panel already asks, so
 /// a consumer wears the mark with no consumer-specific code in Dart.
 #[test]
@@ -9651,7 +9646,7 @@ fn an_effect_box_draws_the_data_inputs_its_signature_declares() {
     assert_eq!(unwired.id, "points");
     assert_eq!(
         unwired.label, "Points",
-        "declared beside the port in the engine, so it rides the K-303 chain"
+        "declared beside the port in the engine, so it rides the engine-labels chain"
     );
     assert!(!unwired.wired, "nothing feeds it yet — the no-stream mark");
     assert!(
@@ -9679,7 +9674,7 @@ fn an_effect_box_draws_the_data_inputs_its_signature_declares() {
                 groups: Vec::new(),
             },
         )
-        .expect("a producer above its consumer is the arrangement K-492 asks for");
+        .expect("a producer above its consumer is the arrangement a points wire asks for");
     assert!(
         socket(clone).expect("still declared").wired,
         "and the socket fills the moment a stream reaches it"
@@ -9756,7 +9751,7 @@ fn a_drivers_parameter_keyframes_like_any_other() {
             BridgeEffectValue::Float(BridgeScalar::Static(42.0)),
         )
         .expect("staged");
-    // And a keyframed one, in composition frames (K-213).
+    // And a keyframed one, in composition frames.
     staged[0]
         .set_value(
             "frequency".into(),
@@ -9817,8 +9812,8 @@ fn a_drivers_parameter_keyframes_like_any_other() {
     assert_eq!(layer.get_graph().expect("graph").wiring.edges.len(), 1);
 }
 
-/// **A named group saves the boxes, the wires between them and their shape**
-/// (K-651), and comes back as fresh instances one undo takes away whole.
+/// **A named group saves the boxes, the wires between them and their shape**,
+/// and comes back as fresh instances one undo takes away whole.
 #[test]
 fn a_node_group_round_trips_through_its_file_in_one_commit() {
     let (project, layer) = layer_to_wire();
@@ -9965,11 +9960,11 @@ fn applying_a_driver_adds_a_graph_node_rather_than_a_stack_effect() {
     assert_eq!(layer.get_effects().expect("stack").len(), 1);
 }
 
-/// **A catalogue entry carries its declared ports** (K-471 §1.3), which is what
-/// lets the Graph panel wire a driver into the *same* commit that adds it, and
-/// filter the Tab search to the entries a dragged wire could land on. Before
-/// this, a driver's outputs only existed once `get_graph` could derive them from
-/// a node already in the document, so the auto-wire had to be a second op.
+/// **A catalogue entry carries its declared ports**, which is what lets the
+/// Graph panel wire a driver into the *same* commit that adds it, and filter
+/// the Tab search to the entries a dragged wire could land on. Before this, a
+/// driver's outputs only existed once `get_graph` could derive them from a node
+/// already in the document, so the auto-wire had to be a second op.
 #[test]
 fn a_catalogue_entry_declares_its_ports_before_any_instance_exists() {
     use crate::api::effect::list_drivers;
@@ -10106,7 +10101,7 @@ fn the_queue_reorders_what_is_still_waiting() {
 }
 
 /// The guide switch crosses like its siblings, and a **locked** layer refuses
-/// it — unlike shy, which a lock still accepts (K-497).
+/// it — unlike shy, which a lock still accepts.
 ///
 /// The difference is the whole point of the switch: shy changes what the
 /// Timeline lists, guide changes what the file carries, and a locked layer is
@@ -10131,7 +10126,7 @@ fn a_locked_layer_refuses_the_guide_switch_and_still_takes_shy() {
 }
 
 /// A proxy is attached, switched and detached over the seam, and every row
-/// state the Project panel draws is readable from one call (K-501).
+/// state the Project panel draws is readable from one call.
 #[test]
 fn a_proxy_is_attached_switched_and_detached_over_the_seam() {
     let (project, _folder, filed, _loose) = project_with_folder();
@@ -10267,7 +10262,7 @@ fn the_proxy_path_is_named_beside_the_original() {
 }
 
 // ---------------------------------------------------------------------------
-// Colour management (K-489, K-490, docs/impl/ocio.md §6.1). The seam's half:
+// Colour management (docs/impl/ocio.md §6.1). The seam's half:
 // the summary a picker is built from, the two edits, deliverability, and the
 // export's pre-queue refusal.
 // ---------------------------------------------------------------------------
@@ -10367,7 +10362,7 @@ fn write_config(dir: &tempfile::TempDir, text: &str) -> String {
 
 /// The whole vocabulary a picker is built from crosses in one read: the config's
 /// own active space names, then each display with its views — in the config's
-/// order, and never translated (K-303).
+/// order, and never translated.
 #[test]
 fn the_colour_summary_carries_the_config_s_own_names() {
     let (project, _footage, dir) = project_with_footage();
@@ -10395,7 +10390,7 @@ fn the_colour_summary_carries_the_config_s_own_names() {
 
 /// A config that is not there does not stop anything: the project keeps every
 /// name it was given, and the refusal crosses as an id plus its facts so the
-/// frontend can write the sentence in the reader's own language (K-005).
+/// frontend can write the sentence in the reader's own language.
 #[test]
 fn a_missing_config_refuses_by_id_and_keeps_every_name() {
     let (project, footage, dir) = project_with_footage();
@@ -10518,8 +10513,9 @@ fn the_two_colour_edits_are_one_undo_step_each() {
     );
 }
 
-/// The half of K-490's asymmetry that says no: a space is deliverable only when
-/// the config that defines it is loaded and the transform to it bakes.
+/// The half of the preview-and-delivery asymmetry that says no: a space is
+/// deliverable only when the config that defines it is loaded and the
+/// transform to it bakes.
 #[test]
 fn only_a_loaded_config_can_deliver_its_spaces() {
     let (project, _footage, dir) = project_with_footage();
@@ -10705,8 +10701,7 @@ fn relinking_leaves_an_item_whose_file_is_still_there_alone() {
 }
 
 /// A **partial** track crosses as the span it solved against the clip it did
-/// not finish, and a camera linked to it holds past the end of that span
-/// (K-417's hold, K-540).
+/// not finish, and a camera linked to it holds past the end of that span.
 ///
 /// The two claims belong together: the range the status row draws is the same
 /// range the link clamps into, and a test that checked only one of them would
@@ -10764,7 +10759,7 @@ fn a_partial_track_reports_its_span_and_the_camera_holds_past_it() {
     );
 
     // The bar and the badge read the same range. Inside it the camera is
-    // derived; past it the last derived motion is held, which is K-417's rule
+    // derived; past it the last derived motion is held, which is the hold rule
     // meeting a range that now ends early.
     let camera = add_solved_camera(layer).expect("a linked camera");
     assert_eq!(camera_link(camera, 0).state, BridgeLinkState::Derived);
@@ -10778,7 +10773,7 @@ fn a_partial_track_reports_its_span_and_the_camera_holds_past_it() {
 }
 
 /// **A mask's per-point feather widths cross the bridge, and each is clamped
-/// exactly as the one width is** (K-545).
+/// exactly as the one width is**.
 ///
 /// The clamp is the half worth pinning: `BridgeMask::write` rebuilds the mask
 /// field by field, so a list arriving with a negative width — or one wide
@@ -10863,7 +10858,7 @@ fn a_masks_per_point_feather_crosses_and_is_clamped() {
     );
 }
 
-/// **The project's colour shelf crosses the seam and undoes** (K-448): the
+/// **The project's colour shelf crosses the seam and undoes**: the
 /// picker reads it, writes it whole, and each write is one undo step.
 #[test]
 fn the_project_colour_shelf_reads_writes_and_undoes_over_the_seam() {
@@ -11071,7 +11066,7 @@ fn a_corner_pin_is_refused_with_nothing_to_pin_or_nowhere_to_put_it() {
     assert!(create_corner_pin(shot, Uuid::now_v7()).is_err());
 }
 
-/// The other half of docs/08 §4's Tracker row (K-734): the same track pressed
+/// The other half of docs/08 §4's Tracker row: the same track pressed
 /// onto the target layer's own transform, through the one doorway a press
 /// crosses.
 #[test]
@@ -11340,7 +11335,7 @@ fn a_discovered_plugin_lists_under_its_own_grouping_with_its_provenance() {
     );
 
     // Its parameters reach Effect controls through the same call a built-in's
-    // do — the four schema lookups now walk the whole catalogue (K-594).
+    // do — the four schema lookups now walk the whole catalogue.
     let params = list_parameters(plugin.name.clone());
     assert!(
         params.iter().any(|p| p.id == "gain"),
@@ -11404,7 +11399,7 @@ fn an_unknown_effect_is_a_badged_placeholder_and_never_an_error() {
 
     // An audio plugin is the same story whichever standard minted the name:
     // both prefixes land in one namespace, and a machine without the plugin
-    // badges it as missing rather than as an effect from the future (K-707).
+    // badges it as missing rather than as an effect from the future.
     for name in [
         "clap:com.nobody.notinstalled",
         "vst3:0123456789abcdef0123456789abcdef",
@@ -12057,11 +12052,11 @@ fn setting_a_shader_source_is_one_undo_step() {
     );
 }
 
-// --- The project's own picture, off the Viewer (K-468) ---------------------
+// --- The project's own picture, off the Viewer ----------------------------
 
 /// **The road a headless save takes.** The welcome screen's thumbnail used to be
 /// a photograph of the Viewer widget, so a project saved with no Viewer on
-/// screen — an After Effects conversion, an agent, an autosave with the panel
+/// screen — an After Effects conversion, a script, an autosave with the panel
 /// closed — got no picture and the row showed an empty well. Nothing here starts
 /// a worker or mounts anything: a project, a composition, a layer, and a still.
 ///

@@ -185,7 +185,7 @@ unsafe extern "C" fn clip_get_handle(
         // **The property set is optional**: `ofxImageEffect.h` says "if not
         // null, the ... property set will be placed here", and ntsc-rs passes
         // null for it. Answering `kOfxStatErrValue` to that made the plugin
-        // fail an action it had done nothing wrong in (K-595).
+        // fail an action it had done nothing wrong in.
         if !property_set.is_null() {
             // SAFETY: the plugin's out-parameter, checked non-null.
             unsafe { *property_set = props.as_ptr() };

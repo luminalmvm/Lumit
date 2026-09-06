@@ -1,5 +1,5 @@
 //! The timeline spectrogram: what a stretch of sound *contains*, by frequency,
-//! summarised once and answerable at any zoom (docs/09 §4, K-699).
+//! summarised once and answerable at any zoom (docs/09 §4).
 //!
 //! In plain terms: a waveform says how loud each moment is; a spectrogram says
 //! what is in it — kicks along the bottom, hats along the top, a voice in the
@@ -191,7 +191,7 @@ impl Spectrogram {
     }
 
     /// The window `[start_s, end_s)` in `cols` columns of [`BINS`] bytes,
-    /// column-major — the lane's ask, one column per pixel (K-280's shape).
+    /// column-major — the lane's ask, one column per pixel.
     ///
     /// Columns outside the audio come back silent rather than missing, so a
     /// caller's column index and a byte offset always agree.

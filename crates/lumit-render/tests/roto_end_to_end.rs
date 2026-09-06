@@ -1,4 +1,4 @@
-//! **A propagated matte cuts a layer in a real render** (K-710, docs/impl/roto.md
+//! **A propagated matte cuts a layer in a real render** (docs/impl/roto.md
 //! §5 and §10 item 7).
 //!
 //! # In plain terms
@@ -12,7 +12,7 @@
 //! This one does. It puts a Roto brush on a layer, files a matte for that
 //! layer's source frame under the effect's own id, and pushes the document
 //! through the same public entry the Viewer and the exporter use
-//! (`HeadlessRenderer::render_rgba`, the one comp walk of K-031). So it crosses
+//! (`HeadlessRenderer::render_rgba`, the one comp walk there is). So it crosses
 //! every seam at once: the store, the draw builder's roto carriage, the upload,
 //! and the pass in `run_ops`.
 //!
@@ -150,7 +150,7 @@ fn px(rgba: &[u8], w: u32, x: u32) -> [u8; 4] {
 
 #[test]
 fn a_propagated_matte_cuts_the_layer_it_sits_on_and_passes_through_outside_its_span() {
-    let Ok(mut r) = HeadlessRenderer::new() else {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };

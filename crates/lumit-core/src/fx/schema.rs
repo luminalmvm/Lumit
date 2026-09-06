@@ -15,7 +15,7 @@ pub enum Roi {
     /// Output pixel needs only the same input pixel.
     Exact,
     /// Needs input dilated by a radius in **px@comp** — pixels at composition
-    /// size, the unit every distance in Lumit is in (K-419, K-433). Sized from
+    /// size, the unit every distance in Lumit is in. Sized from
     /// the effect's own hard maximum, so a typed radius can never reach past
     /// the tile it was given.
     PaddedPx(f32),
@@ -71,7 +71,7 @@ pub struct ParamSchema {
     /// rather than a match that has to know which field of which effect holds a
     /// pixel count — an effect cannot forget to be rescaled. It is also the
     /// single source of truth for the unit rider the panel draws beside the
-    /// value (K-443), which is why [`Unit::Unset`] is a build failure rather
+    /// value, which is why [`Unit::Unset`] is a build failure rather
     /// than a quiet "no unit": a parameter that never decided and a parameter
     /// that is genuinely dimensionless must not look alike.
     ///
@@ -88,7 +88,7 @@ pub struct ParamSchema {
 ///
 /// `stem` is the pair's name with the axis taken off — `light` for
 /// `light_x` / `light_y` — and it is the **key the link flag is stored under**
-/// on an effect instance (K-443), so it has to be the pair's identity rather
+/// on an effect instance, so it has to be the pair's identity rather
 /// than either half's id.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ParamPair {
@@ -100,8 +100,8 @@ pub struct ParamPair {
     pub y: &'static str,
 }
 
-/// What a socket on the graph canvas carries (K-472,
-/// [impl/node-graph.md](../../../docs/impl/node-graph.md) §6.1).
+/// What a socket on the graph canvas carries
+/// ([impl/node-graph.md](../../../docs/impl/node-graph.md) §6.1).
 ///
 /// # In plain terms
 ///
@@ -113,7 +113,7 @@ pub struct ParamPair {
 /// crosses the bridge**.
 ///
 /// [`PortType::Points`] lands with the first engine commit even though nothing
-/// emits one yet, so the type system is complete before Particulate (K-446)
+/// emits one yet, so the type system is complete before Particulate
 /// arrives to consume it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PortType {
@@ -127,7 +127,7 @@ pub enum PortType {
     Colour,
     /// Vector geometry.
     Shape,
-    /// A points stream: one frame's particles or instances (K-446). Evaluated
+    /// A points stream: one frame's particles or instances. Evaluated
     /// data like an image, never stored in the document.
     Points,
     /// Sound.
@@ -143,17 +143,17 @@ pub enum PortType {
 /// writes down when a wire is joined to it — never seen, never translated. The
 /// **label** is what the canvas draws beside the plug, and like every other word
 /// the engine sends it crosses the bridge in English and is looked up in the
-/// frontend's table (K-303) — which is why it is declared here, beside the port,
+/// frontend's table — which is why it is declared here, beside the port,
 /// rather than worked out from the id at the seam.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Port {
     /// Stable, snake_case, and the only half the document stores.
     pub id: &'static str,
-    /// The word drawn beside the socket, in British English (K-303).
+    /// The word drawn beside the socket, in British English.
     pub label: &'static str,
     /// What travels through it, which is also what colours it.
     pub ty: PortType,
-    /// **3D awareness** (K-561), for a [`PortType::Points`] port only.
+    /// **3D awareness**, for a [`PortType::Points`] port only.
     ///
     /// The points wire stays one type: a stream carries three coordinates
     /// whatever reads it. What this says is which of the two readings the
@@ -179,7 +179,7 @@ impl Port {
         }
     }
 
-    /// The same port, declared **3D-aware** (K-561): its consumer reads the
+    /// The same port, declared **3D-aware**: its consumer reads the
     /// stream's three axes rather than the projected two.
     #[must_use]
     pub const fn three_d(self) -> Port {
@@ -199,12 +199,12 @@ pub enum ParamKind {
     Float {
         default: f64,
         slider: (f64, f64),
-        /// Hard bounds; either side may be None (K-090: a threshold clamps
+        /// Hard bounds; either side may be None (a threshold clamps
         /// at zero below and runs unbounded above).
         hard: (Option<f64>, Option<f64>),
     },
     /// A **bounded** number: a track and a thumb with the value beside it, for
-    /// a parameter whose whole meaning lives inside a closed range (K-414).
+    /// a parameter whose whole meaning lives inside a closed range.
     ///
     /// The VALUE side is an ordinary [`EffectValue::Float`](crate::model::
     /// EffectValue::Float), exactly as [`ParamKind::Int`] and
@@ -223,7 +223,7 @@ pub enum ParamKind {
     /// where the range is the parameter's *nature* rather than a range someone
     /// found sufficient: Temperature's ±150 slider runs to a ±200 hard range
     /// precisely because there is a picture beyond the slider's end, so it
-    /// stays a Float (K-414's first candidate, examined and declined).
+    /// stays a Float (the first candidate for adoption, examined and declined).
     Slider {
         default: f64,
         /// The closed range: the slider's travel, and the hard bounds, which
@@ -291,7 +291,7 @@ pub enum ParamKind {
     /// drawn from the fresh instance id at instantiation, so two copies of
     /// a seeded effect never wobble in sync.
     Seed,
-    /// A file path chosen from a dialog (K-111), e.g. a `.cube` LUT. The
+    /// A file path chosen from a dialog, e.g. a `.cube` LUT. The
     /// `filter` extensions (lower-case, no dot) and `filter_name` drive the
     /// open dialog. The value carries a [`FileParam`]; it animates only by
     /// stepping (hold keys), since two paths cannot be blended.
@@ -308,7 +308,7 @@ pub enum ParamKind {
     /// layer is rendered alone. Unset (or a dangling reference) is a
     /// labelled no-op, never a fault.
     ///
-    /// **This layer** (K-288): a reference to the layer the effect is *on*
+    /// **This layer**: a reference to the layer the effect is *on*
     /// is not a re-render of that layer — it is the effect's own input at
     /// its point in the stack. On an ordinary layer that is the picture the
     /// effect is about to process; on an **adjustment layer** it is the
@@ -324,7 +324,7 @@ pub enum ParamKind {
     },
     /// A reference to one of **this layer's masks**, handed to the effect as
     /// *geometry* — where the curve goes — rather than as the coverage the
-    /// mask produces (K-408).
+    /// mask produces.
     ///
     /// # In plain terms
     ///
@@ -339,8 +339,8 @@ pub enum ParamKind {
     /// stores is an [`EffectValue::MaskPath`](crate::model::EffectValue::
     /// MaskPath) — an optional mask id, static exactly as a layer reference
     /// is. The vertices ride beside the op, flattened at the frame's time
-    /// ([`crate::mask::mask_path_at`]), the way K-387's aux slots and K-395's
-    /// matte do; forcing a path through a parameter would be the wrong shape
+    /// ([`crate::mask::mask_path_at`]), the way the aux slots and the matte
+    /// do; forcing a path through a parameter would be the wrong shape
     /// permanently.
     ///
     /// **"First mask"** is the self-default, the way [`ParamKind::Layer`] has
@@ -361,7 +361,7 @@ pub enum ParamKind {
         /// nothing — for an effect whose path input is genuinely optional.
         self_default: bool,
     },
-    /// A **tone curve**, stored as its own control points (K-412).
+    /// A **tone curve**, stored as its own control points.
     ///
     /// # In plain terms
     ///
@@ -397,7 +397,7 @@ pub enum ParamKind {
         /// start invisible and grow from nothing (particulate.md §2).
         default: &'static [[f32; 2]],
     },
-    /// A **button**, not a value (K-417): a row the panel draws as a push
+    /// A **button**, not a value: a row the panel draws as a push
     /// button, which asks the engine to *do* something rather than describing
     /// what a picture should look like.
     ///
@@ -430,7 +430,7 @@ pub enum ParamKind {
 
 impl ParamKind {
     /// The socket type a driver wire may land on, or `None` for a control no
-    /// wire can drive (K-472 §6.1).
+    /// wire can drive.
     ///
     /// Number accepts number and colour accepts colour; nothing else is
     /// drivable in v1. A switch, a dropdown, a seed, a file, a layer, a mask,
@@ -457,7 +457,7 @@ impl ParamKind {
 }
 
 /// How a transform- or displacement-domain effect treats the border pixels
-/// its warp reveals (P3, K-145): the one reusable Edges control, shared by
+/// its warp reveals (P3): the one reusable Edges control, shared by
 /// the blur family (docs/08 §3.8) and Shake (§3.4). The `u32` codes are the
 /// wire form the resolved ops and every WGSL kernel read — 0 Transparent,
 /// 1 Repeat, 2 Mirror — so the enum only names those numbers, it never
@@ -502,7 +502,7 @@ impl EdgesMode {
 }
 
 /// A collapsible group of parameters inside one effect's parameter list
-/// (P4, K-145): the disclosure "twirl" the Effect Controls draws so an effect
+/// (P4): the disclosure "twirl" the Effect Controls draws so an effect
 /// can tuck advanced controls behind a header (Shake's per-axis wobble). The
 /// group is driven entirely from schema metadata, so any effect adopts it by
 /// declaring one in its [`EffectSchema::groups`]; the UI renders the named
@@ -526,7 +526,7 @@ pub struct ParamGroup {
     /// to Matte *and* Lights). None, or an empty set, is always visible.
     pub visible_when: Option<(&'static str, &'static [u32])>,
     /// When set, the group is shown only while the lens in play has at least
-    /// this many glass elements (K-371).
+    /// this many glass elements.
     ///
     /// The Lens flare offers a coating choice per element, and lenses have
     /// between four and eighteen of them, so the row count has to follow the
@@ -597,34 +597,33 @@ pub enum EnabledCond {
     LayerSet,
 }
 
-/// The Add-effect menu's grouping (K-090, extended by K-398 and K-400): every
-/// schema declares one.
+/// The Add-effect menu's grouping: every schema declares one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FxCategory {
     BlurSharpen,
     Colour,
     Distortion,
-    /// The effects that **make** pixels rather than change them (K-398): Fill,
+    /// The effects that **make** pixels rather than change them: Fill,
     /// Gradient, Noise, Fractal noise. Three of the four never read the incoming
     /// picture at all, which is why none of the other six describes them.
     Generate,
     Stylise,
     Temporal,
     /// The effects that **remove** the picture progressively, so a cut can be
-    /// made out of one (K-400): Linear wipe, Radial wipe. What they do to a
+    /// made out of one: Linear wipe, Radial wipe. What they do to a
     /// frame is take some of it away by a Completion the timeline animates —
     /// which is neither a stylisation nor a utility, and is the family AE's Iris
     /// wipe, Venetian blinds and Card wipe join when they land.
     Transition,
     Utility,
-    /// The effects that hold a **value** rather than change a picture (K-414):
+    /// The effects that hold a **value** rather than change a picture:
     /// Slider control, Angle control, Checkbox control, Colour control, Point
     /// control. Each is one row an expression reads and the timeline keyframes,
     /// which is what After Effects' Expression Controls are and why half the
     /// rigs in the world are wired through them. They render nothing at all, so
     /// no other category describes them.
     Controls,
-    /// The **drivers** (K-471): the nodes that make a *value* rather than a
+    /// The **drivers**: the nodes that make a *value* rather than a
     /// picture — Wiggle, Audio level, Colour cycle, Math, Remap, Smooth. Each
     /// declares a [`Signature::Data`](crate::fx::Signature::Data) instead of an
     /// image kernel, and a wire from one into an effect's socket makes that
@@ -683,16 +682,16 @@ impl FxCategory {
         FxCategory::Utility,
         // Last, as it is in the Add-effect menu: the menu groups by first
         // appearance in the catalogue, and the Controls family is appended at
-        // the end of it (K-137, K-414).
+        // the end of it.
         FxCategory::Controls,
         // Last of all: a driver is added from the Graph panel's own search
         // rather than from the Add-effect menu, so it sits after the family it
-        // is kin to (K-471).
+        // is kin to.
         FxCategory::Drivers,
     ];
 }
 
-/// The id of the generic Matte layer parameter every effect gains (K-395).
+/// The id of the generic Matte layer parameter every effect gains.
 ///
 /// One definition: `#[derive(Effect)]` emits this very const into the injected
 /// [`ParamSchema`], the draw builder looks the layer reference up by it, and the
@@ -700,14 +699,14 @@ impl FxCategory {
 /// bound to a layer nobody renders.
 pub const MATTE_PARAM: &str = "matte";
 
-/// The id of the Invert switch that rides beside [`MATTE_PARAM`] (K-395).
+/// The id of the Invert switch that rides beside [`MATTE_PARAM`].
 pub const MATTE_INVERT_PARAM: &str = "matte_invert";
 
 /// [`MATTE_INVERT_PARAM`]'s resolved id — what the generic post-lerp reads the
 /// switch out of the bag by, once per op rather than once per effect.
 pub const MATTE_INVERT_ID: super::params::ParamId = super::params::ParamId::new(MATTE_INVERT_PARAM);
 
-/// The id of the Channel choice that rides beside [`MATTE_PARAM`] (K-425):
+/// The id of the Channel choice that rides beside [`MATTE_PARAM`]:
 /// which channel of the matte layer drives the effect, by the shared
 /// [`CHANNEL_OPTIONS`](super::CHANNEL_OPTIONS) index (Luminance by default).
 ///
@@ -731,7 +730,7 @@ pub const MIX_PARAM: &str = "mix";
 /// [`MIX_PARAM`]'s resolved id.
 pub const MIX_ID: super::params::ParamId = super::params::ParamId::new(MIX_PARAM);
 
-/// The id of the Blend choice injected beside every Mix slider (K-425): how
+/// The id of the Blend choice injected beside every Mix slider: how
 /// the effect's result combines with its input, by index into
 /// [`BlendMode::ALL`](crate::model::BlendMode::ALL) — the layer modes, verbatim.
 /// Normal (index 0, the default) is the effect's output unchanged, byte for
@@ -742,7 +741,7 @@ pub const BLEND_PARAM: &str = "blend";
 /// [`BLEND_PARAM`]'s resolved id.
 pub const BLEND_ID: super::params::ParamId = super::params::ParamId::new(BLEND_PARAM);
 
-/// What an effect's Matte row *means*, and therefore who consumes it (K-395).
+/// What an effect's Matte row *means*, and therefore who consumes it.
 ///
 /// # In plain terms
 ///
@@ -767,7 +766,7 @@ pub enum MatteRole {
     /// It exists because "every effect" is a claim about the effects that
     /// exist, and an effect that genuinely cannot be driven by a picture should
     /// be able to say so rather than carry a row that does nothing. The
-    /// **Controls family** declares it (K-414): a Slider control touches no
+    /// **Controls family** declares it: a Slider control touches no
     /// pixel, so a matte would be a picture gating nothing.
     None,
     /// The generic **strength** semantic: the injected [`MATTE_PARAM`] pair, and
@@ -775,18 +774,18 @@ pub enum MatteRole {
     /// ([`cpu::matte_mix`](super::cpu::matte_mix) and its WGSL twin). The
     /// default, and what all but four effects use.
     Strength,
-    /// The effect claims the matte **inside its own maths** — the K-395
-    /// override. The generic dissolve does not run.
+    /// The effect claims the matte **inside its own maths**. The generic
+    /// dissolve does not run.
     Own {
         /// The parameter the layer reference is stored under. [`MATTE_PARAM`]
         /// for an effect that takes the injected row and simply means something
         /// deeper by it (Gaussian blur, Glow), and the effect's own older id
-        /// where it owned the idea before K-395 existed (Depth of field's
-        /// `depth`, the Lens flare's `matte`) — a save is a save, K-065.
+        /// where it owned the idea before the universal matte existed (Depth of
+        /// field's `depth`, the Lens flare's `matte`) — a save is a save.
         param: &'static str,
         /// **What this effect's matte does**, in one sentence, sentence case, no
-        /// full stop — the schema prose K-395 requires of every override, and
-        /// what the manual prints beside the Matte row (`fx-reference.json`).
+        /// full stop — the schema prose every override carries, and what the
+        /// manual prints beside the Matte row (`fx-reference.json`).
         /// The declaration cannot claim the matte without writing it: the two
         /// arrive as one attribute.
         meaning: &'static str,
@@ -838,21 +837,21 @@ pub struct EffectSchema {
     pub category: FxCategory,
     pub traits: EffectTraits,
     pub params: &'static [ParamSchema],
-    /// Collapsible parameter groups (P4, K-145): each names a contiguous run
+    /// Collapsible parameter groups (P4): each names a contiguous run
     /// of `params` the Effect Controls tucks behind a twirl. Empty for the
     /// effects that declare none.
     pub groups: &'static [ParamGroup],
     /// Rows that grey out while another parameter says so. Empty for the
     /// effects whose controls are all independent, which is most of them.
     pub enabled_when: &'static [EnabledWhen],
-    /// What this effect's Matte row means, and therefore who consumes it
-    /// (K-395) — see [`MatteRole`].
+    /// What this effect's Matte row means, and therefore who consumes it — see
+    /// [`MatteRole`].
     ///
     /// It is the one fact the generic carriage keys on, and both sides read it:
     /// the draw builder fills one matte slot per op whose role names a
     /// parameter, and `run_ops` consumes one per op whose role names a
-    /// parameter — one predicate, one order, exactly as K-387 requires of every
-    /// parallel list. Whether the *dissolve* then runs, or the texture goes to
+    /// parameter — one predicate, one order, the rule every parallel list
+    /// follows. Whether the *dissolve* then runs, or the texture goes to
     /// the kernel instead, is the same field's second question
     /// ([`MatteRole::generic`]).
     ///
@@ -864,20 +863,20 @@ pub struct EffectSchema {
 
 impl EffectSchema {
     /// The [`ParamKind::MaskPath`] row this effect declares — its id and
-    /// whether an unset row means the layer's first mask (K-408).
+    /// whether an unset row means the layer's first mask.
     ///
     /// **The one predicate.** `build.rs` flattens a slot per op that answers
     /// `Some`, and `fxops::run_ops` consumes one per op that answers `Some`,
-    /// in the same order — the K-387 rule, one predicate and one order, so the
-    /// two lists cannot drift apart silently. Anything that needs to know
+    /// in the same order — one predicate and one order, so the two lists
+    /// cannot drift apart silently. Anything that needs to know
     /// whether an effect takes a path asks here rather than matching on the
     /// parameter list itself.
     ///
     /// The first declaration wins: an effect takes at most one path, because a
     /// second would need a second carriage and nothing has asked for one.
-    /// Whether this effect carries the injected Channel row beside its matte
-    /// (K-425) — and therefore whether the seam prepares the matte (channel
-    /// pick and Invert, once) before the kernel or the dissolve sees it. An
+    /// Whether this effect carries the injected Channel row beside its matte —
+    /// and therefore whether the seam prepares the matte (channel pick and
+    /// Invert, once) before the kernel or the dissolve sees it. An
     /// effect that owns its channel choice (Depth of field, Displacement map,
     /// Set matte, the Lens flare) carries none and keeps reading the raw RGBA
     /// matte itself, Invert included.
@@ -886,7 +885,7 @@ impl EffectSchema {
         self.params.iter().any(|p| p.id == MATTE_CHANNEL_PARAM)
     }
 
-    /// Whether this effect carries the injected Blend row (K-425): every
+    /// Whether this effect carries the injected Blend row: every
     /// effect with a Mix slider that does not declare a `blend` of its own.
     ///
     /// **The options are the test, not the id.** The Lens flare declares a
@@ -911,7 +910,7 @@ impl EffectSchema {
     }
 
     /// This effect's **vector pairs**: the `foo_x` / `foo_y` runs the panel
-    /// draws as one row of two wells with a link glyph between them (K-443).
+    /// draws as one row of two wells with a link glyph between them.
     ///
     /// # In plain terms
     ///
@@ -952,14 +951,14 @@ impl EffectSchema {
     }
 
     /// **Every** [`ParamKind::MaskPath`] row this effect declares, in
-    /// declaration order — id and `self_default` apiece (K-408, K-546).
+    /// declaration order — id and `self_default` apiece.
     ///
     /// [`Self::mask_path`] answers the first, which is the whole story for the
     /// three effects that walk one line. The Matte key takes two (an inside
     /// hold-out and an outside one), so the carriage counts rows rather than
     /// ops: `build.rs` flattens one polyline per row this yields and
     /// `fxops::run_ops` consumes one per row, in this order. One predicate,
-    /// one order — the K-387 rule, now over rows instead of effects.
+    /// one order — the same rule, now over rows instead of effects.
     pub fn mask_paths(&self) -> impl Iterator<Item = (&'static str, bool)> + '_ {
         self.params.iter().filter_map(|p| match p.kind {
             ParamKind::MaskPath { self_default } => Some((p.id, self_default)),
@@ -975,18 +974,18 @@ impl EffectSchema {
     }
 
     /// The **auxiliary layer** this effect samples beside its own input
-    /// (K-123, K-387, [impl/layer-input.md](../../../docs/impl/layer-input.md)):
+    /// ([impl/layer-input.md](../../../docs/impl/layer-input.md)):
     /// the first [`ParamKind::Layer`] row that is not the effect's matte.
     ///
     /// **The one predicate**, exactly as [`EffectSchema::mask_path`] is one:
     /// `build.rs` renders a slot per op that answers `Some` and
     /// `fxops::run_ops` consumes one per op that answers `Some`, in the same
     /// order, so the two lists cannot drift apart silently. It replaced a table
-    /// of match names in `build.rs` (K-429) — a table is a second rule, and a
+    /// of match names in `build.rs` — a table is a second rule, and a
     /// second rule is a thing to forget when an effect gains a layer row.
     ///
     /// It is deliberately *independent* of the matte carriage and of whatever
-    /// else the effect consumes: Fast motion blur reads a whole flow field and
+    /// else the effect consumes: Motion blur reads a whole flow field and
     /// a Motion vectors layer and a matte, and Set matte reads a layer and no
     /// matte at all. An effect takes at most one auxiliary layer, because a
     /// second would need a second carriage and nothing has asked for one.

@@ -11,7 +11,7 @@
 // what make the dashes possible: a 3×3 gradient on compressed footage points a
 // different way in almost every pixel, and the dashes come out as speckle.
 //
-// The value is the PERCEPTUAL luma (§3.58's curve, K-404), or the alpha, and the
+// The value is the PERCEPTUAL luma (§3.58's curve), or the alpha, and the
 // pixel's position is measured from the middle of the frame — see cpu::
 // vegas_stroke for why the arm matters.
 //
@@ -29,7 +29,7 @@ struct Params {
     mix_amt: f32,        // 0..1, blended against the unprocessed input
     from_alpha: u32,     // 1 reads the alpha rather than the luma
     composite: u32,      // 1 keeps the layer under the stroke
-    matte_on: f32,       // 1 = the matte scales Opacity per pixel (K-428)
+    matte_on: f32,       // 1 = the matte scales Opacity per pixel
     _pad1: u32,
 };
 
@@ -38,14 +38,14 @@ struct Params {
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
 
-// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// The Matte (docs/08 §2.6), bound for every kernel on this layout and
 // read only under `matte_on` — bound to `src` when there is none, since a
 // texture binding cannot be left empty.
 @group(0) @binding(4) var matte: texture_2d<f32>;
 
 // This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
 // luma, clamped. The Channel pick and Invert already happened, once, at the
-// seam (fx_matte_prepare.wgsl, K-425).
+// seam (fx_matte_prepare.wgsl).
 fn matte_k(xy: vec2<i32>) -> f32 {
     let m = textureLoad(matte, xy, 0);
     return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
@@ -118,7 +118,7 @@ fn vegas(@builtin(global_invocation_id) gid: vec3<u32>) {
     let soft = max(p.band * p.inv_segment, 1e-4);
     let along = clamp((p.duty - frac) / soft + 0.5, 0.0, 1.0);
 
-    // The matte pulls Opacity toward 0 per pixel, before the composite (K-428).
+    // The matte pulls Opacity toward 0 per pixel, before the composite.
     var opacity = p.opacity;
     if (p.matte_on != 0.0) {
         opacity = matte_toward(opacity, 0.0, matte_k(xy));

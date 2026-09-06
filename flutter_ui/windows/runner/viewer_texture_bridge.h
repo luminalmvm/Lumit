@@ -1,4 +1,4 @@
-// The in-runner zero-copy Viewer bridge (K-177).
+// The in-runner zero-copy Viewer bridge.
 //
 // In plain terms: the Rust engine draws the Viewer's picture into a Windows
 // shared GPU texture and hands Dart an OS "handle" naming it. Dart calls this

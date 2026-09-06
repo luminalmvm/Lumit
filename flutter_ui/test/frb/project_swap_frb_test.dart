@@ -1,4 +1,4 @@
-// Adopting another project is announced on the scoped-change stream (K-740).
+// Adopting another project is announced on the scoped-change stream.
 //
 // Every per-document cache in the shell drops itself on an `items` change and
 // on nothing else: the Project panel's item, name and probe caches, the comp

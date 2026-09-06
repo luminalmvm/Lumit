@@ -141,7 +141,7 @@ struct AdjustParams {
     _pad: [f32; 3],
 }
 
-/// The generic Matte dissolve's one number (K-395): 1 to invert the matte.
+/// The generic Matte dissolve's one number: 1 to invert the matte.
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct MatteMixParams {
@@ -149,7 +149,7 @@ struct MatteMixParams {
     _pad: [f32; 3],
 }
 
-/// The matte preparation's two numbers (K-425): the channel and the invert.
+/// The matte preparation's two numbers: the channel and the invert.
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct MattePrepareParams {
@@ -158,7 +158,7 @@ struct MattePrepareParams {
     _pad: [u32; 2],
 }
 
-/// The effect Blend's two numbers (K-425): the mode and the effect's Mix.
+/// The effect Blend's two numbers: the mode and the effect's Mix.
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct BlendMixParams {
@@ -171,7 +171,7 @@ struct BlendMixParams {
 /// itself arrives as its own 3D texture (see [`upload_lut_3d`] and
 /// [`FxEngine::lut`]); this uniform carries the edge length the shader needs to
 /// turn a colour into grid coordinates, the host Mix, and the cube's input
-/// domain (K-271 — the shader remaps through it exactly as the CPU reference
+/// domain (the shader remaps through it exactly as the CPU reference
 /// does; before that it assumed 0..1 and a cube saying otherwise rendered
 /// silently wrong).
 #[repr(C)]
@@ -181,7 +181,7 @@ struct LutParams {
     size: u32,
     /// 0..1, blended against the unprocessed input.
     mix: f32,
-    /// The Input space the lookup happens in (K-543): 0 Linear, 1 sRGB,
+    /// The Input space the lookup happens in: 0 Linear, 1 sRGB,
     /// 2 Rec. 709 — `lumit_core::lut::LutSpace::code`'s numbering, which the
     /// shader's `to_space` / `to_linear` branch on. 0 is the identity both ways.
     space: u32,
@@ -213,7 +213,7 @@ impl FxEngine {
     /// bind any same-size float texture in that slot.
     ///
     /// **The aperture and the average are both shapeable, and every shaping
-    /// control is branched around at its neutral** (K-313): the aperture's
+    /// control is branched around at its neutral**: the aperture's
     /// **Roundness** reaches below zero into star shapes and **Deform** squeezes
     /// it on one axis — both leave it inscribed in the circle of the CoC radius,
     /// so `ceil(radius)` stays a correct bound on the taps and the effect's ROI
@@ -323,8 +323,8 @@ impl FxEngine {
                     binding: 4,
                     resource: ubuf.as_entire_binding(),
                 },
-                // The Matte slot Motion blur added to this shared layout
-                // (K-429). This kernel never reads it, so `src` stands in it:
+                // The Matte slot Motion blur added to this shared layout.
+                // This kernel never reads it, so `src` stands in it:
                 // a binding cannot be left empty, and it is the same
                 // "bound but not read" convention `dispatch_matted` uses.
                 wgpu::BindGroupEntry {
@@ -351,7 +351,7 @@ impl FxEngine {
     /// working texture, returning a new texture of the same size. One pass on
     /// **unpremultiplied** colour (§2.2 — a LUT is an arbitrary colour map):
     /// per output pixel, unpremultiply, convert into the Input space `space`
-    /// names (K-543 — 0 Linear, 1 sRGB, 2 Rec. 709; Linear is the identity and
+    /// names (0 Linear, 1 sRGB, 2 Rec. 709; Linear is the identity and
     /// the bit-exact picture this pass rendered before), map each channel through
     /// `[domain_min, domain_max]` to a grid coordinate in `[0, size-1]`
     /// (clamped, and a zero span reading as 0), `textureLoad` the eight
@@ -518,7 +518,7 @@ impl FxEngine {
         out
     }
 
-    /// The generic Matte dissolve (K-395, docs/08 §2.6): per-channel lerp from
+    /// The generic Matte dissolve (docs/08 §2.6): per-channel lerp from
     /// the picture the effect was given (`input`) to what it produced
     /// (`processed`), by the `matte`'s premultiplied Rec. 709 luma — inverted
     /// when `invert`. The op-for-op twin of
@@ -526,8 +526,8 @@ impl FxEngine {
     /// all three textures are this raster's size, and a new one comes back.
     ///
     /// It is never called when no matte is bound, which is what makes an effect
-    /// with an unset Matte row byte-identical to the same effect before K-395
-    /// (K-258): the pass does not run, so there is nothing to be identical to.
+    /// with an unset Matte row byte-identical to the same effect before
+    /// mattes: the pass does not run, so there is nothing to be identical to.
     #[allow(clippy::too_many_arguments)]
     pub fn matte_mix(
         &self,
@@ -672,7 +672,7 @@ impl FxEngine {
         out
     }
 
-    /// The matte's Channel pick and Invert, once (K-425, docs/08 §2.6): the
+    /// The matte's Channel pick and Invert, once (docs/08 §2.6): the
     /// RGBA `matte` becomes a grey picture whose R = G = B = the chosen
     /// channel (a `CHANNEL_OPTIONS` index), clamped and inverted if asked,
     /// alpha 1. The op-for-op twin of
@@ -681,7 +681,7 @@ impl FxEngine {
     /// The seam calls it only when
     /// [`matte_needs_prepare`](lumit_core::fx::cpu::matte_needs_prepare) says
     /// so: Luminance with Invert off is what every kernel reads already, and
-    /// not running the pass is what keeps that case byte for byte (K-258).
+    /// not running the pass is what keeps that case byte for byte.
     pub fn matte_prepare(
         &self,
         ctx: &GpuContext,
@@ -708,7 +708,7 @@ impl FxEngine {
         )
     }
 
-    /// The effect Blend and Mix, once (K-425, docs/08 §1.5): `processed` is
+    /// The effect Blend and Mix, once (docs/08 §1.5): `processed` is
     /// the kernel's output at Mix 100, `input` what it was given; each pixel
     /// becomes `input * (1 - mix) + blend(input, processed) * mix` for `mode`
     /// a `BlendMode::ALL` index. The op-for-op twin of

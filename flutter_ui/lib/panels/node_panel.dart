@@ -1,5 +1,5 @@
 // The Node panel: the parameter rows of whichever box the Graph panel has
-// picked (K-471, the approved Nodes-workspace drawing).
+// picked (the approved Nodes-workspace drawing).
 //
 // **In plain terms.** The Graph panel draws boxes. Click one and this panel
 // lists what that box can be set to — the same rows the Effect controls panel
@@ -175,7 +175,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
               p
             ),
           BridgeOutputRef_SourceMatte() => ('source', 'matte'),
-          // A points wire's source is a *stack effect* (K-492).
+          // A points wire's source is a *stack effect*.
           BridgeOutputRef_EffectData(:final effect, :final port) => (
               graphNodeKey(BridgeNodeRef.effect(effect)),
               port
@@ -342,7 +342,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     final values = {for (final v in picked.info.values) v.id: v.value};
     final params = cachedListParameters(picked.info.name);
 
-    // **A point is one row, here as everywhere** (K-443). An `_x`/`_y` pair of
+    // **A point is one row, here as everywhere**. An `_x`/`_y` pair of
     // floats folds into a single Position row with one label, one stopwatch
     // over both channels and — where the pair is declared in pixels — the
     // dropper that picks the point off the Viewer. Points sample's query point

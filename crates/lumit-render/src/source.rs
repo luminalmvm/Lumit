@@ -124,7 +124,7 @@ pub trait SourceProbes {
 /// * **The probe returned is always the original's.** A proxy is a smaller
 ///   copy of the same footage, so the layer keeps the original's pixel size and
 ///   the original's rate and length: geometry is in px@comp against the
-///   original's raster (K-419), and every transform, mask and effect parameter
+///   original's raster, and every transform, mask and effect parameter
 ///   goes on meaning what it meant. All the proxy changes is how many pixels
 ///   come back from the decode — which is exactly what the preview-resolution
 ///   tier already does, through the same `target_width` machinery.

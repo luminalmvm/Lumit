@@ -7,11 +7,11 @@
 // (including when footage is dropped on it, which prefills the fields from the
 // media — docs/07 §3.1).
 //
-// **The shape is the approved drawing's** (K-469), and it is the *same* popup
-// the export dialog is built from: a kicker title strip, label-left rows in a
+// **The shape is the approved drawing's**, and it is the *same* popup the
+// export dialog is built from: a kicker title strip, label-left rows in a
 // 110px column with 12 after it, kicker-titled sections separated by a rule,
-// and a footer carrying Cancel and the single filled action. `dialog_frame.dart`
-// holds the pieces; this file holds the questions.
+// and a footer carrying Cancel and the single filled action.
+// `dialog_frame.dart` holds the pieces; this file holds the questions.
 //
 // **The frame rate is one number, and the duration is a length of time.** Both
 // are deliberate:
@@ -24,11 +24,11 @@
 // * The duration reads and edits as `HH:MM:SS:FF` timecode — the same clock
 //   face the Viewer shows — but what is *written* is still a length in seconds,
 //   converted at the rate typed above it. Seconds in the document is what fixes
-//   the old "changing the rate retimes the comp" bug (K-180): a frame count
-//   means nothing without the rate it was counted at, so storing yesterday's
-//   count back at a new rate changed how long the comp really was while every
-//   layer kept its own seconds — which looked exactly like the layers speeding
-//   up or slowing down.
+//   the old "changing the rate retimes the comp" bug: a frame count means
+//   nothing without the rate it was counted at, so storing yesterday's count
+//   back at a new rate changed how long the comp really was while every layer
+//   kept its own seconds — which looked exactly like the layers speeding up or
+//   slowing down.
 
 import 'dart:typed_data';
 
@@ -50,8 +50,8 @@ import '../widgets/controls.dart';
 import 'dialog_frame.dart';
 
 /// The frame the drawing gives this dialog, and its row — a 110px label column
-/// with 12 after it, in rows of 30. Not the Export dialog's (K-458, K-469:
-/// each drawing measures its own).
+/// with 12 after it, in rows of 30. Not the Export dialog's: each drawing
+/// measures its own.
 const double compDialogWidth = 520;
 const double compLabelColumn = 110;
 const double compRowGap = 12;
@@ -114,10 +114,10 @@ Future<bool> showCompSettingsFrb({
       confirm: l10n.save,
       initial: comp.getSettings(),
       onConfirm: (settings) {
-        // **The playhead keeps its moment, not its number** (K-572). A frame
-        // count means nothing without the rate it was counted at, so the time
-        // under the playhead is read *before* the rate is written and the
-        // nearest frame of the new grid asked for after — the engine does both
+        // **The playhead keeps its moment, not its number.** A frame count
+        // means nothing without the rate it was counted at, so the time under
+        // the playhead is read *before* the rate is written and the nearest
+        // frame of the new grid asked for after — the engine does both
         // conversions, exactly, because 29.97's boundaries do not survive a
         // float. Markers and the work area need none of this: both are stored
         // as rational time already, so they keep their moments untouched.
@@ -149,10 +149,10 @@ Future<CompositionReference?> showNewCompositionFrb({
   required ProjectReference project,
   List<FootageReference> footage = const [],
 
-  /// Settings ▸ Interface ▸ Editing ▸ *Video arrives as a Sequence layer*
-  /// (K-246), forwarded to the engine for each item placed below. Taken as an
-  /// argument rather than read from the workspace here, because this file is
-  /// a dialog and knows nothing about where settings live.
+  /// Settings ▸ Interface ▸ Editing ▸ *Video arrives as a Sequence layer*,
+  /// forwarded to the engine for each item placed below. Taken as an argument
+  /// rather than read from the workspace here, because this file is a dialog
+  /// and knows nothing about where settings live.
   bool asSequence = false,
 }) async {
   // Probed before the dialog opens rather than inside it: `mediaInfo` reads the
@@ -401,9 +401,9 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
             ),
             HouseButton(
               key: const ValueKey('comp-apply'),
-              // The window's default action (K-319): focused on open so Enter
-              // applies; a field being typed in keeps Enter for its own submit,
-              // which calls the same confirm.
+              // The window's default action: focused on open so Enter applies;
+              // a field being typed in keeps Enter for its own submit, which
+              // calls the same confirm.
               primary: true,
               autofocus: true,
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -643,7 +643,7 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
 
   /// A named group of rows: a rule, the drawing's 4 of air, a kicker band, and
   /// the rows under it. The Settings pages' shape rather than the Export
-  /// dialog's box — this drawing separates its sections with a line (K-469).
+  /// dialog's box — this drawing separates its sections with a line.
   Widget _section(LumitTheme t, String title, List<Widget> rows) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
@@ -747,7 +747,7 @@ String timecodeOfDuration(BridgeRational seconds, int fpsNum, int fpsDen) {
 }
 
 /// A whole frame count back to exact seconds at `fpsNum/fpsDen` — the pair the
-/// document stores (K-180: seconds, never a frame count).
+/// document stores: seconds, never a frame count.
 BridgeRational secondsOfFrames(int frames, int fpsNum, int fpsDen) {
   if (fpsNum <= 0) return BridgeRational(num: frames, den: 1);
   final num = frames * (fpsDen <= 0 ? 1 : fpsDen);

@@ -1,4 +1,4 @@
-// Curves (docs/08-EFFECTS.md §3.30, K-412): a tone curve per channel, baked
+// Curves (docs/08-EFFECTS.md §3.30): a tone curve per channel, baked
 // host-side into a 257-entry table and read here as a lookup, evaluated on
 // unpremultiplied colour (§2.2, the wrap fused into the kernel) and
 // re-premultiplied on the way out. Mirrors lumit_core::fx::cpu::curves

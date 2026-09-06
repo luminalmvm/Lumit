@@ -34,7 +34,7 @@ pub struct MatteDraw {
     pub luma: bool,
     pub inverted: bool,
     /// The matte source's own effect stack, resolved at the matte's layer time
-    /// (docs/impl/layer-input.md; K-142). Non-empty only when the consumer's
+    /// (docs/impl/layer-input.md). Non-empty only when the consumer's
     /// `MatteRef::source` is `EffectsAndMasks` — the effects then run on the matte
     /// texture (upload → linearise → `run_ops`) before it is composited alone, so
     /// a keyed or blurred matte gates by its processed pixels. Empty for None /
@@ -47,17 +47,17 @@ pub struct MatteDraw {
     /// ops in `fx` (as for a layer's own `lut_files`). Empty unless the
     /// source mode is `EffectsAndMasks` and the matte source has a LUT.
     pub lut_files: Vec<Option<String>>,
-    /// Set when the matte source is a **Precomp** (K-268): the nested comp's
+    /// Set when the matte source is a **Precomp**: the nested comp's
     /// own draw list, realised recursively exactly as a Precomp layer's
     /// picture is — `rgba` is then empty and `tex_w`/`tex_h` are the nested
     /// comp's size. A comp has no pixels until it is rendered, so `pixels_for`
     /// answers None for one, and a track matte set to a precomp silently
     /// gated nothing at all until this field existed (the layer-input twin of
-    /// the same hole was K-266's `DofInputDraw::nested`). The source-mode
+    /// the same hole was `DofInputDraw::nested`). The source-mode
     /// masks/effects toggles do not apply to a comp reference — the comp
     /// renders as itself, its layers' own masks and effects included.
     pub nested: Option<Box<NestedInputDraw>>,
-    /// The matte source's own OCIO colour space (K-490), carried for the same
+    /// The matte source's own OCIO colour space, carried for the same
     /// reason and read the same way as [`DrawSource::Pixels::colour_space`]: a
     /// matte drawn from footage is image content, and log footage read as
     /// though it were sRGB gates by the wrong shape. `None` — a source that is
@@ -66,7 +66,7 @@ pub struct MatteDraw {
     pub colour_space: Option<String>,
 }
 
-/// One Roto brush's matte for one frame, as the draw carries it (K-710): the
+/// One Roto brush's matte for one frame, as the draw carries it: the
 /// propagation's gray8 plane at the source raster, shared rather than copied
 /// (the store hands out an `Arc` and this is that same allocation).
 #[derive(Clone)]
@@ -82,14 +82,14 @@ pub struct RotoMatteDraw {
 /// working raster. The referenced layer is rendered source-only (its own
 /// effect stack is not applied), exactly as a matte source is — so a depth
 /// reference can never recurse into another effect, and the preview and export
-/// threads produce the same depth pass (K-031).
+/// threads produce the same depth pass.
 pub struct DofInputDraw {
     pub rgba: Vec<u8>,
     pub tex_w: u32,
     pub tex_h: u32,
     /// The depth layer's own effect stack, resolved at its layer time — run on
     /// the depth texture before it is resampled, when the consuming effect's
-    /// depth source is `EffectsAndMasks` (K-142, mirroring the matte). Empty for
+    /// depth source is `EffectsAndMasks` (mirroring the matte). Empty for
     /// None / Masks (the raw pixels are carried in `rgba`). Temporal inputs are
     /// not fed through an effects-and-masks depth input in v1 (matte boundary).
     pub fx: lumit_core::fx::ResolvedStack,
@@ -97,7 +97,7 @@ pub struct DofInputDraw {
     /// `fx`. Empty unless the depth source is `EffectsAndMasks` and the depth
     /// layer has a LUT.
     pub lut_files: Vec<Option<String>>,
-    /// Set when the referenced layer is a **Precomp** (K-266): the nested
+    /// Set when the referenced layer is a **Precomp**: the nested
     /// comp's own draw list, realised recursively exactly as a Precomp
     /// layer's picture is — `rgba` is then empty and `tex_w`/`tex_h` are the
     /// nested comp's size. `pixels_for` has no pixels for a comp (they only
@@ -106,7 +106,7 @@ pub struct DofInputDraw {
     /// source-mode masks/effects toggles do not apply to a comp reference —
     /// the comp renders as itself, its layers' own effects included.
     pub nested: Option<Box<NestedInputDraw>>,
-    /// The referenced layer's own OCIO colour space (K-490), as
+    /// The referenced layer's own OCIO colour space, as
     /// [`MatteDraw::colour_space`] carries a matte's: a Light wrap background
     /// plate or a Texturize texture is a picture, and it is interpreted through
     /// the space its footage item was tagged with rather than the built-in
@@ -115,14 +115,14 @@ pub struct DofInputDraw {
 }
 
 /// What a layer-input parameter resolves to for one effect op (docs/impl/
-/// layer-input.md, K-288): nothing, this effect's own input, or another
+/// layer-input.md): nothing, this effect's own input, or another
 /// layer's picture. One of these per op that declares a Layer parameter,
 /// 1:1 and in order with those ops.
 pub enum LayerInputDraw {
     /// Unset, dangling, out of its time span, or not in a mode that reads
     /// one — the effect degrades to its labelled no-op, never a fault.
     Absent,
-    /// The reference points at the layer the effect is **on** (K-288), so
+    /// The reference points at the layer the effect is **on**, so
     /// the input is that effect's own input at its point in the stack. No
     /// second render happens: `run_ops` binds the texture it is already
     /// carrying. On an adjustment layer that texture is the composite of
@@ -134,7 +134,7 @@ pub enum LayerInputDraw {
     Layer(DofInputDraw),
 }
 
-/// A layer-input's nested comp render (K-266) — the [`DrawSource::Nested`]
+/// A layer-input's nested comp render — the [`DrawSource::Nested`]
 /// shape, boxed onto [`DofInputDraw`].
 pub struct NestedInputDraw {
     pub width: u32,
@@ -142,7 +142,7 @@ pub struct NestedInputDraw {
     pub background: [f64; 4],
     pub draws: Vec<CompLayerDraw>,
     pub camera: Option<lumit_core::model::CameraPose>,
-    /// The nested frame's own content name (K-422), as for
+    /// The nested frame's own content name, as for
     /// [`DrawSource::Nested::key`]; `None` realises it every time.
     pub key: Option<u128>,
 }
@@ -154,8 +154,8 @@ pub enum DrawSource {
         rgba: Vec<u8>,
         tex_w: u32,
         tex_h: u32,
-        /// The footage item's OCIO colour space, by the loaded config's name
-        /// (K-490). `None` — every layer that is not footage, and every
+        /// The footage item's OCIO colour space, by the loaded config's
+        /// name. `None` — every layer that is not footage, and every
         /// footage item nobody has assigned — is the built-in interpretation
         /// this always did.
         ///
@@ -172,7 +172,7 @@ pub enum DrawSource {
         draws: Vec<CompLayerDraw>,
         /// The nested comp's own active camera at this time.
         camera: Option<lumit_core::model::CameraPose>,
-        /// The nested frame's own content name (K-422): the frame key of the
+        /// The nested frame's own content name: the frame key of the
         /// nested comp at this layer time and quality tier, the same whichever
         /// parent asks for it, so the realiser can hand back the texture it
         /// made last time instead of walking `draws` again. `None` — footage
@@ -180,7 +180,7 @@ pub enum DrawSource {
         /// keyer — realises it every time. A collapsed Precomp never reaches
         /// here: its inner draws are spliced into the parent's list.
         key: Option<u128>,
-        /// The Precomp layer's own paint strokes (K-547), stamped into the
+        /// The Precomp layer's own paint strokes, stamped into the
         /// nested picture once it has been realised. Every other kind of
         /// layer has its strokes baked into `Pixels` by `build`'s
         /// `pixels_for`; a Precomp has no pixels until it is rendered, so
@@ -188,9 +188,9 @@ pub enum DrawSource {
         /// Empty on the overwhelming majority of Precomp layers, which is
         /// the case that costs nothing.
         paint: Vec<lumit_core::paint::PaintStroke>,
-        /// The layer time `paint`'s keyed Start and End are read at (K-549),
+        /// The layer time `paint`'s keyed Start and End are read at,
         /// which is the same clock every other animated value on this layer
-        /// is read at (K-213). Meaningless — and unread — when `paint` is
+        /// is read at. Meaningless — and unread — when `paint` is
         /// empty.
         paint_time: f64,
     },
@@ -207,7 +207,7 @@ pub enum DrawSource {
 /// time `tau`, plus the comp's camera at `tau`. Carried on the adjustment's
 /// [`DrawSource::Adjust`] draw so `Realiser::realise` composites the held
 /// version in place of the plain below-composite — the same `build_comp_draws`
-/// + `realise` export drives, so preview equals export (K-031).
+/// + `realise` export drives, so preview equals export.
 pub struct TemporalBelow {
     pub draws: Vec<CompLayerDraw>,
     pub camera: Option<lumit_core::model::CameraPose>,
@@ -221,21 +221,21 @@ pub struct TemporalBelow {
 /// plain frame-time below-composite by `mix`, and the result stands in for the
 /// below-composite the adjustment's own effects and coverage blend see — the
 /// same `render_below_at` (via `below_draws_at`) export drives, so preview equals
-/// export (K-031). Carried on the adjustment's [`DrawSource::Adjust`] draw; None
+/// export. Carried on the adjustment's [`DrawSource::Adjust`] draw; None
 /// on every ordinary draw and every non-accumulation adjustment.
 pub struct AccumulationBelow {
     /// One below-stack draw list + camera per sub-frame sample time `τ_k`.
     pub samples: Vec<(Vec<CompLayerDraw>, Option<lumit_core::model::CameraPose>)>,
     /// Averaged-over-original blend, 0..1 (1 = full accumulation blur).
     pub mix: f32,
-    /// **The Matte, scaling Shutter angle per pixel** (K-429, docs/08 §2.6).
+    /// **The Matte, scaling Shutter angle per pixel** (docs/08 §2.6).
     /// [`LayerInputDraw::Absent`] is the whole of the old behaviour: equal
-    /// weights, one hardware additive pass, byte for byte what it was (K-258).
+    /// weights, one hardware additive pass, byte for byte what it was.
     /// It is carried here rather than on the effect's op because this effect
     /// resolves to no op at all — it orchestrates a re-render — so the matte
     /// carriage `run_ops` walks skips it on both sides.
     pub matte: LayerInputDraw,
-    /// The Matte's Channel and Invert (K-425), applied by the combine itself:
+    /// The Matte's Channel and Invert, applied by the combine itself:
     /// nothing prepares this matte at the dispatch seam, because there is no
     /// dispatch.
     pub matte_channel: u32,
@@ -291,7 +291,7 @@ pub struct CompLayerDraw {
     /// source. Empty unless the stack is temporal.
     pub neighbours: Vec<(i32, Vec<u8>, u32, u32)>,
     /// The layer's dense forward flow fields `(offset, u, v, conf, w, h)`, one
-    /// per neighbour offset a flow-consuming effect asked for (K-544) — Fast
+    /// per neighbour offset a flow-consuming effect asked for — Fast
     /// motion blur (docs/08 §3.2) reads `+1`, Datamosh (§3.12) reads `-1`, and a
     /// stack with both carries both rather than one of them silently doing
     /// nothing. Carried from the decode job; `w × h` matches the decoded source.
@@ -316,11 +316,11 @@ pub struct CompLayerDraw {
     /// referenced layer's source pixels; the GPU render happens in
     /// `realise_segment`.
     pub dof_inputs: Vec<LayerInputDraw>,
-    /// **Every op's Matte** (K-395, docs/08 §2.6): one slot per op whose effect
+    /// **Every op's Matte** (docs/08 §2.6): one slot per op whose effect
     /// declares a matte parameter — which is every op — 1:1 and in stack order
     /// with them. [`LayerInputDraw::Absent`] when the row is unset or the
     /// reference is dangling, which runs nothing at all and leaves the effect
-    /// exactly as it was before K-395 (K-258).
+    /// exactly as it was before the matte list existed.
     ///
     /// One list for all four meanings: the generic strength dissolve, Depth of
     /// field's depth pass, the Lens flare's source matte, and the blur and
@@ -328,9 +328,9 @@ pub struct CompLayerDraw {
     /// reference is stored under and who consumes the texture, and the schema's
     /// `MatteRole` answers both — so nothing here needs to know.
     pub mattes: Vec<LayerInputDraw>,
-    /// **Every path op's mask** (K-408, docs/08 §1.2): one flattened polyline
+    /// **Every path op's mask** (docs/08 §1.2): one flattened polyline
     /// per [`ParamKind::MaskPath`](lumit_core::fx::ParamKind::MaskPath) **row**
-    /// of every op that declares any (K-546: the Matte key declares two), in
+    /// of every op that declares any (the Matte key declares two), in
     /// stack order and then declaration order within an op — the same
     /// one-predicate, one-order rule [`Self::mattes`] follows, with its own
     /// counter because its predicate is a different one (most effects take a
@@ -343,7 +343,7 @@ pub struct CompLayerDraw {
     /// documented no-op — an unset row, a mask since deleted, a layer with no
     /// masks — and never a fault.
     pub mask_paths: Vec<lumit_core::mask::MaskPolyline>,
-    /// **Every Roto brush's matte for this frame** (K-710, docs/impl/roto.md
+    /// **Every Roto brush's matte for this frame** (docs/impl/roto.md
     /// §5): one slot per enabled `roto_brush` op that resolves to an op at all,
     /// in stack order — the same one-predicate, one-order rule the mask paths
     /// follow, with its own counter in `run_ops` because its predicate is a
@@ -355,14 +355,14 @@ pub struct CompLayerDraw {
     /// propagation has run, and after the cache folder is deleted.
     ///
     /// A gray8 plane at the **source's own raster**, not this layer's working
-    /// one: the matte was solved on the file's frames (K-248) and the resample
+    /// one: the matte was solved on the file's frames and the resample
     /// into the working raster happens on the card, where every other
     /// differently-sized input is fitted.
     pub roto_mattes: Vec<Option<RotoMatteDraw>>,
-    /// **Every points producer's birth schedule** (points-stream.md §3.3,
-    /// K-474): one per op whose effect declares a `Points` output — Particulate
-    /// alone in v1 — 1:1 and in stack order with them, the same one-predicate,
-    /// one-order rule the mask paths follow.
+    /// **Every points producer's birth schedule** (points-stream.md §3.3): one
+    /// per op whose effect declares a `Points` output — Particulate alone in
+    /// v1 — 1:1 and in stack order with them, the same one-predicate, one-order
+    /// rule the mask paths follow.
     ///
     /// It is here for the mask path's reason and one more of its own: neither
     /// half of it is a number anybody typed. The layer's own clock is not a
@@ -373,13 +373,13 @@ pub struct CompLayerDraw {
     /// stored tracks. A default schedule is the documented passthrough.
     pub points_schedules: Vec<lumit_core::fx::points::PointsSchedule>,
     /// The `lens_file` paths of the layer's enabled built-in `lens_flare`
-    /// effects (K-264), 1:1 with the stack's `lens_flare` ops —
+    /// effects, 1:1 with the stack's `lens_flare` ops —
     /// None = unset. The caller reads and hashes each file and passes the
     /// parallel `flare_lens` texts to `run_ops`; a missing or unreadable
     /// file degrades to the picked library lens (labelled fallback).
     pub flare_lens_files: Vec<Option<String>>,
     /// The raster width this layer's `fx` were RESOLVED against, when it
-    /// can differ from the raster they will RUN on (K-266) — set for
+    /// can differ from the raster they will RUN on — set for
     /// Adjust layers (the comp width; their stack runs on the render
     /// target, which reduced-resolution preview shrinks), `None` when the
     /// resolve factor already matches (footage layers scale by their
@@ -388,22 +388,22 @@ pub struct CompLayerDraw {
     /// (`ResolvedStack::rescale_spatial`) so px@comp parameters land where
     /// the user put them at every preview resolution.
     pub fx_ref_width: Option<f32>,
-    /// The content name of the picture `fx` runs on (K-421): what the source
+    /// The content name of the picture `fx` runs on: what the source
     /// is (the decode job's identity for footage, the colour and size for a
     /// solid), plus the masks and paint baked into it and its raster size. The
     /// per-effect cache names each op's output from this; a nested comp's is
-    /// its own frame key (K-422); `None` — a text or shape layer, an
+    /// its own frame key; `None` — a text or shape layer, an
     /// adjustment's composite — runs the stack uncached in v1. Never the pixels themselves: naming by identity is what
     /// keeps a build free of hashing a frame's worth of bytes.
     pub fx_input_key: Option<u128>,
-    /// Per-layer motion-blur sub-frame placements (docs/06 §4, K-120): the
+    /// Per-layer motion-blur sub-frame placements (docs/06 §4): the
     /// layer's own transform re-evaluated across the open shutter. Empty unless
     /// the comp master and the layer switch are both on (and samples ≥ 2), in
     /// which case the compositor draws the layer's SAME texture at each of
     /// these and averages them into one smeared layer; the single-placement
     /// fields above stay the frame-time (k=0-ish) representative placement.
     pub mb: Vec<lumit_gpu::MbSample>,
-    /// The comp's Light layers that shade this one (docs/06, K-361), already
+    /// The comp's Light layers that shade this one (docs/06), already
     /// reduced to comp-pixel rectangles. Empty unless the comp holds lights
     /// and this layer's Accepts lights switch is on — and empty means the
     /// lighting pass never runs, which is how a comp without lights renders
@@ -425,11 +425,11 @@ pub struct CompLayerDraw {
     /// (one temporal re-render per adjustment in v1). None on every ordinary draw.
     pub accumulation_below: Option<AccumulationBelow>,
     /// **The picture a flow-consuming effect on a layer with no footage
-    /// measures against** (docs/08 §3.2, K-565): this layer's own stack rebuilt
+    /// measures against** (docs/08 §3.2): this layer's own stack rebuilt
     /// at each neighbour time, as `(offset, draws, camera)` in ascending offset
     /// order.
     ///
-    /// Fast motion blur and Datamosh want per-pixel motion, and the decode
+    /// Motion blur and Datamosh want per-pixel motion, and the decode
     /// worker can only measure it between decoded source frames — which an
     /// **adjustment layer** (whose picture is the composite of everything
     /// below it) and a **Precomp layer** (whose picture is a comp render) do
@@ -444,7 +444,7 @@ pub struct CompLayerDraw {
     /// the effect exactly as a footage layer's decoded field is handed over. One
     /// entry per offset the stack asked for (`stack_flow_neighbours`), so a
     /// stack holding both consumers gets both measurements and neither silently
-    /// takes the other's (K-544).
+    /// takes the other's.
     ///
     /// Empty on every layer whose motion the decode worker can measure and on
     /// every layer that asks for none, which is almost all of them.

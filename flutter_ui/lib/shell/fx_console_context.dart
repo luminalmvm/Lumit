@@ -1,10 +1,10 @@
-// The Ctrl+Space console's snapshot (K-324): what the camera button writes,
-// and where it lands.
+// The Ctrl+Space console's snapshot: what the camera button writes, and where
+// it lands.
 //
 // The radial ring the console once raised — and everything this file built
-// for it — went with K-658 (owner's ruling): the console is
-// the search popover now, and every slice the ring offered lives on in the
-// menus, the palette and the panels it was drawn from.
+// for it — went with the owner's ruling: the console is the search popover
+// now, and every slice the ring offered lives on in the menus, the palette
+// and the panels it was drawn from.
 //
 // This file is kept apart from `fx_console_frb.dart` so the console widget
 // stays a thing that draws what it is given: the widget knows nothing about
@@ -17,15 +17,15 @@ import '../main.dart';
 import '../src/rust/api/export.dart';
 import 'status_line_frb.dart';
 
-/// Write the frame on screen to a PNG (K-324).
+/// Write the frame on screen to a PNG.
 ///
 /// It is a one-frame **export**, not a new engine path: the exporter already
-/// writes PNGs (`codec: 'png'`, K-201) and is the tested way a Lumit frame
-/// becomes a file, so a snapshot is that with the range set to the playhead
-/// and the frame after it. The alternative — a second still-writer beside the
+/// writes PNGs (`codec: 'png'`) and is the tested way a Lumit frame becomes a
+/// file, so a snapshot is that with the range set to the playhead and the
+/// frame after it. The alternative — a second still-writer beside the
 /// exporter — is a second thing to keep correct about colour and size for no
-/// gain. The engine numbers an image sequence `<stem>.00001.png`, so the frame
-/// number lands in the file name whatever this passes.
+/// gain. The engine numbers an image sequence `<stem>.00001.png`, so the
+/// frame number lands in the file name whatever this passes.
 ///
 /// Nothing is reported here beyond what the status line already says: the
 /// strip polls the exporter and shows the finished path itself, which is the
@@ -40,9 +40,9 @@ void saveSnapshotFrb(LumitState app, LumitUiState ui) {
   try {
     comp.startExport(
       // Every field of the spec, because a snapshot is an export like any
-      // other and the seam carries the whole of one (K-485): the composition's
-      // own frame and rate, one frame of range, no sound, and every picture
-      // and render setting at what an ordinary export takes.
+      // other and the seam carries the whole of one: the composition's own
+      // frame and rate, one frame of range, no sound, and every picture and
+      // render setting at what an ordinary export takes.
       spec: BridgeExportSpec(
         preset: '',
         codec: 'png',

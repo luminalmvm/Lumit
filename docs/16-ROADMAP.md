@@ -1,6 +1,6 @@
 # Lumit roadmap
 
-**Status: canonical.** Build order per decision K-002: gaming-edit MVP first, then the march
+**Status: canonical.** Build order: gaming-edit MVP first, then the march
 to full AE replacement. Every phase ends at a **gate**: a user-visible capability plus
 performance criteria on the reference hardware defined in
 [13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md). A phase is not done until its gate
@@ -64,7 +64,7 @@ Tier-1 effect suite of [08-EFFECTS.md](08-EFFECTS.md): flow motion blur, glow, c
 browser, LUT loader, echo/trails, glitch basics. Per-layer motion blur. Preset save/load and
 import/export. Scopes panel.
 
-**Gate 3 — the v1 milestone (K-002, [00-VISION.md](00-VISION.md) §4)**: a flow-style editor
+**Gate 3 — the v1 milestone ([00-VISION.md](00-VISION.md) §4)**: a flow-style editor
 completes an MVM-style edit start-to-finish in Lumit alone — beat-marked cuts, flow ramps,
 a smooth camera move, a masked transition, the full stacked look — and exports for YouTube;
 the look previews in real time at 1080p60 on the reference machine; a six-hour editing
@@ -78,9 +78,8 @@ LFX C ABI, validator, and template repo; the AE Bridge exporter panel and Lumit-
 importer with the fidelity report ([11-AE-IMPORT.md](11-AE-IMPORT.md)); best-effort `.aep`
 structural import.
 
-Also in this phase: the migration-aware first-run screen (K-006,
-[07-UI-SPEC.md](07-UI-SPEC.md) §13.1) — it belongs alongside the AE Bridge, when
-switchers start arriving.
+Also in this phase: the migration-aware first-run screen ([07-UI-SPEC.md](07-UI-SPEC.md)
+§13.1) — it belongs alongside the AE Bridge, when switchers start arriving.
 
 **Gate 4**: a real community AE montage project imports via the Bridge with transforms,
 keyframes, retimes, and mapped effects intact and an honest per-item report; Twixtor OFX
@@ -92,7 +91,7 @@ Ongoing, ordered by community demand: 2.5D cameras/lights/DOF in full, game came
 import (HLAE and friends — absorbing the flow scene's external tool chain), the tracker and
 stabiliser, keying and matte tools, rotoscoping (the flow style leans on hand-roto and
 multi-pass footage; depth-pass-aware compositing belongs here), the Puppet tools
-([impl/puppet.md](impl/puppet.md) — mesh, pins, as-rigid-as-possible deformer, K-704), a
+([impl/puppet.md](impl/puppet.md) — mesh, pins, as-rigid-as-possible deformer), a
 particle system, tier-2 effects, text animators, shape operators (repeater et al.), variable mask feather, the
 **Composer** audio workspace ([09-AUDIO.md](09-AUDIO.md) §Composer), pitch-preserving audio
 retime, OFX GPU render suite, OCIO colour management, app scripting.
@@ -102,10 +101,10 @@ previously required AE plus plugins.
 
 ## Phase 6 — Beyond parity
 
-The long ambitions (K-023): working directly in 3D, Blender scene import, deeper 3D
-compositing, and the node view over the evaluation graph (K-036 — grading node chain
+The long ambitions: working directly in 3D, Blender scene import, deeper 3D
+compositing, and the node view over the evaluation graph (grading node chain
 first, full node compositing after). Also: Lottie export, OpenTimelineIO interchange, render-farm/CLI export, and
-a first-class macOS/Metal release (K-033 — the engine already runs on Metal via wgpu;
+a first-class macOS/Metal release (the engine already runs on Metal via wgpu;
 this adds VideoToolbox zero-copy, ProRes, the OFX Metal suite, and notarisation).
 Specified when we get there; the 4×4 transform core, rational time, and DAG engine were
 chosen so none of this requires a rewrite.
@@ -118,7 +117,7 @@ Every gate below is subject to [14-ENGINEERING-RULES.md](14-ENGINEERING-RULES.md
 definition of done) and the CI performance gates of
 [13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md) §7.3 — which are the job **`performance
 gates (ratio vs baseline)`**, running the headless harness against the checked-in baseline
-for that runner (K-389). A regression blocks a merge, phase work notwithstanding. The five
+for that runner. A regression blocks a merge, phase work notwithstanding. The five
 budgets that job cannot reach (B1, B2, B8, B9, B10) are release checks, not merge gates,
 until the instrumentation in [TODO.md](TODO.md) lands.
 

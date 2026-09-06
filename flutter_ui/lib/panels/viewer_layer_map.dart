@@ -26,7 +26,7 @@
 import 'dart:math' as math;
 import 'dart:ui' show Offset;
 
-/// A scale factor that can be flipped but never vanishes (K-230).
+/// A scale factor that can be flipped but never vanishes.
 ///
 /// **Negative scale is a real value**: dragging a handle past the anchor turns
 /// the layer over, which is how every editor mirrors a layer, and the map used
@@ -147,7 +147,7 @@ class ViewerLayerMap {
   /// The same map with the layer's pivot moved to ([anchorX], [anchorY]) and
   /// its position set to [position] — the pair a pan-behind writes together.
   ///
-  /// What a pivot drag in flight looks like (K-235): the anchor mark moves and
+  /// What a pivot drag in flight looks like: the anchor mark moves and
   /// the picture, box and all, deliberately does not.
   ViewerLayerMap pivotedAt(
     double anchorX,

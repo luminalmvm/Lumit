@@ -22,8 +22,8 @@ use lumit_fx_macros::Effect;
     // The circle can span the whole frame.
     roi = FullFrame,
     premultiplied = true,
-    // K-427: the matte scales the displacement, inside the kernel (the
-    // owner's rule for mattes); the generic strength dissolve does not also run.
+    // The matte scales the displacement, inside the kernel (the owner's rule
+    // for mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales Angle per pixel: white twirls the full Angle, grey less, black \
@@ -49,8 +49,8 @@ pub struct Twirl {
     )]
     pub radius: f32,
 
-    /// px@comp: where the twirl's middle sits (K-260 — point parameters are
-    /// pixels). The schema default is a nominal 1080p centre;
+    /// px@comp: where the twirl's middle sits (point parameters are pixels).
+    /// The schema default is a nominal 1080p centre;
     /// [`instantiate_for_raster`](crate::fx::instantiate_for_raster) centres a
     /// fresh instance on the actual comp.
     #[slider(label = "Centre X", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]

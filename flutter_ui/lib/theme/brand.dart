@@ -1,5 +1,5 @@
 // The brand's own colours — the two keys of the Lumit mark (docs/15-DESIGN.md
-// §11, K-480).
+// §11).
 //
 // In plain terms: everything else in this folder is a *theme* colour, which
 // changes with the scheme somebody picked. These four do not. They are the mark
@@ -11,10 +11,11 @@
 //
 // Each key is a gradient of two stops, and the pair of gradients is what the
 // brand is: a green key on the left and a blue one on the right. It was a blue
-// key and a violet-magenta one until K-538 - the violet-magenta was the old
-// accent's family and went green with it, and the two keys swapped sides so the
-// lockup opens green and closes blue. The blue's own two values did not change.
-// All four are the SVG sources' own, character for character (§11).
+// key and a violet-magenta one until the accent changed - the violet-magenta
+// was the old accent's family and went green with it, and the two keys swapped
+// sides so the lockup opens green and closes blue. The blue's own two values
+// did not change. All four are the SVG sources' own, character for character
+// (§11).
 
 import 'dart:ui' show Color;
 

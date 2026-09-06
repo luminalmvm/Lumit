@@ -20,7 +20,7 @@ struct Params {
     inv_pin_band: f32,     // 1 / |Wave height|
     mix_amt: f32,          // 0..1, blended against the unprocessed input
     shape: u32,            // 0 Sine, 1 Square, 2 Triangle, 3 Sawtooth, 4 Circle
-    matte_on: f32,         // 1 = the matte scales Wave height (K-427)
+    matte_on: f32,         // 1 = the matte scales Wave height
     _pad1: u32,
 };
 
@@ -29,14 +29,14 @@ struct Params {
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
 
-// The Matte (K-395, docs/08 §2.6), bound for every kernel on this layout and
+// The Matte (docs/08 §2.6), bound for every kernel on this layout and
 // read only under `matte_on` — bound to `src` when there is none, since a
 // texture binding cannot be left empty.
 @group(0) @binding(4) var matte: texture_2d<f32>;
 
 // This pixel's matte strength (== cpu::matte_strength): premultiplied Rec. 709
 // luma, clamped. The Channel pick and Invert already happened, once, at the
-// seam (fx_matte_prepare.wgsl, K-425).
+// seam (fx_matte_prepare.wgsl).
 fn matte_k(xy: vec2<i32>) -> f32 {
     let m = textureLoad(matte, xy, 0);
     return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
@@ -116,7 +116,7 @@ fn wave_warp(@builtin(global_invocation_id) gid: vec3<u32>) {
             * (1.0 + p.pin.y * (ramp(fw - 0.5 - px) - 1.0))
             * (1.0 + p.pin.z * (ramp(py - 0.5) - 1.0))
             * (1.0 + p.pin.w * (ramp(fh - 0.5 - py) - 1.0));
-    // The matte scales Wave height per pixel (K-427, == cpu::wave_warp_matted).
+    // The matte scales Wave height per pixel (== cpu::wave_warp_matted).
     var height = p.height;
     if (p.matte_on != 0.0) {
         height = height * matte_k(xy);

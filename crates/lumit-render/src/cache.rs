@@ -38,7 +38,7 @@ pub enum CacheTier {
 }
 
 /// One display-ready comp frame in the RAM tier (sRGB bytes as shown and as
-/// exported — the same pixels, K-031).
+/// exported — the same pixels).
 pub struct CachedCompFrame {
     pub width: u32,
     pub height: u32,
@@ -76,8 +76,8 @@ impl lumit_eval::SourceStamper for Stamper<'_> {
         self.probes.probe(item).video().map(|(fps, ..)| fps)
     }
 
-    /// The camera the picture is actually drawn with — the solve link followed
-    /// (K-417), through the same store [`crate::build`] and [`crate::headless`]
+    /// The camera the picture is actually drawn with — the solve link followed,
+    /// through the same store [`crate::build`] and [`crate::headless`]
     /// read. Without this a linked camera's frames would be named by the
     /// transform the document happens to hold, which is not the transform they
     /// were drawn with, and a solve landing would hand back every frame made
@@ -93,14 +93,14 @@ impl lumit_eval::SourceStamper for Stamper<'_> {
 
     fn stamp(&self, item: Uuid, lt: f64, native: bool) -> Option<(String, u64)> {
         // The same proxy resolution point the decode planner goes through
-        // (K-501, `crate::source::effective_media`), and for the reason the key
+        // (`crate::source::effective_media`), and for the reason the key
         // exists at all: the name of a frame has to say which file its pixels
         // came out of, or a proxy frame and a full-resolution frame of the same
         // moment share a name and one is served for the other. The path is in
         // the stamp already — so folding the choice in is nothing more than
         // asking the same question the plan asked.
         let (media, probe) = crate::source::effective_media(self.doc, self.probes, item)?;
-        // The item's colour space (K-490, docs/impl/ocio.md §5.5). It goes in
+        // The item's colour space (docs/impl/ocio.md §5.5). It goes in
         // *this* item's stamp rather than in the comp's own name, so
         // reassigning one item retires that item's frames and leaves every
         // other frame of the comp exactly where it was.
@@ -131,7 +131,7 @@ impl lumit_eval::SourceStamper for Stamper<'_> {
             ..self.quality
         };
         // A layer that needs flow decodes at its own width whatever the preview
-        // tier says (K-331), so its name must say so too — the plan and this
+        // tier says, so its name must say so too — the plan and this
         // stamp must never disagree about the width the pixels have.
         let target = if native {
             None
@@ -184,7 +184,7 @@ pub fn frame_key_at(
 }
 
 /// Names a nested comp's frame for the draw builder and the decode planner
-/// (K-422, docs/06 §5.2): the key [`frame_key_at`] gives that comp at that
+/// (docs/06 §5.2): the key [`frame_key_at`] gives that comp at that
 /// layer time, the same whichever parent asks for it. `None` when the frame
 /// must not be cached — some footage unprobed, or a draft render, whose
 /// decode is narrower than the settled name would claim.

@@ -1,6 +1,6 @@
 // The shape every popup shares: a title strip, an optional row of page tabs,
 // label-left rows inside titled groups, and a footer carrying a factual line
-// and the single filled action (§12A.4, K-444).
+// and the single filled action (§12A.4).
 //
 // **In plain terms.** Two dialogs are drawn in the approved mockups — New
 // composition and Export — and they are drawn as the same object at two sizes.
@@ -9,7 +9,7 @@
 //
 // A dialog is built **in the window**, as an ordinary framework overlay. That
 // is not a stopgap: when Flutter's windowing reaches the stable channel a
-// `showDialog` becomes a real child window with no rewrite here (K-449).
+// `showDialog` becomes a real child window with no rewrite here.
 //
 // The measurements are the drawings' own, read off their computed styles and
 // pinned by `export_metrics_test` / `comp_settings_metrics_test`. A value that
@@ -26,7 +26,7 @@ import '../widgets/controls.dart';
 /// The title strip, over its hairline.
 const double dialogTitleStrip = 30;
 
-/// The close mark in it, at the size the drawings render it (K-456).
+/// The close mark in it, at the size the drawings render it.
 const double dialogCloseGlyph = 12;
 
 /// The page-tab row under the title strip, over its own hairline, and the gap
@@ -43,8 +43,7 @@ const double dialogFooterGap = 12;
 ///
 /// A footer whose actions will not fit on one line drops them to a column
 /// instead of eliding their words — §12A.6's ladder, step 2, applied to a
-/// footer (K-488). Three buttons come to 10 above, 24 · 8 · 24 · 8 · 24, and
-/// 10 below.
+/// footer. Three buttons come to 10 above, 24 · 8 · 24 · 8 · 24, and 10 below.
 const double dialogFooterStackGap = 8;
 const double dialogFooterPad = 10;
 
@@ -75,7 +74,7 @@ class DialogFrame extends StatelessWidget {
   /// Every dialog but one states a width, because a dialog is drawn to a
   /// measure. A **resizable** window is the exception: the window around it
   /// has the size, and a frame that fixed its own would win against the
-  /// corner grip (K-242, the shape settings_window_frb.dart already uses).
+  /// corner grip (the shape settings_window_frb.dart already uses).
   final double? width;
   final List<Widget> children;
 
@@ -237,11 +236,11 @@ Widget dialogTabs<T>(
 ///
 /// The drawing puts a *box* round each group here rather than the rule the
 /// Settings pages use — a dialog read once wants its areas fenced, a settings
-/// page lived in wants them separated (K-458: each drawing decides its own).
+/// page lived in wants them separated. Each drawing decides its own.
 /// [highlighted] lights the box's edge for a moment — what a section tab does
-/// to the section it jumps to on a dialog that scrolls rather than paging
-/// (K-485). The accent is doing here exactly what it does in the tab strip:
-/// saying *this is the one you asked for*, and only while you are asking.
+/// to the section it jumps to on a dialog that scrolls rather than paging. The
+/// accent is doing here exactly what it does in the tab strip: saying
+/// *this is the one you asked for*, and only while you are asking.
 ///
 /// [dimmed] is a whole group the chosen output has no use for — the Audio group
 /// of a folder of stills, the picture groups of a sound file. Its name goes to
@@ -298,8 +297,8 @@ Widget dialogGroup(
 ///
 /// [labelColumn] and [gap] are the drawing's, and they differ between dialogs
 /// — Export computes 100 and 10 in a 640px frame, New composition 110 and 12
-/// in a 520px one. Neither is "the" dialog row; each drawing measures its own
-/// (K-458), which is why this takes them rather than fixing one.
+/// in a 520px one. Neither is "the" dialog row; each drawing measures its own,
+/// which is why this takes them rather than fixing one.
 Widget dialogRow(
   LumitTheme t,
   String label,
@@ -333,9 +332,9 @@ Widget dialogRow(
 /// nothing to commit carries outlined buttons and no fill (§12A.4).
 ///
 /// [stacked] drops the actions to a column, each at the footer's full width,
-/// for a dialog too narrow to seat them in a line — §12A.6's ladder step 2
-/// (K-488). The order is unchanged, so the filled action is still last, which
-/// in a column means the bottom.
+/// for a dialog too narrow to seat them in a line — §12A.6's ladder step 2. The
+/// order is unchanged, so the filled action is still last, which in a column
+/// means the bottom.
 Widget dialogFooter(
   LumitTheme t, {
   String summary = '',
@@ -415,7 +414,7 @@ Widget dialogDropdown<T>(
   /// export's colour spaces, where the config's own names sit under one.
   String? Function(T)? group,
 
-  /// Why an option cannot be chosen (K-485: disabled, never hidden).
+  /// Why an option cannot be chosen: disabled, never hidden.
   String? Function(T)? disabledReason,
 }) =>
     SizedBox(

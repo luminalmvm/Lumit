@@ -67,7 +67,7 @@ pub const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// How long a describe may take: the handshake's ceiling, or a quirks-table
 /// control deadline set longer than it. The audio broker's twin, for the same
-/// reason (K-751): the first describe opens the bundle from disk on a process
+/// reason: the first describe opens the bundle from disk on a process
 /// that has only just said hello, which is a program starting rather than a
 /// plugin thinking, and nothing on a render waits on it.
 pub(crate) fn describe_deadline(quirks: &crate::quirks::Quirks) -> Duration {
@@ -882,8 +882,7 @@ mod describe_deadline_tests {
     use std::time::Duration;
 
     /// The shipped two-second control deadline is not what describe waits
-    /// under: the first describe opens the module, which is a program starting
-    /// (K-751).
+    /// under: the first describe opens the module, which is a program starting.
     #[test]
     fn describe_takes_the_handshake_ceiling_by_default() {
         let quirks = Quirks::default();

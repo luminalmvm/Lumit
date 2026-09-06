@@ -185,8 +185,8 @@ void main() {
     });
 
     /// The browser's share of AP5: an audio plugin lists under the one Audio
-    /// plugins heading — K-594's grammar, a group that folds like any other —
-    /// and its context menu says where it came from and offers the switch.
+    /// plugins heading, a group that folds like any other, and its context
+    /// menu says where it came from and offers the switch.
     testWidgets(
         'an audio plugin heads the Audio plugins group and can be '
         'switched off', (tester) async {

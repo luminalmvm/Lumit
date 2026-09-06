@@ -257,7 +257,7 @@ fn fs_copy_f32(in: VsOut) -> @location(0) vec4<f32> {
 
 ## 9. Matching the CPU exactly
 
-Every kernel has a CPU twin that is the reference (K-019). Agreement is not
+Every kernel has a CPU twin that is the reference. Agreement is not
 approximate hand-waving. It constrains how you write the shader:
 
 - Use explicit left-to-right reductions where `mix()` or `smoothstep()` would reduce

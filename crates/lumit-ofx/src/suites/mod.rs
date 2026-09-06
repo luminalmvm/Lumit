@@ -19,6 +19,7 @@ use crate::handles::Handle;
 use crate::status::{finish, OfxStatus, Status, StatusResult};
 
 pub mod image_effect;
+pub mod interact;
 pub mod memory;
 pub mod message;
 pub mod multi_thread;

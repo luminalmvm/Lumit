@@ -4,9 +4,9 @@
 // file at compile time — the same twin fx_fractal_noise.wgsl reads, which is why
 // a Fractal noise and a Turbulent displace at the same settings line up.
 //
-// One of the effects that claim the generic Matte inside their own maths
-// (K-395): the matte's luma multiplies the DISPLACEMENT, so a grey matte warps
-// the picture less rather than showing a warped copy over an unwarped one. With
+// One of the effects that claim the generic Matte inside their own maths: the
+// matte's luma multiplies the DISPLACEMENT, so a grey matte warps the picture
+// less rather than showing a warped copy over an unwarped one. With
 // `matte_on == 0` the vector is used exactly as the field gave it, and the
 // result is byte-for-byte the no-matte pass.
 
@@ -23,7 +23,7 @@ struct Params {
     cycle: i32,               // depth loop length in cells; 0 = no loop
     mix_amt: f32,             // 0..1, blended against the unprocessed input
     matte_on: f32,            // 1 = scale the displacement by the matte's luma
-    _pad1: f32,               // was Invert; applied once at the seam since K-425
+    _pad1: f32,               // was Invert; now applied once at the seam
     _pad0: f32,
 };
 
@@ -37,7 +37,7 @@ struct Params {
 
 // == cpu::matte_strength / fx_blur.wgsl's matte_k: premultiplied Rec. 709 luma,
 // clamped. One reading of "how much matte is here"; the Channel pick and
-// Invert happened once already, in fx_matte_prepare.wgsl (K-425).
+// Invert happened once already, in fx_matte_prepare.wgsl.
 fn matte_k(xy: vec2<i32>) -> f32 {
     let m = textureLoad(matte, xy, 0);
     return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);

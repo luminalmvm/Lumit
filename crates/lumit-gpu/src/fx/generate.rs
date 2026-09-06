@@ -1,8 +1,8 @@
-//! The Generate kernels (docs/08 §3.34–§3.37, K-398): Fill, Gradient, Noise and
+//! The Generate kernels (docs/08 §3.34–§3.37): Fill, Gradient, Noise and
 //! Fractal noise — the effects that make pixels rather than change them.
 //!
 //! Each op mirrors its `lumit_core::fx::cpu` parameter struct field-for-field so
-//! the kernel and the CPU oracle consume the identical numbers (K-031). Nothing
+//! the kernel and the CPU oracle consume the identical numbers. Nothing
 //! here does arithmetic; every reciprocal, cosine and fraction was taken once,
 //! host-side, in the effect's own `packed`.
 
@@ -51,8 +51,8 @@ pub struct GradientOp {
     pub seed: u32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
-    /// Paint the ramp only where the layer already is, leaving its alpha alone
-    /// (K-706) — the Gradient overlay *style*, as against this effect's
+    /// Paint the ramp only where the layer already is, leaving its alpha alone —
+    /// the Gradient overlay *style*, as against this effect's
     /// frame-flooding generator.
     pub clip_to_alpha: bool,
 }
@@ -69,7 +69,7 @@ struct GradientParams {
     mix_amt: f32,
     seed: u32,
     radial: u32,
-    /// 1 = clip the ramp to the layer's coverage and leave its alpha (K-706).
+    /// 1 = clip the ramp to the layer's coverage and leave its alpha.
     clip_to_alpha: u32,
     _pad1: u32,
 }
@@ -394,7 +394,7 @@ struct LightningParams {
     mix_amt: f32,
     count: u32,
     composite: u32,
-    /// 1 = the matte scales the bolt's opacity per pixel (K-428).
+    /// 1 = the matte scales the bolt's opacity per pixel.
     matte_on: f32,
     _pad1: u32,
     segs: [[f32; 4]; LIGHTNING_SEGMENTS],
@@ -420,7 +420,7 @@ pub struct RadioWavesOp {
     pub rotation: f32,
     /// Spin in radians per second.
     pub spin: f32,
-    /// The newest wave's index, taken host-side (K-399).
+    /// The newest wave's index, taken host-side.
     pub newest: i32,
     /// How many waves to walk back from it.
     pub count: i32,
@@ -461,7 +461,7 @@ struct RadioWavesParams {
     newest: i32,
     count: i32,
     composite: u32,
-    /// 1 = the matte scales Opacity per pixel (K-428).
+    /// 1 = the matte scales Opacity per pixel.
     matte_on: f32,
     _pad1: u32,
     _pad2: u32,
@@ -509,7 +509,7 @@ struct VegasParams {
     mix_amt: f32,
     from_alpha: u32,
     composite: u32,
-    /// 1 = the matte scales Opacity per pixel (K-428).
+    /// 1 = the matte scales Opacity per pixel.
     matte_on: f32,
     _pad1: u32,
 }
@@ -577,7 +577,7 @@ struct PathDrawParams {
     seed: u32,
     count: u32,
     style: u32,
-    /// 1 = the matte scales Opacity per pixel (K-428).
+    /// 1 = the matte scales Opacity per pixel.
     matte_on: f32,
     _pad1: u32,
     _pad2: u32,
@@ -622,7 +622,7 @@ struct AddGrainParams {
     seed: u32,
     tick: i32,
     monochrome: u32,
-    /// 1 = the matte scales Intensity per pixel (K-428).
+    /// 1 = the matte scales Intensity per pixel.
     matte_on: f32,
 }
 

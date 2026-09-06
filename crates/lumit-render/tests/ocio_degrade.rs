@@ -1,5 +1,5 @@
-//! The degrade ladder, and what a frame is named under (K-490,
-//! docs/impl/ocio.md §3.3, §5.5).
+//! The degrade ladder, and what a frame is named under
+//! (docs/impl/ocio.md §3.3, §5.5).
 //!
 //! **In plain terms.** A colour config is a file on disk, and files move, get
 //! deleted, and get written by people using features Lumit has not implemented.
@@ -203,7 +203,7 @@ fn editing_the_config_on_disk_gives_every_frame_a_new_name() {
     assert_eq!(state.frame_identity(), after);
 }
 
-/// **The K-490 asymmetry, in one test.** The preview of a project whose config
+/// **The asymmetry, in one test.** The preview of a project whose config
 /// is missing still renders — the state above says so — but the export of a
 /// file into one of that config's colour spaces refuses, and the refusal says
 /// what went wrong rather than "not available in this build".
@@ -221,7 +221,7 @@ fn preview_degrades_where_delivery_refuses() {
         ..Default::default()
     };
 
-    // With no config at all, K-479's refusal stands untouched.
+    // With no config at all, the refusal stands untouched.
     let none = ColourState::default();
     assert!(spec.check_with_colour(&none).is_err());
 
@@ -363,11 +363,11 @@ fn a_footage_layers_pixels_carry_the_items_colour_space() {
 fn one_input_table_is_uploaded_per_distinct_colour_space() {
     use lumit_render::colour::InputTransforms;
 
-    let Ok(ctx) = lumit_gpu::GpuContext::headless() else {
+    let Some(ctx) = lumit_gpu::test_support::lease() else {
         eprintln!("no adapter here");
         return;
     };
-    let engine = lumit_gpu::ColourEngine::new(&ctx);
+    let engine = ctx.colour();
 
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("config.ocio");
@@ -394,18 +394,18 @@ fn one_input_table_is_uploaded_per_distinct_colour_space() {
 
     let mut state = ColourState::default();
     state.sync(&doc);
-    let built = InputTransforms::build(&doc, &state, &ctx, &engine);
+    let built = InputTransforms::build(&doc, &state, &ctx, engine);
     assert!(built.get("srgb_texture").is_some());
     assert!(built.get("no_such_space").is_none());
     assert!(!built.is_empty());
 
     // A project with no config uploads nothing at all.
     let none = ColourState::default();
-    assert!(InputTransforms::build(&doc, &none, &ctx, &engine).is_empty());
+    assert!(InputTransforms::build(&doc, &none, &ctx, engine).is_empty());
 
     // And neither does one whose config went missing — the preview degrades to
     // the built-in interpretation rather than to no picture.
     std::fs::remove_file(&path).unwrap();
     state.sync(&doc);
-    assert!(InputTransforms::build(&doc, &state, &ctx, &engine).is_empty());
+    assert!(InputTransforms::build(&doc, &state, &ctx, engine).is_empty());
 }

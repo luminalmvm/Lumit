@@ -1,4 +1,4 @@
-//! The six timed scenarios (docs/13-PERFORMANCE-RULES.md §2, K-389).
+//! The six timed scenarios (docs/13-PERFORMANCE-RULES.md §2).
 //!
 //! # In plain terms
 //!
@@ -97,7 +97,7 @@ const SCRUB: Quality = Quality {
 /// used by B6 and by the idle fill.
 ///
 /// ponytail: the real adaptive controller picks a tier per run and walks it up
-/// and down (K-186); it lives in `lumit-bridge`, which an engine-side harness
+/// and down; it lives in `lumit-bridge`, which an engine-side harness
 /// must not depend on. Pinning the middle rung measures the same work at a
 /// fixed quality, which is what a regression gate needs — a controller that
 /// silently settled a rung lower would otherwise read as "faster".
@@ -358,15 +358,15 @@ impl Harness {
     }
 }
 
-/// **B12-B14 — Particulate's own three numbers** (docs/13 §2, K-475).
+/// **B12-B14 — Particulate's own three numbers** (docs/13 §2).
 ///
 /// # In plain terms
 ///
 /// The six scenarios above time the *editor* doing something. These three time
-/// one **effect** doing its work, because K-475 made Particulate's budget its
-/// own: Max particles is the user's dial, so an instance's cost is a number the
-/// document states rather than one a comp average hides. docs/13 §7.3 has owed
-/// "a harness scenario apiece" since PS2 measured them.
+/// one **effect** doing its work, because Particulate's budget is its own: Max
+/// particles is the user's dial, so an instance's cost is a number the document
+/// states rather than one a comp average hides. docs/13 §7.3 has owed "a
+/// harness scenario apiece" since PS2 measured them.
 ///
 /// **Each number is the effect's work, not the pass's.** A fourth fixture runs
 /// first with nothing to emit — one full-frame copy and one round trip to the
@@ -417,7 +417,7 @@ pub mod particulate {
     const CASES: [Case; 4] = [
         // Nothing to draw: the pass's fixed cost, subtracted from the rest.
         Case(None, 0.0, CAP_DEFAULT, 4.0),
-        // ~300 live at 150 a second over a two-second life: K-475's default look.
+        // ~300 live at 150 a second over a two-second life: the default look.
         Case(Some("B12"), 150.0, CAP_DEFAULT, 4.0),
         Case(Some("B13"), 10_000.0, CAP_DEFAULT, 4.0),
         Case(Some("B14"), 500_000.0, CAP_HARD, 2.0),
@@ -507,7 +507,7 @@ pub mod particulate {
                 rate
             });
         schedule.trim_to_newest(lumit_gpu::fx::MAX_CANDIDATES);
-        // **Flat, deliberately** (K-561): B12–B14 are the budgets docs/13 §2
+        // **Flat, deliberately**: B12–B14 are the budgets docs/13 §2
         // states and the baselines checked in beside them, so the fixture has
         // to keep measuring the same work. The third axis costs one dot product
         // and one divide per particle in the vertex stage — inside the noise of
@@ -560,7 +560,7 @@ pub mod particulate {
     }
 }
 
-/// **B15–B17 — the puppet's own three numbers** (docs/13 §2, K-704).
+/// **B15–B17 — the puppet's own three numbers** (docs/13 §2).
 ///
 /// # In plain terms
 ///

@@ -1,5 +1,5 @@
 //! The Custom shader's text side: the declaration grammar, the assembler and
-//! the uniform layout (docs/impl/custom-shader.md §1.3, §1.4, §2.2, K-650).
+//! the uniform layout (docs/impl/custom-shader.md §1.3, §1.4, §2.2).
 //!
 //! # In plain terms
 //!

@@ -1,7 +1,7 @@
-// The long-list searchable picker (K-262, retargeted K-264).
+// The long-list searchable picker.
 //
 // Built for the Lens flare's 1299-lens library, whose eager dropdown took the
-// app down in a layout pass. The library is twenty curated lenses now (K-264)
+// app down in a layout pass. The library is twenty curated lenses now
 // — below the searchable threshold, so the flare uses the plain dropdown —
 // but the picker remains the guard for ANY long Choice list, so its laziness
 // and its search are pinned here against synthetic options rather than

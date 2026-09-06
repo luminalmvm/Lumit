@@ -94,31 +94,31 @@ The macro generates, from that one declaration:
   hot loop is a comparison of two `u64`s that were computed at compile time.
 
 Attributes map to `ParamKind` one-for-one: `#[slider]` → `Float`, `#[bounded]` → `Slider`
-(K-414 — a closed range, `min`/`max`/`default` and no hard pair, because the range *is* the
+(a closed range, `min`/`max`/`default` and no hard pair, because the range *is* the
 hard pair; the value side stays a float, so adopting it on an existing parameter changes
 nothing but the control), `#[counter]` → `Int`,
 `#[dial]` → `Angle`, `#[toggle]` → `Bool`, `#[choice]` → `Choice`, `#[colour]` → `Colour`,
 `#[seed]` → `Seed`, `#[file]` → `File`, `#[layer]` → `Layer`, `#[curve]` → `Curve`
-(K-412 — a tone curve's own control points; it takes a label and nothing else, since the
+(a tone curve's own control points; it takes a label and nothing else, since the
 points live in the unit square by definition and the default is the identity diagonal for
 every one of them), `#[mask_path]` → `MaskPath`
-(K-408 — one of the owning layer's masks, whose geometry rides beside the op; its
+(one of the owning layer's masks, whose geometry rides beside the op; its
 `self_default` defaults to **true**, the other way round from `#[layer]`'s, because an
 effect that wants a path wants the one path most layers have). Group and greying metadata
-(`ParamGroup`, `EnabledWhen`, K-145 and K-313) stay declared on the effect attribute,
+(`ParamGroup`, `EnabledWhen`) stay declared on the effect attribute,
 because they name *runs* of parameters rather than living inside one.
 
-**Four parameters are injected, not declared** (K-395, K-425): the `matte` Layer row, its
+**Four parameters are injected, not declared**: the `matte` Layer row, its
 `matte_invert` switch and its `matte_channel` choice, which every effect gets so the row
 means something on all of them from the day it landed rather than on the handful someone
 remembered; and the `blend` choice beside every `mix` slider. The `matte` attribute says
 what the Matte row *means* rather than whether it exists — see §2.5b for the roles and
 the table of the effects that claim their matte. The matte injection is conditional on
 the struct not already declaring a `matte` field, which is how the Lens flare keeps the
-row it wrote itself (K-065) without getting a second one under the same id;
+row it wrote itself without getting a second one under the same id;
 `matte_channel = false` keeps the Channel off an effect that picks its matte's channels
 itself (Depth of field, Displacement map, the Lens flare), and `matte = false` drops the
-row entirely (the Controls, the Camera track, the Matte key, and — since K-429 — Set
+row entirely (the Controls, the Camera track, the Matte key, and Set
 matte, whose picker is its own source row on the auxiliary-layer carriage and not a
 matte at all). The Blend is
 injected right after `mix` in schema order — the panel draws it on the Mix row — on every
@@ -141,7 +141,7 @@ match:
 | Unit | Meaning | Resolve does |
 |---|---|---|
 | `Raw` | a plain number (a mix, a gamma) | nothing |
-| `Px` | px@comp: pixels at composition size (docs/08 §2.3) — **the unit of every distance, radius and displacement** (K-419) | × `px_scale` |
+| `Px` | px@comp: pixels at composition size (docs/08 §2.3) — **the unit of every distance, radius and displacement** | × `px_scale` |
 | `Degrees` | an angle | nothing |
 | `Seconds` | a duration | nothing (rational time is resolved upstream) |
 
@@ -150,7 +150,7 @@ reference format, but **no parameter may declare it**; the owner's rule is that 
 in Lumit is a percentage of the diagonal, and `no_parameter_is_a_per_cent_of_the_diagonal`
 in `fx/tests.rs` fails the build on one.
 
-**The ROI tile padding is px@comp too** (K-433). An effect declares `roi = PaddedPx(n)`,
+**The ROI tile padding is px@comp too.** An effect declares `roi = PaddedPx(n)`,
 sized from its *own* hard maximum — Gaussian blur's 2 000 px radius pads 2 000 — and where
 that maximum is open (a value may be typed past the slider) it pads the slider's maximum
 doubled and says so in a comment. `Roi::padding_raster_px(px_scale)` resolves it, ×
@@ -187,7 +187,7 @@ pub enum Value {
     Bool(bool),
     Choice(u32),
     Colour([f32; 4]),
-    /// Four plain floats under one id (K-388): a small fixed vector — Shake's
+    /// Four plain floats under one id: a small fixed vector — Shake's
     /// unit-free noise sample `(x, y, rotation, z)` — that would otherwise be
     /// four `derived.*` entries, and nine times over with its motion blur on.
     Vec4([f32; 4]),
@@ -197,7 +197,7 @@ pub enum Value {
     /// A file reference resolves to its slot in the stack's file table, for the
     /// same reason.
     File(u32),
-    /// A tone curve's own control points (K-412), inline: at most sixteen
+    /// A tone curve's own control points, inline: at most sixteen
     /// pairs, small enough to stay `Copy` and to be hashed field by field.
     Curve(CurvePoints),
 }
@@ -241,7 +241,7 @@ lookup is a short linear scan of adjacent memory (an effect's parameters are ≤
 almost always ≤ 10, so this is faster than hashing), and `ResolvedFx` stays `Copy`.
 
 **Determinism.** `Resolved` was `Copy` plain-old-data so a stack could be hashed
-byte-for-byte (K-143). `Value` has padding, so byte-hashing it would be feeding
+byte-for-byte. `Value` has padding, so byte-hashing it would be feeding
 uninitialised bytes into a frame key — the arena is hashed **field by field** through an
 explicit `feed_hash`, in stack order, which is stronger than the byte-wise version it
 replaces (it cannot silently change when a variant grows). See §5.
@@ -273,13 +273,13 @@ blade normals does it here, once, for both the GPU and the CPU path. As built it
 inherent `packed()` on the parameter struct rather than a trait method, so each effect
 returns its own shape and no `Packed` union has to exist.
 
-**An effect with a mode fork returns an enum, not a tuple.** A *quality tier* (K-090) —
+**An effect with a mode fork returns an enum, not a tuple.** A *quality tier* —
 RGB split's and chromatic aberration's Wavelength toggle — runs a different kernel with a
 different uniform, which is why those effects had two `Resolved` variants each before they
 moved. `packed()` answering with a small enum keeps the fork in one place: the CPU
 reference and the GPU wrapper both match on it, so neither can decide the mode for itself.
 
-### 2.4a Resolve-time derivation (the time and marker seam, K-385)
+### 2.4a Resolve-time derivation (the time and marker seam)
 
 A few effects derive values at resolve time from things that are not parameters: Flash
 builds a beat envelope from the marker context and a whole keyframed trigger track,
@@ -342,12 +342,12 @@ pub trait GpuEffect: Sync + 'static {
 asserts the two registries agree: every schema that resolves has exactly one `GpuEffect`,
 and every `GpuEffect` names a schema.
 
-### 2.5a Side-table inputs (the parallel-list seam, K-387)
+### 2.5a Side-table inputs (the parallel-list seam)
 
 Some effects consume an input the render prepared beside the stack: the k-th LUT op
 binds `luts[k]`, a depth/layer input binds `layer_inputs[k]`, Echo reads the decoded
 neighbour frames, the flow consumers read the dense field, and the k-th op declaring a
-`MaskPath` row binds `mask_paths[k]` (K-408). `build.rs` enumerates these
+`MaskPath` row binds `mask_paths[k]`. `build.rs` enumerates these
 with one predicate in one order, and `run_ops` walks shared counters so the two sides
 cannot drift. Registry dispatch keeps that contract by making the consumption a
 declaration:
@@ -370,16 +370,16 @@ slot over; the enumeration predicate in `build.rs` and the consumption in `run_o
 the same schema, so the one-predicate, one-order rule survives unchanged. A missing slot
 stays a passthrough (degrade, never fault), exactly the convention every list already had.
 
-**The auxiliary layer is no longer a kind** (K-429). `AuxKind::LayerInput` and the
+**The auxiliary layer is no longer a kind.** `AuxKind::LayerInput` and the
 `layer_input_param` table of match names in `build.rs` are both gone, replaced by
 `EffectSchema::layer_input()` — the first `ParamKind::Layer` row that is not the effect's
 matte. It is the same shape as the matte carriage below and the mask-path one: one
 predicate the schema answers, walked by both sides in the same order, and the slot is a
-**field** on `AuxSlot` rather than a variant. That is what lets Fast motion blur read a
+**field** on `AuxSlot` rather than a variant. That is what lets Motion blur read a
 whole flow field *and* a Motion vectors layer *and* a matte, without a variant per pair —
 the combinatorial seam §2.5b was written to keep the matte out of.
 
-### 2.5b The one matte carriage (K-395)
+### 2.5b The one matte carriage
 
 The Matte input every effect gained (docs/08 §2.6) is the same seam with a **second
 predicate**, deliberately not a sixth `AuxKind`. The difference is which effects it
@@ -403,10 +403,10 @@ carries a matte. So:
 - **The counter is its own.** Sharing `dof_i` would bind a matte to whichever Light wrap
   happened to sit above it, because the two predicates select different effects.
 - **The slot is a `LayerInput`**, rendered by the same `render_layer_input` a background
-  plate is: alone, at the effect's raster, with `ThisLayer` (K-288) resolved against the
+  plate is: alone, at the effect's raster, with `ThisLayer` resolved against the
   picture the chain is carrying.
 - **Nothing runs when no slot is bound**, which is what makes an unset row byte-identical
-  to no row at all (K-258) rather than a lerp by one.
+  to no row at all rather than a lerp by one.
 - **A row the panel does not show fills no slot.** `mattes_for` consults
   `param_visible`/`param_enabled`, so a matte named on a hidden or greyed row costs
   nothing: the Lens flare's Matte rows exist only while its Source type is Matte, and it
@@ -427,7 +427,7 @@ pictures.
 (kind, matte) pair, and the Lens flare already needs both: its prescription off the
 `LensFile` list, its matte off the matte carriage.
 
-**The mask path rides the same way** (K-408): `AuxSlot::mask_path()` is a second field
+**The mask path rides the same way**: `AuxSlot::mask_path()` is a second field
 beside the matte, filled for every op whose schema answers `EffectSchema::mask_path()`,
 on its own counter — every effect takes a matte and almost none takes a path, so one
 shared index would hand a path to whichever effect happened to sit above. It arrives as a
@@ -437,7 +437,7 @@ builds a *distance field* over one want different bytes in a storage buffer, so 
 consumer uploads it at its own layout rather than the carriage guessing. An empty
 polyline is the effect's documented no-op.
 
-**And the three consumers share one pipeline** (K-409, docs/08 §3.78-§3.79). Scribble,
+**And the three consumers share one pipeline** (docs/08 §3.78-§3.79). Scribble,
 Stroke and Vegas's Mask/Path source each have their own `EffectDef`, their own schema and
 their own `GpuEffect` — three `match_name`s, as the catalogue requires — but all three
 `run` methods build a `cpu::PathDrawParams` host-side and hand it to the same
@@ -457,7 +457,7 @@ The four that claim it, and why each is a different picture from a strength diss
 | Depth of field | `depth` | a **depth** pass: how far away each pixel is, so the blur widens with distance from focus |
 | Lens flare | `matte` | where the flare **detects its light sources**, in Matte source mode |
 
-**And the blur, sharpen and colour families claim it by the owner's rule (K-426, docs/08
+**And the blur, sharpen and colour families claim it by the owner's rule (docs/08
 §2.6):** the matte scales the effect's *amount* per pixel, toward its neutral value, before
 the maths runs. Seventeen effects declare `matte = ("matte", "<what it scales>")` on that
 basis — Directional blur's Length, Radial blur's Amount, both sharpens' Amount, Channel
@@ -470,22 +470,22 @@ the CPU reference grows a `_matted` twin taking `matte: &[f32]` (the old name st
 `dispatch_matted`, and the `GpuEffect` hands it `aux.matte()`. The per-pixel pull is one
 helper on each path, `cpu::matte_toward` and its WGSL twin — `neutral·(1 − k) + value·k`,
 spelled so that k = 1 is the value to the bit — which is why an empty matte reproduces the
-pre-claim function byte for byte without a second code path (K-258;
-`check_matte_claim` in `lumit-gpu/src/fx/tests.rs` pins all four facts per effect). Three
+pre-claim function byte for byte without a second code path
+(`check_matte_claim` in `lumit-gpu/src/fx/tests.rs` pins all four facts per effect). Three
 controls cannot be pulled by a lerp of the host's numbers and carry the raw control into
 the kernel instead: Exposure's factor is `exp2(stops·k)`, Temperature's gains are rebuilt
 from `t·k` (the blue gain floors), and Hue shift builds the matrix for `angle·k` from the
 same coefficients in `f32` (`cpu::hue_matrix_px`). Contrast and Vignette stay on
 `Strength` because scaling their amount *is* the dissolve.
 
-**Threshold takes the same shape for a different quantity (K-559):** its matte scales the
+**Threshold takes the same shape for a different quantity:** its matte scales the
 **Level** — a plain `level·k`, not a `matte_toward`, because a Level of 0 is a real
 setting and not the effect's neutral — so the cut *moves* across the frame rather than
 fading. Everything else about it is the paragraph above, `cpu::threshold_matted` and
 `fx_threshold.wgsl`'s `matte_on` included, and it is held by a `check_matte_claim` row
-like every other claim. This is what supersedes K-426's Threshold sentence.
+like every other claim. This is what supersedes the earlier rule's Threshold sentence.
 
-**And the Distortion family claims it the same way (K-427, docs/08 §2.6):** a distortion's
+**And the Distortion family claims it the same way (docs/08 §2.6):** a distortion's
 amount is a *distance*, so the matte multiplies the displacement per pixel. Fourteen more
 declare `matte = ("matte", "<what it scales>")` on the shape above, unchanged — RGB split's
 and Chromatic aberration's Amount (both tiers, so the shared `spectral_split` kernel takes
@@ -509,21 +509,21 @@ things are worth knowing when reading them:
 Scanlines is the one that changes shape rather than scale: `intensity · k` would be the
 dissolve to the bit, so the matte divides **Line period** instead, floored at
 `cpu::SCANLINES_MIN_K` (`1e-4`, the identical literal in the WGSL) so black is lines too
-far apart to see. Datamosh keeps `Strength` for the K-426 reason — `current·(1 − i) +
-melted·i` makes `i·k` and the dissolve the same arithmetic — and Tile, Mirror and Polar
-coordinates have no amount to scale.
+far apart to see. Datamosh keeps `Strength` for the same reason Contrast does —
+`current·(1 − i) + melted·i` makes `i·k` and the dissolve the same arithmetic — and Tile,
+Mirror and Polar coordinates have no amount to scale.
 
 Each one's sentence lives in its own declaration and reaches `fx-reference.json`, so the
 manual's parameter table prints what that effect's matte does rather than the generic
-sentence (K-395: an override documents its meaning in the schema prose). The macro will
+sentence (an override documents its meaning in the schema prose). The macro will
 not let an override be declared without one — the id and the sentence are one attribute.
 
 One kind carries a **pair**, because two inputs arrive together off one decode:
 `FlowField` is the dense field *and* the decoded neighbours — Datamosh walks the field out
-of the −1 frame, so it needs both, while Fast motion blur ignores the frames. It advances
+of the −1 frame, so it needs both, while Motion blur ignores the frames. It advances
 no second counter, which is the point: an effect declares one list, not a set of them.
 (`FlareInputs` used to be the other, pairing the flare's Matte source with its
-prescription; K-395 took the matte off it, and what is left is `LensFile`.)
+prescription; §2.5b's matte carriage took the matte off it, leaving `LensFile`.)
 
 Two facts about a slot cannot be a parameter and so are read off the slot itself. The
 first is presence — a Layer row never reaches the arena, so "is a depth pass bound?"
@@ -563,11 +563,11 @@ there is no start-up cost and nothing runs before `main`.
 `ctor` was the issue's original proposal and was withdrawn in the thread. The reason to
 leave it withdrawn is not start-up time — it is that a `ctor` makes catalogue order depend
 on link order, and the menu, the command palette and the preset browser are all
-`BUILTINS`-driven (K-137), so an unstable order is a visible defect. Third-party effects
+`BUILTINS`-driven, so an unstable order is a visible defect. Third-party effects
 (OFX, docs/12) register at run time through the *same* `EffectDef` trait object, into a
 registry that starts as the built-in list — which is the seam this refactor is really for.
 
-**That seam is built** (K-593). `Catalogue` keeps the compile-time slice and holds a
+**That seam is built.** `Catalogue` keeps the compile-time slice and holds a
 run-time list beside it; `get`, `iter` and `len` walk both, **built-ins first, always**, so
 a plugin can never move a built-in in the menu. `Catalogue::register` is additive, refuses a
 `match_name` already known — which is what makes a rescan idempotent — and takes a
@@ -599,7 +599,7 @@ which is how a plugin that failed badges its own row instead of stopping the com
 2. Host maths that used to sit in the `resolve_one` arm now sits in `pack`, called once at
    dispatch, on whichever side needs it.
 3. `run_ops` looks up the `GpuEffect` and calls it with the bag.
-4. The CPU ladder rung (K-019) and the parity tests call `apply_cpu` with the same bag.
+4. The CPU ladder rung and the parity tests call `apply_cpu` with the same bag.
 
 Two effects (`posterize_time`, `accumulation_mb`) are orchestration-only and have no image
 op; they declare no `GpuEffect`, which is exactly what the old `resolve_one` returning
@@ -629,7 +629,7 @@ with the same row widgets. Four rules, which are the answers the issue thread ar
    an action. This keeps the document the source of truth: nothing re-derives a parameter
    list while a frame is being rendered.
 3. **Keyframes outlive their parameter.** A parameter with no schema behind it is still a
-   stored property; K-065's "keep what you do not understand" already covers it.
+   stored property; the "keep what you do not understand" rule already covers it.
 4. **The cache key covers them**, and this is the part that must not be got wrong: the key
    already hashes every `EffectParam` id and value (`lumit-eval`), so a dynamic parameter's
    *value* is covered for free. What is not is the *shape* — a shader source that changes
@@ -640,7 +640,7 @@ A spare parameter needs no shader at all, which is why the same mechanism gives 
 "slider effect" the thread wanted: an effect whose whole purpose is to hold values for
 other properties to read. It renders as identity and declares `roi: Exact, cost: Trivial`.
 
-**The Controls family got there first, and without the mechanism** (K-414, docs/08 §3.80).
+**The Controls family got there first, and without the mechanism** (docs/08 §3.80).
 Five ordinary declared effects — Slider control, Angle control, Checkbox control, Colour
 control, Point control — each one declared row, `is_image_op() == false`, `matte = false`,
 `roi: Exact, cost: Trivial`. They are what a user actually reaches for, and they needed
@@ -664,7 +664,7 @@ for the second case; the first is now five lines of catalogue.
   routes — that is the point of it — so it must not read anything the CPU path lacks
   (a device limit, an adapter feature).
 - **A missing parameter is a default, not a fault.** `read` fills from the declared default,
-  which is what makes K-258's backfill and old projects work. It must never panic
+  which is what makes the matte row's backfill and old projects work. It must never panic
   (14-ENGINEERING-RULES §4) and never log per frame.
 - **Two registries, one truth.** The `lumit-render` GPU table is keyed by `match_name`
   strings; a typo there is a missing effect at run time, not a compile error. The agreement
@@ -683,8 +683,8 @@ The old and new paths coexist for exactly as long as the migration takes, and no
 3. The awkward ones last, and each on its own. `flash`, `scanlines` and `block_glitch` were
    on this list for their seam rather than their size — each derives a number from the
    *layer time* at resolve, and Flash also reads the §1.4 marker context and its Trigger
-   property's whole keyframe track — and came off it when K-385 widened `EffectDef` with
-   §2.4a's hook. `lut` and `echo` came off it when K-387 added §2.5a's aux seam — one an
+   property's whole keyframe track — and came off it when §2.4a's hook widened `EffectDef`.
+   `lut` and `echo` came off it when §2.5a's aux seam landed — one an
    effect that counts along a list, one that reads a whole list, so both shapes are proven —
    and the rest of the side-table set followed it in one batch: `dof` (the folded aperture,
    and the layer-input slot), `light_wrap` (the same `dof_i` counter), `motion_blur` and
@@ -695,16 +695,16 @@ The old and new paths coexist for exactly as long as the migration takes, and no
    **`lens_flare` was its own campaign** and has landed: 50 parameters, the aux pair, a
    lazy bake closure the engine may run on another thread, and a frame-time grid probe that
    calls back into `lumit-core` mid-dispatch. `AuxKind::FlareInputs` already carried its two
-   slots (K-395 later took the Matte off it, leaving `LensFile`), so the seam was never
+   slots (§2.5b later took the Matte off it, leaving `LensFile`), so the seam was never
    what blocked it; what it needed of its own was a home for
-   **Lights mode's sources** (K-360), which are the comp's own Light layers at this frame
+   **Lights mode's sources**, which are the comp's own Light layers at this frame
    rather than anything anyone types. They are §2.4a derived values, two `Value::Colour`
    entries a light — geometry `(x, y, half_w, half_h)` and colour `(r, g, b, 0)` — under
    sixteen fixed ids, pushed only for the sources that exist, so a Manual or Matte flare
    carries none of them. The bake closure and the probe moved wholesale into the GPU
    wrapper, which is the one wrapper in `gpufx.rs` that is not thin and could not be.
 
-   **`shake` was the last one**, and it needed a decision rather than a migration (K-388):
+   **`shake` was the last one**, and it needed a decision rather than a migration:
    nine sub-frame samples of four floats each, and a dispatch that forks to a different
    kernel for them. Two changes settled it. `Value` gained a `Vec4`, so a small fixed vector
    is one entry rather than four ids. And Shake's noise became a **unit-free** derived value
@@ -715,7 +715,7 @@ The old and new paths coexist for exactly as long as the migration takes, and no
    `rgb_split` Wavelength precedent. With it, `Resolved::Shake`, `resolve_one`, `cpu::apply`
    and the free `rescale_px` are all gone: `Resolved` is one variant, a place in the stack.
 4. **Landed.** `Resolved` and the hand-written `BUILTINS` body are deleted (`resolve_one`,
-   `cpu::apply` and the free `rescale_px` went with K-388, having no arms left). With one
+   `cpu::apply` and the free `rescale_px` went with `shake`, having no arms left). With one
    variant holding nothing but an index that was always its own position, `ResolvedOps`
    collapsed to the arena alone: `ResolvedStack` *is* the resolved stack, its op order is
    the stack order, and `ResolvedOps::rescale_px` folded into
@@ -773,13 +773,13 @@ Parity, throughout:
     the actual acceptance criterion for the migration; they take the effect's own parameter
     struct, which `pack` now produces, so they need no rewriting.
 
-Side tables (§2.5a, K-387) — every one of these fails as a *picture*, never as a crash,
+Side tables (§2.5a) — every one of these fails as a *picture*, never as a crash,
 which is why each is written down:
 
 14. `a_side_table_effect_declares_the_list_it_consumes` (lumit-render) — an effect
     declaring a `File` row must return something other than `AuxKind::None`, and one
     declaring a `Layer` row that is not its matte must be found by
-    `EffectSchema::layer_input()` (K-429), because `resolve_into_arena` drops those kinds
+    `EffectSchema::layer_input()`, because `resolve_into_arena` drops those kinds
     and the input would otherwise never arrive. The only place both halves are visible.
     Its lumit-core twin is `the_arena_carries_no_file_slot_or_layer_binding`, which pins
     the silence.
@@ -795,6 +795,6 @@ which is why each is written down:
     frames renders a perfectly ordinary picture, and nothing else notices.
 17. `the_side_table_batch_stays_a_cpu_passthrough` (lumit-core) — the six effects whose real
     input is a second picture draw **nothing** through `cpu::apply_stack`, exactly as their
-    old `cpu::apply` arms did. The degradation rung (K-019) is the path nobody looks at, so
+    old `cpu::apply` arms did. The degradation rung is the path nobody looks at, so
     an `apply_cpu` written for one of these — reading a garbage buffer, or half-rendering —
     would go unnoticed.

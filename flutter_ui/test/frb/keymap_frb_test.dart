@@ -1,5 +1,5 @@
 // Settings → Keymap and the reveal cycle, against the real engine
-// (docs/07-UI-SPEC.md §15 and §4.3, K-199).
+// (docs/07-UI-SPEC.md §15 and §4.3).
 //
 // The point of these is that the table and the keyboard are the *same* keymap.
 // A settings page that edits a copy would look right in every screenshot and
@@ -85,7 +85,7 @@ void main() {
       await openKeymapPage(tester);
 
       // The first group, and its first rows, are on screen as the page opens.
-      // A group's name is a section kicker now (K-465), and a kicker's capitals
+      // A group's name is a section kicker now, and a kicker's capitals
       // are the style rather than the string.
       expect(find.text('ANYWHERE'), findsOneWidget);
       expect(find.text('Play or pause'), findsOneWidget);
@@ -103,7 +103,7 @@ void main() {
       expect(find.text('Duplicate the layer'), findsOneWidget);
     });
 
-    /// Retime has one chord like everything else (K-200): Ctrl+Alt+T, AE's
+    /// Retime has one chord like everything else: Ctrl+Alt+T, AE's
     /// own, and one Windows cannot steal. The misremembered Alt+Shift+T is
     /// gone rather than kept as a second — anyone who wants it back can bind
     /// it, which is the whole point of the page.
@@ -215,8 +215,8 @@ void main() {
     /// can be told apart, and both halves are pinned here because the page
     /// says something different about each.
     ///
-    /// A panel taking an **app-wide** chord is a *shadow*, not a clash
-    /// (K-281): the focused panel gets first refusal and the app-wide binding
+    /// A panel taking an **app-wide** chord is a *shadow*, not a clash:
+    /// the focused panel gets first refusal and the app-wide binding
     /// is the fallback, so the chord runs exactly one action and which one is
     /// never in doubt. The page says so quietly rather than asking to have it
     /// fixed — the shipped default carries one on purpose (`L` in the
@@ -295,8 +295,8 @@ void main() {
       expect(find.textContaining('runs two things'), findsOneWidget);
     });
 
-    /// **A keymap saved by an older build must not take a new key away**
-    /// (K-302). This is what actually broke `Ctrl+C` in the owner's app while
+    /// **A keymap saved by an older build must not take a new key away**.
+    /// This is what actually broke `Ctrl+C` in the owner's app while
     /// every test here passed: a stored keymap replaced the whole map on
     /// start-up, so `edit.copy` — added after that file was written — had no
     /// chord at all. Tests start from the shipped defaults; only a real session
@@ -434,7 +434,7 @@ void main() {
           reason: 'the cycle restarted rather than continuing to UUU');
     });
 
-    /// **`U` stops at the keys; `UU` opens the headings whole** (K-622).
+    /// **`U` stops at the keys; `UU` opens the headings whole**.
     ///
     /// The first tap used to open the *groups* holding animation, and a group
     /// opens whole — so one keyed Opacity unrolled Position, Scale, Rotation and
@@ -519,7 +519,7 @@ void main() {
           reason: 'the third tap collapses the layer, cycle unchanged');
     });
 
-    /// **The reveal is the whole selection's** (K-523). `Ctrl+A` then `U` read
+    /// **The reveal is the whole selection's**. `Ctrl+A` then `U` read
     /// the selection's *primary* and revealed that layer alone — and where the
     /// top layer carried no keys, which is the ordinary case, the key looked
     /// dead.
@@ -562,7 +562,7 @@ void main() {
       ));
       await tester.pump();
 
-      // What the shell's `Ctrl+A` does in the Timeline (K-522): the whole
+      // What the shell's `Ctrl+A` does in the Timeline: the whole
       // stack, with the top layer as primary.
       p.uiState.setSelection(comp.getLayers());
       await tester.pump();
@@ -576,7 +576,7 @@ void main() {
       expect(find.text('Rotation'), findsOneWidget,
           reason: 'so is the fourth: U runs on every selected layer');
       expect(find.text('Position'), findsNothing,
-          reason: 'and still stops at the keys (K-622)');
+          reason: 'and still stops at the keys');
     });
 
     /// A `U` filters the layers it revealed and **no others**: the reveal is a
@@ -639,7 +639,7 @@ void main() {
   });
 
   /// **Animation ▸ Reveal properties with keyframes / with animation / all
-  /// modified properties** (K-684) — the `U` machinery under the menu's own
+  /// modified properties** — the `U` machinery under the menu's own
   /// words, each row a wider rule than the one above it.
   ///
   /// The menu is not the cycle: a row chosen deliberately says what it does
@@ -727,8 +727,8 @@ void main() {
               'what separates this row from UU, where the heading opens whole');
     });
 
-    /// The rows read the **whole selection** (K-523), and the whole comp when
-    /// nothing is selected (K-203) — the same two rules `U` follows, because
+    /// The rows read the **whole selection**, and the whole comp when
+    /// nothing is selected — the same two rules `U` follows, because
     /// they are the same command.
     testWidgets('the reveal covers every selected layer', (tester) async {
       tester.view.physicalSize = const Size(1600, 900);
@@ -755,7 +755,7 @@ void main() {
       ));
       await tester.pump();
 
-      // What the shell's `Ctrl+A` does in the Timeline (K-522).
+      // What the shell's `Ctrl+A` does in the Timeline.
       p.uiState.setSelection(comp.getLayers());
       await tester.pump();
 
@@ -767,7 +767,7 @@ void main() {
   });
 
   /// The Viewer's own commands name keymap actions rather than carrying chords
-  /// of their own (K-199), which only works if the ids match the engine's. A
+  /// of their own, which only works if the ids match the engine's. A
   /// typo here would show as a menu row with no shortcut beside it and a chord
   /// that runs nothing — two silent failures rather than one loud one.
   test('the Viewer view commands name actions the keymap has', () {

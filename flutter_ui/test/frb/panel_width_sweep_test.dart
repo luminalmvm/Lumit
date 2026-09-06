@@ -3,8 +3,8 @@
 // **Why this file exists.** The owner reports that dragging a dock seam far
 // enough to the left crashes the editor, and calls it "a common issue with
 // panel adjustments" — so this is not one panel's bug to fix, it is a claim
-// about all of them. K-451's degradation ladder ends at step 5: below a
-// panel's declared minimum width the panel *scrolls horizontally* rather than
+// about all of them. The degradation ladder ends at step 5: below a panel's
+// declared minimum width the panel *scrolls horizontally* rather than
 // compressing further. A panel that throws instead has skipped that step.
 //
 // [sweepWidths] pumps a panel across the whole range a seam drag can produce
@@ -99,7 +99,7 @@ Future<void> sweepWidths(
     final thrown = tester.takeException();
     expect(thrown, isNull,
         reason: 'the ${panel.name} panel threw at ${width}px: below its '
-            'minimum it must scroll horizontally, not fail (K-451 step 5)');
+            'minimum it must scroll horizontally, not fail (step 5)');
   }
   addTearDown(tester.view.reset);
 }

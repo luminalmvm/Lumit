@@ -1,4 +1,4 @@
-// The spectral lane mode (K-699): a layer's waveform lane drawn as a
+// The spectral lane mode: a layer's waveform lane drawn as a
 // spectrogram — time along the lane, frequency up it, brightness the level —
 // and the little store that remembers which of the three pictures each
 // layer's lane shows.
@@ -13,7 +13,7 @@
 // The bytes become **one image**, not thousands of rectangles: each fetch is
 // mapped through the theme's own band ramp into RGBA once, decoded to a GPU
 // texture, and painted with a single `drawImageRect` inside the lane's own
-// repaint boundary — which is what keeps the K-681 gates honest about it.
+// repaint boundary — which is what keeps the budget gates honest about it.
 
 import 'dart:ui' as ui;
 
@@ -29,7 +29,7 @@ import '../widgets/controls.dart';
 /// the plain wave, the three-band multiwave stack, or the spectrogram.
 enum LaneMode { wave, stack, spectral }
 
-/// Every layer's lane-mode choice, for the session (K-699).
+/// Every layer's lane-mode choice, for the session.
 ///
 /// Session state like an open twirl, not project data: the mode changes no
 /// sample and no export. Module-level for the same reason the sequence
@@ -41,8 +41,8 @@ class LaneModes extends ChangeNotifier {
   final Map<String, LaneMode> _byLayer = {};
 
   /// What a layer with no choice of its own shows — the Settings multiwave
-  /// toggle, handed in by the panel that reads it (K-184: read once, not per
-  /// row build).
+  /// toggle, handed in by the panel that reads it (read once, not per row
+  /// build).
   bool stackDefault = true;
 
   LaneMode of(String layerId) =>
@@ -87,8 +87,8 @@ class SpectralLane extends StatefulWidget {
   final double left;
   final double right;
 
-  /// How tall to draw, anchored to the bottom of the row (K-437's borrowed
-  /// pair, exactly as the wave uses it).
+  /// How tall to draw, anchored to the bottom of the row (the same borrowed
+  /// pair the wave uses).
   final double height;
 
   const SpectralLane({

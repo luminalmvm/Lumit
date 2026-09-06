@@ -4,8 +4,8 @@
 //! # In plain terms
 //!
 //! Exporting writes the composited comp to an `.mp4` on its own thread, exactly
-//! as the egui frontend does (K-017). The bridge reuses the identical exporter
-//! (`lumit_render::export`) through the headless seam (K-175): the seam builds the
+//! as the egui frontend does. The bridge reuses the identical exporter
+//! (`lumit_render::export`) through the headless seam: the seam builds the
 //! footage/audio inputs and lends a GPU context, and `export::start` spawns the
 //! encode thread and streams progress back over a channel. The bridge holds that
 //! channel's receiver and drains it on each poll, so Dart can drive a simple
@@ -22,12 +22,12 @@
 //!   into `lumit_render::export::ExportSpec` and back, plus the four questions
 //!   the dialogue asks the engine rather than answering itself: what a format
 //!   can carry, whether a spec is exportable, what a crop leaves, and what
-//!   bitrate it will run at (K-479, K-485);
+//!   bitrate it will run at;
 //! - the **filename template** — `{comp}`/`{preset}`/`{date}` substitution, the
 //!   Windows sanitiser and the `.mp4` guarantee, a faithful port of
 //!   `shell::export_default_file_name`/`render_filename_template`/
 //!   `sanitise_windows_filename`. A blank template reproduces each preset's own
-//!   default file name byte-for-byte (K-119, load-bearing).
+//!   default file name byte-for-byte (load-bearing).
 //!
 //! Naming a codec needs the `media` feature; without it the conversion answers
 //! a calm "this build has no encoder" and every capability reads false, so the
@@ -88,7 +88,7 @@ fn preset_params(name: &str) -> Option<PresetParams> {
 }
 
 /// A preset's own default file name (`ExportPreset::default_file_name`), the
-/// byte-for-byte fallback when no filename template is set (K-119).
+/// byte-for-byte fallback when no filename template is set.
 fn preset_default_file_name(name: &str) -> &'static str {
     match name {
         "youtube_1080p60" => "youtube-1080p60.mp4",
@@ -100,7 +100,7 @@ fn preset_default_file_name(name: &str) -> &'static str {
 }
 
 // ---------------------------------------------------------------------------
-// The seam's own half of the export spec (K-485): `BridgeExportSpec` in, the
+// The seam's own half of the export spec: `BridgeExportSpec` in, the
 // engine's `ExportSpec` out, and the dialogue's four questions — what can this
 // format carry, is this spec exportable, what does the crop leave, what bitrate
 // will it run at — answered by the engine rather than re-derived in Dart.
@@ -161,9 +161,9 @@ pub(crate) fn crop_for(spec: &BridgeExportSpec, comp_w: u32, comp_h: u32) -> Bri
 /// `colour` is the project's colour state, so a spec naming one of an OCIO
 /// config's own spaces is answered by whether that space can actually be
 /// delivered — the config loaded, and the transform to it baked — rather than
-/// by K-479's blanket refusal of every OCIO name. A config that has gone
-/// missing refuses **by name**, which is K-490's asymmetry: the preview
-/// degrades to the built-in transform, the delivery does not.
+/// by a blanket refusal of every OCIO name. A config that has gone missing
+/// refuses **by name**, which is the preview-and-delivery asymmetry: the
+/// preview degrades to the built-in transform, the delivery does not.
 pub(crate) fn spec_check(spec: &BridgeExportSpec, colour: &ColourState) -> String {
     // The crop plays no part in what a format can carry, so the comp's size is
     // not needed to answer this one.
@@ -211,7 +211,7 @@ pub(crate) fn preset_save(name: &str, spec: &BridgeExportSpec) -> Result<(), Str
     library.save_default()
 }
 
-/// What the export dialogue opens on (K-588). Read whole each time, for the
+/// What the export dialogue opens on. Read whole each time, for the
 /// reason [`preset_save`] gives: five short strings in one small file, and a
 /// copy held in memory would be a second thing to keep in step.
 pub(crate) fn defaults_get() -> BridgeExportDefaults {
@@ -366,7 +366,7 @@ pub(crate) fn to_export_spec(
         bitrate: match (spec.bitrate_auto, spec.bitrate_mbps) {
             (true, _) => Bitrate::Auto,
             // A blank field sets no bitrate at all and lets the encoder choose
-            // its own quality, which is a different answer from Auto (K-479).
+            // its own quality, which is a different answer from Auto.
             (false, 0) => Bitrate::EncoderDefault,
             (false, mbps) => Bitrate::Manual {
                 target_bps: bps(mbps),
@@ -441,7 +441,7 @@ pub(crate) fn to_export_spec(
             honour_solo: spec.honour_solo,
             render_guides: spec.render_guides,
             // An answer nobody recognises is the composition's own answer:
-            // a number out of range must not refuse an export (K-502).
+            // a number out of range must not refuse an export.
             motion_blur: match spec.motion_blur {
                 1 => MotionBlurOverride::OnForChecked,
                 2 => MotionBlurOverride::OffForAll,
@@ -557,8 +557,8 @@ fn from_export_spec(spec: &lumit_render::export::ExportSpec) -> Option<BridgeExp
 /// The `export_preset` reply: the dialogue fields a preset stamps plus its
 /// suggested file name — everything Dart needs to fill the export dialogue for
 /// `preset_name`, reproducing `ExportDialogState::apply` exactly. `comp_name`
-/// and `template` feed the `{comp}`/`{preset}`/`{date}` filename substitution
-/// (K-119); a blank template yields the preset's own default file name.
+/// and `template` feed the `{comp}`/`{preset}`/`{date}` filename substitution;
+/// a blank template yields the preset's own default file name.
 pub(crate) fn export_preset(preset_name: &str, comp_name: &str, template: &str) -> String {
     let stamped = preset_params(preset_name);
     let (codec, size, bitrate_mbps) = match stamped {
@@ -587,7 +587,7 @@ pub(crate) fn export_preset(preset_name: &str, comp_name: &str, template: &str) 
     .to_string()
 }
 
-/// The suggested file name for `preset` (K-119) — a faithful port of
+/// The suggested file name for `preset` — a faithful port of
 /// `shell::export_default_file_name`: with no (or a blank) template, the preset's
 /// own default file name byte-for-byte; otherwise the template with `{comp}`/
 /// `{preset}`/`{date}` substituted, sanitised, and forced to end in `.mp4`.
@@ -601,7 +601,7 @@ fn export_default_file_name(preset: &str, comp_name: &str, template: Option<&str
     }
 }
 
-/// Substitute `{comp}`/`{preset}`/`{date}` in a filename template (K-119),
+/// Substitute `{comp}`/`{preset}`/`{date}` in a filename template,
 /// sanitise against characters Windows forbids, and guarantee a `.mp4` suffix —
 /// a faithful port of `shell::render_filename_template`.
 fn render_filename_template(template: &str, comp_name: &str, preset_stem: &str) -> String {
@@ -640,7 +640,7 @@ fn sanitise_windows_filename(raw: &str) -> String {
     }
 }
 
-/// Today's UTC date as `YYYY-MM-DD` (K-119's `{date}` token) — a faithful port
+/// Today's UTC date as `YYYY-MM-DD` (the `{date}` token) — a faithful port
 /// of `shell::today_utc_date` and its `civil_from_days`.
 fn today_utc_date() -> String {
     let secs = std::time::SystemTime::now()
@@ -940,11 +940,11 @@ mod driving {
             .ok_or("export: unknown composition")?;
         let spec = to_export_spec(spec, cw, ch)?;
 
-        // Build the audio inputs through the headless seam (K-175), then hand
+        // Build the audio inputs through the headless seam, then hand
         // off to the exporter, which drives the same render walk the Viewer
-        // uses on its own thread and device (K-017, K-031).
+        // uses on its own thread and device.
         //
-        // The inputs are gathered from the *delivery* snapshot (K-497), not the
+        // The inputs are gathered from the *delivery* snapshot, not the
         // project: a guide layer is reference-only, so its sound is no more
         // delivered than its picture — and "solo ignored" reaches the mixdown
         // for the same reason, in an export that has a picture at all. The
@@ -1266,8 +1266,8 @@ mod tests {
     }
 
     /// A zero size, a zero rate and a negative range all mean "the
-    /// composition's own", which is what the dialogue's untouched fields say
-    /// (K-201) — never a frame of 0×0 or a range of nothing.
+    /// composition's own", which is what the dialogue's untouched fields say —
+    /// never a frame of 0×0 or a range of nothing.
     #[test]
     #[cfg(feature = "media")]
     fn the_untouched_fields_mean_the_composition_s_own() {
@@ -1299,7 +1299,7 @@ mod tests {
         assert_eq!(to_export_spec(&backwards, 640, 360).unwrap().range, None);
     }
 
-    /// *Auto* and a blank field are two answers, not one (K-479): Auto works a
+    /// *Auto* and a blank field are two answers, not one: Auto works a
     /// rate out from the frame, a blank field sets none at all, and a typed one
     /// keeps its own peak when a preset gave it one.
     #[test]
@@ -1319,7 +1319,7 @@ mod tests {
         assert_eq!(
             to_export_spec(&blank, 64, 36).unwrap().bitrate,
             Bitrate::EncoderDefault,
-            "a blank field lets the encoder choose its own quality (K-119)"
+            "a blank field lets the encoder choose its own quality"
         );
 
         let typed = BridgeExportSpec {
@@ -1356,7 +1356,7 @@ mod tests {
     fn every_format_answers_for_what_it_can_carry() {
         let mp4 = format_caps("h264");
         assert!(mp4.video && mp4.audio && mp4.bit_rate && mp4.metadata);
-        assert!(!mp4.alpha, "no v1 codec in an mp4 carries alpha (K-479)");
+        assert!(!mp4.alpha, "no v1 codec in an mp4 carries alpha");
         assert_eq!(mp4.depths, vec![8]);
 
         let png = format_caps("png");
@@ -1409,7 +1409,7 @@ mod tests {
     }
 
     /// The crop is the typed insets, or the Viewer's region when that is asked
-    /// for — and the reading is the frame that survives it (K-362, K-419).
+    /// for — and the reading is the frame that survives it.
     #[test]
     fn the_crop_answers_the_typed_insets_or_the_region() {
         let typed = BridgeExportSpec {
@@ -1509,8 +1509,7 @@ mod tests {
     }
 
     /// Every option the six engine changes landed crosses the seam, reaches the
-    /// engine's own type, and comes back as the field that set it (K-493,
-    /// K-497, K-498, K-501, K-502).
+    /// engine's own type, and comes back as the field that set it.
     ///
     /// One test rather than six, because they share the one question: is the
     /// flat field the seam carries the same answer the engine acts on? A
@@ -1683,7 +1682,7 @@ mod tests {
     }
 
     /// The refusals the engine already had reach the dialogue's footer as the
-    /// engine's own sentence, with no new call to make them (K-485).
+    /// engine's own sentence, with no new call to make them.
     #[test]
     #[cfg(feature = "media")]
     fn a_format_that_cannot_carry_a_setting_says_so_in_the_footers_own_words() {

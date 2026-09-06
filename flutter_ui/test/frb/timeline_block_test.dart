@@ -29,7 +29,7 @@ import 'frb_test_support.dart';
 void main() {
   setUpAll(initEngineForTests);
 
-  group('The block tools (K-458, §4.3)', () {
+  group('The block tools (§4.3)', () {
     ({LumitState state, LumitUiState uiState, CompositionReference comp})
         withComp() {
       final p = freshProject();
@@ -114,7 +114,7 @@ void main() {
     }
 
     /// Take the whole property in hand: clicking a property's name selects it
-    /// and all of its keys (K-500 §2.1), which is the shortest way to a block.
+    /// and all of its keys, which is the shortest way to a block.
     Future<void> selectTheBlock(WidgetTester tester) async {
       await tester.tap(find.text('Opacity'));
       await tester.pumpAndSettle();
@@ -519,7 +519,7 @@ void main() {
 
     /// The lane key selection selected and eased and did nothing else: `Delete`
     /// fell straight past it to the shell, which deleted the *layer* the keys
-    /// sat on. The panel claims the key first now (K-234's ladder), above the
+    /// sat on. The panel claims the key first now in the ladder, above the
     /// mask rung and below nothing.
     testWidgets('Delete removes the selected lane keys, not the layer',
         (tester) async {

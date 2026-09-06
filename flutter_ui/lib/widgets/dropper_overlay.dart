@@ -13,8 +13,7 @@
 // value read off it.
 //
 // Every colour and corner here comes from the theme; the only colours not from
-// it are the sampled pixels themselves, which are the document's (K-004,
-// docs/15 §11).
+// it are the sampled pixels themselves, which are the document's (docs/15 §11).
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/state.dart';
@@ -31,8 +30,8 @@ const double _barHeight = 20;
 
 /// The corner of the outline round the region about to be averaged. Its own
 /// number rather than the control radius it used to borrow: under Round a
-/// control is a capsule (K-394), and this is a **mark** drawn over pixels, not
-/// a surface — a square region ringed at half its own width would be a circle.
+/// control is a capsule, and this is a **mark** drawn over pixels, not a
+/// surface — a square region ringed at half its own width would be a circle.
 /// The value is the one Sharp always drew it at, so Sharp is untouched.
 const double _regionRadius = 4;
 
@@ -185,7 +184,7 @@ class DropperViewfinder extends StatelessWidget {
       decoration: BoxDecoration(
         color: t.surface2,
         // The capsule this used to spell out by hand under Round is what the
-        // control radius now *is* there (K-394), so one read covers both.
+        // control radius now *is* there, so one read covers both.
         borderRadius: BorderRadius.circular(t.tokens.controlRadius),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 8),

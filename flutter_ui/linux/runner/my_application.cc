@@ -19,7 +19,7 @@ G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 static void first_frame_cb(MyApplication* self, FlView* view) {
   GtkWidget* window = gtk_widget_get_toplevel(GTK_WIDGET(view));
   gtk_widget_show(window);
-  // **Maximise here, not before the view exists** (K-749).
+  // **Maximise here, not before the view exists**.
   //
   // Lumit opens maximised on all three platforms, but asking for it during
   // `activate` asked an unrealised window with no surface behind it. What the
@@ -73,15 +73,15 @@ static void my_application_activate(GApplication* application) {
 
   // Lumit opens maximised, as it does on Windows (windows/runner/
   // win32_window.cpp) and macOS — but the asking happens in `first_frame_cb`,
-  // once there is a window on screen to maximise (K-749). Only the default,
-  // though: GTK has nothing like AppKit's frame autosave, so remembering the
-  // size and position between runs would mean following configure-events and
-  // writing a file by hand here.
+  // once there is a window on screen to maximise. Only the default, though:
+  // GTK has nothing like AppKit's frame autosave, so remembering the size and
+  // position between runs would mean following configure-events and writing a
+  // file by hand here.
   // ponytail: default only, add the remembering when a Linux user asks.
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   // Pin the renderer to Skia, as the Windows runner does with its typed
-  // `set_impeller_switch` (K-754, superseding K-748's mechanism).
+  // `set_impeller_switch`.
   //
   // In plain terms: Flutter has two renderers, and the newer one — Impeller —
   // is measurably slower for the way Lumit draws (docs/impl/ui-performance.md
@@ -89,8 +89,8 @@ static void my_application_activate(GApplication* application) {
   // all (issue #104). This says so on the project, which is a property the
   // embedder reads unconditionally.
   //
-  // **Not the environment variables `flutter run` uses.** K-748 pinned Skia by
-  // appending to FLUTTER_ENGINE_SWITCHES, which is how the tool does it — and
+  // **Not the environment variables `flutter run` uses.** The earlier pin
+  // appended to FLUTTER_ENGINE_SWITCHES, which is how the tool does it — and
   // the engine reads those only under `#ifndef FLUTTER_RELEASE`
   // (shell/platform/common/engine_switches.cc). A release build ignores them
   // entirely, so that pin held in `flutter run` and did nothing in the
@@ -117,8 +117,8 @@ static void my_application_activate(GApplication* application) {
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 
-  // The zero-copy Viewer bridge (K-177): register the 'lumit/viewer_texture'
-  // channel on the main engine so Dart can hand it engine-drawn DMA-BUF frames to
+  // The zero-copy Viewer bridge: register the 'lumit/viewer_texture' channel
+  // on the main engine so Dart can hand it engine-drawn DMA-BUF frames to
   // show as GL external textures — the Linux twin of the Windows runner's
   // ViewerTextureBridge (flutter_window.cpp OnCreate). Only the main window shows
   // the Viewer, so — exactly as on Windows — the bridge is registered here alone,

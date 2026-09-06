@@ -1,4 +1,4 @@
-// The Easing panel (docs/07 §5.4, K-349): the easing editor with somewhere to live.
+// The Easing panel (docs/07 §5.4): the easing editor with somewhere to live.
 //
 // In plain terms: the same unit box the Easing… button used to open as a popup,
 // docked instead. The difference is not how it looks — it is the same widget —
@@ -9,7 +9,7 @@
 //
 // The panel does not own the selection and never asks what it is. The Timeline
 // publishes a callback while it can take a shape (`LumitUiState.easingApply`,
-// the same claim idiom Delete and Copy use — K-234, K-300), and this panel
+// the same claim idiom Delete and Copy use), and this panel
 // presses it. Null means nothing is listening — no Timeline on screen, or its
 // graph is in the speed lens, where a shape drawn against value travel does not
 // belong — and Apply greys with a line saying so.

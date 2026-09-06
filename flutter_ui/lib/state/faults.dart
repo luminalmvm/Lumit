@@ -1,4 +1,4 @@
-// What the shell does when a panel's build throws (K-741).
+// What the shell does when a panel's build throws.
 //
 // # In plain terms
 //
@@ -33,6 +33,7 @@ import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
+import 'package:lumit_flutter/state/cache_dir.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 
 /// The file the engine appends its own faults to
@@ -48,7 +49,7 @@ import 'package:lumit_flutter/theme/theme.dart';
 /// wrong dependency for a diagnostic: this has to work when the engine is what
 /// went wrong. Both sides append whole records in a single write, which is what
 /// keeps two writers from splitting each other's lines.
-File faultLog() => File('${Directory.systemTemp.path}'
+File faultLog() => File('${lumitCacheDir().path}'
     '${Platform.pathSeparator}lumit-diagnostics.log');
 
 /// Past this many bytes the file starts again — the engine's own cap
@@ -79,6 +80,8 @@ void recordFault(String message, StackTrace? stack) =>
 /// without filling the file a real session is writing to.
 void recordFaultTo(File file, String message, StackTrace? stack) {
   try {
+    // The cache folder may not exist yet on a first run.
+    file.parent.createSync(recursive: true);
     // Checked before the write, as the engine does it: the record lands in the
     // file that keeps it rather than in one about to be truncated.
     final over = file.existsSync() && file.lengthSync() > _capBytes;

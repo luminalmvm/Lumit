@@ -6,7 +6,7 @@
 //! which beats the composition carries, and the shape of a whole keyframed
 //! Trigger track. None of those is a control, so the strength is worked out at
 //! resolve time through the one hook that sees them ([`EffectDef::
-//! resolve_derived`], K-385) and handed to the kernel as a single number, exactly
+//! resolve_derived`]) and handed to the kernel as a single number, exactly
 //! as the hand-written resolve arm handed it over before.
 
 use crate::fx::markers::flash_nth;
@@ -51,7 +51,7 @@ pub struct Flash {
     pub trigger: f32,
 
     /// Frames (comp-rate, §2.3) a marker-driven flash lasts. Hard floor 0,
-    /// unbounded above (the K-090 one-sided clamp); 0 is honestly a flash zero
+    /// unbounded above (a one-sided clamp); 0 is honestly a flash zero
     /// frames long — never shown.
     #[slider(min = 0.0, max = 12.0, default = 2.0, hard_min = 0.0, unit = Frames)]
     pub duration: f32,
@@ -118,7 +118,7 @@ pub struct Flash {
 
 impl Flash {
     /// The envelope × intensity this frame, 0..1, derived at resolve time rather
-    /// than declared (K-385). Never a panel row: it is what the controls and the
+    /// than declared. Never a panel row: it is what the controls and the
     /// clock *produce*.
     pub const DERIVED_STRENGTH: ParamId = ParamId::new("derived.strength");
 
@@ -148,7 +148,7 @@ impl EffectDef for FlashDef {
     }
 
     /// The trigger envelope, scaled by Intensity and clamped — the whole of what
-    /// the old resolve arm did, moved unchanged (K-385).
+    /// the old resolve arm did, moved unchanged.
     ///
     /// Every read is the one the arm made, in the order it made it and in `f64`
     /// throughout, so the number reaching the kernel is bit-identical: the mode

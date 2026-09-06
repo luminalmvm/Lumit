@@ -1,5 +1,4 @@
-// Settings → Appearance → Customise: every colour in the theme, editable
-// (K-202).
+// Settings → Appearance → Customise: every colour in the theme, editable.
 //
 // **What it edits.** The theme you are looking at, live. Opening seeds every
 // row from the current theme — built-in or one of your own — and each change
@@ -11,7 +10,7 @@
 // and the colours. Saving from a built-in scheme asks for a name and makes a
 // new theme; saving while one of your own is selected updates that one, which
 // is what "select it, customise it, save" ought to mean. **Save a copy…**
-// (K-298) writes the edits down under a new name instead, so a theme can be
+// writes the edits down under a new name instead, so a theme can be
 // branched without first being overwritten.
 //
 // One colour is not offered: the Viewer's surround. It is strictly neutral by
@@ -228,7 +227,7 @@ class _ThemeEditorState extends State<_ThemeEditor> {
   }
 
   /// Save a copy: the edits as they stand, under a new name, leaving whatever
-  /// was open where it was (K-298). What "I like this theme, but…" wants —
+  /// was open where it was. What "I like this theme, but…" wants —
   /// without it, the only way to branch a theme was to overwrite it and undo
   /// the edits by hand.
   Future<void> _saveCopy() async {
@@ -293,7 +292,7 @@ class _ThemeEditorState extends State<_ThemeEditor> {
                   HouseButton(
                     key: const ValueKey('theme-editor-save-on-close'),
                     small: true,
-                    // The default action (K-319): Enter keeps the work.
+                    // The default action: Enter keeps the work.
                     primary: true,
                     autofocus: true,
                     onPressed: () => close(true),

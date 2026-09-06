@@ -88,7 +88,7 @@ class LumitState extends ChangeNotifier {
   final ValueNotifier<bool> opening = ValueNotifier(false);
 
   /// How far the open has got, or null before the engine has said anything
-  /// about it (K-628).
+  /// about it.
   ///
   /// The engine reports each phase of the read as it begins and hands over the
   /// share of the whole open that sits behind it; the last stretch — the render
@@ -146,7 +146,7 @@ class LumitState extends ChangeNotifier {
     // engine's own first report replaces this as it starts reading.
     openProgress.value =
         OpenProgress(phase: OpenPhase.readingFile, fraction: 0);
-    // The engine's running commentary on the read (K-628). **Not cancelled when
+    // The engine's running commentary on the read. **Not cancelled when
     // the call returns**: a phase report crosses to Dart on an event-loop turn
     // of its own, so a subscription dropped the moment `openProject` resolved
     // would take every report still in flight with it and leave the bar stuck
@@ -177,7 +177,7 @@ class LumitState extends ChangeNotifier {
   }
 
   /// Import an After Effects project and make it the open one (docs/11) —
-  /// either front door (K-418): the `.aep` itself, or a Lumit Bridge bundle.
+  /// either front door: the `.aep` itself, or a Lumit Bridge bundle.
   ///
   /// Answers the report to show, or null when what was picked is not something
   /// this build can read — the previous project stays loaded in that case,
@@ -216,12 +216,12 @@ class LumitState extends ChangeNotifier {
         path: target, onChangeStream: _changeSink());
     if (imported == null) {
       // Three misses, three answers. An `.aep` the parser could not read is
-      // the one K-418 made possible and the one worth being calm about: a
-      // newer After Effects may store something this build has not met, and
-      // the Bridge route reads it in full. A *folder* holding an `.aep` is the
-      // older mistake — the bundle picker asked for a folder and the user
-      // reasonably pointed it at the project's own — and still teaches the
-      // route. Anything else is simply not a bundle.
+      // the one the direct route made possible and the one worth being calm
+      // about: a newer After Effects may store something this build has not
+      // met, and the Bridge route reads it in full. A *folder* holding an
+      // `.aep` is the older mistake — the bundle picker asked for a folder
+      // and the user reasonably pointed it at the project's own — and still
+      // teaches the route. Anything else is simply not a bundle.
       final aep = path.toLowerCase().endsWith('.aep');
       var folderOfAep = false;
       try {
@@ -269,7 +269,7 @@ class LumitState extends ChangeNotifier {
       previous.close();
     }
     project = opened;
-    // The comp list is cached per document (K-184) and invalidated when the
+    // The comp list is cached per document and invalidated when the
     // item tree changes — but adopting another project is not a change to the
     // tree, it is a different tree. Left standing, every reader of `comps()`
     // answers from the project that is no longer loaded until something
@@ -290,7 +290,7 @@ class LumitState extends ChangeNotifier {
     }
 
     refreshWindowTitle();
-    // **The swap is published, not just performed** (K-740). `_compsCache`
+    // **The swap is published, not just performed**. `_compsCache`
     // above is one of many per-document caches, and it was the only one told:
     // the Project panel's item and name caches, the comp read model and the
     // comp-time cache all drop themselves on an `items` change and nothing
@@ -305,7 +305,7 @@ class LumitState extends ChangeNotifier {
     unawaited(_backfillThumbnail());
   }
 
-  /// A project opened with no picture on file grows one, once (K-468).
+  /// A project opened with no picture on file grows one, once.
   ///
   /// Every save has filed a thumbnail since the engine could draw one, but
   /// projects that predate it — an After Effects conversion, everything saved
@@ -350,7 +350,7 @@ class LumitState extends ChangeNotifier {
   void notifyDocumentChanged() => notifyListeners();
 
   /// Give [layer] a Retime, or take it away again — the one implementation,
-  /// shared by the keyboard chords and the Composition menu (K-197, docs/04
+  /// shared by the keyboard chords and the Composition menu (docs/04
   /// §12), so no route can drift from the others.
   ///
   /// The engine refuses nothing here, but the call is a bridge crossing like
@@ -372,7 +372,7 @@ class LumitState extends ChangeNotifier {
   /// Here rather than in the menu bar because the Project panel offers the same
   /// command, and two copies of "import each path, then notify" is one copy too
   /// many for something every new user's first action goes through.
-  /// A batch is **one** undo step (K-581): picking six files in the dialogue,
+  /// A batch is **one** undo step: picking six files in the dialogue,
   /// or dropping six on the panel, is one action the user took, so it is one
   /// Ctrl-Z. The group is closed in a `finally` because a group left open
   /// records nothing.
@@ -424,7 +424,7 @@ class LumitState extends ChangeNotifier {
   void handleChange(ScopedChange event) {
     // The item tree changed shape: the cached comp list is stale.
     //
-    // **The item flag alone, not `item != null`** (K-680). This cache holds
+    // **The item flag alone, not `item != null`**. This cache holds
     // every comp and its *name*, and only the item scope can change either:
     // `op_scope` sets it for adding, removing and renaming an item, and for
     // comp settings, which carry the name. A layer op names its comp too — and
@@ -445,7 +445,7 @@ class LumitState extends ChangeNotifier {
   }
 
   /// Every composition in the project with its name, folders walked — cached
-  /// so the comp tabs cost no bridge calls per rebuild (K-184). Invalidated
+  /// so the comp tabs cost no bridge calls per rebuild. Invalidated
   /// whenever the item tree changes.
   List<(CompositionReference, String)>? _compsCache;
   List<(CompositionReference, String)> comps() {

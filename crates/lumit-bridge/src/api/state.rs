@@ -37,7 +37,7 @@ pub struct LumitBridgeState {
     /// the document changes identity.
     pub journal: SharedJournal,
     pub sender: Option<Sender<WorkerRequest>>,
-    /// The project's OCIO config as the *seam* holds it (K-490): the parse and
+    /// The project's OCIO config as the *seam* holds it: the parse and
     /// the baked output-space tables the colour reads answer from.
     ///
     /// Derived state, never stored — the document holds a path and nothing else
@@ -102,7 +102,7 @@ pub struct BridgeSharedFrameInfoLinux {
     pub tier: u32,
 }
 
-/// The Windows zero-copy Viewer frame (K-177): an NT handle to a shared D3D12
+/// The Windows zero-copy Viewer frame: an NT handle to a shared D3D12
 /// texture the Flutter runner imports directly, so no pixels cross the FFI
 /// boundary. The handle is stable for the session and changes only when the
 /// comp's dimensions do. The format is always RGBA8, so it is not carried.
@@ -131,7 +131,7 @@ pub struct BridgeSharedFrameInfo {
 
 /// A small still picture as plain pixels — the thumbnail payload
 /// (`FootageReference::thumbnail`). **Not a Viewer transport**: the read-back
-/// frame path was deleted in K-183, so the only pixel payloads that cross the
+/// frame path was deleted, so the only pixel payloads that cross the
 /// bridge are these thumbnails, the scope traces and the dropper's windows,
 /// each small by construction.
 #[frb(non_opaque)]
@@ -149,7 +149,7 @@ pub struct BridgeRenderedFrame {
 ///
 /// The one place pixels still cross the boundary, and small enough not to
 /// matter — 256 KiB against a 1080p frame's 8 MiB. Viewer frames themselves
-/// only ever cross as GPU handles (K-183): flutter_rust_bridge's SSE codec
+/// only ever cross as GPU handles: flutter_rust_bridge's SSE codec
 /// serialises a `Vec<u8>` one byte at a time, measured at 8.8 ms for a 1080p
 /// frame, which is why the read-back frame transport was deleted.
 #[frb(non_opaque)]
@@ -157,7 +157,7 @@ pub struct BridgeRenderedFrame {
 pub struct BridgeScopeTrace {
     /// The trace this picture *is*, echoed back from the request: 0 waveform,
     /// 1 parade, 2 vectorscope, 3 histogram. Two panels may want traces at
-    /// once — the Scopes panel and the Levels row's histogram (K-413) — and
+    /// once — the Scopes panel and the Levels row's histogram — and
     /// they share one response stream, so each has to be able to tell whether
     /// the picture that just arrived is the one it asked for.
     pub kind: u32,
@@ -174,7 +174,7 @@ pub struct BridgeScopeTrace {
 /// into a handful.
 ///
 /// Small by construction — 129×129 is 66 KiB, against a 1080p frame's 8 MiB —
-/// so it crosses the boundary as plain pixels without breaking the K-183 rule
+/// so it crosses the boundary as plain pixels without breaking the rule
 /// that *frames* only ever cross as GPU handles. It is the answer to a question
 /// about a few pixels, not a picture to display.
 #[frb(non_opaque)]
@@ -208,7 +208,7 @@ pub struct BridgeSampledPixels {
 }
 
 /// Where the Viewer cuts a layer's effect stack short — the "at effect" chip's
-/// point (K-528, superseding K-486's thumbnail seam).
+/// point.
 ///
 /// **In plain terms.** Picking an effect and turning the chip on shows the
 /// composition rendered with that layer's stack stopping after the picked
@@ -351,7 +351,7 @@ pub enum WorkerResponse {
     /// the render-time indicators (docs/13 §7.1).
     FrameProfile(BridgeFrameProfile),
     /// The graphics device was lost and a new one has been built in its place
-    /// (K-585, budget B9). Carries nothing: the worker has already put the
+    /// (budget B9). Carries nothing: the worker has already put the
     /// picture back, and the frontend's whole part is one calm line in the
     /// status bar saying why the preview blinked.
     DeviceReset,
@@ -361,7 +361,7 @@ pub(crate) type CallbackStream = StreamSink<ScopedChange>;
 
 pub type WorkerResponseStream = StreamSink<WorkerResponse>;
 
-/// Which part of opening a project is under way (K-628).
+/// Which part of opening a project is under way.
 ///
 /// In plain terms: opening a `.lum` is a short run of jobs, and the card over
 /// the shell says which one is happening rather than sweeping a bar that knows
@@ -385,7 +385,7 @@ pub enum OpenPhase {
     StartingPreview,
 }
 
-/// How far opening a project has got (K-628).
+/// How far opening a project has got.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct OpenProgress {
@@ -478,10 +478,10 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         | Op::RemoveItem { .. }
         | Op::RenameItem { .. }
         // A colour tag tints the item's row icon and feeds the panel's filter
-        // chips, so the panel has to hear about it (K-451).
+        // chips, so the panel has to hear about it.
         | Op::SetItemLabel { .. }
         | Op::SetMediaRef { .. }
-        // A proxy is a second media reference on a footage item (K-501), and
+        // A proxy is a second media reference on a footage item, and
         // all three of these change what the item's row says about itself —
         // whether it has a stand-in, whether it is being used, and the
         // project-wide switch that governs every row at once. All of them also
@@ -496,18 +496,18 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         // reads it directly — but it is a document change like any other, so it
         // belongs in the item scope rather than in a silent default.
         | Op::SetCacheLocation { .. }
-        // How hard the renderer works at the edges (K-274). No panel draws it
+        // How hard the renderer works at the edges. No panel draws it
         // either — Settings reads it directly — but it is a document change,
         // and one that renames every frame of every comp, so it must be
         // reported rather than fall through silently.
         | Op::SetAntiAliasing { .. }
         // Which OCIO config the project's colour names come from, and what one
-        // footage item arrives as (K-490). Both rename frames — the config
+        // footage item arrives as. Both rename frames — the config
         // every frame of every comp, the assignment every frame reading that
         // item — and the item's row will name its space, so both report.
         | Op::SetColourConfig { .. }
         | Op::SetFootageColourSpace { .. }
-        // The project's colour shelf (K-448). No panel draws it — the picker
+        // The project's colour shelf. No panel draws it — the picker
         // reads it when it opens — but it is a document change like the cache
         // location above, so it reports rather than passing silently.
         | Op::SetProjectSwatches { .. }
@@ -515,8 +515,8 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         | Op::SetSolidDef { .. } => (None, None, true),
 
         // Comp settings carry the comp's name, so the panel row changes too.
-        // Trimming and cropping are comp settings plus the layers they move
-        // (K-686, K-687), so they report the widest scope the settings do.
+        // Trimming and cropping are comp settings plus the layers they move,
+        // so they report the widest scope the settings do.
         Op::SetCompSettings { comp, .. }
         | Op::TrimCompToWorkArea { comp }
         | Op::CropCompToRegion { comp, .. } => (Some(*comp), None, true),
@@ -532,7 +532,7 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         | Op::SetCompMarkers { comp, .. }
         // The beat band redraws from it, and it travels with the markers.
         | Op::SetBeatGrid { comp, .. }
-        // A layer group is a band over a run of rows (K-702), so the outline
+        // A layer group is a band over a run of rows, so the outline
         // rebuilds and no one layer's contents changed. The comp is the honest
         // scope for all four: making one, taking it away, and renaming or
         // recolouring the header row it draws.
@@ -541,7 +541,7 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         | Op::SetGroupName { comp, .. }
         | Op::SetGroupLabel { comp, .. }
         // A header's effect stack scopes to the whole run of members it acts
-        // on (K-731), so the comp is the honest scope, as for the adjustment
+        // on, so the comp is the honest scope, as for the adjustment
         // switch below.
         | Op::SetGroupEffects { comp, .. }
         // A layer that becomes an adjustment starts acting on everything
@@ -667,7 +667,7 @@ impl LumitBridgeState {
 
         let (comp, layer, items) = op_scope(&document_change.op);
 
-        // **Nothing is invalidated here, and that is the point (K-178).** This
+        // **Nothing is invalidated here, and that is the point.** This
         // used to drop every held frame of every composition on every committed
         // op, because frames were filed by position: the edit did not change any
         // frame's *name*, so the only safe answer was to throw them all away.
@@ -706,7 +706,7 @@ impl LumitBridgeState {
     /// took. Async puts it on a worker thread, which is what lets Dart hold the
     /// previous document on screen behind a progress bar until this returns.
     ///
-    /// `on_progress_stream` is how the opening card stops guessing (K-628): each
+    /// `on_progress_stream` is how the opening card stops guessing: each
     /// phase says it has begun, and the frontend draws the share of the whole
     /// open that is behind it. Optional, because nothing about opening a project
     /// depends on someone watching.
@@ -788,14 +788,14 @@ pub(crate) fn adopt(
         .collect();
 
     // And every camera solve this project's tracked clips already have on
-    // disk, as jobs that read the `track/` sidecar and decode nothing
-    // (K-417). Collected here for the same reason as the probe warm above —
+    // disk, as jobs that read the `track/` sidecar and decode nothing.
+    // Collected here for the same reason as the probe warm above —
     // the paths are resolved and the fingerprints stamped by now, and the
     // document is about to move into the store — and fired after the
     // registry lock, below.
     let solves = lumit_render::track::warm_jobs(&doc);
     // And every roto matte its stroked brushes already have on disk, the same
-    // way and for the same reason (K-713): a file read per brush, decoding
+    // way and for the same reason: a file read per brush, decoding
     // nothing, so a reopened project's subjects are cut before the first
     // repaint rather than after the next Propagate.
     let mattes = lumit_render::roto::warm_jobs(&doc);
@@ -832,7 +832,7 @@ pub(crate) fn adopt(
         }
         // The waveform summaries are keyed by file path and shared between
         // projects, so they are not any one project's to clear — but the
-        // project being closed is the reason they were built (K-280). The
+        // project being closed is the reason they were built. The
         // probe answers are shared the same way and go for the same reason,
         // and clearing them also cancels whatever the probe worker still
         // had queued for the project that is closing.

@@ -1,7 +1,7 @@
 # Particulate goldens (PS7, points-stream.md §5). Regenerate:
 #   cargo test -p lumit-render --lib regenerate_particulate_goldens -- --ignored
-# The stream is the CPU reference (K-019); the card's read-back and the
-# three pictures are held to it within 10^-5 of range (K-508).
+# The stream is the CPU reference; the card's read-back and the
+# three pictures are held to it within 10^-5 of range.
 ids 26
 0
 5

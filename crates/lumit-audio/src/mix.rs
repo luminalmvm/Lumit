@@ -37,13 +37,13 @@ pub fn db_to_gain(db: f64) -> f32 {
     }
 }
 
-/// Full left / full right on the Pan property (docs/09 §6, K-694): a
+/// Full left / full right on the Pan property (docs/09 §6): a
 /// percentage of the way to one side, so a value well reads "L 50" or "R 20"
 /// without arithmetic. 0 is centre.
 pub const PAN_FULL: f64 = 100.0;
 
 /// Pan → the pair of channel gains a **constant-power stereo balance** puts
-/// on a source (K-694). `pan` is in [`PAN_FULL`] units and is clamped.
+/// on a source. `pan` is in [`PAN_FULL`] units and is clamped.
 ///
 /// In plain terms: turning a sound to one side has to take it off the other,
 /// and the ear hears loudness closer to *power* than to amplitude, so simply
@@ -79,7 +79,7 @@ pub fn pan_gains(pan: f64) -> [f32; 2] {
 /// Baked by the host (which owns the keyframes); this crate only ever reads
 /// it.
 ///
-/// **One stage carries both** (K-694). Volume and pan are a single pair of
+/// **One stage carries both**. Volume and pan are a single pair of
 /// channel gains by the time the mixer sees them: a second envelope would be
 /// a second walk of the same clip per frame, and two ways for a fade and a
 /// sweep to disagree about which sample they landed on.
@@ -138,7 +138,7 @@ pub fn mix_stereo(sources: &[PlacedAudio], total_frames: usize) -> Vec<f32> {
 /// blow the DAC, or reach the encoder at full scale.
 ///
 /// The fader is a stage on the sum rather than a multiplier folded into each
-/// source's gain (K-691). The samples would be the same either way —
+/// source's gain. The samples would be the same either way —
 /// multiplication distributes over the sum — but only a stage lets a strip's
 /// meter read the layer's own level while the master reads what the device is
 /// handed, and only a stage sits where the board draws it: **ahead of** the
@@ -266,7 +266,7 @@ pub struct MixPlan {
     pub clips: Vec<PlacedClip>,
     pub total_frames: usize,
     /// The comp's **master fader** as a linear gain, applied to the sum and
-    /// ahead of the ceiling (K-691). 1.0 is unity — which is why this type
+    /// ahead of the ceiling. 1.0 is unity — which is why this type
     /// spells its own `Default` out rather than deriving one: a derived
     /// zero here would be a silent mix that looked like an empty field.
     pub master_gain: f32,
@@ -505,7 +505,7 @@ mod tests {
 
     #[test]
     fn placement_before_comp_start_clips_the_pre_zero_head() {
-        // GEN-3 (K-153): a layer dragged so it starts before comp time 0. Its
+        // GEN-3: a layer dragged so it starts before comp time 0. Its
         // in point and start offset move together (the body-drag covenant), so
         // in_s == offset_s == -1: at comp 0 the source is already 1 s in. The
         // active span intersected with the comp window [0, 2) is what sounds;
@@ -568,7 +568,7 @@ mod tests {
         );
 
         // The two channels are independent, which is what lets one envelope
-        // carry a fade and a pan sweep at once (K-694).
+        // carry a fade and a pan sweep at once.
         let swept = GainEnvelope {
             stride: 2,
             points: vec![[1.0, 0.0], [0.0, 1.0]],
@@ -908,7 +908,7 @@ mod tests {
         assert!((meters.read(meter::MASTER).peak[0] - 0.6).abs() < 1e-6);
     }
 
-    /// The master fader is a **stage ahead of the limiter** (K-691), not a
+    /// The master fader is a **stage ahead of the limiter**, not a
     /// per-source multiplier: a sum hot enough to be held at the ceiling
     /// comes back under it when the master is pulled down — which is the
     /// whole point of a fader in front of a limiter. It reads the same

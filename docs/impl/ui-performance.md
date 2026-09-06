@@ -1,6 +1,6 @@
 # UI performance — the 60/120 mandate, measured and answered
 
-**Status: binding** (K-676, 2026-08-30). This note records the owner's interface-speed
+**Status: binding** (2026-08-30). This note records the owner's interface-speed
 mandate as engineering fact: what was measured on the real machine against the real
 composition **in the owner's own conditions**, where each millisecond actually sits,
 the architecture that removes them, and the ordered work packages — each gated by a
@@ -59,7 +59,7 @@ Two clarifications the mandate adds to docs/13:
 
 The owner's Windows machine: RTX 5080, main monitor **2560×1440 at 165 Hz**, OS scale
 1.0 (`devicePixelRatio` 1.0; the interface itself draws at the ×1.1 presentation
-baseline, K-560, so a maximised window rasters the monitor's full area whatever the
+baseline, so a maximised window rasters the monitor's full area whatever the
 baseline — the baseline changes how many rows fit, not how many pixels are filled).
 Flutter 3.47, `flutter run --profile`, the Impeller OpenGLES backend unless a row
 says Skia. The project is the real edit, *Set me Free Converted.lum*, the **Clips**
@@ -79,7 +79,7 @@ its output so no run can misreport itself:
 
 A trap worth its own sentence, found the hard way: **a bare copy of a `.lum` into
 scratch is the empty condition**, silently. Media references are saved relative to
-the project file (K-173; the absolute path is never serialised), so the copy's media
+the project file (the absolute path is never serialised), so the copy's media
 goes missing and the preview shows nothing — while `render_frame` traffic carries on
 against placeholders and looks alive in the logs. The probe therefore prints which
 condition it is actually in, and its live runs junction the media folder beside the
@@ -100,7 +100,7 @@ gesture's wall clock.
 
 | Condition | Zoom fly fps (raster ms) | Playhead drag fps (raster ms) | Scroll lanes fps |
 |---|---|---|---|
-| 1280×720 + empty (the agent trap) | **84.9** (10.5) | **79.6** (11.0) | 12.1 |
+| 1280×720 + empty (the small-window trap) | **84.9** (10.5) | **79.6** (11.0) | 12.1 |
 | maximised + empty | 30.3 (30.0) | 30.1 (29.9) | 8.5 |
 | maximised + live (the owner) | **19.7** (48.8) | **19.9** (47.7) | 8.6 |
 
@@ -151,10 +151,11 @@ Reading it:
   the window-slide frames rebuild three screenfuls (build p90 ~75 ms at 57 visible
   rows) and the raster thread re-records the whole band. Genuinely UI-thread: Skia
   moves scroll from 8.6 to only 9.9 fps. §3.2.
-- **Zoom, scrub, work-area build cheaply** (K-293/K-638/K-647/K-649 and the band
-  layer did their work: 4–11 ms builds) **and still run at 20–30 fps**: the raster
-  thread's 30–49 ms is the whole story, and it is window-sized, not lane-sized —
-  Graph mode (one CustomPaint) rasters the same. §3.3.
+- **Zoom, scrub, work-area build cheaply** (the zoom seam, the LazyBlocks window,
+  one-call sampling, the playhead layer and the band layer did their work: 4–11 ms
+  builds) **and still run at 20–30 fps**: the raster thread's 30–49 ms is the whole
+  story, and it is window-sized, not lane-sized — Graph mode (one CustomPaint)
+  rasters the same. §3.3.
 - **Fresh versus revisited spans differ by ~6 ms of raster, not by frame rate class**
   (47.7 vs 41.7; on Skia they are identical at 5.25). Presenting from the bank versus
   renders arriving is **not** what makes scrubbing slow; the chrome's own repaint is.
@@ -220,7 +221,7 @@ still runs one ~40 ms build frame, and a lock switch's own commit still costs ~1
 fsync (§7 item 5). Both are named in §7, neither is the wave, and neither is
 reproducible in a headless test of the Timeline alone.
 
-### 2.6 The scroll row, re-read on the pinned backend (K-733, 2026-08-31)
+### 2.6 The scroll row, re-read on the pinned backend (2026-08-31)
 
 The one gesture still reading ~10 fps after the pin was the wheel scroll — ~12 fps in
 the probe against a table of 88–132 — and the missing ~70 ms a frame turned out not to
@@ -267,7 +268,7 @@ The same corrected accounting re-reads the whole table upward — the same run:
 zoom fly **103.8** fps (span med 11.4), playhead sweeps **139.1 / 141.5** (9.3),
 work-area drag **152.6** (9.0), graph zoom **120.3**, graph drag **142.2**,
 measuring-off **151.4** with zero frames over 17 ms. Earlier fps columns (§2.3–§2.5,
-K-732's verification table) carry the ~15% dilution and stand as recorded; every
+the Skia pin's verification figures) carry the ~15% dilution and stand as recorded; every
 comparison inside them was like-for-like.
 
 ## 3. Where each millisecond sits
@@ -298,14 +299,14 @@ condition (§3.5) — it is the follow-on of *any* edit on a big project.
 
 ### 3.2 Scroll
 
-A wheel notch moves the shared vertical scroll; `LazyBlocks` (K-638) recomputes its
+A wheel notch moves the shared vertical scroll; `LazyBlocks` recomputes its
 three-screenful window; any slide calls `setState` and **rebuilds every block in the
 window** — each a `Bar` (hover regions, trim handles, summary-key painter, waveform)
 plus a `KeyLane` per open property row — and the band sits behind **one**
-`RepaintBoundary` (K-649), so the raster thread **re-records the whole three-screenful
+`RepaintBoundary`, so the raster thread **re-records the whole three-screenful
 picture** to show one new row at the edge. At the owner's window that is a ~75 ms
 build on each slide frame plus ~42 ms of raster per frame — 8.6 fps, both halves (the
-scroll mirrors). K-638's virtualisation bounded the cost — 2,000 layers cost what 57
+scroll mirrors). The virtualisation bounded the cost — 2,000 layers cost what 57
 do, and that stands — what is left is that the window is rebuilt and re-recorded
 wholesale instead of incrementally. This one is genuinely UI-thread: Skia's better
 raster still leaves it at 9.9 fps on its ~69 ms slide builds. §4.3 is the fix —
@@ -315,8 +316,8 @@ the scroll's stops plus the old fps arithmetic.
 
 ### 3.3 Zoom and scrub are raster-bound, and two comparisons say where
 
-Builds are 4–11 ms — the K-293 seam (only the lane half listens to the zoom) and
-K-638's window hold. The raster thread then spends **30–49 ms** and the frame lands
+Builds are 4–11 ms — the zoom seam (only the lane half listens to the zoom) and
+the LazyBlocks window hold. The raster thread then spends **30–49 ms** and the frame lands
 many vsyncs late: 20–30 fps, the owner's complaint verbatim. The first control:
 **Graph mode — one `CustomPaint` of curves — rasters 33 ms for the same gestures in
 the same conditions.** So the cost is not the lane band's widget-drawn complexity; it
@@ -345,8 +346,8 @@ Two, measured together at ~1.2–1.3 ms a frame — a sixth of the 8.3 ms budget
   (`state/comp_time.dart`), so it taxes frames the session has not asked about — a
   scrub across a long comp on a fresh session pays it per new frame (88–308 ms per
   sweep measured; a maximised zoom-to-fit happens to pre-warm the visible span, which
-  is why some runs show it near zero — an accident of warm-up, not a fix). The batch
-  that K-647 built (`sample_scalars`, 8 µs a row) crosses the seam at the same moment
+  is why some runs show it near zero — an accident of warm-up, not a fix). The one-call
+  sampling batch (`sample_scalars`, 8 µs a row) crosses the seam at the same moment
   and could carry the time in the same crossing.
 
 These matter *more* once WP-1 lands: at 145 fps the vsync interval is 6.9 ms, and
@@ -369,11 +370,11 @@ fit it.
 
 ### 4.1 The backend is Impeller, and what is left of the gap is the backend's own
 
-**Reversed on the shipping question, 2026-08-31 (K-732): the runner now pins Skia.**
+**Reversed on the shipping question, 2026-08-31: the runner now pins Skia.**
 `flutter_ui/windows/runner/main.cpp` sets `ImpellerSwitch::Disabled` on the `DartProject`
 before the engine is created, so the pin holds in the shipped binary rather than in a
-launch flag. All three runners carry the pin since K-748, and since K-754 each carries it
-as a property the *release* engine reads — `fl_dart_project_set_enable_impeller` on Linux,
+launch flag. All three runners carry the pin, and each carries it as a property the
+*release* engine reads — `fl_dart_project_set_enable_impeller` on Linux,
 `FLTEnableImpeller` in the macOS Info.plist. Not `FLUTTER_ENGINE_SWITCHES`: those are read
 only under `#ifndef FLUTTER_RELEASE`, so a pin set that way measures fine under
 `flutter run` and is absent from the build users install. Everything below stays the record of what Impeller was measured to cost and
@@ -386,7 +387,7 @@ Skia is **not** a shipping backend for Lumit at any number. `--no-enable-impelle
 one use only — a diagnostic reference that says how much headroom the hardware has — and
 says nothing about what ships. So the shipped Windows runner starts the engine on
 Flutter's default, which is Impeller's OpenGLES backend, and carries **no pin at all**:
-the smallest runner is the one with nothing to say about backends (K-677).
+the smallest runner is the one with nothing to say about backends.
 
 **Vulkan is not reachable on Windows in 3.47** — read out of the engine, then confirmed by
 running it. `impeller-backend` is a real switch (`shell/common/switch_defs.h`), parsed into
@@ -436,7 +437,8 @@ through Skia whatever the app ships.
 
 ### 4.2 The paint-layer discipline: a repaint matrix, gated
 
-K-626/K-649 layering, finished and enforced. What may rebuild and repaint per gesture:
+The playhead and work-area band layering, finished and enforced. What may rebuild and
+repaint per gesture:
 
 | Gesture | May rebuild | May repaint (re-record) |
 |---|---|---|
@@ -444,15 +446,15 @@ K-626/K-649 layering, finished and enforced. What may rebuild and repaint per ge
 | Playhead move | playhead listenables, time readouts | playhead layer, cache-bar painter, Viewer texture |
 | Select click | the blocks whose slice changed; Effect controls (async) | those blocks |
 | Vertical scroll | blocks **entering** the window | entering blocks; the rest translates |
-| Zoom tick | the lane half (K-293) | lane band + ruler ticks; the outline not at all |
+| Zoom tick | the lane half | lane band + ruler ticks; the outline not at all |
 | Work-area drag | the ruler's staged band/handle; ground listenables | band layer, handle, ground wash |
 | Document edit | one model-refresh wave | what the edit touched |
 
 The gate: `rebuild_budget_test.dart` grows paint-count assertions per gesture (counted
-off `RenderRepaintBoundary`, as K-649's test already does), so a regression is a red
+off `RenderRepaintBoundary`, as the playhead test already does), so a regression is a red
 test naming the gesture, not a feeling.
 
-**Landed with WP-6** (K-681, 2026-08-30), one test per row, and two things about the
+**Landed with WP-6** (2026-08-30), one test per row, and two things about the
 instrument are worth writing down because the obvious reading of it is wrong.
 
 - **A block boundary's paint counters do not count re-records.** A
@@ -460,7 +462,7 @@ instrument are worth writing down because the obvious reading of it is wrong.
   parent's own paint, and its *asymmetric* count in two unrelated situations: when it
   re-recorded **alone**, and — the trap — when the parent painted and its existing layer
   was **reused**, which is the whole saving these boundaries exist for. Summing the two
-  and calling it "repaints", which is how K-649's original test reads them (correctly,
+  and calling it "repaints", which is how the playhead test reads them (correctly,
   because there the band's own boundary is the subject), makes every block on screen look
   dirty on any gesture that moves the band at all: a wheel slide came out at 28 of 27
   blocks. The test's `recorded` helper therefore decides per frame — a rise in symmetric
@@ -486,8 +488,8 @@ and "the comp" the same list and no budget can tell them apart.
 | Select a layer (name cell) | 304 | **2** lanes, **2** outline |
 | Scroll, one wheel notch | 497 | **3** lanes, **3** outline |
 | Zoom fly (Ctrl+wheel, 20 frames) | — | **0** outline, and the outline band **never paints** |
-| Playhead move, 20 frames | 300 | 0 lanes (K-649's test, unchanged) |
-| Work-area edge drag, 20 moves | 263 | 0 lanes, band 11 (K-626's test, unchanged) |
+| Playhead move, 20 frames | 300 | 0 lanes (the playhead test, unchanged) |
+| Work-area edge drag, 20 moves | 263 | 0 lanes, band 11 (the work-area test, unchanged) |
 | Edit (a lock switch, whole wave) | 4,972 | 1 lane, 27 outline — **one** pass over the window |
 
 ### 4.3 Scroll becomes incremental: widget identity plus per-block boundaries
@@ -526,7 +528,7 @@ rather than argued: with the layers in, zoom-fly raster **fell** 33.0 → 28.5 m
 the playhead sweep 47.7 → 27.7 — less picture to re-record, not more — so no
 flight-time disabling is needed.
 
-**The first bullet landed with WP-3** (K-678, 2026-08-30) and the two halves of it
+**The first bullet landed with WP-3** (2026-08-30) and the two halves of it
 separate cleanly in the probe. Keying the blocks by index alone took the lane slide's
 build p90 from **80.2 ms to 24.5**; reusing the widget instance on top of it took it to
 **6.0 ms** (med 2.6, max 11.8) — inside the 8.3 ms budget, from thirteen times over it.
@@ -535,11 +537,11 @@ with it, 42.5 → 32.6–34.8 across the two post-change runs. What the package 
 reach is the frame rate: 9.5 fps against the gate's 60, because ~33 ms of the ~63 ms span
 is the window-sized raster floor WP-1 measured and could not move (§4.1, §7.2). The
 UI-thread half of §3.2 is answered; the rest of that gesture's cost is the backend's.
-**Resolved by K-732 + K-733 (§2.6):** on the pinned backend, with the probe's legs
-kept inside the scroll extent and fps counted over the gesture's own window, the
-scroll answers every notch within the 16.6 ms floor (span med 10.7–15.3, zero frames
-over 17 ms at a hand's pace) — the lingering "9.5 fps" was the stops and the
-arithmetic, not a frame class.
+**Resolved by the Skia pin and the corrected accounting (§2.6):** on the pinned
+backend, with the probe's legs kept inside the scroll extent and fps counted over the
+gesture's own window, the scroll answers every notch within the 16.6 ms floor (span
+med 10.7–15.3, zero frames over 17 ms at a hand's pace) — the lingering "9.5 fps" was
+the stops and the arithmetic, not a frame class.
 
 ### 4.4 Selection is listenable row state, never a panel `setState`
 
@@ -588,7 +590,7 @@ never.
 
 ### 4.5 Per-frame engine questions are per-revision facts
 
-The K-184 family's rule, extended from builds to gestures: **a value that can only
+The per-revision rule, extended from builds to gestures: **a value that can only
 change with the document is asked once per revision, never per frame — and during a
 continuous gesture the per-frame sync budget for document-touching calls is zero.**
 Named instances: `animated_mask_paths_at` (empty-at-this-revision short-circuits the
@@ -600,7 +602,7 @@ wave. `cached_frames` (0.02 ms, a cache-index read that genuinely changes per fr
 stays, and so does `render_frame` — asking for the picture is what a scrub *is*, not a
 question about the document.
 
-**Both named instances landed with WP-4** (K-679, 2026-08-30), and the shape each took
+**Both named instances landed with WP-4** (2026-08-30), and the shape each took
 is worth recording because neither is the shape §3.4 assumed.
 
 - `animated_mask_paths_at` is **not** the empty answer §3.4 assumed, and finding that
@@ -627,8 +629,8 @@ is worth recording because neither is the shape §3.4 assumed.
   the frame lands in. A scrub crosses the seam once per ~8 seconds of 60 fps footage
   instead of once per frame it has not visited.
 
-**Both of §3.1's walks and three nobody had counted landed with WP-5** (K-680,
-2026-08-30), and the shape the answer took is one rule applied five times: *a fact the
+**Both of §3.1's walks and three nobody had counted landed with WP-5** (2026-08-30),
+and the shape the answer took is one rule applied five times: *a fact the
 read model can state for nothing turns a per-layer question into no question at all.*
 `BridgeLayerInfo` grew the layer's `source` (the same `ItemReference` `get_source_item`
 answers with), `source_size`, `source_frames`, `volume_db` and `wired` — every one of
@@ -643,7 +645,7 @@ them a match arm inside a walk the engine was already doing — and the five wal
   the five, 49 calls and 17 ms a click) are asked only of a layer that `wired` says has a
   wire in it, which on this project is none of them;
 - the **Volume** row's `get_volume_db` per sounding layer reads the model, where the Flow
-  rate had been riding since K-160.
+  rate was already riding.
 
 Two more were not walks over layers but the same mistake over other things. The comp-tab
 strip's cached list of every comp and its name was dropped whenever a change *named a
@@ -677,8 +679,8 @@ delivers the stream event and the per-frame check is what they were relying on. 
 the same "an edit's follow-on is one wave" problem WP-5 owns (§7 item 5), and it should
 be answered there once, not smuggled in here at the cost of the suite that guards it.
 
-**A measured frame is a per-frame fact, and the panel treated it as a revision** (K-750,
-2026-09-01). With the render-time column on — the default — the worker reports what
+**A measured frame is a per-frame fact, and the panel treated it as a revision**
+(2026-09-01). With the render-time column on — the default — the worker reports what
 every composited frame cost, and `TimelinePanelFrb` answered each report with a
 `setState` of its own: the whole Timeline rebuilt for numbers that only the column's
 cells and its header read, and both already listen to `RenderTimings` for themselves.
@@ -701,8 +703,8 @@ Vulkan, so the picture never reaches Dart there while the profile does.
 - **The two-trees refusal stands** (docs/TODO, "The Timeline's two halves are still
   two widget trees"): outline and lanes stay two scroll views with the mirror;
   everything here works within that.
-- **K-638's `LazyBlocks` window, K-647's one-call sampling, K-648's navigator,
-  K-649's playhead layer, the work-area band layer** all stand — §4.3 refines
+- **The `LazyBlocks` window, the one-call sampling, the navigator, the playhead
+  layer, the work-area band layer** all stand — §4.3 refines
   LazyBlocks' insides and replaces nothing.
 - **The budget tests' guarantees hold and tighten**: zero bridge calls in rebuild
   paths (`bridge_call_budget_test.dart`), bounded rebuild counts
@@ -716,7 +718,7 @@ Vulkan, so the picture never reaches Dart there while the profile does.
   backend, ~0 on Skia); the +18 ms live-picture tax in §2.2 is the compositor's, and
   outlived WP-1 — §4.1 shows our end of that transport has nothing left to give, so it
   travels to §7.2 with the rest of the gap.
-- **Flutter stays a thin view** (K-181): everything here is about *when* the view
+- **Flutter stays a thin view**: everything here is about *when* the view
   redraws, never about deciding document truth in Dart.
 
 ## 6. The probe, parked
@@ -749,7 +751,7 @@ table on Skia (§2.4). Every work package below re-runs the probe before and aft
 package is done when its gate row holds. docs/13 §7.3 names it the manual instrument
 for B1/B2; it is deleted the day a real-window CI harness supersedes it.
 
-**The accounting, corrected 2026-08-31 (K-733).** Frames are counted against the
+**The accounting, corrected 2026-08-31.** Frames are counted against the
 gesture's own window: `_measure` stamps `[t0, t1]` with `Timeline.now` (printed as the
 `tus=` line, for lining a CPU-sample or VM-timeline capture up against the same
 window), `framesWithin` keeps only frames whose vsync falls inside it, fps divides by
@@ -768,12 +770,12 @@ class.
 
 ## 7. Work packages
 
-Ordered; each sized for one agent; each gate measured by the probe **in the owner's
+Ordered; each sized for one pull request; each gate measured by the probe **in the owner's
 conditions (§2.1: maximised, live preview)** against the same comp, medians unless
 said otherwise; where marked, also asserted in a widget test so CI holds it.
 
 1. **WP-1 — Impeller at mandate speed. Done as far as it goes; its gate is not met**
-   (K-677, 2026-08-30). §4.1: the shipped Windows runner takes Flutter's default —
+   (2026-08-30). §4.1: the shipped Windows runner takes Flutter's default —
    Impeller GLES, no pin, no knob — after Vulkan was ruled out of 3.47 on Windows from
    the engine's own sources and then measured inert, the Dart tree was audited clear of
    Impeller-expensive paint, and the residual cost was located in the embedder (4× MSAA
@@ -797,7 +799,7 @@ said otherwise; where marked, also asserted in a widget test so CI holds it.
    boundary (§4.3, brought forward). The last two were invisible to the widget
    counters — 600–950 rebuilds a click, of which the rows and bars are 4 — and
    turned up only by timing each builder in the running app.
-3. **WP-3 — Scroll is incremental. Landed 2026-08-30 (K-678); its UI-thread gate is
+3. **WP-3 — Scroll is incremental. Landed 2026-08-30; its UI-thread gate is
    met and its raster gate is WP-1's, still unmet.** §4.3, both halves. *Gate (probe):*
    wheel-scroll the Clips comp — build p90 **< 8.3 ms** (slide frames were ~70–75 ms),
    raster med **< 8 ms** on the pinned backend, span p90 **< 16.6 ms**, ≥ 60 fps
@@ -805,16 +807,17 @@ said otherwise; where marked, also asserted in a widget test so CI holds it.
    11.81), from 80.18 (med 3.00, max 100.68); the outline half 6.46 from 77.32; raster
    med 34.75 from 42.48, span med 62.85 from 81.65, 9.5 fps from 8.2. The build gate is
    met with room; the raster, span and fps rows are the ~33 ms window floor of §4.1 —
-   the backend pin the gate's wording assumed does not exist (K-677), and Graph mode's
+   the backend pin the gate's wording assumed does not exist, and Graph mode's
    single painter rasters the same in the same window. Nothing widget-side reaches
-   them; they travel to §7.2. **Closed by K-732 + K-733 (§2.6): on the pinned backend
-   the scroll answers every notch inside the floor, and the residual low fps figure
-   was the probe's own gesture and arithmetic.** *Gate (CI):* a window slide builds only entering blocks
+   them; they travel to §7.2. **Closed by the Skia pin and the corrected accounting
+   (§2.6): on the pinned backend the scroll answers every notch inside the floor, and
+   the residual low fps figure was the probe's own gesture and arithmetic.**
+   *Gate (CI):* a window slide builds only entering blocks
    — `rebuild_budget_test`'s "a scroll builds the rows it brings in, not the whole
-   window": 3 rows and 3 bars on a slide of two rows, from 28 and 28. K-649's
+   window": 3 rows and 3 bars on a slide of two rows, from 28 and 28. The
    playhead-repaints-alone test keeps holding.
 4. **WP-4 — Continuous gestures make zero per-frame document calls. Landed
-   2026-08-30 (K-679); its gate is met on the drags it names.** §4.5 for
+   2026-08-30; its gate is met on the drags it names.** §4.5 for
    `animated_mask_paths_at` and `time_of_frame`, and the drag paths audited for
    siblings. *Gate (probe):* playhead and work-area drags — **0** sync
    document-touching calls per frame on this comp; `cached_frames` exempt (and
@@ -840,7 +843,7 @@ said otherwise; where marked, also asserted in a widget test so CI holds it.
    path moves" (0 calls still, 30 selected-and-keyed, 0 keyed-but-unselected) and
    `time_of_frame` pinned at **0** on a scrub, including one whose memory was emptied
    first.
-5. **WP-5 — An edit's follow-on is one wave. Landed 2026-08-30 (K-680); its sync-call
+5. **WP-5 — An edit's follow-on is one wave. Landed 2026-08-30; its sync-call
    gate is met and two of its frame gates are not, for a reason that is not the wave.**
    §4.5 for the document-change walks. *Gate (probe):* a switch toggle on the Clips comp
    — sync bridge time in the following second **< 5 ms** (was ~90 ms), no build frame
@@ -869,7 +872,7 @@ said otherwise; where marked, also asserted in a widget test so CI holds it.
    price rather than of either op's work. It is `JournalFile::append`
    (`crates/lumit-project/src/lib.rs`): every committed op opens the journal, writes a
    line and calls **`sync_data`** — an fsync, on the UI thread, inside the sync call.
-   That is a durability choice (crash recovery, K-284's journal), not a fan-out, and
+   That is a durability choice (crash recovery, the operation journal), not a fan-out, and
    trading it is the owner's to make; it is named here rather than quietly changed.
 
    **The settle and build-frame gates are not met, and the cause is not the edit.** A
@@ -885,7 +888,7 @@ said otherwise; where marked, also asserted in a widget test so CI holds it.
    `get_source_item`, `get_graph` and `get_volume_db`, and at most two `get_settings`,
    with the Viewer and the Timeline both mounted over a mixed stack of solids and
    precomps.
-6. **WP-6 — The matrix becomes gates. Landed 2026-08-30 (K-681).** §4.2 lands as
+6. **WP-6 — The matrix becomes gates. Landed 2026-08-30.** §4.2 lands as
    paint-count assertions in `rebuild_budget_test.dart` per gesture, counted off
    `RenderRepaintBoundary`; §4.2's own table above carries the numbers each row is pinned
    at, and the two traps in the instrument that had to be worked around to get them.
@@ -894,7 +897,7 @@ said otherwise; where marked, also asserted in a widget test so CI holds it.
    blocks; a select click and a wheel notch re-record **2** and **3** of 27 blocks; a zoom
    leaves the outline band unpainted; an edit is capped at **one** pass over the window in
    both halves, which is what a second wave would break. The playhead and work-area rows
-   were already held by K-649's and K-626's tests and are unchanged.
+   were already held by the playhead and work-area tests and are unchanged.
    **What cannot be gated headless, and stays the probe's:** the raster thread's
    milliseconds — a widget test has no compositor, no window and no external texture, so
    frame rate, raster median and span are unobservable in CI at any window size. The
@@ -1019,7 +1022,7 @@ the partial-repaint diagnosis is now tested and in.
 
 ### 7.2 WP-7 — the Impeller gap, still open
 
-**The ruling, 2026-08-31: Lumit ships on Skia, pinned in the runner (K-732).** Two
+**The ruling, 2026-08-31: Lumit ships on Skia, pinned in the runner.** Two
 attempts to close the gap inside the engine ran out below — single-sample was ~5 ms
 worse, and partial repaint lifted the scrub to ~50 fps while making playback slower —
 so the choice came down to the numbers §2.4 has held all along: Impeller 20–36 fps and
@@ -1030,8 +1033,8 @@ however it was launched. Confirmed the same day by a `flutter run --profile` car
 backend flag**, owner's conditions: the embedder's `Using the Impeller rendering backend
 (OpenGLESSDF)` line is absent from the run, and the probe reads 88–132 fps at 5.5–6.9 ms
 of raster across the zoom, both playhead sweeps and the work-area drag — §2.4's Skia
-column, reproduced from a launch that asked for nothing. This reverses K-677's shipping
-clause only; **the rest of this
+column, reproduced from a launch that asked for nothing. This reverses §4.1's original
+shipping clause only; **the rest of this
 section stands as the record and the package stays open**, because the pin is a
 workaround with a flip-back condition: re-run the §2.4 A/B per Flutter upgrade, and the
 day Impeller clears the mandate in the owner's conditions the line becomes
@@ -1042,7 +1045,7 @@ the Shinde piece).** Its checklist and this note agree rather than argue: repain
 boundaries around what animates (landed, WP-2/3), fixed-extent lazy lists (LazyBlocks
 with precomputed heights is that pattern), pre-compiled shaders, the 8.33 ms budget,
 and adapting the cap to the refresh rate. Two of its lines bear directly on our gap
-and support K-677's reading: "texture usage can still perform worse on Impeller" (our
+and support §4.1's reading: "texture usage can still perform worse on Impeller" (our
 +18 ms live-preview term, from a pro-Impeller source), and its premise that Impeller's
 wins come from NATIVE modern APIs - Metal, Vulkan - while its own desktop line says
 support "is still limited or experimental"; Windows today is GLES over ANGLE over
@@ -1155,7 +1158,7 @@ responsible for, and each is measured against the backend that ships.
 - **When Impeller reaches the mandate on Windows** (WP-1, §7.2): unanswered, and the
   answer is not in Lumit's tree — re-run the §2.4 A/B per Flutter upgrade and read the
   Windows embedder's compositor for a Vulkan backend or partial repaint. Until it is
-  answered the shipped runner is **pinned to Skia** (K-732, superseding K-677's
+  answered the shipped runner is **pinned to Skia** (superseding §4.1's original
   shipping clause); the answer arriving is what flips the pin back to
   `ImpellerSwitch::Default`.
 - **Why a republishing texture costs Impeller ~18 ms** (§2.2) is left undiagnosed on

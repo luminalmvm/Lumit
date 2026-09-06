@@ -1,12 +1,12 @@
-// The first-run screen: one question, asked once (K-246, docs/07 §13.1).
+// The first-run screen: one question, asked once (docs/07 §13.1).
 //
 // On the very first launch — a machine with no settings file — Lumit asks how
-// the user edits, and sets the two preferences of K-246 from the answer. That
-// is the whole screen, plus the update tick along the bottom (K-296): a
-// preference primer, not a tour, and not a wizard. Every setting it writes is
-// an ordinary row in Settings afterwards — the editing pair under Interface ▸
-// Editing, the tick under General ▸ Updates — so nothing here is a decision
-// anybody is stuck with.
+// the user edits, and sets the two editing preferences from the answer. That
+// is the whole screen, plus the update tick along the bottom: a preference
+// primer, not a tour, and not a wizard. Every setting it writes is an ordinary
+// row in Settings afterwards — the editing pair under Interface ▸ Editing, the
+// tick under General ▸ Updates — so nothing here is a decision anybody is
+// stuck with.
 //
 // It is deliberately plain for now. The four cards of docs/07 §13.1, each with
 // a small image showing what the choice does, are the destination; the owner
@@ -19,9 +19,9 @@ import '../state/workspace.dart';
 import '../widgets/controls.dart';
 
 /// What the screen comes back with: which editor, and whether Lumit should
-/// keep an eye out for new versions (K-296). The tick is on the screen rather
-/// than only in Settings because it is a decision about how Lumit behaves from
-/// now on, which is exactly what this screen is for.
+/// keep an eye out for new versions. The tick is on the screen rather than
+/// only in Settings because it is a decision about how Lumit behaves from now
+/// on, which is exactly what this screen is for.
 typedef FirstRunAnswer = ({bool? vegas, bool autoUpdate});
 
 /// Show the screen if this machine has never answered it, and record the
@@ -57,7 +57,7 @@ class _FirstRun extends StatefulWidget {
 }
 
 class _FirstRunState extends State<_FirstRun> {
-  /// Ticked to begin with (K-296). Nothing is downloaded either way — this is
+  /// Ticked to begin with. Nothing is downloaded either way — this is
   /// permission to look, not permission to fetch.
   bool _autoUpdate = true;
 

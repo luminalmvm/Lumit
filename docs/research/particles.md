@@ -66,7 +66,7 @@ quantity and burst logic are graph inputs like everything else
 ### 2.2 What Lumit should offer
 
 Lumit has two assets no plugin gets for free: **shape layers** and **masks**, both
-already reachable by effects (the mask-path reference kind, K-408, walks a mask's
+already reachable by effects (the mask-path reference kind walks a mask's
 geometry today — the Stroke-style effects use it). The natural emitter list:
 
 - **Point** (a 2D point parameter with crosshair pick, px@comp) with a direction and
@@ -141,8 +141,8 @@ expressions, which already reach every scalar parameter.
 
 ### 3.3 Recommendation
 
-Particular's model maps almost one-to-one onto what Lumit already has. **`ParamKind::Curve`
-(K-412)** is 2..16 control points in the unit square with a clamped cubic through them,
+Particular's model maps almost one-to-one onto what Lumit already has. **`ParamKind::Curve`**
+is 2..16 control points in the unit square with a clamped cubic through them,
 baked to a 257-entry table per resolve, static (not keyframed) — which is exactly what
 an over-life curve is: x = normalised life, y = multiplier. So:
 
@@ -249,7 +249,7 @@ which is deterministic but is why max life needs a hard cap.
 **Needs a simulation cache (the "simulated" extras).** Position-dependent forces —
 attractors, field-following curl noise, depth-buffer collision with bounce/slide —
 have no closed form; the frame-N state depends on frame-N−1. The precedent is already
-in the house: the camera track's sidecar (K-417, K-248) — a background job, keyed by
+in the house: the camera track's sidecar — a background job, keyed by
 its inputs, cached in the project sidecar, *rebuildable and deterministic so a rebuild
 is byte-identical*. A particle sim cache is the same animal: **fixed-step integration**
 (step = the comp frame interval in rational time, never wall clock; substeps a fixed
@@ -325,8 +325,8 @@ rasterises its own geometry — the Lens flare's sprite pass is the nearest prec
 ## 8. Proposed v1 parameter surface
 
 Sized against the fx system as it stands: every kind below exists today (float, slider,
-int, bool, enum, angle, colour, 2D point, curve K-412, seed, layer reference K-123,
-mask-path reference K-408, marker-trigger §1.4), the universal Matte row (§2.6) comes
+int, bool, enum, angle, colour, 2D point, curve, seed, layer reference,
+mask-path reference, marker-trigger §1.4), the universal Matte row (§2.6) comes
 free, and the depth input reuses DOF's layer-reference pattern.
 
 | Group | Parameter | Kind | Notes |
@@ -334,7 +334,7 @@ free, and the depth input reuses DOF's layer-reference pattern.
 | *Emitter* | Type | enum | Point / Line / Ellipse / Rectangle / Mask path / Layer |
 | | Position | 2D point | crosshair pick; Line adds a second point |
 | | Size | float ×2, px@comp | Ellipse/Rectangle |
-| | Mask path | mask-path ref | K-408; greyed unless Type = Mask path |
+| | Mask path | mask-path ref | greyed unless Type = Mask path |
 | | Source layer | layer ref | Type = Layer; Weight by: enum Luma / Alpha |
 | | Emit from | enum | Interior / Edge (shape and mask types) |
 | | Direction | angle + Spread (degrees) | |

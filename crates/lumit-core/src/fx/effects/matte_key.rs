@@ -1,4 +1,4 @@
-//! Matte key (docs/08 §3.21, K-121/K-154, K-546): a Keylight-style
+//! Matte key (docs/08 §3.21): a Keylight-style
 //! colour-difference keyer — a proper greenscreen key, not a chroma-distance
 //! approximation.
 //!
@@ -9,20 +9,20 @@
 //! on the same integers. All of that used to sit in a resolve arm; it sits in
 //! [`MatteKey::packed`] now, called once by whichever render path is running.
 //!
-//! **The spatial controls** (K-546) are the half of Keylight that cannot be
+//! **The spatial controls** are the half of Keylight that cannot be
 //! done a pixel at a time: Screen pre-blur softens the picture the key is
 //! *judged from*, and shrink/grow, Softness and the two Despots tidy the matte
 //! as a picture of its own before it is spent on the colour. Two mask-path rows
-//! (K-408) hold parts of the frame open or shut whatever the key made of them.
+//! hold parts of the frame open or shut whatever the key made of them.
 //! None of that is decided here — this file still only *normalises* numbers;
 //! the pipeline is [`cpu::matte_key_spatial`], and it is one branch away from
 //! the pointwise keyer, so **the defaults render the bytes they always did**.
 //!
-//! Migration (unchanged by this move): a project saved before K-154 keeps its
-//! stored `key` (screen colour) and `spill` (now the despill amount); its old
-//! `tolerance` / `softness` are superseded and simply go unread. The K-546 rows
-//! are all neutral by default, so an older project is not re-keyed by them
-//! either.
+//! Migration (unchanged by this move): a project saved by an earlier version
+//! keeps its stored `key` (screen colour) and `spill` (now the despill
+//! amount); its old `tolerance` / `softness` are superseded and simply go
+//! unread. The spatial rows are all neutral by default, so an older project is
+//! not re-keyed by them either.
 
 use crate::fx::{
     cpu, EffectDef, EffectMetadata, EffectSchema, MatteKeyParams, MatteKeyView, ParamGroup,
@@ -62,17 +62,17 @@ pub const MATTE_KEY_GROUPS: &[ParamGroup] = &[ParamGroup {
     version = 2,
     category = Utility,
     // Every step is clamp/min/max/lerp — continuous, so the §1.6 ULP oracle
-    // holds. Since K-546 it is no longer pointwise: the spatial stages judge a
+    // holds. It is no longer pointwise: the spatial stages judge a
     // pixel's matte by its neighbours, so the cost is the multi-pass one and
     // the region of interest is dilated by the sum of the three spatial
     // controls' own hard maxima (100 px pre-blur + 50 px shrink/grow + 100 px
     // softness + the despot's one pixel), exactly as the Gaussian blur sizes
-    // its padding from its Radius' hard maximum (K-433). At the defaults not
+    // its padding from its Radius' hard maximum. At the defaults not
     // one of those passes runs and the old single pointwise pass is what
     // executes.
     cost = Moderate,
     roi = PaddedPx(251.0),
-    // K-425 (the owner's rule for mattes): a keyer carries no Matte row. Its
+    // The owner's rule for mattes: a keyer carries no Matte row. Its
     // subject is the picture it keys, and a strength matte over a key is a
     // garbage matte — which is a mask's job, not this row's.
     matte = false,
@@ -139,10 +139,10 @@ pub struct MatteKey {
     pub spill: f32,
 
     /// How far the picture the key is **judged from** is softened, px@comp
-    /// (§2.3), before the matte is measured — Keylight's Screen pre-blur
-    /// (K-546). Grain and compression noise stop reading as detail; the colour
-    /// that comes out is still the sharp original. 0, the default, skips the
-    /// stage and the effect keys exactly as it did before.
+    /// (§2.3), before the matte is measured — Keylight's Screen pre-blur. Grain
+    /// and compression noise stop reading as detail; the colour that comes out
+    /// is still the sharp original. 0, the default, skips the stage and the
+    /// effect keys exactly as it did before.
     #[slider(
         label = "Screen pre-blur",
         min = 0.0,
@@ -191,7 +191,7 @@ pub struct MatteKey {
     pub clip_rollback: f32,
 
     /// Marches the matte's edge outward (+) or inward (−), px@comp (§2.3) —
-    /// Keylight's Screen shrink/grow (K-546). Morphological, not a blur: the
+    /// Keylight's Screen shrink/grow. Morphological, not a blur: the
     /// edge moves and stays as crisp as it was. 0, the default, is the neutral.
     #[slider(
         label = "Screen shrink/grow",
@@ -205,7 +205,7 @@ pub struct MatteKey {
     pub shrink_grow: f32,
 
     /// How far the matte itself is blurred, px@comp (§2.3) — and only the
-    /// matte, so the picture keeps its own sharpness (K-546). 0, the default,
+    /// matte, so the picture keeps its own sharpness. 0, the default,
     /// is the neutral.
     #[slider(
         label = "Screen softness",
@@ -219,7 +219,7 @@ pub struct MatteKey {
     pub softness: f32,
 
     /// Per cent → 0..1: how far an isolated **dark** speck — a pinhole in the
-    /// foreground — is lifted to the darkest of its neighbours (K-546). A pixel
+    /// foreground — is lifted to the darkest of its neighbours. A pixel
     /// on a real edge has a neighbour on its own side, so edges are left alone.
     #[slider(
         label = "Despot black",
@@ -233,8 +233,7 @@ pub struct MatteKey {
     pub despot_black: f32,
 
     /// Per cent → 0..1: how far an isolated **bright** speck — a fleck left in
-    /// the keyed background — is dropped to the brightest of its neighbours
-    /// (K-546).
+    /// the keyed background — is dropped to the brightest of its neighbours.
     #[slider(
         label = "Despot white",
         min = 0.0,
@@ -247,13 +246,13 @@ pub struct MatteKey {
     pub despot_white: f32,
 
     /// A mask of this layer's whose inside is forced **opaque**, whatever the
-    /// key made of it (K-546) — the hold-out for a patch of foreground the
+    /// key made of it — the hold-out for a patch of foreground the
     /// screen colour eats. Unset is nothing held in, never the first mask: a
     /// garbage matte nobody asked for would be a keyer that stopped keying.
     #[mask_path(label = "Inside mask", self_default = false)]
     pub inside_mask: bool,
 
-    /// A mask of this layer's whose inside is forced **transparent** (K-546) —
+    /// A mask of this layer's whose inside is forced **transparent** —
     /// the shape drawn round a light stand, a rig, the edge of the screen.
     /// Unset is nothing cut out, for the same reason.
     #[mask_path(label = "Outside mask", self_default = false)]
@@ -323,7 +322,7 @@ impl MatteKey {
 impl MatteKey {
     /// Raster pixels per comp pixel (§2.3), pushed at resolve because the mask
     /// carriage hands its vertices over in px@comp and the garbage mattes are
-    /// filled in the raster (K-408, K-546). Never a panel row — the same
+    /// filled in the raster. Never a panel row — the same
     /// derived value Scribble, Stroke and Vegas already carry, under the same
     /// id.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");

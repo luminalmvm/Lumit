@@ -1,4 +1,4 @@
-//! Planar track (docs/08 §3.87, K-579): the handle for a flat surface being
+//! Planar track (docs/08 §3.87): the handle for a flat surface being
 //! followed through a shot.
 //!
 //! **In plain terms.** Something flat in the shot — a phone screen, a poster, a
@@ -19,7 +19,7 @@
 //! turns the effect to **one point** or **two points**, each a small box
 //! followed on its own. One box gives a position; two give a position, a turn
 //! and a growth from the line between them — and being separate boxes, they need
-//! no relation to each other at all (K-735).
+//! no relation to each other at all.
 //!
 //! **Why it is not a mode on Camera track.** The two effects share their first
 //! step and nothing after it. A Camera track answers *where the camera was* —
@@ -105,7 +105,7 @@ pub struct PlanarTrack {
     #[choice(options = FOLLOW_OPTIONS, default = FOLLOW_DEFAULT, label = "Follow")]
     pub follow: u32,
 
-    /// px@comp (K-260): the tracked quad's upper-left corner on the reference
+    /// px@comp: the tracked quad's upper-left corner on the reference
     /// frame. The four corners are the *reference* shape — where the surface is
     /// at the start of the shot — and everything the analysis finds is measured
     /// against them.
@@ -138,7 +138,7 @@ pub struct PlanarTrack {
     #[slider(label = "Lower right y", min = -1080.0, max = 2160.0, default = 710.0, unit = Px)]
     pub lower_right_y: f32,
 
-    /// px@comp (K-260): the first tracked point on the reference frame, read
+    /// px@comp: the first tracked point on the reference frame, read
     /// when [`follow`](Self::follow) is one of the point options.
     #[slider(label = "Point 1 x", min = -1920.0, max = 3840.0, default = 860.0, unit = Px)]
     pub point1_x: f32,

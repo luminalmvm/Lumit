@@ -159,7 +159,7 @@ fn assert_close(a: f64, b: f64) {
 
 /// The sRGB transfer function, written out here rather than borrowed from the
 /// mapper: a colour conversion tested against its own implementation proves
-/// nothing (K-026).
+/// nothing.
 fn to_linear(v: f64) -> f64 {
     if v <= 0.040_45 {
         v / 12.92
@@ -284,7 +284,7 @@ fn the_nested_comp_its_folder_and_its_two_precomp_layers_come_across() {
 /// Every number here is one `make-fixture.jsx` wrote by hand, so a mistake is
 /// a plain transcription slip — the kind a test catches and a reading does
 /// not. The background is the one that converts: After Effects reports it in
-/// the project's display space and Lumit stores scene-linear light (K-026).
+/// the project's display space and Lumit stores scene-linear light.
 #[test]
 fn the_composition_keeps_its_settings_shutter_and_background() {
     let c = fixture();
@@ -837,7 +837,7 @@ fn the_blend_mode_spread_arrives_and_dissolve_falls_back_with_a_row() {
 
 /// **§5 row: the switch states, and the two with no counterpart.**
 ///
-/// Shy, solo, lock, motion blur and the guide flag (K-497) cross straight
+/// Shy, solo, lock, motion blur and the guide flag cross straight
 /// over. Draft quality and "preserve underlying transparency" have no Lumit
 /// switch, and each changes what a comp looks like, so each is a row rather
 /// than a silent drop.
@@ -875,9 +875,9 @@ fn the_switches_cross_over_and_the_ones_with_no_counterpart_are_reported() {
 /// map.**
 ///
 /// What does come across: the 3D switch and the layer's Z, the layer's
-/// **Orientation** on the rotation lanes (K-625 — the rotations here are
-/// zero, so the orientation is exactly what they describe), the camera's Zoom
-/// out of its options group, and the light's kind, colour, intensity and cone.
+/// **Orientation** on the rotation lanes (the rotations here are zero, so the
+/// orientation is exactly what they describe), the camera's Zoom out of its
+/// options group, and the light's kind, colour, intensity and cone.
 /// Two of those convert — AE's intensity is a percentage where 100 is unity,
 /// and its cone angle is the *full* angle where Lumit's is the half.
 ///
@@ -898,7 +898,7 @@ fn the_3d_layer_the_camera_and_the_light_come_across_as_far_as_they_map() {
     assert!(card.switches.three_d);
     assert_eq!(card.transform.position_z.value_at(0.0), -150.0);
     // Orientation [0, 30, 0] onto the rotation lanes, the layer's own
-    // rotations being zero (K-625).
+    // rotations being zero.
     assert_eq!(card.transform.rotation_x.value_at(0.0), 0.0);
     assert_eq!(card.transform.rotation_y.value_at(0.0), 30.0);
     assert_eq!(card.transform.rotation.value_at(0.0), 0.0);
@@ -972,7 +972,7 @@ fn the_text_layers_words_arrive_and_the_shape_layer_keeps_its_slot() {
 ///
 /// Every figure below is worked out here from what `make-fixture.jsx` set and
 /// what the composition is, never copied from the mapper: a blur radius is 40
-/// After Effects pixels and stays 40 (px@comp, K-419), Fill's opacity is a
+/// After Effects pixels and stays 40 (px@comp), Fill's opacity is a
 /// bare 0–1 factor where Lumit reads a per cent, and Tint's two colours cross
 /// into scene-linear light.
 #[test]
@@ -1052,7 +1052,7 @@ fn the_colour_and_generate_effects_convert_every_parameter() {
 /// round a contour where Lumit spaces them along it, so the count becomes a
 /// length through the mask's own perimeter; Scribble and Vegas both name a
 /// mask by index, which has to resolve to the same id the mask itself was
-/// given (K-408).
+/// given.
 #[test]
 fn the_transform_shadow_and_the_two_mask_reading_effects_convert() {
     let host = layer(fixture(), "fx host");
@@ -1119,7 +1119,7 @@ fn the_transform_shadow_and_the_two_mask_reading_effects_convert() {
 /// produce.**
 ///
 /// Curves is the effect After Effects' own scripting cannot read: its point
-/// list is `CUSTOM_VALUE` data (K-410), so the instance keeps its slot as a
+/// list is `CUSTOM_VALUE` data, so the instance keeps its slot as a
 /// placeholder *and* the property is named as unreadable — the pair, not one
 /// or the other, is what stops a Curves shipping with no curve.
 ///
@@ -1137,14 +1137,15 @@ fn the_report_counts_what_it_says_and_names_its_placeholder() {
         report.summary(),
         Summary {
             imported: 62,
-            // One fewer Adjusted row since K-497: the guide flag is a switch
-            // Lumit has now, so it crosses over instead of being reported.
+            // One fewer Adjusted row now the guide flag is a switch Lumit has,
+            // so it crosses over instead of being reported.
             // One more since Invert joined the table: the fixture's Channel is
             // Red, which is a row rather than a placeholder now. One more
-            // since K-625: the fixture's camera is a two-node one, and the
-            // point of interest that aims it is named rather than dropped.
-            // Two fewer since K-666: the Transform effect has a Skew pair now,
-            // so the fixture's Skew and Skew Axis carry rather than report.
+            // since two-node cameras arrived: the fixture's camera is a
+            // two-node one, and the point of interest that aims it is named
+            // rather than dropped. Two fewer since the Transform effect gained
+            // a Skew pair, so the fixture's Skew and Skew Axis carry rather
+            // than report.
             adjusted: 58,
             placeholders: 1,
             skipped: 1,
@@ -1290,7 +1291,7 @@ fn the_captures_unreadables_are_the_four_classes_we_know_about() {
 ///
 /// The whole point of importing into an ordinary [`Document`]: `lumit-project`
 /// carries it — placeholders, `ae` namespaces, negative spans and all — with
-/// no second dialect of the Lumit format to maintain (K-410). A sample of the
+/// no second dialect of the Lumit format to maintain. A sample of the
 /// deepest assertions is re-run on the reloaded document rather than a shallow
 /// count, because the shapes worth doubting are the ones only an import makes:
 /// a keyframe's ease, a matte reference, a converted effect parameter, an
@@ -1347,7 +1348,7 @@ fn the_golden_document_round_trips_through_a_saved_project() {
 }
 
 /// **The twenty-two layers carrying the Layer Styles group wear no style, and
-/// the import puts none on them** (K-706, docs/impl/layer-styles.md §7).
+/// the import puts none on them** (docs/impl/layer-styles.md §7).
 ///
 /// After Effects lists all ten style slots on any layer that has ever had the
 /// group, switched off or not, and every one of the bundle's two hundred and

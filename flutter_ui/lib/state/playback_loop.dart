@@ -9,8 +9,8 @@
 // The first is that a composition nobody has narrowed used to be treated as
 // "no loop at all", so it played out to its end and stopped — while the comp
 // beside it in the same project, one somebody had pressed `B` in, looped. But a
-// comp with no work area *is* a comp whose work area is the whole of it
-// (K-203): the engine's "not narrowed" is null, and the interface has no such
+// comp with no work area *is* a comp whose work area is the whole of it:
+// the engine's "not narrowed" is null, and the interface has no such
 // state. The span falls back to the whole comp, so one rule covers every comp
 // in the project rather than two picked by who pressed what.
 //
@@ -22,7 +22,7 @@
 // playhead back inside before you had seen anything — the tail of a comp could
 // not be previewed at all. The two sides of the work area now behave the same:
 // a run that starts past the end simply does not loop. It previews forward
-// from where you parked, and stopping puts you back (K-254).
+// from where you parked, and stopping puts you back.
 
 /// The span playback loops round for a run started at `playhead`, or null when
 /// this run does not loop and plays out to the composition's end instead.

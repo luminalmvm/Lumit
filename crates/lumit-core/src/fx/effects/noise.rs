@@ -7,9 +7,9 @@
 //!
 //! The only number the kernel wants that is not a control is *which frame this
 //! is*, because grain that does not move is not grain. That is worked out at
-//! resolve time from the layer's own clock ([`EffectDef::resolve_derived`],
-//! K-385) and handed over as a plain integer, so the kernel never sees time and
-//! two exports agree bit-for-bit (§2.4).
+//! resolve time from the layer's own clock ([`EffectDef::resolve_derived`]) and
+//! handed over as a plain integer, so the kernel never sees time and two
+//! exports agree bit-for-bit (§2.4).
 
 use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, ParamId, Params, ResolveCx, Value};
 use lumit_fx_macros::Effect;
@@ -76,9 +76,9 @@ impl Noise {
     /// Layer time discretised to the millisecond — a distinct draw per frame at
     /// any frame rate up to 1000 fps, which is the documented ceiling of "a
     /// fresh draw every frame" (docs/08 §3.36). Never a panel row: it is what
-    /// the clock produces, not what anyone typed. The Block glitch tick (K-385)
-    /// is the same shape; this one is finer because grain must not repeat
-    /// between frames where a block pop may.
+    /// the clock produces, not what anyone typed. The Block glitch tick is the
+    /// same shape; this one is finer because grain must not repeat between
+    /// frames where a block pop may.
     pub const DERIVED_TICK: ParamId = ParamId::new("derived.tick");
 
     /// This instance's tick read back out of a resolved bag: [`Noise::packed`]'s

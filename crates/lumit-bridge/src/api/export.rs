@@ -19,21 +19,20 @@ use serde_json::Value;
 use crate::api::{composition::CompositionReference, BridgeError};
 
 /// What the export dialogue is asking for — the whole of
-/// `lumit_render::export::ExportSpec`, in the flat shape the seam carries
-/// (K-479, K-485).
+/// `lumit_render::export::ExportSpec`, in the flat shape the seam carries.
 ///
 /// `width`/`height` of zero mean "the composition's own size", which is what the
 /// dialogue shows until somebody types over it. `bitrate_mbps` of zero means the
 /// encoder's own default — a quality nobody chose is better than a number this
 /// layer invented — and is a *different answer* from `bitrate_auto`, which works
-/// a delivery-quality rate out from the frame and the rate (K-479).
+/// a delivery-quality rate out from the frame and the rate.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct BridgeExportSpec {
     /// A preset name from the store, or empty for a custom export.
     pub preset: String,
     /// The output format key: `h264` / `hevc` for an `.mp4`, `png` / `tiff`
-    /// for a numbered image sequence (K-201), `m4a` / `wav` for sound alone.
+    /// for a numbered image sequence, `m4a` / `wav` for sound alone.
     pub codec: String,
     pub width: u32,
     pub height: u32,
@@ -44,7 +43,7 @@ pub struct BridgeExportSpec {
     pub peak_mbps: u32,
     /// Work the bitrate out from the frame and the rate. Overrides
     /// `bitrate_mbps`; a blank field (zero) with this off means the encoder
-    /// chooses its own quality, which is what blank has always meant (K-119).
+    /// chooses its own quality, which is what blank has always meant.
     pub bitrate_auto: bool,
     /// Output frame rate; zero means the composition's own. A different rate
     /// resamples by nearest comp frame over the same wall-clock span.
@@ -57,12 +56,12 @@ pub struct BridgeExportSpec {
     pub include_audio: bool,
     /// Audio bits per second; zero takes the delivery-preset rate.
     pub audio_bit_rate: i64,
-    /// The sound's sample rate in hertz — one of [`export_audio_rates`]
-    /// (K-493). Zero means the customary 48 kHz, so a caller that never sets
+    /// The sound's sample rate in hertz — one of [`export_audio_rates`].
+    /// Zero means the customary 48 kHz, so a caller that never sets
     /// it writes the file Lumit has always written.
     #[frb(default = 0)]
     pub audio_rate: u32,
-    /// Bits a sound sample: 16 or 24 (K-493). Anything below 24 reads as
+    /// Bits a sound sample: 16 or 24. Anything below 24 reads as
     /// sixteen, which is what an unset field has always meant. A format whose
     /// sound cannot carry the choice (AAC stores coefficients, not samples) is
     /// refused rather than handed the identical file either way —
@@ -70,7 +69,7 @@ pub struct BridgeExportSpec {
     #[frb(default = 0)]
     pub audio_depth: u32,
     /// Channels in the written sound: `1` folds the composition's stereo mix
-    /// down to mono, anything else (zero included) keeps it stereo (K-493).
+    /// down to mono, anything else (zero included) keeps it stereo.
     /// Every format that carries sound carries both, so there is no capability
     /// row for it.
     #[frb(default = 0)]
@@ -88,23 +87,22 @@ pub struct BridgeExportSpec {
     /// Rec. 709 (a genuine pass-through), `linear`, `rec709`, `rec2020`,
     /// `display-p3`, or the name of an OCIO output space (post-v1; an export
     /// that asks for one before OCIO exists is refused). A space the chosen
-    /// container cannot *state* is refused too, rather than written unlabelled
-    /// (K-498).
+    /// container cannot *state* is refused too, rather than written unlabelled.
     pub colour_space: String,
-    /// The filter a resized frame is resampled with (K-498): `high` for
+    /// The filter a resized frame is resampled with: `high` for
     /// Lanczos-3, anything else — blank included — for the bilinear default
     /// every Lumit export has always used. Blank rather than `fast` as the
     /// unset value, so a caller that never sets it cannot change a byte.
     #[frb(default = "")]
     pub resample: String,
-    /// Pixels taken off each edge, at composition size (K-419).
+    /// Pixels taken off each edge, at composition size.
     pub crop_top: u32,
     pub crop_left: u32,
     pub crop_bottom: u32,
     pub crop_right: u32,
     /// Take the crop from the Viewer's region of interest instead.
     pub use_region_of_interest: bool,
-    /// That region as comp fractions `[x0, y0, x1, y1]` (K-362), or empty for
+    /// That region as comp fractions `[x0, y0, x1, y1]`, or empty for
     /// none. Anything that is not four increasing finite numbers is no region.
     pub region: Vec<f64>,
     /// What is written into the container about the file, in the order the
@@ -117,26 +115,26 @@ pub struct BridgeExportSpec {
     pub disk_cache_read_only: bool,
     /// Run each layer's effect stack.
     pub effects: bool,
-    /// Honour solo switches (K-105).
+    /// Honour solo switches.
     pub honour_solo: bool,
-    /// Deliver the guide layers too (K-497). Off — the default — is what a
+    /// Deliver the guide layers too. Off — the default — is what a
     /// guide layer is: drawn in the Viewer, absent from the file, at every
     /// depth.
     #[frb(default = false)]
     pub render_guides: bool,
-    /// Motion blur at export (K-502): `0` the compositions' own settings, `1`
+    /// Motion blur at export: `0` the compositions' own settings, `1`
     /// on for checked layers, `2` off for all layers. An unknown number is the
     /// compositions' own settings — an answer nobody recognises is not a
     /// reason to refuse an export.
     #[frb(default = 0)]
     pub motion_blur: u32,
-    /// Retime blend at export (K-502): `0` the compositions' own settings, `1`
+    /// Retime blend at export: `0` the compositions' own settings, `1`
     /// off for all layers. There is **no** *on for checked layers*: a layer's
     /// interpolation policy is its own check, so that answer would write the
     /// identical file as the first.
     #[frb(default = 0)]
     pub retime_blend: u32,
-    /// Read the proxies instead of the originals (K-501). Off by default
+    /// Read the proxies instead of the originals. Off by default
     /// whatever the project is set to work at: delivery is the one moment a
     /// proxy must not apply, and a draft for review is the only export it is
     /// right for.
@@ -161,7 +159,7 @@ pub struct BridgeMetadataField {
 
 impl Default for BridgeExportSpec {
     /// A comp-sized H.264 mp4 with sound — what a plain "Export…" has always
-    /// meant (K-119) — mirroring `ExportSpec::default()` field for field.
+    /// meant — mirroring `ExportSpec::default()` field for field.
     fn default() -> Self {
         Self {
             preset: String::new(),
@@ -206,7 +204,7 @@ impl Default for BridgeExportSpec {
 }
 
 /// What one output format can and cannot carry — `ExportFormat::caps()` as the
-/// dialogue reads it (K-479).
+/// dialogue reads it.
 ///
 /// A control the format cannot honour is **disabled**, not live: the dialogue
 /// reads this row to decide, and the engine refuses the same combinations as a
@@ -229,7 +227,7 @@ pub struct BridgeFormatCaps {
     /// what it is.
     pub audio_bit_rate: bool,
     /// This format's sound can be written twenty-four bits a sample as well as
-    /// sixteen (K-493) — true for uncompressed PCM, false for AAC and for
+    /// sixteen — true for uncompressed PCM, false for AAC and for
     /// every format with no sound at all.
     ///
     /// A flag rather than a list, because the engine's list is
@@ -243,11 +241,11 @@ pub struct BridgeFormatCaps {
     pub metadata: bool,
     /// The colour spaces this format's container can **state**, by the stable
     /// names `BridgeExportSpec::colour_space` carries: `""` (sRGB / Rec. 709),
-    /// `linear`, `rec709`, `rec2020`, `display-p3` (K-498). Empty where the
+    /// `linear`, `rec709`, `rec2020`, `display-p3`. Empty where the
     /// format carries no picture.
     ///
     /// Names, not labels: a space the seam cannot translate is a space whose
-    /// wording belongs in `app_en.arb` like every other string (K-005, K-303),
+    /// wording belongs in `app_en.arb` like every other string,
     /// and a name nobody recognises — an OCIO config's own — is shown as it
     /// arrived, exactly as a codec name is.
     #[frb(default = [])]
@@ -337,7 +335,7 @@ impl CompositionReference {
     }
 }
 
-/// What one output format can and cannot carry (K-479). The dialogue asks this
+/// What one output format can and cannot carry. The dialogue asks this
 /// of every format key it offers and disables what the answer refuses.
 #[frb(sync)]
 pub fn export_format_caps(codec: String) -> BridgeFormatCaps {
@@ -345,7 +343,7 @@ pub fn export_format_caps(codec: String) -> BridgeFormatCaps {
 }
 
 /// Every sample rate an export can write sound at, in hertz and in the order
-/// the Sound row lists them (K-493).
+/// the Sound row lists them.
 ///
 /// Not a capability row, because it does not vary by format: a format either
 /// carries sound — `BridgeFormatCaps::audio` — and then carries all of these,
@@ -366,7 +364,7 @@ impl CompositionReference {
     ///
     /// **On the composition rather than free-standing** because a colour space
     /// is one of the settings, and whether a name can be delivered is a
-    /// question about *this project's* colour config (K-490) — one check, so
+    /// question about *this project's* colour config — one check, so
     /// the footer and the exporter cannot disagree about the same spec.
     #[frb(sync)]
     pub fn export_spec_check(&self, spec: BridgeExportSpec) -> Result<String, BridgeError> {
@@ -378,7 +376,7 @@ impl CompositionReference {
 
 /// The crop this spec actually applies to a `comp_width` × `comp_height` frame,
 /// and the frame that survives it — the typed insets, or the Viewer's region of
-/// interest when that is asked for and exists (K-362, K-479).
+/// interest when that is asked for and exists.
 #[frb(sync)]
 pub fn export_crop_for(spec: BridgeExportSpec, comp_width: u32, comp_height: u32) -> BridgeCrop {
     crate::export::crop_for(&spec, comp_width, comp_height)
@@ -420,7 +418,7 @@ pub fn export_preset_delete(name: String) -> Result<(), BridgeError> {
     crate::export::preset_delete(&name).map_err(BridgeError::ExportFailed)
 }
 
-/// What the export dialogue opens on when nothing else has been said (K-588) —
+/// What the export dialogue opens on when nothing else has been said —
 /// the subset of a spec worth remembering between sessions, kept beside the
 /// preset library in the application's own data area and never in a `.lum`.
 ///
@@ -435,7 +433,7 @@ pub struct BridgeExportDefaults {
     /// The output format key, or empty for the preset's own.
     pub codec: String,
     /// The filename pattern in the tokens the exporter already substitutes —
-    /// `{comp}`, `{preset}`, `{date}` (K-119). Empty gives each preset's own
+    /// `{comp}`, `{preset}`, `{date}`. Empty gives each preset's own
     /// suggested name.
     pub filename_template: String,
     /// Where a finished file is written: `ask` every time, `project` for
@@ -464,7 +462,7 @@ pub fn export_defaults_set(defaults: BridgeExportDefaults) -> Result<(), BridgeE
 /// What a delivery preset stamps into the dialogue, and what to call the file.
 ///
 /// A blank `preset` gives the custom defaults. `template` drives the
-/// `{comp}`/`{preset}`/`{date}` substitution (K-119); blank yields the preset's
+/// `{comp}`/`{preset}`/`{date}` substitution; blank yields the preset's
 /// own suggested name.
 #[frb(sync)]
 pub fn export_preset(preset: String, comp_name: String, template: String) -> BridgeExportPreset {

@@ -1,7 +1,7 @@
 // Layer compositing (docs/06-RENDER-PIPELINE.md render order, evaluator v0).
 //
 // Each layer draws as a textured quad. The vertex transform is a full 4×4
-// (decision K-023: 4×4 from day one, so 3D bolts on without a rewrite).
+// (4×4 from day one, so 3D bolts on without a rewrite).
 // Blending is premultiplied-over in LINEAR light — the whole reason the
 // working format exists: light adds correctly here.
 
@@ -199,7 +199,7 @@ fn blend_encoded(mode: f32, s: vec3<f32>, d: vec3<f32>) -> vec3<f32> {
 
 // Snapshot blends (docs/06-RENDER-PIPELINE.md §blend domains): the fragment
 // reads the accumulated comp itself and writes the finished value (fixed-
-// function blending off). The perceptual set (K-162, T24) runs encoded —
+// function blending off). The perceptual set (T24) runs encoded —
 // encode both sides, apply the formula, decode. Lighten/Darken/Subtract are
 // domain-invariant and run directly in linear.
 @fragment

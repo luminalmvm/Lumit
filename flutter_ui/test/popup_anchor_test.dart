@@ -1,4 +1,4 @@
-// A popup anchors in the space it is drawn in (K-560).
+// A popup anchors in the space it is drawn in.
 //
 // The bug this pins is the one the owner saw after changing the UI scale:
 // every menu, dropdown and context menu says where it wants to be with a

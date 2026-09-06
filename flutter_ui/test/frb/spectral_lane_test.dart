@@ -1,7 +1,7 @@
-// The spectral lane mode (K-699): plain wave / multiwave stack / spectrogram
+// The spectral lane mode: plain wave / multiwave stack / spectrogram
 // per layer, cycled by the chip on the Waveform row — and the toggle repaints
-// the lane without rebuilding the table, which is the K-681 discipline the
-// chip has to keep.
+// the lane without rebuilding the table, which is the discipline the chip
+// has to keep.
 
 import 'dart:io';
 import 'dart:typed_data';

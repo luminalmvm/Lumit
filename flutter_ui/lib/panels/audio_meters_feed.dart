@@ -1,13 +1,13 @@
 // The bars' pulse: one poll of the engine's meter tap, shared by the Mixer
-// strips and the Audio panel's Levels (docs/09 §3.1, K-690).
+// strips and the Audio panel's Levels (docs/09 §3.1).
 //
 // In plain terms: while a mixer is on screen, something has to keep asking the
 // engine "how loud is it right now" and hand the answer to the bars. This is
 // that something — one timer for however many bars are drawn, publishing into
 // one [ValueNotifier] that the meter *painters* listen to directly. A tick
 // therefore repaints the bars and rebuilds nothing: the strips, the faders and
-// the wells never hear it (the K-681 gates; docs/impl/ui-performance.md WP-2's
-// listenable-inside-a-boundary shape).
+// the wells never hear it (the rebuild gates; docs/impl/ui-performance.md
+// WP-2's listenable-inside-a-boundary shape).
 //
 // The peak hold — the line resting above the bar for a few seconds — is
 // computed here, because docs/09 §3.1 makes it the panel's own and because a

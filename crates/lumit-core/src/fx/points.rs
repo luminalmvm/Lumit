@@ -1,5 +1,5 @@
 //! The points stream, and the closed forms that put a particle where it is
-//! (K-474, K-475, K-561; [impl/particulate.md](../../../../docs/impl/particulate.md)
+//! ([impl/particulate.md](../../../../docs/impl/particulate.md)
 //! §3–§4, [impl/points-stream.md](../../../../docs/impl/points-stream.md) §3).
 //!
 //! # In plain terms
@@ -15,7 +15,7 @@
 //! one evaluation, export matches preview, and the same project renders the
 //! same pixels for ever. The price is that particles cannot react to each
 //! other — no collisions, no flocking — and for the montage staples this
-//! exists for, that is the right trade (K-474).
+//! exists for, that is the right trade.
 //!
 //! Three pieces, in the order a frame uses them:
 //!
@@ -31,17 +31,17 @@
 //!    way it went, how long it lives), and where the four forces have carried
 //!    it since. All four — gravity, wind through drag, drag, turbulence as a
 //!    displacement — were chosen *because* they can be integrated on paper;
-//!    that is the selection criterion, not a styling choice (K-474).
+//!    that is the selection criterion, not a styling choice.
 //! 3. **The reference draw** ([`draw_discs`]). The CPU oracle for the picture:
 //!    a feathered disc stamped per particle, which is the shape the GPU's
-//!    instanced quad has to agree with (K-019, docs/08 §1.6).
+//!    instanced quad has to agree with (docs/08 §1.6).
 //!
 //! One module, two readers: Particulate's own drawing, and — when PS4 lands —
 //! the Points sample driver, which reads the very same stream so that what a
 //! wire measures is what the viewer sees. A second implementation of these
 //! formulas would be a drift waiting to be found.
 //!
-//! # The third axis (K-561)
+//! # The third axis
 //!
 //! A particle carries three coordinates, not two. Everything above is
 //! unchanged by that — the same dice, the same schedule, the same algebra with
@@ -50,22 +50,22 @@
 //! layer's own flat picture once the **composition's camera** has looked at it.
 //! On a 2D layer there is no camera to look with, the projection is
 //! [`Projection::FLAT`], and every number this module produces for the picture
-//! is bit-for-bit what it was before the axis existed (the K-258 gate).
+//! is bit-for-bit what it was before the axis existed.
 
 use crate::fx::cpu::{curve_at, CURVE_TABLE};
 use crate::fx::noise::{hash01, value3};
 use crate::mask::MaskPolyline;
 
-/// Max particles' default (K-475): the cap a fresh instance declares, and the
+/// Max particles' default: the cap a fresh instance declares, and the
 /// budget the reference desktop must draw in a millisecond.
 pub const CAP_DEFAULT: i64 = 20_000;
 
-/// Max particles' hard ceiling (K-475): the most an instance may ever be typed
+/// Max particles' hard ceiling: the most an instance may ever be typed
 /// up to, and the peak scratch the governor grants against (docs/13 §6).
 pub const CAP_HARD: i64 = 1_000_000;
 
 /// Where a particle at depth `z` lands on the layer's own flat picture, once
-/// the composition's active camera has looked at it (K-561).
+/// the composition's active camera has looked at it.
 ///
 /// # In plain terms
 ///
@@ -88,8 +88,8 @@ pub const CAP_HARD: i64 = 1_000_000;
 /// [`FLAT`](Self::FLAT) is the identity: `(x, y, 1)` for any `z`, which is a
 /// 2D layer, a composition with no camera, and every project saved before the
 /// axis existed. It is applied without a branch and lands on exactly the bits
-/// it was handed, which is what makes the K-258 guarantee arithmetic rather
-/// than a promise.
+/// it was handed, which is what makes that compatibility guarantee arithmetic
+/// rather than a promise.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Projection {
     /// Row-major 3×4: `[x, y, z, 1] → (X, Y, W)`, in the units the particle
@@ -139,7 +139,7 @@ impl Projection {
     }
 
     /// The same projection, for particle coordinates measured in a raster
-    /// `px_scale` times the size the matrix was built at (K-266, K-385).
+    /// `px_scale` times the size the matrix was built at.
     ///
     /// The matrix is built in **px@comp**, because that is what the layer's
     /// placement is in; the draw works in whatever raster the preview is
@@ -148,7 +148,7 @@ impl Projection {
     /// two position rows grows with the raster, and only the direction part of
     /// the depth row shrinks with it. At full scale nothing moves, so a
     /// full-resolution preview and the export are bit-identical by
-    /// construction (K-031).
+    /// construction.
     #[must_use]
     pub fn rescaled(&self, px_scale: f32) -> Projection {
         let s = px_scale.max(1e-6);
@@ -191,7 +191,7 @@ impl RenderMode {
     pub const OPTIONS: &'static [&'static str] = &["Disc", "Sprite", "Streak"];
 
     /// The mode for a stored Choice index; anything unknown is a Disc, the
-    /// declared default (a document from a newer build renders, K-065).
+    /// declared default (a document from a newer build renders).
     #[must_use]
     pub const fn from_code(code: u32) -> Self {
         match code {
@@ -227,13 +227,13 @@ pub enum EmitterShape {
     Ellipse,
     /// Uniformly over the interior of a rectangle of `width` × `height`.
     Rectangle,
-    /// Uniformly along the arc length of a mask path (K-408). An **empty
+    /// Uniformly along the arc length of a mask path. An **empty
     /// polyline emits nothing** — the documented no-op, degrade and never
     /// fault (14-ENGINEERING-RULES §4).
     MaskPath,
-    /// Uniformly along an ellipse's **outline**, by arc length (K-597).
+    /// Uniformly along an ellipse's **outline**, by arc length.
     EllipseOutline,
-    /// Uniformly along a rectangle's **outline**, by arc length (K-597).
+    /// Uniformly along a rectangle's **outline**, by arc length.
     RectangleOutline,
 }
 
@@ -241,7 +241,7 @@ impl EmitterShape {
     /// The Choice option labels, in code order.
     ///
     /// The two outline shapes are **appended**, not slotted in beside the areas
-    /// they hollow out: a Choice is stored as its index (K-065), so inserting
+    /// they hollow out: a Choice is stored as its index, so inserting
     /// one would silently turn every saved Mask path emitter into something
     /// else. The dropdown reads in code order and the panel is the poorer for
     /// it by one line, which is the price of a document that still means what
@@ -258,7 +258,7 @@ impl EmitterShape {
 
     /// The shape for a stored Choice index; anything unknown is a Point, which
     /// is the declared default (a document from a newer build is rendered, not
-    /// refused — K-065).
+    /// refused).
     #[must_use]
     pub const fn from_code(code: u32) -> Self {
         match code {
@@ -272,9 +272,9 @@ impl EmitterShape {
         }
     }
 
-    /// Whether this shape emits along an **outline** the host flattens for it
-    /// (K-597) — the two shapes that walk a polyline of their own rather than
-    /// filling an interior.
+    /// Whether this shape emits along an **outline** the host flattens for it:
+    /// the two shapes that walk a polyline of their own rather than filling an
+    /// interior.
     #[must_use]
     pub const fn is_outline(self) -> bool {
         matches!(
@@ -284,20 +284,20 @@ impl EmitterShape {
     }
 }
 
-/// How many chords an ellipse's outline is flattened into (K-597).
+/// How many chords an ellipse's outline is flattened into.
 ///
 /// The vertices sit **on** the true ellipse, so the only error is the chord
 /// cutting the corner between two of them: `r · (1 − cos(π/N))`, which at 128
 /// is three parts in ten thousand — a twentieth of a pixel on a four-hundred
 /// pixel emitter, and well inside the 10⁻⁵-of-range agreement the two render
-/// paths owe each other (K-508). Walking that polyline by arc length is
+/// paths owe each other. Walking that polyline by arc length is
 /// **exactly** what a Mask path emitter already does, which is why there is one
 /// walk in this engine and not two.
 const OUTLINE_SEGMENTS: usize = 128;
 
 /// The emitter's own outline as a closed polyline in its **local** frame —
 /// centred on the origin, unturned — or an empty one for every shape that fills
-/// an interior instead (K-597).
+/// an interior instead.
 ///
 /// Local rather than absolute, because [`birth_point`] then turns and places it
 /// with the same two lines every other area shape uses: an outline is a
@@ -350,13 +350,13 @@ pub fn outline_polyline(e: &Emitter) -> MaskPolyline {
 pub struct Emitter {
     pub shape: EmitterShape,
     /// px@comp (or raster px — the caller's own scale; see [`evaluate`]).
-    /// Three coordinates since K-561: `z` is towards the camera, positive away
+    /// Three coordinates: `z` is towards the camera, positive away
     /// from it, and zero is the layer's own plane.
     pub position: [f32; 3],
     /// The extents Line, Ellipse and Rectangle are drawn to.
     pub width: f32,
     pub height: f32,
-    /// The extent **through** the layer's plane (K-561): Point becomes a
+    /// The extent **through** the layer's plane: Point becomes a
     /// segment along `z`, Ellipse a cylinder and Rectangle a box, each filled
     /// uniformly. Line and Mask path stay planar — a mask path is where the
     /// user drew it, and a line is one dimension by name.
@@ -367,7 +367,7 @@ pub struct Emitter {
     pub angle_deg: f32,
     /// Launch direction in the layer's plane, degrees; −90 is up.
     pub direction_deg: f32,
-    /// Launch **elevation** out of that plane, degrees (K-561). Zero is the
+    /// Launch **elevation** out of that plane, degrees. Zero is the
     /// plane itself, which is what every project saved before the axis existed
     /// reads as.
     pub direction_z_deg: f32,
@@ -410,7 +410,7 @@ pub struct ParticleLook {
     pub rotation_deg: f32,
     /// The per-particle spread of `rotation_deg`, **degrees**: each particle
     /// takes a uniform draw of `±rotation_jitter_deg/2` about it, from the seed
-    /// hash (K-507).
+    /// hash.
     pub rotation_jitter_deg: f32,
     /// Spin, degrees per second.
     pub spin_deg: f32,
@@ -418,14 +418,14 @@ pub struct ParticleLook {
     pub align_to_motion: bool,
 }
 
-/// The four v1 forces — exactly the set with closed-form integrals (K-474).
+/// The four v1 forces — exactly the set with closed-form integrals.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Forces {
-    /// px per second², positive down. **Down stays down** (K-561): gravity is
+    /// px per second², positive down. **Down stays down**: gravity is
     /// the one force with a direction of its own, and giving it a depth
     /// component would be inventing a control the note does not ask for.
     pub gravity: f32,
-    /// The air's own speed, px per second, on all three axes (K-561). Wind acts
+    /// The air's own speed, px per second, on all three axes. Wind acts
     /// **through** drag: with `drag` at 0 it does nothing at all, which is the
     /// documented behaviour.
     pub wind: [f32; 3],
@@ -447,12 +447,12 @@ pub struct PointsParams {
     pub emitter: Emitter,
     pub particle: ParticleLook,
     pub forces: Forces,
-    /// Max particles (K-475): the most that may be **live** at once. Over
+    /// Max particles: the most that may be **live** at once. Over
     /// budget, the newest by birth index survive.
     pub cap: u32,
     pub seed: u32,
     /// Where the composition's camera puts a particle that is off the layer's
-    /// plane (K-561). [`Projection::FLAT`] — the default — is a 2D layer, and
+    /// plane. [`Projection::FLAT`] — the default — is a 2D layer, and
     /// is what [`crate::fx::effects::particulate::Particulate::points`] hands
     /// back, because a bag of parameters cannot know what the comp is looking
     /// with. The renderer and the driver walk fill it in with
@@ -461,7 +461,7 @@ pub struct PointsParams {
 }
 
 impl PointsParams {
-    /// The same parameters, seen through `projection` (K-561).
+    /// The same parameters, seen through `projection`.
     #[must_use]
     pub fn projected(mut self, projection: Projection) -> Self {
         self.projection = projection;
@@ -470,7 +470,7 @@ impl PointsParams {
 }
 
 /// One frame's particles, structure-of-arrays — the CPU form of the stream
-/// (particulate.md §4, `Vec3` per K-561).
+/// (particulate.md §4, `Vec3`).
 ///
 /// The GPU form is the same attributes in buffers; `count` there is what
 /// [`len`](Self::len) is here, because a length beside a `Vec` would be a
@@ -481,7 +481,7 @@ impl PointsParams {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct PointsStream {
     /// px in the layer's own three axes, this frame (closed form plus
-    /// turbulence) — **unprojected** (K-561). A consumer that has not declared
+    /// turbulence) — **unprojected**. A consumer that has not declared
     /// 3D awareness reads [`projected`](Self::projected) instead.
     pub position: Vec<[f32; 3]>,
     /// px per second — the analytic speed plus turbulence's own rate of change.
@@ -500,7 +500,7 @@ pub struct PointsStream {
     /// The **birth index** — stable across frames, and what makes trails
     /// possible. There is no separate id space (particulate.md §4).
     pub id: Vec<u64>,
-    /// The camera the stream was evaluated under (K-561) — carried on the
+    /// The camera the stream was evaluated under — carried on the
     /// stream itself so that "where does particle *i* appear?" is one call and
     /// not a second thing to thread beside it. [`Projection::FLAT`] on a 2D
     /// layer, and in the driver walk's px@comp evaluation of a 2D layer.
@@ -514,7 +514,7 @@ impl PointsStream {
         self.id.len()
     }
 
-    /// **What a 2D consumer reads** (K-561): particle `i` where the camera puts
+    /// **What a 2D consumer reads**: particle `i` where the camera puts
     /// it on the layer's own plane.
     ///
     /// The wire carries one type. A consumer that declares 3D awareness on its
@@ -545,19 +545,19 @@ impl PointsStream {
     }
 
     /// The same stream in a raster `px_scale` times the size it was evaluated
-    /// at (K-266, K-385, K-600).
+    /// at.
     ///
     /// **Why a consumer needs this and a producer does not.** A producer's
     /// distances arrive already rescaled, because they are rows in its bag and
     /// the resolve step scales a `Px` row generically (docs/08 §2.3). A stream
     /// read off a *wire* is not in anybody's bag: it is evaluated once, in
-    /// px@comp, because that is the unit a consumer reads it as data in
-    /// (K-419). Turning it into the pixels a frame is being drawn at is
-    /// therefore one multiplication per length — the three position axes, the
-    /// three speed axes, the diameter — and the camera taking the same factor
-    /// it takes for Particulate ([`Projection::rescaled`]). At full resolution
+    /// px@comp, because that is the unit a consumer reads it as data in.
+    /// Turning it into the pixels a frame is being drawn at is therefore one
+    /// multiplication per length — the three position axes, the three speed
+    /// axes, the diameter — and the camera taking the same factor it takes
+    /// for Particulate ([`Projection::rescaled`]). At full resolution
     /// `px_scale` is 1 and every number is the bits it already was, which is
-    /// what makes preview and export identical by construction (K-031).
+    /// what makes preview and export identical by construction.
     #[must_use]
     pub fn rescaled(&self, px_scale: f32) -> PointsStream {
         let s = px_scale.max(1e-6);
@@ -582,7 +582,7 @@ impl PointsStream {
 
     /// Where particle `id` was in `past`, or `None` if it was not alive then.
     ///
-    /// **A merge, not a search** (K-601): both streams are ordered by birth
+    /// **A merge, not a search**: both streams are ordered by birth
     /// index ascending — a fact of the evaluation rather than a scheduling
     /// artefact (particulate.md §5) — so a walk that only ever moves forwards
     /// answers every particle of one stream against another in one pass.
@@ -598,7 +598,7 @@ impl PointsStream {
 
     /// Keep the **newest `n`** particles by birth index, dropping the rest.
     ///
-    /// The degradation rung (K-475): under governor pressure the effect draws
+    /// The degradation rung: under governor pressure the effect draws
     /// the newest half, halving again as pressure demands. It is the cap rule
     /// applied a second time, so what vanishes under pressure is what would
     /// have vanished under a smaller cap — deterministic, and identical from
@@ -812,7 +812,7 @@ impl Schedule {
 /// parameter bag, because everything else is a number somebody typed. These two
 /// are not: the layer's own clock is not a control, and the birth schedule is
 /// the *whole history* of the Emit rate track rather than its value now. So
-/// they ride beside the op the way a mask's flattened polyline does (K-408) —
+/// they ride beside the op the way a mask's flattened polyline does —
 /// built once by the draw builder, which is the only place that holds a layer's
 /// timing and its stored tracks, and handed to whichever render path runs.
 ///
@@ -824,40 +824,40 @@ pub struct PointsSchedule {
     pub schedule: Schedule,
     /// Layer time in seconds, the moment the stream is evaluated at. The
     /// *sample* time for a sub-frame re-render, so accumulation motion blur
-    /// gets true particle motion for free (K-132).
+    /// gets true particle motion for free.
     pub t: f64,
-    /// Where the composition's camera puts a particle off the layer's plane
-    /// (K-561), in **px@comp** — the third thing the bag cannot carry, and for
+    /// Where the composition's camera puts a particle off the layer's plane,
+    /// in **px@comp** — the third thing the bag cannot carry, and for
     /// the same reason as the other two: the comp's camera and the layer's own
     /// placement are not controls on this effect. `None` is a 2D layer, and is
     /// what every project saved before the axis existed answers.
     pub projection: Option<Projection>,
-    /// **The stream a wire brings in** (K-600, points-stream.md §3.3), in
+    /// **The stream a wire brings in** (points-stream.md §3.3), in
     /// px@comp, newest first: entry 0 is this frame, and entry *k* is the same
     /// producer evaluated `k` steps into the past — which is how Trail looks
-    /// backwards without remembering anything (K-601). Empty for a producer,
+    /// backwards without remembering anything. Empty for a producer,
     /// and empty for a consumer with **nothing wired**, which is the documented
     /// calm: the effect draws nothing and passes its picture on.
     ///
     /// It is filled on the host rather than on the card because that is the
-    /// shape the generators already established (K-598): the points a consumer
+    /// shape the generators already established: the points a consumer
     /// stamps are bit for bit the ones the closed forms evaluated, and the
     /// driver walk reads the very same function. (ponytail: one host evaluation
     /// per sample per frame, memoised per producer. points-stream.md §3.3
     /// designs a GPU arena carriage for when a profile shows a real comp
     /// spending it — and that carriage is also what would let **Scatter** feed
     /// a stack consumer, which for now reads the same empty stream a driver
-    /// does, K-599.)
+    /// does.)
     pub input: Vec<PointsStream>,
     /// Which effect in the layer's stack the wire came from, by index — folded
     /// into the frame key, and read for nothing else.
     ///
     /// The stream is a pure function of the producer's parameters, the time and
     /// the camera; the producer sits strictly earlier in the stack (the
-    /// downstream-only rule, K-492), so its bag is already inside this op's
+    /// downstream-only rule), so its bag is already inside this op's
     /// cumulative key. What is *not* in that key is which of two producers the
     /// wire names, or whether it is drawn at all. An index rather than an id,
-    /// so a duplicated layer still hits the per-effect cache (K-421): a key
+    /// so a duplicated layer still hits the per-effect cache: a key
     /// names content, never which row it came from.
     pub input_from: Option<u32>,
 }
@@ -898,11 +898,11 @@ mod attr {
     pub const SIZE: u32 = 5;
     pub const TURB_PHASE: u32 = 6;
     pub const ROTATION: u32 = 7;
-    /// Where in the emitter's **depth** this particle starts (K-561). A new id
+    /// Where in the emitter's **depth** this particle starts. A new id
     /// rather than a reuse: every earlier draw keeps the number it always drew,
     /// so a project made before the axis existed is untouched.
     pub const EMIT_W: u32 = 8;
-    /// The elevation draw, out of the layer's plane (K-561).
+    /// The elevation draw, out of the layer's plane.
     pub const DIRECTION_Z: u32 = 9;
 }
 
@@ -911,7 +911,7 @@ mod attr {
 /// lattice, not a second one (particulate.md §3.2).
 const TURB_CHANNEL_X: u32 = 64;
 const TURB_CHANNEL_Y: u32 = 65;
-/// Turbulence's third lattice (K-561) — a jitter that had x and y gains z.
+/// Turbulence's third lattice — a jitter that had x and y gains z.
 const TURB_CHANNEL_Z: u32 = 66;
 
 /// One per-particle draw in `[0, 1)`: `hash(seed, birth index, attribute)`.
@@ -970,9 +970,9 @@ fn drag_terms(x: f32) -> (f32, f32) {
 /// frame**: keyframe gravity and every live trajectory re-solves under the new
 /// value, so the whole system leans when the keyframe lands. That is
 /// physically wrong and visually right, and integrating the changing force
-/// instead *is* the simulation this design excludes (K-474).
+/// instead *is* the simulation this design excludes.
 ///
-/// **Three axes, one algebra** (K-561): the depth component integrates under
+/// **Three axes, one algebra**: the depth component integrates under
 /// exactly the same drag and wind terms as the other two. Gravity does not,
 /// because gravity is `[0, g, 0]` — down is down, and a depth component would
 /// be a control nobody asked for.
@@ -1017,13 +1017,13 @@ fn turbulence(p0: [f32; 3], phase: f32, f: &Forces, seed: u32, age: f32) -> [f32
 
 /// Where in the emitter this particle starts.
 ///
-/// `w` is the draw through the emitter's [`depth`](Emitter::depth) (K-561),
+/// `w` is the draw through the emitter's [`depth`](Emitter::depth),
 /// filled uniformly: a Point becomes a segment, an Ellipse a cylinder and a
 /// Rectangle a box. Line and Mask path ignore it and stay on the plane.
 ///
 /// `path` is **the polyline this shape walks**: the layer's flattened mask for
 /// a Mask path emitter, and the emitter's own local outline for the two outline
-/// shapes (K-597). One argument, because both are the same question — where is
+/// shapes. One argument, because both are the same question — where is
 /// `u` of the way along? — answered by the same arc-length walk.
 fn birth_point(e: &Emitter, path: &MaskPolyline, u: f32, v: f32, w: f32) -> Option<[f32; 3]> {
     let (s, c) = e.angle_deg.to_radians().sin_cos();
@@ -1055,7 +1055,7 @@ fn birth_point(e: &Emitter, path: &MaskPolyline, u: f32, v: f32, w: f32) -> Opti
             (w - 0.5) * e.depth,
         ),
         EmitterShape::MaskPath => {
-            // The mask's own line, by arc length (K-408). Nothing to walk is
+            // The mask's own line, by arc length. Nothing to walk is
             // the documented no-op: no path, no particles.
             if path.is_empty() {
                 return None;
@@ -1064,7 +1064,7 @@ fn birth_point(e: &Emitter, path: &MaskPolyline, u: f32, v: f32, w: f32) -> Opti
             // Already an absolute position, so the emitter's own rotation and
             // position do not move it — the path is where the user drew it —
             // and it stays on the layer's plane, at the depth the emitter sits
-            // at (K-561).
+            // at.
             return Some([p[0], p[1], e.position[2]]);
         }
     };
@@ -1120,7 +1120,7 @@ pub fn evaluate_with_tail(
     }
     let e = &p.emitter;
     let look = &p.particle;
-    // The polyline this emitter walks (K-597): the layer's mask for a Mask path
+    // The polyline this emitter walks: the layer's mask for a Mask path
     // shape, the emitter's own outline for the two outline shapes, and nothing
     // at all for the interiors — one flattening, done once for the whole
     // evaluation rather than per particle.
@@ -1163,8 +1163,9 @@ pub fn evaluate_with_tail(
         let speed = jitter(e.speed, e.speed_jitter, draw(p.seed, b, attr::SPEED));
         let (sd, cd) = dir.sin_cos();
         // The elevation tilts the launch out of the plane. At nought — every
-        // project saved before K-561 — `cos` is exactly 1 and `sin` exactly 0,
-        // so the two in-plane components are the bits they always were.
+        // project saved before the axis existed — `cos` is exactly 1 and `sin`
+        // exactly 0, so the two in-plane components are the bits they always
+        // were.
         let (sz, cz) = dir_z.sin_cos();
         let v0 = [speed * cd * cz, speed * sd * cz, speed * sz];
         let (pos, vel) = integrate(p0, v0, &p.forces, age);
@@ -1191,7 +1192,7 @@ pub fn evaluate_with_tail(
         {
             *c = (from + (to - from) * u) * alpha;
         }
-        // The per-particle rotation spread (K-507): a uniform draw of ±half the
+        // The per-particle rotation spread: a uniform draw of ±half the
         // dial about Rotation, from the seed hash like every other die, so two
         // sprites born together do not point the same way.
         let spread_rot =
@@ -1224,7 +1225,7 @@ pub fn evaluate_with_tail(
         out.rotation.push(rotation);
         out.colour.push(colour);
         out.id.push(b);
-        // **The cap rule** (K-474): over budget, the newest `cap` by birth
+        // **The cap rule**: over budget, the newest `cap` by birth
         // index survive. Walking newest first makes that a stop rather than a
         // sort, and old particles vanishing early under overload is visible,
         // deterministic and the same from any scrub direction.
@@ -1249,7 +1250,7 @@ pub fn evaluate_with_tail(
 }
 
 /// The CPU reference draw: a feathered disc per particle, over the picture
-/// (docs/08 §1.6, K-019).
+/// (docs/08 §1.6).
 ///
 /// **In plain terms.** Each particle is stamped as a soft round dab into the
 /// buffer, oldest first so newer particles land on top — the same order, and
@@ -1279,7 +1280,7 @@ pub fn draw_discs(rgba: &mut [f32], w: u32, h: u32, s: &PointsStream, feather: f
 }
 
 /// The picture the Sprite mode stamps: the referenced layer's frame, linear
-/// premultiplied RGBA, `w × h` (K-123, layer-input.md).
+/// premultiplied RGBA, `w × h` (layer-input.md).
 #[derive(Debug, Clone, Copy)]
 pub struct Sprite<'a> {
     pub rgba: &'a [f32],
@@ -1318,7 +1319,7 @@ pub fn wants_schedule(sig: crate::fx::Signature) -> bool {
         .any(|p| p.ty == crate::fx::PortType::Points)
 }
 
-/// Whether an entry **reads** a points stream off a wire (K-600): the other
+/// Whether an entry **reads** a points stream off a wire: the other
 /// half of the family, and the other reason to want a carriage.
 #[must_use]
 pub fn consumes_points(sig: crate::fx::Signature) -> bool {
@@ -1343,7 +1344,7 @@ pub fn wants_carriage(sig: crate::fx::Signature) -> bool {
 /// A mask path in the raster the frame is being drawn at.
 ///
 /// A polyline is flattened in **px@comp** — deliberately, so the same document
-/// gives the same curve at any preview divisor (K-408) — and every other
+/// gives the same curve at any preview divisor — and every other
 /// distance the closed forms read has already been multiplied by the raster
 /// factor on its way through the bag. One place does the same to the path, so
 /// the two render paths cannot come to scale it differently.
@@ -1395,7 +1396,7 @@ fn sprite_tap(sp: &Sprite<'_>, u: f32, v: f32) -> [f32; 4] {
 }
 
 /// The CPU reference draw for all three render modes, over the picture
-/// (docs/08 §1.6, K-019).
+/// (docs/08 §1.6).
 ///
 /// **In plain terms.** Each particle is stamped into the buffer, oldest first
 /// so newer particles land on top — the same order, and so the same picture, as
@@ -1415,7 +1416,7 @@ fn sprite_tap(sp: &Sprite<'_>, u: f32, v: f32) -> [f32; 4] {
 /// A dab and not a full-frame pass: a particle covers a few dozen pixels, and
 /// visiting two million of them per particle to find that out is the shape a
 /// reference implementation cannot afford even as an oracle.
-/// - **Depth** (K-561): every particle is put through the stream's own
+/// - **Depth**: every particle is put through the stream's own
 ///   [`Projection`] first — where the composition's camera sees it, and how
 ///   much smaller or larger for being further off or nearer. On a 2D layer the
 ///   projection is flat and this is exactly the arithmetic it always was.
@@ -1451,7 +1452,7 @@ pub fn draw_stream(
             continue;
         }
         // The host Mix, folded into the source's coverage. For a premultiplied
-        // `over` that is the dissolve exactly, so no second pass runs (K-425).
+        // `over` that is the dissolve exactly, so no second pass runs.
         let src = [
             colour[0] * mix,
             colour[1] * mix,

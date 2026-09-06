@@ -9,7 +9,7 @@ use lumit_fx_macros::Effect;
 /// that kernel wants (docs/impl/effect-registry.md §2.4).
 ///
 /// The same fork RGB split has — Wavelength is a quality tier running a
-/// different kernel (K-144), not a dial — but with this effect's own shapes:
+/// different kernel, not a dial — but with this effect's own shapes:
 /// there is no angle (the offset is always radial) and no per-tap scale.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Fringe {
@@ -18,18 +18,18 @@ pub enum Fringe {
         /// Peak channel offset in raster pixels, reached at the corner distance
         /// from the frame centre.
         amount_px: f32,
-        /// The three taps' tints, normalised per channel (K-167).
+        /// The three taps' tints, normalised per channel.
         tints: [[f32; 3]; 3],
         /// 0..1.
         mix: f32,
     },
-    /// The Wavelength tier (K-144): RGB split's spectral machinery run radially.
+    /// The Wavelength tier: RGB split's spectral machinery run radially.
     Spectral {
         /// Peak spectral offset in raster pixels.
         amount_px: f32,
         /// Tap count, rounded from the Samples slider.
         samples: i32,
-        /// The three picker colours driving the dispersion gradient (A1/K-163);
+        /// The three picker colours driving the dispersion gradient (A1);
         /// **not** normalised — the gradient reads them as authored.
         tints: [[f32; 3]; 3],
         /// 0..1.
@@ -49,8 +49,8 @@ pub enum Fringe {
     // declared statically across every comp resolution; full-frame is the safe
     // static bound.
     roi = FullFrame,
-    // K-427: the matte scales the displacement, inside the kernel (the
-    // owner's rule for mattes); the generic strength dissolve does not also run.
+    // The matte scales the displacement, inside the kernel (the owner's rule
+    // for mattes); the generic strength dissolve does not also run.
     matte = (
         "matte",
         "scales Amount per pixel: white fringes at the full Amount, grey less, \
@@ -59,7 +59,7 @@ pub enum Fringe {
 )]
 pub struct ChromaticAberration {
     /// px@comp (§2.3): peak channel offset, reached at the corner distance from
-    /// the frame centre. Open above (K-135). This effect has only the radial
+    /// the frame centre. Open above. This effect has only the radial
     /// shape and one purpose, so "how many pixels of fringe" is the honest
     /// unit. Declared `Px`, so the resolve step scales it by the
     /// §2.3 preview factor and
@@ -75,7 +75,7 @@ pub struct ChromaticAberration {
     )]
     pub amount: f32,
 
-    /// The three channel colours (P2/K-143), scene-linear RGBA (alpha ignored):
+    /// The three channel colours (P2), scene-linear RGBA (alpha ignored):
     /// the reusable three-colour picker tints the three radial taps. Defaults
     /// red / green / blue reproduce the classic R-outward / B-inward / G-anchor
     /// split bit-for-bit.
@@ -90,13 +90,13 @@ pub struct ChromaticAberration {
     #[colour(label = "Colour 3", default = [0.0, 0.0, 1.0, 1.0])]
     pub channel_colour_3: [f32; 4],
 
-    /// K-144 quality tier, reusing RGB split's own spectral machinery (K-090):
+    /// The quality tier, reusing RGB split's own spectral machinery:
     /// off (and absent on older projects) = the three tinted radial taps; on =
     /// `samples` spectral taps for a smooth rainbow fringe.
     #[toggle(default = false)]
     pub wavelength: bool,
 
-    /// Wavelength mode's tap count (K-144). Rounded and clamped to 3..=64;
+    /// Wavelength mode's tap count. Rounded and clamped to 3..=64;
     /// ignored when Wavelength is off.
     #[slider(min = 3.0, max = 64.0, default = 16.0, hard_min = 3.0, hard_max = 64.0, unit = Raw)]
     pub samples: f32,
@@ -141,7 +141,7 @@ impl ChromaticAberration {
         } else {
             Fringe::Classic {
                 amount_px,
-                // Normalised per channel (K-167), like RGB split's classic
+                // Normalised per channel, like RGB split's classic
                 // mode: only the misaligned fringes take the colours.
                 tints: normalise_tint_columns(tints),
                 mix,

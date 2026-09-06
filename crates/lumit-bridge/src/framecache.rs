@@ -13,7 +13,7 @@
 //! through which the settings ops and the cache bar talk to the tiers living on
 //! the worker thread.
 //!
-//! ## Named by content, which is the whole design (K-178, docs/06 §5.2)
+//! ## Named by content, which is the whole design (docs/06 §5.2)
 //!
 //! Every frame is filed under a **content hash** — a hash of everything that
 //! went into it: each layer's evaluated transform, its effects, masks, blend and
@@ -46,7 +46,7 @@
 //! ## What fills this tier
 //!
 //! Two things. The Scopes path renders CPU pixels of its own (the zero-copy
-//! Viewer keeps none, K-183) and files them. And the **demotion ladder**
+//! Viewer keeps none) and files them. And the **demotion ladder**
 //! (docs §5.3): a frame squeezed out of the VRAM cache is read back off the card
 //! and lands here, then goes on to disk — and can be put straight back on the
 //! card when it is wanted again, without compositing anything. That read-back is
@@ -217,8 +217,8 @@ impl Cache {
 /// controls. One Flutter window, one cache.
 static CACHE: OnceLock<Mutex<Cache>> = OnceLock::new();
 
-/// **Tests that clear, resize or assert on this global take this first**
-/// (K-752). Cargo runs a binary's tests on parallel threads, and there is one
+/// **Tests that clear, resize or assert on this global take this first**.
+/// Cargo runs a binary's tests on parallel threads, and there is one
 /// cache in the process: a test that clears it while another is asserting a
 /// frame is held in it fails the other — which is what
 /// `the_fill_keeps_going_into_memory_once_the_card_is_full` did twice running
@@ -250,8 +250,8 @@ fn with_cache<R>(f: impl FnOnce(&mut Cache) -> R) -> R {
 ///
 /// Reading and banking are two calls rather than one `get_or_render` because
 /// the decision to bank cannot always be made until *after* the render: a frame
-/// drawn while a Lens flare's bake was still being made is of the previous lens
-/// (K-350), and only the render itself can say whether that happened. The key
+/// drawn while a Lens flare's bake was still being made is of the previous
+/// lens, and only the render itself can say whether that happened. The key
 /// names the content, so a superseded render for the same key simply overwrites
 /// with identical pixels.
 pub(crate) fn get(key: FrameKey) -> Option<(u32, u32, Vec<u8>)> {
@@ -385,8 +385,8 @@ pub(crate) fn contains(key: FrameKey) -> bool {
 /// entry filed under whichever asked first, so this can miss a frame it could
 /// have served, and then the Scopes render their own.
 ///
-/// **`still_current` is what keeps it from answering with the wrong picture**
-/// (K-330). An entry's provenance says which position asked for it, and that
+/// **`still_current` is what keeps it from answering with the wrong picture**.
+/// An entry's provenance says which position asked for it, and that
 /// stays true for ever — but what the position *shows* does not. Edit the comp
 /// and frame 12 renders to a new name, while the old entry sits in the map
 /// still claiming frame 12; the finest of the two wins, which alternates as
@@ -581,7 +581,7 @@ pub(crate) mod vram {
 ///
 /// Published rather than asked, for the same reason [`vram`] is: the pool lives
 /// on the worker's renderer, and a settings window must not reach across the
-/// loop to read it (K-184's rule, on the other side of the bridge).
+/// loop to read it (the read model's rule, on the other side of the bridge).
 pub(crate) mod decode {
     use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -674,7 +674,7 @@ pub(crate) mod disk {
     /// The wanted location, and a counter the worker watches so a change is
     /// noticed exactly once.
     /// How many frames are in the write-behind queue, as the worker last
-    /// published — the depth K-277 bounded, in the memory report (K-294).
+    /// published — the depth that queue is bounded to, in the memory report.
     static PENDING_PARKS: AtomicU64 = AtomicU64::new(0);
 
     pub(crate) fn publish_pending_parks(n: u64) {
@@ -771,7 +771,7 @@ pub(crate) mod disk {
 ///
 /// Playable beats promotable, so a frame both held and parked reads as held.
 ///
-/// The high nibble is the *resolution tier* (K-441, docs/15-DESIGN.md §6.3):
+/// The high nibble is the *resolution tier* (docs/15-DESIGN.md §6.3):
 /// the preview **divisor** the held picture was actually made at, relative to
 /// the scale the bar asked about — `1` full, `2` half, `3` third, `4` quarter,
 /// the same ladder [`crate::realtime::tier_scale`] names. It is `0` exactly
@@ -846,7 +846,7 @@ pub(crate) mod bar {
     /// All zeros when the worker has not published this composition at this
     /// scale yet — the honest answer, and one the next worker turn corrects.
     ///
-    /// Test-only since K-441 put both nibbles across the seam: the bar reads
+    /// Test-only since both nibbles crossed the seam: the bar reads
     /// [`read_packed`] and splits them itself, so nothing in the shipped
     /// library still asks for the storage half alone. It stays because it is
     /// what the masking is proved against.
@@ -902,7 +902,7 @@ mod tests {
     /// another's frames out from under it, which shows up as one unrelated case
     /// failing every so often and passing on a re-run: the worst kind, because
     /// it teaches everybody to re-run rather than to look. Caught on this
-    /// branch's own suite (K-294), pre-existing rather than new.
+    /// branch's own suite, pre-existing rather than new.
     ///
     /// The lock is taken for the body of every test that touches the global; a
     /// poisoned lock is recovered rather than propagated, so one genuine
@@ -1109,7 +1109,7 @@ mod tests {
     /// was made at the finer scale won, and which one that was flipped as the
     /// tiers churned under playback: hence the flicker, and hence a scope that
     /// disagreed with the picture beside it. A candidate whose name is no
-    /// longer this position's name is now passed over (K-330).
+    /// longer this position's name is now passed over.
     #[test]
     fn a_frame_the_edit_orphaned_is_not_served_positionally() {
         let _guard = cache_test_guard();
@@ -1249,9 +1249,9 @@ mod tests {
         assert_eq!(bar::read(comp, 5, 1000), vec![0; 5], "cleared means blank");
     }
 
-    /// K-441, docs/15-DESIGN.md §6.3: a strip byte says *where* a frame is
-    /// kept and *how big* it is, and the two must stay separable — the bar
-    /// draws its storage states from one nibble and its hue from the other.
+    /// docs/15-DESIGN.md §6.3: a strip byte says *where* a frame is kept and
+    /// *how big* it is, and the two must stay separable — the bar draws its
+    /// storage states from one nibble and its hue from the other.
     ///
     /// [`bar::storage_of`] is the split, and it keeps answering `0`..=`4`
     /// however large the divisor grows. A packed byte read as a storage state

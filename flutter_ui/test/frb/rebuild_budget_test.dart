@@ -447,15 +447,15 @@ void main() {
     ///
     /// It is the last of the three selection paths, and the one that was left
     /// out of the first pass because it changes two things rather than one —
-    /// the picked rows *and* the lane keyframes that come with them (K-500
-    /// §2.1). Both halves of the table draw from it, so it stayed a `setState`
+    /// the picked rows *and* the lane keyframes that come with them (§2.1).
+    /// Both halves of the table draw from it, so it stayed a `setState`
     /// on the whole panel: measured at 1144 widgets for one click on a
     /// two-layer project, the toolbar, the column headers, every bar and every
     /// row redrawn so that one row could go from unlit to lit.
     ///
     /// It is *two* redraws to be rid of, not one, and that is why it looked
     /// bigger than the outline's share: the press picks the row before the tap
-    /// does (K-334, `_selectOnEdit`), so a plain click on a name went through
+    /// does (`_selectOnEdit`), so a plain click on a name went through
     /// the panel-wide `setState` twice over.
     Future<({dynamic ui, dynamic comp, String path})> pickAProperty(
         WidgetTester tester) async {
@@ -546,7 +546,7 @@ void main() {
         reason: 'no property row redrew, so nothing on screen changed:\n'
             '${rebuilds.ranking()}',
       );
-      // And the shell heard it too (K-341): the Viewer outlines the layer a
+      // And the shell heard it too: the Viewer outlines the layer a
       // picked row belongs to.
       expect(picked.ui.selectedProperties.value, contains(picked.path));
     });
@@ -578,7 +578,7 @@ void main() {
       rebuilds
         ..counting = false
         ..remove();
-      // The row's own double-click window (K-243's rename) is a 40 ms timer,
+      // The row's own double-click window (it starts a rename) is a 40 ms timer,
       // and the binding refuses to end a test with one pending. Off the count,
       // because a click that has already lit its row is what is being measured.
       await tester.pump(const Duration(milliseconds: 100));
@@ -632,7 +632,7 @@ void main() {
       expect(rows.first.selected, isTrue,
           reason: 'the clicked row did not draw itself selected — the outline '
               'stopped following the layer selection');
-      // Both halves of the table draw the same answer (K-217), and the bar is
+      // Both halves of the table draw the same answer, and the bar is
       // the half that reads it through the lanes' own blocks.
       final bars = tester.widgetList<Bar>(find.byType(Bar)).where(
           (b) => b.entry.layer.internallayerId == picked.layer.internallayerId);
@@ -648,7 +648,7 @@ void main() {
           reason: 'the click did not reach the shell selection');
     });
 
-    /// The fifth selection path: clicking a **group header** (K-702), which
+    /// The fifth selection path: clicking a **group header**, which
     /// selects the whole band.
     ///
     /// It was the one still holding a panel-wide `setState` after WP-2 took
@@ -814,7 +814,7 @@ void main() {
               '${rebuilds.ranking()}');
     });
 
-    /// The **incremental scroll** rule (K-678, docs/impl/ui-performance.md
+    /// The **incremental scroll** rule (docs/impl/ui-performance.md
     /// §4.3): a wheel notch that slides the window by a row or two builds the
     /// rows it brings in, and leaves the rest of the window alone.
     ///
@@ -898,8 +898,8 @@ void main() {
     // it *re-records*, which is the half the owner's 20 fps actually lived in.
     // Every row of the table gets one, in the table's own order: idle, select,
     // scroll, zoom, playhead drag, work-area drag, edit. The playhead and
-    // work-area rows already have theirs above (they were written first, for
-    // K-626 and K-649); the five here are the rest.
+    // work-area rows already have theirs above (they were written first);
+    // the five here are the rest.
     //
     // What cannot be tested headless is the raster thread's own milliseconds —
     // a widget test has no compositor and no window. Those stay the probe's
@@ -942,7 +942,7 @@ void main() {
     }
 
     /// A band's own paint counts and those of the repaint boundaries **directly
-    /// under** it — one per block (K-678, §4.3). The walk stops at the first
+    /// under** it — one per block (§4.3). The walk stops at the first
     /// boundary down each branch, so the answer is about blocks and not about
     /// the widgets inside them.
     ///
@@ -1085,7 +1085,7 @@ void main() {
       final outline =
           recorded(outlineBefore, bandPaints(tester, 'tl-outline-blocks'))
               .length;
-      // The row's own double-click window (K-243's rename) is a 40 ms timer,
+      // The row's own double-click window (it starts a rename) is a 40 ms timer,
       // and the binding refuses to end a test with one pending.
       await tester.pump(const Duration(milliseconds: 100));
 
@@ -1108,7 +1108,7 @@ void main() {
           reason: 'no outline block re-recorded, so no row lit');
     });
 
-    /// **Scroll.** The build half of this is pinned above (K-678); this is the
+    /// **Scroll.** The build half of this is pinned above; this is the
     /// paint half of the same rule — the entering block records, the rest of
     /// the window translates on its own layer.
     testWidgets('scroll: a slide repaints the blocks entering the window',
@@ -1152,7 +1152,7 @@ void main() {
           reason: 'nothing re-recorded, so no block entered the window');
     });
 
-    /// **Zoom.** K-293's seam, as a paint count: only the lane half listens to
+    /// **Zoom.** The two halves, as a paint count: only the lane half listens to
     /// the zoom, so the outline must not draw at all for one — and the zoom
     /// flies (`SmoothZoom`), so the flight's frames are counted with it.
     ///
@@ -1257,7 +1257,7 @@ void main() {
       expect(layer.getSwitches().locked, isTrue);
     });
 
-    /// **A measured frame is not an edit** (K-750). With the render-time column
+    /// **A measured frame is not an edit.** With the render-time column
     /// on — the default — the engine reports what every composited frame cost,
     /// and the panel used to answer each report with a `setState` of its own:
     /// the whole Timeline rebuilt for numbers that only the column's cells and

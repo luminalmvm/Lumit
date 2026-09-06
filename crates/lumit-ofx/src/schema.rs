@@ -15,7 +15,7 @@
 //!
 //! * **Units.** A double whose `kOfxParamPropDoubleType` is one of the
 //!   *absolute* spatial kinds — `X`/`Y`/`XY`, absolute or not — is a distance,
-//!   and every distance in Lumit is px@comp ([`Unit::Px`], K-419). An angle is
+//!   and every distance in Lumit is px@comp ([`Unit::Px`]). An angle is
 //!   [`Unit::Degrees`]. **Everything else is [`Unit::Raw`]**, including the
 //!   normalised spatial types: a normalised coordinate runs 0 to 1 where
 //!   Lumit's per cent runs 0 to 100, so drawing a "%" beside it would be a
@@ -24,7 +24,7 @@
 //!   `foo_z`. Lumit has no point *kind*: a point is two adjacent number rows
 //!   the panel folds into one, which is why
 //!   [`EffectSchema::pairs`](lumit_core::fx::EffectSchema::pairs) reads the
-//!   suffixes (K-443). A plugin's Centre therefore draws exactly as a
+//!   suffixes. A plugin's Centre therefore draws exactly as a
 //!   built-in's does, link glyph and all.
 //! * **A choice keeps its option labels**, in the plugin's order, with no
 //!   dividers.
@@ -46,7 +46,7 @@
 //!   a schema that claimed a padding would be claiming it on the plugin's
 //!   behalf. `temporal` follows the plugin's own declared frame access, and P5
 //!   replaces it per instance from `getFramesNeeded`.
-//! * **No matte row.** K-395's injected Matte, its Invert and its Channel are
+//! * **No matte row.** The injected Matte, its Invert and its Channel are
 //!   for **built-ins**, where the row means something the dispatch seam can
 //!   carry out. A plugin's rows are its own: injecting a Matte would put a
 //!   control on the panel that the plugin has never heard of and nothing would
@@ -149,7 +149,7 @@ pub fn schema_of(plugin: &PluginDescriptor) -> Result<EffectSchema, Rejection> {
     })
 }
 
-/// One schema row's way **back** to the OFX parameter it came from (K-593).
+/// One schema row's way **back** to the OFX parameter it came from.
 ///
 /// The trip out is [`schema_of`]: a plugin's parameters become Lumit rows, and
 /// a 2-D control becomes two of them. The trip home is this: a resolved bag,
@@ -443,7 +443,7 @@ fn rows_of(param: &ParamDescription) -> Vec<ParamSchema> {
         }
         param_types::STRING if string_is_path(props) => {
             // A path is a path: Lumit already draws one, with a dialog behind
-            // it (K-111).
+            // it.
             one(
                 ParamKind::File {
                     filter: &[],
@@ -456,7 +456,7 @@ fn rows_of(param: &ParamDescription) -> Vec<ParamSchema> {
         // Group and page are layout, not values; custom is an opaque vendor
         // blob (docs/12 §2.2); a string that is not a path is text, and Lumit
         // has no text row; parametric is a function rather than the control
-        // points Lumit's curve is made of (K-412).
+        // points Lumit's curve is made of.
         _ => Vec::new(),
     }
 }
