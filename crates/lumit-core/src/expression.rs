@@ -26,6 +26,17 @@ mod comp;
 mod layer;
 mod math;
 
+// These bounds apply to every project/import expression. A property consumes a
+// scalar, point, colour, or text value, so 1 MiB text and 16k collection items
+// leave substantial headroom without permitting a project to allocate its full
+// project.json budget on every property read. Four thousand graph points exceed
+// display resolution while bounding UI-requested repeated evaluation.
+const MAX_EXPRESSION_OPERATIONS: u64 = 100_000;
+const MAX_EXPRESSION_STRING_BYTES: usize = 1 << 20;
+const MAX_EXPRESSION_ARRAY_ITEMS: usize = 16_384;
+const MAX_EXPRESSION_MAP_ITEMS: usize = 16_384;
+const MAX_GRAPH_SAMPLES: i64 = 4_096;
+
 #[derive(Clone, Debug)]
 pub struct ExpressionContext {
     pub document: Arc<Document>,
@@ -86,6 +97,13 @@ impl ExpressionContext {
 
 fn make_engine() -> Engine {
     let mut engine = Engine::new();
+
+    engine.set_max_operations(MAX_EXPRESSION_OPERATIONS);
+    engine.set_max_string_size(MAX_EXPRESSION_STRING_BYTES);
+    // Rhai's array literal parser rejects item `max` before inserting it, so
+    // configure one more than Lumit's documented retained-array ceiling.
+    engine.set_max_array_size(MAX_EXPRESSION_ARRAY_ITEMS + 1);
+    engine.set_max_map_size(MAX_EXPRESSION_MAP_ITEMS);
 
     let math = exported_module!(math::math);
     let comp = exported_module!(comp::comp);
@@ -228,6 +246,7 @@ pub fn evaluate_range(
     end: f64,
     samples: i64,
 ) -> Vec<f64> {
+    let samples = samples.clamp(0, MAX_GRAPH_SAMPLES);
     with_engine(|engine| {
         let Ok(ast) = engine.compile_expression(expression) else {
             return Vec::new();
@@ -598,6 +617,78 @@ mod tests {
     fn an_uncompilable_expression_samples_to_nothing() {
         assert!(evaluate_range("this is not (", None, 0.0, 1.0, 8).is_empty());
         assert_eq!(evaluate_range("time", None, 0.0, 4.0, 4).len(), 4);
+    }
+
+    #[test]
+    fn expression_work_and_graph_sampling_are_bounded() {
+        let engine = make_engine();
+        assert_eq!(engine.max_operations(), MAX_EXPRESSION_OPERATIONS);
+        assert_eq!(engine.max_string_size(), MAX_EXPRESSION_STRING_BYTES);
+        assert_eq!(engine.max_array_size(), MAX_EXPRESSION_ARRAY_ITEMS + 1);
+        assert_eq!(engine.max_map_size(), MAX_EXPRESSION_MAP_ITEMS);
+
+        assert_eq!(evaluate("1 + 2 * 3", None), 7.0);
+        assert_eq!(evaluate("if 2 > 1 { 9 } else { 0 }", None), 9.0);
+        assert_eq!(evaluate_text("\"frame \" + 7", None), "frame 7");
+        assert_eq!(evaluate("[1, 2].len()", None), 2.0);
+        assert_eq!(evaluate_range("time", None, 0.0, 1.0, 16).len(), 16);
+
+        assert_eq!(
+            evaluate_range("time", None, 0.0, 1.0, MAX_GRAPH_SAMPLES + 1).len(),
+            MAX_GRAPH_SAMPLES as usize
+        );
+        assert_eq!(
+            evaluate_range("time", None, 0.0, 1.0, MAX_GRAPH_SAMPLES).len(),
+            MAX_GRAPH_SAMPLES as usize
+        );
+        assert_eq!(
+            evaluate_range("time", None, 0.0, 1.0, 1_000_000).len(),
+            MAX_GRAPH_SAMPLES as usize
+        );
+
+        let string = |len| format!("\"{}\".len()", "x".repeat(len));
+        assert_eq!(
+            evaluate(&string(MAX_EXPRESSION_STRING_BYTES), None),
+            MAX_EXPRESSION_STRING_BYTES as f64
+        );
+        assert_eq!(
+            evaluate(&string(MAX_EXPRESSION_STRING_BYTES + 1), None),
+            -1.0
+        );
+
+        let array = |len| format!("[{}].len()", vec!["0"; len].join(","));
+        assert_eq!(
+            evaluate(&array(MAX_EXPRESSION_ARRAY_ITEMS), None),
+            MAX_EXPRESSION_ARRAY_ITEMS as f64
+        );
+        assert_eq!(evaluate(&array(MAX_EXPRESSION_ARRAY_ITEMS + 1), None), -1.0);
+
+        let map = |len| {
+            format!(
+                "#{{{}}}.len()",
+                (0..len)
+                    .map(|n| format!("key_{n}: 0"))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )
+        };
+        assert_eq!(
+            evaluate(&map(MAX_EXPRESSION_MAP_ITEMS), None),
+            MAX_EXPRESSION_MAP_ITEMS as f64
+        );
+        assert_eq!(evaluate(&map(MAX_EXPRESSION_MAP_ITEMS + 1), None), -1.0);
+
+        assert_eq!(evaluate("1 + 1", None), 2.0);
+        assert_eq!(
+            evaluate(&string(MAX_EXPRESSION_STRING_BYTES + 1), None),
+            -1.0
+        );
+        assert!(evaluate_value(&string(MAX_EXPRESSION_STRING_BYTES + 1), None).is_err());
+        assert_eq!(evaluate("1 + 1", None), 2.0);
+
+        for _ in 0..10_000 {
+            assert_eq!(evaluate("time + 1", Some(at(2.0))), 3.0);
+        }
     }
 
     /// **A value expression says what it answered with, or why it did not.**
