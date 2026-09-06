@@ -1,5 +1,5 @@
 ---
-title: Lumit 0.0.0
+title: Lumit v0.0.0
 description: One sentence, used for the page description and the social card.
 versionNumber: 0.0.0
 date: 2026-01-01
@@ -28,3 +28,11 @@ release is for, then break the detail into sections.
   effect that no longer draws the same. Leave the section out otherwise.
 - Lumit shows this section after the update is downloaded and before it restarts,
   so keep it to what the reader has to know.
+
+## Downloads
+
+The last section, one sentence with both links. Change the tag on the GitHub one
+to this release's.
+
+Windows, macOS, and Linux builds are on [Lumit Downloads](https://lumitlab.com/download) and
+[GitHub releases](https://github.com/luminalmvm/Lumit/releases/tag/v0.0.0).
