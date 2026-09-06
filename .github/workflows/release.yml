@@ -104,7 +104,7 @@ jobs:
           Copy-Item assets\brand\lumit-project.ico, assets\brand\lumit-preset.ico "$stage\icons"
           Compress-Archive -Path "$stage\*" -Force `
             -DestinationPath "packaging/windows/dist/lumit-$version-windows-x64.zip"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: windows-installer
           path: |
@@ -215,7 +215,7 @@ jobs:
             flatpak-build packaging/flatpak/io.github.luminalmvm.Lumit.yml
           flatpak build-bundle flatpak-repo \
             "lumit-$version-linux-x64.flatpak" io.github.luminalmvm.Lumit
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: linux-bundle
           path: lumit-*-linux-x64.flatpak
@@ -307,7 +307,7 @@ jobs:
           mkdir -p packaging/macos/dist
           ditto -c -k --keepParent "$app" \
             "packaging/macos/dist/lumit-$version-macos-$(uname -m).zip"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: macos-dmg
           path: |
