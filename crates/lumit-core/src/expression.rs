@@ -26,6 +26,19 @@ mod comp;
 mod layer;
 mod math;
 
+// These bounds apply to every project/import expression. They deliberately
+// leave normal animated properties ample room while making evaluation finite.
+const MAX_EXPRESSION_OPERATIONS: u64 = 100_000;
+const MAX_EXPRESSION_STRING_BYTES: usize = 1 << 20;
+const MAX_EXPRESSION_ARRAY_ITEMS: usize = 16_384;
+const MAX_EXPRESSION_MAP_ITEMS: usize = 16_384;
+const MAX_EXPRESSION_VARIABLES: usize = 1_024;
+const MAX_EXPRESSION_FUNCTIONS: usize = 1_024;
+const MAX_EXPRESSION_MODULES: usize = 64;
+const MAX_EXPRESSION_CALL_DEPTH: usize = 64;
+const MAX_EXPRESSION_DEPTH: usize = 64;
+const MAX_GRAPH_SAMPLES: i64 = 4_096;
+
 #[derive(Clone, Debug)]
 pub struct ExpressionContext {
     pub document: Arc<Document>,
@@ -86,6 +99,16 @@ impl ExpressionContext {
 
 fn make_engine() -> Engine {
     let mut engine = Engine::new();
+
+    engine.set_max_operations(MAX_EXPRESSION_OPERATIONS);
+    engine.set_max_string_size(MAX_EXPRESSION_STRING_BYTES);
+    engine.set_max_array_size(MAX_EXPRESSION_ARRAY_ITEMS);
+    engine.set_max_map_size(MAX_EXPRESSION_MAP_ITEMS);
+    engine.set_max_variables(MAX_EXPRESSION_VARIABLES);
+    engine.set_max_functions(MAX_EXPRESSION_FUNCTIONS);
+    engine.set_max_modules(MAX_EXPRESSION_MODULES);
+    engine.set_max_call_levels(MAX_EXPRESSION_CALL_DEPTH);
+    engine.set_max_expr_depths(MAX_EXPRESSION_DEPTH, MAX_EXPRESSION_DEPTH);
 
     let math = exported_module!(math::math);
     let comp = exported_module!(comp::comp);
@@ -228,6 +251,7 @@ pub fn evaluate_range(
     end: f64,
     samples: i64,
 ) -> Vec<f64> {
+    let samples = samples.clamp(0, MAX_GRAPH_SAMPLES);
     with_engine(|engine| {
         let Ok(ast) = engine.compile_expression(expression) else {
             return Vec::new();
@@ -598,6 +622,17 @@ mod tests {
     fn an_uncompilable_expression_samples_to_nothing() {
         assert!(evaluate_range("this is not (", None, 0.0, 1.0, 8).is_empty());
         assert_eq!(evaluate_range("time", None, 0.0, 4.0, 4).len(), 4);
+    }
+
+    #[test]
+    fn expression_work_and_graph_sampling_are_bounded() {
+        assert_eq!(
+            evaluate_range("time", None, 0.0, 1.0, MAX_GRAPH_SAMPLES + 1).len(),
+            MAX_GRAPH_SAMPLES as usize
+        );
+        // A finite engine limit turns an otherwise endless project expression
+        // into the same neutral property value used for ordinary eval errors.
+        assert_eq!(evaluate("let n = 0; while true { n += 1; } n", None), -1.0);
     }
 
     /// **A value expression says what it answered with, or why it did not.**
