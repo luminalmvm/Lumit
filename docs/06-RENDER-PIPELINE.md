@@ -336,13 +336,24 @@ here.
 **Depth is one project-wide switch.** The
 project's working depth — 8 bpc integer, 16 bpc float (default), or 32 bpc float —
 applies to every comp, every effect buffer, and every inter-node texture in the
-project. **v1 status:** the engine currently renders **fp16 only**; the 8/32 bpc options
-and the depth control below are the intended design, not yet built ([TODO.md](TODO.md)). There is no per-comp override: switching the project switches everything,
-exactly like AE's project bit depth. The control lives as a small depth button at the
-foot of the Project panel (AE's spot; click to cycle, dialogue for the long list
-later), and Application Settings holds only the *default for newly created projects*.
-Kernels MAY use wider internal accumulators where the algorithm needs them (large
-iterative blurs, scopes), but everything a node reads or writes is project depth.
+project. There is no per-comp override: switching the project switches everything,
+exactly like AE's project bit depth. Kernels MAY use wider internal accumulators where
+the algorithm needs them (large iterative blurs, scopes), but everything a node reads or
+writes is project depth.
+
+**How it is carried.** `Document::colour_depth` is the setting; `GpuContext::working`
+is what every pass reads, set once at the top of a render. wgpu bakes a target format
+into a pipeline, so each depth wants its own: the colour engine keeps its linearise
+pair per format, the compositor widens its existing per-sample-count pipeline map to
+`(samples, format)`, and the effect engine — which builds every kernel up front and
+names the storage format in its compute layouts — is held once per depth by the
+renderer. One build the first time a session uses a depth, then nothing. 32 bpc needs
+`FLOAT32_FILTERABLE`, since every intermediate is sampled; a card without it works at
+16 and the Settings row says so, the same softer-not-absent rule the sample count
+follows.
+
+The control lives in Project settings ▸ Rendering, beside anti-aliasing and for the
+same reasons.
 
 Why fp16 stays the default: fp16 here is floating point, not AE's integer
 16bpc — it already carries values above 1.0 (superwhites, glow overshoot, up to 65504)
@@ -1047,14 +1058,38 @@ export is deterministic (§7.3). The keys are FFmpeg's own (`title`, `artist`, `
 removed rather than written blank.
 
 **Image sequences.** Beside the video formats, an export can write one still per
-frame: **PNG** or **TIFF**, lossless RGBA, through the same ffmpeg seam (the image2 muxer) and
+frame: **PNG**, **TIFF** or **OpenEXR**, lossless RGBA, through the same ffmpeg seam (the image2 muxer) and
 the same frame walk — choose `shot.png` and the frames land beside it as `shot.00001.png`,
 `shot.00002.png`, … A sequence carries no audio (a folder of stills has nowhere to put it) and
 no bitrate (it is lossless); a cancelled or failed sequence removes the frames it wrote rather
-than leaving a folder that looks like a finished export. Both still formats can also carry
+than leaving a folder that looks like a finished export. PNG and TIFF can also carry
 **16 bits per channel** (`rgba64`), which the video codecs cannot; the pack stage hands the
 encoder little-endian samples either way and each format's own byte order is the encoder's
 business, not the caller's.
+
+#### 7.4a OpenEXR: the one format that writes the scene
+
+Every other still format here writes a *picture* — the composite through the display
+transform, encoded for something to look at. OpenEXR writes the **scene**: scene-linear,
+no view transform, no encoding curve, no clamp, so a value four times white is written as
+four. That is the whole reason to have it, and it is why the export takes a different route
+into the encoder.
+
+- The frame is read back from the **linear composite**, before the display pass
+  (`Present::LinearF32`), rather than from the display-encoded 8- or 16-bit readback the
+  other formats use. The channel and alpha choices still apply — they are about what the
+  file carries, not how bright it is — and the un-multiply divides colour back up without
+  clamping, which is exactly what an additive blend needs and what eight bits cannot hold.
+- **Float depths only**: half (the default, and what a render farm writes) or full float.
+  Eight-bit codes in an EXR would be a scene file holding a picture. The depths a format
+  offers are the capability row's business, so the dialogue never shows a depth the file
+  cannot carry.
+- ffmpeg's own EXR encoder writes it, fed planar `gbrapf32le` with `format` half or float
+  and ZIP16 compression — lossless, so the choice costs time and not quality.
+- The file's precision is the **project's colour depth** (§3.1): a comp working at 16 bpc
+  writes half-precision numbers whichever depth the file is set to. Working at 32 bpc is
+  what makes a full-float EXR carry full-float values, which is the combination a depth
+  pass wants.
 
 **What each format can carry is a table, not folklore.** One capability row per format —
 picture, sound, alpha, the colour depths, whether a bitrate applies, whether the container

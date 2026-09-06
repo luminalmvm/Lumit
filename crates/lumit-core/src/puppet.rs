@@ -138,6 +138,37 @@ pub fn alpha_at_natural(rgba: &[u8], w: u32, h: u32, natural_w: u32, natural_h: 
     out
 }
 
+/// [`alpha_at_natural`] for a scene-linear float raster.
+///
+/// The bitmap it produces stays one byte a pixel, and rightly so: what the
+/// mesh wants to know is where the silhouette is, which is a question about
+/// coverage and not about range. Alpha is nought to one whatever width it is
+/// stored at, so this scales it rather than clipping anything.
+#[must_use]
+pub fn alpha_at_natural_f32(
+    rgba: &[u8],
+    w: u32,
+    h: u32,
+    natural_w: u32,
+    natural_h: u32,
+) -> Vec<u8> {
+    let (w, h) = (w as usize, h as usize);
+    let (nw, nh) = (natural_w as usize, natural_h as usize);
+    if w == 0 || h == 0 || nw == 0 || nh == 0 || rgba.len() < w * h * 16 {
+        return vec![0; nw * nh];
+    }
+    let mut out = vec![0u8; nw * nh];
+    for y in 0..nh {
+        let sy = (y * h / nh).min(h - 1);
+        for x in 0..nw {
+            let sx = (x * w / nw).min(w - 1);
+            let a = crate::pixels::f32_at(rgba, (sy * w + sx) * 4 + 3);
+            out[y * nw + x] = (a.clamp(0.0, 1.0) * 255.0).round() as u8;
+        }
+    }
+    out
+}
+
 /// Build the mesh over an alpha bitmap.
 ///
 /// `alpha` is one byte per pixel, `w`×`h`, at the layer's natural size;
@@ -1555,10 +1586,37 @@ pub fn apply_puppet(
     mesh: &PuppetMesh,
     solution: &PuppetSolution,
 ) {
+    apply_puppet_as::<Rgba8>(rgba, w, h, natural_w, natural_h, mesh, solution);
+}
+
+/// [`apply_puppet`] for a scene-linear float raster
+/// (`lumit_media::PixelFormat::LinearF32`), sixteen bytes a pixel.
+pub fn apply_puppet_f32(
+    rgba: &mut [u8],
+    w: u32,
+    h: u32,
+    natural_w: f64,
+    natural_h: f64,
+    mesh: &PuppetMesh,
+    solution: &PuppetSolution,
+) {
+    apply_puppet_as::<LinearF32>(rgba, w, h, natural_w, natural_h, mesh, solution);
+}
+
+/// The warp itself, over whichever raster [`Raster`] describes.
+fn apply_puppet_as<R: Raster>(
+    rgba: &mut [u8],
+    w: u32,
+    h: u32,
+    natural_w: f64,
+    natural_h: f64,
+    mesh: &PuppetMesh,
+    solution: &PuppetSolution,
+) {
     if solution.identity || w == 0 || h == 0 {
         return;
     }
-    if rgba.len() != (w as usize) * (h as usize) * 4 {
+    if rgba.len() != (w as usize) * (h as usize) * R::BYTES {
         return;
     }
     let sx = f64::from(w) / natural_w.max(1.0);
@@ -1651,10 +1709,9 @@ pub fn apply_puppet(
                 }
                 let sxp = l[0] * rest[0][0] + l[1] * rest[1][0] + l[2] * rest[2][0] - 0.5;
                 let syp = l[0] * rest[0][1] + l[1] * rest[1][1] + l[2] * rest[2][1] - 0.5;
-                let texel = sample_rgba(&src, iw, ih, sxp, syp);
-                let base = (py * iw + px) * 4;
-                if let Some(slot) = rgba.get_mut(base..base + 4) {
-                    slot.copy_from_slice(&texel);
+                let base = (py * iw + px) * R::BYTES;
+                if let Some(slot) = rgba.get_mut(base..base + R::BYTES) {
+                    R::sample_into(&src, iw, ih, sxp, syp, slot);
                 }
             }
         }
@@ -1662,6 +1719,60 @@ pub fn apply_puppet(
 }
 
 /// Bilinear sample of a premultiplied RGBA buffer at pixel-index coordinates.
+/// How one raster's pixels are read and written by the warp.
+///
+/// The warp itself is geometry — triangles, barycentric coordinates, a
+/// painter's sort — and none of that cares how wide a sample is. This is the
+/// only part that does, so the warp is written once and this says whether it
+/// is moving bytes or floats about.
+pub trait Raster {
+    /// Bytes one pixel occupies.
+    const BYTES: usize;
+    /// Bilinearly sample `src` at continuous `(x, y)` and write the texel into
+    /// `out`, which is [`Self::BYTES`] long.
+    fn sample_into(src: &[u8], w: usize, h: usize, x: f64, y: f64, out: &mut [u8]);
+}
+
+/// The eight-bit raster every layer but a float source carries.
+pub struct Rgba8;
+
+impl Raster for Rgba8 {
+    const BYTES: usize = 4;
+    fn sample_into(src: &[u8], w: usize, h: usize, x: f64, y: f64, out: &mut [u8]) {
+        let texel = sample_rgba(src, w, h, x, y);
+        if out.len() == 4 {
+            out.copy_from_slice(&texel);
+        }
+    }
+}
+
+/// The scene-linear float raster a float source (OpenEXR) decodes to. The
+/// same bilinear weights, on the values as they are — so a warped highlight
+/// keeps every stop it had, and a warped depth pass keeps its distances.
+pub struct LinearF32;
+
+impl Raster for LinearF32 {
+    const BYTES: usize = 16;
+    fn sample_into(src: &[u8], w: usize, h: usize, x: f64, y: f64, out: &mut [u8]) {
+        if w == 0 || h == 0 || out.len() != 16 {
+            return;
+        }
+        let fx = x.clamp(0.0, (w - 1) as f64);
+        let fy = y.clamp(0.0, (h - 1) as f64);
+        let (x0, y0) = (fx.floor() as usize, fy.floor() as usize);
+        let (x1, y1) = ((x0 + 1).min(w - 1), (y0 + 1).min(h - 1));
+        let (tx, ty) = (fx - x0 as f64, fy - y0 as f64);
+        let (i00, i10) = ((y0 * w + x0) * 4, (y0 * w + x1) * 4);
+        let (i01, i11) = ((y1 * w + x0) * 4, (y1 * w + x1) * 4);
+        for (c, slot) in out.chunks_exact_mut(4).enumerate() {
+            let g = |i: usize| f64::from(crate::pixels::f32_at(src, i + c));
+            let top = g(i00) * (1.0 - tx) + g(i10) * tx;
+            let bot = g(i01) * (1.0 - tx) + g(i11) * tx;
+            slot.copy_from_slice(&((top * (1.0 - ty) + bot * ty) as f32).to_le_bytes());
+        }
+    }
+}
+
 fn sample_rgba(src: &[u8], w: usize, h: usize, x: f64, y: f64) -> [u8; 4] {
     if w == 0 || h == 0 {
         return [0; 4];
@@ -2309,5 +2420,54 @@ mod tests {
         let at_two = block.pins_at(2.0);
         assert_eq!(at_two[0].rest, [10.0, 10.0], "rest is the reference time");
         assert_eq!(at_two[0].now, [50.0, 10.0], "now is this frame");
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod float_raster_tests {
+    use super::*;
+
+    /// A 2×2 float raster: `v` in every colour channel, `a` in alpha.
+    fn plate(v: f32, a: f32) -> Vec<u8> {
+        let mut out = Vec::new();
+        for _ in 0..4 {
+            for c in [v, v, v, a] {
+                out.extend_from_slice(&c.to_le_bytes());
+            }
+        }
+        out
+    }
+
+    /// The warp's sample reads float pixels at their own width and does not
+    /// clip them. Sampling exactly on a texel is that texel, above white and
+    /// all — which is what the eight-bit reader could not do with these bytes.
+    #[test]
+    fn the_float_sample_keeps_values_above_white() {
+        let src = plate(9.0, 1.0);
+        let mut out = [0u8; 16];
+        LinearF32::sample_into(&src, 2, 2, 0.0, 0.0, &mut out);
+        assert_eq!(crate::pixels::f32_px(&out, 0)[0], 9.0);
+    }
+
+    /// The mesh is built from a silhouette, so the bitmap stays one byte a
+    /// pixel — but it has to be read out of sixteen-byte pixels to be right.
+    #[test]
+    fn the_float_alpha_lift_reads_the_right_channel() {
+        let src = plate(9.0, 0.5);
+        let alpha = alpha_at_natural_f32(&src, 2, 2, 2, 2);
+        assert_eq!(alpha.len(), 4);
+        // 0.5 coverage, scaled into the bitmap's own 0..255.
+        for a in alpha {
+            assert_eq!(a, 128);
+        }
+    }
+
+    /// A raster whose length does not match its stated size lifts nothing
+    /// rather than reading past the end (docs/14 §4).
+    #[test]
+    fn a_short_float_raster_lifts_no_alpha() {
+        let alpha = alpha_at_natural_f32(&[0u8; 3], 2, 2, 2, 2);
+        assert_eq!(alpha, vec![0; 4]);
     }
 }

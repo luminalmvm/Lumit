@@ -35,7 +35,10 @@ use uuid::Uuid;
 /// size)`. The natural size is the layer's *own* pixel size, which is what
 /// transforms act in — never the decoded size, which shrinks and grows with the
 /// preview resolution.
-pub type LayerPixels = (Vec<u8>, u32, u32, (f32, f32));
+/// One layer's own picture: the bytes, the decoded size, the native source
+/// size, and how wide the bytes' samples are. Everything but a float footage
+/// source is `Srgb8`, which is what it has always been.
+pub type LayerPixels = (Vec<u8>, u32, u32, (f32, f32), lumit_media::PixelFormat);
 
 /// The map of already-decoded pixels a build reads, keyed by layer id.
 pub type PixelsByLayer<'a> = HashMap<Uuid, &'a CompLayerPixels>;
@@ -66,7 +69,7 @@ fn warp_puppet(
     lt: f64,
     solo_at: &impl Fn(&lumit_core::model::Layer, f64) -> Option<LayerPixels>,
 ) {
-    let (rgba, w, h, natural) = pixels;
+    let (_, w, h, natural, _) = pixels;
     let (w, h, natural) = (*w, *h, *natural);
     let pins = block.pins_at(lt);
     // Nothing pinned warps nothing — unless a puppet tool is armed on this
@@ -92,10 +95,19 @@ fn warp_puppet(
     // move is exact too. Observable trigger: a mesh that visibly follows the
     // shot instead of holding still — pins going inert as a figure walks out of
     // where it stood at the reference time.
-    let Some((reference, rw, rh, _)) = solo_at(layer, block.reference_time.to_f64()) else {
+    let Some((reference, rw, rh, _, rfmt)) = solo_at(layer, block.reference_time.to_f64()) else {
         return;
     };
-    let alpha = lumit_core::puppet::alpha_at_natural(&reference, rw, rh, nw, nh);
+    // The reference frame is read for its alpha alone, at whichever width it
+    // arrived at — the bitmap that comes out is a silhouette either way.
+    let alpha = match rfmt {
+        lumit_media::PixelFormat::LinearF32 => {
+            lumit_core::puppet::alpha_at_natural_f32(&reference, rw, rh, nw, nh)
+        }
+        lumit_media::PixelFormat::Srgb8 => {
+            lumit_core::puppet::alpha_at_natural(&reference, rw, rh, nw, nh)
+        }
+    };
     let Ok(mesh) = PUPPET.mesh(&alpha, nw, nh, block.density, block.expansion) else {
         crate::puppet::forget(layer.id);
         return;
@@ -124,8 +136,12 @@ fn warp_puppet(
             inert: solution.inert.clone(),
         },
     );
-    lumit_core::puppet::apply_puppet(
-        rgba,
+    let warp = match pixels.4 {
+        lumit_media::PixelFormat::LinearF32 => lumit_core::puppet::apply_puppet_f32,
+        lumit_media::PixelFormat::Srgb8 => lumit_core::puppet::apply_puppet,
+    };
+    warp(
+        pixels.0.as_mut_slice(),
         w,
         h,
         f64::from(natural.0),
@@ -144,7 +160,7 @@ fn warp_puppet(
 /// away rather than leaving the last one lying over a picture it no longer fits;
 /// that absence is what the first click reads as its refusal.
 fn preview_puppet(pixels: &LayerPixels, layer: Uuid, density: f64, expansion: f64) {
-    let (rgba, w, h, natural) = pixels;
+    let (rgba, w, h, natural, _) = pixels;
     let nw = natural.0.round().max(1.0) as u32;
     let nh = natural.1.round().max(1.0) as u32;
     let alpha = lumit_core::puppet::alpha_at_natural(rgba, *w, *h, nw, nh);
@@ -1060,12 +1076,26 @@ pub fn build_comp_draws_at(
             // `Composition::lights_at`, not from the draw list.
             LayerKind::Light { .. } => None,
         };
+        // Footage is the only kind that can arrive as anything but bytes.
+        let format = match &layer.kind {
+            LayerKind::Footage { .. } | LayerKind::Sequence { .. } => pixels_by_layer
+                .get(&layer.id)
+                .map_or(lumit_media::PixelFormat::Srgb8, |lp| lp.format),
+            _ => lumit_media::PixelFormat::Srgb8,
+        };
         raw.map(|(mut rgba, w, h, natural)| {
             // Paint first, masks second: a stroke is part of the layer's
             // picture, and a mask gates the picture (docs/06 render
             // order). Painting after the mask would let a brush draw outside
             // the shape the mask cut.
-            lumit_core::paint::apply_strokes(
+            //
+            // Both stages come in a width to match the plate, so a float layer
+            // stays float through either of them.
+            let strokes = match format {
+                lumit_media::PixelFormat::LinearF32 => lumit_core::paint::apply_strokes_f32,
+                lumit_media::PixelFormat::Srgb8 => lumit_core::paint::apply_strokes,
+            };
+            strokes(
                 &mut rgba,
                 w,
                 h,
@@ -1076,7 +1106,13 @@ pub fn build_comp_draws_at(
                 // a stroke keyed to draw itself on travels with the layer.
                 lt,
             );
-            lumit_core::mask::apply_masks(
+            // A mask only ever touches alpha, so both widths keep their colour
+            // exactly as it arrived — a masked OpenEXR is still an OpenEXR.
+            let gate = match format {
+                lumit_media::PixelFormat::LinearF32 => lumit_core::mask::apply_masks_f32,
+                lumit_media::PixelFormat::Srgb8 => lumit_core::mask::apply_masks,
+            };
+            gate(
                 &mut rgba,
                 w,
                 h,
@@ -1085,7 +1121,7 @@ pub fn build_comp_draws_at(
                 &layer.masks,
                 lt,
             );
-            (rgba, w, h, natural)
+            (rgba, w, h, natural, format)
         })
     };
 
@@ -1174,6 +1210,8 @@ pub fn build_comp_draws_at(
             rgba: Vec::new(),
             tex_w: nested.width,
             tex_h: nested.height,
+            // A comp is realised on the card; there are no source bytes here.
+            format: lumit_media::PixelFormat::Srgb8,
             fx: Default::default(),
             lut_files: Vec::new(),
             nested: Some(nested),
@@ -1204,7 +1242,7 @@ pub fn build_comp_draws_at(
         // Layer source. None samples the layer's raw pixels —
         // clear its masks so `pixels_for` skips them; Masks and Effects
         // and masks keep them.
-        let (rgba, tex_w, tex_h, natural) = if mode.applies_masks() {
+        let (rgba, tex_w, tex_h, natural, format) = if mode.applies_masks() {
             pixels_for(src)?
         } else {
             let mut bare = src.clone();
@@ -1256,6 +1294,7 @@ pub fn build_comp_draws_at(
             rgba,
             tex_w,
             tex_h,
+            format,
             fx,
             lut_files,
             nested: None,
@@ -1825,12 +1864,15 @@ pub fn build_comp_draws_at(
             // Matte source mode. None reads the source's raw pixels —
             // clear its masks so `pixels_for` skips them; Masks and Effects and
             // masks keep them.
-            let (m_rgba, m_w, m_h, m_nat) = if let Some(n) = &nested {
+            let (m_rgba, m_w, m_h, m_nat, m_fmt) = if let Some(n) = &nested {
                 (
                     Vec::new(),
                     n.width,
                     n.height,
                     (n.width as f32, n.height as f32),
+                    // A comp is realised on the card; there are no source
+                    // bytes here.
+                    lumit_media::PixelFormat::Srgb8,
                 )
             } else if mr.source.applies_masks() {
                 pixels_for(src)?
@@ -1877,6 +1919,7 @@ pub fn build_comp_draws_at(
                 rgba: m_rgba,
                 tex_w: m_w,
                 tex_h: m_h,
+                format: m_fmt,
                 natural_size: m_nat,
                 position: (
                     mtr.position_x.value_at_with_context(mlt, context.clone()) as f32,
@@ -2263,7 +2306,7 @@ pub fn build_comp_draws_at(
                 continue;
             }
             _ => {
-                let Some((rgba, w, h, natural)) = pixels_for(layer) else {
+                let Some((rgba, w, h, natural, format)) = pixels_for(layer) else {
                     continue;
                 };
                 (
@@ -2271,6 +2314,7 @@ pub fn build_comp_draws_at(
                         rgba,
                         tex_w: w,
                         tex_h: h,
+                        format,
                         colour_space: crate::colour::footage_colour_space(doc, &layer.kind),
                     },
                     natural,

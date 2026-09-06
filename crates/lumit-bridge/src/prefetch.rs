@@ -28,9 +28,9 @@ pub(crate) struct Done {
     pub item: Uuid,
     pub frame: usize,
     pub target_width: Option<u32>,
-    pub width: u32,
-    pub height: u32,
-    pub rgba: Vec<u8>,
+    /// The decode itself, handed on whole — so a prefetched float frame is
+    /// filed as what it is rather than read as bytes.
+    pub decoded: lumit_media::DecodedFrame,
 }
 
 /// The worker's handle: send wants, drain finished decodes. Dropping it ends
@@ -100,9 +100,7 @@ fn run(jobs: Receiver<PrefetchWant>, done: Sender<Done>) {
                 item: want.item,
                 frame: want.frame,
                 target_width: want.target_width,
-                width: out.width,
-                height: out.height,
-                rgba: out.rgba,
+                decoded: out,
             })
             .is_err()
         {

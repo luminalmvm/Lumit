@@ -99,6 +99,25 @@ impl MediaRef {
             &self.relative_path
         }
     }
+
+    /// The path to *open* for this reference — the other way round from
+    /// [`Self::display_path`].
+    ///
+    /// The session's absolute path, falling back to the stored relative one
+    /// when there is none: an unsaved project has nothing to be relative to,
+    /// and a project just loaded has not had its media resolved yet.
+    ///
+    /// Says where to look, not whether anything is there — the same division
+    /// [`Self::display_path`] keeps, and `lumit_project::resolve_media` is
+    /// still what answers the second question.
+    #[must_use]
+    pub fn on_disk(&self) -> &str {
+        if self.absolute_path.is_empty() {
+            &self.relative_path
+        } else {
+            &self.absolute_path
+        }
+    }
 }
 
 /// A footage item that is a folder of numbered stills rather than one file
@@ -2488,6 +2507,17 @@ pub struct Document {
     /// whole render path is built around.
     #[serde(default)]
     pub anti_aliasing: AntiAliasing,
+    /// How many bits a channel the compositor works in
+    /// (docs/06-RENDER-PIPELINE.md §3.4).
+    ///
+    /// A **project** property for [`AntiAliasing`]'s reason and one more: it
+    /// decides what a comp can hold, not only what it looks like. At eight bits
+    /// there is nothing above white, so a glow has nothing bright to bloom from
+    /// and an OpenEXR exported from the comp has nothing to carry. It travels in
+    /// the `.lum` and serves preview and export alike, or the two would not
+    /// match.
+    #[serde(default)]
+    pub colour_depth: ColourDepth,
     /// Where *this project's* rendered frames are parked, overriding the
     /// application-wide choice (docs/06-RENDER-PIPELINE.md §5.4, docs/07 §15).
     ///
@@ -2603,6 +2633,79 @@ pub enum AntiAliasing {
     X8,
 }
 
+/// How many bits a channel the compositor works in (docs/06 §3.4) — After
+/// Effects' project colour depth, and the same three choices.
+///
+/// # In plain terms
+///
+/// Every layer is drawn into a buffer before it is drawn onto the screen, and
+/// this is how big each number in that buffer is allowed to be. It is a trade
+/// between what a comp can hold and what it costs to hold it, and it is a fact
+/// about the project rather than about the machine, so it travels in the file.
+///
+/// **Eight** is the cheapest and the most limited: a channel runs nought to
+/// one and nothing else exists. Anything brighter than white is clipped the
+/// moment it is composited, so a glow has nothing to bloom from, an exposure
+/// cannot be pulled back down, and an OpenEXR written from the comp holds a
+/// picture rather than a scene. It is here for large comps on modest machines,
+/// where a quarter of the memory and a quarter of the bandwidth is the
+/// difference between working and waiting.
+///
+/// **Sixteen** is the default and what Lumit has always done: half floats, so
+/// values well above white survive with about three decimal digits of
+/// precision. This is *not* After Effects' sixteen, which counts whole numbers
+/// to 32768 and clips at white like eight does — it is the format the whole
+/// effect catalogue was written against.
+///
+/// **Thirty-two** is full float. The same range as sixteen with the precision
+/// a depth pass actually needs: half stops counting whole numbers at about
+/// 2048, which is an ordinary distance in a `Z` channel, so a comp that carries
+/// depth through it wants this. Twice the memory and twice the bandwidth of
+/// sixteen, everywhere.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize, Hash,
+)]
+pub enum ColourDepth {
+    /// Eight bits a channel, nought to one, nothing above white.
+    Eight,
+    /// Half floats. The default, and what every effect was written against.
+    #[default]
+    Sixteen,
+    /// Full floats: the range of sixteen with the precision depth work needs.
+    ThirtyTwo,
+}
+
+impl ColourDepth {
+    /// Bits a channel, for the label and for anything counting memory.
+    #[must_use]
+    pub fn bits(self) -> u32 {
+        match self {
+            Self::Eight => 8,
+            Self::Sixteen => 16,
+            Self::ThirtyTwo => 32,
+        }
+    }
+
+    /// The setting a bit count corresponds to; anything else reads as the
+    /// default, so a value from a newer build degrades to the picture this one
+    /// can draw rather than refusing to open the project.
+    #[must_use]
+    pub fn from_bits(bits: u32) -> Self {
+        match bits {
+            8 => Self::Eight,
+            32 => Self::ThirtyTwo,
+            _ => Self::Sixteen,
+        }
+    }
+
+    /// Whether this depth can hold a value above white at all — the one
+    /// question most of the render path actually wants answered.
+    #[must_use]
+    pub fn is_high_dynamic_range(self) -> bool {
+        !matches!(self, Self::Eight)
+    }
+}
+
 impl AntiAliasing {
     /// The sample count to hand the renderer.
     #[must_use]
@@ -2689,6 +2792,7 @@ impl Document {
             proxies: std::collections::BTreeMap::new(),
             use_proxies: true,
             anti_aliasing: AntiAliasing::default(),
+            colour_depth: ColourDepth::default(),
             cache_location: None,
             colour: ColourManagement::default(),
             swatches: Vec::new(),

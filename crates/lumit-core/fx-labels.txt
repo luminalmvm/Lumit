@@ -69,6 +69,7 @@ Broadcast safe
 Brush hardness
 Brush size
 Bulge
+Bypass
 Camera track
 Cancel
 Card wipe
@@ -227,6 +228,7 @@ Evolution options
 Exclusion
 Expansion
 Exposure
+Extract channels
 F-stop
 Fade
 Fade in
@@ -545,6 +547,7 @@ Reduce saturation
 Refine radius
 Region size
 Relief
+Reload channels
 Remainder
 Remap
 Remove edge leak

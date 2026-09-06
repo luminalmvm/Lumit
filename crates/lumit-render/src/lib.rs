@@ -98,7 +98,7 @@ pub use realise::Realiser;
 /// Re-exported so callers that already depend on the renderer — the bridge,
 /// reporting what the Settings row is really drawing at — need not take a
 /// direct dependency on `lumit-gpu` just to ask.
-pub use lumit_gpu::adapter_sample_count;
+pub use lumit_gpu::{adapter_colour_depth, adapter_sample_count};
 
 /// How much memory the graphics card has, re-exported for the same reason: the
 /// bridge answers Settings' VRAM ceiling with it and would otherwise need a

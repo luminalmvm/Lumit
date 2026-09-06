@@ -426,6 +426,47 @@ pub fn apply_strokes(
     }
 }
 
+/// [`apply_strokes`] for the scene-linear float frames a float source decodes
+/// to (`lumit_media::PixelFormat::LinearF32`), sixteen bytes a pixel.
+///
+/// Where a stroke lands is geometry and does not care how wide a sample is, so
+/// the coverage pass below is the same one the byte path runs. Only the laying
+/// down differs, and it differs by being simpler: the picture and the brush
+/// colour are both already linear, so there is no curve to undo and redo, and
+/// nothing rounds.
+pub fn apply_strokes_f32(
+    rgba: &mut [u8],
+    w: u32,
+    h: u32,
+    natural_w: f64,
+    natural_h: f64,
+    strokes: &[PaintStroke],
+    t: f64,
+) {
+    if strokes.is_empty() || w == 0 || h == 0 {
+        return;
+    }
+    // As the byte path: a raster that does not match its stated size paints
+    // nothing rather than slicing past the end (docs/14 §4).
+    if rgba.len() != (w as usize) * (h as usize) * 16 {
+        return;
+    }
+    let sx = f64::from(w) / natural_w.max(1.0);
+    let sy = f64::from(h) / natural_h.max(1.0);
+    let source = strokes
+        .iter()
+        .any(|s| s.mode == PaintMode::Clone)
+        .then(|| rgba.to_vec());
+
+    let mut coverage = vec![0u8; (w as usize) * (h as usize)];
+    for stroke in strokes {
+        let Some(rect) = fill_coverage(&mut coverage, stroke, w, h, sx, sy, t) else {
+            continue;
+        };
+        composite_f32(rgba, source.as_deref(), w, sx, sy, stroke, &coverage, rect);
+    }
+}
+
 /// The 0..255 coverage a stroke's brush leaves on a `w`×`h` raster, or `None`
 /// when it cannot touch it at all.
 ///
@@ -744,6 +785,89 @@ fn composite(
                     over(px, rgb, a);
                 }
             }
+        }
+    }
+}
+
+/// [`composite`] for a scene-linear float raster.
+///
+/// The one difference of substance: the blend runs on the values as they are.
+/// The byte path has to decode both sides to linear light, blend, and encode
+/// the answer back, because what it holds are sRGB codes; here both sides are
+/// already linear light, so the round trip is simply absent — and with it the
+/// clipping that round trip does to anything above white.
+#[allow(clippy::too_many_arguments)]
+fn composite_f32(
+    rgba: &mut [u8],
+    source: Option<&[u8]>,
+    w: u32,
+    sx: f64,
+    sy: f64,
+    stroke: &PaintStroke,
+    coverage: &[u8],
+    (x0, y0, x1, y1): (u32, u32, u32, u32),
+) {
+    let opacity = (stroke.opacity.clamp(0.0, 100.0) / 100.0) as f32;
+    // The brush colour is stored linear, so it is used as stored — the byte
+    // path's trip through `solid_rgba` is what it needs to reach bytes, not
+    // something the colour wants doing to it.
+    let colour = stroke.colour.0;
+    let colour_alpha = colour[3].clamp(0.0, 1.0);
+    let h = rgba.len() / 16 / (w as usize).max(1);
+    let blend = (stroke.blend != BlendMode::Normal).then(|| {
+        BlendMode::ALL
+            .iter()
+            .position(|m| *m == stroke.blend)
+            .unwrap_or(0) as u32
+    });
+    let marked = |px: [f32; 4], rgb: [f32; 3]| -> [f32; 3] {
+        let Some(mode) = blend else { return rgb };
+        let b = crate::fx::cpu::blend_pixel(
+            mode,
+            [px[0], px[1], px[2], 1.0],
+            [rgb[0], rgb[1], rgb[2], 1.0],
+        );
+        [b[0], b[1], b[2]]
+    };
+
+    for y in y0..=y1 {
+        let row = (y as usize) * (w as usize);
+        let cov_row = &coverage[row + x0 as usize..=row + x1 as usize];
+        for (x, &cov) in (x0..=x1).zip(cov_row) {
+            let c = f32::from(cov) / 255.0;
+            if c <= 0.0 {
+                continue;
+            }
+            let n = row + x as usize;
+            let mut px = crate::pixels::f32_px(rgba, n);
+            match stroke.mode {
+                PaintMode::Paint => {
+                    let a = c * opacity * colour_alpha;
+                    let rgb = marked(px, [colour[0], colour[1], colour[2]]);
+                    crate::pixels::over_f32(&mut px, rgb, a);
+                }
+                PaintMode::Erase => {
+                    // No colour to blend: an erase takes alpha away, which is
+                    // what makes it reversible by lowering its opacity later.
+                    px[3] *= 1.0 - c * opacity;
+                }
+                PaintMode::Clone => {
+                    let Some(source) = source else { continue };
+                    let ox = f64::from(x) + stroke.clone_offset.0 * sx;
+                    let oy = f64::from(y) + stroke.clone_offset.1 * sy;
+                    // Off the layer there is nothing to copy; a clone that ran
+                    // off the edge used to wrap, which reads as a bug.
+                    if ox < 0.0 || oy < 0.0 || ox >= f64::from(w) || oy >= h as f64 {
+                        continue;
+                    }
+                    let j = (oy as usize) * (w as usize) + (ox as usize);
+                    let src = crate::pixels::f32_px(source, j);
+                    let a = c * opacity * src[3].clamp(0.0, 1.0);
+                    let rgb = marked(px, [src[0], src[1], src[2]]);
+                    crate::pixels::over_f32(&mut px, rgb, a);
+                }
+            }
+            crate::pixels::set_f32_px(rgba, n, px);
         }
     }
 }
@@ -1408,5 +1532,69 @@ mod tests {
         let mut rgba = raster(60, 30, [0, 0, 0, 0]);
         apply_strokes(&mut rgba, 60, 30, 60.0, 30.0, &[stroke], 0.0);
         assert!(alpha_at(&rgba, 60, 55, 15) > 0, "the far end is drawn");
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod float_tests {
+    use super::*;
+    use crate::pixels::f32_px;
+
+    /// An `n`×`n` float raster carrying `v` in every colour channel, opaque.
+    fn plate(n: usize, v: f32) -> Vec<u8> {
+        let mut out = Vec::new();
+        for _ in 0..n * n {
+            for c in [v, v, v, 1.0] {
+                out.extend_from_slice(&c.to_le_bytes());
+            }
+        }
+        out
+    }
+
+    /// One small dab at the middle of an 8×8 plate, well clear of the corners.
+    fn dab(mode: PaintMode) -> PaintStroke {
+        let mut s = PaintStroke::new("s", vec![(4.0, 4.0)]);
+        s.mode = mode;
+        s.width = 2.0;
+        s
+    }
+
+    /// The point of the float paint path: a stroke laid on a plate that is four
+    /// times brighter than white leaves the *unpainted* pixels four times
+    /// brighter than white. On the byte path the whole plate came back at 1.0,
+    /// because getting at the alpha meant flattening the colour.
+    #[test]
+    fn painting_a_float_plate_leaves_the_rest_of_it_alone() {
+        let mut px = plate(8, 4.0);
+        apply_strokes_f32(&mut px, 8, 8, 8.0, 8.0, &[dab(PaintMode::Paint)], 0.0);
+        // The corner is nowhere near the dab, so it must be exactly what it
+        // was. On the byte path the whole plate came back at 1.0.
+        assert_eq!(f32_px(&px, 0)[0], 4.0, "the plate was flattened");
+        // And the dab itself landed.
+        assert_ne!(f32_px(&px, 4 * 8 + 4)[0], 4.0, "the dab did not mark");
+    }
+
+    /// An erase takes coverage away and leaves the colour where it was — at
+    /// whatever value that colour is, above white included.
+    #[test]
+    fn erasing_a_float_plate_keeps_its_colour() {
+        let mut px = plate(8, 4.0);
+        let i = 4 * 8 + 4;
+        let before = f32_px(&px, i);
+        apply_strokes_f32(&mut px, 8, 8, 8.0, 8.0, &[dab(PaintMode::Erase)], 0.0);
+        let after = f32_px(&px, i);
+        assert_eq!(before[0], after[0], "erase changed the colour");
+        assert!(after[3] < before[3], "erase did not take alpha away");
+    }
+
+    /// A raster whose length does not match its stated size paints nothing
+    /// rather than slicing past the end (docs/14 §4) — the float path carries
+    /// the same guard the byte one does.
+    #[test]
+    fn a_mismatched_float_raster_paints_nothing() {
+        let mut px = vec![0u8; 3];
+        apply_strokes_f32(&mut px, 2, 2, 2.0, 2.0, &[dab(PaintMode::Paint)], 0.0);
+        assert_eq!(px, vec![0u8; 3]);
     }
 }

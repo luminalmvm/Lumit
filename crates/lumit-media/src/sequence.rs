@@ -79,6 +79,33 @@ impl Run {
             None => name.to_owned(),
         }
     }
+
+    /// The file frame `n` of this run actually is, counting from nought.
+    ///
+    /// Built from [`Self::first`]'s own name rather than from the printf
+    /// pattern, so the number is padded to exactly the width the files on disk
+    /// use — `Depth000007_depth.exr`, not `Depth7_depth.exr`. A frame past the
+    /// end clamps to the last file, which is what every other reader of a run
+    /// does with an over-long layer.
+    #[must_use]
+    pub fn file_at(&self, n: usize) -> PathBuf {
+        let last = self.count.saturating_sub(1) as usize;
+        let number = self.start as usize + n.min(last);
+        let name = self
+            .first
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or_default();
+        match split(name) {
+            Some(p) => {
+                let width = p.digits.len();
+                self.first
+                    .with_file_name(format!("{}{number:0width$}{}", p.prefix, p.suffix))
+            }
+            // A run whose first file has no number in it is a run of one.
+            None => self.first.clone(),
+        }
+    }
 }
 
 /// A file name split at its number: `Depth`, 6, `_depth.exr`.

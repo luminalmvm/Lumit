@@ -345,6 +345,10 @@ pub fn collect_comp_jobs(
                         temporal: Vec::new(),
                         flow_neighbours: Vec::new(),
                         slate: false,
+                        channels: lumit_core::fx::stack_extracted_channels(
+                            &layer.effects,
+                            layer.switches.fx,
+                        ),
                     });
                 }
             }
@@ -397,6 +401,8 @@ pub fn collect_comp_jobs(
                         temporal: Vec::new(),
                         flow_neighbours: Vec::new(),
                         slate: true,
+                        // Nothing was decoded, so nothing was extracted.
+                        channels: None,
                     });
                     continue;
                 }
@@ -488,6 +494,10 @@ pub fn collect_comp_jobs(
                     // since they want opposite directions.
                     flow_neighbours,
                     slate: false,
+                    channels: lumit_core::fx::stack_extracted_channels(
+                        &layer.effects,
+                        layer.switches.fx,
+                    ),
                 });
             }
         }
@@ -550,6 +560,7 @@ pub fn same_decode(a: &[CompJob], b: &[CompJob]) -> bool {
                 && x.flow == y.flow
                 && x.temporal == y.temporal
                 && x.flow_neighbours == y.flow_neighbours
+                && x.channels == y.channels
         })
 }
 
@@ -594,6 +605,17 @@ impl CompJob {
         }
         for offset in &self.flow_neighbours {
             h.update(&offset.to_le_bytes());
+        }
+        // The extracted channels name the pixels as surely as the frame number
+        // does: the same file at the same frame is a different picture read as
+        // `Z` than read as RGB, and without this the cache would hand back
+        // whichever was asked for first.
+        if let Some(slots) = &self.channels {
+            h.update(b"channels/");
+            for slot in slots {
+                h.update(slot.as_deref().unwrap_or("").as_bytes());
+                h.update(&[0]);
+            }
         }
         let mut k = [0u8; 16];
         k.copy_from_slice(&h.finalize().as_bytes()[..16]);
@@ -777,6 +799,7 @@ mod tests {
             temporal: Vec::new(),
             flow_neighbours: Vec::new(),
             slate: false,
+            channels: None,
         }
     }
 

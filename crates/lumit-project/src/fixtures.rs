@@ -217,6 +217,7 @@ pub fn stress_document(p: &StressParams) -> Document {
         auto_folders: AutoFolders::default(),
         // The default, on, like any new project.
         anti_aliasing: Default::default(),
+        colour_depth: Default::default(),
         colour: Default::default(),
         // And it keeps no colours: an empty shelf writes no line, so
         // the fixture's bytes are the same as they were before swatches.

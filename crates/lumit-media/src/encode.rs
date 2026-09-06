@@ -162,6 +162,12 @@ pub enum BitDepth {
     #[default]
     Eight,
     Sixteen,
+    /// Half floats — OpenEXR's own default, and what nearly every EXR in a
+    /// pipeline actually holds. Scene-linear, so values above white survive.
+    Half,
+    /// Full floats. The range of [`Self::Half`] with the precision a depth pass
+    /// needs, at twice the file size.
+    Float,
 }
 
 impl BitDepth {
@@ -169,7 +175,8 @@ impl BitDepth {
     pub fn bytes_per_channel(self) -> usize {
         match self {
             BitDepth::Eight => 1,
-            BitDepth::Sixteen => 2,
+            BitDepth::Sixteen | BitDepth::Half => 2,
+            BitDepth::Float => 4,
         }
     }
 
@@ -178,7 +185,20 @@ impl BitDepth {
         match self {
             BitDepth::Eight => "8-bit",
             BitDepth::Sixteen => "16-bit",
+            BitDepth::Half => "16-bit float",
+            BitDepth::Float => "32-bit float",
         }
+    }
+
+    /// Whether this depth carries scene-linear floats rather than codes that
+    /// count to a maximum.
+    ///
+    /// The one question the export's pack stage asks: a float depth is written
+    /// from the linear composite with no display transform and no clamp, an
+    /// integer one from the display-encoded readback as it always was.
+    #[must_use]
+    pub fn is_float(self) -> bool {
+        matches!(self, BitDepth::Half | BitDepth::Float)
     }
 }
 
@@ -366,6 +386,10 @@ pub fn encoder_label(encoder: &str) -> &'static str {
 pub enum ImageFormat {
     Png,
     Tiff,
+    /// OpenEXR — the one still format here that holds a *scene* rather than a
+    /// picture of one (docs/06 §7.4a). Scene-linear floats, values above white
+    /// kept, and the format a render is handed back to a compositor in.
+    Exr,
 }
 
 impl ImageFormat {
@@ -374,6 +398,7 @@ impl ImageFormat {
         match self {
             ImageFormat::Png => "PNG sequence",
             ImageFormat::Tiff => "TIFF sequence",
+            ImageFormat::Exr => "OpenEXR sequence",
         }
     }
 
@@ -382,6 +407,7 @@ impl ImageFormat {
         match self {
             ImageFormat::Png => "png",
             ImageFormat::Tiff => "tiff",
+            ImageFormat::Exr => "exr",
         }
     }
 
@@ -389,6 +415,7 @@ impl ImageFormat {
         match self {
             ImageFormat::Png => ffi::AV_CODEC_ID_PNG,
             ImageFormat::Tiff => ffi::AV_CODEC_ID_TIFF,
+            ImageFormat::Exr => ffi::AV_CODEC_ID_EXR,
         }
     }
 
@@ -398,11 +425,16 @@ impl ImageFormat {
     /// TIFF (as FFmpeg writes it) little. The pack stage always hands over
     /// little-endian samples and this says which of them needs swapping, so
     /// callers never have to know a format's endianness.
+    /// OpenEXR is the exception: it is fed planar float regardless of which
+    /// float depth was asked for, and the encoder's own `format` option decides
+    /// whether the file stores half or full — so the pack stage hands over one
+    /// shape and the file carries whichever was chosen.
     pub fn pix_fmt(self, depth: BitDepth) -> i32 {
         match (self, depth) {
+            (ImageFormat::Exr, _) => ffi::AV_PIX_FMT_GBRAPF32LE,
             (_, BitDepth::Eight) => ffi::AV_PIX_FMT_RGBA,
-            (ImageFormat::Png, BitDepth::Sixteen) => ffi::AV_PIX_FMT_RGBA64BE,
-            (ImageFormat::Tiff, BitDepth::Sixteen) => ffi::AV_PIX_FMT_RGBA64LE,
+            (ImageFormat::Png, _) => ffi::AV_PIX_FMT_RGBA64BE,
+            (ImageFormat::Tiff, _) => ffi::AV_PIX_FMT_RGBA64LE,
         }
     }
 
@@ -410,6 +442,15 @@ impl ImageFormat {
     /// byte-swapped on the way in.
     fn swaps_16(self, depth: BitDepth) -> bool {
         depth == BitDepth::Sixteen && self == ImageFormat::Png
+    }
+
+    /// The value for the EXR encoder's `format` option: 1 half, 2 float
+    /// (`ffmpeg -h encoder=exr`). `None` for a format that has no such option.
+    fn exr_pixel_type(self, depth: BitDepth) -> Option<i64> {
+        (self == ImageFormat::Exr).then_some(match depth {
+            BitDepth::Float => 2,
+            _ => 1,
+        })
     }
 }
 
@@ -498,7 +539,26 @@ impl ImageSequenceEncoder {
         let pix_fmt = format.pix_fmt(depth);
         ctx.set_pix_fmt(pix_fmt);
         set_colour_tags(&mut ctx, colour);
-        ctx.open(None)?;
+        // OpenEXR's own options: whether each sample is stored half or full,
+        // and how the scanlines are packed down. ZIP over sixteen scanline
+        // blocks is what a render farm writes and what every reader opens
+        // fastest; it is lossless, so the choice costs nothing but time.
+        let mut options = None;
+        if let Some(pixel_type) = format.exr_pixel_type(depth) {
+            let mut opts = rsmpeg::avutil::AVDictionary::new(
+                &CString::new("format").map_err(|_| MediaError::BadPath)?,
+                &CString::new(if pixel_type == 2 { "float" } else { "half" })
+                    .map_err(|_| MediaError::BadPath)?,
+                0,
+            );
+            opts = opts.set(
+                &CString::new("compression").map_err(|_| MediaError::BadPath)?,
+                &CString::new("zip16").map_err(|_| MediaError::BadPath)?,
+                0,
+            );
+            options = Some(opts);
+        }
+        ctx.open(options)?;
 
         {
             let mut stream = output.new_stream();
@@ -516,7 +576,15 @@ impl ImageSequenceEncoder {
             width: w,
             height: h,
             pix_fmt,
-            src_bytes_per_px: 4 * depth.bytes_per_channel(),
+            // OpenEXR is always handed interleaved 32-bit floats whatever the
+            // file will store, because that is what the linear readback is;
+            // the encoder's own `format` option narrows to half on the way
+            // into the file.
+            src_bytes_per_px: if format == ImageFormat::Exr {
+                16
+            } else {
+                4 * depth.bytes_per_channel()
+            },
             swap16: format.swaps_16(depth),
             next_pts: 0,
             finished: false,
@@ -541,14 +609,18 @@ impl ImageSequenceEncoder {
         frame
             .alloc_buffer()
             .map_err(|e| MediaError::Ffmpeg(e.to_string()))?;
-        copy_pixels_into(
-            &mut frame,
-            rgba,
-            self.width,
-            self.height,
-            self.src_bytes_per_px,
-            self.swap16,
-        )?;
+        if self.pix_fmt == ffi::AV_PIX_FMT_GBRAPF32LE {
+            copy_planar_f32_into(&mut frame, rgba, self.width, self.height)?;
+        } else {
+            copy_pixels_into(
+                &mut frame,
+                rgba,
+                self.width,
+                self.height,
+                self.src_bytes_per_px,
+                self.swap16,
+            )?;
+        }
         frame.set_pts(self.next_pts);
         self.next_pts += 1;
 
@@ -1318,6 +1390,61 @@ fn copy_rgba_into(
 
 /// As [`copy_rgba_into`], for any packed pixel size, optionally swapping each
 /// `u16` sample's two bytes on the way (the big-endian still formats).
+/// Scatter interleaved scene-linear float RGBA into a planar `gbrapf32le`
+/// frame — the one shape OpenEXR's encoder takes.
+///
+/// The mirror of the float decode's interleave (docs/impl/media-io.md §5a):
+/// G, B, R, A planes out of R, G, B, A samples in, four bytes moved per
+/// sample and nothing converted.
+fn copy_planar_f32_into(
+    frame: &mut AVFrame,
+    rgba: &[u8],
+    width: i32,
+    height: i32,
+) -> Result<(), MediaError> {
+    let w = usize::try_from(width).unwrap_or(0);
+    let h = usize::try_from(height).unwrap_or(0);
+    let row = w.saturating_mul(4);
+    if rgba.len() < w.saturating_mul(h).saturating_mul(16) {
+        return Err(MediaError::Ffmpeg(
+            "float buffer too small for frame".into(),
+        ));
+    }
+    // Plane order is G, B, R, A; the source is R, G, B, A.
+    for (plane, channel) in [(0usize, 1usize), (1, 2), (2, 0), (3, 3)] {
+        let stride = usize::try_from(frame.linesize[plane]).unwrap_or(0);
+        if stride < row {
+            return Err(MediaError::Ffmpeg(
+                "encode frame stride smaller than one row".into(),
+            ));
+        }
+        let Some(ptr) = frame.data.get(plane).copied().filter(|p| !p.is_null()) else {
+            return Err(MediaError::Ffmpeg("encode frame has no data plane".into()));
+        };
+        let buf_len = stride
+            .checked_mul(h)
+            .ok_or_else(|| MediaError::Ffmpeg("encode frame buffer size overflow".into()))?;
+        // SAFETY: `frame` was just filled by `alloc_buffer` in `write_rgba`,
+        // which allocates at least `linesize[i] * height` bytes for each plane
+        // this format has; `stride`/`h` are read from that same frame, the null
+        // check above rules out the one case rsmpeg cannot statically
+        // guarantee, and the stride check keeps every write below in bounds.
+        #[allow(unsafe_code)]
+        let dst = unsafe { std::slice::from_raw_parts_mut(ptr, buf_len) };
+        for y in 0..h {
+            for x in 0..w {
+                let from = (y * w + x) * 16 + channel * 4;
+                let to = y * stride + x * 4;
+                let Some(sample) = rgba.get(from..from + 4) else {
+                    continue;
+                };
+                dst[to..to + 4].copy_from_slice(sample);
+            }
+        }
+    }
+    Ok(())
+}
+
 fn copy_pixels_into(
     frame: &mut AVFrame,
     rgba: &[u8],
@@ -1739,6 +1866,67 @@ mod tests {
             !sequence_frame_path(&path, 4).exists(),
             "no fourth frame was asked for"
         );
+    }
+
+    /// The point of exporting OpenEXR at all: a value four times white comes
+    /// back out of the file as four times white. Every other still format
+    /// Lumit writes would have clipped it on the way in.
+    ///
+    /// Read back with the OpenEXR reader rather than with ffmpeg, so the test
+    /// checks the *file* rather than a round trip through the same library
+    /// that wrote it.
+    #[test]
+    fn an_exr_sequence_keeps_values_above_white() {
+        for (depth, tolerance) in [(BitDepth::Float, 1e-6), (BitDepth::Half, 0.01)] {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("shot.exr");
+            let mut enc = ImageSequenceEncoder::open(
+                &path,
+                ImageFormat::Exr,
+                8,
+                4,
+                30,
+                1,
+                depth,
+                ColourTags::Srgb,
+            )
+            .unwrap();
+            // Interleaved scene-linear float RGBA: red four times white, green
+            // a half, blue nought, opaque.
+            let mut frame = Vec::new();
+            for _ in 0..8 * 4 {
+                for v in [4.0f32, 0.5, 0.0, 1.0] {
+                    frame.extend_from_slice(&v.to_le_bytes());
+                }
+            }
+            enc.write_rgba(&frame).unwrap();
+            enc.finish().unwrap();
+
+            let written = sequence_frame_path(&path, 1);
+            let read = crate::exr::read_channels(
+                &written,
+                &[
+                    Some("R".into()),
+                    Some("G".into()),
+                    Some("B".into()),
+                    Some("A".into()),
+                ],
+            )
+            .unwrap();
+            assert_eq!((read.width, read.height), (8, 4));
+            let px: Vec<f32> = read.rgba[..16]
+                .chunks_exact(4)
+                .map(|b| f32::from_le_bytes(<[u8; 4]>::try_from(b).unwrap_or([0; 4])))
+                .collect();
+            for (got, want) in px.iter().zip([4.0, 0.5, 0.0, 1.0]) {
+                assert!(
+                    (got - want).abs() < tolerance,
+                    "{} wrote {got}, wanted {want}",
+                    depth.label()
+                );
+            }
+            assert!(px[0] > 1.0, "{} clipped the highlight", depth.label());
+        }
     }
 
     /// TIFF takes the same path; one frame proves the codec is in the build.

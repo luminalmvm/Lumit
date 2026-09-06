@@ -375,6 +375,33 @@ pub fn effect_flow_neighbour(match_name: &str) -> Option<i32> {
 /// honest answer. They are separate entries in the same flow cache, keyed by the
 /// frame pair they were measured over, so a stack with one of them costs exactly
 /// what it always did.
+/// Which of the file's channels this stack asks to be decoded into red, green,
+/// blue and alpha (docs/08 §3.97), or `None` for a stack that does not ask.
+///
+/// Read by the decode planner, beside [`stack_flow_neighbours`] and for the
+/// same reason: both are effect settings that have to be known *before* the
+/// pixels exist, so the plan reads them rather than the stack.
+///
+/// **The last enabled one wins.** Two Extract channels on one layer is a
+/// contradiction rather than a chain — there is only one decode — and the
+/// bottom of the stack is the one nearer the picture, so it is the one that
+/// gets asked for. Effects off is every layer decoding as itself.
+#[must_use]
+pub fn stack_extracted_channels(
+    effects: &[EffectInstance],
+    fx_on: bool,
+) -> Option<[Option<String>; 4]> {
+    if !fx_on {
+        return None;
+    }
+    effects
+        .iter()
+        .filter(|e| e.effect.namespace == EffectNamespace::Builtin)
+        .filter(|e| e.effect.match_name == "extract_channels")
+        .filter_map(crate::fx::effects::extract_channels::selection)
+        .next_back()
+}
+
 pub fn stack_flow_neighbours(effects: &[EffectInstance], fx_on: bool) -> Vec<i32> {
     let mut offsets: Vec<i32> = if fx_on {
         effects
@@ -388,4 +415,62 @@ pub fn stack_flow_neighbours(effects: &[EffectInstance], fx_on: bool) -> Vec<i32
     offsets.sort_unstable();
     offsets.dedup();
     offsets
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod extracted_channel_tests {
+    use super::*;
+    use crate::fx::effects::extract_channels as ec;
+
+    fn extractor(channels: &[&str], slot: usize, option: u32) -> EffectInstance {
+        let names: Vec<String> = channels.iter().map(|c| (*c).to_owned()).collect();
+        let mut inst = crate::fx::builtins::instantiate("extract_channels").unwrap();
+        inst.extra
+            .insert(ec::EXTRA_KEY.to_owned(), ec::channels_extra(&names));
+        inst.params.push(crate::model::EffectParam {
+            id: ec::SLOT_IDS[slot].to_owned(),
+            value: crate::model::EffectValue::Choice(option),
+            extra: serde_json::Map::new(),
+        });
+        inst
+    }
+
+    /// The plan reads the selection off the stack, which is the whole way the
+    /// decode ever hears about it.
+    #[test]
+    fn the_stack_hands_over_the_channels_it_asks_for() {
+        let stack = vec![extractor(&["R", "Z"], 0, 2)];
+        assert_eq!(
+            stack_extracted_channels(&stack, true),
+            Some([Some("Z".into()), None, None, None])
+        );
+    }
+
+    /// Effects off is every layer decoding as itself — the switch has to reach
+    /// the decode as well as the stack, or turning effects off would leave the
+    /// layer showing an extracted channel with no effect to explain it.
+    #[test]
+    fn effects_off_decodes_the_picture_the_file_opens_as() {
+        let stack = vec![extractor(&["R", "Z"], 0, 2)];
+        assert_eq!(stack_extracted_channels(&stack, false), None);
+    }
+
+    /// One decode, so a second copy is a contradiction rather than a chain: the
+    /// one nearer the picture is the one that gets asked for.
+    #[test]
+    fn two_extractors_take_the_lower_one() {
+        let stack = vec![extractor(&["R", "Z"], 0, 2), extractor(&["R", "Z"], 0, 1)];
+        assert_eq!(
+            stack_extracted_channels(&stack, true),
+            Some([Some("R".into()), None, None, None])
+        );
+    }
+
+    /// A layer with no such effect asks for nothing, which is nearly every
+    /// layer and has to stay free.
+    #[test]
+    fn an_ordinary_stack_asks_for_nothing() {
+        assert_eq!(stack_extracted_channels(&[], true), None);
+    }
 }

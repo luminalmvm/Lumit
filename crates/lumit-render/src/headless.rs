@@ -46,7 +46,21 @@ use uuid::Uuid;
 struct Parts {
     colour: lumit_gpu::ColourEngine,
     compositor: lumit_gpu::Compositor,
-    fx: lumit_gpu::fx::FxEngine,
+    /// One effect engine per **working format** (docs/06 §3.4), built on first
+    /// use and kept.
+    ///
+    /// The colour engine and the compositor cache their own pipelines per
+    /// format, because each holds a handful. This one cannot: it builds every
+    /// kernel in the catalogue up front, and its compute bind-group layouts
+    /// name the storage format a kernel writes into — so a project working at
+    /// another depth wants the whole engine again rather than a pipeline of it.
+    /// The Lens flare's own lazily-built set rides inside, which is where it
+    /// wants to be for the same reason.
+    ///
+    /// The cost is one build per depth a session actually uses: a pause the
+    /// first time somebody switches, then nothing. A project that never
+    /// changes depth builds exactly what it always did.
+    fx: std::collections::HashMap<wgpu::TextureFormat, lumit_gpu::fx::FxEngine>,
     lut_cache: std::cell::RefCell<crate::fxops::LutCache>,
     /// The per-effect intermediate cache, VRAM only. Lives here
     /// rather than beside `frame_textures` because its entries are textures
@@ -57,6 +71,30 @@ struct Parts {
     /// shaders are worth keeping between frames — and empty until the first
     /// adjustment or Precomp layer actually asks for motion.
     flow: std::cell::RefCell<crate::realise::CompositeFlow>,
+}
+
+impl Parts {
+    /// Build the effect engine for the context's current working format if
+    /// this is the first frame to want it (see [`Self::fx`]).
+    ///
+    /// Separate from reading it back so the mutable borrow ends here: the
+    /// realiser takes shared references to several of these fields at once.
+    fn ensure_fx(&mut self, ctx: &lumit_gpu::GpuContext) {
+        self.fx
+            .entry(ctx.working())
+            .or_insert_with(|| lumit_gpu::fx::FxEngine::new(ctx));
+    }
+
+    /// Every engine built so far.
+    ///
+    /// The flare's bake settings and counters are a fact about the *session*,
+    /// not about one depth: a project switched from sixteen bits to
+    /// thirty-two must not find its bakes silently un-deferred, and the
+    /// counters the tests read must add up across whatever was built. So the
+    /// settings go to all of them and the counters sum.
+    fn fx_all(&self) -> impl Iterator<Item = &lumit_gpu::fx::FxEngine> {
+        self.fx.values()
+    }
 }
 
 /// One footage item's probe result, cached so a scrub does not re-probe. Slate
@@ -555,7 +593,7 @@ impl HeadlessRenderer {
         let parts = Parts {
             colour,
             compositor,
-            fx,
+            fx: std::collections::HashMap::from([(gpu.working(), fx)]),
             lut_cache: std::cell::RefCell::new(crate::fxops::LutCache::default()),
             fx_cache: std::cell::RefCell::new(crate::fxops::FxCache::default()),
             flow: std::cell::RefCell::new(crate::realise::CompositeFlow::default()),
@@ -781,7 +819,9 @@ impl HeadlessRenderer {
     /// would be worse than one that says the shader is broken.
     pub fn allow_stale_shaders(&self, on: bool) {
         if let Some(parts) = self.parts.as_ref() {
-            parts.fx.allow_stale_shaders(on);
+            for fx in parts.fx_all() {
+                fx.allow_stale_shaders(on);
+            }
         }
     }
 
@@ -957,7 +997,9 @@ impl HeadlessRenderer {
     /// frames those were.
     pub fn set_deferred_flare_bakes(&self, deferred: bool) {
         if let Some(parts) = self.parts.as_ref() {
-            parts.fx.set_deferred_flare_bakes(deferred);
+            for fx in parts.fx_all() {
+                fx.set_deferred_flare_bakes(deferred);
+            }
         }
     }
 
@@ -968,9 +1010,12 @@ impl HeadlessRenderer {
     /// landed and the picture is now worth making again.
     #[must_use]
     pub fn flare_bake_generation(&self) -> u64 {
-        self.parts
-            .as_ref()
-            .map_or(0, |parts| parts.fx.flare_bake_generation())
+        self.parts.as_ref().map_or(0, |parts| {
+            parts
+                .fx_all()
+                .map(lumit_gpu::fx::FxEngine::flare_bake_generation)
+                .sum()
+        })
     }
 
     /// How many times a frame has drawn a lens flare with other optics than
@@ -978,17 +1023,22 @@ impl HeadlessRenderer {
     /// means the frame may be banked under the name taken before it.
     #[must_use]
     pub fn flare_substitutions(&self) -> u64 {
-        self.parts
-            .as_ref()
-            .map_or(0, |parts| parts.fx.flare_substitutions())
+        self.parts.as_ref().map_or(0, |parts| {
+            parts
+                .fx_all()
+                .map(lumit_gpu::fx::FxEngine::flare_substitutions)
+                .sum()
+        })
     }
 
     /// Whether a flare bake is being made right now.
     #[must_use]
     pub fn flare_bake_pending(&self) -> bool {
-        self.parts
-            .as_ref()
-            .is_some_and(|parts| parts.fx.flare_bake_pending())
+        self.parts.as_ref().is_some_and(|parts| {
+            parts
+                .fx_all()
+                .any(lumit_gpu::fx::FxEngine::flare_bake_pending)
+        })
     }
 
     /// The content-hash name of this comp frame ([`crate::cache::frame_key`]),
@@ -1182,8 +1232,19 @@ impl HeadlessRenderer {
             return Err("headless preview: no decoded pixels".into());
         };
 
-        let Some(parts) = self.parts.take() else {
+        let Some(mut parts) = self.parts.take() else {
             return Err("headless preview: renderer is unavailable after an earlier fault".into());
+        };
+        // The project's colour depth, set on the context before anything is
+        // built or drawn (docs/06 §3.4). Every texture in this frame reads it,
+        // so it has to be settled before the first one exists — and the effect
+        // engine for this depth is built here if this is the first frame to
+        // want it.
+        self.gpu.set_working_bits(doc.colour_depth.bits());
+        parts.ensure_fx(&self.gpu);
+        let Some(fx) = parts.fx.get(&self.gpu.working()) else {
+            self.parts = Some(parts);
+            return Err("headless preview: no effect engine for the project's colour depth".into());
         };
         // The footage input transforms this comp asks for (docs/impl/ocio.md
         // §5.2). `None` — the usual case — is the built-in interpretation and
@@ -1196,7 +1257,7 @@ impl HeadlessRenderer {
                 ctx: self.gpu.clone_handle(),
                 engine: &parts.colour,
                 compositor: &parts.compositor,
-                fx: &parts.fx,
+                fx,
                 lut_cache: &parts.lut_cache,
                 fx_cache: &parts.fx_cache,
                 render_scale: composite_scale(quality),
@@ -1294,6 +1355,10 @@ impl HeadlessRenderer {
                         .colour
                         .display16_through(&self.gpu, &linear, size, self.view, artefact)
                 }
+                // Handed over as it is. A coarse preview tier would be the
+                // wrong size, but export always composites at 1.0, so there is
+                // nothing to resample and nothing to run.
+                Present::LinearF32 => linear,
             })
         };
         // Return the engines to the pool even on error, so one failed frame does
@@ -1410,6 +1475,31 @@ impl HeadlessRenderer {
             .map_err(|e| format!("headless preview: {e}"))
     }
 
+    /// The composite as **scene-linear floats**, four per pixel — what an
+    /// OpenEXR export writes (docs/06 §7.4a).
+    ///
+    /// Not a display: no view transform, no encoding curve, no clamp. A value
+    /// four times white comes back as four, which is the whole reason the
+    /// format is worth writing.
+    pub fn render_preview_linear(
+        &mut self,
+        doc: &Arc<Document>,
+        comp_id: Uuid,
+        frame: u64,
+        quality: Quality,
+    ) -> Result<(Vec<f32>, u32, u32), String> {
+        let (shown, cw, ch) =
+            self.preview_display_texture_fmt(doc, comp_id, frame, quality, Present::LinearF32)?;
+        let Some(parts) = self.parts.as_ref() else {
+            return Err("headless preview: renderer is unavailable after an earlier fault".into());
+        };
+        parts
+            .colour
+            .readback_linear_f32(&self.gpu, &shown)
+            .map(|px| (px, cw, ch))
+            .map_err(|e| format!("headless preview: {e}"))
+    }
+
     /// How many comp frames the interactive path has actually decoded. A live
     /// value drag must not move this — that is the whole promise of
     /// [`Self::render_preview`], and the preview tests assert it here.
@@ -1476,12 +1566,9 @@ impl HeadlessRenderer {
         item: Uuid,
         frame: usize,
         target_width: Option<u32>,
-        width: u32,
-        height: u32,
-        rgba: Vec<u8>,
+        decoded: lumit_media::DecodedFrame,
     ) {
-        self.pool
-            .preload(item, frame, target_width, width, height, rgba);
+        self.pool.preload(item, frame, target_width, decoded);
     }
 
     /// Forget the retained per-layer pixels. The next [`Self::render_preview`]
@@ -2931,6 +3018,14 @@ enum Present {
     Rgba8,
     Bgra8,
     Rgba16,
+    /// **The one present that is not a display**: the composite as it stands,
+    /// scene-linear, with no view transform and no encoding curve.
+    ///
+    /// For OpenEXR export (docs/06 §7.4a), whose whole point is to hold the
+    /// scene rather than a picture of it. Running the display transform on the
+    /// way into one would bake the Viewer's own way of looking into the file,
+    /// and every value above white would go with it.
+    LinearF32,
 }
 
 /// The scale the compositor should composite at for `quality`: the Viewer's
@@ -4658,7 +4753,9 @@ mod tests {
             let Some(parts) = r.parts.as_ref() else {
                 return;
             };
-            parts.fx.warm_flare_bake(0xfeed_face, &stub_bake())
+            parts
+                .fx_all()
+                .any(|fx| fx.warm_flare_bake(0xfeed_face, &stub_bake()))
         };
         if !queued {
             return; // no bake thread on this machine
@@ -4701,7 +4798,9 @@ mod tests {
             let Some(parts) = r.parts.as_ref() else {
                 return;
             };
-            parts.fx.warm_flare_bake(0x0f57_09ba, &stub_bake())
+            parts
+                .fx_all()
+                .any(|fx| fx.warm_flare_bake(0x0f57_09ba, &stub_bake()))
         };
         if !queued {
             return; // no bake thread on this machine
@@ -4801,7 +4900,9 @@ surfaces:
             let Some(parts) = r.parts.as_ref() else {
                 return;
             };
-            parts.fx.warm_flare_bake(0xdead_beef, &stub_bake())
+            parts
+                .fx_all()
+                .any(|fx| fx.warm_flare_bake(0xdead_beef, &stub_bake()))
         };
         if !queued {
             return; // no bake thread on this machine
@@ -8390,12 +8491,19 @@ pub mod test_support {
             let Self {
                 gpu, parts, scope, ..
             } = self;
-            let parts = parts?;
+            let mut parts = parts?;
+            // The pool holds one engine, and it is the default depth's: that
+            // is the one every test that has not asked for another is about to
+            // want, and it is seeded at construction so it is always here. An
+            // engine a test built for some other depth is dropped with the
+            // rest of `parts` rather than pooled, which is what keeps the
+            // shared set to one.
+            let fx = parts.fx.remove(&lumit_gpu::WORKING_FORMAT)?;
             Some(SharedGpu {
                 ctx: gpu,
                 colour: parts.colour,
                 compositor: parts.compositor,
-                fx: parts.fx,
+                fx,
                 scope,
             })
         }

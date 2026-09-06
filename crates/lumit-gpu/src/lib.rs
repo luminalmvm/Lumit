@@ -68,6 +68,19 @@ pub struct GpuContext {
     /// docs/14-ENGINEERING-RULES.md forbids. It keeps `GpuContext: Send`, which
     /// is what the renderer living on a worker thread actually needs; it was
     /// never `Sync`.
+    /// What this context's passes work in — the project's colour depth
+    /// (docs/06 §3.4), as a texture format.
+    ///
+    /// A `Cell` beside the frame batch below, and for the same reason: it is
+    /// per-render state on a context used by one thread at a time, not a fact
+    /// about the adapter like [`Self::sample_flags`]. The realiser sets it
+    /// once at the top of a render and every pass reads it, which is what
+    /// keeps a depth change from being a signature on forty functions.
+    ///
+    /// **Every pipeline that targets it is cached per format**, exactly as the
+    /// composite's are cached per multisample count, so switching depth costs
+    /// one rebuild and then nothing.
+    working: std::cell::Cell<wgpu::TextureFormat>,
     frame: std::cell::RefCell<Option<wgpu::CommandEncoder>>,
     /// How many [`Self::begin_frame`] calls are open. The realise walk recurses
     /// — nested comps, adjustment layers, one whole render per motion-blur
@@ -206,6 +219,31 @@ pub fn adapter_sample_count(requested: u32) -> Option<u32> {
     ADAPTER_SAMPLE_FLAGS
         .get()
         .map(|&flags| sample_count_from(flags, requested))
+}
+
+/// Whether the first adapter opened will filter a thirty-two-bit float
+/// texture — the one capability the project's colour depth depends on.
+///
+/// Published for [`adapter_colour_depth`] in the same shape and for the same
+/// reason as [`ADAPTER_SAMPLE_FLAGS`]: a Settings row wants to say what is
+/// being used without taking the renderer's lock.
+static ADAPTER_FLOAT32_FILTERABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+
+/// The colour depth in bits this machine will work at for `requested`, without
+/// needing a context (docs/06 §3.4).
+///
+/// `None` before any adapter has been opened, exactly as
+/// [`adapter_sample_count`] answers — nothing has asked the card yet, and the
+/// project's own setting is what a panel shows until something truer exists.
+#[must_use]
+pub fn adapter_colour_depth(requested: u32) -> Option<u32> {
+    ADAPTER_FLOAT32_FILTERABLE.get().map(|&filterable| {
+        if requested == 32 && !filterable {
+            16
+        } else {
+            requested
+        }
+    })
 }
 
 /// How much memory the card has, in bytes, published the first time a context
@@ -390,6 +428,7 @@ impl GpuContext {
             device,
             queue,
             software: false,
+            working: std::cell::Cell::new(WORKING_FORMAT),
             // Not knowable from a device alone, and the safe answer for a
             // memory report is the one that does not claim the card's frames
             // are inside this process when they may not be.
@@ -414,6 +453,37 @@ impl GpuContext {
         sample_count_from(self.sample_flags, requested)
     }
 
+    /// What this context's passes work in (see [`Self::working`] the field).
+    #[must_use]
+    pub fn working(&self) -> wgpu::TextureFormat {
+        self.working.get()
+    }
+
+    /// Set the working format for the renders that follow — the project's
+    /// colour depth in bits (8, 16 or 32).
+    ///
+    /// Called at the top of a render rather than per pass: every texture inside
+    /// one frame has to agree, or a pass would draw into a target its pipeline
+    /// was not built for.
+    ///
+    /// Thirty-two bits needs `FLOAT32_FILTERABLE`, because every intermediate is
+    /// sampled. A card without it gets sixteen and the picture is softer rather
+    /// than absent, which is the rule the multisample fallback follows too.
+    pub fn set_working_bits(&self, bits: u32) {
+        let wanted = working_format_for(bits);
+        let usable = if wanted == wgpu::TextureFormat::Rgba32Float
+            && !self
+                .device
+                .features()
+                .contains(wgpu::Features::FLOAT32_FILTERABLE)
+        {
+            WORKING_FORMAT
+        } else {
+            wanted
+        };
+        self.working.set(usable);
+    }
+
     /// A second handle on the same device and queue, keeping what the adapter
     /// reported. wgpu handles are internally reference-counted, so this shares
     /// the one device; unlike [`Self::from_parts`] it does not throw away
@@ -425,6 +495,8 @@ impl GpuContext {
             device: self.device.clone(),
             queue: self.queue.clone(),
             software: self.software,
+            // A second handle on one device works in what that device is set to.
+            working: std::cell::Cell::new(self.working.get()),
             unified_memory: self.unified_memory,
             sample_flags: self.sample_flags,
             frame: std::cell::RefCell::new(None),
@@ -699,9 +771,17 @@ impl GpuContext {
         // card has them, which is what makes 8× anti-aliasing legal rather than
         // merely advertised (see [`usable_sample_flags`]). A card without them
         // opens as before and is held to 4×.
+        // FLOAT32_FILTERABLE rides in the same "ask if the card has it" mask.
+        // A float source (OpenEXR) uploads as `Rgba32Float` and is then sampled
+        // like any other layer, and sampling a 32-bit float texture with a
+        // filtering sampler is a validation error without it. A card that does
+        // not offer it gets the half-float upload instead (see
+        // [`ColourEngine::upload_float_frame`]) — softer, never an error, the
+        // same shape as the multisample fallback beside it.
         let descriptor = wgpu::DeviceDescriptor {
             required_features: adapter.features()
-                & wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES,
+                & (wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
+                    | wgpu::Features::FLOAT32_FILTERABLE),
             ..Default::default()
         };
         #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
@@ -762,11 +842,17 @@ impl GpuContext {
         // Publish it for the reporting path (see `ADAPTER_SAMPLE_FLAGS`); the
         // first context to open wins and every later one agrees with it.
         let _ = ADAPTER_SAMPLE_FLAGS.set(sample_flags);
+        let _ = ADAPTER_FLOAT32_FILTERABLE.set(
+            device
+                .features()
+                .contains(wgpu::Features::FLOAT32_FILTERABLE),
+        );
 
         Ok(Self {
             device,
             queue,
             software,
+            working: std::cell::Cell::new(WORKING_FORMAT),
             unified_memory,
             sample_flags,
             frame: std::cell::RefCell::new(None),
@@ -778,8 +864,30 @@ impl GpuContext {
 }
 
 /// The two colour crossings (linearise, display) as render pipelines.
+/// One working format's linearise pipelines: the plain pass, and the one with
+/// a baked colour artefact bound (docs/impl/ocio.md §5.2). They are built and
+/// kept together because a project working at one depth wants both.
+struct LinearisePair {
+    plain: wgpu::RenderPipeline,
+    ocio: wgpu::RenderPipeline,
+}
+
 pub struct ColourEngine {
-    linearise: wgpu::RenderPipeline,
+    /// The linearise pair — plain and with a colour artefact bound — built per
+    /// **working format** on first use and kept.
+    ///
+    /// These are the only two colour passes whose target follows the project's
+    /// colour depth (docs/06 §3.4); every display pass below writes into a
+    /// display format, which the depth setting has nothing to do with. wgpu
+    /// bakes the target format into a pipeline, so a project working at
+    /// thirty-two bits needs its own pair — the same reason the composite keeps
+    /// a pipeline set per multisample count, and the same lazy map.
+    linearise: std::sync::Mutex<std::collections::HashMap<wgpu::TextureFormat, LinearisePair>>,
+    /// What [`Self::linearise`] is built from, kept so a format nobody has
+    /// asked for yet can still be built later.
+    shader: wgpu::ShaderModule,
+    pipeline_layout: wgpu::PipelineLayout,
+    ocio_pipeline_layout: wgpu::PipelineLayout,
     display: wgpu::RenderPipeline,
     /// The display pass again, targeting BGRA — for the shared-texture Viewer,
     /// whose consumer (ANGLE inside Flutter) matches share-handle surfaces
@@ -796,7 +904,6 @@ pub struct ColourEngine {
     /// because the render TARGET differs: an artefact's output is already
     /// display-encoded, so these write through a plain `Unorm` view where the
     /// built-in ones write through `UnormSrgb` and let the hardware encode.
-    linearise_ocio: wgpu::RenderPipeline,
     display_ocio: wgpu::RenderPipeline,
     display_bgra_ocio: wgpu::RenderPipeline,
     display16_ocio: wgpu::RenderPipeline,
@@ -938,8 +1045,30 @@ struct ViewParamsRaw {
     _pad: [f32; 2],
 }
 
-/// The engine's working format (docs/06-RENDER-PIPELINE.md §3).
+/// The engine's default working format (docs/06-RENDER-PIPELINE.md §3): what a
+/// context works in until a project says otherwise, and what every test that
+/// does not care about depth gets.
+///
+/// The live answer is [`GpuContext::working`], which follows the project's
+/// colour depth. This is the sixteen-bit case, and it is the default for the
+/// reason `ColourDepth::Sixteen` is: it is what the effect catalogue was
+/// written against.
 pub const WORKING_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
+
+/// The working format for a project colour depth in bits (8, 16 or 32).
+///
+/// Eight is `Rgba8Unorm` and **not** the sRGB variant: the compositor blends in
+/// linear light, and an sRGB target would have the hardware encode on every
+/// write and decode on every read of an intermediate. Anything above white is
+/// clipped at eight bits, which is the trade that setting is.
+#[must_use]
+pub fn working_format_for(bits: u32) -> wgpu::TextureFormat {
+    match bits {
+        8 => wgpu::TextureFormat::Rgba8Unorm,
+        32 => wgpu::TextureFormat::Rgba32Float,
+        _ => WORKING_FORMAT,
+    }
+}
 /// Source/display byte format: sRGB-encoded, hardware-converted at the edges.
 pub const SRGB_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 /// The display target a sixteen-bit export reads back from
@@ -1282,7 +1411,16 @@ impl ColourEngine {
             ..Default::default()
         });
         Self {
-            linearise: make(WORKING_FORMAT, "linearise", "fs_copy"),
+            // Built on demand per working format; the sixteen-bit pair is the
+            // one nearly every project asks for, so it is made here rather
+            // than on the first frame.
+            linearise: std::sync::Mutex::new(std::collections::HashMap::from([(
+                WORKING_FORMAT,
+                LinearisePair {
+                    plain: make(WORKING_FORMAT, "linearise", "fs_copy"),
+                    ocio: make_ocio(WORKING_FORMAT, "linearise-ocio", "fs_ocio"),
+                },
+            )])),
             display: make(SRGB_FORMAT, "display", "fs_copy"),
             display_bgra: make(
                 wgpu::TextureFormat::Bgra8UnormSrgb,
@@ -1290,7 +1428,6 @@ impl ColourEngine {
                 "fs_copy",
             ),
             display16: make(DEEP_DISPLAY_FORMAT, "display16", "fs_display16"),
-            linearise_ocio: make_ocio(WORKING_FORMAT, "linearise-ocio", "fs_ocio"),
             display_ocio: make_ocio(unencoded(SRGB_FORMAT), "display-ocio", "fs_ocio"),
             display_bgra_ocio: make_ocio(
                 unencoded(wgpu::TextureFormat::Bgra8UnormSrgb),
@@ -1298,12 +1435,79 @@ impl ColourEngine {
                 "fs_ocio",
             ),
             display16_ocio: make_ocio(DEEP_DISPLAY_FORMAT, "display16-ocio", "fs_ocio16"),
+            shader,
+            pipeline_layout,
+            ocio_pipeline_layout,
             layout,
             ocio_layout,
             sampler,
             linear_sampler,
             neutral_buf: view_uniform(ctx, "colour-view-neutral", DisplayParams::NEUTRAL),
             view_buf: view_uniform(ctx, "colour-view", DisplayParams::NEUTRAL),
+        }
+    }
+
+    /// The linearise pipeline for one working format, building and keeping the
+    /// pair on first use.
+    ///
+    /// `with` is handed the pipeline rather than a clone of it, because a
+    /// `RenderPipeline` is not `Clone` and the map owns it — so the borrow ends
+    /// with the closure and the lock is never held across the pass.
+    ///
+    /// A poisoned lock cannot happen (nothing here panics while holding it) but
+    /// must not panic if it somehow did, so the fallback builds an uncached
+    /// pair: a slower frame, never a dead engine (docs/14 — no panics in engine
+    /// crates), which is the composite's rule for the same map.
+    fn with_linearise<R>(
+        &self,
+        ctx: &GpuContext,
+        format: wgpu::TextureFormat,
+        ocio: bool,
+        with: impl FnOnce(&wgpu::RenderPipeline) -> R,
+    ) -> R {
+        let build = || self.build_linearise(ctx, format);
+        match self.linearise.lock() {
+            Ok(mut map) => {
+                let pair = map.entry(format).or_insert_with(build);
+                with(if ocio { &pair.ocio } else { &pair.plain })
+            }
+            Err(_) => {
+                let pair = build();
+                with(if ocio { &pair.ocio } else { &pair.plain })
+            }
+        }
+    }
+
+    /// One working format's linearise pair, from the module and layouts kept
+    /// since construction.
+    fn build_linearise(&self, ctx: &GpuContext, format: wgpu::TextureFormat) -> LinearisePair {
+        let make = |layout: &wgpu::PipelineLayout, label: &str, entry: &str| {
+            ctx.device
+                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some(label),
+                    layout: Some(layout),
+                    vertex: wgpu::VertexState {
+                        module: &self.shader,
+                        entry_point: Some("vs_fullscreen"),
+                        buffers: &[],
+                        compilation_options: Default::default(),
+                    },
+                    fragment: Some(wgpu::FragmentState {
+                        module: &self.shader,
+                        entry_point: Some(entry),
+                        targets: &[Some(format.into())],
+                        compilation_options: Default::default(),
+                    }),
+                    primitive: Default::default(),
+                    depth_stencil: None,
+                    multisample: Default::default(),
+                    multiview: None,
+                    cache: None,
+                })
+        };
+        LinearisePair {
+            plain: make(&self.pipeline_layout, "linearise", "fs_copy"),
+            ocio: make(&self.ocio_pipeline_layout, "linearise-ocio", "fs_ocio"),
         }
     }
 
@@ -1447,6 +1651,87 @@ impl ColourEngine {
             cube,
             params,
         }
+    }
+
+    /// Upload already-linear 32-bit float RGBA (a decoded OpenEXR frame).
+    ///
+    /// **In plain terms.** An eight-bit frame arrives with the sRGB curve
+    /// baked in and a pass on the card has to undo it. A float frame does not:
+    /// its numbers are scene-linear already. So this hands back a texture that
+    /// is *finished* — there is no decode to run, and the linearise pass is
+    /// skipped rather than being made to do nothing.
+    ///
+    /// The texture is `Rgba32Float` where the card will filter one, so a depth
+    /// pass keeps the precision it was written with. Where it will not, the
+    /// samples are narrowed to half and the texture is [`WORKING_FORMAT`] —
+    /// still every stop above white, still no decode, just the precision the
+    /// hardware is willing to sample. The picture is softer on such a card
+    /// rather than absent, which is the rule the whole engine follows.
+    ///
+    /// It carries the same usages a linearise output carries, so it stands in
+    /// for one everywhere: sampled by the compositor, read back by the oracle,
+    /// drawn into by an effect that works in place.
+    pub fn upload_float_frame(
+        &self,
+        ctx: &GpuContext,
+        rgba: &[u8],
+        width: u32,
+        height: u32,
+    ) -> wgpu::Texture {
+        let full = ctx
+            .device
+            .features()
+            .contains(wgpu::Features::FLOAT32_FILTERABLE);
+        let format = if full {
+            wgpu::TextureFormat::Rgba32Float
+        } else {
+            WORKING_FORMAT
+        };
+        let narrowed;
+        let (data, bytes_per_row) = if full {
+            (rgba, width * 16)
+        } else {
+            narrowed = rgba
+                .chunks_exact(4)
+                .flat_map(|b| {
+                    let v = <[u8; 4]>::try_from(b).map_or(0.0, f32::from_le_bytes);
+                    half::f16::from_f32(v).to_le_bytes()
+                })
+                .collect::<Vec<u8>>();
+            (narrowed.as_slice(), width * 8)
+        };
+        let texture = ctx.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("frame-linear-float"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_DST
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        ctx.queue.write_texture(
+            texture.as_image_copy(),
+            data,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(bytes_per_row),
+                rows_per_image: Some(height),
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+        );
+        texture
     }
 
     /// Upload sRGB-encoded RGBA8 bytes (a decoded frame) ready for linearising.
@@ -1641,24 +1926,39 @@ impl ColourEngine {
         src: &wgpu::Texture,
         ocio: Option<&OcioArtefact>,
     ) -> wgpu::Texture {
-        self.pass(
-            ctx,
-            if ocio.is_some() {
-                &self.linearise_ocio
-            } else {
-                &self.linearise
-            },
-            src,
-            WORKING_FORMAT,
-            // Readable, like the display pass beside it, so the linear stage
-            // can be compared against its CPU oracle (docs/08 §1.6) — which is
-            // how the OCIO input transform is gated at all.
-            wgpu::TextureUsages::COPY_SRC,
-            "linearise",
-            // Decoding source pixels is not a view of anything.
-            DisplayParams::NEUTRAL,
-            ocio,
-        )
+        self.linearise_into(ctx, src, ocio, ctx.working())
+    }
+
+    /// [`Self::linearise_through`] writing into a chosen format.
+    ///
+    /// The one caller that wants anything but [`WORKING_FORMAT`] is a float
+    /// source with a colour space assigned: its samples arrived at full float
+    /// precision, and narrowing them to half on the way through an input
+    /// transform would throw away exactly what the source was carrying. The
+    /// transform itself is the same pass either way.
+    pub fn linearise_into(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        ocio: Option<&OcioArtefact>,
+        format: wgpu::TextureFormat,
+    ) -> wgpu::Texture {
+        self.with_linearise(ctx, format, ocio.is_some(), |pipeline| {
+            self.pass(
+                ctx,
+                pipeline,
+                src,
+                format,
+                // Readable, like the display pass beside it, so the linear
+                // stage can be compared against its CPU oracle (docs/08 §1.6)
+                // — which is how the OCIO input transform is gated at all.
+                wgpu::TextureUsages::COPY_SRC,
+                "linearise",
+                // Decoding source pixels is not a view of anything.
+                DisplayParams::NEUTRAL,
+                ocio,
+            )
+        })
     }
 
     /// Linear working texture → sRGB display texture (register this with the
@@ -1874,6 +2174,96 @@ impl ColourEngine {
             for texel in data[start..start + row as usize].chunks_exact(2) {
                 let v = crate::fx::f16_to_f32(u16::from_le_bytes([texel[0], texel[1]]));
                 out.push((v.clamp(0.0, 1.0) * 65_535.0).round() as u16);
+            }
+        }
+        drop(data);
+        buffer.unmap();
+        Ok(out)
+    }
+
+    /// Read a **linear working texture** back as scene-linear floats, four per
+    /// pixel — what an OpenEXR export writes (docs/06 §7.4a).
+    ///
+    /// Unlike [`Self::readback8`] and [`Self::readback16`] beside it, nothing
+    /// here is display-encoded and nothing is clamped: the whole point of the
+    /// format is to hold the scene rather than a picture of it, so a value four
+    /// times white comes back as four.
+    ///
+    /// Reads whichever working format the texture actually is, since that
+    /// follows the project's colour depth: half and full float both arrive as
+    /// `f32`, and eight-bit unorm is scaled up rather than refused — a project
+    /// working at eight bits can still write an EXR, it simply has nothing
+    /// above white to put in it.
+    pub fn readback_linear_f32(
+        &self,
+        ctx: &GpuContext,
+        tex: &wgpu::Texture,
+    ) -> Result<Vec<f32>, GpuError> {
+        let size = tex.size();
+        let bytes_per_px = match tex.format() {
+            wgpu::TextureFormat::Rgba32Float => 16,
+            wgpu::TextureFormat::Rgba16Float => 8,
+            wgpu::TextureFormat::Rgba8Unorm | wgpu::TextureFormat::Rgba8UnormSrgb => 4,
+            other => {
+                return Err(GpuError::Readback(format!(
+                    "cannot read {other:?} back as linear float"
+                )))
+            }
+        };
+        let row = size.width * bytes_per_px;
+        let padded =
+            row.div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT) * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        let buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("readback-linear-f32"),
+            size: u64::from(padded) * u64::from(size.height),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        // Hand over anything the frame batch is still holding: what is read
+        // below may have been recorded into it (a no-op outside a batch).
+        ctx.flush();
+        let mut encoder = ctx.device.create_command_encoder(&Default::default());
+        encoder.copy_texture_to_buffer(
+            tex.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded),
+                    rows_per_image: Some(size.height),
+                },
+            },
+            size,
+        );
+        ctx.submit([encoder.finish()]);
+
+        let slice = buffer.slice(..);
+        let (tx, rx) = std::sync::mpsc::channel();
+        slice.map_async(wgpu::MapMode::Read, move |r| {
+            let _ = tx.send(r);
+        });
+        ctx.device.poll(wgpu::Maintain::Wait);
+        rx.recv()
+            .map_err(|e| GpuError::Readback(e.to_string()))?
+            .map_err(|e| GpuError::Readback(e.to_string()))?;
+
+        let data = slice.get_mapped_range();
+        let mut out = Vec::with_capacity((size.width * size.height * 4) as usize);
+        for r in 0..size.height {
+            let start = (r * padded) as usize;
+            let row_bytes = &data[start..start + row as usize];
+            match bytes_per_px {
+                16 => out.extend(
+                    row_bytes
+                        .chunks_exact(4)
+                        .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])),
+                ),
+                8 => out.extend(
+                    row_bytes
+                        .chunks_exact(2)
+                        .map(|b| crate::fx::f16_to_f32(u16::from_le_bytes([b[0], b[1]]))),
+                ),
+                _ => out.extend(row_bytes.iter().map(|b| f32::from(*b) / 255.0)),
             }
         }
         drop(data);

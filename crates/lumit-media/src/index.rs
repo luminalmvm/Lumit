@@ -391,6 +391,97 @@ pub mod tests_support {
         status.success().then_some(out)
     }
 
+    /// One 4×4 OpenEXR frame carrying about four times white — a value no
+    /// eight-bit buffer can hold, which is the whole point of it.
+    ///
+    /// The mixer's own gain is capped at two, so it runs twice. What lands in
+    /// the file is 3.984619 rather than a round 4.0 because lavfi's white is
+    /// 254/255 before the gain; it is the same number every run, which is what
+    /// a fixture needs to be.
+    pub fn exr_fixture(dir: &Path) -> Option<PathBuf> {
+        let bin = ffmpeg_bin()?;
+        let out = dir.join("hdr.exr");
+        let status = Command::new(bin)
+            .args([
+                "-v",
+                "error",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=c=white:s=4x4",
+                "-vf",
+                "format=gbrapf32le,colorchannelmixer=rr=2:gg=2:bb=2,\
+                 colorchannelmixer=rr=2:gg=2:bb=2",
+                "-frames:v",
+                "1",
+                "-c:v",
+                "exr",
+                "-format",
+                "float",
+            ])
+            .arg(&out)
+            .status()
+            .ok()?;
+        status.success().then_some(out)
+    }
+
+    /// The value [`exr_fixture`] carries in every colour channel.
+    pub const EXR_FIXTURE_VALUE: f32 = 3.984_619;
+
+    /// A 4×4 OpenEXR holding more than a picture: `R`, `G`, `B`, `A`, a `Z`
+    /// depth channel counting well past what half floats can hold, and an
+    /// `N.X` normal — the shape a render actually leaves behind, and the one
+    /// ffmpeg cannot describe.
+    ///
+    /// Written with the exr crate rather than the ffmpeg CLI because the CLI's
+    /// encoder writes RGB and nothing else, so there would be no extra channel
+    /// to go looking for.
+    ///
+    /// `Z` is `100 · (i + 1)`, which reaches 1600 at the last pixel: every
+    /// value is exact in a float and the later ones are not exact in a half,
+    /// which is what makes it worth asserting on.
+    pub fn multichannel_exr(dir: &Path) -> PathBuf {
+        use exr::prelude::*;
+
+        let out = dir.join("aov.exr");
+        let px = 16usize;
+        let channel =
+            |name: &str, values: Vec<f32>| AnyChannel::new(name, FlatSamples::F32(values));
+        let layer = Layer::new(
+            (4, 4),
+            LayerAttributes::named("main"),
+            Encoding::FAST_LOSSLESS,
+            AnyChannels::sort(
+                vec![
+                    channel("A", vec![1.0; px]),
+                    channel("B", vec![0.25; px]),
+                    channel("G", vec![0.5; px]),
+                    channel("N.X", vec![-1.0; px]),
+                    channel("R", vec![0.75; px]),
+                    channel(
+                        "Z",
+                        (0..px)
+                            .map(|i| 100.0 * (i as f32 + 1.0))
+                            .collect::<Vec<_>>(),
+                    ),
+                ]
+                .into_iter()
+                .collect(),
+            ),
+        );
+        Image::from_layer(layer)
+            .write()
+            .to_file(&out)
+            .expect("write the multi-channel EXR fixture");
+        out
+    }
+
+    /// The depth `multichannel_exr` writes at pixel `i`.
+    pub fn multichannel_depth_at(i: usize) -> f32 {
+        100.0 * (i as f32 + 1.0)
+    }
+
     pub fn zero_byte_file(dir: &Path) -> PathBuf {
         let path = dir.join("empty.bin");
         std::fs::write(&path, []).expect("write zero-byte fixture");

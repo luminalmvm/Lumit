@@ -602,6 +602,16 @@ pub enum Op {
     SetAntiAliasing {
         anti_aliasing: crate::model::AntiAliasing,
     },
+    /// Set how many bits a channel the compositor works in (docs/06 §3.4).
+    ///
+    /// An op for `SetAntiAliasing`'s reason and one more: it changes what a
+    /// comp can *hold*, not only what it looks like. At eight bits there is
+    /// nothing above white for a glow to bloom from or an OpenEXR to carry, so
+    /// it has to travel in the file and be undoable like any other change to
+    /// the picture.
+    SetColourDepth {
+        colour_depth: crate::model::ColourDepth,
+    },
     /// Replace the project's colour shelf whole ([`crate::model::Swatch`]).
     ///
     /// **The whole list, not an add and a remove pair.** Keeping a colour and
@@ -780,6 +790,7 @@ impl Op {
             Op::SetAutoFolder { .. } => "Set automatic folder",
             Op::SetCacheLocation { .. } => "Set cache location",
             Op::SetAntiAliasing { .. } => "Set anti-aliasing",
+            Op::SetColourDepth { .. } => "Set colour depth",
             Op::SetProjectSwatches { .. } => "Edit swatches",
             Op::SetColourConfig { .. } => "Set colour management",
             Op::SetFootageColourSpace { .. } => "Set footage colour space",
@@ -1967,6 +1978,12 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             let previous = std::mem::replace(&mut doc.anti_aliasing, *anti_aliasing);
             Ok(Op::SetAntiAliasing {
                 anti_aliasing: previous,
+            })
+        }
+        Op::SetColourDepth { colour_depth } => {
+            let previous = std::mem::replace(&mut doc.colour_depth, *colour_depth);
+            Ok(Op::SetColourDepth {
+                colour_depth: previous,
             })
         }
         Op::SetProjectSwatches { swatches } => {

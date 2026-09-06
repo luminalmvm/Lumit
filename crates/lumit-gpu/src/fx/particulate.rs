@@ -16,7 +16,7 @@
 //! artefact and two renders of one frame able to disagree. So: count, scan,
 //! place. Deterministic by construction (particulate.md §5).
 
-use crate::{GpuContext, WORKING_FORMAT};
+use crate::GpuContext;
 
 use super::{work_texture, FxEngine};
 
@@ -761,7 +761,7 @@ impl ParticulatePipelines {
                     module,
                     entry_point: Some("pt_fs"),
                     targets: &[Some(wgpu::ColorTargetState {
-                        format: WORKING_FORMAT,
+                        format: ctx.working(),
                         // Premultiplied `over`, the same blend the compositor's
                         // Normal uses: the particle's own colour, and what was
                         // there kept by however much it did not cover.

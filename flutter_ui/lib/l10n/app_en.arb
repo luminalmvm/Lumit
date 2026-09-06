@@ -29,6 +29,15 @@
   "@armRazor": {
     "description": "Menu item: pick up the blade that cuts a layer where you click."
   },
+  "bitsPerChannel": "{bits} bpc",
+  "@bitsPerChannel": {
+    "description": "A colour depth, shown in the project settings dropdown and the export dialogue. 'bpc' is bits per channel, the standard abbreviation across compositing applications. {bits} is 8, 16 or 32.",
+    "placeholders": {
+      "bits": {
+        "type": "String"
+      }
+    }
+  },
   "brushShapeRound": "Round",
   "@brushShapeRound": {
     "description": "Brush shape choice in the paint tool options and on a stroke's Timeline row: a circular brush tip."
@@ -1725,6 +1734,14 @@
   "@formatH264": {
     "description": "Export format. H.264 and .mp4 are technical names and stay as they are."
   },
+  "formatExrPicker": "OpenEXR image",
+  "@formatExrPicker": {
+    "description": "The file type shown in the system Save dialogue. OpenEXR stays as it is."
+  },
+  "formatExrSequence": "OpenEXR image sequence",
+  "@formatExrSequence": {
+    "description": "Export format: one numbered OpenEXR per frame, holding scene-linear colour with values above white kept. OpenEXR stays as it is."
+  },
   "formatHevc": "HEVC video (.mp4)",
   "@formatHevc": {
     "description": "Export format. HEVC and .mp4 are technical names and stay as they are."
@@ -1876,6 +1893,10 @@
   "fxBrightness": "Brightness",
   "@fxBrightness": {
     "description": "Effect controls — the name of an effect, and its own first control."
+  },
+  "fxBypass": "Bypass",
+  "@fxBypass": {
+    "description": "Effect controls — a switch on Extract channels that passes the picture through untouched, so the extracted channels can be compared against it."
   },
   "fxCentreX": "Centre X",
   "@fxCentreX": {
@@ -2332,6 +2353,10 @@
   "fxExposure": "Exposure",
   "@fxExposure": {
     "description": "Effect controls — the name of an effect."
+  },
+  "fxExtractChannels": "Extract channels",
+  "@fxExtractChannels": {
+    "description": "Effect name in the Add effect menu — reads the layer's picture out of channels its file holds but its colour does not, such as a depth pass in an OpenEXR."
   },
   "fxFStop": "F-stop",
   "@fxFStop": {
@@ -2940,6 +2965,10 @@
   "fxRendered": "Rendered",
   "@fxRendered": {
     "description": "Effect controls — a control on Depth of field."
+  },
+  "fxReloadChannels": "Reload channels",
+  "@fxReloadChannels": {
+    "description": "Effect controls — a button on Extract channels that reads the file's channel list again, for when the render it came from has changed shape."
   },
   "fxRepeat": "Repeat",
   "@fxRepeat": {
@@ -5305,6 +5334,14 @@
   "@settingsAntiAliasing": {
     "description": "Project settings: the name of the setting that smooths edges."
   },
+  "settingsColourDepth": "Colour depth",
+  "@settingsColourDepth": {
+    "description": "Project settings: the name of the setting choosing how many bits a channel the compositor works in."
+  },
+  "settingsColourDepthInUse": "In use on this machine",
+  "@settingsColourDepthInUse": {
+    "description": "Project settings: the name of the row showing which colour depth the graphics card is actually working at."
+  },
   "settingsAntiAliasingInUse": "In use on this machine",
   "@settingsAntiAliasingInUse": {
     "description": "Project settings: the name of the row showing what the graphics card is actually doing."
@@ -5416,6 +5453,14 @@
   "settingsHelpAntiAliasingInUse": "This graphics card does not offer the setting above, so Lumit is using the highest it does. The project is unchanged.",
   "@settingsHelpAntiAliasingInUse": {
     "description": "Project settings: the sentence under 'In use on this machine'."
+  },
+  "settingsHelpColourDepth": "How much room each colour has. 8 keeps nothing brighter than white, so glows have nothing to bloom from. 16 and 32 both hold the full range; 32 adds the precision a depth pass needs, at twice the memory. Saved in the project.",
+  "@settingsHelpColourDepth": {
+    "description": "Project settings: the sentence under Colour depth."
+  },
+  "settingsHelpColourDepthInUse": "This graphics card cannot work at the depth above, so Lumit is using 16 bpc. The project is unchanged.",
+  "@settingsHelpColourDepthInUse": {
+    "description": "Project settings: the sentence under the colour depth's 'In use on this machine'."
   },
   "settingsHelpAutomaticUpdates": "Look for a new version of Lumit when it starts, at most once a day. Nothing is downloaded until you ask for it.",
   "@settingsHelpAutomaticUpdates": {
@@ -11566,6 +11611,10 @@
   },
   "histSetAntiAliasing": "Set anti-aliasing",
   "@histSetAntiAliasing": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSetColourDepth": "Set colour depth",
+  "@histSetColourDepth": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
   },
   "histEditSwatches": "Edit swatches",

@@ -23,7 +23,7 @@ use std::sync::{
     Arc, Mutex, OnceLock,
 };
 
-use crate::{GpuContext, WORKING_FORMAT};
+use crate::GpuContext;
 
 use super::{work_texture, FxEngine};
 
@@ -732,6 +732,9 @@ pub(super) struct LazyFlare {
     /// For the fallback build: a device handle is cheap to hold (it is a
     /// reference-counted handle, not a copy of the card).
     device: wgpu::Device,
+    /// The working format this set is built for — held for the fallback build,
+    /// which happens too late to ask a context.
+    format: wgpu::TextureFormat,
     /// The background build, taken and joined by the first [`Self::get`].
     building: Mutex<Option<std::thread::JoinHandle<LensFlareFx>>>,
     ready: OnceLock<LensFlareFx>,
@@ -744,15 +747,20 @@ pub(super) struct LazyFlare {
 impl LazyFlare {
     pub(super) fn spawn(ctx: &GpuContext) -> Self {
         let device = ctx.device.clone();
+        // The format is taken now, with the context in hand: this engine is
+        // built once for one working depth, and the map that owns it keeps one
+        // per depth (see `Parts::fx`).
+        let format = ctx.working();
         let building = std::thread::Builder::new()
             .name("lumit-flare-pipelines".into())
             .spawn({
                 let device = device.clone();
-                move || LensFlareFx::with_device(&device)
+                move || LensFlareFx::with_device(&device, format)
             })
             .ok();
         Self {
             device,
+            format,
             building: Mutex::new(building),
             ready: OnceLock::new(),
             deferred: AtomicBool::new(false),
@@ -772,7 +780,7 @@ impl LazyFlare {
                 .ok()
                 .and_then(|mut held| held.take())
                 .and_then(|thread| thread.join().ok())
-                .unwrap_or_else(|| LensFlareFx::with_device(&self.device));
+                .unwrap_or_else(|| LensFlareFx::with_device(&self.device, self.format));
             built
                 .deferred
                 .store(self.deferred.load(Ordering::Relaxed), Ordering::Relaxed);
@@ -816,7 +824,7 @@ impl LensFlareFx {
 
     /// Everything here is built from the device alone, which is what lets
     /// [`LazyFlare`] build it on a thread that has no `GpuContext` to hand.
-    pub(super) fn with_device(device: &wgpu::Device) -> Self {
+    pub(super) fn with_device(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
         let storage_entry =
             |binding: u32, read_only: bool, vis: wgpu::ShaderStages| wgpu::BindGroupLayoutEntry {
                 binding,
@@ -892,7 +900,7 @@ impl LensFlareFx {
                     visibility: c,
                     ty: wgpu::BindingType::StorageTexture {
                         access: wgpu::StorageTextureAccess::WriteOnly,
-                        format: WORKING_FORMAT,
+                        format,
                         view_dimension: wgpu::TextureViewDimension::D2,
                     },
                     count: None,
@@ -908,7 +916,7 @@ impl LensFlareFx {
                     visibility: c,
                     ty: wgpu::BindingType::StorageTexture {
                         access: wgpu::StorageTextureAccess::WriteOnly,
-                        format: WORKING_FORMAT,
+                        format,
                         view_dimension: wgpu::TextureViewDimension::D2,
                     },
                     count: None,
@@ -927,7 +935,7 @@ impl LensFlareFx {
                     visibility: c,
                     ty: wgpu::BindingType::StorageTexture {
                         access: wgpu::StorageTextureAccess::WriteOnly,
-                        format: WORKING_FORMAT,
+                        format,
                         view_dimension: wgpu::TextureViewDimension::D2,
                     },
                     count: None,

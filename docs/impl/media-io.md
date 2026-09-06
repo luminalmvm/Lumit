@@ -116,6 +116,81 @@ Honour `AVFrame` colourspace/range metadata when present; the footage interpreta
 override ([03-DATA-MODEL.md](../03-DATA-MODEL.md) §3) wins over both. 10-bit (P010) is the
 same shader with a scale factor — plumb bit depth from day one, game HDR captures exist.
 
+### 5a. Float sources keep their depth
+
+A source ffmpeg decodes as **float** — OpenEXR, and whatever else carries the descriptor's
+`AV_PIX_FMT_FLAG_FLOAT` — never goes through the byte path above. Rounding an EXR into
+`AV_PIX_FMT_RGBA` threw away both the range above white and the precision a depth pass is
+made of, and it was doing so silently.
+
+- The decode scales to **`gbrapf32le`** and packs the four planes into interleaved
+  **32-bit floats**, `PixelFormat::LinearF32`. swscale has no packed float RGBA destination
+  (neither `rgbaf32le` nor `rgbaf16le` is among them), so the interleave happens in
+  `lumit-media::decode`. On the common case — an EXR with alpha — swscale has no conversion
+  to do at all, since that planar format is already what the decoder hands back: the
+  samples are copied, never converted.
+- **Full float, not half.** A Z channel is the thing this carries, and half runs out of
+  integer precision around 2048, which is an ordinary distance in a depth pass.
+- The buffer stays one `Vec<u8>` at every stage. `PixelFormat` beside it says how wide the
+  samples are, so the frame cache, the temporal neighbours and the byte budgets all work
+  unchanged — there are simply four times as many bytes per pixel.
+- **The upload is the linearisation.** Float pixels are already scene-linear, so
+  `lumit_gpu::ColourEngine::upload_float_frame` hands back a finished working texture and
+  the linearise pass does not run. With a colour space assigned the ordinary input
+  transform runs on the float values as they stand, writing into the source's own format
+  rather than the narrower working one — an input transform is a colour conversion, not a
+  decode, and `lumit_gpu::unencoded` leaves a float format alone, which is what makes one
+  pass correct for both widths.
+- **`Rgba32Float` needs `FLOAT32_FILTERABLE`**, since a layer's pixels are always sampled.
+  The device asks for it in the same "if the card has it" mask as the adapter's format
+  features. A card without it gets the same frame narrowed to half — every stop above white
+  kept, only the precision the hardware will sample — which is the softer-not-absent rule
+  the multisample fallback beside it follows.
+
+**Nothing flattens a float layer.** Each CPU stage that touches picture samples comes in a
+width to match: `paint::apply_strokes_f32`, `mask::apply_masks_f32`,
+`puppet::apply_puppet_f32` with `alpha_at_natural_f32`, and
+`lumit_flow::FlowEngine::synthesize_at_f32` for the Flow retiming policy. The two
+geometry-heavy ones — the puppet warp and the flow synthesis — are written once over a
+`Raster`/`Texel` trait rather than twice, since only reading a pixel in and writing one out
+ever depended on a byte.
+
+The one thing that differs by width is *where* flow synthesis runs. The compute kernel
+keeps its two frames in storage buffers of packed bytes, four to a pixel, so a float frame
+does not fit it, and widening those buffers would quadruple them for the eight-bit case
+that is nearly every case. A float plate retimed by Flow therefore costs a CPU pass per
+frame where an eight-bit one costs a compute dispatch. The arithmetic is identical — the
+synthesis has always worked in `f32` internally, and the card was only doing the same sums
+faster.
+
+### 5b. Reading OpenEXR by channel name
+
+The Extract channels effect (docs/08 §3.97) needs two things ffmpeg cannot do: **say which
+channels a file holds**, and **hand back one named channel**. Its decoder takes a `layer` and
+a `part` but has no way to enumerate either, so without the list the effect's dropdowns would
+be a box to type `Z` into blind. Both come from the `exr` crate, in `lumit-media::exr`;
+everything else about EXR still goes through ffmpeg, including the ordinary decode.
+
+- The **channel list** is read off the header alone, and passed through exactly as the file
+  wrote it, layer prefix and all — `Z`, `N.X`, `diffuse.R`, `crypto_object00.a`. A name the
+  user recognises from their render settings is worth more than a name that sorts nicely.
+- The **named read** takes four channel names, red to alpha, and builds an ordinary
+  `LinearF32` frame. An unfilled colour slot is black and an unfilled alpha is opaque; a name
+  the file does not hold reads as empty rather than as a fault. It reads the whole file, since
+  the crate's typed channel selection is compile-time shaped and these names are chosen at
+  run time — an EXR with forty AOVs costs forty AOVs of memory for the moment it takes to pull
+  four, which is the same order as opening the file costs anyway.
+- Half, float and uint channels all arrive as float, so a colour pass in half and a `Z` in
+  float and an object id in uint read alike.
+- The selection travels on the decode job and is part of the **cache key**, in both the
+  decoded-frame cache and `CompJob::source_key`. The same file at the same frame read as `Z`
+  is not the picture it opens as, and without that the cache would hand back whichever was
+  asked for first.
+- The frame's own file is resolved through `Run::file_at`, so a numbered run extracts frame
+  N's channels out of frame N's file. `downsample` then honours the preview width, box
+  averaging rather than dropping samples — a depth pass reads as the distance across the pixel
+  rather than as whichever corner was sampled.
+
 ## 6. Audio decode
 
 Decode to **f32 interleaved at the device rate** (swr_convert to 48 kHz default), cache
@@ -144,7 +219,16 @@ shader on GPU → readback 8-bit/10-bit NV12 → encoder. Muxing: mp4 with `+fas
 4. Colour golden: synthetic NV12 ramps → known linear values within 1 LSB of 16-bit.
 5. Throughput gate: 4K60 H.264 sustained decode ≥ 60 fps on reference hardware via the
    baseline path (hw decode, CPU copy) — proves v1 is viable even if interop slips.
-6. Image sequences: frame N of a run decodes file N, out of order as well as
+6. Float depth: an EXR carrying a value four times white decodes to that value, not to
+   clipped white, and an ordinary eight-bit clip still decodes to four bytes a pixel. The
+   plate reaches the draw list still float, masked as well as bare — the draw list is the
+   last place anything can say what the samples are before the upload picks a texture
+   format. Then each CPU stage in its float form: a stroke leaves the unpainted part of an
+   above-white plate untouched, an erase keeps the colour it uncovers, the puppet's sample
+   and alpha lift read the right channel at the right width, and flow synthesis at half
+   phase averages 2.0 and 6.0 to 4.0 rather than clamping both ends to 1.0 first. Every one
+   of them refuses a raster whose length does not match its stated size.
+7. Image sequences: frame N of a run decodes file N, out of order as well as
    forward; the run detected from any file of it is the same run; a gap ends it and the
    frames past the gap are unreachable rather than shifted into place; and what Lumit's own
    image-sequence export writes reads back as the run it is. Built with Netpbm fixtures —

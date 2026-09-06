@@ -27,7 +27,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use crate::{GpuContext, WORKING_FORMAT};
+use crate::GpuContext;
 
 use super::{work_texture, FxEngine};
 
@@ -94,7 +94,7 @@ impl CustomShaderPipelines {
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::StorageTexture {
                             access: wgpu::StorageTextureAccess::WriteOnly,
-                            format: WORKING_FORMAT,
+                            format: ctx.working(),
                             view_dimension: wgpu::TextureViewDimension::D2,
                         },
                         count: None,

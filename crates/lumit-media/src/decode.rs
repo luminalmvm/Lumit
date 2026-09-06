@@ -24,13 +24,52 @@ use rsmpeg::ffi;
 use rsmpeg::swscale::SwsContext;
 use rsmpeg::UnsafeDerefMut;
 
-/// A decoded frame as straight (non-premultiplied) RGBA8, sRGB-encoded.
+/// How wide a decoded frame's samples are, and what they already mean.
+///
+/// **In plain terms.** Most footage arrives as one byte a channel with the
+/// sRGB curve baked in, and the graphics card undoes that curve on upload. A
+/// few formats do not: an OpenEXR frame is float and already scene-linear, and
+/// rounding it into bytes throws away both the range above white and the
+/// precision a depth pass is made of. This says which of the two a frame is,
+/// so the buffer beside it can stay one `Vec<u8>` either way — the bytes are
+/// the same bytes, there are just four times as many of them per pixel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PixelFormat {
+    /// Four bytes a pixel, sRGB-encoded, straight alpha. Every eight-bit
+    /// source, which is nearly all of them.
+    Srgb8,
+    /// Sixteen bytes a pixel: four 32-bit floats, already scene-linear, so
+    /// nothing decodes them on the way in. Values above 1.0 are ordinary here.
+    ///
+    /// Full float rather than half because a Z channel is the thing this
+    /// carries: half runs out of integer precision around 2048, which is an
+    /// ordinary distance in a depth pass, and a depth pass that quantises is
+    /// worse than useless for the effects that read it.
+    LinearF32,
+}
+
+impl PixelFormat {
+    /// Bytes one pixel occupies in the buffer.
+    #[must_use]
+    pub fn bytes_per_px(self) -> usize {
+        match self {
+            PixelFormat::Srgb8 => 4,
+            PixelFormat::LinearF32 => 16,
+        }
+    }
+}
+
+/// A decoded frame as straight (non-premultiplied) RGBA.
 /// Linearisation happens on the GPU per docs/06-RENDER-PIPELINE.md; this CPU
 /// struct is the hand-off format for upload.
+///
+/// `rgba` is channel order, not sample width: [`Self::format`] says how wide
+/// each of the four channels is, and a float frame carries four times the bytes.
 pub struct DecodedFrame {
     pub width: u32,
     pub height: u32,
     pub rgba: Vec<u8>,
+    pub format: PixelFormat,
 }
 
 /// A decoded frame as single-channel luma, at the file's own raster size.
@@ -390,7 +429,109 @@ fn convert_luma(frame: &AVFrame) -> Result<LumaFrame, MediaError> {
     })
 }
 
+/// Whether this pixel format carries float samples — an OpenEXR frame, and
+/// anything else ffmpeg hands back as float.
+///
+/// Read off libav's own descriptor rather than matched against a list of
+/// format constants, so a float format nobody here has heard of is still
+/// recognised as one.
+fn is_float(format: i32) -> bool {
+    // SAFETY: `av_pix_fmt_desc_get` takes a format value and returns either a
+    // pointer to a static descriptor libav owns for the lifetime of the
+    // process, or null for a value it does not recognise — which the null
+    // check below is what handles. Nothing is allocated and nothing borrowed.
+    #[allow(unsafe_code)]
+    unsafe {
+        let desc = ffi::av_pix_fmt_desc_get(format);
+        !desc.is_null() && ((*desc).flags & u64::from(ffi::AV_PIX_FMT_FLAG_FLOAT)) != 0
+    }
+}
+
+/// A float frame packed as scene-linear 32-bit floats, keeping the range and
+/// the precision the eight-bit path would have rounded away
+/// (docs/impl/media-io.md §5a).
+///
+/// swscale has no packed float RGBA output — neither `rgbaf32le` nor
+/// `rgbaf16le` is among its destinations — so the scale lands in planar
+/// `gbrapf32le` and the interleave happens here. That is the same shape as the
+/// encoder's own pack stage, and on the common case (an EXR with alpha)
+/// swscale has no conversion to do at all, since that planar format is already
+/// the decoder's own output: the samples are copied, never converted.
+fn convert_linear_f32(
+    frame: &AVFrame,
+    target_width: Option<u32>,
+) -> Result<DecodedFrame, MediaError> {
+    let src_w = frame.width;
+    let src_h = frame.height;
+    let dst_w = target_width
+        .map(|w| i32::try_from(w).unwrap_or(src_w))
+        .unwrap_or(src_w)
+        .clamp(2, src_w.max(2));
+    let dst_h =
+        ((i64::from(src_h) * i64::from(dst_w) / i64::from(src_w.max(1))) as i32).max(2) & !1;
+
+    let mut sws = SwsContext::get_context(
+        src_w,
+        src_h,
+        frame.format,
+        dst_w,
+        dst_h,
+        ffi::AV_PIX_FMT_GBRAPF32LE,
+        ffi::SWS_BILINEAR,
+        None,
+        None,
+        None,
+    )
+    .ok_or_else(|| MediaError::Ffmpeg("float swscale context creation failed".into()))?;
+
+    let mut out = AVFrame::new();
+    out.set_width(dst_w);
+    out.set_height(dst_h);
+    out.set_format(ffi::AV_PIX_FMT_GBRAPF32LE);
+    out.alloc_buffer()
+        .map_err(|e| MediaError::Ffmpeg(e.to_string()))?;
+    sws.scale_frame(frame, 0, src_h, &mut out)?;
+
+    let width = u32::try_from(dst_w).unwrap_or(0);
+    let height = u32::try_from(dst_h).unwrap_or(0);
+    let height_usize = height as usize;
+    let row_f32 = (width as usize).saturating_mul(4);
+    // Planar GBRAP: one plane each, in that order, four bytes a sample.
+    let mut planes: [Vec<u8>; 4] = [Vec::new(), Vec::new(), Vec::new(), Vec::new()];
+    for (i, plane) in planes.iter_mut().enumerate() {
+        let stride = usize::try_from(out.linesize[i]).unwrap_or(0);
+        let buf_len = stride
+            .checked_mul(height_usize)
+            .ok_or_else(|| MediaError::Ffmpeg("float frame buffer size overflow".into()))?;
+        let data = unsafe_plane_slice(&out, i, buf_len)?;
+        *plane = copy_tight_rows(data, stride, row_f32, height_usize)?;
+    }
+
+    // G, B, R, A planes out; R, G, B, A floats in. The alpha plane is always
+    // present in this format — swscale fills it opaque when the source had
+    // none — so a frame with no alpha reads as fully opaque rather than as a
+    // hole. Both sides are 32-bit floats, so each sample is four bytes moved,
+    // not a number converted.
+    let px = (width as usize).saturating_mul(height_usize);
+    let mut rgba = Vec::with_capacity(px.saturating_mul(16));
+    for n in 0..px {
+        let at = n.saturating_mul(4);
+        for plane in [&planes[2], &planes[0], &planes[1], &planes[3]] {
+            rgba.extend_from_slice(plane.get(at..at + 4).unwrap_or(&[0; 4]));
+        }
+    }
+    Ok(DecodedFrame {
+        width,
+        height,
+        rgba,
+        format: PixelFormat::LinearF32,
+    })
+}
+
 fn convert_rgba(frame: &AVFrame, target_width: Option<u32>) -> Result<DecodedFrame, MediaError> {
+    if is_float(frame.format) {
+        return convert_linear_f32(frame, target_width);
+    }
     let src_w = frame.width;
     let src_h = frame.height;
     let dst_w = target_width
@@ -441,23 +582,31 @@ fn convert_rgba(frame: &AVFrame, target_width: Option<u32>) -> Result<DecodedFra
         width,
         height,
         rgba,
+        format: PixelFormat::Srgb8,
     })
 }
 
 /// Read the frame's first data plane as a byte slice. Kept in one place so
 /// the raw-pointer handling is auditable (rsmpeg exposes planes as pointers).
 fn unsafe_data_slice(frame: &AVFrame, len: usize) -> Result<&[u8], MediaError> {
-    if frame.data[0].is_null() {
+    unsafe_plane_slice(frame, 0, len)
+}
+
+/// [`unsafe_data_slice`] for a chosen plane — the planar float path reads four
+/// of them, and a packed one only ever asks for plane nought.
+fn unsafe_plane_slice(frame: &AVFrame, plane: usize, len: usize) -> Result<&[u8], MediaError> {
+    let Some(ptr) = frame.data.get(plane).copied().filter(|p| !p.is_null()) else {
         return Err(MediaError::Ffmpeg("decoded frame has no data plane".into()));
-    }
-    // SAFETY: `frame` (`out` in `convert_rgba`) was just filled by
+    };
+    // SAFETY: `frame` (`out` in the two convert functions) was just filled by
     // `alloc_buffer` + `sws.scale_frame`, which allocate and write exactly
-    // `linesize[0] * height` bytes for plane 0 of a packed RGBA frame; `len`
-    // is computed by the caller from those same fields, and the null check
-    // above rules out the one case rsmpeg cannot statically guarantee.
+    // `linesize[plane] * height` bytes for each plane the destination format
+    // has; `len` is computed by the caller from those same fields, and the
+    // null check above rules out both a plane index this format does not have
+    // and the one case rsmpeg cannot statically guarantee.
     #[allow(unsafe_code)]
     unsafe {
-        Ok(std::slice::from_raw_parts(frame.data[0], len))
+        Ok(std::slice::from_raw_parts(ptr, len))
     }
 }
 
@@ -494,10 +643,71 @@ fn copy_tight_rows(
 mod tests {
     use super::*;
     use crate::index::build_frame_index;
-    use crate::index::tests_support::fixture;
+    use crate::index::tests_support::{exr_fixture, fixture, EXR_FIXTURE_VALUE};
 
     fn frame_hash(f: &DecodedFrame) -> String {
         blake3::hash(&f.rgba).to_hex().to_string()
+    }
+
+    /// Read pixel `n`'s four channels out of a float frame.
+    fn float_px(f: &DecodedFrame, n: usize) -> [f32; 4] {
+        let mut out = [0.0; 4];
+        for (c, slot) in out.iter_mut().enumerate() {
+            let at = n * 16 + c * 4;
+            let bytes = <[u8; 4]>::try_from(&f.rgba[at..at + 4]).unwrap();
+            *slot = f32::from_le_bytes(bytes);
+        }
+        out
+    }
+
+    /// The point of the whole float path: a value four times brighter than
+    /// white is still four times brighter than white after decoding.
+    ///
+    /// On the eight-bit path this pixel came back as 255, and every stop above
+    /// white in a render went with it.
+    #[test]
+    fn an_exr_keeps_its_values_above_white() {
+        let dir = tempfile::tempdir().unwrap();
+        let Some(file) = exr_fixture(dir.path()) else {
+            return; // no ffmpeg CLI on this machine; the suite still passes
+        };
+        let src = MediaSource::file(&file);
+        let index = build_frame_index(&src).unwrap();
+        let mut dec = VideoDecoder::open(&src, index).unwrap();
+        let frame = dec.frame_rgba(0, None).unwrap();
+
+        assert_eq!(frame.format, PixelFormat::LinearF32);
+        assert_eq!(frame.rgba.len(), (frame.width * frame.height) as usize * 16);
+        let [r, g, b, a] = float_px(&frame, 0);
+        // The file stores 32-bit floats and so does the buffer, and swscale has
+        // no conversion to do between them — so this is a copy, and the
+        // tolerance is here to absorb the fixture's own decimal literal rather
+        // than any arithmetic of ours.
+        for (name, got) in [("red", r), ("green", g), ("blue", b)] {
+            assert!(
+                (got - EXR_FIXTURE_VALUE).abs() < 1e-5,
+                "{name} decoded as {got}, wanted {EXR_FIXTURE_VALUE}"
+            );
+            assert!(got > 1.0, "{name} was clipped to {got}");
+        }
+        assert!((a - 1.0).abs() < 1e-6, "alpha decoded as {a}");
+    }
+
+    /// The eight-bit path is untouched by the float one: ordinary footage
+    /// still decodes to four bytes a pixel, sRGB-encoded, as it always did.
+    #[test]
+    fn ordinary_footage_still_decodes_to_eight_bit() {
+        let dir = tempfile::tempdir().unwrap();
+        let Some(file) = fixture(dir.path()) else {
+            return;
+        };
+        let src = MediaSource::file(&file);
+        let index = build_frame_index(&src).unwrap();
+        let mut dec = VideoDecoder::open(&src, index).unwrap();
+        let frame = dec.frame_rgba(0, None).unwrap();
+
+        assert_eq!(frame.format, PixelFormat::Srgb8);
+        assert_eq!(frame.rgba.len(), (frame.width * frame.height) as usize * 4);
     }
 
     /// The luma tap is the same picture, at the same size, seeking the same

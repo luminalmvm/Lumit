@@ -684,6 +684,47 @@ impl ProjectReference {
         Ok(())
     }
 
+    /// How many bits a channel this project's compositor works in — 8, 16 or
+    /// 32 (docs/06 §3.4).
+    #[frb(sync)]
+    pub fn colour_depth(&self) -> Result<u32, BridgeError> {
+        let state = self.state()?;
+        let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
+        Ok(state.store.snapshot().colour_depth.bits())
+    }
+
+    /// The depth this machine is actually working at — the project's setting
+    /// resolved against what the graphics card offers.
+    ///
+    /// Equal to [`Self::colour_depth`] on any adapter that can sample a
+    /// thirty-two-bit float texture, which is nearly all of them. Where it
+    /// differs the difference is a fact about the machine and never an error,
+    /// exactly as with the sample count beside it: the Settings row shows what
+    /// is being used beside what is set, and the project keeps the value its
+    /// author chose.
+    #[frb(sync)]
+    pub fn colour_depth_in_use(&self) -> Result<u32, BridgeError> {
+        let asked = self.colour_depth()?;
+        Ok(lumit_render::adapter_colour_depth(asked).unwrap_or(asked))
+    }
+
+    /// Set how many bits a channel the compositor works in.
+    ///
+    /// Takes 8, 16 or 32. Anything else reads as 16 rather than failing: an
+    /// unknown depth is not a reason to refuse an edit. An ordinary op, so it
+    /// is undoable, journalled and saved in the `.lum`.
+    #[frb(sync)]
+    pub fn set_colour_depth(&self, bits: u32) -> Result<(), BridgeError> {
+        let colour_depth = lumit_core::model::ColourDepth::from_bits(bits);
+        let state = self.state()?;
+        let state = state.write().map_err(|_| BridgeError::WriteFailed)?;
+        state
+            .store
+            .commit(Op::SetColourDepth { colour_depth })
+            .map_err(BridgeError::OpError)?;
+        Ok(())
+    }
+
     /// The project's colour shelf, in the order the colours were kept.
     ///
     /// Empty for a project nobody has kept a colour in. The picker reads this

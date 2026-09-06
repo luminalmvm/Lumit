@@ -21,6 +21,8 @@ pub struct MatteDraw {
     pub rgba: Vec<u8>,
     pub tex_w: u32,
     pub tex_h: u32,
+    /// How wide `rgba`'s samples are; see [`DrawSource::Pixels::format`].
+    pub format: lumit_media::PixelFormat,
     pub natural_size: (f32, f32),
     pub position: (f32, f32),
     pub anchor: (f32, f32),
@@ -87,6 +89,9 @@ pub struct DofInputDraw {
     pub rgba: Vec<u8>,
     pub tex_w: u32,
     pub tex_h: u32,
+    /// How wide `rgba`'s samples are — a depth pass arrives as an OpenEXR
+    /// more often than not, and that is exactly the input this carries.
+    pub format: lumit_media::PixelFormat,
     /// The depth layer's own effect stack, resolved at its layer time — run on
     /// the depth texture before it is resampled, when the consuming effect's
     /// depth source is `EffectsAndMasks` (mirroring the matte). Empty for
@@ -154,6 +159,12 @@ pub enum DrawSource {
         rgba: Vec<u8>,
         tex_w: u32,
         tex_h: u32,
+        /// How wide `rgba`'s samples are. `Srgb8` is uploaded and then
+        /// linearised on the card, as it always was; `LinearF16` is already
+        /// scene-linear and already the compositor's own width, so it is
+        /// uploaded straight into a working texture and the linearise pass is
+        /// skipped rather than made to do nothing.
+        format: lumit_media::PixelFormat,
         /// The footage item's OCIO colour space, by the loaded config's
         /// name. `None` — every layer that is not footage, and every
         /// footage item nobody has assigned — is the built-in interpretation

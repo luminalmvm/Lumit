@@ -202,6 +202,8 @@ List<_Format> get _formats => [
           ExportOutputType.imageSequence),
       _Format('tiff', l10n.formatTiffSequence, 'tiff', l10n.formatTiffPicker,
           ExportOutputType.imageSequence),
+      _Format('exr', l10n.formatExrSequence, 'exr', l10n.formatExrPicker,
+          ExportOutputType.imageSequence),
       _Format('m4a', l10n.formatM4a, 'm4a', l10n.formatM4aPicker,
           ExportOutputType.audioOnly),
       _Format('wav', l10n.formatWav, 'wav', l10n.formatWavPicker,
@@ -1986,7 +1988,13 @@ class _ExportDialogState extends State<_ExportDialog> {
         options: _caps.depths.isEmpty
             ? [_depth]
             : _caps.depths.map((d) => d.toInt()).toList(),
-        label: (d) => d >= 16 ? l10n.exportDepth16 : l10n.exportDepth8,
+        // OpenEXR carries floats and nothing else, so its 16 is half floats
+        // rather than sixteen-bit codes and it offers a 32 the others do not.
+        // Naming those by their depth alone keeps the row honest without a
+        // second word for what is already an established abbreviation.
+        label: (d) => _format.key == 'exr'
+            ? l10n.bitsPerChannel('$d')
+            : (d >= 16 ? l10n.exportDepth16 : l10n.exportDepth8),
         onChanged:
             _caps.depths.length > 1 ? (d) => _edit(() => _depth = d) : null,
       );

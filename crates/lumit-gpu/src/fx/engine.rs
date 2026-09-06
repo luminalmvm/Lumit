@@ -2,7 +2,7 @@
 //! kernel, builds the bind-group layouts and assembles the pipeline table.
 //! The per-effect apply methods live in the sibling family modules.
 
-use crate::{GpuContext, WORKING_FORMAT};
+use crate::GpuContext;
 
 use super::FxEngine;
 
@@ -26,7 +26,7 @@ impl FxEngine {
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::StorageTexture {
                             access: wgpu::StorageTextureAccess::WriteOnly,
-                            format: WORKING_FORMAT,
+                            format: ctx.working(),
                             view_dimension: wgpu::TextureViewDimension::D2,
                         },
                         count: None,
@@ -64,7 +64,7 @@ impl FxEngine {
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::StorageTexture {
                             access: wgpu::StorageTextureAccess::WriteOnly,
-                            format: WORKING_FORMAT,
+                            format: ctx.working(),
                             view_dimension: wgpu::TextureViewDimension::D2,
                         },
                         count: None,
@@ -145,7 +145,7 @@ impl FxEngine {
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::StorageTexture {
                             access: wgpu::StorageTextureAccess::WriteOnly,
-                            format: WORKING_FORMAT,
+                            format: ctx.working(),
                             view_dimension: wgpu::TextureViewDimension::D2,
                         },
                         count: None,
@@ -189,7 +189,7 @@ impl FxEngine {
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::StorageTexture {
                             access: wgpu::StorageTextureAccess::WriteOnly,
-                            format: WORKING_FORMAT,
+                            format: ctx.working(),
                             view_dimension: wgpu::TextureViewDimension::D2,
                         },
                         count: None,

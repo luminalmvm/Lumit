@@ -783,6 +783,10 @@ use lumit_media::encode::BitDepth;
 const EIGHT_ONLY: &[BitDepth] = &[BitDepth::Eight];
 /// The still formats carry either width.
 const EIGHT_OR_SIXTEEN: &[BitDepth] = &[BitDepth::Eight, BitDepth::Sixteen];
+/// OpenEXR carries floats and nothing else — writing eight-bit codes into one
+/// would be a scene file holding a picture, which is the one thing the format
+/// is for not doing. Half first because it is what a render farm writes.
+const EXR_DEPTHS: &[BitDepth] = &[BitDepth::Half, BitDepth::Float];
 /// AAC has no sample width of its own; only the delivery default stands.
 const AAC_DEPTH: &[AudioDepth] = &[AudioDepth::Sixteen];
 /// Uncompressed PCM in a `.wav` carries either width.
@@ -813,11 +817,15 @@ impl ExportFormat {
             // Stills: lossless RGBA, either depth, no sound and no bitrate.
             // The image2 muxer writes one file per frame and has nowhere to
             // put container metadata.
-            ExportFormat::Images(_) => FormatCaps {
+            ExportFormat::Images(f) => FormatCaps {
                 video: true,
                 audio: false,
                 alpha: true,
-                depths: EIGHT_OR_SIXTEEN,
+                depths: if f == lumit_media::encode::ImageFormat::Exr {
+                    EXR_DEPTHS
+                } else {
+                    EIGHT_OR_SIXTEEN
+                },
                 audio_rates: &[],
                 audio_depths: &[],
                 bit_rate: false,
@@ -1707,6 +1715,89 @@ pub fn play_done_sound() -> bool {
 /// file and `&[u16]` a sixteen-bit one, each channel little-endian (the byte
 /// order the encoder seam expects). There is nowhere left to widen a signal
 /// that was never deep, which is the point of it being typed.
+/// [`pack_frame`] for the scene-linear float depths (docs/06 §7.4a): the same
+/// channel and alpha decisions, on numbers that are already what the file will
+/// hold.
+///
+/// **No colour transform.** The integer path converts because it is writing a
+/// picture into a space a screen will read it in; this is writing the scene,
+/// which has no destination space to be converted to. An OpenEXR that had a
+/// transfer curve applied would be the one thing the format exists to avoid.
+///
+/// **No clamp either**, except on alpha, which is coverage and genuinely runs
+/// nought to one. The un-multiply divides colour back up and a premultiplied
+/// pixel brighter than its own coverage is exactly what an additive blend
+/// makes — at eight bits that has to be clipped, here it does not.
+#[must_use]
+pub fn pack_frame_f32(px: &[f32], channels: Channels, alpha: AlphaMode) -> Vec<u8> {
+    let straight = channels == Channels::RgbAlpha && alpha == AlphaMode::Straight;
+    let opaque = channels == Channels::Rgb;
+    let mut out = Vec::with_capacity(px.len() * 4);
+    for chunk in px.chunks_exact(4) {
+        let a = chunk[3];
+        let mut rgba = [chunk[0], chunk[1], chunk[2], chunk[3]];
+        if opaque {
+            rgba[3] = 1.0;
+        } else if straight && a > 0.0 {
+            for c in &mut rgba[..3] {
+                *c /= a;
+            }
+        } else if straight {
+            // No coverage: no colour to recover. Zero rather than a division
+            // that has no answer.
+            rgba[..3].fill(0.0);
+        }
+        for c in rgba {
+            out.extend_from_slice(&c.to_le_bytes());
+        }
+    }
+    out
+}
+
+/// [`lumit_core::pixels::letterbox_resize`] for scene-linear floats.
+///
+/// The integer resize is generic over a `Channel`, which is normalised-integer
+/// shaped — it counts to a maximum and rounds — so a float frame cannot ride
+/// it. Bilinear, the same filter the `Fast` resample uses, and nothing is
+/// clamped on the way through.
+#[must_use]
+pub fn letterbox_resize_f32(
+    px: &[f32],
+    src_w: u32,
+    src_h: u32,
+    dst_w: u32,
+    dst_h: u32,
+) -> Vec<f32> {
+    let (fit_w, fit_h, off_x, off_y) = lumit_core::pixels::fit_contain(src_w, src_h, dst_w, dst_h);
+    let (sw, sh) = (src_w.max(1) as usize, src_h.max(1) as usize);
+    let mut out = vec![0.0f32; (dst_w as usize) * (dst_h as usize) * 4];
+    for y in 0..fit_h as usize {
+        // The source row this output row sits on, in continuous coordinates.
+        let sy = ((y as f64 + 0.5) * f64::from(src_h) / f64::from(fit_h.max(1)) - 0.5)
+            .clamp(0.0, (sh - 1) as f64);
+        let (y0, fy) = (sy.floor() as usize, sy - sy.floor());
+        let y1 = (y0 + 1).min(sh - 1);
+        for x in 0..fit_w as usize {
+            let sx = ((x as f64 + 0.5) * f64::from(src_w) / f64::from(fit_w.max(1)) - 0.5)
+                .clamp(0.0, (sw - 1) as f64);
+            let (x0, fx) = (sx.floor() as usize, sx - sx.floor());
+            let x1 = (x0 + 1).min(sw - 1);
+            let at = |px_i: usize, py: usize, c: usize| -> f64 {
+                f64::from(px.get((py * sw + px_i) * 4 + c).copied().unwrap_or(0.0))
+            };
+            let to = ((y + off_y as usize) * dst_w as usize + x + off_x as usize) * 4;
+            for c in 0..4 {
+                let top = at(x0, y0, c) * (1.0 - fx) + at(x1, y0, c) * fx;
+                let bot = at(x0, y1, c) * (1.0 - fx) + at(x1, y1, c) * fx;
+                if let Some(slot) = out.get_mut(to + c) {
+                    *slot = (top * (1.0 - fy) + bot * fy) as f32;
+                }
+            }
+        }
+    }
+    out
+}
+
 pub fn pack_frame<C: lumit_core::pixels::Channel>(
     px: &[C],
     channels: Channels,
@@ -2428,6 +2519,27 @@ fn run(
                     px
                 };
                 pack_frame(&px, spec.channels, spec.alpha, colour.as_ref())
+            }
+            // The float depths read the composite back as it stands: no
+            // display transform, no curve, no clamp (docs/06 §7.4a). The
+            // channel and alpha choices still apply — they are about what the
+            // file carries, not about how bright it is — and the resize runs
+            // on the floats so a delivered EXR is filtered rather than
+            // point-sampled.
+            BitDepth::Half | BitDepth::Float => {
+                let (px, _, _) = renderer.render_preview_linear(
+                    doc,
+                    comp_id,
+                    src as u64,
+                    spec.render.quality,
+                )?;
+                let px = spec.crop.apply(&px, comp.width, comp.height, 4);
+                let px = if resize {
+                    letterbox_resize_f32(&px, crop_w, crop_h, tw, th)
+                } else {
+                    px
+                };
+                pack_frame_f32(&px, spec.channels, spec.alpha)
             }
         };
         if let Err(e) = sink.write_rgba(&rgba) {

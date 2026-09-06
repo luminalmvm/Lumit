@@ -986,6 +986,33 @@ pub fn apply_masks(
     }
 }
 
+/// [`apply_masks`] for the float frames a float source decodes to
+/// (`lumit_media::PixelFormat::LinearF32`): sixteen bytes a pixel, the alpha in
+/// the last four.
+///
+/// A mask gates coverage and nothing else, so this is the same one line of
+/// arithmetic against a wider number — which is why masking an OpenEXR keeps
+/// every stop above white the plate had, where routing it through the
+/// eight-bit gate would have flattened them to get at the alpha.
+pub fn apply_masks_f32(
+    rgba: &mut [u8],
+    w: u32,
+    h: u32,
+    natural_w: f64,
+    natural_h: f64,
+    masks: &[Mask],
+    t: f64,
+) {
+    if masks.is_empty() {
+        return;
+    }
+    let total = combined_coverage(masks, w, h, natural_w, natural_h, t);
+    for (px, cov) in rgba.chunks_exact_mut(16).zip(total) {
+        let a = crate::pixels::f32_at(px, 3) * f32::from(cov) / 255.0;
+        px[12..16].copy_from_slice(&a.to_le_bytes());
+    }
+}
+
 /// The combined 0..255 coverage of a mask stack at `w`×`h` (path coordinates
 /// in `natural` space) — the same maths [`apply_masks`] uses, exposed so
 /// GPU-sourced layers (Precomps) can upload it as a texture instead of
