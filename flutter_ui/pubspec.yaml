@@ -1,7 +1,7 @@
 name: lumit_flutter
 description: "Lumit's Flutter frontend; see docs/archive/flutter-port/."
 publish_to: 'none'
-version: 0.3.2+1
+version: 0.3.3+1
 
 environment: 
   sdk: '>=3.6.0 <4.0.0'
