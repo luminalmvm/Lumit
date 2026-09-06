@@ -178,6 +178,7 @@ pub fn resolve_drivers_projected(
         projection,
         budget: Cell::new(EVAL_BUDGET),
         streams: RefCell::new(Vec::new()),
+        arenas: RefCell::new(ArenaPool::default()),
         cross: true,
     };
     let mut out = ResolvedDrivers::default();
@@ -248,6 +249,7 @@ pub fn driven_volume_db(
         projection: points::Projection::FLAT,
         budget: Cell::new(EVAL_BUDGET),
         streams: RefCell::new(Vec::new()),
+        arenas: RefCell::new(ArenaPool::default()),
         cross: true,
     };
     match ev.output(*node, port, lt, 0)? {
@@ -297,6 +299,7 @@ pub fn effect_stream(
             projection,
             budget: Cell::new(EVAL_BUDGET),
             streams: RefCell::new(Vec::new()),
+            arenas: RefCell::new(ArenaPool::default()),
             cross: true,
         };
         ev.stream(effect, t, 0)
@@ -339,6 +342,7 @@ pub fn driver_stream(
             projection,
             budget: Cell::new(EVAL_BUDGET),
             streams: RefCell::new(Vec::new()),
+            arenas: RefCell::new(ArenaPool::default()),
             cross: true,
         };
         ev.tap_stream(node, t, 0)
@@ -383,6 +387,39 @@ pub fn temporal_window(graph: &LayerGraph, lt: f64, context: Arc<ExpressionConte
 }
 
 /// The demand-driven walk.
+#[derive(Default)]
+struct ArenaPool {
+    arenas: Vec<ResolvedStack>,
+    #[cfg(test)]
+    allocations: usize,
+    #[cfg(test)]
+    reuses: usize,
+    #[cfg(test)]
+    high_water: usize,
+}
+
+impl ArenaPool {
+    #[cfg(test)]
+    fn checked_out(&mut self, reused: bool) {
+        if reused {
+            self.reuses += 1;
+        } else {
+            self.allocations += 1;
+        }
+    }
+
+    #[cfg(not(test))]
+    fn checked_out(&mut self, _reused: bool) {}
+
+    #[cfg(test)]
+    fn returned(&mut self) {
+        self.high_water = self.high_water.max(self.arenas.len());
+    }
+
+    #[cfg(not(test))]
+    fn returned(&mut self) {}
+}
+
 struct Eval<'a> {
     graph: &'a LayerGraph,
     context: Arc<ExpressionContext>,
@@ -400,6 +437,9 @@ struct Eval<'a> {
     /// and a linear scan over three entries beats hashing a `Uuid`. The stream
     /// is shared rather than cloned: it is eight `Vec`s of up to the cap.
     streams: RefCell<Vec<(Uuid, Rc<PointsStream>)>>,
+    /// Reusable parameter arenas. Arenas are checked out before a driver call,
+    /// so recursive graph evaluation never holds a `RefCell` borrow.
+    arenas: RefCell<ArenaPool>,
     /// **Whether this walk may still cross a layer boundary**.
     ///
     /// A cross-layer tap evaluates the named layer with a fresh walk over
@@ -413,6 +453,30 @@ struct Eval<'a> {
 }
 
 impl Eval<'_> {
+    fn with_arena<R>(&self, f: impl FnOnce(&mut ResolvedStack) -> R) -> R {
+        let mut pool = self.arenas.borrow_mut();
+        let mut arena = match pool.arenas.pop() {
+            Some(arena) => {
+                pool.checked_out(true);
+                arena
+            }
+            None => {
+                pool.checked_out(false);
+                ResolvedStack::default()
+            }
+        };
+        drop(pool);
+        arena.clear();
+        let result = f(&mut arena);
+        arena.clear();
+        let mut pool = self.arenas.borrow_mut();
+        if pool.arenas.len() < MAX_DEPTH as usize + 1 {
+            pool.arenas.push(arena);
+            pool.returned();
+        }
+        result
+    }
+
     /// What driver `node` puts out of `port` at time `t`.
     fn output(&self, node: Uuid, port: &str, t: f64, depth: u32) -> Option<Value> {
         if depth >= MAX_DEPTH || self.budget.get() == 0 {
@@ -467,40 +531,40 @@ impl Eval<'_> {
         // drivers missing the 8 ms UI frame with the allocator, not the
         // arithmetic, on top of the profile. Pool the arenas on `Eval` then —
         // they are the same size every time and die in visit order.
-        let mut bag = ResolvedStack::new();
-        resolve_into_arena(
-            def,
-            inst,
-            NodeRef::Driver(node),
-            t,
-            0.0,
-            1.0,
-            &MarkerContext::NONE,
-            &mut bag,
-            self.context.clone(),
-            &wired,
-        );
-        let fx = bag.get(0)?;
-
-        let sample = |socket: &str, at: f64| self.input(node, socket, at, depth + 1);
-        let points = |socket: &str| self.points_input(node, socket, t, depth + 1);
-        let cx = DriverCx {
-            node,
-            inst,
-            lt: t,
-            context: &self.context,
-            params: fx.params,
-            audio: self.audio,
-            sample_input: &sample,
-            points_input: &points,
-        };
-        let mut found = None;
-        def.eval_driver(&cx, &mut |id, value| {
-            if id == port {
-                found = Some(value);
-            }
-        });
-        found
+        self.with_arena(|bag| {
+            resolve_into_arena(
+                def,
+                inst,
+                NodeRef::Driver(node),
+                t,
+                0.0,
+                1.0,
+                &MarkerContext::NONE,
+                bag,
+                self.context.clone(),
+                &wired,
+            );
+            let fx = bag.get(0)?;
+            let sample = |socket: &str, at: f64| self.input(node, socket, at, depth + 1);
+            let points = |socket: &str| self.points_input(node, socket, t, depth + 1);
+            let cx = DriverCx {
+                node,
+                inst,
+                lt: t,
+                context: &self.context,
+                params: fx.params,
+                audio: self.audio,
+                sample_input: &sample,
+                points_input: &points,
+            };
+            let mut found = None;
+            def.eval_driver(&cx, &mut |id, value| {
+                if id == port {
+                    found = Some(value);
+                }
+            });
+            found
+        })
     }
 
     /// What is feeding driver `node`'s `port` at time `t`, or `None` when the
@@ -607,6 +671,7 @@ impl Eval<'_> {
             projection: self.projection,
             budget: Cell::new(self.budget.get()),
             streams: RefCell::new(Vec::new()),
+            arenas: RefCell::new(ArenaPool::default()),
             cross: false,
         };
         let stream = far.stream(producer.id, t, 0);
@@ -694,32 +759,52 @@ impl Eval<'_> {
             source_matte: Vec::new(),
         };
 
-        // **px@comp, always**: a stream read as data is in composition
-        // pixels whatever raster the preview happens to be drawn at, so the
-        // number Nearest distance hands a px@comp parameter travels through the
-        // same rescale a typed one does and lands in the right units.
-        let mut bag = ResolvedStack::new();
-        resolve_into_arena(
-            def,
-            inst,
-            NodeRef::Effect(effect),
-            t,
-            0.0,
-            1.0,
-            &MarkerContext::NONE,
-            &mut bag,
-            self.context.clone(),
-            &wired,
-        );
-        let params = bag.get(0)?.params;
+        // Resolve into a checked-out arena, but reduce the borrowed parameters
+        // to owned stream inputs before returning it to the reentrant pool.
+        enum Producer {
+            Grid(PointsStream),
+            Particulate {
+                points: points::PointsParams,
+                window_frames: i64,
+            },
+        }
+        let dt = 1.0 / comp.frame_rate.fps().max(1.0);
+        let producer = self.with_arena(|bag| {
+            resolve_into_arena(
+                def,
+                inst,
+                NodeRef::Effect(effect),
+                t,
+                0.0,
+                1.0,
+                &MarkerContext::NONE,
+                bag,
+                self.context.clone(),
+                &wired,
+            );
+            let params = bag.get(0)?.params;
+            match inst.effect.match_name.as_str() {
+                "grid" => Some(Producer::Grid(
+                    super::effects::grid::Grid::read(params).stream(self.projection),
+                )),
+                "particulate" => {
+                    let particulate = super::effects::particulate::Particulate::read(params);
+                    Some(Producer::Particulate {
+                        points: particulate.points(),
+                        window_frames: particulate.window_frames(dt),
+                    })
+                }
+                _ => None,
+            }
+        })?;
         // **A generator's stream is arithmetic and nothing else**: no
         // schedule to scan, no mask to flatten, no clock to read. It is here
         // rather than behind a trait method because the two producers want
         // genuinely different things from the document — Particulate wants the
         // whole history of its Emit rate track — and a trait method wide enough
         // to carry both would be an interface shaped by its callers.
-        if inst.effect.match_name == "grid" {
-            let stream = Rc::new(super::effects::grid::Grid::read(params).stream(self.projection));
+        if let Producer::Grid(stream) = producer {
+            let stream = Rc::new(stream);
             self.streams.borrow_mut().push((effect, Rc::clone(&stream)));
             return Some(stream);
         }
@@ -732,10 +817,13 @@ impl Eval<'_> {
         // memoised, so a future carriage that can answer will not find a wrong
         // answer cached in front of it. Anything else this build does not know
         // how to evaluate falls out here too, which is the same calm.
-        if inst.effect.match_name != "particulate" {
+        let Producer::Particulate {
+            points,
+            window_frames,
+        } = producer
+        else {
             return None;
-        }
-        let p = super::effects::particulate::Particulate::read(params);
+        };
 
         // The mask-path emitter's polyline, flattened at composition scale, by
         // the rule the draw builder applies: a row the panel does not show, or
@@ -757,19 +845,15 @@ impl Eval<'_> {
         // graph once per scanned frame would make one picture cost a thousand
         // driver walks, and a rate that rewrote its own past would make
         // particles jump about as the wire moved. Both readers, one rule.
-        let dt = 1.0 / comp.frame_rate.fps().max(1.0);
         let rate_at = |lt: f64| -> f64 {
             inst.float_at_with_context("emit_rate", lt, self.context.clone())
                 .unwrap_or(0.0)
         };
-        let sched = super::points::Schedule::scan(
-            dt,
-            (t / dt).floor() as i64,
-            p.window_frames(dt),
-            &rate_at,
-        );
+        let mut sched =
+            super::points::Schedule::scan(dt, (t / dt).floor() as i64, window_frames, &rate_at);
+        sched.trim_to_newest(u64::from(points.cap));
         let stream = Rc::new(super::points::evaluate(
-            &p.points().projected(self.projection),
+            &points.projected(self.projection),
             &sched,
             t,
             &path,
@@ -1997,12 +2081,18 @@ mod tests {
             projection: points::Projection::FLAT,
             budget: Cell::new(EVAL_BUDGET),
             streams: RefCell::new(Vec::new()),
+            arenas: RefCell::new(ArenaPool::default()),
             cross: true,
         };
         assert!(ev.output(a.id, points_sample::COUNT_PORT, 1.0, 0).is_some());
         assert!(ev
             .output(b.id, points_sample::NEAREST_PORT, 1.0, 0)
             .is_some());
+        assert_eq!(
+            ev.arenas.borrow().arenas.len(),
+            2,
+            "the nested scalar-to-stream evaluation returns both arenas for reuse"
+        );
         assert_eq!(
             ev.streams.borrow().len(),
             1,
@@ -2012,6 +2102,99 @@ mod tests {
             EVAL_BUDGET - ev.budget.get() < 16,
             "a two-driver graph must not spend a frame's budget"
         );
+    }
+
+    /// P-001: scalar resolutions return a cleared arena, including the normal
+    /// repeated-output and early-`None` paths.
+    #[test]
+    fn scalar_arena_pool_reuses_cleared_arenas_and_bounds_retention() {
+        let remap = inst("remap");
+        let graph = LayerGraph {
+            nodes: vec![remap.clone()],
+            ..LayerGraph::default()
+        };
+        let ev = Eval {
+            graph: &graph,
+            context: ctx(),
+            audio: None,
+            projection: points::Projection::FLAT,
+            budget: Cell::new(EVAL_BUDGET),
+            streams: RefCell::new(Vec::new()),
+            arenas: RefCell::new(ArenaPool::default()),
+            cross: true,
+        };
+        for _ in 0..64 {
+            assert!(ev.output(remap.id, "value", 0.0, 0).is_some());
+        }
+        let _: Option<()> = ev.with_arena(|_| None);
+        let pool = ev.arenas.borrow();
+        assert_eq!(pool.allocations, 1);
+        assert!(pool.reuses >= 64);
+        assert_eq!(pool.high_water, 1);
+        assert_eq!(pool.arenas.len(), 1);
+        assert!(pool.arenas.iter().all(|arena| arena.len() == 0));
+    }
+
+    /// P-001: stream resolution reduces its borrowed parameters before return,
+    /// so repeated streams can reuse the same cleared arena.
+    #[test]
+    fn stream_arena_pool_reuses_owned_stream_inputs_and_bounds_retention() {
+        let grid = inst("grid");
+        let graph = LayerGraph::default();
+        let ev = Eval {
+            graph: &graph,
+            context: staged(vec![grid.clone()], graph.clone()),
+            audio: None,
+            projection: points::Projection::FLAT,
+            budget: Cell::new(EVAL_BUDGET),
+            streams: RefCell::new(Vec::new()),
+            arenas: RefCell::new(ArenaPool::default()),
+            cross: true,
+        };
+        for _ in 0..64 {
+            assert!(ev.stream(grid.id, 0.0, 0).is_some());
+            ev.streams.borrow_mut().clear();
+        }
+        let pool = ev.arenas.borrow();
+        assert_eq!(pool.allocations, 1);
+        assert!(pool.reuses >= 63);
+        assert_eq!(pool.high_water, 1);
+        assert!(pool.arenas.iter().all(|arena| arena.len() == 0));
+    }
+
+    /// P-001: checking out another arena while an outer scalar/stream resolve
+    /// holds one is reentrant and cannot retain stale state or a RefCell borrow.
+    #[test]
+    fn nested_arena_checkout_is_reentrant_and_returns_both_arenas() {
+        let graph = LayerGraph::default();
+        let ev = Eval {
+            graph: &graph,
+            context: ctx(),
+            audio: None,
+            projection: points::Projection::FLAT,
+            budget: Cell::new(EVAL_BUDGET),
+            streams: RefCell::new(Vec::new()),
+            arenas: RefCell::new(ArenaPool::default()),
+            cross: true,
+        };
+        ev.with_arena(|outer| {
+            outer.begin(
+                super::super::BUILTIN_DEFS.get("blur").expect("blur"),
+                Uuid::nil(),
+            );
+            ev.with_arena(|inner| {
+                assert_eq!(inner.len(), 0, "nested checkout starts clear");
+                inner.begin(
+                    super::super::BUILTIN_DEFS.get("grid").expect("grid"),
+                    Uuid::nil(),
+                );
+            });
+            assert_eq!(outer.len(), 1, "inner clear cannot touch outer state");
+        });
+        let pool = ev.arenas.borrow();
+        assert_eq!(pool.allocations, 2);
+        assert_eq!(pool.high_water, 2);
+        assert!(pool.arenas.iter().all(|arena| arena.len() == 0));
     }
 
     /// **Termination is the commit-time refusal, and bounded work is the belt**
@@ -2062,6 +2245,7 @@ mod tests {
             projection: points::Projection::FLAT,
             budget: Cell::new(EVAL_BUDGET),
             streams: RefCell::new(Vec::new()),
+            arenas: RefCell::new(ArenaPool::default()),
             cross: true,
         };
         let _ = ev.output(sampler.id, points_sample::COUNT_PORT, 1.0, 0);
