@@ -86,7 +86,7 @@ runs:
     # primary key, and the next run finds it ahead of the stale one.
     - name: Restore the built keg
       id: cache
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: ${{ steps.paths.outputs.cellar }}
         key: ffmpeg-8.1.2-${{ runner.os }}-${{ runner.arch }}-bump${{ inputs.cache-bump }}-${{ github.run_id }}
@@ -190,7 +190,7 @@ runs:
     # run's prefix restore finds it first.
     - name: Save the built keg
       if: steps.build.outcome == 'success'
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: ${{ steps.paths.outputs.cellar }}
         key: ${{ steps.cache.outputs.cache-primary-key }}

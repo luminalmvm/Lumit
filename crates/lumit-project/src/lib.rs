@@ -414,6 +414,13 @@ pub fn frame_cache_dir(doc_id: Uuid) -> Option<PathBuf> {
     Some(dirs.cache_dir().join("frames").join(doc_id.to_string()))
 }
 
+/// The application's own cache directory, the parent of every folder below,
+/// which unlike `/tmp` belongs to one user on every platform.
+pub fn cache_dir() -> Option<PathBuf> {
+    let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
+    Some(dirs.cache_dir().to_path_buf())
+}
+
 /// Camera-solve sidecar directory (docs/10-FILE-FORMAT.md §3) — where a
 /// tracked clip's solve is parked so the next session does not re-track it.
 ///
