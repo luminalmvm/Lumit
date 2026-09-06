@@ -975,9 +975,14 @@ fn feed_layer(
         if let LayerKind::Footage { item, .. } = &layer.kind {
             let comp_dt = 1.0 / comp.frame_rate.fps().max(1.0);
             h.update(b"temporal/");
-            for o in lumit_core::fx::stack_temporal_window(&layer.effects, layer.switches.fx, lt)
-                .into_iter()
-                .filter(|&o| o != 0)
+            // Asked at the layer's frame, which is the unit a plugin counts in.
+            for o in lumit_core::fx::stack_temporal_window(
+                &layer.effects,
+                layer.switches.fx,
+                lt / comp_dt,
+            )
+            .into_iter()
+            .filter(|&o| o != 0)
             {
                 let nlt = lt + f64::from(o) * comp_dt;
                 let nst = layer.source_time_at(nlt);

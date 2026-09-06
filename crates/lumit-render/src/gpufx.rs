@@ -6919,6 +6919,88 @@ mod tests {
             .any(|(id, _)| *id == inst.id));
     }
 
+    /// **A run-time effect is handed the layer's decoded neighbours**, read
+    /// back as plain floats beside the picture. A plugin that reads the frames
+    /// either side (a motion blur) was handed nothing but the frame in hand
+    /// and compared it with itself. This is the seam that carries the
+    /// neighbours from the decode to the definition's CPU render.
+    #[test]
+    fn a_run_time_effect_is_handed_the_decoded_neighbours() {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
+            return;
+        };
+        /// Paints every pixel with the -1 neighbour's red, or leaves the
+        /// picture alone when there is no such neighbour.
+        struct Previous(&'static lumit_core::fx::EffectSchema);
+        impl lumit_core::fx::EffectDef for Previous {
+            fn schema(&self) -> &'static lumit_core::fx::EffectSchema {
+                self.0
+            }
+            fn apply_cpu_temporal(
+                &self,
+                _inst: uuid::Uuid,
+                _lt: f64,
+                rgba: &mut [f32],
+                _w: u32,
+                _h: u32,
+                _p: lumit_core::fx::Params<'_>,
+                neighbours: &[(i32, &[f32])],
+            ) {
+                let Some((_, previous)) = neighbours.iter().find(|(o, _)| *o == -1) else {
+                    return;
+                };
+                for (out, from) in rgba.iter_mut().zip(previous.iter()) {
+                    *out = *from;
+                }
+            }
+        }
+        let def: &'static Previous = Box::leak(Box::new(Previous(
+            a_run_time_def("ofx:test.render.previous").schema,
+        )));
+        assert!(crate::gpufx::ofx::register(def), "it registered");
+
+        let fx = ctx.fx();
+        let (w, h) = (4u32, 4u32);
+        let source: Vec<f32> = (0..(w * h)).flat_map(|_| [0.2f32, 0.2, 0.2, 1.0]).collect();
+        let previous: Vec<f32> = (0..(w * h)).flat_map(|_| [0.8f32, 0.4, 0.1, 1.0]).collect();
+        let inst = a_run_time_instance("ofx:test.render.previous");
+        let ops = lumit_core::fx::resolve_stack(
+            std::slice::from_ref(&inst),
+            0.0,
+            1000.0,
+            1.0,
+            &lumit_core::fx::MarkerContext::NONE,
+            std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
+        );
+
+        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
+        let neighbours = [(-1, lumit_gpu::fx::upload_linear_f32(&ctx, &previous, w, h))];
+        let out = crate::fxops::run_ops(
+            fx,
+            &ctx,
+            tex,
+            w,
+            h,
+            &ops,
+            &neighbours,
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            None,
+            None,
+        );
+        let got = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+        assert!(
+            (got[0] - 0.8).abs() < 1e-2 && (got[1] - 0.4).abs() < 1e-2,
+            "the neighbour never reached the definition: {:?}",
+            &got[..4]
+        );
+    }
+
     /// **Shake picks its own kernel** (docs/08 §3.4, T18).
     ///
     /// Shake is the one migrated effect whose dispatch forks: plain, it is the

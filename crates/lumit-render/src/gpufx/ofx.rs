@@ -18,8 +18,12 @@
 //! host of anything). `lumit-ofx` builds the definition; the composition root
 //! registers it here and in the catalogue; this draws it.
 //!
-//! **It takes no side table** — `aux()` is [`AuxKind::None`] — and it consumes
-//! no matte of its own, so the generic dissolve beside the dispatch spends it
+//! **Its one side table is the layer's neighbours**: `aux()` is
+//! [`AuxKind::Neighbours`], the decoded frames either side that Echo reads as
+//! textures, read back here for a plugin that reads them on the CPU. A motion
+//! blur asks its input for `t - 1` and `t + 1`, and a host that answers both
+//! with the frame in hand shows it a scene with no motion. It consumes no
+//! matte of its own, so the generic dissolve beside the dispatch spends it
 //! exactly as it does for any other effect on
 //! [`MatteRole::Strength`](lumit_core::fx::MatteRole). A plugin's rows
 //! are its own; a Matte the plugin never heard of would be a control nothing
@@ -33,7 +37,7 @@ use lumit_gpu::fx::FxEngine;
 use lumit_gpu::GpuContext;
 use uuid::Uuid;
 
-use super::{AuxSlot, GpuEffect};
+use super::{AuxKind, AuxSlot, GpuEffect};
 
 type Tex = wgpu::Texture;
 
@@ -83,13 +87,14 @@ pub fn clear_errored(instance: Uuid) {
 
 /// Run one definition's own CPU render and file whatever it says about it.
 ///
-/// This is the pass below, minus the two transfers: the picture goes to the
-/// definition as plain floats and the badge comes back. It is a function rather
-/// than three lines inside [`CpuPass::run`] because the failure path — a plugin
-/// that died, hung or was switched off — has to be provable without a graphics
-/// card, and the seam that turns "the plugin failed" into "the layer wears a
-/// badge" is exactly these two calls in this order
-/// (docs/impl/ofx-host.md §5 item 4).
+/// This is the pass below, minus the transfers: the picture and its neighbours
+/// go to the definition as plain floats and the badge comes back. It is a
+/// function rather than three lines inside [`CpuPass::run`] because the
+/// failure path (a plugin that died, hung or was switched off) has to be
+/// provable without a graphics card, and the seam that turns "the plugin
+/// failed" into "the layer wears a badge" is exactly these two calls in this
+/// order (docs/impl/ofx-host.md §5 item 4).
+#[allow(clippy::too_many_arguments)]
 pub fn apply_and_note(
     def: &'static dyn EffectDef,
     instance: Uuid,
@@ -98,8 +103,9 @@ pub fn apply_and_note(
     w: u32,
     h: u32,
     p: Params<'_>,
+    neighbours: &[(i32, &[f32])],
 ) {
-    def.apply_cpu_at(instance, lt, rgba, w, h, p);
+    def.apply_cpu_temporal(instance, lt, rgba, w, h, p, neighbours);
     note(instance, def.last_error());
 }
 
@@ -131,6 +137,10 @@ impl GpuEffect for CpuPass {
         self.0.schema().match_name
     }
 
+    fn aux(&self) -> AuxKind {
+        AuxKind::Neighbours
+    }
+
     fn run(
         &self,
         _fx: &FxEngine,
@@ -152,7 +162,24 @@ impl GpuEffect for CpuPass {
             );
             return tex.clone();
         };
-        apply_and_note(self.0, instance, lt, &mut rgba, w, h, p);
+        // The neighbours come off the card the same way, those at the
+        // picture's own size: one at another size is one the plugin could not
+        // compare with the frame in hand, and it is left out rather than
+        // padded, so the plugin gets the frame in hand for that time.
+        let neighbours: Vec<(i32, Vec<f32>)> = aux
+            .neighbours()
+            .iter()
+            .filter(|(_, neighbour)| neighbour.width() == w && neighbour.height() == h)
+            .filter_map(|(offset, neighbour)| {
+                let pixels = lumit_gpu::fx::readback_linear_f32(ctx, neighbour, w, h).ok()?;
+                Some((*offset, pixels))
+            })
+            .collect();
+        let borrowed: Vec<(i32, &[f32])> = neighbours
+            .iter()
+            .map(|(offset, pixels)| (*offset, pixels.as_slice()))
+            .collect();
+        apply_and_note(self.0, instance, lt, &mut rgba, w, h, p, &borrowed);
         lumit_gpu::fx::upload_linear_f32(ctx, &rgba, w, h)
     }
 }

@@ -29,7 +29,7 @@ use crate::instance::ParamSnapshot;
 
 /// The version both sides must agree on. Bump it whenever a message changes
 /// shape: an old broker beside a new host is a mismatch, not a crash.
-pub const PROTOCOL_VERSION: u32 = 2;
+pub const PROTOCOL_VERSION: u32 = 3;
 
 /// Which instance a message is about. The host mints these; the broker only
 /// ever quotes one back.
@@ -124,7 +124,10 @@ pub enum HostMessage {
         bounds: RectI,
         /// Which way up the pictures are handed to the plugin.
         order: RowOrder,
-        /// One picture per input clip, already in the ring.
+        /// One picture per input clip, already in the ring, and the Source
+        /// clip's frames at other times, each under its own time, the
+        /// neighbours a motion blur or a retimer reads, shipped with the frame
+        /// rather than fetched after it (docs/impl/ofx-host.md §4).
         inputs: Vec<FrameRef>,
         /// The slot the answer goes in.
         output: Slot,

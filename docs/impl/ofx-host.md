@@ -138,8 +138,23 @@ What the built transport pins, beyond the sketch above:
 - Frames cross the ring as fp32 RGBA, tightly packed top-down. The header's row bytes
   describe *the ring*; the flip to OFX's bottom-up layout happens at the plugin boundary
   inside the broker.
-- The prefetch hook sits between `getFramesNeeded` and `isIdentity` — the only point in
-  §3's order where a frame at another time may be asked for.
+- **The frames either side travel with the frame.** The engine decodes a temporal effect's
+  neighbours beside the frame in hand (`stack_temporal_window`), and the render request
+  carries them by offset. They go into the same shipment as the frame, each `FrameRef` under
+  its own time, and onto the instance before the first question. That is where they have to
+  be: a plugin answers `getFramesNeeded` after reading how long its clip is, and a motion
+  blur (RSMB) fetches `t ± 1` inside its render. The clip's frame range and the instance's
+  duration are set to exactly the frames in hand before every render, so a plugin that
+  clamps to its clip sees a clip with neighbours in it. Told the clip was one frame long,
+  it asked for nothing and found no motion, which is what "RSMB does nothing" was. A
+  shipment the ring can't hold whole ships the frame alone. A clip the request has no
+  picture for (a plugin's optional second input) is unconnected, so nothing fetches from it.
+- The prefetch hook sits between `getFramesNeeded` and `isIdentity`, for whatever a plugin
+  asks for beyond what came with the frame, and those answer with the frame in hand.
+- **Time is in frames.** OFX counts in frames and the resolve walk speaks in seconds. The
+  definition's `resolve_derived` puts the layer's frame (`round(lt × comp fps)`) in the bag
+  as `derived.frame`, and the render, `getFramesNeeded` (asked through
+  `stack_temporal_window`, which now takes the frame) and the neighbour keys all use it.
 
 ## 4a. Becoming an effect
 
@@ -175,7 +190,10 @@ registered into the same catalogue the built-ins live in — the seam
 - **`getFramesNeeded` is asked per instance and per frame** through
   `EffectDef::frames_needed`, and the offsets it answers reach `stack_temporal_window` — and
   through it the frame key and the neighbour decode. The static declaration §3's describe
-  produced is the fallback and the gate.
+  produced is the fallback and the gate. The decoded neighbours come back down through
+  `EffectDef::apply_cpu_temporal`: the read-back pass declares `AuxKind::Neighbours`, reads
+  each neighbour at the picture's size off the card, and the definition hands them to the
+  host with the frame (§4).
 - **A failed render is identity, byte for byte**: the definition returns without writing,
   and files a sentence under the instance for the badge.
 - **Two hosts.** `LocalHost` drives a bundle in this process; `BrokerHost` drives §4's

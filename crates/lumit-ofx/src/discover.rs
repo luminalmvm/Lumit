@@ -194,14 +194,21 @@ struct Gated {
 }
 
 impl PluginHost for Gated {
-    fn render(&self, inst: Uuid, time: f64, params: &ParamSnapshot, source: Frame16) -> Rendering {
+    fn render(
+        &self,
+        inst: Uuid,
+        time: f64,
+        params: &ParamSnapshot,
+        source: Frame16,
+        neighbours: &[(i32, Frame16)],
+    ) -> Rendering {
         if is_disabled(&self.identifier) {
             return Rendering {
                 frame: source,
                 error: Some(DISABLED_REASON.to_owned()),
             };
         }
-        self.inner.render(inst, time, params, source)
+        self.inner.render(inst, time, params, source, neighbours)
     }
 
     fn frames_needed(&self, inst: Uuid, time: f64, params: &ParamSnapshot) -> Option<Vec<i32>> {
@@ -346,7 +353,14 @@ fn scan_in_process(
 struct Absent;
 
 impl PluginHost for Absent {
-    fn render(&self, _: Uuid, _: f64, _: &ParamSnapshot, source: Frame16) -> Rendering {
+    fn render(
+        &self,
+        _: Uuid,
+        _: f64,
+        _: &ParamSnapshot,
+        source: Frame16,
+        _: &[(i32, Frame16)],
+    ) -> Rendering {
         Rendering {
             frame: source,
             error: Some("the plugin's bundle could not be opened".to_owned()),

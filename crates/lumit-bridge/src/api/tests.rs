@@ -11510,6 +11510,7 @@ fn pressing_a_plugins_button_writes_what_it_did_into_the_document() {
             _time: f64,
             _params: &lumit_ofx::ParamSnapshot,
             source: lumit_ofx::Frame16,
+            _neighbours: &[(i32, lumit_ofx::Frame16)],
         ) -> lumit_ofx::Rendering {
             lumit_ofx::Rendering {
                 frame: source,
@@ -11850,6 +11851,7 @@ fn a_plugin_that_fails_a_frame_badges_its_layer_and_the_next_frame_clears_it() {
             _time: f64,
             _params: &lumit_ofx::ParamSnapshot,
             source: lumit_ofx::Frame16,
+            _neighbours: &[(i32, lumit_ofx::Frame16)],
         ) -> lumit_ofx::Rendering {
             if self.failing.load(Ordering::SeqCst) {
                 return lumit_ofx::Rendering {
@@ -11931,6 +11933,7 @@ fn a_plugin_that_fails_a_frame_badges_its_layer_and_the_next_frame_clears_it() {
         4,
         4,
         lumit_core::fx::Params::EMPTY,
+        &[],
     );
 
     // **Identity, byte for byte.** A failed plugin costs the layer its effect,
@@ -11963,6 +11966,7 @@ fn a_plugin_that_fails_a_frame_badges_its_layer_and_the_next_frame_clears_it() {
         4,
         4,
         lumit_core::fx::Params::EMPTY,
+        &[],
     );
     let cleared =
         crate::api::effect::read_instance_info(&instance, lumit_core::time::Rational::ZERO);
@@ -11985,6 +11989,7 @@ fn a_plugin_that_fails_a_frame_badges_its_layer_and_the_next_frame_clears_it() {
         4,
         4,
         lumit_core::fx::Params::EMPTY,
+        &[],
     );
     let switched_off =
         crate::api::effect::read_instance_info(&off, lumit_core::time::Rational::ZERO);

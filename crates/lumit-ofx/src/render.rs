@@ -42,7 +42,7 @@
 //! queues behind one lock (docs/12 §2.3, [`crate::instance::ThreadSafety`]).
 
 use std::cell::Cell;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use lumit_eval::epoch::{Cancelled, EpochToken};
 use thiserror::Error;
@@ -54,7 +54,8 @@ use crate::ffi::{
 use crate::handles::Handle;
 use crate::host::state;
 use crate::image::{Frame16, Image, RectI, RowOrder};
-use crate::instance::{add_images_at, set_images, take_images, Instance};
+use crate::instance::{add_images_at, set_images, take_images, time_key, Instance};
+use crate::ipc::proto::FrameWanted;
 use crate::props::{PropValue, PropertySet};
 use crate::status::Status;
 
@@ -122,6 +123,11 @@ pub struct RenderRequest {
     pub order: RowOrder,
     /// One picture per input clip, by the name the plugin gave the clip.
     pub inputs: BTreeMap<String, Frame16>,
+    /// The Source clip at other times, by source-relative frame offset: the
+    /// frames either side that a motion blur or a retimer reads, decoded by
+    /// the engine beside the frame in hand and the same size as it. Empty for
+    /// a plain filter.
+    pub neighbours: Vec<(i32, Frame16)>,
 }
 
 impl RenderRequest {
@@ -140,7 +146,20 @@ impl RenderRequest {
             bounds,
             order: RowOrder::BottomUp,
             inputs,
+            neighbours: Vec::new(),
         }
+    }
+
+    /// The first and last frame the Source clip has a picture for in this
+    /// request: the frame in hand, widened by the neighbours either side of it.
+    #[must_use]
+    pub fn frame_span(&self) -> (f64, f64) {
+        let (mut low, mut high) = (0, 0);
+        for (offset, _) in &self.neighbours {
+            low = low.min(*offset);
+            high = high.max(*offset);
+        }
+        (self.time + f64::from(low), self.time + f64::from(high))
     }
 }
 
@@ -152,7 +171,8 @@ pub struct Rendered {
     pub region_of_definition: RectI,
     /// `getFramesNeeded`'s answer: per clip, the first and last frame the
     /// plugin wants to see. The evaluation graph's temporal edges are made from
-    /// this (docs/05 §4.2); nothing prefetches it yet.
+    /// this (docs/05 §4.2), and the engine decodes the frames it names for the
+    /// next render's [`RenderRequest::neighbours`].
     pub frames_needed: BTreeMap<String, (f64, f64)>,
     /// The clip the plugin said it was a pass-through of, if it said so. When
     /// this is set, no render happened at all.
@@ -214,17 +234,45 @@ pub fn render_is_cancelled() -> bool {
     token.cancelled()
 }
 
-/// What fetches the frames a plugin asked for beyond the one being rendered.
+/// What fetches the frames a plugin asked for and does not have.
 ///
-/// It is handed `getFramesNeeded`'s answer — per clip, the first and last frame
-/// wanted — and answers with the pictures, keyed by clip and
+/// It is handed the frames `getFramesNeeded` named that did not come with the
+/// request, one entry each, and answers with the pictures, keyed by clip and
 /// [`crate::instance::time_key`]. In process there is nothing to fetch from and
-/// the answer is empty; in the broker it is one round trip for the lot, which
+/// the answer is empty. In the broker it is one round trip for the lot, which
 /// is the whole reason `getFramesNeeded` is dispatched before the render rather
 /// than after (docs/impl/ofx-host.md §4).
-pub type Prefetch<'a> = &'a mut dyn FnMut(
-    &BTreeMap<String, (f64, f64)>,
-) -> Result<BTreeMap<(String, i64), Frame16>, RenderError>;
+pub type Prefetch<'a> =
+    &'a mut dyn FnMut(&[FrameWanted]) -> Result<BTreeMap<(String, i64), Frame16>, RenderError>;
+
+/// Every frame `getFramesNeeded` asked for that is not the one being rendered,
+/// as one flat list. The ranges come back per clip as a first and a last frame.
+/// A retimer's t±5 is eleven frames, and eleven is what goes on the wire, once.
+#[must_use]
+pub fn frames_wanted(needed: &BTreeMap<String, (f64, f64)>, time: f64) -> Vec<FrameWanted> {
+    /// A range no plugin means, and a list no host should build. A plugin that
+    /// asks for a thousand frames of one output frame has asked for something
+    /// the ring can't hold anyway.
+    const MAX_FRAMES: usize = 256;
+
+    let mut wanted = Vec::new();
+    for (clip, (first, last)) in needed {
+        if !first.is_finite() || !last.is_finite() || last < first {
+            continue;
+        }
+        let mut frame = first.floor();
+        while frame <= *last && wanted.len() < MAX_FRAMES {
+            if time_key(frame) != time_key(time) {
+                wanted.push(FrameWanted {
+                    clip: clip.clone(),
+                    time: frame,
+                });
+            }
+            frame += 1.0;
+        }
+    }
+    wanted
+}
 
 /// Render one frame through one instance of one plugin.
 ///
@@ -272,6 +320,18 @@ pub fn render_with_prefetch(
         OUTPUT_CLIP.to_owned(),
         Image::black(request.bounds, request.order)?,
     );
+    // The frames either side go on with the picture, each under the time the
+    // plugin will ask for it at. They can't wait for `getFramesNeeded`: a
+    // plugin answers that after reading how long its clip is, and a motion
+    // blur fetches its neighbours inside the render itself.
+    let mut images_at = BTreeMap::new();
+    for (offset, frame) in &request.neighbours {
+        let at = crate::instance::time_key(request.time + f64::from(*offset));
+        images_at.insert(
+            (SOURCE_CLIP.to_owned(), at),
+            Image::from_frame(frame, request.order)?,
+        );
+    }
 
     // Taken with no host lock held, and now held for the whole conversation
     // rather than for the render alone: every action in it calls into the
@@ -280,7 +340,7 @@ pub fn render_with_prefetch(
     let guard = instance.render_lock();
     let _held = guard.as_ref().map(crate::instance::RenderGuard::hold);
 
-    let previous = set_images(handle, images, BTreeMap::new())?;
+    let previous = set_images(handle, images, images_at)?;
     drop(previous);
     // The project is the frame being rendered, and the plugin is told so before
     // it is asked anything: a generator places itself by these two numbers.
@@ -288,6 +348,18 @@ pub fn render_with_prefetch(
         handle,
         f64::from(request.bounds.x2 - request.bounds.x1),
         f64::from(request.bounds.y2 - request.bounds.y1),
+    )?;
+    // And the clip is as long as the frames in hand. A plugin that reads the
+    // frames either side clamps what it asks for to its clip's range, so a
+    // range that stops at the frame in hand is a plugin that never sees a
+    // second frame and finds no motion in the first. A clip the request has
+    // no picture for is unconnected, so nothing asks for it.
+    let (first, last) = request.frame_span();
+    crate::instance::set_clip_state(
+        handle,
+        |name| name == OUTPUT_CLIP || request.inputs.contains_key(name),
+        first,
+        last,
     )?;
 
     let outcome = ask(plugin, instance, request, token, prefetch);
@@ -371,11 +443,28 @@ fn ask(
     let frames_needed = get_frames_needed(plugin, handle, request)?;
     token.check()?;
 
-    // The one place a frame at another time can be asked for: after the plugin
-    // has said which frames it wants and before it is asked for anything else.
-    // One call, however many frames — a retimer's per-frame fetches are the
-    // thing this exists to keep off the wire.
-    let temporal = prefetch(&frames_needed)?;
+    // Whatever the plugin wants beyond the frames that came with the request
+    // is asked for here, after it has said which frames those are and before
+    // it is asked for anything else. One call, however many frames, since a
+    // retimer's per-frame fetches are the thing this exists to keep off the
+    // wire. A frame already in hand is not asked for again.
+    let in_hand: BTreeSet<(String, i64)> = request
+        .neighbours
+        .iter()
+        .map(|(offset, _)| {
+            let at = time_key(request.time + f64::from(*offset));
+            (SOURCE_CLIP.to_owned(), at)
+        })
+        .collect();
+    let wanted: Vec<FrameWanted> = frames_wanted(&frames_needed, request.time)
+        .into_iter()
+        .filter(|want| !in_hand.contains(&(want.clip.clone(), time_key(want.time))))
+        .collect();
+    let temporal = if wanted.is_empty() {
+        BTreeMap::new()
+    } else {
+        prefetch(&wanted)?
+    };
     let mut images_at = BTreeMap::new();
     for (key, frame) in &temporal {
         images_at.insert(key.clone(), Image::from_frame(frame, request.order)?);

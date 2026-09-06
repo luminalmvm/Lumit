@@ -532,7 +532,7 @@ fn build(
 
     for clip in &descriptor.clips {
         let mut clip_props = clip.props.clone();
-        seed_clip_instance_properties(&mut clip_props);
+        seed_clip_instance_properties(&mut clip_props, &clip.name);
         let props = state.props.insert(clip_props)?;
         let clip_handle = state.clips.insert(ClipBinding {
             effect: handle,
@@ -597,10 +597,10 @@ fn seed_instance_properties(
         keys::PROJECT_EXTENT,
         PropValue::Double(vec![DEFAULT_PROJECT.0, DEFAULT_PROJECT.1]),
     );
-    // One frame: Lumit renders a frame at a time and tells a plugin nothing
-    // about the layer it sits on (docs/12 §2.1). A plugin that reads this to
-    // place a ramp across the clip gets a one-frame clip, which is honest for a
-    // host that hands over one frame.
+    // One frame until the first render: Lumit renders a frame at a time and
+    // tells a plugin nothing about the layer it sits on (docs/12 §2.1), so the
+    // clip is as long as the frames in hand, which [`set_frame_range`] says
+    // before every render.
     props.seed(keys::EFFECT_DURATION, PropValue::double(1.0));
     props.seed(keys::SUPPORTS_TILES, PropValue::int(0));
     props.seed(keys::FRAME_RATE, PropValue::double(25.0));
@@ -616,8 +616,11 @@ fn seed_instance_properties(
 /// The properties a clip gains when it stops being a description and becomes
 /// an input. Every one is a promise: float RGBA, premultiplied, square pixels,
 /// no fields — which is exactly what the host table says and what
-/// [`crate::image`] hands over.
-fn seed_clip_instance_properties(props: &mut PropertySet) {
+/// [`crate::image`] hands over. Only the Source and the Output are connected:
+/// this host feeds one input, and a plugin's optional second one has nothing
+/// on it, which [`set_clip_state`] says again from the request before every
+/// render.
+fn seed_clip_instance_properties(props: &mut PropertySet, name: &str) {
     let mut seed_string = |key: &str, value: &str| {
         if let Ok(value) = PropValue::string(value) {
             props.seed(key, value);
@@ -630,7 +633,8 @@ fn seed_clip_instance_properties(props: &mut PropertySet) {
     seed_string(keys::PRE_MULTIPLICATION, values::IMAGE_PRE_MULTIPLIED);
     seed_string(keys::CLIP_FIELD_ORDER, values::IMAGE_FIELD_NONE);
 
-    props.seed(keys::CLIP_CONNECTED, PropValue::int(1));
+    let connected = name == SOURCE_CLIP || name == OUTPUT_CLIP;
+    props.seed(keys::CLIP_CONNECTED, PropValue::int(i32::from(connected)));
     props.seed(keys::CLIP_CONTINUOUS_SAMPLES, PropValue::int(0));
     props.seed(keys::PIXEL_ASPECT_RATIO, PropValue::double(1.0));
     props.seed(keys::FRAME_RATE, PropValue::double(25.0));
@@ -655,6 +659,51 @@ pub(crate) fn set_project_size(handle: Handle, width: f64, height: f64) -> Resul
     let set = state.props.get_mut(props)?;
     set.set(keys::PROJECT_SIZE, PropValue::Double(vec![width, height]));
     set.set(keys::PROJECT_EXTENT, PropValue::Double(vec![width, height]));
+    Ok(())
+}
+
+/// Tell an instance which of its clips have a picture on them, and how long
+/// the clip is: the first and last frame the host has a picture for, which is
+/// the frame in hand and the neighbours either side of it.
+///
+/// Called before the first action of every render, beside [`set_project_size`]
+/// and for the same reason. A plugin that reads the frames either side clamps
+/// what it asks for to this range. Told the clip is one frame long, it asks for
+/// nothing and finds no motion. A clip with no picture is unconnected, so a
+/// plugin with an optional second input does not ask for a picture that is
+/// not there and fail its render on the answer.
+pub(crate) fn set_clip_state(
+    handle: Handle,
+    connected: impl Fn(&str) -> bool,
+    first: f64,
+    last: f64,
+) -> Result<(), Status> {
+    let mut state = state();
+    let (props, clips) = {
+        let effect = state.effects.get(handle)?;
+        let clips: Vec<(String, Handle)> = effect
+            .clips
+            .iter()
+            .map(|clip| (clip.name.clone(), clip.props))
+            .collect();
+        (effect.props, clips)
+    };
+    state
+        .props
+        .get_mut(props)?
+        .set(keys::EFFECT_DURATION, PropValue::double(last - first + 1.0));
+    for (name, clip) in clips {
+        let set = state.props.get_mut(clip)?;
+        set.set(
+            keys::CLIP_CONNECTED,
+            PropValue::int(i32::from(connected(&name))),
+        );
+        set.set(keys::FRAME_RANGE, PropValue::Double(vec![first, last]));
+        set.set(
+            keys::CLIP_UNMAPPED_FRAME_RANGE,
+            PropValue::Double(vec![first, last]),
+        );
+    }
     Ok(())
 }
 

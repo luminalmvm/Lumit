@@ -1770,6 +1770,95 @@ fn an_instance_knows_how_big_the_project_is_and_the_render_keeps_it_true() {
     instance.destroy(plugin).expect("destroyed");
 }
 
+/// **The clip is as long as the frames in hand, and the plugin is told so.**
+/// A plugin that reads the frames either side clamps what it asks for to its
+/// clip's frame range, so a range that stops at the frame in hand is a plugin
+/// that never asks for a second frame. The neighbours a request carries widen
+/// the range before the plugin's first question, and come off with the
+/// pictures afterwards. A second input the request has no picture for is
+/// unconnected, so a plugin with an optional one does not fetch from it.
+#[test]
+fn a_render_with_neighbours_tells_the_plugin_how_long_its_clip_is() {
+    let _ledger = image_ledger();
+    let Some((_root, bundle, report)) = a_described_bundle("a_render_with_neighbours") else {
+        return;
+    };
+    let plugin = plugin_of(&bundle, "com.lumitlab.testplug.passthrough");
+    let mut descriptor = described(&report, "com.lumitlab.testplug.passthrough")
+        .descriptor
+        .clone();
+    // A second, optional input the plugin never fetches from, as RSMB Pro's.
+    descriptor.clips.push(crate::describe::ClipDescription {
+        name: "Vectors".to_owned(),
+        props: PropertySet::new(),
+    });
+    let instance = Instance::create(plugin, &descriptor, Context::Filter, &ParamSnapshot::new())
+        .expect("an instance");
+
+    let clip_props = |handle: Handle, name: &str| -> PropertySet {
+        let state = state();
+        let clip = state
+            .effects
+            .get(handle)
+            .expect("the instance")
+            .clips
+            .iter()
+            .find(|clip| clip.name == name)
+            .expect("the clip")
+            .props;
+        state.props.get(clip).expect("its property set").clone()
+    };
+    let source_clip = |handle: Handle| clip_props(handle, crate::render::SOURCE_CLIP);
+    assert_eq!(
+        clip_props(instance.handle(), "Vectors").get_int(keys::CLIP_CONNECTED, 0),
+        Ok(0),
+        "an input this host never feeds is born unconnected"
+    );
+    let duration = |handle: Handle| -> f64 {
+        let state = state();
+        let props = state.effects.get(handle).expect("the instance").props;
+        state
+            .props
+            .get(props)
+            .expect("its property set")
+            .get_double(keys::EFFECT_DURATION, 0)
+            .expect("a duration")
+    };
+
+    let token = Epoch::new().token();
+    let mut request = RenderRequest::filter(20.0, a_test_frame(9, 4));
+    request.neighbours = vec![(-2, a_test_frame(9, 4)), (1, a_test_frame(9, 4))];
+    assert_eq!(request.frame_span(), (18.0, 21.0));
+    crate::render::render(plugin, &instance, &request, &token).expect("it rendered");
+
+    let after = source_clip(instance.handle());
+    assert_eq!(after.get_double(keys::FRAME_RANGE, 0), Ok(18.0));
+    assert_eq!(after.get_double(keys::FRAME_RANGE, 1), Ok(21.0));
+    assert_eq!(
+        after.get_double(keys::CLIP_UNMAPPED_FRAME_RANGE, 0),
+        Ok(18.0)
+    );
+    assert_eq!(
+        after.get_double(keys::CLIP_UNMAPPED_FRAME_RANGE, 1),
+        Ok(21.0)
+    );
+    assert_eq!(after.get_int(keys::CLIP_CONNECTED, 0), Ok(1));
+    assert_eq!(duration(instance.handle()), 4.0);
+    let vectors = clip_props(instance.handle(), "Vectors");
+    assert_eq!(vectors.get_int(keys::CLIP_CONNECTED, 0), Ok(0));
+    assert_eq!(vectors.get_double(keys::FRAME_RANGE, 1), Ok(21.0));
+
+    // A plain frame afterwards is a clip of that one frame again.
+    let plain = RenderRequest::filter(30.0, a_test_frame(9, 4));
+    crate::render::render(plugin, &instance, &plain, &token).expect("it rendered");
+    let after = source_clip(instance.handle());
+    assert_eq!(after.get_double(keys::FRAME_RANGE, 0), Ok(30.0));
+    assert_eq!(after.get_double(keys::FRAME_RANGE, 1), Ok(30.0));
+    assert_eq!(duration(instance.handle()), 1.0);
+
+    instance.destroy(plugin).expect("destroyed");
+}
+
 /// **A plugin writes its own controls, and the host must let it.** The OFX
 /// support library every commercial vendor is built on settles a plugin's
 /// parameters with `paramSetValue` while `kOfxActionCreateInstance` is still
@@ -2492,6 +2581,7 @@ impl PluginHost for DeadHost {
         _time: f64,
         _params: &ParamSnapshot,
         source: Frame16,
+        _neighbours: &[(i32, Frame16)],
     ) -> Rendering {
         Rendering {
             frame: source,
@@ -2772,6 +2862,7 @@ fn a_plugins_memory_reaches_its_render() {
             _time: f64,
             params: &ParamSnapshot,
             source: Frame16,
+            _neighbours: &[(i32, Frame16)],
         ) -> Rendering {
             *self.0.lock().expect("the record") = Some(params.clone());
             Rendering {
@@ -2890,6 +2981,173 @@ fn a_plugins_memory_reaches_its_render() {
     assert_eq!(resolve(&inst)[0].1, Value::Int(0));
     def.apply_cpu_at(inst.id, 0.0, &mut rgba, 2, 2, Params::EMPTY);
     assert_eq!(recorded().get("vendorBlob"), None);
+}
+
+/// **The plugin is told its frame, and handed the frames either side.** The
+/// resolve walk speaks in seconds and OFX counts in frames, so the comp's rate
+/// turns the layer time into the frame the bag carries. The neighbours the
+/// pass read back go to the host by offset, beside the picture, with one of
+/// another size left out.
+#[test]
+fn a_plugin_is_told_its_frame_and_handed_its_neighbours() {
+    use lumit_core::expression::ExpressionContext;
+    use lumit_core::fx::{MarkerContext, ResolveCx};
+    use lumit_core::model::{Composition, Document, LinearColour, ProjectItem};
+    use lumit_core::time::{Duration, FrameRate, Rational};
+
+    type Seen = (f64, Vec<(i32, f32)>);
+    struct Seeing(std::sync::Mutex<Option<Seen>>);
+
+    impl PluginHost for Seeing {
+        fn render(
+            &self,
+            _instance: uuid::Uuid,
+            time: f64,
+            _params: &ParamSnapshot,
+            source: Frame16,
+            neighbours: &[(i32, Frame16)],
+        ) -> Rendering {
+            let seen = neighbours
+                .iter()
+                .map(|(offset, frame)| (*offset, frame.pixel(0, 0)[0]))
+                .collect();
+            *self.0.lock().expect("the record") = Some((time, seen));
+            Rendering {
+                frame: source,
+                error: None,
+            }
+        }
+
+        fn frames_needed(
+            &self,
+            _instance: uuid::Uuid,
+            _time: f64,
+            _params: &ParamSnapshot,
+        ) -> Option<Vec<i32>> {
+            None
+        }
+
+        fn press(
+            &self,
+            _instance: uuid::Uuid,
+            _time: f64,
+            _params: &ParamSnapshot,
+            _name: &str,
+            _source: Frame16,
+        ) -> Result<ParamSnapshot, String> {
+            Err("not this test".to_owned())
+        }
+    }
+
+    let descriptor = PluginDescriptor {
+        identifier: "test.frame".to_owned(),
+        version: (1, 0),
+        grouping: String::new(),
+        label: "Frame test plugin".to_owned(),
+        contexts: vec![Context::Filter],
+        params: Vec::new(),
+        clips: Vec::new(),
+        temporal: true,
+        render_thread_safety: None,
+    };
+    let schema: &'static EffectSchema = Box::leak(Box::new(
+        crate::schema::schema_of(&descriptor).expect("a schema"),
+    ));
+    let host = std::sync::Arc::new(Seeing(std::sync::Mutex::new(None)));
+    let def = OfxEffectDef::new(&descriptor, schema, host.clone());
+    let seen = || {
+        host.0
+            .lock()
+            .expect("the record")
+            .clone()
+            .expect("a render happened")
+    };
+    let inst = lumit_core::model::EffectInstance {
+        id: uuid::Uuid::now_v7(),
+        effect: lumit_core::model::EffectKey {
+            namespace: lumit_core::model::EffectNamespace::Ofx,
+            match_name: schema.match_name.to_owned(),
+            version: 1,
+            extra: serde_json::Map::new(),
+        },
+        enabled: true,
+        params: Vec::new(),
+        sample_temporally: true,
+        custom_name: None,
+        linked_pairs: Vec::new(),
+        plugin_state: None,
+        roto: None,
+        extra: serde_json::Map::new(),
+    };
+
+    // A comp at sixty frames a second, resolved half a second in: frame 30.
+    let comp = Composition {
+        master_volume_db: 0.0,
+        groups: Vec::new(),
+        beat_grid: None,
+        id: uuid::Uuid::now_v7(),
+        name: "c".into(),
+        width: 16,
+        height: 16,
+        frame_rate: FrameRate::new(60, 1).expect("a rate"),
+        duration: Duration(Rational::new(10, 1).expect("a length")),
+        background: LinearColour([0.0, 0.0, 0.0, 1.0]),
+        work_area: None,
+        layers: Vec::new(),
+        markers: Vec::new(),
+        motion_blur: Default::default(),
+        extra: serde_json::Map::new(),
+    };
+    let comp_id = comp.id;
+    let mut document = Document::new();
+    document.items.push(ProjectItem::Composition(comp));
+    let cx = ResolveCx {
+        inst: &inst,
+        lt: 0.5,
+        diag_px: 100.0,
+        px_scale: 1.0,
+        markers: &MarkerContext::NONE,
+        context: std::sync::Arc::new(ExpressionContext {
+            document: std::sync::Arc::new(document),
+            comp: Some(comp_id),
+            layer: None,
+            comp_time: 0.5,
+            current_depth: 0,
+        }),
+    };
+    let mut bag = Vec::new();
+    def.resolve_derived(&cx, &mut |id, value| bag.push((id, value)));
+
+    let mut rgba = vec![0.5_f32; 2 * 2 * 4];
+    let previous = vec![0.25_f32; 2 * 2 * 4];
+    let next = vec![0.75_f32; 2 * 2 * 4];
+    let short = vec![1.0_f32; 4];
+    def.apply_cpu_temporal(
+        inst.id,
+        0.5,
+        &mut rgba,
+        2,
+        2,
+        Params::new(&bag),
+        &[(-1, &previous), (1, &next), (2, &short)],
+    );
+    let (time, neighbours) = seen();
+    assert_eq!(time, 30.0, "half a second at sixty a second is frame 30");
+    assert_eq!(
+        neighbours.len(),
+        2,
+        "a neighbour of another size is left out: {neighbours:?}"
+    );
+    assert_eq!(neighbours[0].0, -1);
+    assert!((neighbours[0].1 - 0.25).abs() < 1e-3);
+    assert_eq!(neighbours[1].0, 1);
+    assert!((neighbours[1].1 - 0.75).abs() < 1e-3);
+
+    // A stack built by hand names no comp, and the time it gives stands.
+    def.apply_cpu_at(inst.id, 7.0, &mut rgba, 2, 2, Params::EMPTY);
+    let (time, neighbours) = seen();
+    assert_eq!(time, 7.0);
+    assert!(neighbours.is_empty());
 }
 
 // --------------------------------------------------------- console windows --

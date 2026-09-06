@@ -17,11 +17,15 @@
 //! # What this definition does with each hook
 //!
 //! * **`schema`** hands back the leaked declaration the describe made.
-//! * **`apply_cpu`** is the render: the picture is fp32 premultiplied linear,
-//!   which is exactly what the plugin boundary wants (docs/12 §2.1), so it goes
-//!   straight across to the [`PluginHost`] and comes straight back. The GPU
-//!   half is the generic read-back wrapper in `lumit-render`, which calls this;
-//!   there is no WGSL to write, because the maths is the plugin's.
+//! * **`apply_cpu_temporal`** is the render: the picture is fp32 premultiplied
+//!   linear, which is exactly what the plugin boundary wants (docs/12 §2.1), so
+//!   it goes straight across to the [`PluginHost`] and comes straight back,
+//!   with the layer's decoded neighbours beside it for a plugin that reads the
+//!   frames either side. The GPU half is the generic read-back wrapper in
+//!   `lumit-render`, which calls this. There is no WGSL to write, because the
+//!   maths is the plugin's. The time it is told is the layer's **frame**, the
+//!   unit OFX counts in, carried into the bag by `resolve_derived` from the
+//!   comp's rate.
 //! * **`frames_needed`** asks the plugin what other frames this instance reads,
 //!   which is `getFramesNeeded` (docs/12 §2.1) and is what puts a retimer's
 //!   sampled frames into the frame key and the prefetch.
@@ -90,16 +94,19 @@ pub trait PluginHost: Send + Sync {
     ///
     /// `instance` is the effect instance's own id, so the host can keep one
     /// live plugin instance per row rather than rebuilding it per frame, and so
-    /// a failure is attributable to the row it happened on. A host that cannot
-    /// render — disabled, crashed, out of deadline — answers with `source` and
-    /// an error rather than a failure: a comp that stops compositing is worse
-    /// than a comp with a badge on one layer.
+    /// a failure is attributable to the row it happened on. `time` is the
+    /// layer's frame. `neighbours` are the Source clip at other frames, by
+    /// offset from `time`, for a plugin that reads the frames either side. A
+    /// host that can't render (disabled, crashed, out of deadline) answers
+    /// with `source` and an error rather than a failure: a comp that stops
+    /// compositing is worse than a comp with a badge on one layer.
     fn render(
         &self,
         instance: Uuid,
         time: f64,
         params: &ParamSnapshot,
         source: Frame16,
+        neighbours: &[(i32, Frame16)],
     ) -> Rendering;
 
     /// The source-relative frame offsets this instance reads at this time —
@@ -368,6 +375,21 @@ fn read_component(slot: &PropValue, route: &ValueRoute) -> Option<Value> {
 /// renames the frames it changes.
 const DERIVED_MEMORY: ParamId = ParamId::new("derived.memory");
 
+/// The bag id the layer's frame rides under: what the plugin is told the time
+/// is, in the frames OFX counts in rather than the seconds the resolve walk
+/// speaks. A plugin asks for the frames either side as `time ± 1`, and a
+/// time in seconds would make that a second either side.
+const DERIVED_FRAME: ParamId = ParamId::new("derived.frame");
+
+/// The frame the plugin is told, out of the bag, or `lt` as it stands when no
+/// comp put one there, which is a stack built by hand.
+fn frame_in_bag(p: Params<'_>, lt: f64) -> f64 {
+    match p.get(DERIVED_FRAME) {
+        Some(Value::Int(frame)) => f64::from(frame),
+        _ => lt,
+    }
+}
+
 /// What each instance's plugin keeps beyond its rows, decoded once per change
 /// from `EffectInstance::plugin_state` and laid over the snapshot on every
 /// render. Keyed by the effect instance, with the hash it was decoded from.
@@ -439,6 +461,19 @@ impl EffectDef for OfxEffectDef {
     }
 
     fn apply_cpu_at(&self, inst: Uuid, lt: f64, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
+        self.apply_cpu_temporal(inst, lt, rgba, w, h, p, &[]);
+    }
+
+    fn apply_cpu_temporal(
+        &self,
+        inst: Uuid,
+        lt: f64,
+        rgba: &mut [f32],
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        neighbours: &[(i32, &[f32])],
+    ) {
         let expected = (w as usize) * (h as usize) * 4;
         if w == 0 || h == 0 || rgba.len() < expected {
             return;
@@ -446,6 +481,18 @@ impl EffectDef for OfxEffectDef {
         let Ok(source) = Frame16::from_f32(w as usize, h as usize, &rgba[..expected]) else {
             return;
         };
+        // A neighbour of another size is one the plugin could not compare
+        // with the frame in hand, and is left out: for that time the plugin
+        // gets the frame in hand, the spec's answer to a frame the host has
+        // not got.
+        let frames: Vec<(i32, Frame16)> = neighbours
+            .iter()
+            .filter(|(_, pixels)| pixels.len() == expected)
+            .filter_map(|(offset, pixels)| {
+                let frame = Frame16::from_f32(w as usize, h as usize, pixels).ok()?;
+                Some((*offset, frame))
+            })
+            .collect();
         let mut snapshot = self.snapshot(p);
         let memory = MEMORY
             .lock()
@@ -454,7 +501,9 @@ impl EffectDef for OfxEffectDef {
         if let Some(memory) = memory {
             recall(&mut snapshot, &memory);
         }
-        let rendered = self.host.render(inst, lt, &snapshot, source);
+        let rendered = self
+            .host
+            .render(inst, frame_in_bag(p, lt), &snapshot, source, &frames);
         let failed = rendered.error.is_some();
         LAST_ERROR.with(|slot| *slot.borrow_mut() = rendered.error);
         if failed {
@@ -475,8 +524,8 @@ impl EffectDef for OfxEffectDef {
         }
     }
 
-    fn frames_needed(&self, inst: &EffectInstance, lt: f64) -> Option<Vec<i32>> {
-        self.host.frames_needed(inst.id, lt, &self.defaults)
+    fn frames_needed(&self, inst: &EffectInstance, frame: f64) -> Option<Vec<i32>> {
+        self.host.frames_needed(inst.id, frame, &self.defaults)
     }
 
     fn last_error(&self) -> Option<String> {
@@ -485,9 +534,19 @@ impl EffectDef for OfxEffectDef {
 
     /// The plugin's memory reaches the render from here: this is the one hook
     /// that sees the document's instance every frame, so it files the memory
-    /// for `apply_cpu_at` and puts its hash in the bag for the frame key.
+    /// for `apply_cpu_temporal` and puts its hash in the bag for the frame key.
+    /// The layer's frame rides in beside it, because this is also the one hook
+    /// that can see the comp's rate.
     fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
         push(DERIVED_MEMORY, Value::Int(remember(cx.inst)));
+        let fps = cx
+            .context
+            .comp
+            .and_then(|id| cx.context.document.comp(id))
+            .map(|comp| comp.frame_rate.fps());
+        if let Some(fps) = fps {
+            push(DERIVED_FRAME, Value::Int((cx.lt * fps).round() as i32));
+        }
     }
 
     fn press(
@@ -632,8 +691,10 @@ impl PluginHost for LocalHost {
         time: f64,
         params: &ParamSnapshot,
         source: Frame16,
+        neighbours: &[(i32, Frame16)],
     ) -> Rendering {
-        let request = RenderRequest::filter(time, source.clone());
+        let mut request = RenderRequest::filter(time, source.clone());
+        request.neighbours = neighbours.to_vec();
         match self.attempt(instance, &request, params) {
             Ok(rendered) => Rendering {
                 frame: rendered.frame,
@@ -784,6 +845,7 @@ impl PluginHost for BrokerHost {
         time: f64,
         params: &ParamSnapshot,
         source: Frame16,
+        neighbours: &[(i32, Frame16)],
     ) -> Rendering {
         let Some(mut broker) = self.broker.lock() else {
             return Rendering {
@@ -798,12 +860,11 @@ impl PluginHost for BrokerHost {
             };
         };
         let _ = broker.set_params(id, params.clone());
-        let request = RenderRequest::filter(time, source.clone());
-        // Nothing is prefetched here: the neighbour frames a retimer asks for
-        // are the layer's own decoded neighbours, and threading them down to
-        // this call is the work of the package that gives the dispatch seam its
-        // side tables. Until then a frame at another time answers with the frame
-        // in hand, which is what the spec says an unfetchable clip gives.
+        let mut request = RenderRequest::filter(time, source.clone());
+        // The layer's decoded neighbours go across with the frame. A plugin
+        // that asks for a frame beyond them gets the frame in hand, which is
+        // what the spec says an unfetchable clip gives.
+        request.neighbours = neighbours.to_vec();
         let answer = broker.render(id, &request, &|_, _| None);
         let notes = broker.take_notes();
         drop(broker);

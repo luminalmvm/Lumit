@@ -344,12 +344,15 @@ fn is_catalogued(e: &EffectInstance) -> bool {
 }
 
 /// The union of source-relative frame offsets a layer's live effect stack
-/// needs at layer time `lt` (docs/08 §1.3 `temporal`), always sorted and always
-/// containing 0 (the current frame). `&[0]` when the stack is bypassed, empty,
-/// or every effect is a plain single-frame one — so a layer with no temporal
-/// effect pays nothing. The render pipeline decodes the layer's source at each
-/// of these offsets so a temporal effect (echo, flow motion blur, datamosh)
-/// can read its neighbours.
+/// needs at layer frame `frame` (docs/08 §1.3 `temporal`), always sorted and
+/// always containing 0 (the current frame). `&[0]` when the stack is bypassed,
+/// empty, or every effect is a plain single-frame one, so a layer with no
+/// temporal effect pays nothing. The render pipeline decodes the layer's source
+/// at each of these offsets so a temporal effect (echo, flow motion blur,
+/// datamosh) can read its neighbours.
+///
+/// `frame` is the layer's local time in **frames of the comp**, the unit a
+/// plugin is asked in and one a built-in never reads.
 ///
 /// **Per instance, not only per effect**. A built-in's window is a fact
 /// about the effect and comes off its declaration, exactly as it always did. A
@@ -359,14 +362,14 @@ fn is_catalogued(e: &EffectInstance) -> bool {
 /// answers for itself, falling back to the declaration when it has nothing more
 /// specific to say. The frames it names are then in the frame key and in the
 /// prefetch, which is what keeps a cached frame from outliving what it sampled.
-pub fn stack_temporal_window(effects: &[EffectInstance], fx_on: bool, lt: f64) -> Vec<i32> {
+pub fn stack_temporal_window(effects: &[EffectInstance], fx_on: bool, frame: f64) -> Vec<i32> {
     let mut offsets = vec![0i32];
     if fx_on {
         for e in effects.iter().filter(|e| e.enabled && is_catalogued(e)) {
             let Some(def) = super::BUILTIN_DEFS.get(&e.effect.match_name) else {
                 continue;
             };
-            match def.frames_needed(e, lt) {
+            match def.frames_needed(e, frame) {
                 Some(own) => offsets.extend_from_slice(&own),
                 None => offsets.extend_from_slice(def.schema().traits.temporal),
             }
