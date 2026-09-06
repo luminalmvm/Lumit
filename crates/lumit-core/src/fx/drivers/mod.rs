@@ -762,9 +762,9 @@ impl Eval<'_> {
         // Resolve into a checked-out arena, but reduce the borrowed parameters
         // to owned stream inputs before returning it to the reentrant pool.
         enum Producer {
-            Grid(PointsStream),
+            Grid(Box<PointsStream>),
             Particulate {
-                points: points::PointsParams,
+                points: Box<points::PointsParams>,
                 window_frames: i64,
             },
         }
@@ -784,13 +784,13 @@ impl Eval<'_> {
             );
             let params = bag.get(0)?.params;
             match inst.effect.match_name.as_str() {
-                "grid" => Some(Producer::Grid(
+                "grid" => Some(Producer::Grid(Box::new(
                     super::effects::grid::Grid::read(params).stream(self.projection),
-                )),
+                ))),
                 "particulate" => {
                     let particulate = super::effects::particulate::Particulate::read(params);
                     Some(Producer::Particulate {
-                        points: particulate.points(),
+                        points: Box::new(particulate.points()),
                         window_frames: particulate.window_frames(dt),
                     })
                 }
@@ -804,7 +804,7 @@ impl Eval<'_> {
         // whole history of its Emit rate track — and a trait method wide enough
         // to carry both would be an interface shaped by its callers.
         if let Producer::Grid(stream) = producer {
-            let stream = Rc::new(stream);
+            let stream = Rc::new(*stream);
             self.streams.borrow_mut().push((effect, Rc::clone(&stream)));
             return Some(stream);
         }
@@ -2132,7 +2132,7 @@ mod tests {
         assert!(pool.reuses >= 64);
         assert_eq!(pool.high_water, 1);
         assert_eq!(pool.arenas.len(), 1);
-        assert!(pool.arenas.iter().all(|arena| arena.len() == 0));
+        assert!(pool.arenas.iter().all(|arena| arena.is_empty()));
     }
 
     /// P-001: stream resolution reduces its borrowed parameters before return,
@@ -2159,7 +2159,7 @@ mod tests {
         assert_eq!(pool.allocations, 1);
         assert!(pool.reuses >= 63);
         assert_eq!(pool.high_water, 1);
-        assert!(pool.arenas.iter().all(|arena| arena.len() == 0));
+        assert!(pool.arenas.iter().all(|arena| arena.is_empty()));
     }
 
     /// P-001: checking out another arena while an outer scalar/stream resolve
@@ -2194,7 +2194,7 @@ mod tests {
         let pool = ev.arenas.borrow();
         assert_eq!(pool.allocations, 2);
         assert_eq!(pool.high_water, 2);
-        assert!(pool.arenas.iter().all(|arena| arena.len() == 0));
+        assert!(pool.arenas.iter().all(|arena| arena.is_empty()));
     }
 
     /// **Termination is the commit-time refusal, and bounded work is the belt**
