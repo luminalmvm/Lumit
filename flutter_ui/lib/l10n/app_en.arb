@@ -7445,6 +7445,10 @@
       }
     }
   },
+  "updateContinue": "Continue",
+  "@updateContinue": {
+    "description": "Button on the dialogue showing a release's warning: go on to the restart question."
+  },
   "updateDownload": "Download",
   "@updateDownload": {
     "description": "Button that fetches an update."
@@ -7525,6 +7529,24 @@
   "updateNotNow": "Not now",
   "@updateNotNow": {
     "description": "Button that declines an update for the moment."
+  },
+  "updateNoticeBody": "Lumit {version} is downloaded. Before it is installed, its release notes say:",
+  "@updateNoticeBody": {
+    "description": "Body of the dialogue showing a release's warning, above the warning itself. {version} is the new version, such as 0.4.0.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "updateNoticeTitle": "Before you update to Lumit {version}",
+  "@updateNoticeTitle": {
+    "description": "Title of the dialogue showing what a release warns about before it is installed. {version} is the new version, such as 0.4.0.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
   },
   "updateOfferBody": "{name} is {size}. Lumit downloads it now and installs it when you restart, so you can carry on working in the meantime.",
   "@updateOfferBody": {

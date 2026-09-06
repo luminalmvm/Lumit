@@ -99,6 +99,42 @@ void main() {
       expect(release?.sha256, 'sha256:abc');
     });
 
+    test('what a release says to read first comes out of its notes', () {
+      final release = UpdateRelease.parse(_releaseJson(body: _noticeBody),
+          platform: 'windows');
+      // Wrapped lines joined, bullets kept, bold and the link's address gone,
+      // and nothing from the section after it.
+      expect(release?.notice, [
+        (
+          bullet: false,
+          text: 'Glow is drawn by a new renderer, so a project that uses it '
+              'will not look the same as it did in 0.3.'
+        ),
+        (bullet: true, text: 'Lens flare loses its Streak count parameter.'),
+        (bullet: true, text: 'See the notes for the rest.'),
+      ]);
+    });
+
+    test('a release with nothing to say before it is applied has no notice',
+        () {
+      final plain = UpdateRelease.parse(
+        _releaseJson(body: "## What's Changed\n\n- A fix\n"),
+        platform: 'windows',
+      );
+      expect(plain?.notice, isEmpty);
+      // GitHub answers without a body when the release has none.
+      expect(UpdateRelease.parse(_releaseJson(), platform: 'windows')?.notice,
+          isEmpty);
+    });
+
+    test('the heading is found whatever its level or case', () {
+      expect(
+        updateNoticeFrom(
+            '### BEFORE YOU UPDATE\nRead this.\n#### Next\nNot this.'),
+        [(bullet: false, text: 'Read this.')],
+      );
+    });
+
     test('an attachment whose name is not a bare file name is never offered',
         () {
       // The name ends up in a local path, so anything that could leave the
@@ -702,19 +738,79 @@ void main() {
       expect(downloads, 0);
       expect(service.stage, UpdateStage.available);
     });
+
+    testWidgets(
+        'a release with something to say says it before the restart question',
+        (tester) async {
+      final service = await _readyService(scratch, notes: _noticeBody);
+      final h = harness(service, dirty: false);
+      await tester.pumpWidget(h.host);
+      await tester.tap(find.byKey(const ValueKey('host-press')));
+      await tester.pumpAndSettle();
+
+      // The notice, with the release's own words, and no restart question yet.
+      expect(find.byKey(const ValueKey('update-notice')), findsOneWidget);
+      expect(find.text('Before you update to Lumit 0.2.0'), findsOneWidget);
+      expect(find.textContaining('Glow is drawn by a new renderer'),
+          findsOneWidget);
+      expect(find.byKey(const ValueKey('update-restart-now')), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('update-notice-continue')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('update-notice')), findsNothing);
+      expect(find.byKey(const ValueKey('update-restart-now')), findsOneWidget);
+    });
+
+    testWidgets('Not now on the notice keeps the update waiting and asks again',
+        (tester) async {
+      final service = await _readyService(scratch, notes: _noticeBody);
+      final h = harness(service, dirty: false);
+      await tester.pumpWidget(h.host);
+      await tester.tap(find.byKey(const ValueKey('host-press')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('update-notice-not-now')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('update-restart-now')), findsNothing);
+      expect(service.stage, UpdateStage.ready);
+      expect(service.downloadedInstaller?.existsSync(), isTrue);
+
+      // The next press of the row puts the same notice up first.
+      await tester.tap(find.byKey(const ValueKey('host-press')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('update-notice')), findsOneWidget);
+    });
   });
 }
 
+/// Release notes with something to say before the update is applied, in the
+/// shape the release pipeline puts at the top of a GitHub release: the section
+/// first, the generated notes after it.
+const String _noticeBody = '''
+## Before you update
+
+Glow is drawn by a new renderer, so a project that uses it
+will not look the same as it did in 0.3.
+
+- **Lens flare** loses its Streak count parameter.
+- See [the notes](https://lumitlab.com/releases/0.4.0) for the rest.
+
+## What's Changed
+
+- Something else entirely
+''';
+
 /// A service already holding a verified download, for the windows that come
 /// after one.
-Future<UpdateService> _readyService(Directory scratch) async {
+Future<UpdateService> _readyService(Directory scratch, {String? notes}) async {
   final body = utf8.encode('installer');
   final service = _service(
     platform: 'windows',
     folder: () => scratch,
     fetch: (_) async => _releaseJson(assets: [
       _asset('lumit-0.2.0-windows-x64-setup.exe', size: body.length),
-    ]),
+    ], body: notes),
     download: (url, into, {required onProgress, required cancelled}) async =>
         into.writeAsBytesSync(body),
     launch: (file, _) async {},
@@ -773,12 +869,15 @@ Map<String, dynamic> _releaseJson({
   bool draft = false,
   bool prerelease = false,
   List<Map<String, dynamic>>? assets,
+  // The release notes. Left out, as an older API answer leaves it out.
+  String? body,
 }) =>
     {
       'tag_name': tag,
       'draft': draft,
       'prerelease': prerelease,
       'html_url': 'https://github.com/luminalmvm/lumit/releases/tag/$tag',
+      if (body != null) 'body': body,
       // What a release actually carries: an installer and a package
       // per platform, plus the Flatpak bundle.
       'assets': assets ??

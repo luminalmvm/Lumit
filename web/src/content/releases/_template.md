@@ -21,3 +21,10 @@ release is for, then break the detail into sections.
 ## Fixed
 
 - Past tense, one line per fix.
+
+## Before you update
+
+- Only when the release changes something a project may depend on, such as an
+  effect that no longer draws the same. Leave the section out otherwise.
+- Lumit shows this section after the update is downloaded and before it restarts,
+  so keep it to what the reader has to know.

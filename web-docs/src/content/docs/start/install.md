@@ -60,6 +60,9 @@ within the application via **Help ▸ Check for updates**, or in **Edit ▸ Sett
 General**. If these options don't work, you can manually update by downloading the 
 [latest build](https://lumitlab.com/download).
 
+A release that changes something a project may depend on says so after the download,
+before Lumit restarts. **Not now** keeps the download and leaves the update in the menu.
+
 Releases are announced on the [Lumit releases page](https://lumitlab.com/releases/), 
 [GitHub releases page](https://github.com/luminalmvm/Lumit/releases), and our 
 [Discord](https://discord.gg/dc3p3XC7mM).
