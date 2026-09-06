@@ -30,7 +30,11 @@ pub(crate) struct Done {
     pub target_width: Option<u32>,
     /// The decode itself, handed on whole — so a prefetched float frame is
     /// filed as what it is rather than read as bytes.
-    pub decoded: lumit_media::DecodedFrame,
+    ///
+    /// Named through `lumit_render`, which always has the decoder, because
+    /// this crate's own is optional and a build without it still moves these
+    /// about (it simply never makes one).
+    pub decoded: lumit_render::DecodedFrame,
 }
 
 /// The worker's handle: send wants, drain finished decodes. Dropping it ends

@@ -5650,6 +5650,7 @@ impl LayerReference {
     /// A sequence answers with its **first** file. Every frame of a run comes
     /// out of one render with one set of passes, so which file is read for the
     /// list does not matter, and the first is the one that is certainly there.
+    #[cfg(feature = "media")]
     fn exr_path(&self) -> Option<std::path::PathBuf> {
         let layer = self.item().ok()?;
         let item = match &layer.kind {
@@ -5670,6 +5671,7 @@ impl LayerReference {
     /// and the effect are the kind that want one. Silent on every other case:
     /// an effect with no list shows four None dropdowns, which is the honest
     /// picture of "there is nothing here to extract".
+    #[cfg(feature = "media")]
     fn seed_extract_channels(&self, instance: &mut lumit_core::model::EffectInstance) {
         use lumit_core::fx::effects::extract_channels as ec;
         if instance.effect.match_name != "extract_channels" {
@@ -5693,6 +5695,7 @@ impl LayerReference {
     /// a button the user presses rather than something that happens to them.
     ///
     /// One op and one undo step, like every other effect-stack edit.
+    #[cfg(feature = "media")]
     pub(crate) fn reload_extract_channels(&self, effect: Uuid) -> Result<(), BridgeError> {
         use lumit_core::fx::effects::extract_channels as ec;
         let path = self.exr_path().ok_or(BridgeError::NotFootage)?;
@@ -5707,6 +5710,19 @@ impl LayerReference {
                 .insert(ec::EXTRA_KEY.to_owned(), ec::channels_extra(&channels));
             Ok(())
         })
+    }
+
+    /// Without the decoder there is no file to read a channel list off, so an
+    /// Extract channels lands with four None dropdowns. The same picture the
+    /// effect shows on a layer that is not an OpenEXR.
+    #[cfg(not(feature = "media"))]
+    fn seed_extract_channels(&self, _instance: &mut lumit_core::model::EffectInstance) {}
+
+    /// The Reload channels button in a build with no decoder: nothing to read,
+    /// said plainly rather than by doing nothing.
+    #[cfg(not(feature = "media"))]
+    pub(crate) fn reload_extract_channels(&self, _effect: Uuid) -> Result<(), BridgeError> {
+        Err(BridgeError::MediaPathUnresolved)
     }
 
     /// Remove `effect` from this layer's stack — **or from its style list**,
