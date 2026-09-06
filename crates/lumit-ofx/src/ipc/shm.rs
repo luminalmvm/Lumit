@@ -194,6 +194,12 @@ pub struct Ring {
     map: MmapMut,
     /// Set on the side that made the file, so that side deletes it.
     owned: Option<PathBuf>,
+    /// The maker's own handle, kept open for the life of the ring. On Windows
+    /// it carries delete-on-close, so the file goes when this process ends
+    /// whether or not anything dropped the ring. The host keeps its brokers
+    /// in a static, and a static is never dropped, which is how half a
+    /// gigabyte a broker used to pile up in the temp directory.
+    file: Option<File>,
 }
 
 impl Drop for Ring {
@@ -202,12 +208,13 @@ impl Drop for Ring {
             return;
         };
         // Windows will not delete a file that is still mapped, and the file is
-        // as big as the ring — a session's worth of undeleted ones would be
-        // real disk. So the mapping goes first, swapped for a one-byte
-        // anonymous one, which costs a page and nothing else.
+        // as big as the ring. So the mapping goes first, swapped for a
+        // one-byte anonymous one, then the handle, which on Windows is the
+        // delete. The remove is for the other platforms.
         if let Ok(empty) = MmapMut::map_anon(1) {
             drop(std::mem::replace(&mut self.map, empty));
         }
+        drop(self.file.take());
         let _ = std::fs::remove_file(path);
     }
 }
@@ -229,18 +236,23 @@ impl Ring {
             slots,
             slot_bytes,
         };
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(path)?;
+        let mut options = OpenOptions::new();
+        options.read(true).write(true).create(true).truncate(true);
+        // FILE_FLAG_DELETE_ON_CLOSE. The broker still opens the file by name
+        // while this handle is open; std's default share mode allows that.
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::OpenOptionsExt;
+            options.custom_flags(0x0400_0000);
+        }
+        let file = options.open(path)?;
         file.set_len(slot_bytes.saturating_mul(u64::from(slots)))?;
         let map = map_file(&file)?;
         Ok(Self {
             spec,
             map,
             owned: Some(path.to_path_buf()),
+            file: Some(file),
         })
     }
 
@@ -256,6 +268,7 @@ impl Ring {
             spec: spec.clone(),
             map,
             owned: None,
+            file: None,
         })
     }
 

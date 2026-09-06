@@ -591,6 +591,13 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
             );
 
         return Listener(
+          // The middle button pans, like in other software.
+          onPointerMove: (event) {
+            if (event.buttons == kMiddleMouseButton &&
+                ui.dropper.value == null) {
+              _panBy(event.delta);
+            }
+          },
           // The wheel zooms about the cursor (docs/07 §2.2): the comp point
           // under the pointer stays under the pointer, which is what makes
           // zooming feel like leaning in rather than teleporting.
@@ -622,13 +629,7 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
               channel: _channel,
               compSize: size,
               footage: footage,
-              onPan: (delta) => setState(() {
-                // A pan during a zoom flight would be fighting it, so the
-                // flight ends where it is and the drag takes over.
-                _zoomFrom = null;
-                _zoomMotion.value = 1;
-                _pan += delta;
-              }),
+              onPan: _panBy,
               // The model is *told* an edit landed, rather than the boxes
               // checking for themselves as they draw: the Viewer
               // commits its own edits, and the drawing path reads the held
@@ -786,6 +787,16 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
       _pan = next.pan;
     });
   }
+
+  /// Move the picture by a drag's worth, whether that drag came from the Hand
+  /// tool, a press on empty space or the middle button.
+  void _panBy(Offset delta) => setState(() {
+        // A pan during a zoom flight would be fighting it, so the flight ends
+        // where it is and the drag takes over.
+        _zoomFrom = null;
+        _zoomMotion.value = 1;
+        _pan += delta;
+      });
 
   /// The magnification "Fit" means here: the whole picture in the panel.
   double _fitScale(BoxConstraints constraints, BridgeCompSize size) {

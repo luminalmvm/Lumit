@@ -440,7 +440,7 @@ pub struct CompLayerDraw {
     /// at each neighbour time, as `(offset, draws, camera)` in ascending offset
     /// order.
     ///
-    /// Fast motion blur and Datamosh want per-pixel motion, and the decode
+    /// Motion blur and Datamosh want per-pixel motion, and the decode
     /// worker can only measure it between decoded source frames — which an
     /// **adjustment layer** (whose picture is the composite of everything
     /// below it) and a **Precomp layer** (whose picture is a comp render) do

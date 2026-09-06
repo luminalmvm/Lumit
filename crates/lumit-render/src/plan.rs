@@ -274,6 +274,11 @@ pub fn collect_comp_jobs(
     // held comp time for `comp.layers[idx]`; equal to `t` for every layer
     // when no Posterize is live, so an ordinary comp is unchanged.
     let sample_times = lumit_core::fx::posterize_sample_times(&comp.layers, t);
+    // Accumulation motion blur (docs/08 §3.26): the sub-frame moments each
+    // layer's footage is wanted at by the adjustments above it, in comp
+    // frames. Empty everywhere in an ordinary comp.
+    let shutter_offsets = lumit_core::fx::accumulation_shutter_offsets(&comp.layers, t);
+    let comp_dt = 1.0 / comp.frame_rate.fps().max(1.0);
     for (idx, layer) in comp.layers.iter().enumerate() {
         if !wanted.contains(&layer.id) || !in_span(layer) {
             continue;
@@ -341,7 +346,8 @@ pub fn collect_comp_jobs(
                         flow,
                         // Temporal effects on Sequence clips are a later
                         // refinement (clip-relative neighbour resolution);
-                        // footage layers first.
+                        // footage layers first. The accumulation shutter
+                        // takes the same boundary: a clip under one is held.
                         temporal: Vec::new(),
                         flow_neighbours: Vec::new(),
                         slate: false,
@@ -349,6 +355,8 @@ pub fn collect_comp_jobs(
                             &layer.effects,
                             layer.switches.fx,
                         ),
+                        shutter: Vec::new(),
+                        shutter_flow: None,
                     });
                 }
             }
@@ -403,6 +411,8 @@ pub fn collect_comp_jobs(
                         slate: true,
                         // Nothing was decoded, so nothing was extracted.
                         channels: None,
+                        shutter: Vec::new(),
+                        shutter_flow: None,
                     });
                     continue;
                 }
@@ -477,6 +487,35 @@ pub fn collect_comp_jobs(
                     } else {
                         Vec::new()
                     };
+                // Accumulation motion blur above this layer (docs/08 §3.26):
+                // the clip at each moment of the open shutter, so the
+                // sub-frame re-renders smear footage motion and not only
+                // transforms. Each moment is picked the way the Blend policy
+                // picks, so a moment on a real frame is that frame alone and
+                // one between two is synthesised from both, by the layer's own
+                // Flow settings where its Retime uses Flow and the defaults
+                // otherwise. Empty for every layer no such adjustment covers.
+                let shutter: Vec<crate::decode::ShutterSample> = shutter_offsets[idx]
+                    .iter()
+                    .map(|&off| {
+                        let slt = lumit_core::time::layer_time(
+                            sample_times[idx] + off * comp_dt,
+                            layer.start_offset.0,
+                        );
+                        let sst = layer.source_time_at(slt);
+                        let (source_frame, blend) =
+                            lumit_core::pixels::frame_pick(sst, fps, src_frames, true, sample_fps);
+                        crate::decode::ShutterSample {
+                            offset: off,
+                            source_frame,
+                            blend,
+                        }
+                    })
+                    .collect();
+                let shutter_flow = (!shutter.is_empty()).then(|| match &layer.interpolation {
+                    Interpolation::Flow(p) => p.clone(),
+                    _ => lumit_core::retime::FlowParams::default(),
+                });
                 jobs.push(CompJob {
                     layer: layer.id,
                     item: *item,
@@ -498,6 +537,8 @@ pub fn collect_comp_jobs(
                         &layer.effects,
                         layer.switches.fx,
                     ),
+                    shutter,
+                    shutter_flow,
                 });
             }
         }
@@ -561,6 +602,8 @@ pub fn same_decode(a: &[CompJob], b: &[CompJob]) -> bool {
                 && x.temporal == y.temporal
                 && x.flow_neighbours == y.flow_neighbours
                 && x.channels == y.channels
+                && x.shutter == y.shutter
+                && x.shutter_flow == y.shutter_flow
         })
 }
 
@@ -616,6 +659,21 @@ impl CompJob {
                 h.update(slot.as_deref().unwrap_or("").as_bytes());
                 h.update(&[0]);
             }
+        }
+        // The shutter moments are content too: the same frame decoded for a
+        // wider shutter carries different in-between pictures.
+        for s in &self.shutter {
+            h.update(b"shutter/");
+            h.update(&s.offset.to_le_bytes());
+            h.update(&s.source_frame.to_le_bytes());
+            if let Some((ceil, weight)) = s.blend {
+                h.update(&ceil.to_le_bytes());
+                h.update(&weight.to_le_bytes());
+            }
+        }
+        if let Some(flow) = &self.shutter_flow {
+            h.update(b"shutter-flow/");
+            h.update(&bincode::serialize(flow).unwrap_or_default());
         }
         let mut k = [0u8; 16];
         k.copy_from_slice(&h.finalize().as_bytes()[..16]);
@@ -800,6 +858,8 @@ mod tests {
             flow_neighbours: Vec::new(),
             slate: false,
             channels: None,
+            shutter: Vec::new(),
+            shutter_flow: None,
         }
     }
 
@@ -1516,5 +1576,160 @@ mod tests {
             2,
             "soloing a music row leaves the picture's decodes alone"
         );
+    }
+
+    /// **A clip under an accumulation motion blur is planned at every moment
+    /// of the shutter** (docs/08 §3.26): one shutter sample per offset, each
+    /// picked between the two source frames the moment falls between, with the
+    /// flow settings the in-betweens are made with. A layer above the
+    /// adjustment plans none, and its job keeps the name it always had.
+    #[test]
+    fn a_clip_under_accumulation_mb_is_planned_at_every_shutter_moment() {
+        use lumit_core::model::{
+            Composition, Document, FootageItem, Layer, LayerKind, LinearColour, MediaRef, Switches,
+            TransformGroup,
+        };
+        use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
+        use std::collections::HashMap;
+
+        let layer = |kind: LayerKind| Layer {
+            graph: Default::default(),
+            markers: Vec::new(),
+            id: Uuid::now_v7(),
+            name: "l".into(),
+            kind,
+            in_point: CompTime(Rational::ZERO),
+            out_point: CompTime(Rational::new(10, 1).unwrap()),
+            start_offset: CompTime(Rational::ZERO),
+            transform: TransformGroup::default(),
+            matte: None,
+            parent: None,
+            label: 0,
+            volume_db: lumit_core::anim::Property::zero(),
+            pan: lumit_core::anim::Property::zero(),
+            audio_only: false,
+            adjustment: false,
+            retime: None,
+            interpolation: lumit_core::retime::Interpolation::default(),
+            parked_flow: None,
+            blend: lumit_core::model::BlendMode::default(),
+            masks: Vec::new(),
+            paint: Vec::new(),
+            puppet: None,
+            effects: Vec::new(),
+            styles: Vec::new(),
+            switches: Switches::default(),
+            extra: serde_json::Map::new(),
+        };
+        let mut doc = Document::new();
+        let footage = |doc: &mut Document| {
+            let item = Uuid::now_v7();
+            doc.items.push(ProjectItem::Footage(FootageItem {
+                sequence: None,
+                id: item,
+                name: "f".into(),
+                media: MediaRef {
+                    relative_path: "f.mp4".into(),
+                    absolute_path: "/f.mp4".into(),
+                    fingerprint: None,
+                    extra: serde_json::Map::new(),
+                },
+                extra: serde_json::Map::new(),
+                colour_space: None,
+            }));
+            item
+        };
+        let (above_item, below_item) = (footage(&mut doc), footage(&mut doc));
+        // Four samples over a whole frame, centred: offsets -3/8, -1/8, 1/8,
+        // 3/8 of a comp frame.
+        let mut adjust = layer(LayerKind::Adjustment);
+        let mut mb = lumit_core::fx::instantiate("accumulation_mb").unwrap();
+        for p in &mut mb.params {
+            let v = match p.id.as_str() {
+                "samples" => 4.0,
+                "shutter_angle" => 360.0,
+                "shutter_phase" => -180.0,
+                _ => continue,
+            };
+            p.value = lumit_core::model::EffectValue::Float(lumit_core::anim::Property::fixed(v));
+        }
+        adjust.effects = vec![mb];
+        let above = layer(LayerKind::Footage { item: above_item });
+        let below = layer(LayerKind::Footage { item: below_item });
+        let (above_id, below_id) = (above.id, below.id);
+        // A 30 fps comp over 60 fps clips: a quarter of a comp frame is half a
+        // source frame, so every moment lands between two frames.
+        let comp = Composition {
+            master_volume_db: 0.0,
+            groups: Vec::new(),
+            beat_grid: None,
+            id: Uuid::now_v7(),
+            name: "c".into(),
+            width: 64,
+            height: 64,
+            frame_rate: FrameRate::new(30, 1).unwrap(),
+            duration: Duration(Rational::new(10, 1).unwrap()),
+            background: LinearColour::BLACK,
+            work_area: None,
+            layers: vec![above, adjust, below],
+            markers: Vec::new(),
+            motion_blur: lumit_core::model::MotionBlur::default(),
+            extra: serde_json::Map::new(),
+        };
+        let probe = crate::SourceProbe::Video {
+            fps: 60.0,
+            width: 64,
+            height: 64,
+            frames: 600,
+            audio: false,
+        };
+        let probes: HashMap<Uuid, crate::SourceProbe> = [(above_item, probe), (below_item, probe)]
+            .into_iter()
+            .collect();
+        let jobs = plan_comp_frame(&doc, &comp, 1.0, Quality::default(), &probes);
+        let job_for = |id: Uuid| jobs.iter().find(|j| j.layer == id).expect("planned");
+
+        let covered = job_for(below_id);
+        assert_eq!(
+            covered.source_frame, 60,
+            "frame 30 of the comp is frame 60 of the clip"
+        );
+        let moment = |offset: f64, source_frame: usize, ceil: usize, weight: f32| {
+            crate::decode::ShutterSample {
+                offset,
+                source_frame,
+                blend: Some((ceil, weight)),
+            }
+        };
+        assert_eq!(
+            covered.shutter,
+            vec![
+                moment(-0.375, 59, 60, 0.25),
+                moment(-0.125, 59, 60, 0.75),
+                moment(0.125, 60, 61, 0.25),
+                moment(0.375, 60, 61, 0.75),
+            ],
+            "each shutter moment is the pair of source frames it falls between"
+        );
+        assert_eq!(
+            covered.shutter_flow,
+            Some(lumit_core::retime::FlowParams::default()),
+            "a Nearest clip makes its in-betweens with the default flow settings"
+        );
+
+        let clear = job_for(above_id);
+        assert!(
+            clear.shutter.is_empty(),
+            "a layer above the adjustment is not covered"
+        );
+        assert_eq!(clear.shutter_flow, None);
+        // The moments are content: the covered job cannot share a name with an
+        // uncovered decode of the same frame, or a cached decode would serve a
+        // shutterless picture to the samples.
+        assert_ne!(covered.source_key(), clear.source_key());
+        assert!(!same_decode(
+            std::slice::from_ref(covered),
+            std::slice::from_ref(clear)
+        ));
     }
 }

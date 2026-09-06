@@ -42,6 +42,7 @@ bool hasEngineLabel(String english) => _table.containsKey(english);
 
 Map<String, String> get _table => {
       "A": l10n.fxA,
+      "Accumulation motion blur": l10n.fxAccumulationMotionBlur,
       "Add grain": l10n.fxAddGrain,
       "Add": l10n.fxAdd,
       "Align to motion": l10n.fxAlignToMotion,
@@ -438,7 +439,6 @@ Map<String, String> get _table => {
       "F-stop": l10n.fxFStop,
       "Fade": l10n.fxFade,
       "Far blur": l10n.fxFarBlur,
-      "Fast motion blur": l10n.fxFastMotionBlur,
       "Feature density": l10n.fxFeatureDensity,
       "Feather": l10n.fxFeather,
       "Field of view": l10n.fxFieldOfView,

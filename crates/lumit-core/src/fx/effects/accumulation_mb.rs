@@ -15,10 +15,11 @@ use lumit_fx_macros::Effect;
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "accumulation_mb",
-    // The user-facing motion blur (docs/08 §3.26): the accumulation kind is the
-    // correct, whole-scene one, so it takes the plain name. The optical-flow
-    // effect (match_name "motion_blur") is "Fast motion blur".
-    label = "Motion blur",
+    // Named for what it does and what it costs (docs/08 §3.26): every sample
+    // is a full render of the scene below, and the name says so before the
+    // effect is added. The optical-flow effect (match_name "motion_blur") is
+    // the plain "Motion blur".
+    label = "Accumulation motion blur",
     version = 1,
     category = Temporal,
     // ≈ N× a full comp render.

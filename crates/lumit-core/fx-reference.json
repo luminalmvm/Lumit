@@ -10694,9 +10694,9 @@
       "matte_role": "strength"
     },
     {
-      "slug": "motion-blur",
+      "slug": "accumulation-motion-blur",
       "match_name": "accumulation_mb",
-      "label": "Motion blur",
+      "label": "Accumulation motion blur",
       "version": 1,
       "category": "Temporal",
       "category_slug": "temporal",
@@ -10826,9 +10826,9 @@
       "matte_role": "own"
     },
     {
-      "slug": "fast-motion-blur",
+      "slug": "motion-blur",
       "match_name": "motion_blur",
-      "label": "Fast motion blur",
+      "label": "Motion blur",
       "version": 1,
       "category": "Temporal",
       "category_slug": "temporal",

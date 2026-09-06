@@ -1019,7 +1019,7 @@ fn occlusion_raw(f: &FlowField, g: &FlowField) -> Vec<u8> {
 /// against its backward twin `g` (docs/08 §3.2, FX-19): 1 where the two agree
 /// (a trustworthy vector), tapering to 0 where they disagree — occlusion, a
 /// motion boundary, or textureless drift. The *smooth* cousin of the binary
-/// [`occlusion`] mask, with **no hard threshold**: Fast motion blur scales each
+/// [`occlusion`] mask, with **no hard threshold**: Motion blur scales each
 /// pixel's streak length by this, so unreliable regions fade toward unblurred
 /// gradually instead of leaving a hard cut. The raw consistency (1 at a perfect
 /// match, ramping linearly to 0 at the same rel/abs mismatch the binary test
@@ -2522,7 +2522,7 @@ mod tests {
             "an inconsistent pair loses confidence"
         );
         // An all-invalid forward is *dimmed*, not extinguished. It used to go
-        // to zero, and that hard cut-off is what left Fast motion blur with
+        // to zero, and that hard cut-off is what left Motion blur with
         // scattered patches of blur and hard edges between them on a fast
         // camera move — the very artefact FX-19's smooth confidence exists to
         // avoid, reintroduced by a binary term inside it. A vector nothing

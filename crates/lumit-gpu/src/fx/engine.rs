@@ -88,7 +88,7 @@ impl FxEngine {
                 bind_group_layouts: &[&adjust_layout],
                 push_constant_ranges: &[],
             });
-        // The dominant-motion reduction Fast motion blur runs first
+        // The dominant-motion reduction Motion blur runs first
         // (docs/impl/optical-flow.md §4.5 item 3): the flow field in (0), one
         // texel per tile out (1), the uniform (2). Its own layout because the
         // output must be rgba32float — the tile vectors are compared against an

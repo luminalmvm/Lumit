@@ -1,4 +1,4 @@
-// Fast motion blur (docs/08-EFFECTS.md §3.2), Guertin-class reconstruction
+// Motion blur (docs/08-EFFECTS.md §3.2), Guertin-class reconstruction
 // (docs/impl/optical-flow.md §4.5 item 3). Mirrors
 // lumit_core::fx::cpu::motion_blur op-for-op (§1.6: the CPU is the oracle) —
 // the same tile reduction, the same tap count, the same weights accumulated in

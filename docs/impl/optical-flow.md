@@ -194,7 +194,8 @@ out = (1/W) Σ_{i=−S..S} w_i · frame(x + v·(i/(2S)))   // w_i = 1 (box) — 
   to a layer, the effect receives a flag and must not add transform-derived velocity
   ([06-RENDER-PIPELINE.md](../06-RENDER-PIPELINE.md) §motion-blur).
 
-**Shipped v1 (labelled "Fast motion blur", FX-19).** The v1 effect measures the single forward
+**Shipped v1 (labelled "Motion blur", FX-19; "Fast motion blur" until the accumulation kind
+took the longer name).** The v1 effect measures the single forward
 neighbour (+1) and streaks each pixel with a fixed centred box of `Samples` taps. Crucially it
 does **not** drop occluded taps from the sum (a per-tap on/off gate showed as hard blurred /
 un-blurred cut regions). Instead the *streak length* is scaled smoothly by a per-pixel
@@ -234,7 +235,7 @@ cannot translate the same parameters into two different measurements.
 | `fallback` | Fallback | §3's both-occluded branch: crossfade or the nearer endpoint |
 | `hud_guard` | HUD guard | Runs §3.1 step 5's `hud_weights` and mixes synthesis back toward the plain blend by it |
 
-Fast motion blur's own controls are docs/08 §3.2's table, not this one: they describe the
+Motion blur's own controls are docs/08 §3.2's table, not this one: they describe the
 *reconstruction*, not the measurement. The blur reads whatever field these settings
 produced — `MbQuality` (Normal/High) chooses how it is integrated (§4.7), the tap cap how
 finely, and neither changes a vector.

@@ -620,7 +620,7 @@ pub fn run_ops_with_roto(
         // The auxiliary layer's own counter, on the schema's own
         // `layer_input` predicate — the one `build.rs` fills by. It is read
         // here rather than inside the `AuxKind` match below because an effect
-        // may want a layer input *and* something else: Fast motion blur reads a
+        // may want a layer input *and* something else: Motion blur reads a
         // whole flow field and a Motion vectors layer, and a variant per pair
         // is the combinatorial seam the matte was kept out of.
         let layer_input = if resolved.def.schema().layer_input().is_some() {
@@ -984,7 +984,7 @@ fn op_keys(
                 matte_i += 1;
             }
             // The layer-input list moved onto the schema's own predicate when
-            // Fast motion blur gained its Motion vectors row: an op
+            // Motion blur gained its Motion vectors row: an op
             // may take a layer input beside any other aux, so it is no longer
             // an AuxKind. A bound plate is a picture nobody named - it breaks
             // the chain exactly as a bound matte does.

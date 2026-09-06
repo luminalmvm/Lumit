@@ -75,7 +75,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$script:Locales = @('de', 'kk', 'uk', 'zh', 'zh_Hant')
+$script:Locales = @('de', 'es', 'kk', 'pl', 'uk', 'zh', 'zh_Hant')
 $script:StateName = 'translation-state.json'
 $script:Dir = $null
 
@@ -445,7 +445,7 @@ function Invoke-SelfTest {
         $s = (Get-Status | Where-Object { $_.Locale -eq 'de' })
         Assert ($s.Stale -eq 1 -and $s.Translated -eq 2) 'a reworded English string makes its translation stale'
         $p = Invoke-Prune
-        Assert ($p.Expired -eq 5 -and $p.Dropped -eq 5) 'prune expires the stale ones and drops the orphans'
+        Assert ($p.Expired -eq $script:Locales.Count -and $p.Dropped -eq $script:Locales.Count) 'prune expires the stale ones and drops the orphans'
         $de = Read-JsonMap (Join-Path $tmp 'app_de.arb')
         Assert (-not $de.Contains('zoom') -and -not $de.Contains('gone')) 'both left the .arb'
         Assert (-not (Read-State)['de'].Contains('zoom')) 'and the sidecar line went with it'

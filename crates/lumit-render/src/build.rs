@@ -943,7 +943,7 @@ pub fn build_comp_draws_at(
                     // viewport zoom, and sizing the layer by that made it
                     // scale with zoom (a small layer ballooned when zoomed in).
                     (
-                        lp.rgba.clone(),
+                        own_shutter_average(layer, lp, lt),
                         lp.width,
                         lp.height,
                         (lp.natural_w as f32, lp.natural_h as f32),
@@ -2051,7 +2051,7 @@ pub fn build_comp_draws_at(
                     false,
                 );
                 // The nested picture again at each neighbour time (docs/08
-                // §3.2), for a Fast motion blur or Datamosh on the
+                // §3.2), for a Motion blur or Datamosh on the
                 // Precomp layer itself: a comp has no decoded frames for the
                 // worker to measure between, but it can be built again at
                 // another moment. The offset steps by the *parent* comp's
@@ -2287,7 +2287,7 @@ pub fn build_comp_draws_at(
                     lights: Vec::new(),
                     temporal_below,
                     accumulation_below,
-                    // The composite this layer's Fast motion blur or Datamosh
+                    // The composite this layer's Motion blur or Datamosh
                     // measures its motion against (docs/08 §3.2): the
                     // below-stack again at each neighbour time. Empty unless
                     // one of those effects is live, which is the whole cost
@@ -2579,14 +2579,17 @@ fn flare_lens_files(effects: &[lumit_core::model::EffectInstance], lt: f64) -> V
 }
 
 /// Render the composite of `below` (the layers beneath a temporal adjustment,
-/// in document order) at the held/sample comp time `tau`, reusing the SAME
-/// decoded `pixels_by_layer` — footage frames are held; only transforms,
-/// effects and the camera re-resolve at `tau` (docs/impl/temporal-rerender.md
-/// §2). This is the one re-render both the preview (`build_comp_draws` +
-/// [`Realiser::realise`]) and export drive, so a Posterize Time (and, later,
-/// accumulation motion blur) frame is identical in the viewport and the file.
-/// Re-resolving decodes nothing: the same held pixels are reused, so the
-/// decode planner is never re-entered (docs/impl/temporal-rerender.md Traps).
+/// in document order) at the held/sample comp time `tau`, reusing the
+/// decoded `pixels_by_layer` the caller hands in — for a Posterize hold that
+/// is the frame-time decode, so footage is held and only transforms, effects
+/// and the camera re-resolve at `tau`; for an accumulation sample the caller
+/// has already swapped in each clip's picture at that moment (docs/impl/
+/// temporal-rerender.md §2). This is the one re-render both the preview
+/// (`build_comp_draws` + [`Realiser::realise`]) and export drive, so a
+/// Posterize Time or accumulation motion blur frame is identical in the
+/// viewport and the file. Re-resolving decodes nothing here: every picture it
+/// reads was planned with the frame, so the decode planner is never re-entered
+/// (docs/impl/temporal-rerender.md Traps).
 ///
 /// Temporal effects inside the below-stack (echo, flow motion blur, datamosh)
 /// are held to a still here — their neighbour frames and flow fields are
@@ -2628,9 +2631,10 @@ pub fn render_below_at(
 /// Build the below-stack's draw list at the held/sample comp time `tau`, plus
 /// the comp's camera at `tau` — the shared CPU step both the preview (embedded
 /// on the adjustment draw as [`TemporalBelow`]) and export (`render_below_at`)
-/// drive, so the two re-render the identical stack. Footage is held
-/// (the same `pixels_by_layer`); temporal effects in the below-stack are
-/// dropped to stills ([`strip_temporal_inputs`]).
+/// drive, so the two re-render the identical stack. Footage is whatever
+/// `pixels_by_layer` says it is at `tau` (held for a Posterize, the moment's
+/// own picture for an accumulation sample); temporal effects in the
+/// below-stack are dropped to stills ([`strip_temporal_inputs`]).
 #[allow(clippy::too_many_arguments)]
 pub fn below_draws_at(
     doc: &Arc<lumit_core::model::Document>,
@@ -2757,6 +2761,25 @@ pub fn accumulation_mb_below(
         .iter()
         .map(|off| {
             let tau = t_comp + off * dt;
+            // The footage at this moment (docs/08 §3.26): the decode
+            // planner fetched each covered clip at every offset of the
+            // shutter, and this sample's below-stack reads those pixels in
+            // place of the frame-time ones, so a clip playing under the
+            // adjustment smears the way a moving layer does. A clip with no
+            // picture for this moment (a Sequence clip, a dropped decode)
+            // keeps its frame-time pixels, which is the held behaviour this
+            // effect always had. References only: the moment's pixels live on
+            // the frame-time entry, so no frame is copied here.
+            let mut at_moment_by_layer = pixels_by_layer.clone();
+            for lp in pixels_by_layer.values() {
+                if let Some((_, moment)) = lp
+                    .shutter
+                    .iter()
+                    .find(|(o, _)| o.to_bits() == off.to_bits())
+                {
+                    at_moment_by_layer.insert(lp.layer, &**moment);
+                }
+            }
             below_draws_at(
                 doc,
                 comp,
@@ -2764,7 +2787,7 @@ pub fn accumulation_mb_below(
                 tau,
                 frame_t,
                 force_mb,
-                pixels_by_layer,
+                &at_moment_by_layer,
                 visited,
             )
         })
@@ -2781,12 +2804,65 @@ pub fn accumulation_mb_below(
     })
 }
 
+/// A clip's picture when the layer itself carries accumulation motion blur
+/// (docs/08 §3.26): the clip averaged over its own shutter moments, which the
+/// decode planner fetched onto [`CompLayerPixels::shutter`] for exactly this.
+/// The frame-time pixels unchanged when the layer carries no live copy of the
+/// effect, which is every ordinary layer.
+///
+/// A plain carrier has nothing beneath it to re-render, so this is what the
+/// effect means there: the motion inside the footage, averaged the way a Blend
+/// retime averages its two frames, in the decoded bytes. The layer's transform
+/// is not sampled here; that is the motion blur switch's job, and the two
+/// stack. A moment the worker could not make (a Sequence clip, a dropped
+/// decode) stands in as the frame-time picture, and Mix blends the average
+/// back toward it. The Matte is not read on a plain carrier.
+///
+/// ponytail: a scalar byte average, N reads of the frame on the CPU each
+/// render. Sum the moments on the card if a profile ever shows it; the
+/// planner and worker need not change.
+fn own_shutter_average(layer: &lumit_core::model::Layer, lp: &CompLayerPixels, lt: f64) -> Vec<u8> {
+    let offsets = match lumit_core::fx::stack_accumulation_mb(&layer.effects, layer.switches.fx, lt)
+    {
+        Some(p) if !layer.is_adjustment() => (p.sample_offsets(), p.mix),
+        _ => return lp.rgba.clone(),
+    };
+    let (offsets, mix) = offsets;
+    if offsets.is_empty() {
+        return lp.rgba.clone();
+    }
+    let n = lp.rgba.len();
+    let mut sum = vec![0u32; n];
+    for off in &offsets {
+        let moment = lp
+            .shutter
+            .iter()
+            .find(|(o, _)| o.to_bits() == off.to_bits())
+            .map(|(_, m)| m.rgba.as_slice())
+            .filter(|m| m.len() == n)
+            .unwrap_or(&lp.rgba);
+        for (s, &b) in sum.iter_mut().zip(moment) {
+            *s += u32::from(b);
+        }
+    }
+    let count = offsets.len() as u32;
+    let average: Vec<u8> = sum
+        .iter()
+        .map(|&s| ((s + count / 2) / count) as u8)
+        .collect();
+    if mix >= 1.0 {
+        average
+    } else {
+        lumit_core::pixels::blend_rgba(&lp.rgba, &average, mix as f32)
+    }
+}
+
 /// The neighbour below-stacks a flow-consuming effect on an **adjustment**
 /// layer measures its motion against (docs/08 §3.2), or None when the
 /// layer carries no such effect.
 ///
 /// An adjustment layer's picture is the composite of everything below it, which
-/// the decode worker never sees — so Fast motion blur and Datamosh on one were
+/// the decode worker never sees — so Motion blur and Datamosh on one were
 /// a silent passthrough, on exactly the layer docs/08 §3.2 calls the most common
 /// place to put the effect. The answer is the one the temporal re-renders
 /// already use: build the below-stack again at the neighbour time through the
@@ -4162,7 +4238,7 @@ mod render_below_at_tests {
     }
 
     // An adjustment layer carrying the named built-in effects at their
-    // defaults — Fast motion blur (docs/08 §3.2) and Datamosh (§3.12) are the
+    // defaults — Motion blur (docs/08 §3.2) and Datamosh (§3.12) are the
     // two that want measured motion.
     fn flow_adjustment(names: &[&str]) -> Layer {
         let mut l = accumulation_adjustment(4.0);
@@ -4211,7 +4287,7 @@ mod render_below_at_tests {
         assert_eq!(
             offsets(&["motion_blur"]),
             vec![1],
-            "Fast motion blur measures forward, to the next frame"
+            "Motion blur measures forward, to the next frame"
         );
         assert_eq!(
             offsets(&["datamosh"]),
@@ -4319,7 +4395,7 @@ mod render_below_at_tests {
             .count()
     }
 
-    // docs/08 §3.2: **the headline case**. Fast motion blur on an
+    // docs/08 §3.2: **the headline case**. Motion blur on an
     // adjustment layer over a moving scene must actually smear it — the effect's
     // commonest placement, and a silent passthrough until the composite below
     // could be measured. Deterministic across two runs, as every render is.
@@ -4337,7 +4413,7 @@ mod render_below_at_tests {
         let b = rig.render(&doc, &blurred, 0.5);
         assert_ne!(
             a, b,
-            "Fast motion blur on an adjustment layer must smear the composite \
+            "Motion blur on an adjustment layer must smear the composite \
              below it, not pass it through"
         );
         assert_eq!(
@@ -4358,7 +4434,7 @@ mod render_below_at_tests {
     // *other* measurement — back to the previous frame — and it drags that
     // previous picture along the field, so both halves of the composite
     // measurement have to arrive. Before this it could have neither, and passed
-    // through. Sharing the machinery with Fast motion blur must not mean sharing
+    // through. Sharing the machinery with Motion blur must not mean sharing
     // the field: a stack holding both is checked structurally above.
     #[test]
     fn an_adjustment_datamosh_drags_the_previous_composite() {
@@ -4429,7 +4505,7 @@ mod render_below_at_tests {
         assert_eq!(
             d.flow_below.iter().map(|(o, _, _)| *o).collect::<Vec<_>>(),
             vec![1],
-            "the Precomp carries the +1 neighbour Fast motion blur asked for"
+            "the Precomp carries the +1 neighbour Motion blur asked for"
         );
         let here = match &d.source {
             DrawSource::Nested { draws, .. } => draws[0].position.0,
@@ -4445,7 +4521,7 @@ mod render_below_at_tests {
         let b = rig.render(&doc, &blurred, 0.5);
         assert_ne!(
             a, b,
-            "Fast motion blur on a Precomp layer must smear the comp inside it"
+            "Motion blur on a Precomp layer must smear the comp inside it"
         );
         assert_eq!(
             b,

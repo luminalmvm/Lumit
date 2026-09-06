@@ -89,6 +89,29 @@ pub struct CompJob {
     /// runs, the decode has already happened. `None` on every ordinary layer,
     /// which decodes the picture the file opens as.
     pub channels: Option<[Option<String>; 4]>,
+    /// The sub-frame moments an accumulation motion blur above this layer
+    /// wants its footage at (docs/08 §3.26), one per shutter sample. Empty for
+    /// a layer no such adjustment covers, so a plain layer decodes exactly one
+    /// frame. Each is the frame pair the moment falls between, picked the way
+    /// the Blend policy picks: a moment that lands on a real frame is that
+    /// frame alone, and one between two is synthesised from both with
+    /// [`Self::shutter_flow`].
+    pub shutter: Vec<ShutterSample>,
+    /// How the in-between moments in [`Self::shutter`] are made: the layer's
+    /// own Flow settings when its Retime uses Flow, otherwise the defaults.
+    /// `None` only when `shutter` is empty.
+    pub shutter_flow: Option<lumit_core::retime::FlowParams>,
+}
+
+/// One sub-frame moment a covered clip is decoded at for accumulation motion
+/// blur: which moment (the offset, in comp frames, the adjustment's shutter
+/// maths produced, and looks it up by again) and which source frames show it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ShutterSample {
+    pub offset: f64,
+    pub source_frame: usize,
+    /// `Some((ceil, weight))` when the moment falls between two frames.
+    pub blend: Option<(usize, f32)>,
 }
 
 /// One measured motion field at a layer's decoded size: per-pixel `u` and `v` in
@@ -114,12 +137,20 @@ pub struct CompLayerPixels {
     /// `conf`idence in 0..1, row-major, same `width × height` as `rgba`) from
     /// this frame to each neighbour [`CompJob::flow_neighbours`] asked for,
     /// keyed by that offset. An offset whose neighbour did not decode is simply
-    /// absent, which is its consumer's passthrough. Fast motion blur (docs/08
+    /// absent, which is its consumer's passthrough. Motion blur (docs/08
     /// §3.2, offset `1`) smears along its field, scaling the streak by `conf`
     /// (FX-19); Datamosh (§3.12, offset `-1`) warps the previous frame
     /// along the `(u, v)` and ignores `conf`. **Both at once is one field each,
     /// not one field shared**: they are opposite measurements.
     pub flow_fields: Vec<(i32, FlowFieldData)>,
+    /// This clip at each sub-frame moment an accumulation motion blur above
+    /// it asked for (see [`CompJob::shutter`]), keyed by offset: a whole
+    /// layer-pixels of its own, the same size as `rgba` and named apart from
+    /// it, so the builder can stand it in for this entry when it builds that
+    /// sample's below-stack without copying a frame. A moment that failed to
+    /// decode is simply absent, and that sample falls back to the frame-time
+    /// pixels. Boxed so a layer with no shutter costs a pointer, not a struct.
+    pub shutter: Vec<(f64, Box<CompLayerPixels>)>,
     /// The content name of this decode: a hash of the [`CompJob`]
     /// identity [`crate::plan::same_decode`] compares — item, path, source
     /// frame, decode width, slate, blend partner, flow settings, temporal
@@ -713,6 +744,96 @@ pub fn flow_settings(p: &lumit_core::retime::FlowParams) -> lumit_flow::FlowSett
     }
 }
 
+/// The content name of a clip's picture at one shutter moment: its frame-time
+/// name and the moment, so the per-effect cache files the two apart.
+fn moment_key(source_key: u128, offset: f64) -> u128 {
+    let mut h = blake3::Hasher::new();
+    h.update(b"shutter-moment/1/");
+    h.update(&source_key.to_le_bytes());
+    h.update(&offset.to_le_bytes());
+    let mut k = [0u8; 16];
+    k.copy_from_slice(&h.finalize().as_bytes()[..16]);
+    u128::from_le_bytes(k)
+}
+
+/// The picture at a moment between two source frames: `a` alone when `blend`
+/// is `None`, else `a` and the `ceil` frame combined at `weight`, by flow
+/// synthesis when `flow` says so and by a plain crossfade otherwise. The one
+/// place a Blend or Flow retime and an accumulation shutter sample make their
+/// in-between frame, so the two cannot disagree about what a moment looks like.
+///
+/// Flow measures through the shared cache and then paints. Splitting the two,
+/// rather than calling `interpolate_at` which does both, is what lets the
+/// measurement be reused: synthesis differs per moment because the weight
+/// does, but the field between two source frames is the same field however
+/// many moments are drawn from it, and a slow ramp or an eight-sample shutter
+/// draws many.
+#[allow(clippy::too_many_arguments)]
+fn combine_pair(
+    decoders: &mut HashMap<Uuid, lumit_media::VideoDecoder>,
+    cache: &mut lumit_cache::ByteLru<FrameCacheKey, CachedFrame>,
+    flow_engine: &mut Option<lumit_flow::FlowEngine>,
+    flow_cache: &mut lumit_cache::ByteLru<FlowKey, CachedFlow>,
+    gpu: Option<&lumit_gpu::GpuContext>,
+    job: &CompJob,
+    a: FramePixels,
+    blend: Option<(usize, f32)>,
+    flow: Option<&lumit_core::retime::FlowParams>,
+) -> Result<Vec<u8>, String> {
+    let Some((ceil, w)) = blend else {
+        return Ok(a.rgba);
+    };
+    let req2 = Request {
+        generation: 0,
+        item: job.item,
+        source: job.source.clone(),
+        frame: ceil,
+        target_width: job.target_width,
+        slate: None,
+        // The retime's other end is read through the same channels, or the
+        // crossfade would be between two different pictures.
+        channels: job.channels.clone(),
+    };
+    let b = decode(decoders, cache, &req2)?;
+    // Both policies keep the plate's own width: a retimed OpenEXR is still an
+    // OpenEXR (docs/impl/media-io.md §5a).
+    let float = a.format == lumit_media::PixelFormat::LinearF32;
+    let Some(params) = flow else {
+        return Ok(if float {
+            lumit_core::pixels::blend_f32(&a.rgba, &b.rgba, w)
+        } else {
+            lumit_core::pixels::blend_rgba(&a.rgba, &b.rgba, w)
+        });
+    };
+    let set = flow_settings(params);
+    let (fw, fh) = (a.width as usize, a.height as usize);
+    let (ga, gb, _) = if float {
+        lumit_flow::flow_grays_f32(&a.rgba, &b.rgba, fw, fh, &set)
+    } else {
+        lumit_flow::flow_grays(&a.rgba, &b.rgba, fw, fh, &set)
+    };
+    let (fwd, bwd) = flow_for(
+        flow_engine,
+        flow_cache,
+        gpu,
+        job.item,
+        a.frame,
+        ceil,
+        &ga,
+        &gb,
+        &set,
+    );
+    let engine = flow_engine.get_or_insert_with(|| flow_engine_for(gpu));
+    // The float synthesis runs on the processor rather than the card — see
+    // `synthesize_at_f32` for why — and gives the same picture the eight-bit
+    // one would, without rounding it.
+    Ok(if float {
+        engine.synthesize_at_f32(&a.rgba, &b.rgba, fw, fh, &fwd, &bwd, w, &set)
+    } else {
+        engine.synthesize_at(&a.rgba, &b.rgba, fw, fh, &fwd, &bwd, w, &set)
+    })
+}
+
 #[allow(clippy::too_many_arguments)] // one worker call; bundling would hide it
 fn decode_comp(
     decoders: &mut HashMap<Uuid, lumit_media::VideoDecoder>,
@@ -841,7 +962,7 @@ fn decode_comp(
                         &gb,
                         &set,
                     );
-                    // The per-pixel confidence Fast motion blur tapers the streak
+                    // The per-pixel confidence Motion blur tapers the streak
                     // by (FX-19); the same deterministic function export runs, so
                     // the two match. Datamosh ignores it.
                     let conf = lumit_flow::confidence(&fwd, &bwd);
@@ -853,84 +974,94 @@ fn decode_comp(
                 }))
             })
             .collect();
-        // Blend / Flow policy: combine with the next source frame. Both keep
-        // the plate's own width — a retimed OpenEXR is still an OpenEXR.
+        // The moments an accumulation motion blur above wants this clip at
+        // (empty for a plain layer, so this loop does nothing then). Each is
+        // made the way the primary frame is made under a Blend or Flow retime,
+        // and a moment that fails to decode is dropped: that sample then shows
+        // the frame-time pixels, which degrades the blur, never the frame.
+        let source_key = job.source_key();
+        // Read off the primary frame before it is combined away: every moment
+        // of this clip is the same file at the same width, so they all carry
+        // the plate's own sample width (docs/impl/media-io.md §5a).
         let format = px.format;
-        let rgba = if let Some((ceil, w)) = job.blend {
-            let req2 = Request {
-                generation: req.generation,
-                item: req.item,
-                source: job.source.clone(),
-                frame: ceil,
-                target_width: req.target_width,
-                slate: None,
-                // The retime's other end is read through the same channels, or
-                // the crossfade would be between two different pictures.
-                channels: job.channels.clone(),
-            };
-            let px2 = decode(decoders, cache, &req2)?;
-            if let Some(params) = &job.flow {
-                let set = flow_settings(params);
-                let (fw, fh) = (px.width as usize, px.height as usize);
-                let float = px.format == lumit_media::PixelFormat::LinearF32;
-                // Measure through the shared cache, then paint. Splitting the
-                // two — rather than calling `interpolate_at`, which does both —
-                // is what lets the measurement be reused: synthesis differs per
-                // frame because φ does, but the field between two source frames
-                // is the same field however many phases are drawn from it, and
-                // a slow ramp draws many.
-                let (ga, gb, _) = if float {
-                    lumit_flow::flow_grays_f32(&px.rgba, &px2.rgba, fw, fh, &set)
-                } else {
-                    lumit_flow::flow_grays(&px.rgba, &px2.rgba, fw, fh, &set)
+        let shutter: Vec<(f64, Box<CompLayerPixels>)> = job
+            .shutter
+            .iter()
+            .filter_map(|s| {
+                let sreq = Request {
+                    generation: 0,
+                    item: job.item,
+                    source: job.source.clone(),
+                    frame: s.source_frame,
+                    target_width: job.target_width,
+                    slate: None,
+                    // A shutter moment is the same picture at another instant,
+                    // so it is read through the same channels.
+                    channels: job.channels.clone(),
                 };
-                let (fwd, bwd) = flow_for(
+                let spx = decode(decoders, cache, &sreq).ok()?;
+                let (width, height) = (spx.width, spx.height);
+                let rgba = combine_pair(
+                    decoders,
+                    cache,
                     flow_engine,
                     flow_cache,
                     gpu,
-                    job.item,
-                    job.source_frame,
-                    ceil,
-                    &ga,
-                    &gb,
-                    &set,
-                );
-                let engine = flow_engine.get_or_insert_with(|| flow_engine_for(gpu));
-                // The float synthesis runs on the processor rather than the
-                // card — see `synthesize_at_f32` for why — and gives the same
-                // picture the eight-bit one would, without rounding it.
-                if float {
-                    engine.synthesize_at_f32(&px.rgba, &px2.rgba, fw, fh, &fwd, &bwd, w, &set)
-                } else {
-                    engine.synthesize_at(&px.rgba, &px2.rgba, fw, fh, &fwd, &bwd, w, &set)
-                }
-            } else {
-                // A crossfade is arithmetic on the samples, so it is done at
-                // whatever width the samples are — a float plate stays float
-                // through a Blend retime.
-                match px.format {
-                    lumit_media::PixelFormat::LinearF32 => {
-                        lumit_core::pixels::blend_f32(&px.rgba, &px2.rgba, w)
-                    }
-                    lumit_media::PixelFormat::Srgb8 => {
-                        lumit_core::pixels::blend_rgba(&px.rgba, &px2.rgba, w)
-                    }
-                }
-            }
-        } else {
-            px.rgba
-        };
+                    job,
+                    spx,
+                    s.blend,
+                    job.shutter_flow.as_ref(),
+                )
+                .ok()?;
+                Some((
+                    s.offset,
+                    Box::new(CompLayerPixels {
+                        layer: job.layer,
+                        width,
+                        height,
+                        rgba,
+                        format,
+                        natural_w: job.natural_w,
+                        natural_h: job.natural_h,
+                        // A sample render strips temporal inputs anyway, so
+                        // none are decoded for a moment.
+                        temporal: Vec::new(),
+                        flow_fields: Vec::new(),
+                        shutter: Vec::new(),
+                        // A different picture, so a different name: the
+                        // per-effect cache must not hand this moment the
+                        // frame-time output.
+                        source_key: moment_key(source_key, s.offset),
+                        source_frame: i64::try_from(s.source_frame).unwrap_or(0),
+                    }),
+                ))
+            })
+            .collect();
+        // Blend / Flow policy: combine with the next source frame.
+        let (width, height) = (px.width, px.height);
+        let rgba = combine_pair(
+            decoders,
+            cache,
+            flow_engine,
+            flow_cache,
+            gpu,
+            job,
+            px,
+            job.blend,
+            job.flow.as_ref(),
+        )?;
         layers.push(CompLayerPixels {
             layer: job.layer,
-            width: px.width,
-            height: px.height,
+            width,
+            height,
             rgba,
             format,
             natural_w: job.natural_w,
             natural_h: job.natural_h,
             temporal,
             flow_fields,
-            source_key: job.source_key(),
+            shutter,
+            source_key,
             source_frame: i64::try_from(job.source_frame).unwrap_or(0),
         });
         // One more source frame in hand. Reported after the layer is filed, so

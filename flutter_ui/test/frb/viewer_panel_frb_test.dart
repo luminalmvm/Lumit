@@ -253,6 +253,65 @@ void main() {
           reason: 'and it is still following the pointer');
     });
 
+    /// Where the picture is drawn, as the panel hands it to the stage.
+    Rect drawnPicture(WidgetTester tester) =>
+        tester.widget<ViewerStage>(find.byType(ViewerStage)).fitted;
+
+    /// A drag across the stage on whichever button is asked for.
+    Future<void> dragStage(WidgetTester tester, Offset by,
+        {required int buttons}) async {
+      final from =
+          tester.getCenter(find.byKey(const ValueKey('viewer-stage')));
+      final pointer = TestPointer(3, PointerDeviceKind.mouse, null, buttons);
+      await tester.sendEventToBinding(pointer.down(from));
+      await tester.pump();
+      for (var i = 1; i <= 4; i++) {
+        await tester.sendEventToBinding(pointer.move(from + by * (i / 4)));
+        await tester.pump();
+      }
+      await tester.sendEventToBinding(pointer.up());
+      await tester.pump();
+    }
+
+    /// **The middle button pans the picture** (docs/07 §2.2), as it does in
+    /// After Effects, Blender and Resolve. Whatever tool is armed, because it
+    /// is read off the pointer rather than won in the gesture arena.
+    testWidgets('a middle-button drag pans the picture', (tester) async {
+      final p = withLayer();
+      await mount(tester, p);
+
+      final before = drawnPicture(tester);
+      await dragStage(tester, const Offset(40, -30),
+          buttons: kMiddleMouseButton);
+      final after = drawnPicture(tester);
+
+      expect(after.left, closeTo(before.left + 40, 1));
+      expect(after.top, closeTo(before.top - 30, 1));
+      expect(after.size, before.size,
+          reason: 'a pan moves the picture, it does not resize it');
+    });
+
+    /// An armed picker owns the picture: it holds still while pixels are being
+    /// read off it, so the pan stands down until the tool is put away.
+    testWidgets('a middle-button drag does not pan under an armed picker',
+        (tester) async {
+      final p = withLayer();
+      await mount(tester, p);
+
+      p.uiState.armDropper(DropperArm(
+        id: 'test',
+        reads: DropperReads.colour,
+        label: 'Key colour',
+        onPick: (_) {},
+      ));
+      await tester.pump();
+
+      final before = drawnPicture(tester);
+      await dragStage(tester, const Offset(40, -30),
+          buttons: kMiddleMouseButton);
+      expect(drawnPicture(tester), before);
+    });
+
     /// **The magnifier is on screen for the whole pick, and it shows what the
     /// release will commit** (docs/07 §6.1). The owner reported it missing
     /// after the redesign; nothing had been taken out of it, but a pick drag

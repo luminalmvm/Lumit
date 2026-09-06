@@ -257,7 +257,7 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
         ],
 
         // --- temporal ---
-        // Fast motion blur smears motion the footage already contains, so the
+        // Motion blur smears motion the footage already contains, so the
         // example plays the plate faster (see wants_speed_up). The shutter stays
         // where it opens by default: doubling the speed and opening the shutter
         // as well turned the picture into porridge.
@@ -444,15 +444,10 @@ fn wants_scene_below(match_name: &str) -> bool {
 
 /// A whip across the frame, for the effect that samples the scene beneath it.
 ///
-/// The motion is the layer's own transform rather than the footage's, and that
-/// is what accumulation motion blur can actually see: its sub-frame samples
-/// re-render the stack beneath with the footage **held** at the frame-time
-/// decode (docs/impl/temporal-rerender.md §2), so a retime of the plate gives
-/// every sample the same pixels and the average is the plate back, unblurred.
-/// Only transforms, effects and the camera move between samples, so the example
-/// moves the transform. (An earlier note here blamed a black frame on the
-/// retimed path; `a_retimed_layer_under_forced_accumulation_mb_is_not_black` in
-/// `headless.rs` pins that it renders, just without any smear.)
+/// The motion is the layer's own transform rather than the footage's. The
+/// effect now samples footage between frames too (docs/impl/temporal-rerender.md
+/// §2), but the plate here is one still photograph panned by ffmpeg, so a
+/// transform whip is the honest picture of what the scene beneath is doing.
 ///
 /// The layer crosses the frame, and the sampled moment is the one where it sits
 /// dead centre, so the framing matches every other picture in the manual and the
@@ -479,10 +474,10 @@ fn animate_whip(plate: &mut Layer, span: Rational) {
     };
 }
 
-/// Fast motion blur reads motion out of the footage itself, so its example plays
-/// the plate faster through the frame it is sampled at. (Accumulation motion blur
-/// cannot read a retime, see `animate_whip`, so that page moves the transform at
-/// a matching rate instead.)
+/// Motion blur reads motion out of the footage itself, so its example plays
+/// the plate faster through the frame it is sampled at. (Accumulation motion
+/// blur's page moves the transform at a matching rate instead, see
+/// `animate_whip`.)
 fn wants_speed_up(match_name: &str) -> bool {
     match_name == "motion_blur"
 }

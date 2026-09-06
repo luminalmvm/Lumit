@@ -1999,6 +1999,14 @@ impl HeadlessRenderer {
         self.demotions.len()
     }
 
+    /// Whether every read-back slot is taken, so the next eviction would be
+    /// dropped rather than read back. The fill waits on this rather than
+    /// rendering a frame the card would then let go.
+    #[must_use]
+    pub fn demotions_saturated(&self) -> bool {
+        self.demotions.len() >= MAX_DEMOTIONS_IN_FLIGHT
+    }
+
     /// How many demotion read-backs the card has refused so far. Each is a
     /// frame that left VRAM and reached no lower tier, by design (a miss costs
     /// a render); a test counting held frames subtracts these.
@@ -6352,9 +6360,9 @@ surfaces:
     /// A retimed footage layer beneath an accumulation motion blur adjustment
     /// with Force on all layers renders the footage, whichever interpolation
     /// the retime uses. Pinned because the manual's harness once reported a
-    /// solid black frame for exactly this stack; the footage is held across the
-    /// samples (docs/impl/temporal-rerender.md §2), so no smear is expected,
-    /// but a picture is.
+    /// solid black frame for exactly this stack. The smear itself is
+    /// `accumulation_samples_the_footage_between_frames` below; this one only
+    /// asks for a picture.
     #[test]
     fn a_retimed_layer_under_forced_accumulation_mb_is_not_black() {
         let mut r = match HeadlessRenderer::shared() {
@@ -6447,6 +6455,140 @@ surfaces:
                 rgba.chunks_exact(4)
                     .any(|px| px[0] > 8 || px[1] > 8 || px[2] > 8),
                 "{name}: a retimed layer under Force on all layers rendered black"
+            );
+        }
+    }
+
+    /// **Accumulation motion blur samples the footage between its frames**
+    /// (docs/08 §3.26). A clip playing under the adjustment used to give every
+    /// sample the same frame-time pixels, so the average was the plain frame
+    /// back and the effect did nothing on footage. Now each sample reads the
+    /// clip at its own moment, so the averaged frame differs from the plain
+    /// one, and it is still a picture. Fails without the shutter decodes.
+    #[test]
+    fn accumulation_samples_the_footage_between_frames() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let Some((_fixture_dir, clip)) = footage_fixture() else {
+            eprintln!("skipping: no ffmpeg CLI to write the footage fixture");
+            return;
+        };
+        // Where the effect sits: nowhere, on an adjustment above the clip, or
+        // on the clip itself.
+        #[derive(Clone, Copy, PartialEq)]
+        enum Carrier {
+            None,
+            Adjustment,
+            Clip,
+        }
+        let render = |r: &mut HeadlessRenderer, carrier: Carrier| -> Vec<u8> {
+            let mut doc = Document::new();
+            let item = Uuid::now_v7();
+            doc.items
+                .push(ProjectItem::Footage(lumit_core::model::FootageItem {
+                    sequence: None,
+                    id: item,
+                    name: "fixture.mp4".into(),
+                    media: lumit_core::model::MediaRef {
+                        relative_path: "fixture.mp4".into(),
+                        absolute_path: clip.to_string_lossy().into_owned(),
+                        fingerprint: None,
+                        extra: serde_json::Map::new(),
+                    },
+                    extra: serde_json::Map::new(),
+                    colour_space: None,
+                }));
+            let comp_id = Uuid::now_v7();
+            let mut clip_layer = matrix_layer("Clip", LayerKind::Footage { item }, 320, 240);
+            // Played eight times faster: the test pattern barely moves between
+            // its own 60 fps frames, and a shutter that spans a comp frame then
+            // spans six source frames, which is motion a byte count can see.
+            let key = |time: Rational, value: f64| lumit_core::anim::Keyframe {
+                time,
+                value,
+                interp_in: lumit_core::anim::SideInterp::Linear,
+                interp_out: lumit_core::anim::SideInterp::Linear,
+            };
+            clip_layer.retime = Some(Property {
+                animation: lumit_core::anim::Animation::Keyframed(vec![
+                    key(Rational::ZERO, 0.0),
+                    key(Rational::new(1, 4).unwrap(), 2.0),
+                ]),
+                extra: serde_json::Map::new(),
+            });
+            let mut mb = lumit_core::fx::instantiate("accumulation_mb").expect("registered");
+            for p in &mut mb.params {
+                let v = match p.id.as_str() {
+                    "samples" => 4.0,
+                    // A whole frame open: the test pattern's clock and bar
+                    // move a source frame per sample at 60 fps under 30.
+                    "shutter_angle" => 360.0,
+                    "shutter_phase" => -180.0,
+                    _ => continue,
+                };
+                p.value = lumit_core::model::EffectValue::Float(Property::fixed(v));
+            }
+            if carrier == Carrier::Clip {
+                clip_layer.effects = vec![mb.clone()];
+            }
+            let mut layers = vec![clip_layer];
+            if carrier == Carrier::Adjustment {
+                let mut adjust = matrix_layer("Adjust", LayerKind::Adjustment, 320, 240);
+                adjust.effects = vec![mb];
+                layers.insert(0, adjust);
+            }
+            doc.items.push(ProjectItem::Composition(Composition {
+                master_volume_db: 0.0,
+                groups: Vec::new(),
+                beat_grid: None,
+                id: comp_id,
+                name: "Scene".into(),
+                width: 320,
+                height: 240,
+                frame_rate: FrameRate::new(30, 1).unwrap(),
+                duration: Duration(Rational::new(2, 1).unwrap()),
+                background: LinearColour::BLACK,
+                work_area: None,
+                layers,
+                markers: Vec::new(),
+                motion_blur: lumit_core::model::MotionBlur::default(),
+                extra: serde_json::Map::new(),
+            }));
+            let store = DocumentStore::new(doc);
+            let doc = store.snapshot();
+            // Frame 2: half a second into the clip at that speed, well inside
+            // its two seconds with the shutter's reach either side.
+            r.render_rgba(&doc, comp_id, 2, 1.0).expect("render").0
+        };
+        let plain = render(&mut r, Carrier::None);
+        // Above the clip on an adjustment, and on the clip itself: both are
+        // the clip smeared, neither is the plain frame back.
+        for (carrier, name) in [
+            (Carrier::Adjustment, "an adjustment above"),
+            (Carrier::Clip, "the clip itself"),
+        ] {
+            let blurred = render(&mut r, carrier);
+            assert!(
+                blurred
+                    .chunks_exact(4)
+                    .any(|px| px[0] > 8 || px[1] > 8 || px[2] > 8),
+                "the accumulated frame is still a picture ({name})"
+            );
+            let differing = plain
+                .iter()
+                .zip(&blurred)
+                .filter(|(a, b)| a.abs_diff(**b) > 4)
+                .count();
+            assert!(
+                differing > plain.len() / 200,
+                "footage under accumulation motion blur on {name} must smear, not \
+                 average back to the plain frame: {differing} of {} bytes differ",
+                plain.len()
             );
         }
     }
@@ -7647,6 +7789,68 @@ surfaces:
         assert!(
             one <= 4,
             "a frame should cost a handful of submissions, not {one}"
+        );
+    }
+
+    /// Each accumulation motion blur sample is handed to the card on its own.
+    ///
+    /// A frame is one batch, and nothing a batch allocates is freed until it
+    /// has run. With the N sub-frame renders inside that one batch, every
+    /// sample's scratch was alive at once: eight samples over one 1080p layer
+    /// held 2.1 GB against 200 MB for the frame alone, and a card with less to
+    /// spare lost its device mid-frame. Submitting and waiting per sample is
+    /// what bounds it, and the submission count is how that shows from
+    /// outside: a frame with N samples submits at least N more buffers than
+    /// the same frame without the effect.
+    #[test]
+    fn each_accumulation_sample_is_its_own_submission() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (cw, ch) = (32u32, 16u32);
+        const SAMPLES: u64 = 4;
+
+        let mut submits_for = |accumulate: bool| -> u64 {
+            let (mut doc, comp_id, _) = matrix_base(cw, ch, LinearColour([0.8, 0.1, 0.1, 1.0]));
+            if accumulate {
+                let mut adjust = matrix_layer("Adjust", LayerKind::Adjustment, cw, ch);
+                let mut mb = lumit_core::fx::instantiate("accumulation_mb").expect("registered");
+                for p in &mut mb.params {
+                    if p.id == "samples" {
+                        p.value =
+                            lumit_core::model::EffectValue::Float(Property::fixed(SAMPLES as f64));
+                    }
+                }
+                adjust.effects = vec![mb];
+                let comp = doc
+                    .items
+                    .iter_mut()
+                    .find_map(|item| match item {
+                        ProjectItem::Composition(c) if c.id == comp_id => Some(c),
+                        _ => None,
+                    })
+                    .expect("the comp matrix_base made");
+                comp.layers.insert(0, adjust);
+            }
+            let store = DocumentStore::new(doc);
+            let doc = store.snapshot();
+            // Warm the lazily-built pipelines, then count the steady state.
+            let _ = r.render_rgba(&doc, comp_id, 0, 1.0).expect("render");
+            let before = r.gpu.submits_so_far();
+            let _ = r.render_rgba(&doc, comp_id, 0, 1.0).expect("render");
+            r.gpu.submits_so_far() - before
+        };
+
+        let plain = submits_for(false);
+        let accumulated = submits_for(true);
+        assert!(
+            accumulated >= plain + SAMPLES,
+            "each of the {SAMPLES} samples must be its own submission: the plain \
+             frame submitted {plain}, the accumulating one {accumulated}"
         );
     }
 

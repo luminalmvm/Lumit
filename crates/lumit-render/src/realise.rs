@@ -82,7 +82,7 @@ pub struct Realiser<'a> {
     /// held by the render's owner beside the caches above and for the same
     /// reason: the solver's plan is worth keeping between frames. `None` — a
     /// caller that never asks for one, and every builder in the tests that has
-    /// no use for it — means a Fast motion blur or Datamosh on an adjustment or
+    /// no use for it — means a Motion blur or Datamosh on an adjustment or
     /// Precomp layer degrades to the passthrough it was before this existed,
     /// which is exactly what an unavailable GPU flow does too.
     pub flow: Option<&'a std::cell::RefCell<CompositeFlow>>,
@@ -95,7 +95,7 @@ pub struct Realiser<'a> {
 /// # In plain terms
 ///
 /// Measuring motion means comparing two pictures, and building the flow solver
-/// compiles a dozen shaders. A project with no Fast motion blur and no Datamosh
+/// compiles a dozen shaders. A project with no Motion blur and no Datamosh
 /// on an adjustment or Precomp layer never asks, so it never pays: this starts
 /// empty and fills itself in on the first question.
 #[derive(Default)]
@@ -550,7 +550,7 @@ impl Realiser<'_> {
                 below.clone()
             };
             // **The motion of the composite below** (docs/08 §3.2). An
-            // adjustment layer has no decoded frames, so its Fast motion blur
+            // adjustment layer has no decoded frames, so its Motion blur
             // and Datamosh used to bind nothing and pass through — on exactly
             // the layer §3.2 calls the commonest place to put the effect. The
             // below-stack was built again at each neighbour time; realise it
@@ -630,7 +630,23 @@ impl Realiser<'_> {
         let frames: Vec<wgpu::Texture> = ab
             .samples
             .iter()
-            .map(|(draws, camera)| self.realise(*camera, width, height, background, draws))
+            .map(|(draws, camera)| {
+                let frame = self.realise(*camera, width, height, background, draws);
+                // Hand this sample's work to the card and wait for it before
+                // starting the next. A frame is one batch, and nothing a
+                // batch allocates comes back until it has run: with the N
+                // samples inside it, every sample's intermediates stayed
+                // alive together. Eight samples over one 1080p layer held
+                // 2.1 GB against 200 MB for the frame alone, which is enough
+                // to take a card down. Waiting per sample keeps one sample's
+                // scratch alive at a time; the finished sample textures are
+                // all that accumulate. The wait costs the overlap between
+                // encoding a sample and drawing the last, small beside N
+                // full renders.
+                self.ctx.flush();
+                self.ctx.settle();
+                frame
+            })
             .collect();
         if frames.is_empty() {
             // No samples (N < 2) degrades to the plain below — never a panic.
@@ -696,7 +712,7 @@ impl Realiser<'_> {
     /// Returns the neighbour pictures and the fields measured against them, in
     /// the same shape a footage layer's decoded neighbours and fields arrive in
     /// — so nothing downstream knows where they came from. Both halves matter:
-    /// Fast motion blur reads only the field, Datamosh also drags the `-1`
+    /// Motion blur reads only the field, Datamosh also drags the `-1`
     /// picture along it, and the contract that each consumer gets the
     /// measurement it asked for holds here because the builder emitted one
     /// entry per offset the stack wanted.
@@ -1022,7 +1038,7 @@ impl Realiser<'_> {
                 // Neighbour source frames a temporal effect (echo) reads;
                 // empty for a plain stack, so this uploads nothing then.
                 // **A Precomp measures its own motion** (docs/08 §3.2).
-                // A comp has no decoded frames either, so a Fast motion blur or
+                // A comp has no decoded frames either, so a Motion blur or
                 // Datamosh on a Precomp layer bound nothing and passed through;
                 // the nested picture was built again at each neighbour time, and
                 // the pair is compared here. Every other kind takes the decoded

@@ -1,6 +1,7 @@
-//! Fast motion blur (docs/08 §3.2): the optical-flow, footage-internal smear.
-//! "Fast" because it is a single-pass per-pixel streak, distinct from the
-//! whole-scene, re-rendering Motion blur (accumulation, §3.26).
+//! Motion blur (docs/08 §3.2): the optical-flow, footage-internal smear. A
+//! single-pass per-pixel streak, and the one most people want, so it takes the
+//! plain name. The whole-scene, re-rendering kind (§3.26) is Accumulation
+//! motion blur.
 //!
 //! **In plain terms.** The motion itself is not a control: the decode worker
 //! computes a dense per-pixel `(u, v)` field with a confidence channel from the
@@ -29,11 +30,11 @@ pub const MOTION_BLUR_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     cond: EnabledCond::LayerSet,
 }];
 
-/// Fast motion blur's controls.
+/// Motion blur's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "motion_blur",
-    label = "Fast motion blur",
+    label = "Motion blur",
     version = 1,
     category = Temporal,
     cost = Heavy,
@@ -176,7 +177,7 @@ impl MotionBlur {
     }
 }
 
-/// Fast motion blur's behaviour: no CPU reference through the single-buffer
+/// Motion blur's behaviour: no CPU reference through the single-buffer
 /// dispatcher (the flow field is a texture), so `apply_cpu` keeps its identity
 /// default — the passthrough the old `Resolved::MotionBlur` arm was.
 pub struct MotionBlurDef;

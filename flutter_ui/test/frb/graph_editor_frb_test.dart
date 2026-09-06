@@ -10,6 +10,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/panels/effect_param_row_frb.dart'
+    show cachedListParameters;
 import 'package:lumit_flutter/panels/graph_editor_frb.dart';
 import 'package:uuid/uuid.dart';
 import 'package:lumit_flutter/panels/graph_maths.dart';
@@ -1206,6 +1208,47 @@ void main() {
               .map((t) => channels.single.drawnValueAt(bulging, t))
               .reduce(math.max),
           100);
+    });
+
+    /// An Angle is a Float scalar drawn as a dial, so a keyed one is a curve
+    /// like any other. The resolver above was still naming the kinds it took,
+    /// so Twirl's Angle opened to an empty graph.
+    testWidgets('graphChannels resolves an angle parameter', (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'twirl');
+      final staged = p.layer.getEffects();
+      final fxId = staged.single.id();
+      final angle = cachedListParameters('twirl').firstWhere(
+          (param) => param.id == 'angle',
+          orElse: () => fail('twirl has no angle parameter'));
+      expect(angle.kind, isA<BridgeParamKind_Angle>());
+      for (final instance in staged) {
+        instance.setValue(
+          id: 'angle',
+          value: BridgeEffectValue.float(BridgeScalar.keyframed([
+            for (final (f, v) in [(0, -30.0), (100, 90.0)])
+              BridgeKeyframe(
+                time: p.comp.timeOfFrame(frame: f),
+                value: v,
+                interpIn: const BridgeSideInterp.linear(),
+                interpOut: const BridgeSideInterp.linear(),
+              ),
+          ])),
+        );
+      }
+      p.layer.setEffects(effects: staged);
+      final id = p.layer.internallayerId.toString();
+      p.uiState.model.refresh();
+
+      final channels = graphChannels(
+        layers: p.uiState.model.layers,
+        selected: ['$id/effects/$fxId/angle'],
+      );
+      expect(channels, hasLength(1),
+          reason: 'an Angle kind is a float and belongs in the graph');
+      expect(channels.single.keys, hasLength(2));
+      expect(channels.single.hardBounds, (null, null),
+          reason: 'a dial winds through full turns');
     });
 
     /// A transform has no parameter range to be held inside, so its curve is

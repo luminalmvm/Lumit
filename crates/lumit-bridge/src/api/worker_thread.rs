@@ -1562,6 +1562,16 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                 continue;
             }
         }
+        // A render onto a full card pushes a frame out, and with every
+        // read-back slot taken that frame is dropped rather than read back.
+        // The next turn then finds it missing and makes it again, which on a
+        // device with slow read-backs is a fill that never ends. So the fill
+        // waits for a slot instead: not exhausted, nothing made this turn, and
+        // the worker comes back in a couple of milliseconds.
+        let (used, budget, _) = state.renderer.frame_texture_stats();
+        if used + frame_bytes > budget && state.renderer.demotions_saturated() {
+            return;
+        }
         match prepare_frame(state, &document, comp_ref.id, frame, quality, bgra, true) {
             // Tell the frontend, or the fill is invisible: the cache bar only
             // redraws when it hears something, and a fill shows no frame.
@@ -4993,13 +5003,18 @@ mod tests {
         state.last_shown = Some((CompositionReference::new(state.project.id, comp), 7, 1.0));
         state.fill_exhausted = false;
         // Idle turns until the fill has nothing left; each turn also collects
-        // what the card handed back, as the worker loop does.
-        for _ in 0..2_000 {
-            if state.fill_exhausted {
-                break;
-            }
+        // what the card handed back, as the worker loop does. With every
+        // read-back slot taken the fill makes nothing and waits, so the loop
+        // gives the card its clock rather than spinning through its turns
+        // before a single read-back has landed, which is what the macOS
+        // runner's software device did with a fixed count of turns.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while !state.fill_exhausted && std::time::Instant::now() < deadline {
             super::idle_fill(&mut state, &mut stream);
             super::drain_demotions(&mut state);
+            if state.renderer.demotions_saturated() {
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
         }
         assert!(state.fill_exhausted, "the fill terminates");
         // Read-backs still in flight land over the next few turns — of the

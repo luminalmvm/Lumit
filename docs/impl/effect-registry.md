@@ -375,7 +375,7 @@ stays a passthrough (degrade, never fault), exactly the convention every list al
 `EffectSchema::layer_input()` — the first `ParamKind::Layer` row that is not the effect's
 matte. It is the same shape as the matte carriage below and the mask-path one: one
 predicate the schema answers, walked by both sides in the same order, and the slot is a
-**field** on `AuxSlot` rather than a variant. That is what lets Fast motion blur read a
+**field** on `AuxSlot` rather than a variant. That is what lets Motion blur read a
 whole flow field *and* a Motion vectors layer *and* a matte, without a variant per pair —
 the combinatorial seam §2.5b was written to keep the matte out of.
 
@@ -520,7 +520,7 @@ not let an override be declared without one — the id and the sentence are one 
 
 One kind carries a **pair**, because two inputs arrive together off one decode:
 `FlowField` is the dense field *and* the decoded neighbours — Datamosh walks the field out
-of the −1 frame, so it needs both, while Fast motion blur ignores the frames. It advances
+of the −1 frame, so it needs both, while Motion blur ignores the frames. It advances
 no second counter, which is the point: an effect declares one list, not a set of them.
 (`FlareInputs` used to be the other, pairing the flare's Matte source with its
 prescription; §2.5b's matte carriage took the matte off it, leaving `LensFile`.)

@@ -15348,7 +15348,7 @@ fn the_matte_scales_the_echo_decay() {
     );
 }
 
-/// Fast motion blur's Shutter angle, per pixel.
+/// Motion blur's Shutter angle, per pixel.
 #[test]
 fn the_matte_scales_the_fast_motion_blur_shutter() {
     use lumit_core::fx::{MbQuality, MbView};

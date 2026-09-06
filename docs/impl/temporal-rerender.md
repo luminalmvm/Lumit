@@ -28,11 +28,25 @@ layer spanning the comp — no separate global flag needed.
 
 ## 2. The shared capability: render the below-stack at time τ
 Factor one helper both effects and both paths (preview + export) use:
-`render_below_at(doc, comp, below_layers, τ, …) -> Texture` = `build_comp_draws` at `τ` (reuse
-the *same* decoded `pixels_by_layer` — footage frames are held; only transforms/effects/camera
-re-resolve) → `realise`. Sub-frame footage *motion* is out of scope (that is the flow
-`motion_blur` effect); this blurs comp-driven animation. Preview and export MUST call the one
-helper so a preview frame equals an export frame, exactly as `render_layer_input` and
+`render_below_at(doc, comp, below_layers, τ, …) -> Texture` = `build_comp_draws` at `τ` (with
+the `pixels_by_layer` the caller hands in; transforms/effects/camera re-resolve) → `realise`.
+For a Posterize hold that map is the frame-time decode, so footage is held. For an
+accumulation sample it is the frame-time decode with **each covered clip's picture at that
+moment swapped in**: the decode planner reads `lumit_core::fx::accumulation_shutter_offsets`
+(the union of every live accumulation adjustment's offsets above each layer) and asks for the
+clip at each offset as a `CompJob::shutter` entry — a real frame where the moment lands on one,
+otherwise the pair it falls between, synthesised by flow (the layer's own Flow settings when its
+Retime uses Flow, else the defaults) through the same `combine_pair` a Flow retime uses. The
+worker files them on `CompLayerPixels::shutter` keyed by offset, `accumulation_mb_below` builds
+each sample's map from them, and a clip with no picture for a moment (a Sequence clip, a dropped
+decode) keeps its frame-time pixels. So footage motion smears as transforms do, at N decodes
+per covered clip per frame; the flow field between two source frames is measured once and
+reused across every moment drawn from it. A **plain layer carrying the effect** gets its own
+offsets from the same helper and is not a re-render at all: `build::own_shutter_average`
+averages the clip's shutter moments in the decoded bytes (Mix blending back toward the
+frame-time picture) before masks and paint, so the effect on a footage layer blurs the motion
+inside that footage and nothing else. Preview and export MUST call the one helper so a
+preview frame equals an export frame, exactly as `render_layer_input` and
 `motion_blur_average` are shared.
 
 ## 3. Accumulation MB
@@ -53,7 +67,13 @@ composites, so unlike per-layer `motion_blur_average`'s `fs_layer` it must NOT r
 Preview (`Realiser::accumulate_below`) and export both render the N sub-frames through the one
 `render_below_at`, average at `1/N`, then blend the average against the frame-time below by
 `mix` (a second `accumulate` of two weighted layers `1 − mix` and `mix` — a linear interpolation
-the additive pass gives exactly). Still-scene bit-identity holds because `1/N` is exact in fp16
+the additive pass gives exactly). **Each sample is submitted and waited for on its own**
+(`flush` then `settle`) rather than left inside the frame's one batch: nothing a batch
+allocates is freed until it has run, so with N renders inside it every sample's scratch was
+alive at once — 2.1 GB for eight samples over one 1080p layer, against 200 MB for the frame
+alone, enough to lose the device on a card with less to spare. The wait costs only the
+overlap between encoding one sample and drawing the last, which is nothing beside N full
+renders; `each_accumulation_sample_is_its_own_submission` pins it by submission count. Still-scene bit-identity holds because `1/N` is exact in fp16
 for a power-of-two N and the N copies sum back exactly; a moving scene smears. **On real
 hardware**, which is the qualification the identity needs: Linux CI runs the pixel tests
 against Mesa's lavapipe, a CPU rasteriser, and there the sum-and-divide path lands up to one
@@ -133,7 +153,7 @@ no per-pixel oracle; the test is a still-scene identity + a moving-scene coverag
 per-layer MB used).
 
 ## 8. A third consumer: measuring the composite's motion
-`below_draws_at` turned out to have one more customer. Fast motion blur (docs/08 §3.2) and
+`below_draws_at` turned out to have one more customer. Motion blur (docs/08 §3.2) and
 Datamosh (§3.12) want per-pixel motion, which the decode worker can only measure between
 decoded source frames — so on an **adjustment layer**, the placement §3.2 calls the commonest
 of all, they bound nothing and passed through. The below-stack at `t ± dt` is exactly the
@@ -147,15 +167,18 @@ own measurement survives.
 Two things follow from reusing this machinery rather than inventing another. The neighbour
 render **strips temporal inputs like any other**, which is what bounds the cost: without it an
 adjustment inside a neighbour render would build neighbours of its own. And the **footage is
-held** (the trap below), so what gets measured is comp-driven motion — transforms, effects,
-cameras, nested animation — not the sub-frame motion of footage playing back beneath the
-adjustment, which is measured by putting the effect on the footage layer.
+held** in these neighbour renders (only the accumulation samples carry sub-frame footage, §2),
+so what gets measured is comp-driven motion — transforms, effects, cameras, nested animation —
+not the sub-frame motion of footage playing back beneath the adjustment, which is measured by
+putting the effect on the footage layer.
 
 ## Traps
-- Re-rendering re-decodes nothing — pass the SAME `pixels_by_layer`; re-resolving at `τ` must
-  not re-request media (that would thrash the decode planner).
+- Re-rendering re-decodes nothing — every picture a sample reads was planned with the frame
+  (the shutter moments ride on the layer's one decode job); re-resolving at `τ` must not
+  re-request media (that would thrash the decode planner).
 - Recursion: an adjustment layer's below-set excludes itself; nested comps already cycle-guard
   via `visited`.
 - Cost: N× render is Heavy — respect docs/13 budgets; degrade N under the preview-draft/scrub
-  path (fewer samples while interacting), full N on export.
+  path (fewer samples while interacting), full N on export. And N× *memory* if the samples
+  share one submission (§3): submit each on its own.
 - Preview == export is the whole risk surface — one shared `render_below_at`, reviewed by hand.

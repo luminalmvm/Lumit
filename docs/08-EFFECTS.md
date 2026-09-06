@@ -458,11 +458,11 @@ genuinely fewer and shorter where the matte is dark — and because `(decay·k)^
 factorises as `decay^(i+1) · k^(i+1)`, a half matte draws *exactly* the half-decay trail. A
 tap the matte has taken to nothing is **skipped** rather than folded in at zero, because a
 zero-weight tap is not a no-op under every combine mode (Multiply by nothing is black).
-Both motion blurs scale their **Shutter angle**: **Fast motion blur** (§3.2) reads `k` at
+Both motion blurs scale their **Shutter angle**: **Motion blur** (flow, §3.2) reads `k` at
 the destination pixel and spends it everywhere the shutter is spent — this pixel's own
 vector, the neighbourhood's dominant sweep, and each tap's reach — so a half matte is
 exactly the half-shutter streak, a genuinely shorter smear and not a long one faded back
-over a sharp picture. **Motion blur** (accumulation, §3.26) has no kernel to claim it
+over a sharp picture. **Accumulation motion blur** (§3.26) has no kernel to claim it
 inside, so it claims it in the **combine**: the same N sub-frame re-renders are averaged
 over a shorter slice of the open shutter, shrunk toward the frame's own moment, so black is
 the unblurred frame and grey is a genuinely shorter exposure. **Posterize time** keeps the
@@ -525,7 +525,7 @@ specified in §3.1's original text but surfaced as layer UI, not an effect. Summ
 
 | # | Effect | Replaces | Cost | Temporal window |
 |---|---|---|---|---|
-| 3.2 | Fast motion blur (flow) | RSMB | heavy | `{-1, 0, +1}` |
+| 3.2 | Motion blur (flow) | RSMB | heavy | `{-1, 0, +1}` |
 | 3.3 | Glow | Deep Glow | moderate | `{0}` |
 | 3.4 | Shake | Sapphire S_Shake | cheap | `{0}` |
 | 3.5 | Transform | AE's Transform effect | trivial | `{0}` |
@@ -551,7 +551,7 @@ specified in §3.1's original text but surfaced as layer UI, not an effect. Summ
 | 3.23 | Invert | stock CC pack invert | cheap | `{0}` |
 | 3.24 | Tint | AE Tint / duotone | cheap | `{0}` |
 | 3.25 | Posterize time | AE Posterize Time | cheap | `{0}` |
-| 3.26 | Motion blur (accumulation) | RSMB / ReelSmart (accumulation) | heavy | `{0}` |
+| 3.26 | Accumulation motion blur | RSMB / ReelSmart (accumulation) | heavy | `{0}` |
 | 3.27 | Lens flare | Optical Flares / Knoll Light Factory | heavy | `{0}` |
 | 3.30 | Curves | AE Curves (`ADBE CurvesCustom`) | cheap | `{0}` |
 | 3.31 | Levels | AE Levels | cheap | `{0}` |
@@ -668,10 +668,11 @@ retimed clip does not recompute flow. CUDA MAY accelerate this node where presen
 the WGSL path is the portable baseline and the CPU reference is the oracle for the flow
 field itself (vector-field tolerance, then bit-tolerant synthesis).
 
-### 3.2 Fast motion blur (flow) — synthesised motion blur (RSMB-class)
+### 3.2 Motion blur (flow) — synthesised motion blur (RSMB-class)
 
-Labelled **Fast motion blur** in the UI (a single-pass per-pixel smear, distinct from the
-whole-scene re-rendering **Motion blur** of §3.26). Game capture has zero natural motion blur;
+Labelled **Motion blur** in the UI: a single-pass per-pixel smear, the one most people reach
+for, so it takes the plain name. The whole-scene re-rendering kind of §3.26 is **Accumulation
+motion blur**. Game capture has zero natural motion blur;
 this effect synthesises it from motion vectors.
 Applied per layer or, most commonly, on an adjustment layer over the whole montage.
 
@@ -2047,10 +2048,11 @@ the collapse splice keeps its inner decode live (the same reason collapsed-Preco
 effects are a follow-up), so that narrow case is a documented parity boundary rather than a
 promise. `cheap` cost, `FullFrame` ROI, `{0}` temporal, Category **Temporal**.
 
-### 3.26 Motion blur — the expensive, correct motion blur (accumulation)
+### 3.26 Accumulation motion blur — the expensive, correct motion blur
 
-Labelled **Motion blur** in the UI: the accumulation kind is the correct, whole-scene one, so it
-takes the plain name; the optical-flow effect (§3.2) is *Fast motion blur*. Do not confuse
+Labelled **Accumulation motion blur** in the UI. It is the correct, whole-scene kind, and every
+sample is a full render of the scene below, so the name carries the cost with it; the plain
+*Motion blur* is the optical-flow effect (§3.2), which is what most people want. Do not confuse
 either with the per-layer transform motion-blur *switch* (docs/06 §4), which is a layer
 switch, not an effect.
 
@@ -2077,7 +2079,12 @@ run, never in `run_ops` — and so resolves to **no** per-pixel op. See
 **Adjustment behaviour.** Like Posterize on an adjustment layer, it is an adjustment effect: the
 composite beneath the effect's layer is what re-renders, laid back over the live composite by
 the adjustment's coverage (mask × opacity). The owner's global "motion-blur the whole scene"
-pass is simply the effect on a full-frame adjustment layer.
+pass is simply the effect on a full-frame adjustment layer. **On a plain layer** it has nothing
+beneath it to re-render, so it averages the layer's own clip over the same shutter moments
+(the decode planner fetches them for the carrier itself), in the decoded bytes before masks,
+paint and the rest of the stack: the motion inside the footage, blurred. The layer's transform
+is not sampled there, which is the motion blur switch's job, and the two stack; Mix blends the
+average back toward the frame-time picture; the Matte is not read on a plain carrier.
 
 **Force on all layers.** With this on, every layer in each sub-frame sample render also smears
 along **its own transform** — per-layer motion blur forced on for the whole below-stack,
@@ -2094,10 +2101,16 @@ keep their own switches (a v1 follow-up).
 **one** shared `render_below_at` and average with the identical `Compositor::accumulate`, so a
 preview frame equals an export frame. A **still scene** averaged over N is bit-identical to the
 plain composite (pinned by test — `1/N` is exact in fp16, the N copies sum back exactly); a
-**moving scene** smears (a coverage-widening test). **Boundaries (v1):** temporal effects inside
-the sampled below-stack (echo, flow motion blur, datamosh) hold to stills (the same v1
-boundary Posterize takes), and an accumulation adjustment inside a collapsed Precomp degrades to
-a no-op (its sampled draws are sized for the nested comp). Honours the per-effect
+**moving scene** smears (a coverage-widening test). **Footage moves too**: each covered clip is
+decoded at every moment of the open shutter — the real frame where the moment lands on one,
+otherwise a flow-synthesised in-between made the way a Flow retime makes its frames — and each
+sample's below-stack reads that picture in place of the frame-time one, so a clip playing under
+the adjustment smears as a moving layer does (N decodes per covered clip per frame, one flow
+measurement per source-frame pair; `docs/impl/temporal-rerender.md` §2). **Boundaries (v1):**
+temporal effects inside the sampled below-stack (echo, flow motion blur, datamosh) hold to
+stills (the same v1 boundary Posterize takes), a Sequence clip under the adjustment holds its
+frame-time picture, and an accumulation adjustment inside a collapsed Precomp degrades to a
+no-op (its sampled draws are sized for the nested comp). Honours the per-effect
 `sample_temporally` flag — a particle system stays pinned to the playhead across the
 samples. Sub-frame sample-count reduction under the draft/scrub path is a tracked follow-up
 (full N always on export). `heavy` cost (≈ N× a full comp render), `FullFrame` ROI, `{0}`

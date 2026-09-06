@@ -179,10 +179,10 @@ with "the effects act on the members": no members, no act.
 - **The header stack cannot see time sideways in v1.** Posterize Time and
   accumulation motion blur resolve to no op and are only wired on the
   adjustment path (docs/08 §3.25–3.26, "adjustment-only capability"), so on a
-  header they are inert. Fast motion blur and Datamosh bind no field and pass
+  header they are inert. Motion blur and Datamosh bind no field and pass
   through (the documented degrade), because nothing builds `flow_below`
   for the unit. <!-- ponytail: temporal/flow effects on a header are
-  inert/passthrough; ceiling = a Fast motion blur on a group does nothing.
+  inert/passthrough; ceiling = a Motion blur on a group does nothing.
   Upgrade: build the member run's draws at each neighbour time into the
   unit's flow_below — realise_segment already measures a Nested draw's own
   motion that way (the Precomp arm) — and thread temporal_below the same
