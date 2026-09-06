@@ -527,6 +527,12 @@ impl ResolvedStack {
         Self::default()
     }
 
+    /// Empty this arena while retaining its allocations for another resolution.
+    pub fn clear(&mut self) {
+        self.ops.clear();
+        self.entries.clear();
+    }
+
     /// Start a new op. Parameters pushed after this belong to it, until the next
     /// `begin` or the end of the stack.
     pub fn begin(&mut self, def: &'static dyn EffectDef, instance: Uuid) {
