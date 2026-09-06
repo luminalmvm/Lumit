@@ -68,6 +68,7 @@ const BridgeColourSummary noColourConfig = BridgeColourSummary(
   name: '',
   workingFromConfig: false,
   workingSpace: '',
+  problems: [],
 );
 
 /// One entered inner shader graph (custom-shader.md §4.2): the handle

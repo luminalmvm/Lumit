@@ -58,6 +58,36 @@ pub struct BridgeColourDisplay {
     pub views: Vec<String>,
 }
 
+/// What one refused name is used as, so the frontend greys out the right row
+/// and no other: a space can be fine to tag footage with and still refuse to
+/// be delivered, when its chain only runs one way.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeColourItem {
+    /// A colour space footage is tagged with.
+    Input,
+    /// A colour space an export delivers.
+    Output,
+    /// A view, with `display` set.
+    View,
+    Look,
+}
+
+/// One name a picker lists that this config cannot make, and why, in the same
+/// id-plus-facts shape as the config-level refusal (see the module note).
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeColourProblem {
+    pub item: BridgeColourItem,
+    /// The space, view or look, the config's own word.
+    pub name: String,
+    /// The display a view belongs to; empty for anything else.
+    pub display: String,
+    pub problem: String,
+    pub problem_args: Vec<BridgeColourArg>,
+    pub problem_english: String,
+}
+
 /// Everything the frontend needs to know about the project's colour config, in
 /// one read (the one-call-per-structure rule).
 ///
@@ -66,8 +96,9 @@ pub struct BridgeColourDisplay {
 /// | state | `path` | `loaded` | `problem` |
 /// |---|---|---|---|
 /// | no config named — the built-in family, today's behaviour | empty | `false` | empty |
-/// | loaded and usable | the path | `true` | empty |
-/// | named but missing, unreadable or refused | the path | `false` | the id |
+/// | loaded, and doing everything it names | the path | `true` | empty |
+/// | loaded, with names it cannot make listed in `problems` | the path | `true` | empty |
+/// | named but missing or unreadable | the path | `false` | the id |
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct BridgeColourSummary {
@@ -103,6 +134,10 @@ pub struct BridgeColourSummary {
     /// linear Rec.709, which is also what a config with no `scene_linear`
     /// comes to.
     pub working_space: String,
+    /// The names above that this config cannot make, each with its reason,
+    /// so a picker lists them greyed out rather than missing. Empty unless
+    /// `loaded`, and empty for a config that does everything it names.
+    pub problems: Vec<BridgeColourProblem>,
 }
 
 /// The project's colour state, brought into line with the document first.
@@ -183,6 +218,34 @@ impl ProjectReference {
                 name: loaded.name(),
                 working_from_config,
                 working_space: loaded.working_space().unwrap_or_default().to_owned(),
+                problems: loaded
+                    .problems()
+                    .iter()
+                    .map(|(item, (english, refusal))| {
+                        use lumit_render::colour::Item;
+                        let (kind, name, display) = match item {
+                            Item::Input(n) => (BridgeColourItem::Input, n.clone(), String::new()),
+                            Item::Output(n) => (BridgeColourItem::Output, n.clone(), String::new()),
+                            Item::View(d, v) => (BridgeColourItem::View, v.clone(), d.clone()),
+                            Item::Look(n) => (BridgeColourItem::Look, n.clone(), String::new()),
+                        };
+                        BridgeColourProblem {
+                            item: kind,
+                            name,
+                            display,
+                            problem: refusal.key.clone(),
+                            problem_args: refusal
+                                .args
+                                .iter()
+                                .map(|(name, value)| BridgeColourArg {
+                                    name: name.clone(),
+                                    value: value.clone(),
+                                })
+                                .collect(),
+                            problem_english: english.clone(),
+                        }
+                    })
+                    .collect(),
             }
         })
     }

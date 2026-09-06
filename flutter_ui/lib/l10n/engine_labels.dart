@@ -32,6 +32,7 @@
 library;
 
 import 'package:lumit_flutter/l10n/strings.dart';
+import 'package:lumit_flutter/src/rust/api/colour.dart';
 
 /// The translation of an engine-supplied label, or [english] unchanged if there
 /// is no entry for it.
@@ -1226,6 +1227,25 @@ String? colourProblem(String key, Map<String, String> args) {
   return inSpace.isEmpty
       ? sentence
       : l10n.ocioProblemInSpace(sentence, inSpace);
+}
+
+/// Why one name a picker lists cannot be made, or null when the config makes
+/// it. A space refuses as an input or as an output on its own, so the picker
+/// says which it is asking about; a view names its display.
+String? colourItemProblem(
+  BridgeColourSummary summary,
+  BridgeColourItem item,
+  String name, {
+  String display = '',
+}) {
+  for (final p in summary.problems) {
+    if (p.item != item || p.name != name || p.display != display) continue;
+    return colourProblem(p.problem, {
+          for (final arg in p.problemArgs) arg.name: arg.value,
+        }) ??
+        p.problemEnglish;
+  }
+  return null;
 }
 
 String? _colourRefusal(String key, String Function(String) a) {

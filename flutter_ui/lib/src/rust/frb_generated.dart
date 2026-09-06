@@ -13281,9 +13281,31 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeColourItem dco_decode_bridge_colour_item(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return BridgeColourItem.values[raw as int];
+  }
+
+  @protected
   BridgeColourNameRole dco_decode_bridge_colour_name_role(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return BridgeColourNameRole.values[raw as int];
+  }
+
+  @protected
+  BridgeColourProblem dco_decode_bridge_colour_problem(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    return BridgeColourProblem(
+      item: dco_decode_bridge_colour_item(arr[0]),
+      name: dco_decode_String(arr[1]),
+      display: dco_decode_String(arr[2]),
+      problem: dco_decode_String(arr[3]),
+      problemArgs: dco_decode_list_bridge_colour_arg(arr[4]),
+      problemEnglish: dco_decode_String(arr[5]),
+    );
   }
 
   @protected
@@ -13304,8 +13326,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeColourSummary dco_decode_bridge_colour_summary(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 11)
-      throw Exception('unexpected arr length: expect 11 but see ${arr.length}');
+    if (arr.length != 12)
+      throw Exception('unexpected arr length: expect 12 but see ${arr.length}');
     return BridgeColourSummary(
       path: dco_decode_String(arr[0]),
       loaded: dco_decode_bool(arr[1]),
@@ -13318,6 +13340,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       name: dco_decode_String(arr[8]),
       workingFromConfig: dco_decode_bool(arr[9]),
       workingSpace: dco_decode_String(arr[10]),
+      problems: dco_decode_list_bridge_colour_problem(arr[11]),
     );
   }
 
@@ -15484,6 +15507,14 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  List<BridgeColourProblem> dco_decode_list_bridge_colour_problem(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_bridge_colour_problem)
+        .toList();
+  }
+
+  @protected
   List<BridgeEffectInfo> dco_decode_list_bridge_effect_info(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_bridge_effect_info).toList();
@@ -16974,11 +17005,37 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeColourItem sse_decode_bridge_colour_item(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return BridgeColourItem.values[inner];
+  }
+
+  @protected
   BridgeColourNameRole sse_decode_bridge_colour_name_role(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var inner = sse_decode_i_32(deserializer);
     return BridgeColourNameRole.values[inner];
+  }
+
+  @protected
+  BridgeColourProblem sse_decode_bridge_colour_problem(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_item = sse_decode_bridge_colour_item(deserializer);
+    var var_name = sse_decode_String(deserializer);
+    var var_display = sse_decode_String(deserializer);
+    var var_problem = sse_decode_String(deserializer);
+    var var_problemArgs = sse_decode_list_bridge_colour_arg(deserializer);
+    var var_problemEnglish = sse_decode_String(deserializer);
+    return BridgeColourProblem(
+        item: var_item,
+        name: var_name,
+        display: var_display,
+        problem: var_problem,
+        problemArgs: var_problemArgs,
+        problemEnglish: var_problemEnglish);
   }
 
   @protected
@@ -17006,6 +17063,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_name = sse_decode_String(deserializer);
     var var_workingFromConfig = sse_decode_bool(deserializer);
     var var_workingSpace = sse_decode_String(deserializer);
+    var var_problems = sse_decode_list_bridge_colour_problem(deserializer);
     return BridgeColourSummary(
         path: var_path,
         loaded: var_loaded,
@@ -17017,7 +17075,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         looks: var_looks,
         name: var_name,
         workingFromConfig: var_workingFromConfig,
-        workingSpace: var_workingSpace);
+        workingSpace: var_workingSpace,
+        problems: var_problems);
   }
 
   @protected
@@ -19388,6 +19447,19 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  List<BridgeColourProblem> sse_decode_list_bridge_colour_problem(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <BridgeColourProblem>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_bridge_colour_problem(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   List<BridgeEffectInfo> sse_decode_list_bridge_effect_info(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -21364,10 +21436,29 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  void sse_encode_bridge_colour_item(
+      BridgeColourItem self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
   void sse_encode_bridge_colour_name_role(
       BridgeColourNameRole self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_bridge_colour_problem(
+      BridgeColourProblem self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_bridge_colour_item(self.item, serializer);
+    sse_encode_String(self.name, serializer);
+    sse_encode_String(self.display, serializer);
+    sse_encode_String(self.problem, serializer);
+    sse_encode_list_bridge_colour_arg(self.problemArgs, serializer);
+    sse_encode_String(self.problemEnglish, serializer);
   }
 
   @protected
@@ -21395,6 +21486,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_String(self.name, serializer);
     sse_encode_bool(self.workingFromConfig, serializer);
     sse_encode_String(self.workingSpace, serializer);
+    sse_encode_list_bridge_colour_problem(self.problems, serializer);
   }
 
   @protected
@@ -23173,6 +23265,16 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_bridge_colour_display(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_bridge_colour_problem(
+      List<BridgeColourProblem> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_bridge_colour_problem(item, serializer);
     }
   }
 

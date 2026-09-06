@@ -21,7 +21,7 @@ import 'dart:typed_data';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/colour.dart'
-    show BridgeColourSummary;
+    show BridgeColourItem, BridgeColourSummary;
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -824,6 +824,27 @@ class EffectParamRowFrb extends StatelessWidget {
     // look is nothing at all.
     final unset =
         role == BridgeColourNameRole.space ? l10n.fxWorkingSpace : l10n.fxNone;
+    // A name the config cannot make is listed and quiet, with its reason on
+    // hover. A space is asked about as an input or as an output, whichever
+    // this row is; a view is asked about under its display.
+    final sibling = switch (siblings['display']) {
+      BridgeEffectValue_Text(:final field0) => field0,
+      _ => '',
+    };
+    String? refused(String name) => switch (role) {
+          BridgeColourNameRole.space => colourItemProblem(
+              summary,
+              param.id.startsWith('output')
+                  ? BridgeColourItem.output
+                  : BridgeColourItem.input,
+              name),
+          BridgeColourNameRole.view when sibling.isNotEmpty =>
+            colourItemProblem(summary, BridgeColourItem.view, name,
+                display: sibling),
+          BridgeColourNameRole.look =>
+            colourItemProblem(summary, BridgeColourItem.look, name),
+          _ => null,
+        };
     return SizedBox(
       width: effectCellWidth + 40,
       child: BareDropdown<String>(
@@ -832,6 +853,7 @@ class EffectParamRowFrb extends StatelessWidget {
         options: options,
         label: (name) => name.isEmpty ? unset : name,
         onChanged: (name) => _set(BridgeEffectValue.text(name)),
+        disabledReason: (name) => name.isEmpty ? null : refused(name),
       ),
     );
   }
@@ -889,8 +911,7 @@ class EffectParamRowFrb extends StatelessWidget {
     double snap(num v) => integer ? v.roundToDouble() : v.toDouble();
 
     if (scalar case BridgeScalar_Keyframed()) {
-      final sampled =
-          sampledScalar(scalar, timeOfFrame(comp, frame));
+      final sampled = sampledScalar(scalar, timeOfFrame(comp, frame));
       return SizedBox(
         width: effectCellWidth,
         child: KeyedValueField(
@@ -1175,8 +1196,7 @@ class EffectParamRowFrb extends StatelessWidget {
     // The swatch used to say the word `animated` and stand down, the way a
     // number field never did — so a colour with keys on it could be looked at
     // and not changed, which is half of "keyframe a colour" missing.
-    double chan(BridgeScalar s) =>
-        sampledScalar(s, timeOfFrame(comp, frame));
+    double chan(BridgeScalar s) => sampledScalar(s, timeOfFrame(comp, frame));
     final t = ThemeScope.of(context).theme;
 
     int byte(double f) => (f.clamp(0.0, 1.0) * 255).round();
@@ -1712,8 +1732,7 @@ class EffectPointRowFrb extends StatelessWidget {
       final span = (kind.sliderMax - kind.sliderMin).abs();
       final speed = span <= 0 ? 0.5 : span / 200;
       if (scalar case BridgeScalar_Keyframed()) {
-        final sampled =
-            sampledScalar(scalar, timeOfFrame(comp, frame));
+        final sampled = sampledScalar(scalar, timeOfFrame(comp, frame));
         return SizedBox(
           width: effectCellWidth,
           child: KeyedValueField(

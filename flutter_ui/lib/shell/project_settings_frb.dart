@@ -94,6 +94,7 @@ class _ProjectSettingsWindowState extends State<_ProjectSettingsWindow> {
         name: '',
         workingFromConfig: false,
         workingSpace: '',
+        problems: [],
       );
     }
   }
@@ -164,8 +165,7 @@ class _ProjectSettingsWindowState extends State<_ProjectSettingsWindow> {
               value: depth,
               options: _depths,
               label: _depthLabel,
-              onChanged: (n) =>
-                  setState(() => project.setColourDepth(bits: n)),
+              onChanged: (n) => setState(() => project.setColourDepth(bits: n)),
             ),
           ),
         ),
@@ -294,6 +294,18 @@ class _ProjectSettingsWindowState extends State<_ProjectSettingsWindow> {
   String get _colourState {
     if (_colour.path.isEmpty) return l10n.projectColourNoConfig;
     if (_colour.loaded) {
+      // How many listed names the config cannot make, each counted once
+      // however many ways it refuses.
+      final refused = {
+        for (final p in _colour.problems) '${p.display}/${p.name}',
+      }.length;
+      if (refused > 0) {
+        return l10n.projectColourLoadedPartly(
+          '${_colour.spaces.length}',
+          '${_colour.displays.length}',
+          '$refused',
+        );
+      }
       return l10n.projectColourLoaded(
         '${_colour.spaces.length}',
         '${_colour.displays.length}',

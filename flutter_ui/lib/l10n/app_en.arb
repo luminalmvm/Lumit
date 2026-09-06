@@ -10804,6 +10804,21 @@
       }
     }
   },
+  "projectColourLoadedPartly": "Loaded: {spaces} colour spaces, {displays} displays. {refused} of the names are greyed out because they need things Lumit does not support yet.",
+  "@projectColourLoadedPartly": {
+    "description": "Project settings, Colour group: the line under the configuration row when the file was read and is in use, but some of the colour spaces, views or looks it lists cannot be used. All three blanks are counts; a greyed-out name shows its reason on hover.",
+    "placeholders": {
+      "spaces": {
+        "type": "String"
+      },
+      "displays": {
+        "type": "String"
+      },
+      "refused": {
+        "type": "String"
+      }
+    }
+  },
   "projectColourNotInForce": "Not in force: {reason}. The built-in colour handling is being used instead.",
   "@projectColourNotInForce": {
     "description": "Project settings, Colour group: the line under the configuration row when the file is named but cannot be used. The reason is one of the ocio* sentences above, which all begin in lower case.",

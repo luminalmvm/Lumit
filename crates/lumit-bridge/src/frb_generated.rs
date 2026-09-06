@@ -14156,6 +14156,20 @@ impl SseDecode for crate::api::colour::BridgeColourDisplay {
     }
 }
 
+impl SseDecode for crate::api::colour::BridgeColourItem {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::colour::BridgeColourItem::Input,
+            1 => crate::api::colour::BridgeColourItem::Output,
+            2 => crate::api::colour::BridgeColourItem::View,
+            3 => crate::api::colour::BridgeColourItem::Look,
+            _ => unreachable!("Invalid variant for BridgeColourItem: {}", inner),
+        };
+    }
+}
+
 impl SseDecode for crate::api::effect::BridgeColourNameRole {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -14167,6 +14181,27 @@ impl SseDecode for crate::api::effect::BridgeColourNameRole {
             3 => crate::api::effect::BridgeColourNameRole::Look,
             4 => crate::api::effect::BridgeColourNameRole::Config,
             _ => unreachable!("Invalid variant for BridgeColourNameRole: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::api::colour::BridgeColourProblem {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_item = <crate::api::colour::BridgeColourItem>::sse_decode(deserializer);
+        let mut var_name = <String>::sse_decode(deserializer);
+        let mut var_display = <String>::sse_decode(deserializer);
+        let mut var_problem = <String>::sse_decode(deserializer);
+        let mut var_problemArgs =
+            <Vec<crate::api::colour::BridgeColourArg>>::sse_decode(deserializer);
+        let mut var_problemEnglish = <String>::sse_decode(deserializer);
+        return crate::api::colour::BridgeColourProblem {
+            item: var_item,
+            name: var_name,
+            display: var_display,
+            problem: var_problem,
+            problem_args: var_problemArgs,
+            problem_english: var_problemEnglish,
         };
     }
 }
@@ -14203,6 +14238,8 @@ impl SseDecode for crate::api::colour::BridgeColourSummary {
         let mut var_name = <String>::sse_decode(deserializer);
         let mut var_workingFromConfig = <bool>::sse_decode(deserializer);
         let mut var_workingSpace = <String>::sse_decode(deserializer);
+        let mut var_problems =
+            <Vec<crate::api::colour::BridgeColourProblem>>::sse_decode(deserializer);
         return crate::api::colour::BridgeColourSummary {
             path: var_path,
             loaded: var_loaded,
@@ -14215,6 +14252,7 @@ impl SseDecode for crate::api::colour::BridgeColourSummary {
             name: var_name,
             working_from_config: var_workingFromConfig,
             working_space: var_workingSpace,
+            problems: var_problems,
         };
     }
 }
@@ -17170,6 +17208,20 @@ impl SseDecode for Vec<crate::api::colour::BridgeColourDisplay> {
     }
 }
 
+impl SseDecode for Vec<crate::api::colour::BridgeColourProblem> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::colour::BridgeColourProblem>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for Vec<crate::api::effect::BridgeEffectInfo> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -19626,6 +19678,29 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::colour::BridgeColourDisplay>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::colour::BridgeColourItem {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Input => 0.into_dart(),
+            Self::Output => 1.into_dart(),
+            Self::View => 2.into_dart(),
+            Self::Look => 3.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::colour::BridgeColourItem
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::colour::BridgeColourItem>
+    for crate::api::colour::BridgeColourItem
+{
+    fn into_into_dart(self) -> crate::api::colour::BridgeColourItem {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::effect::BridgeColourNameRole {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         match self {
@@ -19646,6 +19721,31 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::effect::BridgeColourNameRole>
     for crate::api::effect::BridgeColourNameRole
 {
     fn into_into_dart(self) -> crate::api::effect::BridgeColourNameRole {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::colour::BridgeColourProblem {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.item.into_into_dart().into_dart(),
+            self.name.into_into_dart().into_dart(),
+            self.display.into_into_dart().into_dart(),
+            self.problem.into_into_dart().into_dart(),
+            self.problem_args.into_into_dart().into_dart(),
+            self.problem_english.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::colour::BridgeColourProblem
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::colour::BridgeColourProblem>
+    for crate::api::colour::BridgeColourProblem
+{
+    fn into_into_dart(self) -> crate::api::colour::BridgeColourProblem {
         self
     }
 }
@@ -19687,6 +19787,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::colour::BridgeColourSummary {
             self.name.into_into_dart().into_dart(),
             self.working_from_config.into_into_dart().into_dart(),
             self.working_space.into_into_dart().into_dart(),
+            self.problems.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -23794,6 +23895,24 @@ impl SseEncode for crate::api::colour::BridgeColourDisplay {
     }
 }
 
+impl SseEncode for crate::api::colour::BridgeColourItem {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::colour::BridgeColourItem::Input => 0,
+                crate::api::colour::BridgeColourItem::Output => 1,
+                crate::api::colour::BridgeColourItem::View => 2,
+                crate::api::colour::BridgeColourItem::Look => 3,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
 impl SseEncode for crate::api::effect::BridgeColourNameRole {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -23810,6 +23929,18 @@ impl SseEncode for crate::api::effect::BridgeColourNameRole {
             },
             serializer,
         );
+    }
+}
+
+impl SseEncode for crate::api::colour::BridgeColourProblem {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::api::colour::BridgeColourItem>::sse_encode(self.item, serializer);
+        <String>::sse_encode(self.name, serializer);
+        <String>::sse_encode(self.display, serializer);
+        <String>::sse_encode(self.problem, serializer);
+        <Vec<crate::api::colour::BridgeColourArg>>::sse_encode(self.problem_args, serializer);
+        <String>::sse_encode(self.problem_english, serializer);
     }
 }
 
@@ -23837,6 +23968,7 @@ impl SseEncode for crate::api::colour::BridgeColourSummary {
         <String>::sse_encode(self.name, serializer);
         <bool>::sse_encode(self.working_from_config, serializer);
         <String>::sse_encode(self.working_space, serializer);
+        <Vec<crate::api::colour::BridgeColourProblem>>::sse_encode(self.problems, serializer);
     }
 }
 
@@ -26057,6 +26189,16 @@ impl SseEncode for Vec<crate::api::colour::BridgeColourDisplay> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <crate::api::colour::BridgeColourDisplay>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::colour::BridgeColourProblem> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::colour::BridgeColourProblem>::sse_encode(item, serializer);
         }
     }
 }

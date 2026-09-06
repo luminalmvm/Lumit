@@ -9,15 +9,17 @@
 //!
 //! Two things it is careful about.
 //!
-//! The first is the **calm degrade** (§3.3). A config that has moved, cannot be
-//! read, or asks for something Lumit does not implement must never hold the
-//! project hostage. So a failure here is a *state*, not an error: the config
-//! becomes "not usable, and here is the one sentence saying why", every name
-//! the project was given is kept, and the preview falls back to the built-in
-//! colour family so a frame is always produced. The export does the opposite
-//! and refuses — a wrong colour space in a delivered file is worse than an
-//! export that did not run. That asymmetry is deliberate and is the whole of
-//! the degrade rule.
+//! The first is the **calm degrade** (§3.3). A config that has moved or cannot
+//! be read must never hold the project hostage. So a failure here is a *state*,
+//! not an error: the config becomes "not usable, and here is the one sentence
+//! saying why", every name the project was given is kept, and the preview
+//! falls back to the built-in colour family so a frame is always produced. A
+//! config that parses but asks for something Lumit does not implement is in
+//! force for everything else: each space, view or look that cannot be made is
+//! listed by name with its reason, and a picker greys that row out. The export
+//! does the opposite and refuses — a wrong colour space in a delivered file is
+//! worse than an export that did not run. That asymmetry is deliberate and is
+//! the whole of the degrade rule.
 //!
 //! The second is that **nothing here is a second implementation**. A chain is
 //! resolved by `lumit-colour`, baked by `lumit-colour`, and the baked table is
@@ -128,6 +130,21 @@ impl Refusal {
     }
 }
 
+/// One thing a picker names that a loaded config cannot make. The rest of the
+/// config stays in force: a look nobody picked is no reason to lose every view,
+/// so a refusal is per name and said where the name is offered (§3.3).
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Item {
+    /// A colour space footage may be tagged with: the space → the working space.
+    Input(String),
+    /// A colour space an export may deliver: the working space → the space.
+    Output(String),
+    /// A display and one of its views.
+    View(String, String),
+    /// A look, by name.
+    Look(String),
+}
+
 /// A config the renderer has tried to load, in whichever of the three states it
 /// ended up in.
 pub struct Loaded {
@@ -136,9 +153,14 @@ pub struct Loaded {
     /// The content hash of the config file. Part of every frame's name, so
     /// editing the config on disk retires the frames it made.
     pub hash: u64,
-    /// `None` when the config could not be loaded or is not usable — the state
-    /// the degrade ladder reads.
+    /// `None` when the file could not be read or parsed — the state the
+    /// degrade ladder reads. What a parsed config cannot make is in `problems`.
     config: Option<LoadedConfig>,
+    /// Every name the config offers that it cannot make, with the engine's
+    /// sentence and the keyed refusal the frontend writes its own from.
+    /// Worked out once at load, so a picker greys the row out rather than a
+    /// render discovering it.
+    problems: BTreeMap<Item, (String, Refusal)>,
     /// Linear Rec.709 → the working space, when the project composites in
     /// the config's `scene_linear` and the config can say what that is.
     /// `None` is Lumit's own working space, or a config that cannot say.
@@ -161,11 +183,18 @@ pub struct Loaded {
 }
 
 impl Loaded {
-    /// Whether this config can actually do colour. The one question the degrade
-    /// ladder asks, and the one the export's refusal asks.
+    /// Whether this config was read and parsed, which is the one question the
+    /// degrade ladder asks. What it cannot make is per name, in [`Self::problems`].
     #[must_use]
     pub fn usable(&self) -> bool {
         self.config.is_some()
+    }
+
+    /// Every name this config offers but cannot make, with the engine's
+    /// sentence and the keyed refusal. Empty for a config that does all it says.
+    #[must_use]
+    pub fn problems(&self) -> &BTreeMap<Item, (String, Refusal)> {
+        &self.problems
     }
 
     /// The working space's name when the project composites in the config's
@@ -458,6 +487,7 @@ fn load(path: &str, hash: u64, present: bool, working: WorkingSpace) -> Loaded {
         path: path.to_string(),
         hash,
         config: None,
+        problems: BTreeMap::new(),
         rec709_to_working: None,
         problem: Some(problem),
         refusal: Some(refusal),
@@ -478,17 +508,33 @@ fn load(path: &str, hash: u64, present: bool, working: WorkingSpace) -> Loaded {
         Ok(c) => LoadedConfig::with_working(c, working == WorkingSpace::ConfigSceneLinear),
         Err(e) => return empty(e.to_string(), Refusal::from_error(&e, None)),
     };
-    // `unresolvable` is the crate's own is-this-config-usable answer: every
-    // colour space the config declares, walked to a chain. A config that names
-    // a transform Lumit does not implement is refused **by name** here rather
-    // than being discovered halfway through a render, and the sentence it
-    // refuses with is the one the frontend shows.
-    if let Some((space, why)) = lumit_colour::resolve::unresolvable(&loaded)
-        .into_iter()
-        .next()
-    {
-        let refusal = Refusal::from_error(&why, Some(&space));
-        return empty(format!("{why} (the colour space {space})"), refusal);
+    // Every name a picker will offer, walked to a chain now rather than
+    // discovered halfway through a render. Blender's own config names camera
+    // log spaces and grading looks Lumit does not do yet, and refusing the
+    // whole file for those would lose the views people actually use, so each
+    // name refuses on its own and says why where it is offered.
+    let mut problems = BTreeMap::new();
+    let mut note = |item: Item, result: Result<Chain, lumit_colour::ColourError>| {
+        if let Err(e) = result {
+            problems.insert(item, (e.to_string(), Refusal::from_error(&e, None)));
+        }
+    };
+    let mut seen = std::collections::BTreeSet::new();
+    for name in &loaded.config.space_order {
+        if !seen.insert(name) {
+            continue;
+        }
+        note(Item::Input(name.clone()), loaded.from_space(name));
+        note(Item::Output(name.clone()), loaded.to_space(name));
+    }
+    for (display, view) in lumit_colour::resolve::all_views(&loaded.config) {
+        note(
+            Item::View(display.to_string(), view.name.clone()),
+            loaded.display_view(display, &view.name),
+        );
+    }
+    for name in loaded.config.look_names() {
+        note(Item::Look(name.to_string()), loaded.looks(name));
     }
     // A `scene_linear` the config cannot place against Rec.709 is taken as
     // Rec.709, which is what compose-through always meant; the matrix is
@@ -498,6 +544,7 @@ fn load(path: &str, hash: u64, present: bool, working: WorkingSpace) -> Loaded {
         path: path.to_string(),
         hash,
         config: Some(loaded),
+        problems,
         rec709_to_working,
         problem: None,
         refusal: None,

@@ -7,10 +7,12 @@
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/src/rust/api/colour.dart' show BridgeColourItem;
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../shell/comp_settings_frb.dart';
 import '../shell/status_line_frb.dart';
@@ -237,19 +239,40 @@ Future<void> showProjectMenuFrb({
                         colourSpace,
                       ...colourSpaces,
                     ])
-                      MenuRow(
-                        key: ValueKey<String>(
-                            'project-menu-colour-space-$space'),
-                        onPressed: () {
-                          dismiss();
-                          field0.setColourSpace(space: space);
-                          onLocalEdit();
-                        },
-                        child: Row(children: [
-                          menuTick(space == colourSpace),
-                          Expanded(child: Text(space)),
-                        ]),
-                      ),
+                      // A space the config cannot read footage from stays
+                      // listed, drawn quiet, with its reason on hover.
+                      if (colourItemProblem(
+                              ui.colourSummary, BridgeColourItem.input, space)
+                          case final why?)
+                        LumitTooltip(
+                          message: why,
+                          child: MenuRow(
+                            key: ValueKey<String>(
+                                'project-menu-colour-space-$space'),
+                            onPressed: () {},
+                            child: Row(children: [
+                              menuTick(space == colourSpace),
+                              Expanded(
+                                  child: Text(space,
+                                      style: TextStyle(
+                                          color: menuTheme.textDisabled))),
+                            ]),
+                          ),
+                        )
+                      else
+                        MenuRow(
+                          key: ValueKey<String>(
+                              'project-menu-colour-space-$space'),
+                          onPressed: () {
+                            dismiss();
+                            field0.setColourSpace(space: space);
+                            onLocalEdit();
+                          },
+                          child: Row(children: [
+                            menuTick(space == colourSpace),
+                            Expanded(child: Text(space)),
+                          ]),
+                        ),
                   ],
                 ),
               ),

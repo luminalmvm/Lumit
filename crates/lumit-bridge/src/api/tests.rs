@@ -10458,55 +10458,67 @@ fn a_missing_config_refuses_by_id_and_keeps_every_name() {
     );
 }
 
-/// A config Lumit will not run is refused **by name**, and the name is the
-/// config's own word — the transform it asked for, or the look-up table it could
-/// not find and the colour space that wanted it.
+/// A name Lumit cannot make is refused **by name**, on its own row, and the
+/// rest of the config stays in force. The reason is the config's own word: the
+/// transform it asked for, or the look-up table it could not find.
 #[test]
-fn a_refused_config_names_what_it_asked_for() {
+fn a_refused_name_is_listed_with_its_reason_and_the_config_stays_loaded() {
     let (project, _footage, dir) = project_with_footage();
     project
         .set_colour_config(Some(write_config(&dir, REFUSED_CONFIG)))
         .expect("a config named");
 
     let summary = project.colour_summary().expect("a summary");
-    assert!(!summary.loaded);
-    assert_eq!(summary.problem, "unsupported_transform");
-    let arg = |name: &str| {
-        summary
-            .problem_args
-            .iter()
-            .find(|a| a.name == name)
-            .map(|a| a.value.clone())
-    };
-    assert_eq!(arg("name").as_deref(), Some("FixedFunctionTransform"));
+    assert!(summary.loaded, "{}", summary.problem_english);
+    assert!(summary.problem.is_empty());
+    assert_eq!(summary.spaces, vec!["lin".to_string(), "fancy".to_string()]);
+    let fancy: Vec<_> = summary
+        .problems
+        .iter()
+        .filter(|p| p.name == "fancy")
+        .collect();
+    assert_eq!(
+        fancy.len(),
+        2,
+        "tagging with it and delivering it both refuse"
+    );
+    for p in &fancy {
+        assert_eq!(p.problem, "unsupported_transform");
+        assert_eq!(
+            p.problem_args
+                .iter()
+                .find(|a| a.name == "name")
+                .map(|a| a.value.as_str()),
+            Some("FixedFunctionTransform")
+        );
+    }
     assert!(
-        arg("in_space").is_none(),
-        "the parse refused before any space was walked: {:?}",
-        summary.problem_args
+        !summary.problems.iter().any(|p| p.name == "lin"),
+        "the plain space is untouched: {:?}",
+        summary.problems
     );
 
     // The other half: a config that parses and only fails when a space is
-    // resolved. The space that wanted the missing file is named too, because a
-    // row saying only "nothere.spi1d" gives the reader nowhere to look.
+    // resolved. The row is the space that wanted the missing file, so the
+    // reader knows where to look.
     project
         .set_colour_config(Some(write_config(&dir, UNRESOLVABLE_CONFIG)))
         .expect("a config named");
     let summary = project.colour_summary().expect("a summary");
-    let arg = |name: &str| {
-        summary
+    assert!(summary.loaded);
+    let graded = summary
+        .problems
+        .iter()
+        .find(|p| p.name == "graded")
+        .expect("the space that wanted the file is listed");
+    assert_eq!(graded.problem, "lut_file_not_found");
+    assert_eq!(
+        graded
             .problem_args
             .iter()
-            .find(|a| a.name == name)
-            .map(|a| a.value.clone())
-    };
-    assert!(!summary.loaded);
-    assert_eq!(summary.problem, "lut_file_not_found");
-    assert_eq!(arg("name").as_deref(), Some("nothere.spi1d"));
-    assert_eq!(
-        arg("in_space").as_deref(),
-        Some("graded"),
-        "{:?}",
-        summary.problem_args
+            .find(|a| a.name == "name")
+            .map(|a| a.value.as_str()),
+        Some("nothere.spi1d")
     );
 }
 

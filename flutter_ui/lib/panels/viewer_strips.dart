@@ -480,19 +480,38 @@ class _ColourDropdown extends StatelessWidget {
         for (final display in summary.displays) ...[
           _menuHeading(t, display.name),
           for (final name in display.views)
-            MenuRow(
-              key: ValueKey<String>('viewer-colour-view-${display.name}-$name'),
-              onPressed: () {
-                close(null);
-                ui.setColourView([display.name, name]);
-              },
-              child: Row(children: [
-                menuTick(view != null &&
-                    view.first == display.name &&
-                    view.last == name),
-                Text(name),
-              ]),
-            ),
+            // A view the config cannot make stays in the list, drawn quiet,
+            // with its reason on hover: the disabled-not-hidden rule.
+            if (colourItemProblem(summary, BridgeColourItem.view, name,
+                    display: display.name)
+                case final why?)
+              LumitTooltip(
+                message: why,
+                child: MenuRow(
+                  key: ValueKey<String>(
+                      'viewer-colour-view-${display.name}-$name'),
+                  onPressed: () {},
+                  child: Row(children: [
+                    menuTick(false),
+                    Text(name, style: TextStyle(color: t.textDisabled)),
+                  ]),
+                ),
+              )
+            else
+              MenuRow(
+                key: ValueKey<String>(
+                    'viewer-colour-view-${display.name}-$name'),
+                onPressed: () {
+                  close(null);
+                  ui.setColourView([display.name, name]);
+                },
+                child: Row(children: [
+                  menuTick(view != null &&
+                      view.first == display.name &&
+                      view.last == name),
+                  Text(name),
+                ]),
+              ),
         ],
         if (showToneMap)
           MenuRow(

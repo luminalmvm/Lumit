@@ -58,6 +58,30 @@ colorspaces:
     from_reference: !<ExponentWithLinearTransform> {gamma: [2.4, 2.4, 2.4, 1], offset: [0.055, 0.055, 0.055, 0], direction: inverse}
 ''';
 
+/// The same config with one more view, onto a space built from a transform
+/// Lumit does not do. The config still loads; that one view refuses.
+const _partlyConfig = '''
+ocio_profile_version: 1
+roles:
+  scene_linear: lin
+  reference: ref
+displays:
+  sRGB:
+    - !<View> {name: Standard, colorspace: out_srgb}
+    - !<View> {name: Fancy, colorspace: fancy}
+colorspaces:
+  - !<ColorSpace>
+    name: ref
+  - !<ColorSpace>
+    name: lin
+  - !<ColorSpace>
+    name: out_srgb
+    from_reference: !<ExponentWithLinearTransform> {gamma: [2.4, 2.4, 2.4, 1], offset: [0.055, 0.055, 0.055, 0], direction: inverse}
+  - !<ColorSpace>
+    name: fancy
+    from_reference: !<FixedFunctionTransform> {style: ACES_RedMod03}
+''';
+
 void main() {
   setUpAll(initEngineForTests);
 
@@ -182,6 +206,41 @@ void main() {
 
       await tester.tapAt(const Offset(4, 4));
       await tester.pumpAndSettle();
+      await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
+    });
+
+    /// **In force, name by name** (§3.3). A view Lumit cannot make is listed,
+    /// drawn quiet, with its reason on hover, and does nothing when pressed;
+    /// the view beside it still works.
+    testWidgets('a view the config cannot make is greyed out, with its reason',
+        (tester) async {
+      final p = withComp();
+      final file = File('${dir.path}${Platform.pathSeparator}config.ocio');
+      file.writeAsStringSync(_partlyConfig);
+      useConfig((state: p.state, uiState: p.uiState), file.path);
+      final summary = p.uiState.colourSummary;
+      expect(summary.loaded, isTrue, reason: summary.problemEnglish);
+      expect(summary.problems.map((x) => x.name), contains('Fancy'),
+          reason: 'the refusal is per name, not per config');
+      await mount(tester, p);
+
+      await openPicker(tester);
+      final fancy = find.byKey(const ValueKey('viewer-colour-view-sRGB-Fancy'));
+      expect(fancy, findsOneWidget, reason: 'listed, never hidden');
+      final tip = tester.widget<LumitTooltip>(
+          find.ancestor(of: fancy, matching: find.byType(LumitTooltip)));
+      expect(tip.message, contains('FixedFunctionTransform'),
+          reason: "the reason is the config's own word");
+      await tester.tap(fancy);
+      await tester.pumpAndSettle();
+      expect(p.uiState.colourView, isNull, reason: 'a greyed row does nothing');
+
+      await tester
+          .tap(find.byKey(const ValueKey('viewer-colour-view-sRGB-Standard')));
+      await tester.pumpAndSettle();
+      expect(p.uiState.colourView, ['sRGB', 'Standard'],
+          reason: 'the rest of the config is in force');
+
       await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
     });
 

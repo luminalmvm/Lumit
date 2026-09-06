@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `with_colour`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// One blank in a refusal's sentence, by name: `name` → `FixedFunctionTransform`,
 /// `in_space` → `fancy`. Named rather than positional so a translation may put
@@ -56,6 +56,67 @@ class BridgeColourDisplay {
           views == other.views;
 }
 
+/// What one refused name is used as, so the frontend greys out the right row
+/// and no other: a space can be fine to tag footage with and still refuse to
+/// be delivered, when its chain only runs one way.
+enum BridgeColourItem {
+  /// A colour space footage is tagged with.
+  input,
+
+  /// A colour space an export delivers.
+  output,
+
+  /// A view, with `display` set.
+  view,
+  look,
+  ;
+}
+
+/// One name a picker lists that this config cannot make, and why, in the same
+/// id-plus-facts shape as the config-level refusal (see the module note).
+class BridgeColourProblem {
+  final BridgeColourItem item;
+
+  /// The space, view or look, the config's own word.
+  final String name;
+
+  /// The display a view belongs to; empty for anything else.
+  final String display;
+  final String problem;
+  final List<BridgeColourArg> problemArgs;
+  final String problemEnglish;
+
+  const BridgeColourProblem({
+    required this.item,
+    required this.name,
+    required this.display,
+    required this.problem,
+    required this.problemArgs,
+    required this.problemEnglish,
+  });
+
+  @override
+  int get hashCode =>
+      item.hashCode ^
+      name.hashCode ^
+      display.hashCode ^
+      problem.hashCode ^
+      problemArgs.hashCode ^
+      problemEnglish.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeColourProblem &&
+          runtimeType == other.runtimeType &&
+          item == other.item &&
+          name == other.name &&
+          display == other.display &&
+          problem == other.problem &&
+          problemArgs == other.problemArgs &&
+          problemEnglish == other.problemEnglish;
+}
+
 /// Everything the frontend needs to know about the project's colour config, in
 /// one read (the one-call-per-structure rule).
 ///
@@ -64,8 +125,9 @@ class BridgeColourDisplay {
 /// | state | `path` | `loaded` | `problem` |
 /// |---|---|---|---|
 /// | no config named — the built-in family, today's behaviour | empty | `false` | empty |
-/// | loaded and usable | the path | `true` | empty |
-/// | named but missing, unreadable or refused | the path | `false` | the id |
+/// | loaded, and doing everything it names | the path | `true` | empty |
+/// | loaded, with names it cannot make listed in `problems` | the path | `true` | empty |
+/// | named but missing or unreadable | the path | `false` | the id |
 class BridgeColourSummary {
   /// The path the project names, as it would be shown — the relative one a
   /// saved `.lum` actually carries. Empty when no config is named.
@@ -109,6 +171,11 @@ class BridgeColourSummary {
   /// comes to.
   final String workingSpace;
 
+  /// The names above that this config cannot make, each with its reason,
+  /// so a picker lists them greyed out rather than missing. Empty unless
+  /// `loaded`, and empty for a config that does everything it names.
+  final List<BridgeColourProblem> problems;
+
   const BridgeColourSummary({
     required this.path,
     required this.loaded,
@@ -121,6 +188,7 @@ class BridgeColourSummary {
     required this.name,
     required this.workingFromConfig,
     required this.workingSpace,
+    required this.problems,
   });
 
   static Future<BridgeColourSummary> default_() =>
@@ -138,7 +206,8 @@ class BridgeColourSummary {
       looks.hashCode ^
       name.hashCode ^
       workingFromConfig.hashCode ^
-      workingSpace.hashCode;
+      workingSpace.hashCode ^
+      problems.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -155,5 +224,6 @@ class BridgeColourSummary {
           looks == other.looks &&
           name == other.name &&
           workingFromConfig == other.workingFromConfig &&
-          workingSpace == other.workingSpace;
+          workingSpace == other.workingSpace &&
+          problems == other.problems;
 }
