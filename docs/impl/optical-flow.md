@@ -162,6 +162,16 @@ out = (wA·A(x+uA) + wB·B(x+uB)) / (wA + wB)
 - The flow sampled for warping at x should ideally be the flow *at the destination*;
   approximate with one fixed-point iteration: sample F at x, then re-sample F at
   `x − φ·F₀(x)`, use that. Two lines in the shader, visibly reduces edge doubling.
+- Before either field is warped along, each is **steadied** (`borrow_uncertain`): a pixel
+  blends its own vector with the motion of the nearest confident pixels by its own agreement
+  with the reverse field (§2's measure before its blur, since a bad vector must weigh
+  nothing), the way the blur in §4.7 steers an uncertain pixel, so a vector the measurement
+  does not trust is not warped along as if it were. The borrowed motion is
+  a confidence-weighted push-pull average rather than the blur's tile maximum, since a warp
+  has to land a pixel where its neighbours land and a still thing in front of a moving
+  background shares its tiles with that background. A CPU pass over the field, so the
+  render crate caches the steadied pair beside the measured one and the Motion blur kernel,
+  which borrows for itself, keeps reading the measured one.
 - Where **both** endpoints are occluded/invalid (revealed background with no source):
   fall back to blend `lerp(A, B, φ)` — soft failure identical to Frame-Mix, which is the
   documented graceful-degradation behaviour ([08-EFFECTS.md](../08-EFFECTS.md): confidence-

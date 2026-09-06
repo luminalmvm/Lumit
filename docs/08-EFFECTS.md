@@ -2102,11 +2102,14 @@ keep their own switches (a v1 follow-up).
 preview frame equals an export frame. A **still scene** averaged over N is bit-identical to the
 plain composite (pinned by test — `1/N` is exact in fp16, the N copies sum back exactly); a
 **moving scene** smears (a coverage-widening test). **Footage moves too**: each covered clip is
-decoded at every moment of the open shutter — the real frame where the moment lands on one,
-otherwise a flow-synthesised in-between made the way a Flow retime makes its frames — and each
-sample's below-stack reads that picture in place of the frame-time one, so a clip playing under
-the adjustment smears as a moving layer does (N decodes per covered clip per frame, one flow
-measurement per source-frame pair; `docs/impl/temporal-rerender.md` §2). **Boundaries (v1):**
+decoded at every moment of the open shutter. A moment that lands on a real frame is that frame,
+and one between two frames is a crossfade of the pair, made the way a Blend retime makes its
+frames. A layer whose Retime uses Flow gets flow-synthesised in-betweens with its own settings
+instead. Flow can tear on footage it cannot measure, and it runs only where the user switched
+it on. Each sample's below-stack reads that picture in place of the frame-time one, so a clip
+playing under the adjustment smears as a moving layer does (N decodes per covered clip per
+frame, and under Flow one measurement per source-frame pair, see
+`docs/impl/temporal-rerender.md` §2). **Boundaries (v1):**
 temporal effects inside the sampled below-stack (echo, flow motion blur, datamosh) hold to
 stills (the same v1 boundary Posterize takes), a Sequence clip under the adjustment holds its
 frame-time picture, and an accumulation adjustment inside a collapsed Precomp degrades to a

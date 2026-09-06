@@ -492,9 +492,11 @@ pub fn collect_comp_jobs(
                 // sub-frame re-renders smear footage motion and not only
                 // transforms. Each moment is picked the way the Blend policy
                 // picks, so a moment on a real frame is that frame alone and
-                // one between two is synthesised from both, by the layer's own
-                // Flow settings where its Retime uses Flow and the defaults
-                // otherwise. Empty for every layer no such adjustment covers.
+                // one between two is a crossfade of both. Only a layer whose
+                // Retime uses Flow gets its moments synthesised by flow, with
+                // its own settings: flow can tear on footage it cannot
+                // measure, and it runs only where the user switched it on.
+                // Empty for every layer no such adjustment covers.
                 let shutter: Vec<crate::decode::ShutterSample> = shutter_offsets[idx]
                     .iter()
                     .map(|&off| {
@@ -512,10 +514,10 @@ pub fn collect_comp_jobs(
                         }
                     })
                     .collect();
-                let shutter_flow = (!shutter.is_empty()).then(|| match &layer.interpolation {
-                    Interpolation::Flow(p) => p.clone(),
-                    _ => lumit_core::retime::FlowParams::default(),
-                });
+                let shutter_flow = match &layer.interpolation {
+                    Interpolation::Flow(p) if !shutter.is_empty() => Some(p.clone()),
+                    _ => None,
+                };
                 jobs.push(CompJob {
                     layer: layer.id,
                     item: *item,
@@ -1659,7 +1661,7 @@ mod tests {
         let (above_id, below_id) = (above.id, below.id);
         // A 30 fps comp over 60 fps clips: a quarter of a comp frame is half a
         // source frame, so every moment lands between two frames.
-        let comp = Composition {
+        let mut comp = Composition {
             master_volume_db: 0.0,
             groups: Vec::new(),
             beat_grid: None,
@@ -1711,10 +1713,11 @@ mod tests {
             ],
             "each shutter moment is the pair of source frames it falls between"
         );
+        // Flow runs only where the user switched it on. A clip whose Retime
+        // does not use Flow crossfades its in-betweens.
         assert_eq!(
-            covered.shutter_flow,
-            Some(lumit_core::retime::FlowParams::default()),
-            "a Nearest clip makes its in-betweens with the default flow settings"
+            covered.shutter_flow, None,
+            "a Nearest clip crossfades its in-betweens"
         );
 
         let clear = job_for(above_id);
@@ -1731,5 +1734,20 @@ mod tests {
             std::slice::from_ref(covered),
             std::slice::from_ref(clear)
         ));
+
+        // A clip whose Retime uses Flow has asked for synthesis, and its
+        // moments are made with its own settings.
+        let flow = lumit_core::retime::FlowParams {
+            smoothness: 0.25,
+            ..lumit_core::retime::FlowParams::default()
+        };
+        comp.layers[2].interpolation = lumit_core::retime::Interpolation::Flow(flow.clone());
+        let jobs = plan_comp_frame(&doc, &comp, 1.0, Quality::default(), &probes);
+        let covered = jobs.iter().find(|j| j.layer == below_id).expect("planned");
+        assert_eq!(
+            covered.shutter_flow,
+            Some(flow),
+            "a Flow clip makes its in-betweens with its own flow settings"
+        );
     }
 }
