@@ -849,9 +849,8 @@ impl Eval<'_> {
             inst.float_at_with_context("emit_rate", lt, self.context.clone())
                 .unwrap_or(0.0)
         };
-        let mut sched =
+        let sched =
             super::points::Schedule::scan(dt, (t / dt).floor() as i64, window_frames, &rate_at);
-        sched.trim_to_newest(u64::from(points.cap));
         let stream = Rc::new(super::points::evaluate(
             &points.projected(self.projection),
             &sched,
