@@ -163,6 +163,24 @@ pub fn host() -> *const OfxHost {
     .0
 }
 
+/// A host pointer for one bundle's compatibility presentation.
+///
+/// The normal identity shares the process default. Compatibility aliases get a
+/// separate immutable property set and host struct, both intentionally leaked
+/// because plugins retain the pointers for their whole loaded lifetime.
+pub fn host_for_presentation(name: Option<&str>) -> Result<*const OfxHost, Status> {
+    let Some(name) = name.filter(|name| *name != HOST_NAME) else {
+        return Ok(host());
+    };
+    let mut props = host_property_set();
+    props.set(keys::NAME, PropValue::string(name)?);
+    let handle = state().props.insert(props)?;
+    Ok(Box::into_raw(Box::new(OfxHost {
+        host: handle.as_ptr(),
+        fetch_suite: Some(fetch_suite),
+    })))
+}
+
 /// `OfxHost::fetchSuite`.
 ///
 /// Returning null is a legitimate answer, and this host gives it for every
@@ -220,13 +238,6 @@ pub const HOST_NAME: &str = "com.lumitlab.Lumit";
 ///
 /// [`Status::ErrBadHandle`] if the host has no property set, which is the
 /// state before the host exists.
-pub fn present_as(name: Option<&str>) -> Result<(), Status> {
-    let handle = host_props_handle()?;
-    let value = PropValue::string(name.unwrap_or(HOST_NAME))?;
-    state().props.get_mut(handle)?.set(keys::NAME, value);
-    Ok(())
-}
-
 fn host_property_set() -> PropertySet {
     /// A key or value with a NUL in it would be a literal in this file with a
     /// NUL in it; there is nothing to report to and nothing to do, so the
@@ -356,4 +367,42 @@ pub fn dump(set: &PropertySet) -> String {
         out.push('\n');
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn presented_name(host: *const OfxHost) -> String {
+        // Host structs returned by this module are leaked and immutable.
+        let handle = Handle::from_ptr(unsafe { (*host).host });
+        let state = state();
+        let props = state.props.get(handle);
+        assert!(props.is_ok(), "bundle host property set is missing");
+        let Ok(props) = props else {
+            return String::new();
+        };
+        dump(props)
+    }
+
+    #[test]
+    fn compatibility_presentations_are_bundle_scoped() {
+        let first = host_for_presentation(Some("Compatibility A"));
+        assert!(first.is_ok(), "first compatibility host should be created");
+        let Ok(first) = first else {
+            return;
+        };
+        let second = host_for_presentation(Some("Compatibility B"));
+        assert!(
+            second.is_ok(),
+            "second compatibility host should be created"
+        );
+        let Ok(second) = second else {
+            return;
+        };
+        assert_ne!(first, second);
+        assert!(presented_name(first).contains("Compatibility A"));
+        assert!(presented_name(second).contains("Compatibility B"));
+        assert!(presented_name(host()).contains(HOST_NAME));
+    }
 }

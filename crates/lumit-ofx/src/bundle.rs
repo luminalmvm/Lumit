@@ -278,21 +278,15 @@ impl Bundle {
             return;
         }
         self.loaded = true;
-        // Who the host says it is, for this bundle. The name is on
-        // one property set the whole process shares, so it is set before the
-        // bundle's first `setHost` and left for the bundle's lifetime.
-        // ponytail: a process-wide name, so two bundles hosted in one process
-        // with different quirks would see the last one set; the shipping
-        // arrangement is one bundle per broker process, where it cannot
-        // happen. A per-host-struct name is the upgrade if in-process hosting
-        // ever ships third-party bundles.
+        // Each compatibility alias receives an immutable host/property pair.
+        // A later bundle can never change what an already-loaded plugin sees.
         let presented = self.plugins.iter().find_map(|plugin| {
             quirks
                 .for_plugin(&plugin.identifier, plugin.version.0)
                 .present_as
         });
-        let _ = crate::host::present_as(presented.as_deref());
-        let host = host();
+        let host =
+            crate::host::host_for_presentation(presented.as_deref()).unwrap_or_else(|_| host());
         for plugin in &mut self.plugins {
             if !plugin.is_supported_image_effect() {
                 continue;

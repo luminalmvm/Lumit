@@ -639,60 +639,6 @@ fn the_shipped_quirks_file_presents_the_host_to_universe_as_resolve() {
     );
 }
 
-/// What the host's property set says its name and label are, right now.
-fn host_name_and_label() -> (String, String) {
-    let handle = host_props_handle().expect("the host has its own property set");
-    let state = state();
-    let set = state.props.get(handle).expect("the host set is live");
-    let read = |key: &str| {
-        set.get_string(key, 0)
-            .expect("a string")
-            .to_string_lossy()
-            .into_owned()
-    };
-    (read(keys::NAME), read(keys::LABEL))
-}
-
-/// Presenting the host under another name changes `kOfxPropName` and nothing
-/// else, and `None` puts Lumit's own name back.
-#[test]
-fn the_host_presents_itself_under_a_quirks_name_and_takes_it_back() {
-    let _name = host_name_lock();
-    crate::host::present_as(Some("SomeOtherHost")).expect("the host exists");
-    assert_eq!(
-        host_name_and_label(),
-        ("SomeOtherHost".to_owned(), "Lumit".to_owned()),
-        "the name changes and the label stays Lumit's own"
-    );
-    crate::host::present_as(None).expect("the host exists");
-    assert_eq!(host_name_and_label().0, crate::host::HOST_NAME);
-}
-
-/// Loading a bundle applies its quirks entry: the name the plugin reads from
-/// the host during load is the entry's.
-#[test]
-fn a_bundle_loads_under_the_name_its_quirks_entry_says() {
-    let _name = host_name_lock();
-    let root = tempfile::tempdir().expect("a temp dir");
-    let Some(binary) = a_bundle_in(root.path()) else {
-        skipped("a_bundle_loads_under_the_name_its_quirks_entry_says");
-        return;
-    };
-    let table = QuirksTable::parse(
-        r#"{ "plugins": [ {
-            "identifier": "com.lumitlab.testplug",
-            "present_as": "SomeOtherHost"
-        } ] }"#,
-    )
-    .expect("a well-formed table parses");
-    let mut bundle = Bundle::open(&binary).expect("the bundle opens");
-    bundle.load_with(&table);
-    assert_eq!(host_name_and_label().0, "SomeOtherHost");
-
-    bundle.unload();
-    crate::host::present_as(None).expect("the host exists");
-}
-
 #[test]
 fn a_quirks_entry_overrides_only_what_it_names() {
     let table = QuirksTable::parse(
