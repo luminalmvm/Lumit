@@ -2118,9 +2118,76 @@ void main() {
           reason: 'x doubled, so y doubled — the ratio is what is kept');
     });
 
-    /// A **keyed** other half scales whole: every key's value times the
-    /// factor, every key's time, interpolation and eased shape held. Scaling
-    /// only the number under the playhead would plant keys nobody made.
+    /// Both halves keyed, the well's edit is a key at the playhead, so the
+    /// other half takes one there too, at the ratio the pair reads on that
+    /// frame. Stretching its whole curve instead left the two halves agreeing
+    /// at the playhead and nowhere else.
+    testWidgets(
+        'a chained pair keyed on both halves plants the other key at the playhead',
+        (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'lens_flare');
+      p.uiState.model.refresh();
+      await mount(tester, p, transform: false);
+
+      final id = p.layer.getEffects().single.id();
+      List<BridgeKeyframe> keysOf(String param) => ((p.layer
+                  .getInfo()
+                  .effects
+                  .single
+                  .values
+                  .firstWhere((e) => e.id == param)
+                  .value as BridgeEffectValue_Float)
+              .field0 as BridgeScalar_Keyframed)
+          .field0;
+      BridgeKeyframe key(int seconds, double value) => BridgeKeyframe(
+            time: BridgeRational(num: seconds, den: 1),
+            value: value,
+            interpIn: const BridgeSideInterp.linear(),
+            interpOut: const BridgeSideInterp.linear(),
+          );
+
+      // x and y both ramp, at 2:1.
+      final stack = p.layer.getEffects();
+      stack.single
+        ..setValue(
+            id: 'light_x',
+            value: BridgeEffectValue.float(
+                BridgeScalar.keyframed([key(0, 100), key(2, 300)])))
+        ..setValue(
+            id: 'light_y',
+            value: BridgeEffectValue.float(
+                BridgeScalar.keyframed([key(0, 50), key(2, 150)])));
+      p.layer.setEffects(effects: stack);
+      p.uiState.model.refresh();
+      await tester.pumpAndSettle();
+      await tester
+          .tap(find.byKey(ValueKey<String>('fx-pair-link-$id-light_x')));
+      await tester.pumpAndSettle();
+
+      // Halfway along, where neither half has a key: x reads 200, y 100.
+      p.uiState.playheadFrame.value = p.uiState.selectedComp!
+          .frameAtTime(time: const BridgeRational(num: 1, den: 1));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(ValueKey<String>('fx-float-$id-light_x')));
+      await tester.pump();
+      await tester.enterText(find.byType(EditableText).first, '400');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      final x = keysOf('light_x');
+      final y = keysOf('light_y');
+      expect([for (final k in x) k.value], [100.0, 400.0, 300.0],
+          reason: 'the well took a key at the playhead');
+      expect([for (final k in y) k.value], [50.0, 200.0, 150.0],
+          reason: 'so did the other half, at the 2:1 the pair reads there');
+      expect([for (final k in y) k.time], [for (final k in x) k.time]);
+    });
+
+    /// A **keyed** other half of a static well scales whole: every key's
+    /// value times the factor, every key's time, interpolation and eased
+    /// shape held. Scaling only the number under the playhead would plant
+    /// keys nobody made.
     testWidgets('a chained pair scales a keyed half key by key',
         (tester) async {
       final p = withLayer();
@@ -2277,8 +2344,7 @@ void main() {
       p.layer.setGraph(
         drivers: p.layer.getGraphDrivers(),
         wiring: const BridgeGraphWiring(
-        outUnwired: false,
-            edges: [], layout: [], exposed: [], groups: []),
+            outUnwired: false, edges: [], layout: [], exposed: [], groups: []),
       );
       p.uiState.model.refresh();
       await tester.pump();

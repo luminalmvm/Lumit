@@ -1600,8 +1600,9 @@ the one sanctioned way a group reaches the picture.
     Anchor point, Position or Scale offers Separate axes** (docs/03 §6.5): each axis
     takes a row of its own, with its own stopwatch, its own lane and its own curve, and
     *Combine axes* puts them back — merging the axes' key times as it goes, exactly, so the
-    picture does not move. **Scale is linked by default** and draws one box, an edit holding
-    the x:y ratio; *Unlink axes* gives it a box per axis. Each command is one undo
+    picture does not move. **Scale is linked by default** and draws one box and one graph
+    curve, an edit to either holding the x:y ratio; *Unlink axes* gives it a box and a curve
+    per axis. Each command is one undo
     step. The Viewer's gizmo is unchanged by any of it: it reads the resolved transform,
     which has always been per-axis.
   - **Effects**, only when the layer has any: one row per effect, opening onto that effect's
@@ -2042,7 +2043,8 @@ instead (§4.4).
 **Shipped:** the graph editor is one **full-height pane** over the Timeline's own
 ruler, zoom and horizontal scroll (`Shift+F3` or the toolbar's Graph toggle), drawing every
 selected property as its own coloured curve — a multi-axis property contributes one curve
-per axis, and a static property draws as its flat value line. The curves are evaluated by a
+per axis (a linked Scale one curve, its other axis following every edit), and a static
+property draws as its flat value line. The curves are evaluated by a
 Dart port of the engine's cubic (`graph_maths.dart`, pinned to `anim.rs` by
 docs/impl/keyframe-eval.md and golden tests), so a paint costs zero bridge calls.
 Landed from the lists above: the **value and speed lenses** (key-command-strip buttons; the speed
