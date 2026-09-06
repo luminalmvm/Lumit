@@ -24,15 +24,22 @@ name: release
 on:
   push:
     tags: ["v*"]
-  # A rehearsal: build all three artefacts without publishing anything. The
-  # version cannot come from a branch name, so it is typed in, and the publish
-  # and announce jobs below run for a tag only - a manual run leaves the
-  # installers as run artefacts and creates no release.
+  # A manual run builds all three artefacts from whatever ref it is started
+  # on. The version cannot come from a branch name, so it is typed in. By
+  # default it is a rehearsal that leaves the installers as run artefacts and
+  # creates no release; with `publish` ticked it creates the GitHub release
+  # and its tag at the built commit, exactly as a tag push does, but the
+  # Discord announcement below stays for a tag push alone, so a release can
+  # go out and be announced by hand.
   workflow_dispatch:
     inputs:
       version:
         description: "Version to build, with or without the leading v"
         required: true
+      publish:
+        description: "Create the GitHub release and its tag (no Discord announcement)"
+        type: boolean
+        default: false
 
 # Only the publish job writes to the repository, so only it gets a token
 # that can.
@@ -308,8 +315,8 @@ jobs:
     needs: [windows-installer, linux-bundle, macos-dmg]
     permissions:
       contents: write
-    # A manual run is a rehearsal and publishes nothing.
-    if: ${{ github.ref_type == 'tag' }}
+    # A manual run publishes only when asked to.
+    if: ${{ github.ref_type == 'tag' || inputs.publish }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -324,20 +331,24 @@ jobs:
           # A tag with a suffix (v0.2.0-rc1) publishes as a pre-release, so a
           # dry run of the whole pipeline never becomes the download page's
           # "latest". Plain v0.2.0 is the real thing.
-          case "$GITHUB_REF_NAME" in *-*) prerelease=--prerelease ;; *) prerelease= ;; esac
+          # The tag: the one pushed, or for a manual run the typed version,
+          # which gh creates at the commit this run built.
+          tag="v${RELEASE_VERSION#v}"
+          case "$tag" in *-*) prerelease=--prerelease ;; *) prerelease= ;; esac
           # The "Before you update" section of the release notes, when the
           # file has one, goes at the top of the release ahead of the generated
           # notes. Lumit reads it from there and shows it once the update is
           # downloaded, before it restarts (flutter_ui/lib/state/updates.dart).
-          notes="web/src/content/releases/${GITHUB_REF_NAME#v}.md"
+          notes="web/src/content/releases/${tag#v}.md"
           before=
           if [ -f "$notes" ]; then
             awk '/^#/ { keep = (tolower($0) ~ /^#+[[:space:]]*before you update[[:space:]]*$/) } keep' \
               "$notes" > before.md
             if [ -s before.md ]; then before="--notes-file before.md"; fi
           fi
-          gh release create "$GITHUB_REF_NAME" dist/* \
-            --title "Lumit $GITHUB_REF_NAME" \
+          gh release create "$tag" dist/* \
+            --target "$GITHUB_SHA" \
+            --title "Lumit $tag" \
             --generate-notes $prerelease $before
 
   announce:
