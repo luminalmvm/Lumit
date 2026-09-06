@@ -231,10 +231,13 @@ fn rows_for(channels: &[String]) -> &'static [ParamSchema] {
         .collect();
     let rows: &'static [ParamSchema] = Box::leak(rows.into_boxed_slice());
 
-    if let Ok(mut map) = cache.write() {
-        map.insert(key, rows);
+    // Two callers can miss the read above and build at once. The first to
+    // write wins and the other hands back the winner, so one list is one
+    // pointer however the calls interleave; the loser's build is leaked once.
+    match cache.write() {
+        Ok(mut map) => map.entry(key).or_insert(rows),
+        Err(_) => rows,
     }
-    rows
 }
 
 #[cfg(test)]
@@ -286,6 +289,20 @@ mod tests {
         assert!(std::ptr::eq(a, b));
         let c = rows_for(&["R".into(), "N.X".into()]);
         assert!(!std::ptr::eq(a, c));
+    }
+
+    /// Two callers building the same list at once still end up with one
+    /// pointer, which is the race two of these tests hit on the macOS runner.
+    #[test]
+    fn two_callers_at_once_still_share_one_list() {
+        let handles: Vec<_> = (0..8)
+            .map(|_| std::thread::spawn(|| rows_for(&["G".into(), "N.Y".into()]).as_ptr() as usize))
+            .collect();
+        let seen: Vec<usize> = handles
+            .into_iter()
+            .map(|h| h.join().expect("a thread that finished"))
+            .collect();
+        assert!(seen.iter().all(|p| *p == seen[0]), "{seen:?}");
     }
 
     /// A fresh instance selects nothing, so the layer decodes as it always did.
