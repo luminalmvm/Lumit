@@ -18,7 +18,7 @@ type Tex = wgpu::Texture;
 /// A parsed-and-uploaded `.cube` LUT ready to bind (docs/08 §3.11,
 /// docs/impl/lut.md): the 3D cube texture, its per-axis size `N`, and the input
 /// domain the file declared. Held by [`LutCache`] and cloned into a `run_ops`
-/// `luts` slot; `wgpu::Texture` is an `Arc` handle, so the clone is cheap and
+/// `tables` slot; `wgpu::Texture` is an `Arc` handle, so the clone is cheap and
 /// shares the one upload.
 #[derive(Clone)]
 pub struct LoadedLut {
@@ -34,6 +34,39 @@ pub struct LoadedLut {
     pub domain_min: [f32; 3],
     pub domain_max: [f32; 3],
 }
+
+/// An OCIO effect's baked table, uploaded and ready to bind (docs/08 §3.97).
+/// The OCIO half of a [`ColourTable`] slot.
+#[derive(Clone)]
+pub struct LoadedOcio {
+    pub artefact: std::sync::Arc<lumit_gpu::OcioArtefact>,
+    /// What the table was made from - the config's content hash and the
+    /// edge's names, or the file's path, stamp and direction - folded to the
+    /// one number the effect cache and the frame key take.
+    pub identity: u64,
+}
+
+/// One slot of the parallel colour-table list beside a stack
+/// (docs/impl/effect-registry.md §2.5a): a `lut` op's cube, or an OCIO op's
+/// baked table. One list and one counter for both, because `build.rs`
+/// enumerates them with one predicate - [`TABLE_EFFECTS`] - in stack order.
+#[derive(Clone)]
+pub enum ColourTable {
+    Cube(LoadedLut),
+    Ocio(LoadedOcio),
+}
+
+/// The effects that count along the colour-table list, by match name: the
+/// predicate `build.rs` fills a slot per, and the effects whose `GpuEffect`
+/// declares [`AuxKind::Lut`]. `table_effects_are_the_lut_aux_declarers` holds
+/// the two together.
+pub const TABLE_EFFECTS: [&str; 5] = [
+    "lut",
+    "ocio_colour_space",
+    "ocio_display",
+    "ocio_look",
+    "ocio_file",
+];
 
 /// How many distinct `.cube` files stay uploaded at once. A comp references a
 /// handful at most (docs/impl/lut.md §4); past that the least recently used one
@@ -61,9 +94,92 @@ pub struct LutCache {
     /// eight: a linear scan of eight strings is faster than hashing one, and
     /// the ordering the LRU needs is the `Vec`'s own.
     entries: Vec<(String, Option<std::time::SystemTime>, LoadedLut)>,
+    /// The OCIO effects' tables, keyed and bounded the same way. The key is
+    /// the request plus what it was resolved against - the config's content
+    /// hash, or the file's stamp - so an edited config or file is a miss.
+    ocio: Vec<(OcioKey, LoadedOcio)>,
+}
+
+/// What an OCIO effect's table is made from, for the cache and the identity.
+#[derive(Clone, PartialEq, Eq)]
+struct OcioKey {
+    request: crate::colour::OcioRequest,
+    config: u64,
+    stamp: Option<std::time::SystemTime>,
 }
 
 impl LutCache {
+    /// An OCIO effect's table, baked and uploaded on a miss. `None` for a
+    /// config edge the loaded config cannot make (no config, an unusable one,
+    /// a name it does not have, a view that will not invert) and for a file
+    /// that will not read - the effect's labelled passthrough, never a fault.
+    pub fn get_or_bake(
+        &mut self,
+        ctx: &GpuContext,
+        engine: &lumit_gpu::ColourEngine,
+        request: &crate::colour::OcioRequest,
+        config: Option<&std::sync::Arc<crate::colour::Loaded>>,
+    ) -> Option<LoadedOcio> {
+        use crate::colour::OcioRequest;
+        let key = OcioKey {
+            request: request.clone(),
+            config: match request {
+                OcioRequest::Config(_) => config.filter(|l| l.usable())?.hash,
+                OcioRequest::File { .. } => 0,
+            },
+            stamp: match request {
+                OcioRequest::File { path, .. } => {
+                    std::fs::metadata(path).ok().and_then(|m| m.modified().ok())
+                }
+                OcioRequest::Config(_) => None,
+            },
+        };
+        if let Some(i) = self.ocio.iter().position(|(k, _)| *k == key) {
+            let hit = self.ocio.remove(i);
+            let table = hit.1.clone();
+            self.ocio.insert(0, hit);
+            return Some(table);
+        }
+        self.ocio.retain(|(k, _)| k.request != key.request);
+        let artefact = match request {
+            OcioRequest::Config(edge) => config?.artefact(edge)?,
+            OcioRequest::File { path, inverse } => {
+                let chain = lumit_colour::file::load(std::path::Path::new(path)).ok()?;
+                let chain = if *inverse {
+                    chain.inverted(path).ok()?
+                } else {
+                    chain
+                };
+                std::sync::Arc::new(lumit_colour::bake(&chain, lumit_colour::Shaper::DEFAULT).ok()?)
+            }
+        };
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(format!("{:?}", key.request).as_bytes());
+        hasher.update(&key.config.to_le_bytes());
+        let stamp = key
+            .stamp
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map_or(0, |d| d.as_nanos());
+        hasher.update(&stamp.to_le_bytes());
+        let mut identity = [0u8; 8];
+        identity.copy_from_slice(&hasher.finalize().as_bytes()[..8]);
+        let loaded = LoadedOcio {
+            artefact: std::sync::Arc::new(
+                engine.upload_ocio(ctx, &crate::colour::tables(&artefact)),
+            ),
+            identity: u64::from_le_bytes(identity),
+        };
+        self.ocio.insert(0, (key, loaded.clone()));
+        self.ocio.truncate(LUT_CACHE_MAX);
+        Some(loaded)
+    }
+
+    /// How many OCIO tables are held - the bound's test hook.
+    #[must_use]
+    pub fn ocio_len(&self) -> usize {
+        self.ocio.len()
+    }
+
     /// The cube at `path`, parsed and uploaded on a miss. `None` for anything
     /// that is not a usable 3D cube — an unreadable file, a parse error, or a
     /// 1D LUT — which leaves the effect a labelled passthrough rather than a
@@ -381,8 +497,8 @@ pub fn render_layer_input(
 /// effect in the stack (Flow motion blur reads `+1`, Datamosh `-1`; §3.2,
 /// §3.12), since the two want opposite measurements and a single shared field
 /// was never something both could read. An op whose offset is absent is
-/// a passthrough (degrade, never fault). `luts` is the parallel LUT list (docs/08 §3.11): the
-/// k-th `lut` op binds `luts[k]` — a `None` slot (unset, missing, 1D or
+/// a passthrough (degrade, never fault). `tables` is the parallel LUT list (docs/08 §3.11): the
+/// k-th `lut` op binds `tables[k]` - a `None` slot (unset, missing, 1D or
 /// unreadable file) is a passthrough, exactly like a missing flow field.
 /// `layer_inputs` is the parallel layer-input list (docs/08 §3.28,
 /// docs/impl/layer-input.md): the k-th layer-input-consuming op — `light_wrap`
@@ -432,7 +548,7 @@ pub fn run_ops(
     ops: &lumit_core::fx::ResolvedStack,
     neighbours: &[(i32, Tex)],
     flow_fields: &[(i32, Tex)],
-    luts: &[Option<LoadedLut>],
+    tables: &[Option<ColourTable>],
     layer_inputs: &[LayerInput],
     flare_lens: &[Option<(u64, String)>],
     mattes: &[LayerInput],
@@ -450,7 +566,7 @@ pub fn run_ops(
         ops,
         neighbours,
         flow_fields,
-        luts,
+        tables,
         layer_inputs,
         flare_lens,
         mattes,
@@ -484,7 +600,7 @@ pub fn run_ops_with_roto(
     ops: &lumit_core::fx::ResolvedStack,
     neighbours: &[(i32, Tex)],
     flow_fields: &[(i32, Tex)],
-    luts: &[Option<LoadedLut>],
+    tables: &[Option<ColourTable>],
     layer_inputs: &[LayerInput],
     flare_lens: &[Option<(u64, String)>],
     mattes: &[LayerInput],
@@ -519,7 +635,7 @@ pub fn run_ops_with_roto(
                 h,
                 subs_before,
                 ops,
-                luts,
+                tables,
                 layer_inputs,
                 flare_lens,
                 mattes,
@@ -555,7 +671,7 @@ pub fn run_ops_with_roto(
     // a flare bake queued *during* the walk means a picture of the previous
     // lens, which must not be filed under the name of the new one.
     let mut made: Vec<(u128, Tex)> = Vec::new();
-    // The k-th `lut` op consumes the k-th `luts` slot (the whole threading
+    // The k-th `lut` op consumes the k-th `tables` slot (the whole threading
     // contract — see `build.rs`'s `lut_files` and CompLayerDraw's lut_files); a
     // slot is present only when its `.cube` file loaded. The k-th
     // layer-input-consuming op consumes the k-th `layer_inputs` slot the same
@@ -729,7 +845,7 @@ pub fn run_ops_with_roto(
             let data = match gpu.aux() {
                 AuxKind::None => AuxData::None,
                 AuxKind::Lut => {
-                    let slot = luts.get(lut_i).and_then(|o| o.as_ref());
+                    let slot = tables.get(lut_i).and_then(|o| o.as_ref());
                     lut_i += 1;
                     AuxData::Lut(slot)
                 }
@@ -907,7 +1023,7 @@ fn op_keys(
     h_px: u32,
     flare_substitutions: u64,
     ops: &lumit_core::fx::ResolvedStack,
-    luts: &[Option<LoadedLut>],
+    tables: &[Option<ColourTable>],
     layer_inputs: &[LayerInput],
     flare_lens: &[Option<(u64, String)>],
     mattes: &[LayerInput],
@@ -996,13 +1112,21 @@ fn op_keys(
             }
             match crate::gpufx::gpu_effect(schema.match_name).map(|g| g.aux()) {
                 Some(AuxKind::Lut) => {
-                    if let Some(Some(lut)) = luts.get(lut_i) {
-                        h.update(lut.path.as_bytes());
-                        let mtime = lut
-                            .mtime
-                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                            .map_or(0, |d| d.as_nanos());
-                        h.update(&mtime.to_le_bytes());
+                    match tables.get(lut_i) {
+                        Some(Some(ColourTable::Cube(lut))) => {
+                            h.update(lut.path.as_bytes());
+                            let mtime = lut
+                                .mtime
+                                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                                .map_or(0, |d| d.as_nanos());
+                            h.update(&mtime.to_le_bytes());
+                        }
+                        // What the table was made from - the config's hash and
+                        // the names, or the file's stamp - folded already.
+                        Some(Some(ColourTable::Ocio(o))) => {
+                            h.update(&o.identity.to_le_bytes());
+                        }
+                        _ => {}
                     }
                     lut_i += 1;
                 }
@@ -1620,14 +1744,14 @@ mod tests {
         let cache = warm_cache();
         let lut = |mtime: u64| {
             let cube = vec![[1.0f32, 0.0, 0.0]; 8];
-            Some(LoadedLut {
+            Some(ColourTable::Cube(LoadedLut {
                 texture: lumit_gpu::fx::upload_lut_3d(&ctx, 2, &cube),
                 size: 2,
                 domain_min: [0.0; 3],
                 domain_max: [1.0; 3],
                 path: "grade.cube".into(),
                 mtime: Some(std::time::UNIX_EPOCH + std::time::Duration::from_secs(mtime)),
-            })
+            }))
         };
         let ops = stack(&[("lut", "mix", 100.0), ("exposure", "stops", 1.0)]);
         for mtime in [1, 1, 2] {
@@ -1770,5 +1894,74 @@ mod tests {
             "the drag was served the prefix"
         );
         assert_eq!(cache.borrow().stats().2, 2, "and filed nothing of its own");
+    }
+
+    /// `TABLE_EFFECTS` is the predicate `build.rs` fills the colour-table list
+    /// by, and `AuxKind::Lut` is the one `run_ops` counts by. One list, so the
+    /// two must name the same effects.
+    #[test]
+    fn table_effects_are_the_lut_aux_declarers() {
+        let mut declared: Vec<&str> = lumit_core::fx::BUILTIN_DEFS
+            .builtins()
+            .map(|d| d.schema().match_name)
+            .filter(|n| crate::gpufx::gpu_effect(n).is_some_and(|g| g.aux() == AuxKind::Lut))
+            .collect();
+        declared.sort_unstable();
+        let mut listed = TABLE_EFFECTS.to_vec();
+        listed.sort_unstable();
+        assert_eq!(declared, listed);
+    }
+
+    /// The OCIO file transform's table: baked and uploaded once per file and
+    /// stamp, bounded like the cubes, and `None` for a file that will not read.
+    #[test]
+    fn an_ocio_file_table_is_baked_once_and_refuses_an_unreadable_file() {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let engine = ctx.colour();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("grade.cc");
+        std::fs::write(
+            &path,
+            "<ColorCorrection><SOPNode><Slope>1.1 1 0.9</Slope></SOPNode></ColorCorrection>",
+        )
+        .unwrap();
+        let request = crate::colour::OcioRequest::File {
+            path: path.to_string_lossy().into_owned(),
+            inverse: false,
+        };
+        let mut cache = LutCache::default();
+        let first = cache
+            .get_or_bake(&ctx, engine, &request, None)
+            .expect("bakes");
+        let again = cache
+            .get_or_bake(&ctx, engine, &request, None)
+            .expect("bakes");
+        assert_eq!(first.identity, again.identity);
+        assert_eq!(cache.ocio_len(), 1, "the same file twice is one entry");
+        let inverse = crate::colour::OcioRequest::File {
+            path: path.to_string_lossy().into_owned(),
+            inverse: true,
+        };
+        let back = cache
+            .get_or_bake(&ctx, engine, &inverse, None)
+            .expect("bakes");
+        assert_ne!(
+            first.identity, back.identity,
+            "forward and inverse are two tables"
+        );
+        let missing = crate::colour::OcioRequest::File {
+            path: dir.path().join("gone.cube").to_string_lossy().into_owned(),
+            inverse: false,
+        };
+        assert!(cache.get_or_bake(&ctx, engine, &missing, None).is_none());
+        // A config edge with no config is the passthrough, never a fault.
+        let edge = crate::colour::OcioRequest::Config(crate::colour::Edge::Convert {
+            from: String::new(),
+            to: "anything".into(),
+        });
+        assert!(cache.get_or_bake(&ctx, engine, &edge, None).is_none());
     }
 }

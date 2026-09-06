@@ -150,19 +150,32 @@ impl Session {
                 }
                 self.reply(&BrokerMessage::Done)
             }
-            HostMessage::InstanceChanged {
+            HostMessage::Press {
                 instance,
                 name,
-                value,
-                reason,
                 time,
+                source,
             } => {
-                if let Some(live) = self.instances.get(&instance) {
-                    if let Some(plugin) = self.bundle.plugins().get(live.plugin) {
-                        let _ = live.instance.changed(plugin, &name, value, &reason, time);
-                    }
+                let Some(live) = self.instances.get(&instance) else {
+                    return self.failed("press", "no such instance");
+                };
+                let Some(plugin) = self.bundle.plugins().get(live.plugin) else {
+                    return self.failed("press", "no such plugin in this bundle");
+                };
+                let frame = self
+                    .ring
+                    .as_ref()
+                    .and_then(|ring| ring.read_frame(source.slot).ok())
+                    .map(|(_, frame)| frame);
+                let Some(frame) = frame else {
+                    return self.failed("press", "the frame did not arrive");
+                };
+                // This call is as long as the plugin wants it to be. Looks
+                // stays in here until its editor is closed.
+                match live.instance.press(plugin, &name, time, &frame) {
+                    Ok(params) => self.reply(&BrokerMessage::Pressed { params }),
+                    Err(status) => self.failed("press", &format!("{status:?}")),
                 }
-                self.reply(&BrokerMessage::Done)
             }
             HostMessage::Render {
                 instance,

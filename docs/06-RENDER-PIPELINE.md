@@ -384,7 +384,8 @@ whose names the export can be written in. The config format is hosted **natively
 CPU, to a small deterministic artefact (factorised curves + matrix, or a shaper + 65³ cube
 sampled tetrahedrally), and that one artefact is what the decode pass, the display pass and
 the export's identical blit all sample — one implementation, so parity holds by construction.
-The working space stays fixed with OCIO at the edges. A missing or refused config
+The working space is Lumit's linear Rec.709 by default, or the config's `scene_linear`
+role by project choice (docs/impl/ocio.md §2.1). A missing or refused config
 degrades calmly to the built-ins for preview and refuses for export; fidelity against the
 reference library is gated by vendored golden fixtures, and a config using an unimplemented
 transform is refused by name, never approximated. Nothing else in the pipeline may assume

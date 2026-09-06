@@ -1661,3 +1661,65 @@ fn an_empty_run_contributes_no_unit_draw() {
         "no unit for an empty run"
     );
 }
+
+/// The colour-table list (docs/impl/effect-registry.md §2.5a): one slot per
+/// `lut` or OCIO op, in stack order, on the predicate `run_ops` counts by; an
+/// OCIO effect with nothing to do fills its slot with `None`.
+#[test]
+fn colour_tables_fill_one_slot_per_table_effect_in_stack_order() {
+    use crate::colour::{Edge, OcioRequest, TableRequest};
+    use lumit_core::model::{EffectValue, FileParam};
+    let set = |e: &mut lumit_core::model::EffectInstance, id: &str, v: EffectValue| {
+        if let Some(p) = e.params.iter_mut().find(|p| p.id == id) {
+            p.value = v;
+        }
+    };
+    let text = |s: &str| EffectValue::Text(s.into());
+
+    let sat = lumit_core::fx::instantiate("saturation").unwrap();
+    let mut display = lumit_core::fx::instantiate("ocio_display").unwrap();
+    set(&mut display, "display", text("sRGB"));
+    set(&mut display, "view", text("Standard"));
+    set(&mut display, "inverse", EffectValue::Bool(true));
+    let unset_display = lumit_core::fx::instantiate("ocio_display").unwrap();
+    let mut lut = lumit_core::fx::instantiate("lut").unwrap();
+    set(
+        &mut lut,
+        "file",
+        EffectValue::File(FileParam::single("grade.cube")),
+    );
+    let mut off = lumit_core::fx::instantiate("ocio_look").unwrap();
+    set(&mut off, "look", text("warm"));
+    off.enabled = false;
+    let mut convert = lumit_core::fx::instantiate("ocio_colour_space").unwrap();
+    set(&mut convert, "output_colour_space", text("ACEScg"));
+    let mut file = lumit_core::fx::instantiate("ocio_file").unwrap();
+    set(
+        &mut file,
+        "file",
+        EffectValue::File(FileParam::single("grade.cc")),
+    );
+
+    let effects = vec![sat, display, unset_display, lut, off, convert, file];
+    assert_eq!(
+        crate::build::colour_tables(&effects, 0.0),
+        vec![
+            Some(TableRequest::Ocio(OcioRequest::Config(Edge::Display {
+                input: String::new(),
+                display: "sRGB".into(),
+                view: "Standard".into(),
+                inverse: true,
+            }))),
+            None,
+            Some(TableRequest::Cube("grade.cube".into())),
+            Some(TableRequest::Ocio(OcioRequest::Config(Edge::Convert {
+                from: String::new(),
+                to: "ACEScg".into(),
+            }))),
+            Some(TableRequest::Ocio(OcioRequest::File {
+                path: "grade.cc".into(),
+                inverse: false,
+            })),
+        ]
+    );
+}

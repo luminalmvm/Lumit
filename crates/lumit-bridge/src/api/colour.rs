@@ -88,6 +88,21 @@ pub struct BridgeColourSummary {
     /// Each display with its views, in the config's own order. Never
     /// translated either, and empty unless `loaded`.
     pub displays: Vec<BridgeColourDisplay>,
+    /// The config's looks by name, for the OCIO look transform effect's row.
+    /// Never translated, and empty unless `loaded`.
+    pub looks: Vec<String>,
+    /// What the config calls itself, for the OCIO effects' read-only
+    /// Information row. Never translated, and empty unless `loaded`.
+    pub name: String,
+    /// The project asks to composite in the config's `scene_linear` role
+    /// (docs/impl/ocio.md §2.1). The document's own setting, whether or not a
+    /// config is loaded.
+    pub working_from_config: bool,
+    /// The working space's name when it is the config's: the `scene_linear`
+    /// space, never translated. Empty when the working space is Lumit's own
+    /// linear Rec.709, which is also what a config with no `scene_linear`
+    /// comes to.
+    pub working_space: String,
 }
 
 /// The project's colour state, brought into line with the document first.
@@ -118,23 +133,25 @@ impl ProjectReference {
     pub fn colour_summary(&self) -> Result<BridgeColourSummary, BridgeError> {
         let state = self.state()?;
         let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
-        let path = state
-            .store
-            .snapshot()
+        let snapshot = state.store.snapshot();
+        let path = snapshot
             .colour
             .config
             .as_ref()
             .map(|media| media.display_path().to_owned())
             .unwrap_or_default();
+        let working_from_config =
+            snapshot.colour.working_space == lumit_core::model::WorkingSpace::ConfigSceneLinear;
 
         with_colour(&state, |colour| {
             let Some(loaded) = colour.loaded() else {
                 return BridgeColourSummary {
                     path,
+                    working_from_config,
                     ..BridgeColourSummary::default()
                 };
             };
-            let (spaces, displays) = loaded.vocabulary();
+            let (spaces, displays, looks) = loaded.vocabulary();
             BridgeColourSummary {
                 path,
                 loaded: loaded.usable(),
@@ -162,6 +179,10 @@ impl ProjectReference {
                     .into_iter()
                     .map(|(name, views)| BridgeColourDisplay { name, views })
                     .collect(),
+                looks,
+                name: loaded.name(),
+                working_from_config,
+                working_space: loaded.working_space().unwrap_or_default().to_owned(),
             }
         })
     }
@@ -192,6 +213,26 @@ impl ProjectReference {
         state
             .store
             .commit(Op::SetColourConfig { config })
+            .map(|_| ())
+            .map_err(BridgeError::OpError)
+    }
+
+    /// Choose the project's working space: Lumit's own linear Rec.709, or the
+    /// loaded config's `scene_linear` role (docs/impl/ocio.md §2.1). An
+    /// ordinary op, undoable and saved with the project, for the reason the
+    /// config itself is one.
+    #[frb(sync)]
+    pub fn set_colour_working_space(&self, from_config: bool) -> Result<(), BridgeError> {
+        let state = self.state()?;
+        let state = state.write().map_err(|_| BridgeError::WriteFailed)?;
+        let working_space = if from_config {
+            lumit_core::model::WorkingSpace::ConfigSceneLinear
+        } else {
+            lumit_core::model::WorkingSpace::Rec709Linear
+        };
+        state
+            .store
+            .commit(Op::SetColourWorkingSpace { working_space })
             .map(|_| ())
             .map_err(BridgeError::OpError)
     }

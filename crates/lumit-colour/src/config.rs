@@ -418,6 +418,10 @@ pub struct ViewTransform {
 #[derive(Debug, Clone, Default)]
 pub struct Config {
     pub version: u32,
+    /// What the config calls itself: its `name`, or the first line of its
+    /// `description` when it has no name, or empty. The OCIO effects' read-only
+    /// Information row shows it.
+    pub name: String,
     /// The directory the config file lives in; every relative path is relative
     /// to it (nothing absolute is ever written back).
     pub dir: PathBuf,
@@ -715,6 +719,13 @@ impl Config {
 
         let mut config = Config {
             version: major,
+            name: root
+                .string("name")
+                .or_else(|| {
+                    root.string("description")
+                        .map(|d| d.lines().next().unwrap_or_default().trim().to_string())
+                })
+                .unwrap_or_default(),
             dir: dir.to_path_buf(),
             search_paths: root.string_list("search_path", &[':']),
             active_displays: root.string_list("active_displays", &[',']),
@@ -846,6 +857,12 @@ impl Config {
             .filter(|n| !self.inactive.contains(*n))
             .map(String::as_str)
             .collect()
+    }
+
+    /// The looks a picker should list, by name.
+    #[must_use]
+    pub fn look_names(&self) -> Vec<&str> {
+        self.looks.keys().map(String::as_str).collect()
     }
 
     /// Follow a role to the space it names, one indirection (§4.2).

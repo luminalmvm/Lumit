@@ -21,7 +21,7 @@
 use serde::Serialize;
 
 use super::params::Unit;
-use super::schema::{EffectSchema, EnabledCond, FxCategory, ParamKind};
+use super::schema::{ColourNameRole, EffectSchema, EnabledCond, FxCategory, ParamKind};
 
 /// The whole catalogue, ready to serialise.
 #[derive(Debug, Serialize)]
@@ -124,6 +124,10 @@ pub struct Param {
     /// `mask_path`, whether an unset row means the layer's first mask.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub self_default: Option<bool>,
+    /// Which of the OCIO config's lists a `colour_name` row offers: `space`,
+    /// `display`, `view` or `look`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub colour_role: Option<&'static str>,
 }
 
 /// One collapsible parameter group.
@@ -216,6 +220,7 @@ fn param(schema: &'static super::schema::ParamSchema) -> Param {
         file_filter: None,
         file_filter_name: None,
         self_default: None,
+        colour_role: None,
     };
     match schema.kind {
         ParamKind::Float {
@@ -292,6 +297,16 @@ fn param(schema: &'static super::schema::ParamSchema) -> Param {
             p.kind = "file";
             p.file_filter = Some(filter.to_vec());
             p.file_filter_name = Some(filter_name);
+        }
+        ParamKind::ColourName { role } => {
+            p.kind = "colour_name";
+            p.colour_role = Some(match role {
+                ColourNameRole::Space => "space",
+                ColourNameRole::Display => "display",
+                ColourNameRole::View => "view",
+                ColourNameRole::Look => "look",
+                ColourNameRole::Config => "config",
+            });
         }
         ParamKind::Layer { self_default } => {
             p.kind = "layer";

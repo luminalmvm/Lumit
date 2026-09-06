@@ -119,10 +119,10 @@ fn for_each_property(effects: &[EffectInstance], visit: &mut impl FnMut(&crate::
                 }
                 crate::model::EffectValue::File(f) => visit(&f.index),
                 // Carry no animation: a bool, a dropdown choice, a random
-                // seed, a layer reference, a mask-path reference and a tone
-                // curve are all static in v1 (docs/03 §8). A mask path's
-                // *shape* animates, but it animates on the mask, not here —
-                // this value is only which mask; a curve's shape is
+                // seed, a layer reference, a mask-path reference, a tone
+                // curve and a colour name are all static in v1 (docs/03 §8).
+                // A mask path's *shape* animates, but it animates on the mask,
+                // not here - this value is only which mask; a curve's shape is
                 // right here and still does not animate, because a list that
                 // grows has nothing to interpolate.
                 crate::model::EffectValue::Bool(_)
@@ -130,7 +130,8 @@ fn for_each_property(effects: &[EffectInstance], visit: &mut impl FnMut(&crate::
                 | crate::model::EffectValue::Seed(_)
                 | crate::model::EffectValue::Layer(_)
                 | crate::model::EffectValue::MaskPath(_)
-                | crate::model::EffectValue::Curve(_) => {}
+                | crate::model::EffectValue::Curve(_)
+                | crate::model::EffectValue::Text(_) => {}
             }
         }
     }
@@ -160,7 +161,8 @@ fn for_each_property_mut(
                 | crate::model::EffectValue::Seed(_)
                 | crate::model::EffectValue::Layer(_)
                 | crate::model::EffectValue::MaskPath(_)
-                | crate::model::EffectValue::Curve(_) => {}
+                | crate::model::EffectValue::Curve(_)
+                | crate::model::EffectValue::Text(_) => {}
             }
         }
     }

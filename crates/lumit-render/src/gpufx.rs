@@ -26,7 +26,7 @@ use lumit_core::fx::{EffectMetadata, Params};
 use lumit_gpu::fx::FxEngine;
 use lumit_gpu::GpuContext;
 
-use crate::fxops::LoadedLut;
+use crate::fxops::{ColourTable, LoadedLut, LoadedOcio};
 
 pub mod ofx;
 
@@ -101,9 +101,10 @@ pub struct AuxSlot<'a> {
 pub enum AuxData<'a> {
     /// The effect declared [`AuxKind::None`].
     None,
-    /// This op's parsed cube, or `None` when the file was unset, missing, 1D or
-    /// unreadable.
-    Lut(Option<&'a LoadedLut>),
+    /// This op's colour table - a `lut` op's parsed cube or an OCIO op's baked
+    /// table - or `None` when the file was unset, missing, 1D or unreadable,
+    /// or the config could not make the table.
+    Lut(Option<&'a ColourTable>),
     /// The flare's custom prescription (content hash and text), absent when the
     /// `.lens` row is unset or the file would not parse. Its Matte source is
     /// **not** here: it is the generic matte every effect can take, and it
@@ -236,7 +237,16 @@ impl<'a> AuxSlot<'a> {
     /// kind, and which is a passthrough rather than a panic if it ever does.
     pub fn lut(self) -> Option<&'a LoadedLut> {
         match self.data {
-            AuxData::Lut(l) => l,
+            AuxData::Lut(Some(ColourTable::Cube(l))) => Some(l),
+            _ => None,
+        }
+    }
+
+    /// This op's baked OCIO table, off the same list a cube rides; `None` is
+    /// the OCIO effects' passthrough.
+    pub fn ocio(self) -> Option<&'a LoadedOcio> {
+        match self.data {
+            AuxData::Lut(Some(ColourTable::Ocio(o))) => Some(o),
             _ => None,
         }
     }
@@ -344,6 +354,10 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &Gamma,
     &Temperature,
     &Lut,
+    &OcioColourSpace,
+    &OcioDisplay,
+    &OcioLook,
+    &OcioFile,
     &Dof,
     &ChannelBlur,
     &Transform,
@@ -2289,6 +2303,145 @@ impl GpuEffect for Lut {
             ),
             None => tex.clone(),
         }
+    }
+}
+
+/// The four OCIO effects share one pass: the table was chosen when the slot
+/// was filled, so all a kernel has to know is the Mix.
+fn ocio_run(
+    fx: &FxEngine,
+    ctx: &GpuContext,
+    tex: &Tex,
+    w: u32,
+    h: u32,
+    aux: AuxSlot<'_>,
+    mix: f32,
+) -> Tex {
+    match aux.ocio() {
+        Some(o) => fx.ocio(ctx, tex, w, h, &o.artefact, mix),
+        // No config, a name the config does not have, a file that would not
+        // read: the labelled passthrough, as an unset LUT is.
+        None => tex.clone(),
+    }
+}
+
+struct OcioColourSpace;
+impl GpuEffect for OcioColourSpace {
+    fn match_name(&self) -> &'static str {
+        "ocio_colour_space"
+    }
+    fn aux(&self) -> AuxKind {
+        AuxKind::Lut
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        ocio_run(
+            fx,
+            ctx,
+            tex,
+            w,
+            h,
+            aux,
+            effects::ocio::OcioColourSpace::read(p).packed(),
+        )
+    }
+}
+
+struct OcioDisplay;
+impl GpuEffect for OcioDisplay {
+    fn match_name(&self) -> &'static str {
+        "ocio_display"
+    }
+    fn aux(&self) -> AuxKind {
+        AuxKind::Lut
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        ocio_run(
+            fx,
+            ctx,
+            tex,
+            w,
+            h,
+            aux,
+            effects::ocio::OcioDisplay::read(p).packed(),
+        )
+    }
+}
+
+struct OcioLook;
+impl GpuEffect for OcioLook {
+    fn match_name(&self) -> &'static str {
+        "ocio_look"
+    }
+    fn aux(&self) -> AuxKind {
+        AuxKind::Lut
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        ocio_run(
+            fx,
+            ctx,
+            tex,
+            w,
+            h,
+            aux,
+            effects::ocio::OcioLook::read(p).packed(),
+        )
+    }
+}
+
+struct OcioFile;
+impl GpuEffect for OcioFile {
+    fn match_name(&self) -> &'static str {
+        "ocio_file"
+    }
+    fn aux(&self) -> AuxKind {
+        AuxKind::Lut
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        ocio_run(
+            fx,
+            ctx,
+            tex,
+            w,
+            h,
+            aux,
+            effects::ocio::OcioFile::read(p).packed(),
+        )
     }
 }
 
@@ -6929,7 +7082,7 @@ mod tests {
             &[],
             &[],
             // Slot 0 empty, slot 1 the grade: only the *second* op grades.
-            &[None, Some(kill_green)],
+            &[None, Some(ColourTable::Cube(kill_green))],
             &[],
             &[],
             &[],

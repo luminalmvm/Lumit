@@ -1,8 +1,8 @@
 # OCIO colour management — implementation note
 
 **Decision:** OCIO is hosted natively (one implementation, baked artefacts), and the v1
-scope is: five surfaces, the working space stays fixed, the config is a project
-property.
+scope is: five surfaces, the config is a project property, and the working space is
+Lumit's own unless the project chooses the config's.
 **Related:** the working space and depth, preview equals export through one colour
 path, perceptual operations in Oklab, interpretation never touches the file, paths are
 relative and absolute never serialised, one render walk, engine words, three platforms
@@ -92,50 +92,76 @@ colour pipeline with a missing edge is worse than none:
 | Surface | v1 | Where |
 |---|---|---|
 | Config loading | Yes — a project setting: path to `config.ocio`, LUTs resolved via the config's own `search_path` | §3.1 |
-| Working space | **Stays fixed**: scene-linear Rec.709/sRGB primaries, fp16, premultiplied. OCIO at the edges | §2.1 |
+| Working space | Scene-linear fp16, premultiplied. Lumit's Rec.709 primaries by default, or the config's `scene_linear` role by project choice | §2.1 |
 | Footage input transforms | Yes — per-item colour space assignment from the config's list | §3.2 |
 | Viewer display/view | Yes — the colour-pipeline picker lists the config's displays and views | §6.2 |
 | Export output transform | Yes — `ColourSpace::Ocio(name)` stops refusing when the name is the loaded config's | §6.3 |
 
-Recorded next, deliberately not v1: a config-defined working space (§2.1), context
+Recorded next, deliberately not v1: context
 variables (`$SHOT`-style per-item LUT substitution), `FixedFunctionTransform` and the
-grading-op family, 3D-LUT inversion, and OCIO *looks* as a separate picker (a view
-that bakes a look in works today; a standalone look chooser is UI once someone needs
-it).
+grading-op family, and 3D-LUT inversion. A sixth surface landed after v1: the four
+OCIO *effects* (§6.6), which put the same recipes on one layer in the middle of a
+stack, and are where a look is chosen on its own; and the config-defined working space
+(§2.1), a project choice.
 
-### 2.1 The working space stays fixed — said outright
+### 2.1 The working space: Lumit's own by default, the config's by choice
 
-The tempting alternative is what Nuke does: the working space *becomes* the config's
-`scene_linear` role, ACEScg under an ACES config. Lumit does not do this in v1, and
-the reason is honest rather than convenient: the engine hard-codes its primaries in
-places that are correct today and would silently become wrong. `lumit-gpu::oklab`'s
-matrices assume Rec.709 primaries; the perceptual blend modes and the scopes
-take Rec.709 luma of an sRGB encode (docs/06 §3.5); the tone-map curve, the NV12
-decode target and the hardware sRGB texture trick (docs/impl/gpu-foundation.md) all
-assume the same. A config-defined working space is a real feature — it is the ACES
-pipeline native — but it is "make every primaries-dependent constant working-space
-aware", a change with its own decision entry, not a side effect of loading a file.
+The engine hard-codes Rec.709 primaries in places that are correct today: `lumit-gpu::
+oklab`'s matrices, the luma weights inside the colour effects and the scopes, the tone-map
+curve, the NV12 decode target and the hardware sRGB texture trick (docs/impl/
+gpu-foundation.md). So the default stays **edges-only**, exactly the shape the built-in
+export family landed in: a fixed linear-Rec.709 working space, config transforms
+converting in and out at the borders.
 
-So v1 is **edges-only**, exactly the shape the built-in export family landed in: fixed
-linear-Rec.709 working space, config transforms converting in and out at the borders.
-Two consequences, both stated rather than hidden:
+Bridging to the config's reference space. A config describes transforms to and from its
+own reference space, not ours. When the config declares the OCIO v2 interchange roles
+(`aces_interchange` or `cie_xyz_d65_interchange`), the bridge is exact: input chain =
+(space → reference) ∘ (reference → interchange) ∘ (fixed Bradford-adapted matrix,
+interchange → linear Rec.709 D65); the display chain is the mirror. When a legacy config
+has no interchange role, Lumit **composes through**: it treats the config's `scene_linear`
+role as the working space's equal, so any input→working→display trip is still end-to-end
+exact (the middle cancels), and only Lumit's own perceptual ops (Oklab, perceptual blends,
+luma) read the pixels as if they were Rec.709 when they may be, say, ACEScg. That is what
+every OCIO v1-era host did; the project settings face states which mode is in force
+(§6.4).
 
-- **Bridging to the config's reference space.** A config describes transforms to and
-  from its own reference space, not ours. When the config declares the OCIO v2
-  interchange roles (`aces_interchange` or `cie_xyz_d65_interchange`), the bridge is
-  exact: input chain = (space → reference) ∘ (reference → interchange) ∘ (fixed
-  Bradford-adapted matrix, interchange → linear Rec.709 D65); the display chain is the
-  mirror. When a legacy config has no interchange role, Lumit **composes through**:
-  it treats the config's `scene_linear` role as the working space's equal, so any
-  input→working→display trip is still end-to-end exact (the middle cancels), and only
-  Lumit's own perceptual ops (Oklab, perceptual blends, luma) read the pixels as if
-  they were Rec.709 when they may be, say, ACEScg. That is precisely what every OCIO
-  v1-era host did; the project settings face states which mode is in force (§6.4).
-- **Wide gamut rides as negatives.** Converting a wider-gamut input to linear Rec.709
-  produces negative components for colours outside Rec.709. fp16 carries negatives
-  natively and the compositing maths is linear, so nothing is lost in the working
-  image — the loss point is the baked view LUT's domain, which is the note's biggest
-  fidelity bound (§5.4).
+**The config's working space, by project choice.** `ColourManagement::working_space` is
+`Rec709Linear` (the default above) or `ConfigSceneLinear`, set from the Project settings
+Colour group and carried by `Op::SetColourWorkingSpace`. Under `ConfigSceneLinear` the
+bridge is the compose-through one whatever roles the config declares
+(`LoadedConfig::with_working`): footage lands in the config's `scene_linear`, views and
+exports start from it, and the OCIO effects' unset rows mean it. That is what Nuke and
+Blender do, and it is what makes an ACES project composite in ACEScg. Two things make the
+pixels Lumit *itself* makes right in that space, both keyed on one matrix,
+`LoadedConfig::rec709_to_working`, which exists when the config has an interchange role
+and its `scene_linear` is a matrix away from it:
+
+- **Untagged footage** (and footage tagged with a name the config has lost) linearises
+  through `Edge::Untagged`: the built-in sRGB decode, then Rec.709 → working. It is the
+  default entry of `InputTransforms`, so the decode pass is the OCIO variant for every
+  source, not only the tagged ones.
+- **The built-in view and the built-in export family** run through `Edge::BuiltinDisplay`:
+  working → Rec.709, then the sRGB encode the hardware would have done, baked, so the
+  double-encode trap (§5.2) is walked round by the same Unorm-view rule as any view. The
+  export's built-in families (Linear, Rec.709, Rec.2020, Display P3) undo that sRGB
+  encode on the CPU as they always did, and so land right without knowing the working
+  space changed.
+
+What the matrix does not reach, stated: solids, text, gradients and effect colour
+parameters are numbers in the working space, as Nuke's are, so a colour picked as sRGB
+red is the working space's red. Lumit's own luma weights and Oklab matrices keep reading
+the pixels as Rec.709, the compose-through reading above; the scopes are exempt because
+they read the display-encoded bytes, which the built-in view has already carried back to
+Rec.709. A config with no interchange role has no matrix: `scene_linear` is taken as
+Rec.709 and everything behaves as compose-through did. The working space folds into the
+config's content hash (`content_hash`), so the choice renames every frame.
+
+**Wide gamut rides as negatives** under the default. Converting a wider-gamut input to
+linear Rec.709 produces negative components for colours outside Rec.709. fp16 carries
+negatives natively and the compositing maths is linear, so nothing is lost in the working
+image; the loss point is the baked view LUT's domain, which is the note's biggest fidelity
+bound (§5.4). A config-defined working space with wide primaries sidesteps that entirely,
+which is the practical reason to choose it.
 
 ## 3. The model
 
@@ -633,6 +659,39 @@ land with their `app_en.arb` keys in the same commit, engine-sent ones also in
 `engine_labels.dart`; new keys listed in the commit message and PR for translation.
 Config-supplied names cross verbatim and are never translated (§4.4).
 
+### 6.6 The effects
+
+The project settings manage colour at the edges. Four effects in the Colour category
+put the same recipes on one layer, in the middle of its stack, which is the flexibility
+a grade sometimes needs (docs/08 §3.97): **OCIO colour space transform** (input space,
+output space), **OCIO display transform** (input space, display, view, Inverse), **OCIO
+look transform** (input space, look, output space, Inverse) and **OCIO file transform**
+(a LUT or CDL file, Inverse). Each ends with the host Mix.
+
+What they share with the edges is everything that matters. A name row is a
+`ParamKind::ColourName`, whose value is the config's own spelling of a space, display,
+view or look, empty for unset; an unset space row means Lumit's working space, so a
+fresh colour space transform with one row set is an input or an output transform. The
+render turns the rows into an `Edge` (`Convert`, `Display`, `Look`) of the loaded
+config, or a `File` request for the file transform, and the same `Loaded::artefact`
+cache that bakes the footage, Viewer and export edges bakes these, once per distinct
+edge. The baked table rides beside the op on the colour-table list the LUT effect
+already counted along, and one kernel (`fx_ocio.wgsl`) applies it, prepending the
+sampler the display pass prepends (`ocio_sample.wgsl`), so an effect and the Viewer's
+view are one implementation. The `ocio_parity` test holds the kernel to the oracle at
+the same bound as the display pass.
+
+The degrade rule is the LUT's: no config, a name the config does not have, a view with
+a 3D table in it asked to invert, or a file that will not read is a passthrough, never
+a fault. The frame key already covers it all: the config's hash, the names (through the
+new `EffectValue::Text` arm) and the file's stamp. The Information line the After
+Effects effects draw is a fifth `ColourNameRole`, `Config`: a read-only row showing what
+the config calls itself (`Config::name`, its `name` or the first line of its
+`description`, else the file's name), which the summary carries as `name`.
+The file transform reads the ASC CDL grammar (`.cc`, `.ccc`, `.cdl`) through the CLF
+reader, first grade only, alongside the table formats; it is tetrahedral where the LUT
+effect is trilinear, which is the one visible difference between the two on a `.cube`.
+
 ## 7. Conformance — the golden fixture suite
 
 Fidelity is proven, not asserted, and the proof is data checked into the repository:
@@ -779,8 +838,9 @@ unavailable name with the reason in the tooltip.
 
 **Landed.** The config is chosen where §6.4 puts it — **File ▸ Project settings ▸
 Colour**, a path well with *Choose…* and *Clear*, the state line under it, and the
-fixed working space stated as a reading. There is no separate relink: choosing again
-*is* the relink, which is what a missing config's state line points at.
+working space chosen on a dropdown (Lumit's linear Rec.709, or the config's scene-linear
+space by name, offered once a config is loaded). There is no separate relink: choosing
+again *is* the relink, which is what a missing config's state line points at.
 
 Three shapes the note did not settle, decided in the building:
 

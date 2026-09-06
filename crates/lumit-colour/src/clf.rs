@@ -399,19 +399,34 @@ fn cdl_op(what: &str, node: &Node) -> Result<Op> {
     })
 }
 
-/// The elements this reader treats as process nodes.
-const PROCESS_NODES: [&str; 7] = [
-    "Matrix", "LUT1D", "LUT3D", "Range", "Log", "Exponent", "ASC_CDL",
+/// The elements this reader treats as process nodes. `ColorCorrection` is the
+/// ASC CDL file grammar's own name for the `ASC_CDL` node: a `.cc`, `.ccc` or
+/// `.cdl` file is the same `SOPNode`/`SatNode` block under a different
+/// wrapper, so it reads through this parser rather than a second one.
+const PROCESS_NODES: [&str; 8] = [
+    "Matrix",
+    "LUT1D",
+    "LUT3D",
+    "Range",
+    "Log",
+    "Exponent",
+    "ASC_CDL",
+    "ColorCorrection",
 ];
 
-/// Elements that carry information rather than maths, and are skipped.
-const IGNORED: [&str; 6] = [
+/// Elements that carry information rather than maths, and are skipped. The
+/// last four are the ASC CDL file wrappers.
+const IGNORED: [&str; 10] = [
     "ProcessList",
     "Description",
     "InputDescriptor",
     "OutputDescriptor",
     "Info",
     "ACEStransformID",
+    "ColorCorrectionCollection",
+    "ColorDecisionList",
+    "ColorDecision",
+    "InputDescription",
 ];
 
 /// Parse CLF or CTF text into a resolved chain.
@@ -573,7 +588,7 @@ fn node_to_op(what: &str, node: &Node) -> Result<Op> {
         "Range" => range_op(what, node),
         "Log" => log_op(what, node),
         "Exponent" => exponent_op(what, node),
-        "ASC_CDL" => cdl_op(what, node),
+        "ASC_CDL" | "ColorCorrection" => cdl_op(what, node),
         other => Err(ColourError::UnsupportedClfNode {
             node: other.to_string(),
         }),

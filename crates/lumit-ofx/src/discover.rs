@@ -44,7 +44,7 @@ use lumit_core::fx::{EffectDef, EffectSchema};
 use uuid::Uuid;
 
 use crate::bundle::{self, Bundle};
-use crate::def::{BrokerHost, LocalHost, OfxEffectDef, PluginHost, Rendering};
+use crate::def::{BrokerHost, LocalHost, OfxEffectDef, PluginHost, Rendering, SharedBroker};
 use crate::describe::{describe_bundle, Context, PluginDescriptor};
 use crate::image::Frame16;
 use crate::instance::ParamSnapshot;
@@ -210,6 +210,20 @@ impl PluginHost for Gated {
         }
         self.inner.frames_needed(inst, time, params)
     }
+
+    fn press(
+        &self,
+        inst: Uuid,
+        time: f64,
+        params: &ParamSnapshot,
+        name: &str,
+        source: Frame16,
+    ) -> Result<ParamSnapshot, String> {
+        if is_disabled(&self.identifier) {
+            return Err(DISABLED_REASON.to_owned());
+        }
+        self.inner.press(inst, time, params, name, source)
+    }
 }
 
 /// What a switched-off plugin files under its instance. Read as a **key** by
@@ -262,7 +276,7 @@ fn scan_through_broker(
             return;
         }
     };
-    let shared = Arc::new(parking_lot::Mutex::new(broker));
+    let shared = Arc::new(SharedBroker::new(broker));
     for (index, descriptor) in descriptors.iter().enumerate() {
         let plugin = u32::try_from(index).unwrap_or(u32::MAX);
         let host = |context| -> Arc<dyn PluginHost> {
@@ -341,6 +355,17 @@ impl PluginHost for Absent {
 
     fn frames_needed(&self, _: Uuid, _: f64, _: &ParamSnapshot) -> Option<Vec<i32>> {
         None
+    }
+
+    fn press(
+        &self,
+        _: Uuid,
+        _: f64,
+        _: &ParamSnapshot,
+        _: &str,
+        _: Frame16,
+    ) -> Result<ParamSnapshot, String> {
+        Err("the plugin's bundle could not be opened".to_owned())
     }
 }
 

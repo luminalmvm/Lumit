@@ -74,6 +74,8 @@ pub const RENDER_ACTIONS: [&str; 8] = [
 
 /// The name every filter's output clip goes by.
 pub const OUTPUT_CLIP: &str = "Output";
+/// The one input clip this host drives, by the name OFX gives a filter's input.
+pub const SOURCE_CLIP: &str = "Source";
 
 /// What went wrong, as a value.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
@@ -132,7 +134,7 @@ impl RenderRequest {
             i32::try_from(source.height()).unwrap_or(0),
         );
         let mut inputs = BTreeMap::new();
-        inputs.insert("Source".to_owned(), source);
+        inputs.insert(SOURCE_CLIP.to_owned(), source);
         Self {
             time,
             bounds,

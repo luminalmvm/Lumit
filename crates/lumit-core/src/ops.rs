@@ -624,6 +624,12 @@ pub enum Op {
     SetColourConfig {
         config: Option<Box<crate::model::MediaRef>>,
     },
+    /// Choose the project's working space: Lumit's linear Rec.709, or the
+    /// loaded config's `scene_linear` role (docs/impl/ocio.md §2.1). A project
+    /// property for the reason the config is: it changes every comp's colour.
+    SetColourWorkingSpace {
+        working_space: crate::model::WorkingSpace,
+    },
     /// Say what colour space a footage item arrives in, by the loaded config's
     /// name, or clear it back to the built-in interpretation defaults.
     SetFootageColourSpace {
@@ -781,7 +787,9 @@ impl Op {
             Op::SetCacheLocation { .. } => "Set cache location",
             Op::SetAntiAliasing { .. } => "Set anti-aliasing",
             Op::SetProjectSwatches { .. } => "Edit swatches",
-            Op::SetColourConfig { .. } => "Set colour management",
+            Op::SetColourConfig { .. } | Op::SetColourWorkingSpace { .. } => {
+                "Set colour management"
+            }
             Op::SetFootageColourSpace { .. } => "Set footage colour space",
             Op::SetCompSettings { .. } => "Composition settings",
             Op::SetSolidDef { .. } => "Edit solid",
@@ -1977,6 +1985,12 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             let previous = std::mem::replace(&mut doc.colour.config, config.as_deref().cloned());
             Ok(Op::SetColourConfig {
                 config: previous.map(Box::new),
+            })
+        }
+        Op::SetColourWorkingSpace { working_space } => {
+            let previous = std::mem::replace(&mut doc.colour.working_space, *working_space);
+            Ok(Op::SetColourWorkingSpace {
+                working_space: previous,
             })
         }
         Op::SetFootageColourSpace { id, space } => {
