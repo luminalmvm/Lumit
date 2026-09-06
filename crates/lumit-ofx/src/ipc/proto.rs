@@ -26,11 +26,10 @@ use serde::{Deserialize, Serialize};
 use crate::describe::{Context, PluginDescriptor};
 use crate::image::{RectI, RowOrder};
 use crate::instance::ParamSnapshot;
-use crate::props::PropValue;
 
 /// The version both sides must agree on. Bump it whenever a message changes
 /// shape: an old broker beside a new host is a mismatch, not a crash.
-pub const PROTOCOL_VERSION: u32 = 1;
+pub const PROTOCOL_VERSION: u32 = 2;
 
 /// Which instance a message is about. The host mints these; the broker only
 /// ever quotes one back.
@@ -102,19 +101,18 @@ pub enum HostMessage {
         /// Every control's value.
         params: ParamSnapshot,
     },
-    /// One control changed, and the plugin is to be told, wrapped in
-    /// begin/end as the spec requires.
-    InstanceChanged {
+    /// One of an instance's buttons was pressed. The plugin is told through
+    /// `kOfxActionInstanceChanged`, and `source` is the Source frame its own
+    /// window may ask for while it is in there.
+    Press {
         /// Which instance.
         instance: InstanceId,
-        /// Which control.
+        /// Which button.
         name: String,
-        /// Its new value.
-        value: PropValue,
-        /// `kOfxChangeUserEdited` and friends.
-        reason: String,
-        /// The time the change was made at.
+        /// The layer time the press is at.
         time: f64,
+        /// The frame, already in the ring.
+        source: FrameRef,
     },
     /// Render one frame.
     Render {
@@ -164,6 +162,11 @@ pub enum BrokerMessage {
     Created,
     /// The message was carried out and there is nothing to say about it.
     Done,
+    /// The press is over, and this is every value the plugin holds now.
+    Pressed {
+        /// Every control's value, the plugin's own writes included.
+        params: ParamSnapshot,
+    },
     /// The plugin wants frames the host has not sent. Answered with exactly one
     /// [`HostMessage::Frames`], which is the point of asking for the lot at
     /// once (docs/impl/ofx-host.md §4).

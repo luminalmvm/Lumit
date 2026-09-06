@@ -52,9 +52,8 @@ use crate::ipc::proto::{
     BrokerMessage, FrameRef, FrameWanted, HostMessage, InstanceId, Slot, PROTOCOL_VERSION,
 };
 use crate::ipc::shm::{Ring, ShmError};
-use crate::props::PropValue;
 use crate::quirks::Quirks;
-use crate::render::RenderRequest;
+use crate::render::{RenderRequest, SOURCE_CLIP};
 
 /// How many consecutive failures a plugin gets before it is put away for the
 /// session (docs/12 §2.3).
@@ -64,6 +63,11 @@ pub const STRIKES_BEFORE_DISABLED: u32 = 3;
 /// hello. Separate from the action deadlines: this one is about a program
 /// starting, not about a plugin thinking.
 pub const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// How long a press may take. A plugin with its own editor stays inside the
+/// press until the user closes the window, so this is hours, not seconds. It
+/// exists so a plugin that never comes back is still a plugin that stopped.
+pub const PRESS_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 
 /// How long a describe may take: the handshake's ceiling, or a quirks-table
 /// control deadline set longer than it. The audio broker's twin, for the same
@@ -404,6 +408,12 @@ impl Broker {
         &self.descriptors
     }
 
+    /// The plugin's render deadline, as the quirks table set it.
+    #[must_use]
+    pub fn render_timeout(&self) -> Duration {
+        self.config.quirks.render_timeout
+    }
+
     /// Make an instance of one of the plugins.
     ///
     /// # Errors
@@ -464,37 +474,57 @@ impl Broker {
         Ok(())
     }
 
-    /// One control changed, and the plugin is to be told.
+    /// Press one of an instance's buttons and wait for the plugin to come back
+    /// from it, however long that takes.
+    ///
+    /// The frame goes across first, since a plugin's own window asks the
+    /// Source clip for its preview. The wait is [`PRESS_TIMEOUT`] rather than
+    /// the control deadline, since Magic Bullet Looks stays in its editor until
+    /// the user closes it. What comes back is every value the plugin holds
+    /// afterwards, which is how a look the user built reaches the document.
     ///
     /// # Errors
     ///
     /// [`BrokerError`].
-    pub fn changed(
+    pub fn press(
         &mut self,
         instance: InstanceId,
         name: &str,
-        value: PropValue,
-        reason: &str,
         time: f64,
-    ) -> Result<(), BrokerError> {
-        let record = self
-            .instances
-            .get_mut(&instance)
-            .ok_or(BrokerError::NoSuchInstance)?;
-        record.params.set(name, value.clone());
-        let control = self.config.quirks.control_timeout;
-        let _ = self.action(
-            &HostMessage::InstanceChanged {
-                instance,
-                name: name.to_owned(),
-                value,
-                reason: reason.to_owned(),
-                time,
-            },
-            control,
-            None,
+        source: &Frame16,
+    ) -> Result<ParamSnapshot, BrokerError> {
+        if !self.instances.contains_key(&instance) {
+            return Err(BrokerError::NoSuchInstance);
+        }
+        let bounds = RectI::sized(
+            i32::try_from(source.width()).unwrap_or(0),
+            i32::try_from(source.height()).unwrap_or(0),
         );
-        Ok(())
+        let slot = self.take_slot();
+        self.ring.write_frame(slot, source, bounds, true)?;
+        let message = HostMessage::Press {
+            instance,
+            name: name.to_owned(),
+            time,
+            source: FrameRef {
+                clip: SOURCE_CLIP.to_owned(),
+                time,
+                slot,
+            },
+        };
+        allow_foreground(self.link.as_ref().map(|link| link.child.id()));
+        match self.action(&message, PRESS_TIMEOUT, None) {
+            Ok(BrokerMessage::Pressed { params }) => {
+                // The record is what a restart rebuilds the instance from, so
+                // it carries the plugin's own writes from here on.
+                if let Some(record) = self.instances.get_mut(&instance) {
+                    record.params = params.clone();
+                }
+                Ok(params)
+            }
+            Ok(_) => Err(BrokerError::Unexpected("something other than a press")),
+            Err(fault) => Err(self.fault_error(&fault)),
+        }
     }
 
     /// Render one frame.
@@ -834,6 +864,26 @@ impl Drop for Broker {
         self.kill();
     }
 }
+
+/// Let the plugin's window come to the front. Windows only lets the process
+/// that has the foreground pass that right on, and the plugin lives in the
+/// broker, so without this its editor opens behind Lumit.
+#[cfg(windows)]
+fn allow_foreground(broker: Option<u32>) {
+    #[link(name = "user32")]
+    extern "system" {
+        fn AllowSetForegroundWindow(process: u32) -> i32;
+    }
+    if let Some(process) = broker {
+        // SAFETY: a plain Win32 call that takes a process id and nothing else.
+        unsafe {
+            AllowSetForegroundWindow(process);
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn allow_foreground(_broker: Option<u32>) {}
 
 /// The frame a failed render answers with: its own input, and a sentence.
 fn errored(frame: Frame16, why: &str) -> BrokerRender {

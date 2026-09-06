@@ -964,8 +964,8 @@ pub struct EffectInstance {
     /// whatever order the toggles were clicked in.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub linked_pairs: Vec<String>,
-    /// An **audio plugin's own memory of itself**, as hex
-    /// (docs/impl/audio-plugins.md §4).
+    /// A **plugin's own memory of itself**, as hex
+    /// (docs/impl/audio-plugins.md §4, docs/impl/ofx-host.md §4a).
     ///
     /// # In plain terms
     ///
@@ -983,11 +983,11 @@ pub struct EffectInstance {
     /// ponytail: base64 if a vendor's blob ever makes the doubling matter —
     /// it is a string either way, so the field does not move.
     ///
-    /// **Nothing in Lumit writes one yet.** v1 is parameters-only (§6): no
-    /// plugin GUI, so nothing but a state load changes plugin state, and a
-    /// round-trip is the whole of what the format owes. The plugin's own
-    /// floating window — the package after AP5 — is what makes reading the
-    /// blob back off a live instance necessary.
+    /// An **OFX plugin** writes one when a button of its is pressed
+    /// (`EffectDef::press`): whatever it holds that no row carries, a vendor
+    /// blob or a text, and the render lays it over the plugin's values every
+    /// frame. An audio plugin's is still only loaded and saved, since nothing
+    /// opens an audio plugin's own window yet.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plugin_state: Option<String>,
     /// A **Roto brush's strokes and base frame** (docs/impl/roto.md §1).

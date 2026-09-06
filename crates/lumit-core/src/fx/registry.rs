@@ -391,6 +391,53 @@ pub trait EffectDef: Sync + Send + 'static {
     ) -> Option<std::sync::Arc<dyn super::audio_chain::AudioProcessor>> {
         None
     }
+
+    /// Press one of this effect's Action rows, and hand back what the effect
+    /// wrote while it was pressed.
+    ///
+    /// A built-in's button belongs to whoever draws it, so the default refuses.
+    /// A **plugin** answers: its button is `kOfxActionInstanceChanged`, and
+    /// inside it the plugin may open its own window and stay there until the
+    /// user closes it, then write its own parameters to keep what was done.
+    /// `inst` is the document's copy, read for the values the plugin should
+    /// see, and `source` is the picture the plugin's window may ask for.
+    ///
+    /// Blocks for as long as the plugin does, so never from a rebuild path or
+    /// the interface thread.
+    ///
+    /// # Errors
+    ///
+    /// A sentence for the badge when the effect has no such button or the
+    /// plugin refused the press.
+    fn press(
+        &self,
+        _inst: &EffectInstance,
+        _lt: f64,
+        name: &str,
+        _source: &PressFrame<'_>,
+    ) -> Result<Pressed, String> {
+        Err(format!("{name} is not a button this effect answers"))
+    }
+}
+
+/// The picture handed to a pressed effect: straight RGBA8, row-major, the way
+/// a thumbnail comes off the headless renderer.
+#[derive(Clone, Copy, Debug)]
+pub struct PressFrame<'a> {
+    pub rgba: &'a [u8],
+    pub width: u32,
+    pub height: u32,
+}
+
+/// What a pressed effect wrote while it was pressed.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Pressed {
+    /// Row values the effect set, by the row's schema id.
+    pub rows: Vec<(&'static str, Value)>,
+    /// The effect's own memory afterwards, everything it keeps that no row
+    /// carries, or `None` when it keeps nothing. This is what
+    /// [`EffectInstance::plugin_state`] holds.
+    pub memory: Option<Vec<u8>>,
 }
 
 /// The stable name an effect is looked up by, and the schema that answers to it.

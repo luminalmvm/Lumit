@@ -2561,6 +2561,17 @@ impl PluginHost for DeadHost {
     ) -> Option<Vec<i32>> {
         None
     }
+
+    fn press(
+        &self,
+        _instance: uuid::Uuid,
+        _time: f64,
+        _params: &ParamSnapshot,
+        _name: &str,
+        _source: Frame16,
+    ) -> Result<ParamSnapshot, String> {
+        Err("the plugin is disabled".to_owned())
+    }
 }
 
 /// The declaration one described plugin becomes, leaked as the catalogue holds
@@ -2746,6 +2757,193 @@ fn a_disabled_plugin_renders_identity_byte_for_byte() {
     );
     // Read once, then gone: a stale reason must never badge a later frame.
     assert_eq!(def.last_error(), None);
+}
+
+// ------------------------------------------------------------------ presses --
+
+/// A press goes to the plugin with the frame in place, and what the plugin
+/// wrote comes back: a row it changed as a row, and the blob no row carries as
+/// memory. The test plugin's Trigger writes both, the way Looks stores a look.
+#[test]
+fn a_pressed_button_brings_back_what_the_plugin_wrote() {
+    let _ledger = image_ledger();
+    let Some(schema) =
+        a_registered_plugin("a_pressed_button_brings_back", "com.lumitlab.testplug", 2)
+    else {
+        return;
+    };
+    let def = lumit_core::fx::BUILTIN_DEFS
+        .get(schema.match_name)
+        .expect("registered");
+    let inst = lumit_core::fx::instantiate(schema.match_name).expect("instantiated");
+    let rgba = vec![255u8; 4 * 4 * 4];
+    let source = lumit_core::fx::PressFrame {
+        rgba: &rgba,
+        width: 4,
+        height: 4,
+    };
+
+    let pressed = def
+        .press(&inst, 0.0, "trigger", &source)
+        .expect("the press went through");
+    assert_eq!(
+        pressed.rows,
+        vec![(
+            "gain",
+            Value::Float(lumit_ofx_testplug::TRIGGERED_GAIN as f32)
+        )],
+        "the one row the plugin changed, and only that one"
+    );
+    let memory = pressed
+        .memory
+        .expect("the blob has no row, so it is memory");
+    let memory: ParamSnapshot = bincode::deserialize(&memory).expect("a snapshot");
+    assert_eq!(
+        memory.get("vendorBlob"),
+        Some(&PropValue::String(vec![
+            lumit_ofx_testplug::TRIGGERED_BLOB.to_owned()
+        ])),
+        "the blob came back as memory"
+    );
+    assert_eq!(memory.get("gain"), None, "a row is never also memory");
+
+    // A button the plugin has not got is a sentence, not a press.
+    assert!(def.press(&inst, 0.0, "nothing", &source).is_err());
+}
+
+/// What a plugin keeps beyond its rows reaches its render: the memory on the
+/// document's instance is laid over the values the plugin is rendered with,
+/// once the resolve walk has seen the instance, and comes off again when the
+/// document forgets it.
+#[test]
+fn a_plugins_memory_reaches_its_render() {
+    struct Recording(std::sync::Mutex<Option<ParamSnapshot>>);
+
+    impl PluginHost for Recording {
+        fn render(
+            &self,
+            _instance: uuid::Uuid,
+            _time: f64,
+            params: &ParamSnapshot,
+            source: Frame16,
+        ) -> Rendering {
+            *self.0.lock().expect("the record") = Some(params.clone());
+            Rendering {
+                frame: source,
+                error: None,
+            }
+        }
+
+        fn frames_needed(
+            &self,
+            _instance: uuid::Uuid,
+            _time: f64,
+            _params: &ParamSnapshot,
+        ) -> Option<Vec<i32>> {
+            None
+        }
+
+        fn press(
+            &self,
+            _instance: uuid::Uuid,
+            _time: f64,
+            _params: &ParamSnapshot,
+            _name: &str,
+            _source: Frame16,
+        ) -> Result<ParamSnapshot, String> {
+            Err("not this test".to_owned())
+        }
+    }
+
+    // One parameter with no row, so there is something only memory can carry.
+    let descriptor = PluginDescriptor {
+        identifier: "test.memory".to_owned(),
+        version: (1, 0),
+        grouping: String::new(),
+        label: "Memory test plugin".to_owned(),
+        contexts: vec![Context::Filter],
+        params: vec![crate::describe::ParamDescription {
+            name: "vendorBlob".to_owned(),
+            param_type: crate::ffi::param_types::CUSTOM.to_owned(),
+            props: PropertySet::new(),
+        }],
+        clips: Vec::new(),
+        temporal: false,
+        render_thread_safety: None,
+    };
+    let schema: &'static EffectSchema = Box::leak(Box::new(
+        crate::schema::schema_of(&descriptor).expect("a schema"),
+    ));
+    let host = std::sync::Arc::new(Recording(std::sync::Mutex::new(None)));
+    let def = OfxEffectDef::new(&descriptor, schema, host.clone());
+    let recorded = || {
+        host.0
+            .lock()
+            .expect("the record")
+            .clone()
+            .expect("a render happened")
+    };
+
+    let mut inst = lumit_core::model::EffectInstance {
+        id: uuid::Uuid::now_v7(),
+        effect: lumit_core::model::EffectKey {
+            namespace: lumit_core::model::EffectNamespace::Ofx,
+            match_name: schema.match_name.to_owned(),
+            version: 1,
+            extra: serde_json::Map::new(),
+        },
+        enabled: true,
+        params: Vec::new(),
+        sample_temporally: true,
+        custom_name: None,
+        linked_pairs: Vec::new(),
+        plugin_state: None,
+        roto: None,
+        extra: serde_json::Map::new(),
+    };
+    let mut kept = ParamSnapshot::new();
+    kept.set("vendorBlob", PropValue::string("kept").expect("a string"));
+    inst.set_plugin_state(&bincode::serialize(&kept).expect("bytes"));
+
+    let mut rgba = vec![0.5f32; 2 * 2 * 4];
+    let resolve = |inst: &lumit_core::model::EffectInstance| {
+        let cx = lumit_core::fx::ResolveCx {
+            inst,
+            lt: 0.0,
+            diag_px: 100.0,
+            px_scale: 1.0,
+            markers: &lumit_core::fx::MarkerContext::NONE,
+            context: std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
+        };
+        let mut pushed = Vec::new();
+        def.resolve_derived(&cx, &mut |id, value| pushed.push((id, value)));
+        pushed
+    };
+
+    // Nothing has resolved this instance yet, so the render sees no memory.
+    def.apply_cpu_at(inst.id, 0.0, &mut rgba, 2, 2, Params::EMPTY);
+    assert_eq!(recorded().get("vendorBlob"), None);
+
+    // The resolve files the memory and puts its hash in the bag.
+    let pushed = resolve(&inst);
+    assert_eq!(
+        pushed.len(),
+        1,
+        "the memory's hash rides in the bag: {pushed:?}"
+    );
+    assert_ne!(pushed[0].1, Value::Int(0));
+    def.apply_cpu_at(inst.id, 0.0, &mut rgba, 2, 2, Params::EMPTY);
+    assert_eq!(
+        recorded().get("vendorBlob"),
+        Some(&PropValue::string("kept").expect("a string")),
+        "the render was handed the memory"
+    );
+
+    // Forgotten in the document, forgotten in the render, and the bag says so.
+    inst.plugin_state = None;
+    assert_eq!(resolve(&inst)[0].1, Value::Int(0));
+    def.apply_cpu_at(inst.id, 0.0, &mut rgba, 2, 2, Params::EMPTY);
+    assert_eq!(recorded().get("vendorBlob"), None);
 }
 
 // --------------------------------------------------------- console windows --

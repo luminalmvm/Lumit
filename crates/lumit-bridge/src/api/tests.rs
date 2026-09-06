@@ -8682,19 +8682,19 @@ fn the_status_reads_the_solve_and_the_buttons_are_refused_honestly() {
 
     // Cancel is always safe: nothing is running, and saying so is a no-op
     // rather than an error the panel would have to explain.
-    fire_effect_action(layer, effect, "cancel".to_owned()).expect("cancel is accepted");
+    fire_effect_action(layer, effect, "cancel".to_owned(), None).expect("cancel is accepted");
 
     // A parameter that is not an Action is refused rather than ignored — a
     // button that silently does nothing is the hardest fault to see.
     assert!(matches!(
-        fire_effect_action(layer, effect, "density".to_owned()),
+        fire_effect_action(layer, effect, "density".to_owned(), None),
         Err(BridgeError::InvalidParam)
     ));
 
     // The fixture's media is a path that does not exist, so Analyse cannot
     // start: a refusal about the file, not a fault.
     assert!(matches!(
-        fire_effect_action(layer, effect, "analyse".to_owned()),
+        fire_effect_action(layer, effect, "analyse".to_owned(), None),
         Err(BridgeError::MediaPathUnresolved)
     ));
 
@@ -11076,7 +11076,8 @@ fn transform_keys_move_the_target_layer_and_obey_the_transform_row() {
 
     let (_project, _comp, shot, target, effect) = a_planar_tracked_layer();
 
-    fire_effect_action(shot, effect, "transform_keys".into()).expect("a track and a target layer");
+    fire_effect_action(shot, effect, "transform_keys".into(), None)
+        .expect("a track and a target layer");
     let transform = target.get_transform().expect("the target's transform");
 
     let keys = match transform.position_x {
@@ -11119,7 +11120,8 @@ fn transform_keys_move_the_target_layer_and_obey_the_transform_row() {
         .expect("the Follow row takes a choice");
     shot.set_effects(staged).expect("committed");
 
-    fire_effect_action(shot, effect, "transform_keys".into()).expect("position alone still writes");
+    fire_effect_action(shot, effect, "transform_keys".into(), None)
+        .expect("position alone still writes");
     let narrow = target.get_transform().expect("the target's transform");
     assert!(matches!(narrow.position_x, BridgeScalar::Keyframed(_)));
     assert!(matches!(narrow.position_y, BridgeScalar::Keyframed(_)));
@@ -11451,6 +11453,159 @@ fn an_unknown_effect_is_a_badged_placeholder_and_never_an_error() {
     }
 }
 
+/// Pressing a plugin's button writes what the plugin did into the document,
+/// as one undo step: a row it set as that row, and everything no row carries
+/// as the instance's own memory. The plugin is shown the comp at the playhead
+/// while it is pressed.
+#[test]
+fn pressing_a_plugins_button_writes_what_it_did_into_the_document() {
+    use std::sync::{Arc, Mutex};
+
+    /// A host whose button writes one row and one blob, the way Looks stores a
+    /// look, and remembers the frame it was shown.
+    struct Pressing {
+        shown: Mutex<Option<(usize, usize)>>,
+    }
+
+    impl lumit_ofx::PluginHost for Pressing {
+        fn render(
+            &self,
+            _instance: Uuid,
+            _time: f64,
+            _params: &lumit_ofx::ParamSnapshot,
+            source: lumit_ofx::Frame16,
+        ) -> lumit_ofx::Rendering {
+            lumit_ofx::Rendering {
+                frame: source,
+                error: None,
+            }
+        }
+
+        fn frames_needed(
+            &self,
+            _instance: Uuid,
+            _time: f64,
+            _params: &lumit_ofx::ParamSnapshot,
+        ) -> Option<Vec<i32>> {
+            None
+        }
+
+        fn press(
+            &self,
+            _instance: Uuid,
+            _time: f64,
+            params: &lumit_ofx::ParamSnapshot,
+            name: &str,
+            source: lumit_ofx::Frame16,
+        ) -> Result<lumit_ofx::ParamSnapshot, String> {
+            assert_eq!(name, "trigger", "the plugin's own name for the button");
+            *self.shown.lock().expect("the record") = Some((source.width(), source.height()));
+            let mut after = params.clone();
+            after.set("gain", lumit_ofx::PropValue::double(0.75));
+            after.set(
+                "vendorBlob",
+                lumit_ofx::PropValue::string("pressed").expect("a string"),
+            );
+            Ok(after)
+        }
+    }
+
+    let param = |name: &str, kind: &str, default: Option<f64>| {
+        let mut props = lumit_ofx::PropertySet::new();
+        if let Some(default) = default {
+            props.seed(
+                lumit_ofx::ffi::prop_keys::PARAM_DEFAULT,
+                lumit_ofx::PropValue::double(default),
+            );
+        }
+        lumit_ofx::describe::ParamDescription {
+            name: name.to_owned(),
+            param_type: kind.to_owned(),
+            props,
+        }
+    };
+    let descriptor = lumit_ofx::PluginDescriptor {
+        identifier: "com.lumitlab.pressing".to_owned(),
+        version: (1, 0),
+        grouping: "Lumit/Test".to_owned(),
+        label: "Pressing".to_owned(),
+        contexts: vec![lumit_ofx::Context::Filter],
+        params: vec![
+            param("gain", lumit_ofx::ffi::param_types::DOUBLE, Some(1.0)),
+            param("vendorBlob", lumit_ofx::ffi::param_types::CUSTOM, None),
+            param("trigger", lumit_ofx::ffi::param_types::PUSH_BUTTON, None),
+        ],
+        clips: Vec::new(),
+        temporal: false,
+        render_thread_safety: None,
+    };
+    let schema: &'static lumit_core::fx::EffectSchema = Box::leak(Box::new(
+        lumit_ofx::schema_of(&descriptor).expect("a schema"),
+    ));
+    let host = Arc::new(Pressing {
+        shown: Mutex::new(None),
+    });
+    let def = lumit_ofx::OfxEffectDef::new(&descriptor, schema, host.clone()).leak();
+    assert!(lumit_render::gpufx::ofx::register(def));
+
+    let (project, layer) = project_with_layer();
+    let comp = CompositionReference::new(project.id, layer.comp_id());
+    let target = comp.add_solid_layer().expect("a layer for the plugin");
+    target
+        .add_effect(schema.match_name.to_owned())
+        .expect("the plugin added");
+    let effect = target.item().expect("the layer").effects[0].id;
+
+    crate::api::track::press_plugin_now(&target, effect, "trigger", 0)
+        .expect("the press went through");
+
+    let shown = host
+        .shown
+        .lock()
+        .expect("the record")
+        .expect("the plugin was shown a frame");
+    assert!(
+        shown.0 > 0 && shown.1 > 0,
+        "a real frame, not an empty one: {shown:?}"
+    );
+
+    let fx = target.item().expect("the layer").effects[0].clone();
+    let gain = fx
+        .params
+        .iter()
+        .find(|p| p.id == "gain")
+        .expect("the row the plugin wrote");
+    match &gain.value {
+        lumit_core::model::EffectValue::Float(property) => {
+            assert!((property.value_at(0.0) - 0.75).abs() < 1e-9, "{property:?}");
+        }
+        other => panic!("gain is a float row, got {other:?}"),
+    }
+    assert!(
+        fx.plugin_state_bytes()
+            .is_some_and(|bytes| !bytes.is_empty()),
+        "the blob has no row, so it is the instance's memory"
+    );
+
+    // One undo step takes both back.
+    project.undo().expect("undone");
+    let fx = target.item().expect("the layer").effects[0].clone();
+    let gain = fx.params.iter().find(|p| p.id == "gain").expect("the row");
+    match &gain.value {
+        lumit_core::model::EffectValue::Float(property) => {
+            assert!((property.value_at(0.0) - 1.0).abs() < 1e-9, "{property:?}");
+        }
+        other => panic!("gain is a float row, got {other:?}"),
+    }
+    assert_eq!(fx.plugin_state, None);
+
+    // A button the plugin has not got is refused, and the layer wears the
+    // plugin's own sentence.
+    assert!(crate::api::track::press_plugin_now(&target, effect, "nothing", 0).is_err());
+    assert!(lumit_render::gpufx::ofx::error_of(effect).is_some());
+    lumit_render::gpufx::ofx::clear_errored(effect);
+}
+
 /// Switching a plugin off is answered at once and remembered, and a name that
 /// is not a plugin's is quietly nothing.
 #[test]
@@ -11679,6 +11834,17 @@ fn a_plugin_that_fails_a_frame_badges_its_layer_and_the_next_frame_clears_it() {
             _params: &lumit_ofx::ParamSnapshot,
         ) -> Option<Vec<i32>> {
             None
+        }
+
+        fn press(
+            &self,
+            _instance: Uuid,
+            _time: f64,
+            _params: &lumit_ofx::ParamSnapshot,
+            _name: &str,
+            _source: lumit_ofx::Frame16,
+        ) -> Result<lumit_ofx::ParamSnapshot, String> {
+            Err(self.why.clone())
         }
     }
 
