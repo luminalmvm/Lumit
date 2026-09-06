@@ -264,20 +264,19 @@ String _plainNotes(String line) => line
 
 /// Which attachments suit this machine, best first.
 ///
-/// A per-user installation prefers the *package* — the plain archive of the
-/// application's own files — because that can be swapped in without an
-/// installer or an administrator. An installation Lumit cannot write beside
-/// gets the installer, and gets it as the **only** candidate.
+/// Windows always takes the installer. It runs silently over the folder it
+/// installed into, needs no administrator there, and it is the one thing that
+/// rewrites the Start Menu shortcut and the file associations, which the
+/// in-place swap never touched. That is what let the runner be renamed to
+/// lumit.exe without stranding either. A per-user macOS bundle prefers the
+/// plain archive, which is swapped in without an installer, and a bundle Lumit
+/// can't write beside gets the disk image as the only candidate.
 ///
-/// **That last word is the whole of the fix.** [replaceable] used to be asked
-/// only of the delivery, not of the download, so an older installation in
-/// `Program Files` fetched the archive — correctly, the download worked — and
-/// was then told it would be applied by "installer", which means running the
-/// downloaded file. Running a `.zip` starts nothing. The update button did
-/// nothing, the application did not quit, and a restart by hand came back on
-/// the old version, because the archive it had was never going to be unpacked
-/// by anybody. The asset and the delivery are one decision and are taken here
-/// together.
+/// [replaceable] is asked of the download as well as the delivery, so an
+/// installation that can't be swapped never fetches an archive it would then
+/// be told to run. Running a `.zip` starts nothing, which was the v0.2 upgrade
+/// that downloaded, offered a restart, and did not restart. The asset and the
+/// delivery are one decision and are taken here together.
 ///
 /// Linux is the exception, and deliberately: there is no installer attachment
 /// to fall back to — the tarball is all a release carries — so an unwritable
@@ -291,9 +290,7 @@ List<String> assetSuffixesFor(String platform,
   if (kind == InstallKind.flatpak) return const ['.flatpak'];
   switch (platform) {
     case 'windows':
-      return kind == InstallKind.folder && replaceable
-          ? const ['windows-x64.zip', '.exe']
-          : const ['.exe'];
+      return const ['.exe'];
     case 'macos':
       return kind == InstallKind.bundle && replaceable
           ? const ['macos-arm64.zip', 'macos-x64.zip', 'macos.zip', '.dmg']

@@ -302,8 +302,10 @@ panel layout is.
   the state changes. Downloading MUST show progress in the same row, and a downloaded update
   MUST read "Restart to finish updating" until it is applied.
 - **How an update is applied** follows where Lumit is installed, and the restart
-  window MUST say which it is: swapped in place and restarted (a per-user installation, the
-  normal case), handed to the installer (anywhere Lumit cannot write to its own files), or
+  window MUST say which it is: swapped in place and restarted (a per-user macOS bundle),
+  handed to the installer (Windows, where the installer runs silently over the per-user
+  folder and is what rewrites the shortcut and the file associations, and anywhere else
+  Lumit cannot write to its own files), or
   handed to Flatpak with the install command, in which case Lumit MUST NOT offer to restart
   because it is not replacing anything.
 - **Before you update.** A release whose notes carry a *Before you update* section MUST
