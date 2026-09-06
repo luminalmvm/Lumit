@@ -26,17 +26,15 @@ mod comp;
 mod layer;
 mod math;
 
-// These bounds apply to every project/import expression. They deliberately
-// leave normal animated properties ample room while making evaluation finite.
+// These bounds apply to every project/import expression. A property consumes a
+// scalar, point, colour, or text value, so 1 MiB text and 16k collection items
+// leave substantial headroom without permitting a project to allocate its full
+// project.json budget on every property read. Four thousand graph points exceed
+// display resolution while bounding UI-requested repeated evaluation.
 const MAX_EXPRESSION_OPERATIONS: u64 = 100_000;
 const MAX_EXPRESSION_STRING_BYTES: usize = 1 << 20;
 const MAX_EXPRESSION_ARRAY_ITEMS: usize = 16_384;
 const MAX_EXPRESSION_MAP_ITEMS: usize = 16_384;
-const MAX_EXPRESSION_VARIABLES: usize = 1_024;
-const MAX_EXPRESSION_FUNCTIONS: usize = 1_024;
-const MAX_EXPRESSION_MODULES: usize = 64;
-const MAX_EXPRESSION_CALL_DEPTH: usize = 64;
-const MAX_EXPRESSION_DEPTH: usize = 64;
 const MAX_GRAPH_SAMPLES: i64 = 4_096;
 
 #[derive(Clone, Debug)]
@@ -102,13 +100,10 @@ fn make_engine() -> Engine {
 
     engine.set_max_operations(MAX_EXPRESSION_OPERATIONS);
     engine.set_max_string_size(MAX_EXPRESSION_STRING_BYTES);
-    engine.set_max_array_size(MAX_EXPRESSION_ARRAY_ITEMS);
+    // Rhai's array literal parser rejects item `max` before inserting it, so
+    // configure one more than Lumit's documented retained-array ceiling.
+    engine.set_max_array_size(MAX_EXPRESSION_ARRAY_ITEMS + 1);
     engine.set_max_map_size(MAX_EXPRESSION_MAP_ITEMS);
-    engine.set_max_variables(MAX_EXPRESSION_VARIABLES);
-    engine.set_max_functions(MAX_EXPRESSION_FUNCTIONS);
-    engine.set_max_modules(MAX_EXPRESSION_MODULES);
-    engine.set_max_call_levels(MAX_EXPRESSION_CALL_DEPTH);
-    engine.set_max_expr_depths(MAX_EXPRESSION_DEPTH, MAX_EXPRESSION_DEPTH);
 
     let math = exported_module!(math::math);
     let comp = exported_module!(comp::comp);
@@ -626,13 +621,74 @@ mod tests {
 
     #[test]
     fn expression_work_and_graph_sampling_are_bounded() {
+        let engine = make_engine();
+        assert_eq!(engine.max_operations(), MAX_EXPRESSION_OPERATIONS);
+        assert_eq!(engine.max_string_size(), MAX_EXPRESSION_STRING_BYTES);
+        assert_eq!(engine.max_array_size(), MAX_EXPRESSION_ARRAY_ITEMS + 1);
+        assert_eq!(engine.max_map_size(), MAX_EXPRESSION_MAP_ITEMS);
+
+        assert_eq!(evaluate("1 + 2 * 3", None), 7.0);
+        assert_eq!(evaluate("if 2 > 1 { 9 } else { 0 }", None), 9.0);
+        assert_eq!(evaluate_text("\"frame \" + 7", None), "frame 7");
+        assert_eq!(evaluate("[1, 2].len()", None), 2.0);
+        assert_eq!(evaluate_range("time", None, 0.0, 1.0, 16).len(), 16);
+
         assert_eq!(
             evaluate_range("time", None, 0.0, 1.0, MAX_GRAPH_SAMPLES + 1).len(),
             MAX_GRAPH_SAMPLES as usize
         );
-        // A finite engine limit turns an otherwise endless project expression
-        // into the same neutral property value used for ordinary eval errors.
-        assert_eq!(evaluate("let n = 0; while true { n += 1; } n", None), -1.0);
+        assert_eq!(
+            evaluate_range("time", None, 0.0, 1.0, MAX_GRAPH_SAMPLES).len(),
+            MAX_GRAPH_SAMPLES as usize
+        );
+        assert_eq!(
+            evaluate_range("time", None, 0.0, 1.0, 1_000_000).len(),
+            MAX_GRAPH_SAMPLES as usize
+        );
+
+        let string = |len| format!("\"{}\".len()", "x".repeat(len));
+        assert_eq!(
+            evaluate(&string(MAX_EXPRESSION_STRING_BYTES), None),
+            MAX_EXPRESSION_STRING_BYTES as f64
+        );
+        assert_eq!(
+            evaluate(&string(MAX_EXPRESSION_STRING_BYTES + 1), None),
+            -1.0
+        );
+
+        let array = |len| format!("[{}].len()", vec!["0"; len].join(","));
+        assert_eq!(
+            evaluate(&array(MAX_EXPRESSION_ARRAY_ITEMS), None),
+            MAX_EXPRESSION_ARRAY_ITEMS as f64
+        );
+        assert_eq!(evaluate(&array(MAX_EXPRESSION_ARRAY_ITEMS + 1), None), -1.0);
+
+        let map = |len| {
+            format!(
+                "#{{{}}}.len()",
+                (0..len)
+                    .map(|n| format!("key_{n}: 0"))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )
+        };
+        assert_eq!(
+            evaluate(&map(MAX_EXPRESSION_MAP_ITEMS), None),
+            MAX_EXPRESSION_MAP_ITEMS as f64
+        );
+        assert_eq!(evaluate(&map(MAX_EXPRESSION_MAP_ITEMS + 1), None), -1.0);
+
+        assert_eq!(evaluate("1 + 1", None), 2.0);
+        assert_eq!(
+            evaluate(&string(MAX_EXPRESSION_STRING_BYTES + 1), None),
+            -1.0
+        );
+        assert!(evaluate_value(&string(MAX_EXPRESSION_STRING_BYTES + 1), None).is_err());
+        assert_eq!(evaluate("1 + 1", None), 2.0);
+
+        for _ in 0..10_000 {
+            assert_eq!(evaluate("time + 1", Some(at(2.0))), 3.0);
+        }
     }
 
     /// **A value expression says what it answered with, or why it did not.**
