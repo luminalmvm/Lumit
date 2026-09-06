@@ -704,6 +704,14 @@ impl LoadedConfig {
                 params: *params,
                 dir: *dir,
             }]),
+            TransformSpec::GradingPrimary { params, dir } => Chain::new(vec![Op::GradingPrimary {
+                params: params.clone(),
+                dir: *dir,
+            }]),
+            TransformSpec::GradingTone { params, dir } => Chain::new(vec![Op::GradingTone {
+                params: params.clone(),
+                dir: *dir,
+            }]),
             TransformSpec::Range(params, dir) => {
                 let op = Op::Range(*params);
                 match dir {
@@ -955,7 +963,7 @@ looks:
   - !<Look>
     name: graded
     process_space: plain
-    transform: !<GradingToneTransform> {style: log}
+    transform: !<ExposureContrastTransform> {style: linear, exposure: 1.0}
 "#,
         );
         let err = loaded.to_reference("fancy");
@@ -966,7 +974,7 @@ looks:
         assert!(loaded.to_reference("plain").is_ok());
         let err = loaded.looks("graded");
         assert!(
-            matches!(&err, Err(ColourError::UnsupportedTransform { name }) if name == "GradingToneTransform"),
+            matches!(&err, Err(ColourError::UnsupportedTransform { name }) if name == "ExposureContrastTransform"),
             "{err:?}"
         );
         let bad: Vec<String> = unresolvable(&loaded).into_iter().map(|(n, _)| n).collect();

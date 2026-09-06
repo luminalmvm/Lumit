@@ -124,6 +124,27 @@ impl Tagged {
         }
     }
 
+    /// A number kept in double. The grading transforms work their per channel
+    /// numbers out in double before rounding once for the pixel loop, exactly as
+    /// the reference library does, so their values are read at that precision.
+    fn number64(&self, key: &str) -> Option<f64> {
+        self.get(key)
+            .and_then(Tagged::scalar)
+            .and_then(|s| s.trim().parse::<f64>().ok())
+    }
+
+    fn floats64(&self, key: &str) -> Vec<f64> {
+        self.get(key)
+            .map(|v| {
+                v.seq()
+                    .iter()
+                    .filter_map(|t| t.scalar())
+                    .filter_map(|s| s.trim().parse::<f64>().ok())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     fn floats(&self, key: &str) -> Vec<f32> {
         self.get(key)
             .map(|v| {
@@ -346,6 +367,14 @@ pub enum TransformSpec {
         style: String,
         dir: Direction,
     },
+    GradingPrimary {
+        params: Box<crate::op::GradingPrimary>,
+        dir: Direction,
+    },
+    GradingTone {
+        params: Box<crate::op::GradingTone>,
+        dir: Direction,
+    },
     /// A transform Lumit does not implement, kept by name so that only the
     /// space, view or look that needs it refuses, and only when asked for.
     Unsupported {
@@ -459,11 +488,9 @@ pub struct Config {
 
 /// Transform tags a config may legally carry that v1 does not implement. Named
 /// here so the refusal says the config's own word back to the user.
-const REFUSED_TRANSFORMS: [&str; 8] = [
+const REFUSED_TRANSFORMS: [&str; 6] = [
     "FixedFunctionTransform",
-    "GradingPrimaryTransform",
     "GradingRGBCurveTransform",
-    "GradingToneTransform",
     "ExposureContrastTransform",
     "LookTransform",
     "DisplayViewTransform",
@@ -497,9 +524,81 @@ fn negative_style(
     }
 }
 
+/// The style a grading transform names, or `log`, which is what the reference
+/// library builds one as when a config says nothing.
+fn grading_style(value: &Tagged, tag: &str) -> Result<crate::op::GradingStyle> {
+    use crate::op::GradingStyle;
+    match value.string("style").as_deref() {
+        None | Some("log") => Ok(GradingStyle::Log),
+        Some("linear") => Ok(GradingStyle::Lin),
+        Some("video") => Ok(GradingStyle::Video),
+        Some(other) => Err(ColourError::UnsupportedTransform {
+            name: format!("{tag} with style {other}"),
+        }),
+    }
+}
+
+/// One `{rgb: [r, g, b], master: m}` block. The reference insists on both keys
+/// and so does this: a half-written block would otherwise read as a default and
+/// grade differently here than everywhere else.
+fn grading_rgbm(
+    what: &str,
+    node: &Tagged,
+    key: &str,
+    default: crate::op::GradingRgbm,
+) -> Result<crate::op::GradingRgbm> {
+    let Some(value) = node.get(key) else {
+        return Ok(default);
+    };
+    let rgb = value.floats64("rgb");
+    let (Some(master), [r, g, b]) = (value.number64("master"), rgb.as_slice()) else {
+        return Err(ColourError::Parse {
+            what: what.to_string(),
+            reason: format!("a grading {key} needs both an rgb triple and a master"),
+        });
+    };
+    Ok(crate::op::GradingRgbm {
+        rgb: [*r, *g, *b],
+        master,
+    })
+}
+
+/// One tone band. Its two extra numbers are spelled differently per band, so the
+/// caller passes the two key names the reference reads for that one.
+fn grading_rgbmsw(
+    what: &str,
+    node: &Tagged,
+    key: &str,
+    start_key: &str,
+    width_key: &str,
+    default: crate::op::GradingRgbmsw,
+) -> Result<crate::op::GradingRgbmsw> {
+    let Some(value) = node.get(key) else {
+        return Ok(default);
+    };
+    let rgb = value.floats64("rgb");
+    let (Some(master), Some(start), Some(width), [r, g, b]) = (
+        value.number64("master"),
+        value.number64(start_key),
+        value.number64(width_key),
+        rgb.as_slice(),
+    ) else {
+        return Err(ColourError::Parse {
+            what: what.to_string(),
+            reason: format!("a grading {key} needs rgb, master, {start_key} and {width_key}"),
+        });
+    };
+    Ok(crate::op::GradingRgbmsw {
+        rgb: [*r, *g, *b],
+        master,
+        start,
+        width,
+    })
+}
+
 /// A transform outside the op set is not a reason to refuse the whole file:
-/// Blender's config keeps its grading transforms in looks most people never
-/// pick. The name is kept, and the resolve says it back when something asks.
+/// Blender's config keeps transforms in looks most people never pick. The name
+/// is kept, and the resolve says it back when something asks.
 fn parse_transform(what: &str, value: &Tagged) -> Result<TransformSpec> {
     match parse_transform_kind(what, value) {
         Err(ColourError::UnsupportedTransform { name }) => Ok(TransformSpec::Unsupported { name }),
@@ -657,6 +756,57 @@ fn parse_transform_kind(what: &str, value: &Tagged) -> Result<TransformSpec> {
                         Some("no_clamp" | "noClamp")
                     ),
                 },
+                dir,
+            }
+        }
+        "GradingPrimaryTransform" => {
+            let style = grading_style(value, &tag)?;
+            let d = crate::op::GradingPrimary::new(style);
+            let rgbm = |key: &str, default| grading_rgbm(what, value, key, default);
+            // `pivot` and `clamp` are little maps of their own, and each key
+            // inside them stands alone: a config may state a black clamp and no
+            // white one, and the unstated half keeps the style's default.
+            let pivot = value.get("pivot");
+            let clamp = value.get("clamp");
+            let from = |node: Option<&Tagged>, key: &'static str, default: f64| {
+                node.and_then(|n| n.number64(key)).unwrap_or(default)
+            };
+            TransformSpec::GradingPrimary {
+                params: Box::new(crate::op::GradingPrimary {
+                    brightness: rgbm("brightness", d.brightness)?,
+                    contrast: rgbm("contrast", d.contrast)?,
+                    gamma: rgbm("gamma", d.gamma)?,
+                    offset: rgbm("offset", d.offset)?,
+                    exposure: rgbm("exposure", d.exposure)?,
+                    lift: rgbm("lift", d.lift)?,
+                    gain: rgbm("gain", d.gain)?,
+                    saturation: value.number64("saturation").unwrap_or(d.saturation),
+                    pivot: from(pivot, "contrast", d.pivot),
+                    pivot_black: from(pivot, "black", d.pivot_black),
+                    pivot_white: from(pivot, "white", d.pivot_white),
+                    clamp_black: from(clamp, "black", d.clamp_black),
+                    clamp_white: from(clamp, "white", d.clamp_white),
+                    ..d
+                }),
+                dir,
+            }
+        }
+        "GradingToneTransform" => {
+            let style = grading_style(value, &tag)?;
+            let d = crate::op::GradingToneValues::new(style);
+            let band = |key: &str, start_key: &str, width_key: &str, default| {
+                grading_rgbmsw(what, value, key, start_key, width_key, default)
+            };
+            TransformSpec::GradingTone {
+                params: Box::new(crate::op::GradingTone::new(crate::op::GradingToneValues {
+                    blacks: band("blacks", "start", "width", d.blacks)?,
+                    shadows: band("shadows", "start", "pivot", d.shadows)?,
+                    midtones: band("midtones", "center", "width", d.midtones)?,
+                    highlights: band("highlights", "start", "pivot", d.highlights)?,
+                    whites: band("whites", "start", "width", d.whites)?,
+                    scontrast: value.number64("s_contrast").unwrap_or(d.scontrast),
+                    ..d
+                })),
                 dir,
             }
         }
@@ -1293,6 +1443,90 @@ colorspaces:
         assert_eq!(params.lin_side_break, Some([0.005; 3]));
         assert_eq!(params.linear_slope, None);
         assert_eq!(dir, Direction::Inverse);
+    }
+
+    /// The two grading transforms exactly as Blender's and PixelManager's
+    /// configs write them: block style, an unstated key meaning the style's own
+    /// default, and a tone band whose two extra numbers are spelled per band.
+    #[test]
+    fn the_grading_transforms_read_the_keys_the_real_configs_write() {
+        let text = r#"
+ocio_profile_version: 2
+colorspaces:
+  - !<ColorSpace>
+    name: agx
+    from_reference: !<GradingPrimaryTransform>
+      style: log
+      contrast: {rgb: [1.4, 1.4, 1.4], master: 1}
+      saturation: 0.95
+      pivot: {contrast: -0.2}
+  - !<ColorSpace>
+    name: punchy
+    from_reference: !<GradingToneTransform>
+     shadows: {rgb: [0.2, 0.2, 0.2], master: 0.35, start: 0.4, pivot: 0.1}
+  - !<ColorSpace>
+    name: lin
+    from_reference: !<GradingToneTransform>
+      style: linear
+      midtones: {rgb: [1.2, 1, 1], master: 1.1, center: 0.5, width: 7}
+"#;
+        let config = Config::parse(Path::new("."), text).expect("parses");
+        let Some(TransformSpec::GradingPrimary { params, dir }) =
+            config.spaces["agx"].from_reference.clone()
+        else {
+            panic!("expected a primary grade");
+        };
+        assert_eq!(params.contrast.rgb, [1.4; 3]);
+        assert_eq!(params.saturation, 0.95);
+        assert_eq!(params.pivot, -0.2);
+        // Unstated keys are the style's own defaults, not zero.
+        assert_eq!(params.gamma.master, 1.0);
+        assert_eq!(params.pivot_white, 1.0);
+        assert_eq!(dir, Direction::Forward);
+
+        let Some(TransformSpec::GradingTone { params, .. }) =
+            config.spaces["punchy"].from_reference.clone()
+        else {
+            panic!("expected a tone grade");
+        };
+        // `shadows` spells its width `pivot`, and the bands nobody stated keep
+        // the log style's own places.
+        assert_eq!(params.values.shadows.width, 0.1);
+        assert_eq!(params.values.shadows.start, 0.4);
+        assert_eq!(params.values.midtones.width, 0.6);
+        assert_eq!(params.values.scontrast, 1.0);
+
+        let Some(TransformSpec::GradingTone { params, .. }) =
+            config.spaces["lin"].from_reference.clone()
+        else {
+            panic!("expected a tone grade");
+        };
+        // `midtones` spells its start `center`, and the linear style's bands sit
+        // in stops rather than in code values.
+        assert_eq!(params.values.midtones.start, 0.5);
+        assert_eq!(params.values.highlights.width, 9.0);
+    }
+
+    #[test]
+    fn a_grading_transform_refuses_a_style_and_a_half_written_value_by_name() {
+        let bad_style = Config::parse(
+            Path::new("."),
+            "ocio_profile_version: 2\ncolorspaces:\n  - !<ColorSpace>\n    name: odd\n    to_reference: !<GradingPrimaryTransform> {style: filmlike}\n",
+        );
+        let bad_style = bad_style.expect("the file itself parses");
+        assert!(
+            matches!(&bad_style.spaces["odd"].to_reference, Some(TransformSpec::Unsupported { name }) if name == "GradingPrimaryTransform with style filmlike"),
+            "{:?}",
+            bad_style.spaces["odd"].to_reference
+        );
+        let half_written = Config::parse(
+            Path::new("."),
+            "ocio_profile_version: 2\ncolorspaces:\n  - !<ColorSpace>\n    name: odd\n    to_reference: !<GradingPrimaryTransform> {style: log, contrast: {rgb: [1.2, 1.2, 1.2]}}\n",
+        );
+        assert!(
+            matches!(&half_written, Err(ColourError::Parse { reason, .. }) if reason.contains("master")),
+            "{half_written:?}"
+        );
     }
 
     #[test]

@@ -99,7 +99,8 @@ colour pipeline with a missing edge is worse than none:
 
 Recorded next, deliberately not v1: context
 variables (`$SHOT`-style per-item LUT substitution), `FixedFunctionTransform` and the
-grading-op family, and 3D-LUT inversion. A sixth surface landed after v1: the four
+grading curve transform, and 3D-LUT inversion. The primary and tone grades landed
+after v1, for the AgX looks in Blender's config (§4.1). A sixth surface landed after v1: the four
 OCIO *effects* (§6.6), which put the same recipes on one layer in the middle of a
 stack, and are where a look is chosen on its own; and the config-defined working space
 (§2.1), a project choice.
@@ -262,6 +263,8 @@ The transforms real configs are made of, each with forward and (where noted) inv
 | Log | `LogTransform` (base only), `LogAffineTransform`, `LogCameraTransform` (lin-side break) | exact |
 | Allocation | `AllocationTransform` (`lg2`, `uniform`): the log or the fit a space's `allocation` line stands for | exact |
 | CDL | `CDLTransform` (slope/offset/power + saturation, ASC ordering) | exact except clamp |
+| Primary grade | `GradingPrimaryTransform`, all three styles (`log`, `linear`, `video`), every parameter, both `pivot` and `clamp` blocks | the reference's own, exact except clamp |
+| Tone grade | `GradingToneTransform`, all three styles: blacks, shadows, midtones, highlights, whites and `s_contrast` | the reference's own |
 | Range | `RangeTransform` (scale + clamp) | exact on the non-clamped part |
 | 1D LUT | `FileTransform` → `.spi1d`, `.cube` 1D, `.cub` input LUT, `.3dl` shaper, CLF `LUT1D` | by monotone bisection (§4.3) |
 | 3D LUT | `FileTransform` → `.spi3d`, `.cube` 3D, `.cub` cube, `.3dl` cube, CLF `LUT3D`, **tetrahedral** interpolation | **refused** (§4.3) |
@@ -332,9 +335,21 @@ composes with a display encoding like anything else. **What tier two costs at th
 edge is measured and stated in §5.4** — 0.117 at the Rec.709 blue primary — and
 it is the number the Rust ports exist to reduce.
 
-Everything else a config can name — `FixedFunctionTransform`, `GradingTone`-family,
-`ExposureContrastTransform`, context variables in file paths — is **refused by name**
-in v1 and listed in the refusal taxonomy test (§7).
+**The two grading transforms are ports, not approximations.** Blender's bundled config
+and the PixelManager config build their AgX looks out of `GradingPrimaryTransform` and
+`GradingToneTransform`, so both are implemented from the reference library's own CPU
+code: the per style defaults, the pre-render each style works its numbers out in, the
+five tone bands and their S contrast, and the inverse the reference defines for each.
+Two things are worth knowing. The reference's x86 build raises to a power and takes a
+logarithm with polynomials where this crate calls the real functions, so the golden rows
+that reach a power state a looser bound with that fact written beside it in
+`tests/fixtures/grading/generate.py`, and where its SSE branch disagrees with its own
+scalar branch this crate follows the scalar one. And a tone grade never mixes channels,
+so it bakes to a curve; a primary grade with a saturation does, so it bakes to a cube.
+
+Everything else a config can name — `FixedFunctionTransform`,
+`GradingRGBCurveTransform`, `ExposureContrastTransform`, context variables in file
+paths — is **refused by name** in v1 and listed in the refusal taxonomy test (§7).
 
 ### 4.2 Resolution
 

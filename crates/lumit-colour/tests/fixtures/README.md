@@ -15,6 +15,7 @@ the code is consistent with itself.
 | `aces-cg.fixture` | `cg-config-v4.0.0_aces-v2.0_ocio-v2.5`, the same way | 784 |
 | `files.fixture` | Five small look-up table files under `luts/`, `.spimtx`, `.cub` and `.3dl` among them, run through the reference library's own file readers (`files-generate.py`) | 128 |
 | `builtins.fixture` | Every tier-one `BuiltinTransform` style the Blender and PixelManager configs name, forwards and backwards, and the three ACES 1.x output bakes at the cube form's bounds (`builtins-generate.py`) | 497 |
+| `grading.fixture` | The two grading transforms, one colour space per parameter set: the ten Blender 5.2 and PixelManager actually write, plus one per parameter and per style, both ways round | 1664 |
 
 Every one gates on both of §7.2's gates — the resolved chain evaluated exactly on
 the processor, and the baked artefact sampled by the CPU sampler — at the
@@ -150,6 +151,22 @@ python generate.py aces-1.2 sRGB,Rec.709 > aces-1.2.fixture
 Read it before changing it: every bound above is written there with its
 derivation, and the file is deliberately the only place those derivations live in
 executable form.
+
+The grading fixture has a generator of its own, `grading/generate.py`, because its
+config is checked in here rather than downloaded and its rows are every colour
+space in it rather than a role list. It reads the probe set out of the file above,
+so the two fixtures ask the same questions:
+
+```sh
+cd grading && python generate.py > ../grading.fixture
+```
+
+Its own bounds are written there the same way. Two of them are places where the
+**reference's** answer is the approximate one: its x86 build raises to a power and
+takes a logarithm with polynomials, so a row that reaches either carries a stated
+5 × 10⁻⁵ (measured 1.5 × 10⁻⁵) or 2 × 10⁻⁴ (measured 9.3 × 10⁻⁵) instead of the
+usual 10⁻⁵. Everything that does not reach one agrees to about a part in a hundred
+million.
 
 The one thing it gets right that is easy to get wrong is **which door the
 reference run enters the config by**. Lumit's working space is scene-linear

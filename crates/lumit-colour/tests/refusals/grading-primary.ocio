@@ -1,6 +1,0 @@
-# refuses: GradingPrimaryTransform
-ocio_profile_version: 2
-colorspaces:
-  - !<ColorSpace>
-    name: graded
-    to_scene_reference: !<GradingPrimaryTransform> {style: log}

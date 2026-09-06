@@ -450,6 +450,15 @@ fn every_builtin_row_matches_the_reference() {
     }
 }
 
+/// The two grading transforms, one colour space per parameter set: the ten the
+/// Blender and PixelManager configs actually write, and a synthetic set for
+/// every parameter and every style, both ways round.
+#[test]
+fn the_grading_config_matches_the_reference() {
+    let (loaded, rows) = reference_fixture("grading");
+    gate_config_rows(&loaded, &rows);
+}
+
 /// "Resolves end to end" said as a test rather than as a claim: **every** space
 /// and **every** view of the ACES CG config answers.
 ///

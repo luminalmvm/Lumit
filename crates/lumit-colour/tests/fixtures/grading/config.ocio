@@ -1,0 +1,434 @@
+ocio_profile_version: 2
+
+name: lumit grading fixture
+description: |
+  One colour space per grading parameter set, each carrying a single
+  GradingPrimaryTransform or GradingToneTransform on from_reference. The first
+  ten sets are lifted verbatim from Blender 5.2's bundled config and from the
+  PixelManager config; the rest are synthetic, one per parameter and one per
+  style, in both directions. tests/fixtures/grading/generate.py turns this into
+  tests/fixtures/grading.fixture through the reference OpenColorIO library.
+
+roles:
+  default: ref
+  reference: ref
+  scene_linear: ref
+
+displays:
+  sRGB:
+    - !<View> {name: Raw, colorspace: ref}
+
+active_displays: [sRGB]
+
+colorspaces:
+  - !<ColorSpace>
+    name: ref
+
+  # -- verbatim from the two real configs ------------------------------------
+
+  - !<ColorSpace>
+    name: blender-agx-golden
+    from_reference: !<GradingPrimaryTransform>
+      style: log
+      contrast: {rgb: [1.57, 1.57, 1.57], master: 1}
+      saturation: 0.9
+      pivot: {contrast: -0.2}
+
+  - !<ColorSpace>
+    name: blender-agx-high
+    from_reference: !<GradingPrimaryTransform>
+      style: log
+      contrast: {rgb: [1.4, 1.4, 1.4], master: 1}
+      saturation: 0.95
+      pivot: {contrast: -0.2}
+
+  - !<ColorSpace>
+    name: blender-agx-medium-high
+    from_reference: !<GradingPrimaryTransform>
+      style: log
+      contrast: {rgb: [1.2, 1.2, 1.2], master: 1}
+      saturation: 1
+      pivot: {contrast: -0.2}
+
+  - !<ColorSpace>
+    name: blender-agx-base
+    from_reference: !<GradingPrimaryTransform>
+      style: log
+      contrast: {rgb: [1, 1, 1], master: 1}
+      pivot: {contrast: -0.2}
+
+  - !<ColorSpace>
+    name: blender-agx-medium-low
+    from_reference: !<GradingPrimaryTransform>
+      style: log
+      contrast: {rgb: [0.9, 0.9, 0.9], master: 1}
+      saturation: 1.05
+      pivot: {contrast: -0.2}
+
+  - !<ColorSpace>
+    name: blender-agx-low
+    from_reference: !<GradingPrimaryTransform>
+      style: log
+      contrast: {rgb: [0.8, 0.8, 0.8], master: 1}
+      saturation: 1.1
+      pivot: {contrast: -0.2}
+
+  - !<ColorSpace>
+    name: blender-agx-very-low
+    from_reference: !<GradingPrimaryTransform>
+      style: log
+      contrast: {rgb: [0.7, 0.7, 0.7], master: 1}
+      saturation: 1.15
+      pivot: {contrast: -0.2}
+
+  # The block style and the one-space indent are the real configs' own.
+  - !<ColorSpace>
+    name: blender-punchy-tone
+    from_reference: !<GradingToneTransform>
+     shadows: {rgb: [0.2, 0.2, 0.2], master: 0.35, start: 0.4, pivot: 0.1}
+
+  - !<ColorSpace>
+    name: pixelmanager-green-ink-a
+    from_reference: !<GradingToneTransform>
+     shadows: {rgb: [0.5, 0.8, 0.7], master: 1, start: 2, pivot: 0.001}
+
+  - !<ColorSpace>
+    name: pixelmanager-green-ink-b
+    from_reference: !<GradingToneTransform>
+     shadows: {rgb: [0.9, 1.2, 0.9], master: 0.2, start: 0.5, pivot: 0.001}
+
+  # -- primary, log style ----------------------------------------------------
+
+  - !<ColorSpace>
+    name: primary-log-default
+    from_reference: !<GradingPrimaryTransform> {style: log}
+
+  - !<ColorSpace>
+    name: primary-log-brightness
+    from_reference: !<GradingPrimaryTransform>
+      style: log
+      brightness: {rgb: [12, -8, 4], master: 6}
+
+  - !<ColorSpace>
+    name: primary-log-contrast
+    from_reference: !<GradingPrimaryTransform>
+      style: log
+      contrast: {rgb: [1.3, 0.85, 1.1], master: 1.05}
+      pivot: {contrast: 0.15}
+
+  - !<ColorSpace>
+    name: primary-log-gamma
+    from_reference: !<GradingPrimaryTransform>
+      style: log
+      gamma: {rgb: [1.25, 0.8, 1.05], master: 1.1}
+
+  - !<ColorSpace>
+    name: primary-log-pivots
+    from_reference: !<GradingPrimaryTransform>
+      style: log
+      gamma: {rgb: [1.25, 0.8, 1.05], master: 1.1}
+      pivot: {black: 0.05, white: 0.92}
+
+  - !<ColorSpace>
+    name: primary-log-saturation
+    from_reference: !<GradingPrimaryTransform>
+      style: log
+      saturation: 1.35
+
+  - !<ColorSpace>
+    name: primary-log-clamp
+    from_reference: !<GradingPrimaryTransform>
+      style: log
+      contrast: {rgb: [1.3, 0.85, 1.1], master: 1.05}
+      clamp: {black: 0.02, white: 0.95}
+
+  - !<ColorSpace>
+    name: primary-log-all
+    from_reference: !<GradingPrimaryTransform>
+      style: log
+      brightness: {rgb: [12, -8, 4], master: 6}
+      contrast: {rgb: [1.3, 0.85, 1.1], master: 1.05}
+      gamma: {rgb: [1.25, 0.8, 1.05], master: 1.1}
+      saturation: 1.35
+      pivot: {contrast: 0.15, black: 0.05, white: 0.92}
+      clamp: {black: -0.4, white: 1.6}
+
+  - !<ColorSpace>
+    name: primary-log-all-inverse
+    from_reference: !<GradingPrimaryTransform>
+      style: log
+      brightness: {rgb: [12, -8, 4], master: 6}
+      contrast: {rgb: [1.3, 0.85, 1.1], master: 1.05}
+      gamma: {rgb: [1.25, 0.8, 1.05], master: 1.1}
+      saturation: 1.35
+      pivot: {contrast: 0.15, black: 0.05, white: 0.92}
+      clamp: {black: -0.4, white: 1.6}
+      direction: inverse
+
+  # -- primary, linear style -------------------------------------------------
+
+  - !<ColorSpace>
+    name: primary-linear-default
+    from_reference: !<GradingPrimaryTransform> {style: linear}
+
+  - !<ColorSpace>
+    name: primary-linear-offset
+    from_reference: !<GradingPrimaryTransform>
+      style: linear
+      offset: {rgb: [0.02, -0.01, 0.005], master: 0.01}
+
+  - !<ColorSpace>
+    name: primary-linear-exposure
+    from_reference: !<GradingPrimaryTransform>
+      style: linear
+      exposure: {rgb: [0.5, -0.25, 0.1], master: 0.2}
+
+  - !<ColorSpace>
+    name: primary-linear-contrast
+    from_reference: !<GradingPrimaryTransform>
+      style: linear
+      contrast: {rgb: [1.2, 0.9, 1.1], master: 1.05}
+      pivot: {contrast: 0.5}
+
+  - !<ColorSpace>
+    name: primary-linear-saturation-clamp
+    from_reference: !<GradingPrimaryTransform>
+      style: linear
+      saturation: 0.8
+      clamp: {black: -0.5, white: 8}
+
+  - !<ColorSpace>
+    name: primary-linear-all
+    from_reference: !<GradingPrimaryTransform>
+      style: linear
+      offset: {rgb: [0.02, -0.01, 0.005], master: 0.01}
+      exposure: {rgb: [0.5, -0.25, 0.1], master: 0.2}
+      contrast: {rgb: [1.2, 0.9, 1.1], master: 1.05}
+      saturation: 0.8
+      pivot: {contrast: 0.5}
+      clamp: {black: -0.5, white: 8}
+
+  - !<ColorSpace>
+    name: primary-linear-all-inverse
+    from_reference: !<GradingPrimaryTransform>
+      style: linear
+      offset: {rgb: [0.02, -0.01, 0.005], master: 0.01}
+      exposure: {rgb: [0.5, -0.25, 0.1], master: 0.2}
+      contrast: {rgb: [1.2, 0.9, 1.1], master: 1.05}
+      saturation: 0.8
+      pivot: {contrast: 0.5}
+      clamp: {black: -0.5, white: 8}
+      direction: inverse
+
+  # -- primary, video style --------------------------------------------------
+
+  - !<ColorSpace>
+    name: primary-video-default
+    from_reference: !<GradingPrimaryTransform> {style: video}
+
+  - !<ColorSpace>
+    name: primary-video-offset-lift
+    from_reference: !<GradingPrimaryTransform>
+      style: video
+      offset: {rgb: [0.02, -0.01, 0.005], master: 0.01}
+      lift: {rgb: [0.03, -0.02, 0], master: 0.01}
+
+  - !<ColorSpace>
+    name: primary-video-gain
+    from_reference: !<GradingPrimaryTransform>
+      style: video
+      gain: {rgb: [1.1, 0.95, 1.05], master: 1.02}
+
+  - !<ColorSpace>
+    name: primary-video-gamma-pivots
+    from_reference: !<GradingPrimaryTransform>
+      style: video
+      gamma: {rgb: [1.25, 0.8, 1.05], master: 1.1}
+      pivot: {black: 0.02, white: 0.98}
+
+  - !<ColorSpace>
+    name: primary-video-saturation-clamp
+    from_reference: !<GradingPrimaryTransform>
+      style: video
+      saturation: 0.75
+      clamp: {black: 0, white: 1.2}
+
+  - !<ColorSpace>
+    name: primary-video-all
+    from_reference: !<GradingPrimaryTransform>
+      style: video
+      offset: {rgb: [0.02, -0.01, 0.005], master: 0.01}
+      lift: {rgb: [0.03, -0.02, 0], master: 0.01}
+      gain: {rgb: [1.1, 0.95, 1.05], master: 1.02}
+      gamma: {rgb: [1.25, 0.8, 1.05], master: 1.1}
+      saturation: 0.75
+      pivot: {black: 0.02, white: 0.98}
+      clamp: {black: -0.3, white: 1.4}
+
+  - !<ColorSpace>
+    name: primary-video-all-inverse
+    from_reference: !<GradingPrimaryTransform>
+      style: video
+      offset: {rgb: [0.02, -0.01, 0.005], master: 0.01}
+      lift: {rgb: [0.03, -0.02, 0], master: 0.01}
+      gain: {rgb: [1.1, 0.95, 1.05], master: 1.02}
+      gamma: {rgb: [1.25, 0.8, 1.05], master: 1.1}
+      saturation: 0.75
+      pivot: {black: 0.02, white: 0.98}
+      clamp: {black: -0.3, white: 1.4}
+      direction: inverse
+
+  # -- tone, log style -------------------------------------------------------
+
+  - !<ColorSpace>
+    name: tone-log-default
+    from_reference: !<GradingToneTransform> {style: log}
+
+  - !<ColorSpace>
+    name: tone-log-blacks
+    from_reference: !<GradingToneTransform>
+      style: log
+      blacks: {rgb: [1.2, 0.9, 1.05], master: 1.1, start: 0.45, width: 0.35}
+
+  - !<ColorSpace>
+    name: tone-log-shadows
+    from_reference: !<GradingToneTransform>
+      style: log
+      shadows: {rgb: [1.3, 0.8, 1.1], master: 0.9, start: 0.55, pivot: 0.12}
+
+  - !<ColorSpace>
+    name: tone-log-midtones
+    from_reference: !<GradingToneTransform>
+      style: log
+      midtones: {rgb: [1.25, 0.85, 1.05], master: 1.15, center: 0.45, width: 0.55}
+
+  - !<ColorSpace>
+    name: tone-log-highlights
+    from_reference: !<GradingToneTransform>
+      style: log
+      highlights: {rgb: [0.8, 1.2, 1.05], master: 1.1, start: 0.35, pivot: 0.95}
+
+  - !<ColorSpace>
+    name: tone-log-whites
+    from_reference: !<GradingToneTransform>
+      style: log
+      whites: {rgb: [1.15, 0.9, 1.05], master: 0.95, start: 0.45, width: 0.45}
+
+  - !<ColorSpace>
+    name: tone-log-scontrast-high
+    from_reference: !<GradingToneTransform>
+      style: log
+      s_contrast: 1.45
+
+  - !<ColorSpace>
+    name: tone-log-scontrast-low
+    from_reference: !<GradingToneTransform>
+      style: log
+      s_contrast: 0.7
+
+  - !<ColorSpace>
+    name: tone-log-all
+    from_reference: !<GradingToneTransform>
+      style: log
+      blacks: {rgb: [1.2, 0.9, 1.05], master: 1.1, start: 0.45, width: 0.35}
+      shadows: {rgb: [1.3, 0.8, 1.1], master: 0.9, start: 0.55, pivot: 0.12}
+      midtones: {rgb: [1.25, 0.85, 1.05], master: 1.15, center: 0.45, width: 0.55}
+      highlights: {rgb: [0.8, 1.2, 1.05], master: 1.1, start: 0.35, pivot: 0.95}
+      whites: {rgb: [1.15, 0.9, 1.05], master: 0.95, start: 0.45, width: 0.45}
+      s_contrast: 1.45
+
+  - !<ColorSpace>
+    name: tone-log-all-inverse
+    from_reference: !<GradingToneTransform>
+      style: log
+      blacks: {rgb: [1.2, 0.9, 1.05], master: 1.1, start: 0.45, width: 0.35}
+      shadows: {rgb: [1.3, 0.8, 1.1], master: 0.9, start: 0.55, pivot: 0.12}
+      midtones: {rgb: [1.25, 0.85, 1.05], master: 1.15, center: 0.45, width: 0.55}
+      highlights: {rgb: [0.8, 1.2, 1.05], master: 1.1, start: 0.35, pivot: 0.95}
+      whites: {rgb: [1.15, 0.9, 1.05], master: 0.95, start: 0.45, width: 0.45}
+      s_contrast: 0.7
+      direction: inverse
+
+  # -- tone, linear style ----------------------------------------------------
+
+  - !<ColorSpace>
+    name: tone-linear-default
+    from_reference: !<GradingToneTransform> {style: linear}
+
+  - !<ColorSpace>
+    name: tone-linear-bands
+    from_reference: !<GradingToneTransform>
+      style: linear
+      blacks: {rgb: [1.2, 0.9, 1.05], master: 1.1, start: 0.5, width: 3.5}
+      shadows: {rgb: [1.3, 0.8, 1.1], master: 0.9, start: 2.5, pivot: -6}
+      midtones: {rgb: [1.25, 0.85, 1.05], master: 1.15, center: 0.5, width: 7}
+      highlights: {rgb: [0.8, 1.2, 1.05], master: 1.1, start: -1.5, pivot: 8}
+      whites: {rgb: [1.15, 0.9, 1.05], master: 0.95, start: 0.5, width: 7}
+
+  - !<ColorSpace>
+    name: tone-linear-scontrast
+    from_reference: !<GradingToneTransform>
+      style: linear
+      s_contrast: 1.4
+
+  - !<ColorSpace>
+    name: tone-linear-all
+    from_reference: !<GradingToneTransform>
+      style: linear
+      blacks: {rgb: [1.2, 0.9, 1.05], master: 1.1, start: 0.5, width: 3.5}
+      shadows: {rgb: [1.3, 0.8, 1.1], master: 0.9, start: 2.5, pivot: -6}
+      midtones: {rgb: [1.25, 0.85, 1.05], master: 1.15, center: 0.5, width: 7}
+      highlights: {rgb: [0.8, 1.2, 1.05], master: 1.1, start: -1.5, pivot: 8}
+      whites: {rgb: [1.15, 0.9, 1.05], master: 0.95, start: 0.5, width: 7}
+      s_contrast: 1.4
+
+  - !<ColorSpace>
+    name: tone-linear-all-inverse
+    from_reference: !<GradingToneTransform>
+      style: linear
+      blacks: {rgb: [1.2, 0.9, 1.05], master: 1.1, start: 0.5, width: 3.5}
+      shadows: {rgb: [1.3, 0.8, 1.1], master: 0.9, start: 2.5, pivot: -6}
+      midtones: {rgb: [1.25, 0.85, 1.05], master: 1.15, center: 0.5, width: 7}
+      highlights: {rgb: [0.8, 1.2, 1.05], master: 1.1, start: -1.5, pivot: 8}
+      whites: {rgb: [1.15, 0.9, 1.05], master: 0.95, start: 0.5, width: 7}
+      s_contrast: 0.75
+      direction: inverse
+
+  # -- tone, video style -----------------------------------------------------
+
+  - !<ColorSpace>
+    name: tone-video-default
+    from_reference: !<GradingToneTransform> {style: video}
+
+  - !<ColorSpace>
+    name: tone-video-bands
+    from_reference: !<GradingToneTransform>
+      style: video
+      blacks: {rgb: [1.2, 0.9, 1.05], master: 1.1, start: 0.45, width: 0.35}
+      shadows: {rgb: [1.3, 0.8, 1.1], master: 0.9, start: 0.65, pivot: 0.05}
+      midtones: {rgb: [1.25, 0.85, 1.05], master: 1.15, center: 0.45, width: 0.65}
+      highlights: {rgb: [0.8, 1.2, 1.05], master: 1.1, start: 0.25, pivot: 0.95}
+      whites: {rgb: [1.15, 0.9, 1.05], master: 0.95, start: 0.55, width: 0.45}
+
+  - !<ColorSpace>
+    name: tone-video-all
+    from_reference: !<GradingToneTransform>
+      style: video
+      blacks: {rgb: [1.2, 0.9, 1.05], master: 1.1, start: 0.45, width: 0.35}
+      shadows: {rgb: [1.3, 0.8, 1.1], master: 0.9, start: 0.65, pivot: 0.05}
+      midtones: {rgb: [1.25, 0.85, 1.05], master: 1.15, center: 0.45, width: 0.65}
+      highlights: {rgb: [0.8, 1.2, 1.05], master: 1.1, start: 0.25, pivot: 0.95}
+      whites: {rgb: [1.15, 0.9, 1.05], master: 0.95, start: 0.55, width: 0.45}
+      s_contrast: 1.45
+
+  - !<ColorSpace>
+    name: tone-video-all-inverse
+    from_reference: !<GradingToneTransform>
+      style: video
+      blacks: {rgb: [1.2, 0.9, 1.05], master: 1.1, start: 0.45, width: 0.35}
+      shadows: {rgb: [1.3, 0.8, 1.1], master: 0.9, start: 0.65, pivot: 0.05}
+      midtones: {rgb: [1.25, 0.85, 1.05], master: 1.15, center: 0.45, width: 0.65}
+      highlights: {rgb: [0.8, 1.2, 1.05], master: 1.1, start: 0.25, pivot: 0.95}
+      whites: {rgb: [1.15, 0.9, 1.05], master: 0.95, start: 0.55, width: 0.45}
+      s_contrast: 0.75
+      direction: inverse

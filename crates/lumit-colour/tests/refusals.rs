@@ -79,7 +79,7 @@ fn every_unsupported_config_refuses_by_name() {
         checked += 1;
     }
     // A corpus that quietly emptied itself would pass every assertion above.
-    assert!(checked >= 14, "only {checked} refusal cases were walked");
+    assert!(checked >= 13, "only {checked} refusal cases were walked");
 }
 
 /// The other half of the promise: a config using only what Lumit implements
@@ -122,6 +122,19 @@ colorspaces:
       children:
         - !<AllocationTransform> {allocation: lg2, vars: [-12.47393, 12.5260688117]}
         - !<AllocationTransform> {allocation: uniform, vars: [0, 0.66], direction: inverse}
+  # The two grading transforms Blender's AgX looks are built from, in the block
+  # style and with the one-space indent the real configs write them in.
+  - !<ColorSpace>
+    name: graded
+    from_scene_reference: !<GroupTransform>
+      children:
+        - !<GradingPrimaryTransform>
+          style: log
+          contrast: {rgb: [1.4, 1.4, 1.4], master: 1}
+          saturation: 0.95
+          pivot: {contrast: -0.2}
+        - !<GradingToneTransform>
+         shadows: {rgb: [0.2, 0.2, 0.2], master: 0.35, start: 0.4, pivot: 0.1}
 "#;
     let found = refusals(&corpus(), text);
     assert!(found.is_empty(), "a supported config refused: {found:#?}");
