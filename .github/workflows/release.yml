@@ -34,8 +34,10 @@ on:
         description: "Version to build, with or without the leading v"
         required: true
 
+# Only the publish job writes to the repository, so only it gets a token
+# that can.
 permissions:
-  contents: write
+  contents: read
 
 env:
   # A tag run takes its version from the tag; a manual run from the input. The
@@ -48,21 +50,27 @@ jobs:
     runs-on: windows-latest
     env:
       FFMPEG_ASSET: ffmpeg-n8.1.2-50-g1a748fe2cd-win64-gpl-shared-8.1
+      FFMPEG_SHA256: 0a41f31caff48e3035b48f09f5d840bd8d1863008240fc43e457f15e589cf5b3
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: dtolnay/rust-toolchain@d1031067263f94b142dd6c0ce24c5eb9d02d52a0 # master
+        with:
+          toolchain: stable
       - name: Install FFmpeg 8.1 (BtbN shared build)
         shell: pwsh
         run: |
           $url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/$env:FFMPEG_ASSET.zip"
           Invoke-WebRequest -Uri $url -OutFile "$env:RUNNER_TEMP\ffmpeg.zip"
+          # The archive must match the hash pinned beside its name above.
+          $hash = (Get-FileHash "$env:RUNNER_TEMP\ffmpeg.zip" -Algorithm SHA256).Hash
+          if ($hash -ne $env:FFMPEG_SHA256) { throw "FFmpeg archive hash $hash is not the pinned $env:FFMPEG_SHA256" }
           Expand-Archive "$env:RUNNER_TEMP\ffmpeg.zip" -DestinationPath "$env:RUNNER_TEMP\ffmpeg"
           $root = (Get-ChildItem "$env:RUNNER_TEMP\ffmpeg" -Directory | Select-Object -First 1).FullName
           "FFMPEG_LIBS_DIR=$root\lib"        >> $env:GITHUB_ENV
           "FFMPEG_INCLUDE_DIR=$root\include" >> $env:GITHUB_ENV
           "$root\bin" >> $env:GITHUB_PATH
       - name: Install LLVM 18 (libclang for bindgen)
-        uses: KyleMayes/install-llvm-action@v2
+        uses: KyleMayes/install-llvm-action@ebc0426251bc40c7cd31162802432c68818ab8f0 # v2.0.9
         with:
           version: "18.1.8"
           directory: ${{ runner.temp }}/llvm
@@ -70,8 +78,8 @@ jobs:
         shell: pwsh
         run: |
           "LIBCLANG_PATH=$env:RUNNER_TEMP\llvm\bin" >> $env:GITHUB_ENV
-      - uses: Swatinem/rust-cache@v2
-      - uses: subosito/flutter-action@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           flutter-version: 3.47.1
           channel: stable
@@ -96,7 +104,7 @@ jobs:
           Copy-Item assets\brand\lumit-project.ico, assets\brand\lumit-preset.ico "$stage\icons"
           Compress-Archive -Path "$stage\*" -Force `
             -DestinationPath "packaging/windows/dist/lumit-$version-windows-x64.zip"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: windows-installer
           path: |
@@ -109,9 +117,12 @@ jobs:
     runs-on: ubuntu-latest
     env:
       FFMPEG_ASSET: ffmpeg-n8.1.2-50-g1a748fe2cd-linux64-gpl-shared-8.1
+      FFMPEG_SHA256: 35dc428bf78d3f8a4447a68707338ecf9560ebcc7459967974f9ff5b1f84be24
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: dtolnay/rust-toolchain@d1031067263f94b142dd6c0ce24c5eb9d02d52a0 # master
+        with:
+          toolchain: stable
       - name: Install desktop + Flutter build dependencies
         run: |
           sudo apt-get update
@@ -125,6 +136,8 @@ jobs:
         run: |
           url="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/${FFMPEG_ASSET}.tar.xz"
           curl -fsSL "$url" -o "$RUNNER_TEMP/ffmpeg.tar.xz"
+          # Checked against the hash pinned beside the asset name above.
+          echo "$FFMPEG_SHA256  $RUNNER_TEMP/ffmpeg.tar.xz" | sha256sum -c -
           mkdir -p "$RUNNER_TEMP/ffmpeg"
           tar -xJf "$RUNNER_TEMP/ffmpeg.tar.xz" -C "$RUNNER_TEMP/ffmpeg" --strip-components=1
           root="$RUNNER_TEMP/ffmpeg"
@@ -135,8 +148,8 @@ jobs:
           echo "$root/bin" >> "$GITHUB_PATH"
       - name: Point bindgen at libclang
         run: echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> "$GITHUB_ENV"
-      - uses: Swatinem/rust-cache@v2
-      - uses: subosito/flutter-action@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           flutter-version: 3.47.1
           channel: stable
@@ -202,7 +215,7 @@ jobs:
             flatpak-build packaging/flatpak/io.github.luminalmvm.Lumit.yml
           flatpak build-bundle flatpak-repo \
             "lumit-$version-linux-x64.flatpak" io.github.luminalmvm.Lumit
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: linux-bundle
           path: lumit-*-linux-x64.flatpak
@@ -219,8 +232,10 @@ jobs:
       APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
       APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: dtolnay/rust-toolchain@d1031067263f94b142dd6c0ce24c5eb9d02d52a0 # master
+        with:
+          toolchain: stable
       # Mirrors ci.yml's macOS jobs: FFmpeg 8.1.2 from a formula extracted out
       # of homebrew-core's history, built once and cached, with the major
       # asserted before anything links against it. The action exports
@@ -230,8 +245,8 @@ jobs:
         uses: ./.github/actions/ffmpeg8-macos
       - name: Install the packaging tools
         run: brew install dylibbundler create-dmg
-      - uses: Swatinem/rust-cache@v2
-      - uses: subosito/flutter-action@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           flutter-version: 3.47.1
           channel: stable
@@ -292,7 +307,7 @@ jobs:
           mkdir -p packaging/macos/dist
           ditto -c -k --keepParent "$app" \
             "packaging/macos/dist/lumit-$version-macos-$(uname -m).zip"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: macos-dmg
           path: |
@@ -303,12 +318,14 @@ jobs:
   publish:
     name: GitHub release
     needs: [windows-installer, linux-bundle, macos-dmg]
+    permissions:
+      contents: write
     # A manual run is a rehearsal and publishes nothing.
     if: ${{ github.ref_type == 'tag' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
           merge-multiple: true
           path: dist
@@ -338,7 +355,7 @@ jobs:
       # simply goes unannounced.
       DISCORD_RELEASE_WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Post the release notes to Discord
         if: env.DISCORD_RELEASE_WEBHOOK != ''
         run: node scripts/discord-release.mjs "${GITHUB_REF_NAME#v}"

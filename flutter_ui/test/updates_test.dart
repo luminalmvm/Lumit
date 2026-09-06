@@ -98,6 +98,29 @@ void main() {
       );
       expect(release?.sha256, 'sha256:abc');
     });
+
+    test('an attachment whose name is not a bare file name is never offered',
+        () {
+      // The name ends up in a local path, so anything that could leave the
+      // download folder is refused before the suffix is even looked at.
+      for (final name in const [
+        '../evil.exe',
+        r'..\..\evil.exe',
+        '/tmp/evil.tar.gz',
+        r'C:\Temp\evil.exe',
+        'lumit/0.2.0-windows-x64-setup.exe',
+        '.exe',
+      ]) {
+        expect(isPlainFileName(name), isFalse, reason: name);
+        final json = _releaseJson(assets: [_asset(name)]);
+        for (final platform in const ['windows', 'macos', 'linux']) {
+          expect(UpdateRelease.parse(json, platform: platform), isNull,
+              reason: '$name on $platform');
+        }
+      }
+      expect(isPlainFileName('lumit-0.2.0-windows-x64-setup.exe'), isTrue);
+      expect(isPlainFileName('Lumit-0.2.0-rc1_macos-arm64.zip'), isTrue);
+    });
   });
 
   group('checking', () {
