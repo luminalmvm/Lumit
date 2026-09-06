@@ -15,7 +15,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use lumit_core::model::{ColourManagement, Document, FootageItem, MediaRef, ProjectItem};
-use lumit_render::colour::{ColourState, Edge};
+use lumit_render::colour::{ColourState, Edge, Item};
 use uuid::Uuid;
 
 /// A small, complete config: one space that is not the reference, one display
@@ -42,7 +42,7 @@ colorspaces:
 "#;
 
 /// The same, with one space asking for a transform v1 does not implement. It
-/// parses; it is simply not usable, and must say which transform it wanted.
+/// parses and stays in force; the one space that wanted it refuses, by name.
 const REFUSED: &str = r#"
 ocio_profile_version: 2
 roles:
@@ -146,7 +146,7 @@ fn a_config_that_vanished_degrades_calmly_and_says_so() {
 }
 
 #[test]
-fn a_config_using_something_lumit_does_not_implement_refuses_by_name() {
+fn a_config_using_something_lumit_does_not_implement_refuses_that_name_alone() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("config.ocio");
     std::fs::write(&path, REFUSED).unwrap();
@@ -154,18 +154,24 @@ fn a_config_using_something_lumit_does_not_implement_refuses_by_name() {
     let mut state = ColourState::default();
     state.sync(&doc_naming(&path));
     let loaded = state.loaded().unwrap();
-    assert!(!loaded.usable());
-    let why = loaded.problem.clone().expect("it says why");
+    // The file parses, so the config is in force for everything it can make.
+    assert!(loaded.usable());
+    assert!(loaded.problem.is_none());
+    // The space that wanted the transform is listed both ways round, and the
+    // reason names the transform, which is the promise.
+    let (why, refusal) = &loaded.problems()[&Item::Input("fancy".into())];
     assert!(
         why.contains("FixedFunctionTransform"),
         "a refusal names the transform it refused: {why}"
     );
-    // The transform is named, which is the promise. Whether the colour space
-    // is named too depends on where the refusal happened: a grammar this crate
-    // does not read refuses at parse, before any space is being resolved; one
-    // that parses and then cannot be walked refuses per space, and `load`
-    // appends the name. Both are actionable; only the first is guaranteed.
-    assert!(!why.is_empty());
+    assert_eq!(refusal.key, "unsupported_transform");
+    assert!(loaded
+        .problems()
+        .contains_key(&Item::Output("fancy".into())));
+    assert!(!loaded.problems().contains_key(&Item::Input("lin".into())));
+    // Its edges refuse rather than approximate; the plain space still bakes.
+    assert!(loaded.artefact(&Edge::Input("fancy".into())).is_none());
+    assert!(loaded.artefact(&Edge::Input("lin".into())).is_some());
 }
 
 #[test]

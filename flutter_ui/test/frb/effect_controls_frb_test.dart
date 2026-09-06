@@ -2715,6 +2715,7 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
         name: 'test config',
         workingFromConfig: false,
         workingSpace: '',
+        problems: [],
       );
       await mount(tester, p, transform: false);
 
