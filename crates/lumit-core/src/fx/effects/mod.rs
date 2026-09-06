@@ -72,6 +72,7 @@ pub mod mirror;
 pub mod mosaic;
 pub mod motion_blur;
 pub mod noise;
+pub mod ocio;
 pub mod offset;
 pub mod particulate;
 pub mod photo_filter;

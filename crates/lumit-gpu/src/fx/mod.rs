@@ -325,6 +325,10 @@ pub struct FxEngine {
     /// the cube as a fifth binding — a 3D texture, the first effect to need
     /// one.
     lut: wgpu::ComputePipeline,
+    /// The OCIO effects' pass (docs/08 §3.97): a baked colour table applied
+    /// through the sampler `colour.wgsl` shares. Its own
+    /// [`Self::ocio_layout`], since it binds the table's three parts.
+    ocio: wgpu::ComputePipeline,
     /// Depth-of-field lens blur (foundation for the planned DoF effects).
     /// Shares [`Self::mb_layout`]/`mb_pl` with Motion blur and Datamosh —
     /// its three sampled inputs (source, unprocessed original, depth field)
@@ -363,6 +367,10 @@ pub struct FxEngine {
     /// The LUT lookup's own layout (see [`Self::lut`]): src (0), orig (1),
     /// the storage output (2), the uniform (3) and the 3D cube texture (4).
     lut_layout: wgpu::BindGroupLayout,
+    /// The OCIO pass's layout (see [`Self::ocio`]): src (0), the storage
+    /// output (1), the uniform (2), then the baked table as the colour
+    /// pipeline binds it - the curve texture (3), the cube (4), its params (5).
+    ocio_layout: wgpu::BindGroupLayout,
 }
 
 impl FxEngine {

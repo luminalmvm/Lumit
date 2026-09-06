@@ -90,6 +90,10 @@ use super::effects::{
     mosaic::{Mosaic, MosaicDef},
     motion_blur::{MotionBlur, MotionBlurDef},
     noise::{Noise, NoiseDef},
+    ocio::{
+        OcioColourSpace, OcioColourSpaceDef, OcioDisplay, OcioDisplayDef, OcioFile, OcioFileDef,
+        OcioLook, OcioLookDef,
+    },
     offset::{Offset, OffsetDef},
     particulate::{Particulate, ParticulateDef},
     photo_filter::{PhotoFilter, PhotoFilterDef},
@@ -158,6 +162,10 @@ crate::catalogue![
     GammaDef => Gamma,
     TemperatureDef => Temperature,
     LutDef => Lut,
+    OcioColourSpaceDef => OcioColourSpace,
+    OcioDisplayDef => OcioDisplay,
+    OcioLookDef => OcioLook,
+    OcioFileDef => OcioFile,
     DofDef => Dof,
     // The utility batch's blur, at the Blur & sharpen family's end.
     ChannelBlurDef => ChannelBlur,

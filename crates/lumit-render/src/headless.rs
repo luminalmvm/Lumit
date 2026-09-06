@@ -850,7 +850,14 @@ impl HeadlessRenderer {
             (None, Some((display, view))) => {
                 crate::colour::Edge::DisplayView(display.clone(), view.clone())
             }
-            (None, None) => return None,
+            // The built-in view. Under a config-defined working space the
+            // pixels are not Rec.709, so the built-in sRGB encode is baked
+            // with the primaries change in front of it; under Lumit's own
+            // working space the hardware encode is the pass this always was.
+            (None, None) => {
+                loaded.rec709_to_working()?;
+                crate::colour::Edge::BuiltinDisplay
+            }
         };
         let artefact = loaded.artefact(&edge)?;
         Some(crate::colour::tables(&artefact))
@@ -1268,6 +1275,7 @@ impl HeadlessRenderer {
                 samples: self.gpu.sample_count(doc.anti_aliasing.samples()),
                 profiler: watcher.as_ref(),
                 colour_inputs: inputs.as_ref(),
+                colour_config: self.colour.loaded().filter(|l| l.usable()),
                 flow: Some(&parts.flow),
             };
             let pixels_by_layer: HashMap<Uuid, &crate::decode::CompLayerPixels> = retained

@@ -86,6 +86,12 @@ This is separate from the download page, which reads the GitHub releases API: th
 API gives the assets, these files give the prose. Nothing here needs a tag to exist,
 so notes can be written before or after the release goes out.
 
+One section is read by more than the site. A `## Before you update` section, for a
+release that changes something a project may depend on, is copied by `release.yml` to
+the top of the GitHub release, and Lumit shows it after the update is downloaded and
+before it restarts. It has to be in the file when the tag is pushed, and it can be
+edited on the GitHub release afterwards.
+
 ## Brand
 
 `web/src/components/Wordmark.astro` builds the wordmark out of the app icon on load,

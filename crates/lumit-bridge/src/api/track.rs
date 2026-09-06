@@ -23,10 +23,16 @@
 use std::path::PathBuf;
 
 use flutter_rust_bridge::frb;
-use lumit_core::model::{Fingerprint, LayerKind, ProjectItem};
+use lumit_core::anim::{Animation, Property};
+use lumit_core::fx::{PressFrame, Value};
+use lumit_core::model::{
+    Composition, EffectNamespace, EffectValue, Fingerprint, LayerKind, ProjectItem,
+};
+use lumit_core::time::Rational;
 use lumit_core::track::LinkState;
 use uuid::Uuid;
 
+use crate::api::layer::InstanceHome;
 use crate::api::{layer::LayerReference, state::PROJECTS, BridgeError};
 
 /// The Camera track effect's two Action parameters, by the ids its schema
@@ -353,15 +359,21 @@ pub fn camera_link(camera: LayerReference, frame: i64) -> BridgeCameraLink {
 /// Press one of an effect's Action parameters.
 ///
 /// An Action carries no value, so this is an **event** and not a write: nothing
-/// is staged, nothing is committed, and no undo entry appears. Today the Camera
-/// track's Analyse and Cancel are the only two; an unknown effect or parameter
-/// is refused rather than ignored, because a button that silently does nothing
-/// is the hardest kind of fault to see.
+/// is staged, nothing is committed, and no undo entry appears. The built-in
+/// buttons are the trackers' and the Roto brush's; an unknown effect or
+/// parameter is refused rather than ignored, because a button that silently
+/// does nothing is the hardest kind of fault to see.
+///
+/// A **plugin's** button is the one exception to "no write": it goes to the
+/// plugin, which may open its own window and stay there, and what the plugin
+/// wrote comes back into the document as one undo step when it returns. `frame`
+/// is the playhead, so the plugin sees the frame the user is looking at.
 #[frb(sync)]
 pub fn fire_effect_action(
     layer: LayerReference,
     effect: Uuid,
     param: String,
+    frame: Option<u64>,
 ) -> Result<(), BridgeError> {
     let item = layer.item()?;
     let fx = item
@@ -409,6 +421,9 @@ pub fn fire_effect_action(
             }
             _ => Err(BridgeError::InvalidParam),
         };
+    }
+    if matches!(fx.effect.namespace, EffectNamespace::Ofx) {
+        return press_plugin(layer, effect, param, frame.unwrap_or(0));
     }
     if fx.effect.match_name != lumit_core::track::CAMERA_TRACK {
         return Err(BridgeError::InvalidParam);
@@ -487,6 +502,166 @@ pub(crate) fn media_source(
         }
     };
     Ok((path, fingerprint))
+}
+
+// ---------------------------------------------------------------------------
+// A plugin's own button
+// ---------------------------------------------------------------------------
+
+/// Press a plugin's button on a thread of its own.
+///
+/// The plugin may open a window and stay in it until the user closes it, so
+/// the press is kept off the interface thread. What the plugin wrote goes into
+/// the document when it comes back, and the panel hears of that through the
+/// ordinary change stream, so the caller has nothing to wait for.
+fn press_plugin(
+    layer: LayerReference,
+    effect: Uuid,
+    param: String,
+    frame: u64,
+) -> Result<(), BridgeError> {
+    std::thread::Builder::new()
+        .name("plugin press".to_owned())
+        .spawn(move || {
+            if let Err(why) = press_plugin_now(&layer, effect, &param, frame) {
+                lumit_render::gpufx::ofx::note(effect, Some(format!("{why:?}")));
+            }
+        })
+        .map_err(|_| BridgeError::AnalysisBusy)?;
+    Ok(())
+}
+
+/// The press itself, on whatever thread called it. Split from the spawn so a
+/// test can run it and read the document afterwards.
+pub(crate) fn press_plugin_now(
+    layer: &LayerReference,
+    effect: Uuid,
+    param: &str,
+    frame: u64,
+) -> Result<(), BridgeError> {
+    let comp = layer.composition()?;
+    let item = comp
+        .layers
+        .iter()
+        .find(|l| l.id == layer.layer_id)
+        .ok_or(BridgeError::InvalidLayer)?;
+    let fx = item
+        .effects
+        .iter()
+        .find(|e| e.id == effect)
+        .ok_or(BridgeError::InvalidEffect)?;
+    let def = lumit_core::fx::BUILTIN_DEFS
+        .get(&fx.effect.match_name)
+        .ok_or(BridgeError::InvalidEffect)?;
+    // The layer's own clock at the playhead, which is what its keys are on.
+    let at = comp
+        .frame_rate
+        .time_of_frame(i64::try_from(frame).map_err(|_| BridgeError::InvalidTime)?)
+        .map_err(|_| BridgeError::InvalidTime)?
+        .0
+        .checked_sub(item.start_offset.0)
+        .map_err(|_| BridgeError::InvalidTime)?;
+    let (rgba, width, height) = press_frame(layer, &comp, effect, frame);
+    let source = PressFrame {
+        rgba: &rgba,
+        width,
+        height,
+    };
+    let pressed = def.press(fx, at.to_f64(), param, &source).map_err(|why| {
+        lumit_render::gpufx::ofx::note(effect, Some(why));
+        BridgeError::InvalidParam
+    })?;
+    layer.with_instances(InstanceHome::Effects, move |list| {
+        let fx = list
+            .iter_mut()
+            .find(|e| e.id == effect)
+            .ok_or(BridgeError::InvalidEffect)?;
+        for (row, value) in pressed.rows {
+            if let Some(param) = fx.params.iter_mut().find(|p| p.id == row) {
+                write_row(&mut param.value, value, at);
+            }
+        }
+        fx.set_plugin_state(pressed.memory.as_deref().unwrap_or(&[]));
+        Ok(())
+    })
+}
+
+/// The picture the plugin's window is shown: the comp at `frame` with the
+/// pressed effect and everything after it on its layer switched off, so the
+/// plugin sees what it would be handed to render. Black when there is no
+/// graphics adapter, which still lets the window open.
+fn press_frame(
+    layer: &LayerReference,
+    comp: &Composition,
+    effect: Uuid,
+    frame: u64,
+) -> (Vec<u8>, u32, u32) {
+    let black = || {
+        (
+            vec![0; (comp.width * comp.height * 4) as usize],
+            comp.width,
+            comp.height,
+        )
+    };
+    let Ok(project) = layer.project() else {
+        return black();
+    };
+    let Ok(state) = project.read() else {
+        return black();
+    };
+    let mut doc = lumit_core::model::Document::clone(&state.store.snapshot());
+    drop(state);
+    let staged = doc.items.iter_mut().find_map(|item| match item {
+        ProjectItem::Composition(c) if c.id == layer.comp_id => Some(c),
+        _ => None,
+    });
+    if let Some(item) = staged.and_then(|c| c.layers.iter_mut().find(|l| l.id == layer.layer_id)) {
+        let mut reached = false;
+        for fx in &mut item.effects {
+            reached |= fx.id == effect;
+            if reached {
+                fx.enabled = false;
+            }
+        }
+    }
+    crate::render::thumbnail(&std::sync::Arc::new(doc), layer.comp_id, frame, 1.0)
+        .unwrap_or_else(black)
+}
+
+/// Put a value the plugin wrote onto the document's row at `at`, keeping the
+/// row's animation: a static row takes the value, a keyed row gets a key
+/// there, and a row an expression drives stays the expression's.
+fn write_row(value: &mut EffectValue, written: Value, at: Rational) {
+    fn set(property: &mut Property, v: f64, at: Rational) {
+        if let Animation::Static(held) = &mut property.animation {
+            *held = v;
+            return;
+        }
+        if matches!(property.animation, Animation::Expression(_)) {
+            return;
+        }
+        property.insert_key_preserving_shape(at);
+        if let Animation::Keyframed(keys) = &mut property.animation {
+            let there = keys
+                .iter_mut()
+                .find(|key| (key.time.to_f64() - at.to_f64()).abs() < 1e-9);
+            if let Some(key) = there {
+                key.value = v;
+            }
+        }
+    }
+    match (value, written) {
+        (EffectValue::Float(property), Value::Float(v)) => set(property, f64::from(v), at),
+        (EffectValue::Float(property), Value::Int(v)) => set(property, f64::from(v), at),
+        (EffectValue::Bool(held), Value::Bool(v)) => *held = v,
+        (EffectValue::Choice(held), Value::Choice(v)) => *held = v,
+        (EffectValue::Colour(channels), Value::Colour(colour)) => {
+            for (property, v) in channels.iter_mut().zip(colour) {
+                set(property, f64::from(v), at);
+            }
+        }
+        _ => {}
+    }
 }
 
 // ---------------------------------------------------------------------------

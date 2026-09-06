@@ -46,9 +46,9 @@ pub struct MatteDraw {
     /// source degrades to a still (documented boundary).
     pub fx: lumit_core::fx::ResolvedStack,
     /// The matte source's `lut` file paths, 1:1 and in order with the `lut`
-    /// ops in `fx` (as for a layer's own `lut_files`). Empty unless the
+    /// ops in `fx` (as for a layer's own `colour_tables`). Empty unless the
     /// source mode is `EffectsAndMasks` and the matte source has a LUT.
-    pub lut_files: Vec<Option<String>>,
+    pub colour_tables: Vec<Option<crate::colour::TableRequest>>,
     /// Set when the matte source is a **Precomp**: the nested comp's
     /// own draw list, realised recursively exactly as a Precomp layer's
     /// picture is — `rgba` is then empty and `tex_w`/`tex_h` are the nested
@@ -101,7 +101,7 @@ pub struct DofInputDraw {
     /// The depth layer's `lut` file paths, 1:1 with the `lut` ops in
     /// `fx`. Empty unless the depth source is `EffectsAndMasks` and the depth
     /// layer has a LUT.
-    pub lut_files: Vec<Option<String>>,
+    pub colour_tables: Vec<Option<crate::colour::TableRequest>>,
     /// Set when the referenced layer is a **Precomp**: the nested
     /// comp's own draw list, realised recursively exactly as a Precomp
     /// layer's picture is — `rgba` is then empty and `tex_w`/`tex_h` are the
@@ -316,7 +316,7 @@ pub struct CompLayerDraw {
     /// op, this list is 1:1 and in order with the stack's `lut`
     /// ops — the caller loads each path and passes the parallel `luts` to
     /// `run_ops`. No GPU work happens here; these are just the strings.
-    pub lut_files: Vec<Option<String>>,
+    pub colour_tables: Vec<Option<crate::colour::TableRequest>>,
     /// The layer inputs of the layer's enabled built-in `light_wrap` effects
     /// (docs/08 §3.28, docs/impl/layer-input.md) — a *plate*, not a matte, which
     /// is why it is still its own list. Because `resolve_stack` keeps the same

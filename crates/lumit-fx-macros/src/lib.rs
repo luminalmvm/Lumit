@@ -55,8 +55,21 @@ use syn::{
 #[proc_macro_derive(
     Effect,
     attributes(
-        effect, slider, bounded, counter, dial, toggle, choice, colour, seed, file, layer,
-        mask_path, curve, action
+        effect,
+        slider,
+        bounded,
+        counter,
+        dial,
+        toggle,
+        choice,
+        colour,
+        seed,
+        file,
+        colour_name,
+        layer,
+        mask_path,
+        curve,
+        action
     )
 )]
 pub fn derive_effect(input: TokenStream) -> TokenStream {
@@ -484,6 +497,7 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
         "colour",
         "seed",
         "file",
+        "colour_name",
         "layer",
         "mask_path",
         "curve",
@@ -682,6 +696,25 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
                     }
                 },
                 quote! { p.file_slot(#idc) },
+            )
+        }
+        // A name from the OCIO config. `role = Space | Display | View | Look`
+        // says which list the row offers. Nothing to read: the name never
+        // reaches the bag, so the field is the unit type, as an Action's is.
+        "colour_name" => {
+            let role = get("role").ok_or_else(|| {
+                syn::Error::new(
+                    attr.span(),
+                    "a #[colour_name] needs `role = Space` (or Display, View, Look)",
+                )
+            })?;
+            (
+                quote! {
+                    ::lumit_core::fx::ParamKind::ColourName {
+                        role: ::lumit_core::fx::ColourNameRole::#role,
+                    }
+                },
+                quote! { () },
             )
         }
         "layer" => {

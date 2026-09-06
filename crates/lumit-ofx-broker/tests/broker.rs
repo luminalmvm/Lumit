@@ -19,6 +19,7 @@ use lumit_ofx::bundle::BUNDLE_ARCH_DIR;
 use lumit_ofx::image::Frame16;
 use lumit_ofx::instance::ParamSnapshot;
 use lumit_ofx::ipc::shm::Ring;
+use lumit_ofx::props::PropValue;
 use lumit_ofx::render::RenderRequest;
 use lumit_ofx::{Broker, BrokerConfig, BrokerError, Context, RectI};
 
@@ -372,5 +373,44 @@ fn a_plugin_that_will_not_stop_talking_does_not_fill_the_host() {
     assert!(
         !broker.notes().is_empty(),
         "and it does keep some: the message suite has to carry"
+    );
+}
+
+/// A press crosses the pipe with its frame, waits for the plugin however long
+/// it takes, and comes back with every value the plugin holds, its own writes
+/// included. That is the whole road a look built in a plugin's window takes.
+#[test]
+fn a_press_comes_back_with_what_the_plugin_wrote() {
+    let root = tempfile::tempdir().expect("a temp dir");
+    let Some((mut broker, _)) = a_broker(root.path(), &[]) else {
+        skipped("a_press_comes_back_with_what_the_plugin_wrote");
+        return;
+    };
+    let plugin = broker
+        .descriptors()
+        .iter()
+        .position(|descriptor| descriptor.identifier == "com.lumitlab.testplug")
+        .expect("the test plugin");
+    let instance = broker
+        .create_instance(plugin as u32, Context::Filter, ParamSnapshot::new())
+        .expect("an instance");
+
+    let params = broker
+        .press(instance, "trigger", 0.0, &a_flat_frame(0.5))
+        .expect("the press came back");
+    assert_eq!(
+        params.get("gain"),
+        Some(&PropValue::double(lumit_ofx_testplug::TRIGGERED_GAIN))
+    );
+    assert_eq!(
+        params.get("vendorBlob"),
+        Some(&PropValue::String(vec![
+            lumit_ofx_testplug::TRIGGERED_BLOB.to_owned()
+        ]))
+    );
+    assert_eq!(
+        broker.strikes(),
+        0,
+        "a press that came back is not a strike"
     );
 }

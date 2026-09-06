@@ -31,7 +31,7 @@ mod style_tests;
 /// lookup: no panel ever sees it, which is the point.
 #[frb(ignore)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum InstanceHome {
+pub(crate) enum InstanceHome {
     Effects,
     Styles,
     Group(Uuid),
@@ -5500,7 +5500,7 @@ impl LayerReference {
     /// effect is which list is read and which op commits it. All three live
     /// here, which is why no command below grows a branch of its own.
     #[frb(ignore)]
-    fn with_instances(
+    pub(crate) fn with_instances(
         &self,
         home: InstanceHome,
         edit: impl FnOnce(&mut Vec<EffectInstance>) -> Result<(), BridgeError>,

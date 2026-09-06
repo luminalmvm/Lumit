@@ -299,6 +299,17 @@ pub enum ParamKind {
         filter: &'static [&'static str],
         filter_name: &'static str,
     },
+    /// A name from the project's OCIO config (docs/impl/ocio.md §6.6): a
+    /// colour space, a display, a view or a look, drawn as a dropdown the
+    /// frontend fills from the colour summary it already holds. The value is
+    /// an [`EffectValue::Text`](crate::model::EffectValue::Text) carrying the
+    /// config's own spelling, empty for unset, and it never reaches the
+    /// arena: the render resolves the name against the loaded config and
+    /// threads the baked table beside the op, as a LUT's cube is threaded.
+    /// Static, as a File row is.
+    ColourName {
+        role: ColourNameRole,
+    },
     /// A reference to another layer in the composition (docs/impl/
     /// layer-input.md), sampled as an auxiliary picture — the depth pass a
     /// depth-of-field effect reads, the bright-source matte a Lens flare
@@ -451,9 +462,23 @@ impl ParamKind {
             | ParamKind::Layer { .. }
             | ParamKind::MaskPath { .. }
             | ParamKind::Curve { .. }
+            | ParamKind::ColourName { .. }
             | ParamKind::Action => None,
         }
     }
+}
+
+/// Which of a config's lists a [`ParamKind::ColourName`] row offers. A view
+/// row lists the views of the display its sibling `display` row names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ColourNameRole {
+    Space,
+    Display,
+    View,
+    Look,
+    /// The Information row: read-only, showing what the loaded config calls
+    /// itself. Its value stays empty and nothing reads it.
+    Config,
 }
 
 /// How a transform- or displacement-domain effect treats the border pixels

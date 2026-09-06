@@ -306,6 +306,11 @@ panel layout is.
   normal case), handed to the installer (anywhere Lumit cannot write to its own files), or
   handed to Flatpak with the install command, in which case Lumit MUST NOT offer to restart
   because it is not replacing anything.
+- **Before you update.** A release whose notes carry a *Before you update* section MUST
+  show that section in a window of its own once the download has finished and before the
+  restart question, every time the row is pressed, and MUST NOT apply the update until it
+  has been answered. *Not now* keeps the download and the row that offers it. A release
+  with no such section shows no window.
 
 ### 1.9 The application window
 
@@ -2850,9 +2855,10 @@ what-it-does, control-on-the-right) in a window of its own, and it exists so tha
 - **Colour** (docs/impl/ocio.md §6.4) — the project's OCIO configuration: a row holding
   the path with *Choose…* and *Clear*, a line under it saying what was read ("Loaded: 42 colour
   spaces, 3 displays") or, in one calm sentence, why the file named is not in force; and a
-  read-only **Working space** row stating the space the compositing arithmetic runs in, which
-  v1 fixes at linear Rec. 709. There is no separate relink: *Choose…* is how a configuration
-  that moved is pointed at again.
+  **Working space** dropdown choosing the space the compositing arithmetic runs in: Lumit's
+  linear Rec. 709, or the configuration's scene-linear space, offered once a configuration
+  is loaded. There is no separate relink: *Choose…* is how a configuration that moved is
+  pointed at again.
 
 **Export defaults are not here** (reversing this paragraph's earlier ruling): the
 preset, filename template and destination policy the export dialogue opens on are machine-

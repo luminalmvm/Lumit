@@ -223,6 +223,58 @@ impl FxEngine {
                 bind_group_layouts: &[&lut_layout],
                 push_constant_ranges: &[],
             });
+        // The OCIO effects' layout: src (0), the storage output (1), the
+        // kernel's own uniform (2), then the baked table exactly as the colour
+        // pipeline binds it - the curve (3) and cube (4), both read by hand and
+        // so unfilterable, and the table's params (5).
+        let uniform_entry = |binding: u32| wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility: wgpu::ShaderStages::COMPUTE,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        };
+        let ocio_layout = ctx
+            .device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("fx-ocio-layout"),
+                entries: &[
+                    texture_entry(0),
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::StorageTexture {
+                            access: wgpu::StorageTextureAccess::WriteOnly,
+                            format: ctx.working(),
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                        },
+                        count: None,
+                    },
+                    uniform_entry(2),
+                    texture_entry(3),
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 4,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                            view_dimension: wgpu::TextureViewDimension::D3,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    uniform_entry(5),
+                ],
+            });
+        let ocio_pl = ctx
+            .device
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("fx-ocio-pl"),
+                bind_group_layouts: &[&ocio_layout],
+                push_constant_ranges: &[],
+            });
         let module = |wgsl: &str, name: &str| {
             ctx.device
                 .create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -383,6 +435,15 @@ impl FxEngine {
             module(include_str!("../fx_matte_prepare.wgsl"), "fx-matte-prepare");
         let blend_mix_mod = module(include_str!("../fx_blend_mix.wgsl"), "fx-blend-mix");
         let lut_mod = module(include_str!("../fx_lut.wgsl"), "fx-lut");
+        // The sampler first, then the kernel - the same prepend the colour
+        // pipeline does, so the two compile one sampler.
+        let ocio_mod = module(
+            concat!(
+                include_str!("../ocio_sample.wgsl"),
+                include_str!("../fx_ocio.wgsl")
+            ),
+            "fx-ocio",
+        );
         let blur = pipeline(&blur_mod, "fx-blur", "blur_pass");
         let dir_blur = pipeline(&dir_blur_mod, "fx-dir-blur", "dir_blur");
         let radial_blur = pipeline(&radial_blur_mod, "fx-radial-blur", "radial_blur");
@@ -599,6 +660,16 @@ impl FxEngine {
                 compilation_options: Default::default(),
                 cache: None,
             });
+        let ocio = ctx
+            .device
+            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("fx-ocio"),
+                layout: Some(&ocio_pl),
+                module: &ocio_mod,
+                entry_point: Some("ocio_effect"),
+                compilation_options: Default::default(),
+                cache: None,
+            });
         let lens_flare = super::LazyFlare::spawn(ctx);
         // Particulate (docs/08 §3.86): four compute passes and one instanced
         // draw off one module, so the closed forms and the quad that shows them
@@ -722,12 +793,14 @@ impl FxEngine {
             matte_prepare,
             blend_mix,
             lut,
+            ocio,
             custom_shader: super::custom_shader::CustomShaderPipelines::new(ctx),
             layout,
             adjust_layout,
             mb_layout,
             mb_tile_layout,
             lut_layout,
+            ocio_layout,
         }
     }
 }

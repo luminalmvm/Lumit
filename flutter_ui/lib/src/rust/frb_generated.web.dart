@@ -300,6 +300,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   SolidReference dco_decode_box_autoadd_solid_reference(dynamic raw);
 
   @protected
+  BigInt dco_decode_box_autoadd_u_64(dynamic raw);
+
+  @protected
   BridgeAnimatedMaskPath dco_decode_bridge_animated_mask_path(dynamic raw);
 
   @protected
@@ -364,6 +367,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeColourDisplay dco_decode_bridge_colour_display(dynamic raw);
+
+  @protected
+  BridgeColourNameRole dco_decode_bridge_colour_name_role(dynamic raw);
 
   @protected
   BridgeColourRgba dco_decode_bridge_colour_rgba(dynamic raw);
@@ -1131,6 +1137,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   ProjectReference? dco_decode_opt_box_autoadd_project_reference(dynamic raw);
 
   @protected
+  BigInt? dco_decode_opt_box_autoadd_u_64(dynamic raw);
+
+  @protected
   List<String>? dco_decode_opt_list_String(dynamic raw);
 
   @protected
@@ -1441,6 +1450,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BigInt sse_decode_box_autoadd_u_64(SseDeserializer deserializer);
+
+  @protected
   BridgeAnimatedMaskPath sse_decode_bridge_animated_mask_path(
       SseDeserializer deserializer);
 
@@ -1511,6 +1523,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeColourDisplay sse_decode_bridge_colour_display(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeColourNameRole sse_decode_bridge_colour_name_role(
       SseDeserializer deserializer);
 
   @protected
@@ -2407,6 +2423,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BigInt? sse_decode_opt_box_autoadd_u_64(SseDeserializer deserializer);
+
+  @protected
   List<String>? sse_decode_opt_list_String(SseDeserializer deserializer);
 
   @protected
@@ -2723,6 +2742,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SolidReference self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_u_64(BigInt self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_animated_mask_path(
       BridgeAnimatedMaskPath self, SseSerializer serializer);
 
@@ -2807,6 +2829,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_colour_display(
       BridgeColourDisplay self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_colour_name_role(
+      BridgeColourNameRole self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_colour_rgba(
@@ -3771,6 +3797,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_project_reference(
       ProjectReference? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_u_64(BigInt? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_list_String(List<String>? self, SseSerializer serializer);

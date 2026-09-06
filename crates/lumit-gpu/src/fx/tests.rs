@@ -15614,3 +15614,103 @@ fn the_matte_scales_the_accumulation_shutter() {
     // Bit-stable, run to run (§2.4).
     assert_eq!(half, read(&flat(0.5)), "the combine must be bit-stable");
 }
+
+/// A read-back inside a frame batch sees the frame's own drawing.
+///
+/// Inside a batch `GpuContext::encoder` records into the frame's shared encoder
+/// and submits nothing until the frame ends. A read-back that submits its own
+/// encoder at once would reach the queue ahead of everything still batched,
+/// including whatever filled the texture it copies, and come back all zeroes.
+/// That is what handed every plugin an empty frame. Remove the `ctx.flush()`
+/// from `readback_linear_f32` and this fails with every float nought.
+#[test]
+fn a_readback_inside_a_batch_waits_for_what_is_still_batched() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let (w, h) = (4u32, 4u32);
+    let descriptor = |label| wgpu::TextureDescriptor {
+        label: Some(label),
+        size: wgpu::Extent3d {
+            width: w,
+            height: h,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: crate::WORKING_FORMAT,
+        usage: wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    };
+    let src = ctx.device.create_texture(&descriptor("batch-src"));
+    let dst = ctx.device.create_texture(&descriptor("batch-dst"));
+
+    // Half grey, opaque, in every texel. A queue write is ordered against
+    // submissions, so this lands before anything below.
+    let texel = [f16_bits(0.5), f16_bits(0.5), f16_bits(0.5), f16_bits(1.0)];
+    let mut bytes = Vec::with_capacity((w * h) as usize * 8);
+    for _ in 0..w * h {
+        for half in texel {
+            bytes.extend_from_slice(&half.to_le_bytes());
+        }
+    }
+    ctx.queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &src,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        &bytes,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(w * 8),
+            rows_per_image: Some(h),
+        },
+        wgpu::Extent3d {
+            width: w,
+            height: h,
+            depth_or_array_layers: 1,
+        },
+    );
+
+    ctx.begin_frame();
+    {
+        // Recorded into the frame's shared encoder, so not submitted when the
+        // guard drops, exactly as every pass in a real frame is.
+        let mut encoder = ctx.encoder("batch-copy");
+        encoder.copy_texture_to_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &src,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyTextureInfo {
+                texture: &dst,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
+        );
+    }
+    let read = readback_linear_f32(&ctx, &dst, w, h);
+    ctx.end_frame();
+
+    let read = read.expect("the read-back itself failed");
+    let nonzero = read.iter().filter(|v| **v != 0.0).count();
+    assert_eq!(
+        nonzero,
+        read.len(),
+        "a read-back inside a batch returned {} zeroes of {}: the copy was          submitted ahead of the batch it should have queued behind",
+        read.len() - nonzero,
+        read.len()
+    );
+}

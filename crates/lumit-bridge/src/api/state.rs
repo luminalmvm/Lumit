@@ -507,6 +507,7 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         // every frame of every comp, the assignment every frame reading that
         // item — and the item's row will name its space, so both report.
         | Op::SetColourConfig { .. }
+        | Op::SetColourWorkingSpace { .. }
         | Op::SetFootageColourSpace { .. }
         // The project's colour shelf. No panel draws it — the picker
         // reads it when it opens — but it is a document change like the cache

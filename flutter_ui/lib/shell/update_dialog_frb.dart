@@ -6,7 +6,9 @@
 // is the part the user sees: the one question before a few hundred megabytes
 // are downloaded, the progress while it comes, and the restart at the end —
 // with the offer to save first, because the update cannot finish while Lumit is
-// running and nobody should lose an evening's work to a version number.
+// running and nobody should lose an evening's work to a version number. A
+// release with something to say before it is applied says it ahead of the
+// restart question, on a window of its own.
 //
 // Nothing here decides anything about updating. It asks, it shows, and it calls
 // back into the service, so the two can be read separately: what an update *is*
@@ -128,6 +130,24 @@ Future<void> _askAboutRestart(
   required bool Function() projectIsDirty,
   required Future<void> Function() saveProject,
 }) async {
+  // What the release says to read first, on its own window and ahead of the
+  // restart question, every time the row is pressed: someone who chose Later
+  // yesterday is being asked the same thing today.
+  final notice = updates.release?.notice ?? const <UpdateNoticeLine>[];
+  if (notice.isNotEmpty) {
+    final read = await showLumitModal<bool>(
+      context: context,
+      builder: (close) => _BeforeYouUpdate(
+        version: updates.release?.version ?? '',
+        lines: notice,
+        onChoose: close,
+      ),
+    );
+    // Not now, Escape and the scrim all leave the update where it is,
+    // downloaded and still offered by the row.
+    if (read != true || !context.mounted) return;
+  }
+
   final answer = await showLumitModal<_RestartAnswer>(
     context: context,
     builder: (close) => _RestartToFinish(
@@ -146,6 +166,116 @@ Future<void> _askAboutRestart(
 
 /// What the restart window can be answered with.
 enum _RestartAnswer { restart, saveAndRestart, later }
+
+/// What the release says to read before it is applied. Only ever shown for a
+/// release with something to say, and always ahead of the restart question.
+class _BeforeYouUpdate extends StatelessWidget {
+  final String version;
+  final List<UpdateNoticeLine> lines;
+  final ValueChanged<bool?> onChoose;
+
+  const _BeforeYouUpdate({
+    required this.version,
+    required this.lines,
+    required this.onChoose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return FloatSurface(
+      width: 460,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(10),
+            child: Text(l10n.updateNoticeTitle(version), style: t.bodyPrimary),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Text(
+              l10n.updateNoticeBody(version),
+              style: t.small.copyWith(color: t.textMuted),
+            ),
+          ),
+          // The notes themselves, in a box edged in the warning colour (kraft,
+          // never a red alert). Capped and scrolling, so a release with a lot
+          // to say does not push the buttons off the screen.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+            child: Container(
+              key: const ValueKey('update-notice'),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: t.surface2,
+                border: Border.all(color: t.warning),
+                borderRadius: BorderRadius.circular(t.tokens.floatRadius),
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 220),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final (index, line) in lines.indexed)
+                        Padding(
+                          padding: EdgeInsets.only(top: index == 0 ? 0 : 4),
+                          child: line.bullet
+                              ? Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    SizedBox(
+                                      width: 10,
+                                      child: Text('•', style: t.body),
+                                    ),
+                                    Expanded(
+                                      child: Text(line.text, style: t.body),
+                                    ),
+                                  ],
+                                )
+                              : Text(line.text, style: t.body),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                HouseButton(
+                  key: const ValueKey('update-notice-not-now'),
+                  small: true,
+                  frameless: true,
+                  onPressed: () => onChoose(false),
+                  child: Text(l10n.updateNotNow, style: t.small),
+                ),
+                const SizedBox(width: 8),
+                HouseButton(
+                  key: const ValueKey('update-notice-continue'),
+                  small: true,
+                  // The window's default action: Enter goes on to the restart
+                  // question, the same as every other window in the sequence.
+                  primary: true,
+                  autofocus: true,
+                  onPressed: () => onChoose(true),
+                  child: Text(l10n.updateContinue),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+        ],
+      ),
+    );
+  }
+}
 
 /// "There is a newer Lumit — shall I fetch it?", with what that costs.
 class _OfferUpdate extends StatelessWidget {
@@ -192,11 +322,12 @@ class _OfferUpdate extends StatelessWidget {
                 HouseButton(
                   key: const ValueKey('update-offer-yes'),
                   small: true,
-                  // The window's default action: Enter downloads.
+                  // The window's default action: Enter downloads. No style
+                  // on the label: the filled action sets its own capitals.
                   primary: true,
                   autofocus: true,
                   onPressed: () => onChoose(true),
-                  child: Text(l10n.updateDownload, style: t.small),
+                  child: Text(l10n.updateDownload),
                 ),
               ],
             ),
@@ -386,7 +517,7 @@ class _RestartToFinish extends StatelessWidget {
                     primary: true,
                     autofocus: true,
                     onPressed: () => onChoose(_RestartAnswer.saveAndRestart),
-                    child: Text(l10n.updateSaveAndRestart, style: t.small),
+                    child: Text(l10n.updateSaveAndRestart),
                   ),
                 ] else
                   HouseButton(
@@ -396,8 +527,7 @@ class _RestartToFinish extends StatelessWidget {
                     autofocus: true,
                     onPressed: () => onChoose(_RestartAnswer.restart),
                     child: Text(
-                        quits ? l10n.updateRestartNow : l10n.updateShowTheFile,
-                        style: t.small),
+                        quits ? l10n.updateRestartNow : l10n.updateShowTheFile),
                   ),
               ],
             ),

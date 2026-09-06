@@ -465,6 +465,15 @@ class ProjectReference {
   void setColourDepth({required int bits}) => BridgeLib.instance.api
       .crateApiProjectProjectReferenceSetColourDepth(that: this, bits: bits);
 
+  /// Choose the project's working space: Lumit's own linear Rec.709, or the
+  /// loaded config's `scene_linear` role (docs/impl/ocio.md §2.1). An
+  /// ordinary op, undoable and saved with the project, for the reason the
+  /// config itself is one.
+  void setColourWorkingSpace({required bool fromConfig}) =>
+      BridgeLib.instance.api
+          .crateApiProjectProjectReferenceSetColourWorkingSpace(
+              that: this, fromConfig: fromConfig);
+
   /// Replace the colour shelf whole — which is how a colour is kept and how
   /// one is forgotten (`Op::SetProjectSwatches`).
   ///

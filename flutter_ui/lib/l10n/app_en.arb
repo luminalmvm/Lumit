@@ -7490,6 +7490,10 @@
       }
     }
   },
+  "updateContinue": "Continue",
+  "@updateContinue": {
+    "description": "Button on the dialogue showing a release's warning: go on to the restart question."
+  },
   "updateDownload": "Download",
   "@updateDownload": {
     "description": "Button that fetches an update."
@@ -7570,6 +7574,24 @@
   "updateNotNow": "Not now",
   "@updateNotNow": {
     "description": "Button that declines an update for the moment."
+  },
+  "updateNoticeBody": "Lumit {version} is downloaded. Before it is installed, its release notes say:",
+  "@updateNoticeBody": {
+    "description": "Body of the dialogue showing a release's warning, above the warning itself. {version} is the new version, such as 0.4.0.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "updateNoticeTitle": "Before you update to Lumit {version}",
+  "@updateNoticeTitle": {
+    "description": "Title of the dialogue showing what a release warns about before it is installed. {version} is the new version, such as 0.4.0.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
   },
   "updateOfferBody": "{name} is {size}. Lumit downloads it now and installs it when you restart, so you can carry on working in the meantime.",
   "@updateOfferBody": {
@@ -10793,7 +10815,7 @@
   },
   "projectColourWorkingSpace": "Working space",
   "@projectColourWorkingSpace": {
-    "description": "Project settings, Colour group: the row stating the colour space the compositing arithmetic itself is done in. A reading, not a choice."
+    "description": "Project settings, Colour group: the row choosing the colour space the compositing arithmetic itself is done in: Lumit's own linear Rec. 709, or the OCIO configuration's scene-linear space."
   },
   "projectColourWorkingSpaceValue": "Linear Rec. 709",
   "@projectColourWorkingSpaceValue": {
@@ -11782,5 +11804,54 @@
   "audioChainNotBuilt": "The audio chain could not be built on this layer.",
   "@audioChainNotBuilt": {
     "description": "One line in the status bar at the bottom of the window, after the Audio panel's 'Drive with audio…' or 'Lower behind…' button was pressed and the chain of driver boxes it stages could not be made or wired. Calm, not an error."
+  },
+  "fxOcioColourSpaceTransform": "OCIO colour space transform",
+  "@fxOcioColourSpaceTransform": {
+    "description": "Effect controls - the name of an effect: converts a layer between two colour spaces of the project's OCIO config."
+  },
+  "fxOcioDisplayTransform": "OCIO display transform",
+  "@fxOcioDisplayTransform": {
+    "description": "Effect controls - the name of an effect: shows a layer through a display and view of the project's OCIO config."
+  },
+  "fxOcioLookTransform": "OCIO look transform",
+  "@fxOcioLookTransform": {
+    "description": "Effect controls - the name of an effect: applies a look from the project's OCIO config."
+  },
+  "fxOcioFileTransform": "OCIO file transform",
+  "@fxOcioFileTransform": {
+    "description": "Effect controls - the name of an effect: applies a LUT or CDL file through the OCIO readers."
+  },
+  "fxInputColourSpace": "Input colour space",
+  "@fxInputColourSpace": {
+    "description": "Effect controls - a dropdown naming the colour space the layer's pixels are taken to be in, from the OCIO config."
+  },
+  "fxOutputColourSpace": "Output colour space",
+  "@fxOutputColourSpace": {
+    "description": "Effect controls - a dropdown naming the colour space the effect converts to, from the OCIO config."
+  },
+  "fxLook": "Look",
+  "@fxLook": {
+    "description": "Effect controls - a dropdown naming one of the OCIO config's looks."
+  },
+  "fxInverse": "Inverse",
+  "@fxInverse": {
+    "description": "Effect controls - a checkbox that runs the OCIO transform backwards."
+  },
+  "fxWorkingSpace": "Working space",
+  "@fxWorkingSpace": {
+    "description": "Effect controls - the unset entry of an OCIO colour space dropdown: the space Lumit composites in."
+  },
+  "fxOcioConfiguration": "OCIO configuration",
+  "@fxOcioConfiguration": {
+    "description": "Effect controls - the read-only Information row of an OCIO effect, showing the name of the project's OCIO config."
+  },
+  "projectColourWorkingSpaceConfig": "The configuration's scene-linear space ({space})",
+  "@projectColourWorkingSpaceConfig": {
+    "description": "Project settings, Colour group: the second entry of the working-space dropdown. The blank is the colour space the OCIO configuration names as its scene-linear role, in the configuration's own words, or None when no configuration is loaded.",
+    "placeholders": {
+      "space": {
+        "type": "String"
+      }
+    }
   }
 }

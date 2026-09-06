@@ -14,7 +14,7 @@ import 'roto.dart';
 part 'effect.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `animation_at`, `badge_of`, `bridge_param`, `bridge_shader_ty`, `bridge_unit`, `catalogue`, `clamp_animation`, `derived_params_of`, `document_for`, `fill_derived`, `hard_bounds`, `is_audio_match_name`, `param`, `plugin_category_key`, `presets_in`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `sample_at`, `scan_audio_plugins`, `seconds_of`, `shader_error`, `validated`, `write_at`, `write_at`, `write`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `get_effects`, `new`
 
 /// Every built-in **effect**, in schema order — the Add-effect menu's source of
@@ -516,6 +516,20 @@ class BridgeColour {
           a == other.a;
 }
 
+/// Which of the config's lists a [`BridgeParamKind::ColourName`] row offers
+/// ([`lumit_core::fx::ColourNameRole`]). A View row lists the views of the
+/// display its sibling `display` row names.
+enum BridgeColourNameRole {
+  space,
+  display,
+  view,
+  look,
+
+  /// Read-only: the row shows what the loaded config calls itself.
+  config,
+  ;
+}
+
 /// One built-in effect as the Add-effect menu needs it: the stable `name` to
 /// pass to [`crate::api::layer::LayerReference::add_effect`], the sentence-case
 /// `label` to draw, and the category to group under. `category` is a stable
@@ -720,6 +734,11 @@ sealed class BridgeEffectValue with _$BridgeEffectValue {
   const factory BridgeEffectValue.curve(
     List<Float32List> field0,
   ) = BridgeEffectValue_Curve;
+
+  /// A name from the OCIO config, as the config spells it; empty is unset.
+  const factory BridgeEffectValue.text(
+    String field0,
+  ) = BridgeEffectValue_Text;
 }
 
 @freezed
@@ -990,6 +1009,14 @@ sealed class BridgeParamKind with _$BridgeParamKind {
     required List<String> filter,
     required String filterName,
   }) = BridgeParamKind_File;
+
+  /// A name from the project's OCIO config, drawn as a dropdown the panel
+  /// fills from the colour summary it already holds (docs/impl/ocio.md
+  /// §6.6). The value crossing is a [`BridgeEffectValue::Text`]: the
+  /// config's own spelling, empty for unset.
+  const factory BridgeParamKind.colourName({
+    required BridgeColourNameRole role,
+  }) = BridgeParamKind_ColourName;
   const factory BridgeParamKind.layer() = BridgeParamKind_Layer;
 
   /// One of the **owning layer's masks**, whose geometry the effect walks

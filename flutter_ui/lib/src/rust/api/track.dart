@@ -9,7 +9,7 @@ import 'layer.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 
-// These functions are ignored because they are not marked as `pub`: `create_transform_keys`, `failure_of`, `idle`, `idle`, `media_source`, `tracked_media`
+// These functions are ignored because they are not marked as `pub`: `create_transform_keys`, `failure_of`, `idle`, `idle`, `media_source`, `press_frame`, `press_plugin_now`, `press_plugin`, `tracked_media`, `write_row`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// How `layer`'s analysis is getting on.
@@ -48,16 +48,22 @@ BridgeCameraLink cameraLink(
 /// Press one of an effect's Action parameters.
 ///
 /// An Action carries no value, so this is an **event** and not a write: nothing
-/// is staged, nothing is committed, and no undo entry appears. Today the Camera
-/// track's Analyse and Cancel are the only two; an unknown effect or parameter
-/// is refused rather than ignored, because a button that silently does nothing
-/// is the hardest kind of fault to see.
+/// is staged, nothing is committed, and no undo entry appears. The built-in
+/// buttons are the trackers' and the Roto brush's; an unknown effect or
+/// parameter is refused rather than ignored, because a button that silently
+/// does nothing is the hardest kind of fault to see.
+///
+/// A **plugin's** button is the one exception to "no write": it goes to the
+/// plugin, which may open its own window and stay there, and what the plugin
+/// wrote comes back into the document as one undo step when it returns. `frame`
+/// is the playhead, so the plugin sees the frame the user is looking at.
 void fireEffectAction(
         {required LayerReference layer,
         required UuidValue effect,
-        required String param}) =>
+        required String param,
+        BigInt? frame}) =>
     BridgeLib.instance.api.crateApiTrackFireEffectAction(
-        layer: layer, effect: effect, param: param);
+        layer: layer, effect: effect, param: param, frame: frame);
 
 /// Add a Camera layer whose motion is derived from `tracked`'s solve.
 ///

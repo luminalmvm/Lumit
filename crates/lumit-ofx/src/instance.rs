@@ -46,8 +46,9 @@ use crate::describe::{
 use crate::ffi::{actions, prop_keys as keys, prop_values as values};
 use crate::handles::Handle;
 use crate::host::state;
-use crate::image::Image;
+use crate::image::{Frame16, Image, RectI, RowOrder};
 use crate::props::{PropValue, PropertySet};
+use crate::render::{OUTPUT_CLIP, SOURCE_CLIP};
 use crate::status::Status;
 
 /// What a plugin says about running two renders at once
@@ -179,6 +180,17 @@ impl ParamSnapshot {
     #[must_use]
     pub fn get(&self, name: &str) -> Option<&PropValue> {
         self.values.get(name)
+    }
+
+    /// Every control and its value, by name.
+    pub fn iter(&self) -> impl Iterator<Item = (&String, &PropValue)> {
+        self.values.iter()
+    }
+
+    /// Whether there is nothing in it.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
     }
 }
 
@@ -321,6 +333,23 @@ impl Instance {
         Ok(())
     }
 
+    /// Every control's value as the plugin last left it. After a press this is
+    /// where whatever the plugin wrote from its own window ends up.
+    ///
+    /// # Errors
+    ///
+    /// [`Status::ErrBadHandle`] if the instance is gone.
+    pub fn params(&self) -> Result<ParamSnapshot, Status> {
+        let state = state();
+        let instance = state
+            .effects
+            .get(self.handle)?
+            .instance
+            .as_ref()
+            .ok_or(Status::ErrBadHandle)?;
+        Ok(instance.params.clone())
+    }
+
     /// Replace one control's value and tell the plugin, wrapped as the spec
     /// requires: `kOfxActionBeginInstanceChanged`, the change, then
     /// `kOfxActionEndInstanceChanged`. Sapphire relies on the wrapping
@@ -402,6 +431,55 @@ impl Instance {
             }
         }
         Ok(())
+    }
+
+    /// Press one of the plugin's buttons and hand back every value afterwards.
+    ///
+    /// A button is `kOfxActionInstanceChanged` like any other control, but the
+    /// plugin may do anything at all inside it. Magic Bullet Looks opens its
+    /// whole editor and stays there until the user closes it. So the frame goes
+    /// on first, since that editor asks the Source clip for a preview and will
+    /// not open without one, and the values come back after, since a look is
+    /// stored by the plugin writing its own parameters.
+    ///
+    /// # Errors
+    ///
+    /// The plugin's own failure status, or [`Status::ErrBadHandle`] if the
+    /// instance is gone.
+    pub fn press(
+        &self,
+        plugin: &PluginRef,
+        name: &str,
+        time: f64,
+        source: &Frame16,
+    ) -> Result<ParamSnapshot, Status> {
+        let (width, height) = (source.width(), source.height());
+        let bounds = RectI::sized(
+            i32::try_from(width).map_err(|_| Status::ErrValue)?,
+            i32::try_from(height).map_err(|_| Status::ErrValue)?,
+        );
+        let mut images = BTreeMap::new();
+        images.insert(
+            SOURCE_CLIP.to_owned(),
+            Image::from_frame(source, RowOrder::BottomUp)?,
+        );
+        images.insert(
+            OUTPUT_CLIP.to_owned(),
+            Image::black(bounds, RowOrder::BottomUp)?,
+        );
+        set_images(self.handle, images, BTreeMap::new())?;
+        set_project_size(self.handle, width as f64, height as f64)?;
+        let outcome = self.changed(
+            plugin,
+            name,
+            PropValue::Int(vec![0]),
+            values::CHANGE_USER_EDITED,
+            time,
+        );
+        // Off again whatever the plugin did, so the next render starts clean.
+        let _ = take_images(self.handle);
+        outcome?;
+        self.params()
     }
 
     /// Tell the plugin the instance is going, and take everything down.

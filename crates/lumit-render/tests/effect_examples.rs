@@ -544,6 +544,12 @@ fn unillustrable(match_name: &str) -> Option<&'static str> {
         // the plate with "Lens flare" under it. Take this line out the day the
         // flare's additive pass reaches this renderer.
         "lens_flare" => Some("adds nothing to a headless render (defect, not by design)"),
+        // The three config-bound OCIO effects list the project's config, and
+        // this harness has no config to point at. The file transform draws
+        // the example cube, as the LUT does.
+        "ocio_colour_space" | "ocio_display" | "ocio_look" => {
+            Some("needs the project's OCIO config, and there is none here")
+        }
         _ => None,
     }
 }
@@ -873,7 +879,7 @@ fn render_every_effect_example() {
             continue;
         };
         wire_aux(&mut inst);
-        if e.match_name == "lut" {
+        if e.match_name == "lut" || e.match_name == "ocio_file" {
             set(
                 &mut inst,
                 "file",

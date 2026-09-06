@@ -26,6 +26,7 @@ import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/angle_dial.dart';
 import 'package:lumit_flutter/widgets/dashed_outline.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/colour.dart';
 import 'package:lumit_flutter/src/rust/api/graph.dart';
 import 'package:uuid/uuid.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -2628,6 +2629,44 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
 
       expect(find.textContaining('wgsl:3:'), findsOneWidget,
           reason: 'the compiler names line 3 of the three lines they wrote');
+    });
+
+    /// An OCIO name row lists the project's config from the summary the
+    /// interface already holds, and a pick writes the config's own spelling.
+    testWidgets('an OCIO name row lists the config and writes the name',
+        (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'ocio_colour_space');
+      p.uiState.colourSummary = const BridgeColourSummary(
+        path: 'config.ocio',
+        loaded: true,
+        problem: '',
+        problemArgs: [],
+        problemEnglish: '',
+        spaces: ['lin', 'srgb_texture'],
+        displays: [],
+        looks: [],
+        name: 'test config',
+        workingFromConfig: false,
+        workingSpace: '',
+      );
+      await mount(tester, p, transform: false);
+
+      final id = p.layer.getEffects().single.id();
+      final row = find
+          .byKey(ValueKey<String>('fx-colour-name-$id-output_colour_space'));
+      expect(row, findsOneWidget);
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('srgb_texture').last);
+      await tester.pumpAndSettle();
+
+      expect(
+        p.layer.getEffects().single.getValue(id: 'output_colour_space'),
+        isA<BridgeEffectValue_Text>()
+            .having((v) => v.field0, 'name', 'srgb_texture'),
+        reason: 'the pick reached the document as the config spells it',
+      );
     });
 
     // Without the built library there is nothing to test against; the harness

@@ -91,6 +91,10 @@ into the `.lum` file, and are readable from expressions like any built-in proper
 `paramGetValueAtTime` evaluates the property (including any expression on it) at the
 requested time. Custom parameters carry opaque vendor blobs; Lumit stores and round-trips
 them without interpretation. Parameter pages/groups become the Effect Controls layout.
+A push button is the plugin's own: pressing it sends `kOfxActionInstanceChanged` with the
+Source frame in place, the plugin may open its own window and stay in it, and whatever it
+wrote comes back into the document, rows as rows and everything no row carries as the
+instance's plugin state.
 
 ### 2.3 Out-of-process hosting
 

@@ -15,7 +15,6 @@
 //! viewport, in Flutter, and in the exported file.
 
 use crate::draw::{AccumulationBelow, CompLayerDraw, DrawSource, LayerInputDraw};
-use crate::fxops::LoadedLut;
 
 /// The GPU primitives that turn a comp draw list into a linear texture,
 /// borrowed from whichever owner is compositing — a frontend's viewer, the
@@ -78,6 +77,11 @@ pub struct Realiser<'a> {
     /// anybody's camera, so it has no colour space to be interpreted through and
     /// takes the built-in path deliberately.
     pub colour_inputs: Option<&'a crate::colour::InputTransforms>,
+    /// The project's OCIO config, loaded and usable, for the OCIO effects'
+    /// tables (docs/08 §3.97). `None` - no config, an unusable one, or any of
+    /// the test builders - leaves the three config-bound OCIO effects as
+    /// passthroughs; the file transform reads its file either way.
+    pub colour_config: Option<&'a std::sync::Arc<crate::colour::Loaded>>,
     /// The flow backend a composite measurement runs on (docs/08 §3.2),
     /// held by the render's owner beside the caches above and for the same
     /// reason: the solver's plan is worth keeping between frames. `None` — a
@@ -109,7 +113,7 @@ impl Realiser<'_> {
     /// project with no config, a config that is not usable, and a name the
     /// loaded config does not have.
     fn input_transform(&self, space: &Option<String>) -> Option<&lumit_gpu::OcioArtefact> {
-        self.colour_inputs?.get(space.as_deref()?)
+        self.colour_inputs?.get(space.as_deref())
     }
 
     /// Source pixels to a linear working texture, whichever width they arrived
@@ -228,18 +232,30 @@ impl Realiser<'_> {
             .collect()
     }
 
-    /// Turn a layer's ordered `lut_files` into the parallel `luts` list
+    /// Turn a layer's ordered `colour_tables` into the parallel `tables` list
     /// `run_ops` binds (docs/08 §3.11): each `Some(path)` is parsed and
     /// uploaded once — cached by path *and* last-modified time, bounded and
     /// LRU-evicted (docs/impl/lut.md §4) — and a 1D or unreadable/absent
     /// file yields a `None` slot (a labelled no-op, never a fault). The output
     /// is 1:1 and in order with `files`, so the k-th slot lines up with the
     /// k-th `lut` op.
-    fn load_luts(&self, files: &[Option<String>]) -> Vec<Option<LoadedLut>> {
+    fn load_tables(
+        &self,
+        files: &[Option<crate::colour::TableRequest>],
+    ) -> Vec<Option<crate::fxops::ColourTable>> {
+        use crate::colour::TableRequest;
+        use crate::fxops::ColourTable;
         let mut cache = self.lut_cache.borrow_mut();
         files
             .iter()
-            .map(|slot| cache.get_or_load(&self.ctx, slot.as_ref()?))
+            .map(|slot| match slot.as_ref()? {
+                TableRequest::Cube(path) => {
+                    cache.get_or_load(&self.ctx, path).map(ColourTable::Cube)
+                }
+                TableRequest::Ocio(request) => cache
+                    .get_or_bake(&self.ctx, self.engine, request, self.colour_config)
+                    .map(ColourTable::Ocio),
+            })
             .collect()
     }
 
@@ -290,7 +306,7 @@ impl Realiser<'_> {
                 let linear = if d.fx.is_empty() {
                     linear
                 } else {
-                    let luts = self.load_luts(&d.lut_files);
+                    let tables = self.load_tables(&d.colour_tables);
                     crate::fxops::run_ops(
                         self.fx,
                         &self.ctx,
@@ -300,7 +316,7 @@ impl Realiser<'_> {
                         &d.fx,
                         &[],
                         &[],
-                        &luts,
+                        &tables,
                         &[],
                         &[],
                         &[],
@@ -510,7 +526,7 @@ impl Realiser<'_> {
             // them the same way the per-layer path does, so preview stays
             // identical to export. The adjustment stack runs on the
             // comp-sized composite, so its depth inputs resample to comp size.
-            let luts = self.load_luts(&l.lut_files);
+            let tables = self.load_tables(&l.colour_tables);
             let layer_inputs = self.render_layer_inputs(&l.dof_inputs, tw, th);
             let mattes = self.render_layer_inputs(&l.mattes, tw, th);
             let flare_lens = self.load_flare_lens(&l.flare_lens_files);
@@ -570,7 +586,7 @@ impl Realiser<'_> {
                 &fx_ops,
                 &flow_neighbours,
                 &flow,
-                &luts,
+                &tables,
                 &layer_inputs,
                 &flare_lens,
                 &mattes,
@@ -839,7 +855,7 @@ impl Realiser<'_> {
         let linear = if m.fx.is_empty() {
             linear
         } else {
-            let luts = self.load_luts(&m.lut_files);
+            let tables = self.load_tables(&m.colour_tables);
             crate::fxops::run_ops(
                 self.fx,
                 &self.ctx,
@@ -849,7 +865,7 @@ impl Realiser<'_> {
                 &m.fx,
                 &[],
                 &[],
-                &luts,
+                &tables,
                 &[],
                 &[],
                 &[],
@@ -1082,7 +1098,7 @@ impl Realiser<'_> {
                 };
                 // The parsed-and-uploaded `.cube` LUTs, 1:1 with the stack's
                 // `lut` ops (§3.11); the same load export uses.
-                let luts = self.load_luts(&l.lut_files);
+                let tables = self.load_tables(&l.colour_tables);
                 // The layer inputs — a depth pass, a Light wrap background —
                 // resampled to this layer's working raster (w, h), 1:1 with the
                 // stack's consuming ops (§3.22, §3.28); the same render export
@@ -1123,7 +1139,7 @@ impl Realiser<'_> {
                     &fx_ops,
                     &neighbours,
                     &flow,
-                    &luts,
+                    &tables,
                     &layer_inputs,
                     &flare_lens,
                     &mattes,

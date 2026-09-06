@@ -721,3 +721,96 @@ fn preview_equals_export_in_every_colour_configuration() {
         );
     }
 }
+
+/// The same probes through the OCIO effects' kernel (docs/08 §3.97) rather
+/// than the display pass. Both prepend `ocio_sample.wgsl`; this is the proof
+/// that an effect in a stack reads a table as the Viewer does.
+fn through_the_effect(
+    artefact: &Artefact,
+    colours: &[[f32; 3]],
+    mix: f32,
+) -> Option<Vec<[f32; 3]>> {
+    let ctx = lumit_gpu::test_support::lease()?;
+    let uploaded = ctx.colour().upload_ocio(&ctx, &tables(artefact));
+    let width = colours.len() as u32;
+    let mut halves: Vec<u16> = Vec::with_capacity(colours.len() * 4);
+    for c in colours {
+        for v in [c[0], c[1], c[2], 1.0] {
+            halves.push(half::f16::from_f32(v).to_bits());
+        }
+    }
+    let src = ctx.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("ocio-effect-src"),
+        size: wgpu::Extent3d {
+            width,
+            height: 1,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: lumit_gpu::WORKING_FORMAT,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    ctx.queue.write_texture(
+        src.as_image_copy(),
+        bytemuck::cast_slice(&halves),
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(width * 8),
+            rows_per_image: Some(1),
+        },
+        src.size(),
+    );
+    let out = ctx.fx().ocio(&ctx, &src, width, 1, &uploaded, mix);
+    Some(read_f16_row(&ctx, &out, width))
+}
+
+#[test]
+fn the_effect_kernel_reads_a_table_as_the_display_pass_does() {
+    for (chain, what) in [
+        (factorised_chain(), "factorised"),
+        (cube_chain(), "tetrahedral"),
+    ] {
+        let artefact = bake(&chain, Shaper::DEFAULT).expect("bakes");
+        let colours = probe_colours();
+        let Some(gpu) = through_the_effect(&artefact, &colours, 1.0) else {
+            eprintln!("no adapter here, skipping the {what} effect check");
+            return;
+        };
+        for (c, got) in colours.iter().zip(gpu) {
+            let c16 = [
+                half::f16::from_f32(c[0]).to_f32(),
+                half::f16::from_f32(c[1]).to_f32(),
+                half::f16::from_f32(c[2]).to_f32(),
+            ];
+            let want = artefact.eval(c16);
+            for k in 0..3 {
+                let want_k = half::f16::from_f32(want[k]).to_f32();
+                assert!(
+                    agrees(got[k], want_k),
+                    "{what} effect: at {c:?} channel {k}, the card said {} and the oracle said {want_k}",
+                    got[k]
+                );
+            }
+        }
+    }
+}
+
+/// Mix 0 is the input to the bit: the blend is `a + (b - a) * t`, spelled so
+/// that t = 0 reads the untouched pixel back.
+#[test]
+fn the_effect_kernel_at_mix_zero_is_the_input() {
+    let artefact = bake(&cube_chain(), Shaper::DEFAULT).expect("bakes");
+    let colours = probe_colours();
+    let Some(gpu) = through_the_effect(&artefact, &colours, 0.0) else {
+        eprintln!("no adapter here, skipping the mix check");
+        return;
+    };
+    for (c, got) in colours.iter().zip(gpu) {
+        for k in 0..3 {
+            assert_eq!(got[k], half::f16::from_f32(c[k]).to_f32(), "at {c:?}");
+        }
+    }
+}

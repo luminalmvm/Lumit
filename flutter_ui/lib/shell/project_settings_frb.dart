@@ -90,6 +90,10 @@ class _ProjectSettingsWindowState extends State<_ProjectSettingsWindow> {
         problemEnglish: '',
         spaces: [],
         displays: [],
+        looks: [],
+        name: '',
+        workingFromConfig: false,
+        workingSpace: '',
       );
     }
   }
@@ -257,16 +261,30 @@ class _ProjectSettingsWindowState extends State<_ProjectSettingsWindow> {
               ),
             ]),
           ),
-          // Which primaries the compositing maths is done in — fixed in v1,
-          // and stated rather than left to be assumed.
+          // Which primaries the compositing maths is done in: Lumit's own
+          // linear Rec. 709, or the config's scene-linear space. The second
+          // needs a loaded config to mean anything, so it is offered only
+          // then; the setting itself is the project's and survives either way.
           settingsRow(
             t,
             l10n.projectColourWorkingSpace,
             '',
-            Text(
-              l10n.projectColourWorkingSpaceValue,
+            BareDropdown<int>(
               key: const ValueKey('project-colour-working-space'),
-              style: t.small,
+              value: _colour.workingFromConfig ? 1 : 0,
+              options: const [0, 1],
+              label: (i) => i == 0
+                  ? l10n.projectColourWorkingSpaceValue
+                  : l10n.projectColourWorkingSpaceConfig(
+                      _colour.workingSpace.isEmpty
+                          ? l10n.none
+                          : _colour.workingSpace),
+              onChanged: _colour.loaded || _colour.workingFromConfig
+                  ? (i) {
+                      widget.project.setColourWorkingSpace(fromConfig: i == 1);
+                      setState(() => _colour = _readColour());
+                    }
+                  : null,
             ),
           ),
         ]),

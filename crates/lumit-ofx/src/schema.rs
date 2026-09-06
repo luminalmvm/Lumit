@@ -161,6 +161,8 @@ pub fn schema_of(plugin: &PluginDescriptor) -> Result<EffectSchema, Rejection> {
 pub struct ValueRoute {
     /// The row, as the bag keys it.
     pub id: ParamId,
+    /// The same row by its schema id, which is how the document names it.
+    pub row: &'static str,
     /// The plugin's own name for the parameter this row is part of.
     pub name: String,
     /// One of [`crate::ffi::param_types`] — what shape the value crosses in.
@@ -186,6 +188,7 @@ pub fn value_routes(plugin: &PluginDescriptor) -> Vec<ValueRoute> {
         for (component, row) in rows.iter().enumerate() {
             routes.push(ValueRoute {
                 id: ParamId::new(row.id),
+                row: row.id,
                 name: param.name.clone(),
                 param_type: param.param_type.clone(),
                 component,

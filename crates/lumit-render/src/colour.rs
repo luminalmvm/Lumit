@@ -29,8 +29,8 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
 
-use lumit_colour::{bake, Artefact, LoadedConfig, Shaper, Stage};
-use lumit_core::model::Document;
+use lumit_colour::{bake, Artefact, Chain, Direction, LoadedConfig, Op, Shaper, Stage};
+use lumit_core::model::{Document, WorkingSpace};
 
 /// Which transform a baked artefact is, so two of them are never confused for
 /// each other in the cache.
@@ -42,6 +42,55 @@ pub enum Edge {
     DisplayView(String, String),
     /// The working space → a named space, which is what an export delivers.
     Output(String),
+    /// One named space to another, an empty name being the working space on
+    /// either side: the OCIO colour space transform effect (docs/08 §3.97).
+    Convert { from: String, to: String },
+    /// A named space (empty: the working space) → a display and view, or the
+    /// reverse: the OCIO display transform effect.
+    Display {
+        input: String,
+        display: String,
+        view: String,
+        inverse: bool,
+    },
+    /// A look between two named spaces (empty: the working space): the OCIO
+    /// look transform effect.
+    Look {
+        input: String,
+        look: String,
+        output: String,
+        inverse: bool,
+    },
+    /// Untagged footage under a config-defined working space: the built-in
+    /// sRGB decode, then Rec.709 → the working space (docs/impl/ocio.md §2.1).
+    Untagged,
+    /// The built-in view under a config-defined working space: the working
+    /// space → Rec.709, then the sRGB encode the hardware would have done.
+    BuiltinDisplay,
+}
+
+/// What one slot of a layer's parallel colour-table list is made from
+/// (docs/impl/effect-registry.md §2.5a): the k-th such slot belongs to the
+/// k-th `lut` or OCIO op in the stack. Strings only - no GPU work happens
+/// where these are built.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum TableRequest {
+    /// A `lut` effect's `.cube` path.
+    Cube(String),
+    /// One of the OCIO effects' tables.
+    Ocio(OcioRequest),
+}
+
+/// An OCIO effect's table: an edge of the project's config, or a file read
+/// on its own, which needs no config at all.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum OcioRequest {
+    Config(Edge),
+    /// The OCIO file transform effect: a LUT or CDL file, forward or inverted.
+    File {
+        path: String,
+        inverse: bool,
+    },
 }
 
 /// A refusal as the frontend needs it: the stable id it writes its own
@@ -90,6 +139,10 @@ pub struct Loaded {
     /// `None` when the config could not be loaded or is not usable — the state
     /// the degrade ladder reads.
     config: Option<LoadedConfig>,
+    /// Linear Rec.709 → the working space, when the project composites in
+    /// the config's `scene_linear` and the config can say what that is.
+    /// `None` is Lumit's own working space, or a config that cannot say.
+    rec709_to_working: Option<lumit_colour::matrix::Matrix34>,
     /// One calm sentence, present exactly when `config` is `None`.
     pub problem: Option<String>,
     /// The same refusal, keyed — present exactly when `problem` is.
@@ -115,13 +168,52 @@ impl Loaded {
         self.config.is_some()
     }
 
-    /// The names a picker lists, in the config's own order — active spaces
-    /// only, then each display with its views. Empty when unusable.
+    /// The working space's name when the project composites in the config's
+    /// `scene_linear`, `None` for Lumit's own linear Rec.709.
     #[must_use]
-    pub fn vocabulary(&self) -> (Vec<String>, Vec<(String, Vec<String>)>) {
+    pub fn working_space(&self) -> Option<&str> {
+        self.config.as_ref()?.working_space()
+    }
+
+    /// Linear Rec.709 → the working space, or `None` when they are one and
+    /// the same for rendering (see the field).
+    #[must_use]
+    pub fn rec709_to_working(&self) -> Option<&lumit_colour::matrix::Matrix34> {
+        self.rec709_to_working.as_ref()
+    }
+
+    /// What the config calls itself, for the OCIO effects' Information row:
+    /// its own name or description, or the file's name when it states
+    /// neither. Empty when unusable.
+    #[must_use]
+    pub fn name(&self) -> String {
         let Some(c) = &self.config else {
-            return (Vec::new(), Vec::new());
+            return String::new();
         };
+        if !c.config.name.is_empty() {
+            return c.config.name.clone();
+        }
+        Path::new(&self.path)
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_default()
+    }
+
+    /// The names a picker lists, in the config's own order — active spaces
+    /// only, then each display with its views, then the looks. Empty when
+    /// unusable.
+    #[must_use]
+    #[allow(clippy::type_complexity)]
+    pub fn vocabulary(&self) -> (Vec<String>, Vec<(String, Vec<String>)>, Vec<String>) {
+        let Some(c) = &self.config else {
+            return (Vec::new(), Vec::new(), Vec::new());
+        };
+        let looks = c
+            .config
+            .look_names()
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
         let spaces = c
             .config
             .active_space_names()
@@ -139,7 +231,7 @@ impl Loaded {
                 )
             })
             .collect();
-        (spaces, displays)
+        (spaces, displays, looks)
     }
 
     /// The baked table for one edge, or `None` if this config cannot make it.
@@ -164,6 +256,12 @@ impl Loaded {
 
     fn bake_edge(&self, edge: &Edge) -> Option<Artefact> {
         let c = self.config.as_ref()?;
+        // An effect's empty name is the working space, whose shaper is the
+        // default one (§5.1): the document has no name for it.
+        fn named(s: &str) -> Option<&str> {
+            (!s.is_empty()).then_some(s)
+        }
+        let shaper_of = |s: &String| named(s).map_or(Shaper::DEFAULT, |n| c.shaper_for(n));
         let (chain, shaper) = match edge {
             Edge::Input(name) => (c.from_space(name), c.shaper_for(name)),
             // The working space is the domain of both of these, and the
@@ -171,10 +269,86 @@ impl Loaded {
             // is what §5.1 says it is for.
             Edge::DisplayView(display, view) => (c.display_view(display, view), Shaper::DEFAULT),
             Edge::Output(name) => (c.to_space(name), Shaper::DEFAULT),
+            Edge::Convert { from, to } => (c.convert(named(from), named(to)), shaper_of(from)),
+            // Inverted, the domain is the view's display encoding, which the
+            // default shaper covers. A view with a 3D table in it refuses to
+            // invert, by name, and the effect passes through.
+            Edge::Display {
+                input,
+                display,
+                view,
+                inverse,
+            } => (
+                c.display_view_from(named(input), display, view)
+                    .and_then(|chain| {
+                        if *inverse {
+                            chain.inverted(view)
+                        } else {
+                            Ok(chain)
+                        }
+                    }),
+                if *inverse {
+                    Shaper::DEFAULT
+                } else {
+                    shaper_of(input)
+                },
+            ),
+            Edge::Look {
+                input,
+                look,
+                output,
+                inverse,
+            } => {
+                let spec = if *inverse {
+                    format!("-{look}")
+                } else {
+                    look.clone()
+                };
+                (
+                    c.look_between(named(input), &spec, named(output)),
+                    shaper_of(input),
+                )
+            }
+            // The two built-in edges: the sRGB curve the hardware applies,
+            // with the primaries change beside it. Both refuse without the
+            // matrix, which is when the hardware path is the right one.
+            Edge::Untagged => {
+                let m = *self.rec709_to_working.as_ref()?;
+                (
+                    Ok(Chain::new(vec![
+                        srgb_curve(Direction::Forward),
+                        Op::Matrix(m),
+                    ])),
+                    Shaper::DEFAULT,
+                )
+            }
+            Edge::BuiltinDisplay => {
+                let m = lumit_colour::matrix::invert(self.rec709_to_working.as_ref()?).ok()?;
+                (
+                    Ok(Chain::new(vec![
+                        Op::Matrix(m),
+                        srgb_curve(Direction::Inverse),
+                    ])),
+                    Shaper::DEFAULT,
+                )
+            }
         };
         bake(&chain.ok()?, shaper).ok()
     }
 }
+
+/// The sRGB transfer curve as a chain step: forward decodes, inverse encodes.
+/// The same numbers the hardware's sRGB texture formats use, so a baked
+/// built-in edge and the hardware path agree (the double-encode test).
+fn srgb_curve(dir: Direction) -> Op {
+    Op::MonCurve {
+        gamma: [2.4; 3],
+        offset: [0.055; 3],
+        dir,
+    }
+}
+
+impl Loaded {}
 
 /// The renderer's colour state: at most one config, reloaded when the document
 /// points somewhere else or the file underneath changes.
@@ -183,7 +357,7 @@ pub struct ColourState {
     loaded: Option<Arc<Loaded>>,
     /// What `loaded` was built from, so an unchanged document costs one
     /// comparison rather than one parse.
-    from: Option<(String, u64)>,
+    from: Option<(String, u64, WorkingSpace)>,
     /// The look-up-table files the loaded config names
     /// ([`LoadedConfig::files_read`]), kept so the next sync can ask whether any
     /// of them has been edited — the file list is only knowable once the config
@@ -213,13 +387,14 @@ impl ColourState {
         // hash, the parse below hands back the list again, and a *changed* list
         // can only come from a changed config file, which changed the hash on
         // its own bytes.
+        let working = doc.colour.working_space;
         let hash = bytes
             .as_ref()
-            .map_or(0, |b| content_hash(b, self.files.as_slice()));
-        if self.from.as_ref() == Some(&(path.clone(), hash)) {
+            .map_or(0, |b| content_hash(b, self.files.as_slice(), working));
+        if self.from.as_ref() == Some(&(path.clone(), hash, working)) {
             return;
         }
-        let mut loaded = load(&path, hash, bytes.is_some());
+        let mut loaded = load(&path, hash, bytes.is_some(), working);
         self.files = loaded
             .config
             .as_ref()
@@ -229,9 +404,9 @@ impl ColourState {
         // stored is the one the next sync will compute rather than one parse
         // behind it.
         if let Some(b) = &bytes {
-            loaded.hash = content_hash(b, &self.files);
+            loaded.hash = content_hash(b, &self.files, working);
         }
-        self.from = Some((path.clone(), loaded.hash));
+        self.from = Some((path.clone(), loaded.hash, working));
         self.loaded = Some(Arc::new(loaded));
     }
 
@@ -278,11 +453,12 @@ impl ColourState {
 
 /// Load and check a config, turning every failure into a state rather than an
 /// error (§3.3).
-fn load(path: &str, hash: u64, present: bool) -> Loaded {
+fn load(path: &str, hash: u64, present: bool, working: WorkingSpace) -> Loaded {
     let empty = |problem: String, refusal: Refusal| Loaded {
         path: path.to_string(),
         hash,
         config: None,
+        rec709_to_working: None,
         problem: Some(problem),
         refusal: Some(refusal),
         baked: std::sync::Mutex::new(BTreeMap::new()),
@@ -298,8 +474,8 @@ fn load(path: &str, hash: u64, present: bool) -> Loaded {
             },
         );
     }
-    let loaded = match LoadedConfig::load(Path::new(path)) {
-        Ok(l) => l,
+    let loaded = match lumit_colour::Config::load(Path::new(path)) {
+        Ok(c) => LoadedConfig::with_working(c, working == WorkingSpace::ConfigSceneLinear),
         Err(e) => return empty(e.to_string(), Refusal::from_error(&e, None)),
     };
     // `unresolvable` is the crate's own is-this-config-usable answer: every
@@ -314,10 +490,15 @@ fn load(path: &str, hash: u64, present: bool) -> Loaded {
         let refusal = Refusal::from_error(&why, Some(&space));
         return empty(format!("{why} (the colour space {space})"), refusal);
     }
+    // A `scene_linear` the config cannot place against Rec.709 is taken as
+    // Rec.709, which is what compose-through always meant; the matrix is
+    // `None` and the built-in paths stay the hardware ones.
+    let rec709_to_working = loaded.rec709_to_working().ok().flatten();
     Loaded {
         path: path.to_string(),
         hash,
         config: Some(loaded),
+        rec709_to_working,
         problem: None,
         refusal: None,
         baked: std::sync::Mutex::new(BTreeMap::new()),
@@ -343,9 +524,12 @@ fn load(path: &str, hash: u64, present: bool) -> Loaded {
 /// step restoring the mtime it found — which keeps the frames it made until the
 /// project is reloaded. If that ever bites, hash the bytes and cache each
 /// file's hash against its stamp.
-fn content_hash(bytes: &[u8], files: &[std::path::PathBuf]) -> u64 {
+fn content_hash(bytes: &[u8], files: &[std::path::PathBuf], working: WorkingSpace) -> u64 {
     let mut hasher = blake3::Hasher::new();
     hasher.update(bytes);
+    // The working space is part of what the config's tables mean, so the
+    // choice renames every frame as surely as an edit to the file does.
+    hasher.update(&[u8::from(working == WorkingSpace::ConfigSceneLinear)]);
     for file in files {
         hasher.update(file.as_os_str().as_encoded_bytes());
         if let Ok(meta) = std::fs::metadata(file) {
@@ -434,6 +618,11 @@ pub fn footage_colour_space(doc: &Document, kind: &lumit_core::model::LayerKind)
 #[derive(Default)]
 pub struct InputTransforms {
     by_space: BTreeMap<String, lumit_gpu::OcioArtefact>,
+    /// What untagged footage, and footage tagged with a name the config does
+    /// not have, linearises through under a config-defined working space: the
+    /// built-in sRGB decode with the primaries change behind it. `None` is the
+    /// hardware decode, which is right whenever the working space is Rec.709.
+    default: Option<lumit_gpu::OcioArtefact>,
 }
 
 impl InputTransforms {
@@ -448,8 +637,14 @@ impl InputTransforms {
     ) -> Self {
         let mut by_space = BTreeMap::new();
         let Some(loaded) = state.loaded().filter(|l| l.usable()) else {
-            return Self { by_space };
+            return Self {
+                by_space,
+                default: None,
+            };
         };
+        let default = loaded
+            .artefact(&Edge::Untagged)
+            .map(|a| engine.upload_ocio(ctx, &tables(&a)));
         for item in &doc.items {
             let lumit_core::model::ProjectItem::Footage(f) = item else {
                 continue;
@@ -464,19 +659,23 @@ impl InputTransforms {
                 by_space.insert(space.clone(), engine.upload_ocio(ctx, &tables(&a)));
             }
         }
-        Self { by_space }
+        Self { by_space, default }
     }
 
+    /// The input transform for a footage item's space, or for none. A name
+    /// the config does not have takes the untagged path, as it always did.
     #[must_use]
-    pub fn get(&self, space: &str) -> Option<&lumit_gpu::OcioArtefact> {
-        self.by_space.get(space)
+    pub fn get(&self, space: Option<&str>) -> Option<&lumit_gpu::OcioArtefact> {
+        space
+            .and_then(|s| self.by_space.get(s))
+            .or(self.default.as_ref())
     }
 
     /// Whether this frame needs any input transform at all — the cheap check
     /// that keeps an ordinary project's render exactly as it was.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.by_space.is_empty()
+        self.by_space.is_empty() && self.default.is_none()
     }
 }
 

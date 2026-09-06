@@ -2665,6 +2665,473 @@
       "matte_role": "strength"
     },
     {
+      "slug": "ocio-colour-space-transform",
+      "match_name": "ocio_colour_space",
+      "label": "OCIO colour space transform",
+      "version": 1,
+      "category": "Colour",
+      "category_slug": "colour",
+      "params": [
+        {
+          "id": "input_colour_space",
+          "label": "Input colour space",
+          "kind": "colour_name",
+          "unit": "raw",
+          "colour_role": "space"
+        },
+        {
+          "id": "output_colour_space",
+          "label": "Output colour space",
+          "kind": "colour_name",
+          "unit": "raw",
+          "colour_role": "space"
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "ocio_configuration",
+          "label": "OCIO configuration",
+          "kind": "colour_name",
+          "unit": "raw",
+          "colour_role": "config"
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [],
+      "matte_role": "strength"
+    },
+    {
+      "slug": "ocio-display-transform",
+      "match_name": "ocio_display",
+      "label": "OCIO display transform",
+      "version": 1,
+      "category": "Colour",
+      "category_slug": "colour",
+      "params": [
+        {
+          "id": "input_colour_space",
+          "label": "Input colour space",
+          "kind": "colour_name",
+          "unit": "raw",
+          "colour_role": "space"
+        },
+        {
+          "id": "display",
+          "label": "Display",
+          "kind": "colour_name",
+          "unit": "raw",
+          "colour_role": "display"
+        },
+        {
+          "id": "view",
+          "label": "View",
+          "kind": "colour_name",
+          "unit": "raw",
+          "colour_role": "view"
+        },
+        {
+          "id": "inverse",
+          "label": "Inverse",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "ocio_configuration",
+          "label": "OCIO configuration",
+          "kind": "colour_name",
+          "unit": "raw",
+          "colour_role": "config"
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [],
+      "matte_role": "strength"
+    },
+    {
+      "slug": "ocio-look-transform",
+      "match_name": "ocio_look",
+      "label": "OCIO look transform",
+      "version": 1,
+      "category": "Colour",
+      "category_slug": "colour",
+      "params": [
+        {
+          "id": "input_colour_space",
+          "label": "Input colour space",
+          "kind": "colour_name",
+          "unit": "raw",
+          "colour_role": "space"
+        },
+        {
+          "id": "look",
+          "label": "Look",
+          "kind": "colour_name",
+          "unit": "raw",
+          "colour_role": "look"
+        },
+        {
+          "id": "output_colour_space",
+          "label": "Output colour space",
+          "kind": "colour_name",
+          "unit": "raw",
+          "colour_role": "space"
+        },
+        {
+          "id": "inverse",
+          "label": "Inverse",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "ocio_configuration",
+          "label": "OCIO configuration",
+          "kind": "colour_name",
+          "unit": "raw",
+          "colour_role": "config"
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [],
+      "matte_role": "strength"
+    },
+    {
+      "slug": "ocio-file-transform",
+      "match_name": "ocio_file",
+      "label": "OCIO file transform",
+      "version": 1,
+      "category": "Colour",
+      "category_slug": "colour",
+      "params": [
+        {
+          "id": "file",
+          "label": "File",
+          "kind": "file",
+          "unit": "raw",
+          "file_filter": [
+            "cube",
+            "spi1d",
+            "spi3d",
+            "clf",
+            "ctf",
+            "cc",
+            "ccc",
+            "cdl"
+          ],
+          "file_filter_name": "LUT or CDL"
+        },
+        {
+          "id": "inverse",
+          "label": "Inverse",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [],
+      "matte_role": "strength"
+    },
+    {
       "slug": "depth-of-field",
       "match_name": "dof",
       "label": "Depth of field",
