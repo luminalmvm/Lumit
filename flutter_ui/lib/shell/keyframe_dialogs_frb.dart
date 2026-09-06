@@ -5,9 +5,9 @@
 // and the one it leaves by, and each is either a *hold* (nothing moves until
 // the next key), a straight line, a curve the user aims, or a curve the engine
 // aims for them. **Interpolation** picks which of those four each side is;
-// **Speed** sets how far the curved sides reach — the influence a tangent
-// handle drags (a side's speed is what that handle carries, so it is not a
-// fifth number to type).
+// **Speed** sets the two numbers each curved side carries, how fast the curve
+// runs through the key and how far its handle reaches, as exact figures
+// rather than by dragging the handle (`panels/key_ease_fields.dart`).
 //
 // Neither dialogue writes anything. Each collects an answer and hands it back;
 // the menu applies it, so the rule about *which* keys are affected lives in one
@@ -17,6 +17,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../l10n/strings.dart';
+import '../panels/graph_maths.dart' show KeyEase;
+import '../panels/key_ease_fields.dart';
 import '../widgets/controls.dart';
 
 /// What one side of a keyframe can be. The four the graph editor's own strip
@@ -105,32 +107,37 @@ class _InterpBodyState extends State<_InterpBody> {
       );
 }
 
-/// Ask how far each side's handle reaches, in per cent of the span beside it.
-/// Completes with null when dismissed.
-Future<({double inPercent, double outPercent})?> showKeyframeSpeedFrb({
+/// Ask for a key's speed and influence on each side it has. Opens on [ease],
+/// whose sides with no numbers are not offered - an end key, or the one dot
+/// the speed graph's menu was opened on. [unit] is what the speed is per
+/// second of.
+///
+/// Completes with the numbers that were changed, and only those, or null when
+/// dismissed. Nothing changed comes back as an empty [KeyEase].
+Future<KeyEase?> showKeyframeSpeedFrb({
   required BuildContext context,
-  required double inPercent,
-  required double outPercent,
+  required KeyEase ease,
+  required String? unit,
 }) =>
-    showLumitModal<({double inPercent, double outPercent})>(
+    showLumitModal<KeyEase>(
       context: context,
       builder: (close) => _SpeedBody(
-        inPercent: inPercent,
-        outPercent: outPercent,
+        ease: ease,
+        unit: unit,
         onConfirm: close,
         onCancel: () => close(null),
       ),
     );
 
 class _SpeedBody extends StatefulWidget {
-  final double inPercent;
-  final double outPercent;
-  final ValueChanged<({double inPercent, double outPercent})> onConfirm;
+  final KeyEase ease;
+  final String? unit;
+  final ValueChanged<KeyEase> onConfirm;
   final VoidCallback onCancel;
 
   const _SpeedBody({
-    required this.inPercent,
-    required this.outPercent,
+    required this.ease,
+    required this.unit,
     required this.onConfirm,
     required this.onCancel,
   });
@@ -140,45 +147,22 @@ class _SpeedBody extends StatefulWidget {
 }
 
 class _SpeedBodyState extends State<_SpeedBody> {
-  late double _in = widget.inPercent;
-  late double _out = widget.outPercent;
-
-  void _confirm() => widget.onConfirm((inPercent: _in, outPercent: _out));
+  /// What has been typed so far, each edit laid over the last, so Apply hands
+  /// back one answer however many wells were visited.
+  KeyEase _edit = const KeyEase();
 
   @override
   Widget build(BuildContext context) => _dialogue(
         context,
         title: l10n.menuKeyframeSpeed,
-        onConfirm: _confirm,
+        onConfirm: () => widget.onConfirm(_edit),
         onCancel: widget.onCancel,
         rows: [
-          _labelled(
-            context,
-            l10n.keyInfluenceIn,
-            DragValueField(
-              key: const ValueKey('key-influence-in'),
-              value: _in,
-              // Never quite nothing: an influence of zero is a handle with no
-              // reach at all, which the evaluator has no span to divide by.
-              min: 0.1,
-              max: 100,
-              decimals: 1,
-              suffix: l10n.unitSymbolPercent,
-              onChanged: (v) => setState(() => _in = v.toDouble()),
-            ),
-          ),
-          _labelled(
-            context,
-            l10n.keyInfluenceOut,
-            DragValueField(
-              key: const ValueKey('key-influence-out'),
-              value: _out,
-              min: 0.1,
-              max: 100,
-              decimals: 1,
-              suffix: l10n.unitSymbolPercent,
-              onChanged: (v) => setState(() => _out = v.toDouble()),
-            ),
+          KeyEaseFields(
+            ease: widget.ease,
+            unit: widget.unit,
+            keyPrefix: 'key',
+            onChanged: (edit) => _edit = _edit.merge(edit),
           ),
         ],
       );

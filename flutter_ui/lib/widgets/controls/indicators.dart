@@ -40,24 +40,40 @@ class HouseProgressBar extends StatelessWidget {
 ///
 /// The same shape as the key block's badge — one pill, one size, wherever the
 /// Timeline says a number under the hand.
+///
+/// A pill answers the pointer only when given [onTap]: the graph's selected-key
+/// readout opens that key's ease fields from it. Every other pill rides under
+/// a gesture and lets the pointer through, as it always has.
 class HintPill extends StatelessWidget {
   final String text;
-  const HintPill({super.key, required this.text});
+
+  /// Called with the tap's window position, so what opens can sit beside it.
+  final void Function(Offset globalPosition)? onTap;
+
+  const HintPill({super.key, required this.text, this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return IgnorePointer(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-        decoration: BoxDecoration(
-          color: t.surface4,
-          borderRadius: BorderRadius.circular(2),
-        ),
-        child: Text(
-          text,
-          style: t.mono.copyWith(fontSize: 8, color: t.textPrimary),
-        ),
+    final pill = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      decoration: BoxDecoration(
+        color: t.surface4,
+        borderRadius: BorderRadius.circular(2),
+      ),
+      child: Text(
+        text,
+        style: t.mono.copyWith(fontSize: 8, color: t.textPrimary),
+      ),
+    );
+    final tap = onTap;
+    if (tap == null) return IgnorePointer(child: pill);
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapUp: (d) => tap(d.globalPosition),
+        child: pill,
       ),
     );
   }

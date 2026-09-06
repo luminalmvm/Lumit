@@ -4479,7 +4479,7 @@
   },
   "menuKeyframeSpeed": "Keyframe speed…",
   "@menuKeyframeSpeed": {
-    "description": "Menu item (a feature that is not built yet). Speed, never velocity (docs/01-GLOSSARY.md)."
+    "description": "Animation menu item, and the same row in a keyframe's right-click menu in the graph editor: opens the small window that sets one keyframe's speed and influence on each side as numbers. Speed, never velocity (docs/01-GLOSSARY.md)."
   },
   "menuLayer": "Layer",
   "@menuLayer": {
@@ -11733,5 +11733,44 @@
   "audioChainNotBuilt": "The audio chain could not be built on this layer.",
   "@audioChainNotBuilt": {
     "description": "One line in the status bar at the bottom of the window, after the Audio panel's 'Drive with audio…' or 'Lower behind…' button was pressed and the chain of driver boxes it stages could not be made or wired. Calm, not an error."
+  },
+  "keySpeedIn": "Speed in",
+  "@keySpeedIn": {
+    "description": "Field in the Keyframe speed dialogue and at the foot of the Easing panel: how fast the value is changing as the animation arrives at the keyframe, in the property's units per second. Speed, never velocity (docs/01-GLOSSARY.md)."
+  },
+  "keySpeedOut": "Speed out",
+  "@keySpeedOut": {
+    "description": "Field in the Keyframe speed dialogue and at the foot of the Easing panel: how fast the value is changing as the animation leaves the keyframe, in the property's units per second. Speed, never velocity (docs/01-GLOSSARY.md)."
+  },
+  "keyContinuous": "Continuous",
+  "@keyContinuous": {
+    "description": "Tick beside the speed fields in the Keyframe speed dialogue and the Easing panel. Ticked, the speed out is kept equal to the speed in, so the curve runs through the keyframe without a kink; typing either speed sets both."
+  },
+  "unitPerSecond": "{unit}/s",
+  "@unitPerSecond": {
+    "description": "The unit shown after a speed field: the property's own unit, then a slash and the abbreviation for seconds — 'px/s', '%/s', '°/s'. The unit may be empty, giving '/s' alone.",
+    "placeholders": {
+      "unit": {
+        "type": "String"
+      }
+    }
+  },
+  "easingHandleNumbers": "Out {x1}, {y1} · In {x2}, {y2}",
+  "@easingHandleNumbers": {
+    "description": "Easing panel: the line of small mono numbers under the shape box, giving the two handles' positions in the box. 'Out' is the handle leaving the first keyframe, 'In' the handle arriving at the second; each pair is its x (how far along the box it reaches) and y (how high it lifts), to two decimals. The middle dot separates the two handles.",
+    "placeholders": {
+      "x1": {
+        "type": "String"
+      },
+      "y1": {
+        "type": "String"
+      },
+      "x2": {
+        "type": "String"
+      },
+      "y2": {
+        "type": "String"
+      }
+    }
   }
 }

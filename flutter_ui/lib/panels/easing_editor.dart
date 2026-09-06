@@ -57,34 +57,89 @@ String easingPresetName(String id) => switch (id) {
       _ => l10n.easingBackInOut,
     };
 
-/// The unit box, in logical pixels — the square the travel runs across.
+/// The unit box, in logical pixels - the square the travel runs across - at
+/// its smallest, and the most it grows to when the panel is wide. It follows
+/// the panel's width between the two: a bigger box is a finer drag, and a
+/// small box adrift in a wide panel reads as a mistake.
 const double _boxSide = 170;
+const double _boxMax = 240;
 
 /// Side room: enough for a knob at x = 0 or x = 1 to be drawn whole.
 const double _marginX = 20;
 
-/// Room above and below, sized from [easingHandleReach] rather than guessed, so
-/// a handle at the very limit still draws inside the surface. Getting this
-/// wrong is not cosmetic: a knob past the edge is one the pointer cannot reach
-/// to drag back.
-const double _marginY = _boxSide * easingHandleReach;
-
 /// How near the pointer must come to a handle to take hold of it.
 const double _grabRadius = 18;
 
-/// The content size: the box and its margins, and what every row inside the
-/// popup is pinned to.
+/// The content width the popup uses, and the least the panel lays out at: the
+/// smallest box and its margins.
 const double _popupWidth = _boxSide + _marginX * 2;
-const double _popupHeight = _boxSide + _marginY * 2;
 
-/// The preset grid's tiles: three to a row of the content width.
+/// The preset grid: the gap between tiles, and the narrowest a tile may be.
+/// The grid takes four to a row from the width that fits four this wide and
+/// three below it. Wider still, the tiles grow rather than a fifth arriving,
+/// so a wide panel reads as a bigger library rather than a denser one.
 const double _tileGap = 3;
-const double _tileWidth = (_popupWidth - _tileGap * 2) / 3;
+const double _tileMin = 64;
 
-/// A tile's curve thumbnail height. Its drawn unit box leaves a margin above
-/// and below for the Back family's overshoot; the last pixel or two of a full
-/// overshoot clips, which is what the tile's ClipRect is for.
+/// What a tile's button adds around its drawing: 4px of padding a side and
+/// the 1px edge it always draws, so a tile's inside is this much narrower
+/// than its column.
+const double _tileChrome = 10;
+
+/// A tile's curve thumbnail height at the narrowest tile, growing with the
+/// tile up to [_thumbMax]. Its drawn unit box leaves a margin above and below
+/// for the Back family's overshoot, and the last pixel or two of a full overshoot
+/// clips, which is what the tile's ClipRect is for.
 const double _thumbHeight = 32;
+const double _thumbMax = 56;
+
+/// The editor's measures at one content width: the box and its margins, the
+/// paint's size, and the tile grid. Worked out once per layout so the drag
+/// handlers, the painter and the grid agree about where everything is.
+class _Geometry {
+  final double width;
+  final double side;
+
+  /// Room above and below, sized from [easingHandleReach] rather than guessed,
+  /// so a handle at the very limit still draws inside the surface. Getting
+  /// this wrong is not cosmetic: a knob past the edge is one the pointer
+  /// cannot reach to drag back.
+  final double marginY;
+
+  /// Where the box starts: centred once it has stopped growing.
+  final double boxLeft;
+  final int columns;
+  final double tileWidth;
+  final double thumbHeight;
+
+  const _Geometry._({
+    required this.width,
+    required this.side,
+    required this.marginY,
+    required this.boxLeft,
+    required this.columns,
+    required this.tileWidth,
+    required this.thumbHeight,
+  });
+
+  factory _Geometry.fit(double content) {
+    final side = (content - 2 * _marginX).clamp(_boxSide, _boxMax).toDouble();
+    final columns = content >= _tileMin * 4 + _tileGap * 3 ? 4 : 3;
+    final tile = (content - _tileGap * (columns - 1)) / columns;
+    return _Geometry._(
+      width: content,
+      side: side,
+      marginY: side * easingHandleReach,
+      boxLeft: (content - side) / 2,
+      columns: columns,
+      tileWidth: tile,
+      thumbHeight: (tile * 0.5).clamp(_thumbHeight, _thumbMax).toDouble(),
+    );
+  }
+
+  double get height => side + marginY * 2;
+  Rect get box => Rect.fromLTWH(boxLeft, marginY, side, side);
+}
 
 /// Open the easing editor at [position] as a popup, and call [onApply] with the
 /// shape each time Apply is pressed — the *inline* mode of Settings ▸ Interface
@@ -117,12 +172,17 @@ Future<void> showEasingPopup({
           ),
           // The preset grid makes the editor taller than a popup should be:
           // past this it scrolls, where the docked panel scrolls for itself.
+          // The width is pinned to the smallest layout, as the overlay would
+          // otherwise offer the editor the whole window to grow into.
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxHeight: 460),
             child: SingleChildScrollView(
-              child: EasingEditor(
-                onApply: onApply,
-                onClose: () => close(null),
+              child: SizedBox(
+                width: _popupWidth + 20,
+                child: EasingEditor(
+                  onApply: onApply,
+                  onClose: () => close(null),
+                ),
               ),
             ),
           ),
@@ -198,8 +258,12 @@ class _EasingEditorState extends State<EasingEditor> {
     });
   }
 
+  /// The measures of the last layout - what the drag handlers read, so a
+  /// pointer lands on the box the way it was drawn.
+  _Geometry _geom = _Geometry.fit(_popupWidth);
+
   /// The box's drawing rect inside this widget's own coordinates.
-  Rect get _box => Rect.fromLTWH(_marginX, _marginY, _boxSide, _boxSide);
+  Rect get _box => _geom.box;
 
   /// A control point in widget coordinates. y is flipped: the curve rises as
   /// the value completes, and screen y grows downward.
@@ -241,108 +305,125 @@ class _EasingEditorState extends State<EasingEditor> {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final apply = widget.onApply;
-    return Padding(
-      padding: const EdgeInsets.all(10),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // The empty drag handlers are not dead code: they put the box in the
-          // gesture arena, where the inner member beats the panel's scroll
-          // view — the preset grid made the panel tall enough to scroll, and a
-          // handle drag must shape the curve, not scroll it away. The Listener
-          // does the actual work, because it hears the very first pointer-down
-          // rather than waiting out the drag slop.
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onVerticalDragUpdate: (_) {},
-            onHorizontalDragUpdate: (_) {},
-            child: Listener(
-              key: const ValueKey('easing-box'),
-              onPointerDown: (e) => _grab(e.localPosition),
-              onPointerMove: (e) => _drag(e.localPosition),
-              onPointerUp: (_) => setState(() => _dragging = null),
-              onPointerCancel: (_) => setState(() => _dragging = null),
-              child: CustomPaint(
-                size: const Size(_popupWidth, _popupHeight),
-                painter: _EasingPainter(curve: _curve, box: _box, theme: t),
+    // Laid out to the width on offer: the docked panel's, less its padding.
+    // The popup pins its width to the smallest layout ([showEasingPopup]).
+    return LayoutBuilder(builder: (context, constraints) {
+      final content = constraints.hasBoundedWidth
+          ? (constraints.maxWidth - 20)
+              .clamp(_popupWidth, double.infinity)
+              .toDouble()
+          : _popupWidth;
+      final g = _geom = _Geometry.fit(content);
+      return Padding(
+        padding: const EdgeInsets.all(10),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // The empty drag handlers are not dead code: they put the box in the
+            // gesture arena, where the inner member beats the panel's scroll
+            // view - the preset grid made the panel tall enough to scroll, and a
+            // handle drag must shape the curve, not scroll it away. The Listener
+            // does the actual work, because it hears the very first pointer-down
+            // rather than waiting out the drag slop.
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onVerticalDragUpdate: (_) {},
+              onHorizontalDragUpdate: (_) {},
+              child: Listener(
+                key: const ValueKey('easing-box'),
+                onPointerDown: (e) => _grab(e.localPosition),
+                onPointerMove: (e) => _drag(e.localPosition),
+                onPointerUp: (_) => setState(() => _dragging = null),
+                onPointerCancel: (_) => setState(() => _dragging = null),
+                child: CustomPaint(
+                  size: Size(g.width, g.height),
+                  painter: _EasingPainter(curve: _curve, box: _box, theme: t),
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 8),
-          _presetGrid(t),
-          if (_naming != null) ...[
-            const SizedBox(height: 6),
-            HouseTextField(
-              key: const ValueKey('easing-name'),
-              controller: _nameField,
-              width: _popupWidth,
-              autofocus: true,
-              hint: l10n.easingNameYours,
-              onSubmitted: (_) => _commitName(),
-              onTapOutside: _commitName,
-              onCancelled: () => setState(() => _naming = null),
+            const SizedBox(height: 8),
+            _presetGrid(t, g),
+            if (_naming != null) ...[
+              const SizedBox(height: 6),
+              HouseTextField(
+                key: const ValueKey('easing-name'),
+                controller: _nameField,
+                width: g.width,
+                autofocus: true,
+                hint: l10n.easingNameYours,
+                onSubmitted: (_) => _commitName(),
+                onTapOutside: _commitName,
+                onCancelled: () => setState(() => _naming = null),
+              ),
+            ],
+            const SizedBox(height: 8),
+            // The four numbers, so a shape can be read off and typed back in
+            // elsewhere: each handle's point in the box, named for the side it
+            // shapes - x is how far it reaches, y how high it lifts. Two decimals
+            // is the precision the box can be dragged to.
+            Text(
+              l10n.easingHandleNumbers(
+                _curve.x1.toStringAsFixed(2),
+                _curve.y1.toStringAsFixed(2),
+                _curve.x2.toStringAsFixed(2),
+                _curve.y2.toStringAsFixed(2),
+              ),
+              style: t.mono.copyWith(color: t.textMuted),
             ),
-          ],
-          const SizedBox(height: 8),
-          // The four numbers, so a shape can be read off and typed back in
-          // elsewhere. Two decimals is the precision the box can be dragged to.
-          Text(
-            '${_curve.x1.toStringAsFixed(2)}, ${_curve.y1.toStringAsFixed(2)}, '
-            '${_curve.x2.toStringAsFixed(2)}, ${_curve.y2.toStringAsFixed(2)}',
-            style: t.mono.copyWith(color: t.textMuted),
-          ),
-          const SizedBox(height: 6),
-          // Width pinned to the box: a Row with a Spacer takes every pixel it
-          // is offered, and inside an overlay that is the whole window.
-          SizedBox(
-            width: _popupWidth,
-            child: Row(
-              children: [
-                const Spacer(),
-                // Keeping the drawn shape is not applying it: Apply stays the
-                // one button that touches the document.
-                HouseButton(
-                  key: const ValueKey('easing-save'),
-                  small: true,
-                  onPressed: () => _startNaming(''),
-                  child: Text(l10n.easingSaveEllipsis, style: t.small),
-                ),
-                const SizedBox(width: 6),
-                if (widget.onClose != null) ...[
+            const SizedBox(height: 6),
+            // Width pinned to the box: a Row with a Spacer takes every pixel it
+            // is offered, and inside an overlay that is the whole window.
+            SizedBox(
+              width: g.width,
+              child: Row(
+                children: [
+                  const Spacer(),
+                  // Keeping the drawn shape is not applying it: Apply stays the
+                  // one button that touches the document.
                   HouseButton(
+                    key: const ValueKey('easing-save'),
                     small: true,
-                    onPressed: widget.onClose,
-                    child: Text(l10n.close, style: t.small),
+                    onPressed: () => _startNaming(''),
+                    child: Text(l10n.easingSaveEllipsis, style: t.small),
                   ),
                   const SizedBox(width: 6),
+                  if (widget.onClose != null) ...[
+                    HouseButton(
+                      small: true,
+                      onPressed: widget.onClose,
+                      child: Text(l10n.close, style: t.small),
+                    ),
+                    const SizedBox(width: 6),
+                  ],
+                  HouseButton(
+                    key: const ValueKey('easing-apply'),
+                    small: true,
+                    primary: true,
+                    // A null callback is what greys a HouseButton, so the lock
+                    // and the look are the same fact rather than two.
+                    onPressed: apply == null ? null : () => apply(_curve),
+                    child: Text(l10n.apply,
+                        style: t.small.copyWith(
+                            color: apply == null
+                                ? t.textDisabled
+                                : t.textPrimary)),
+                  ),
                 ],
-                HouseButton(
-                  key: const ValueKey('easing-apply'),
-                  small: true,
-                  primary: true,
-                  // A null callback is what greys a HouseButton, so the lock
-                  // and the look are the same fact rather than two.
-                  onPressed: apply == null ? null : () => apply(_curve),
-                  child: Text(l10n.apply,
-                      style: t.small.copyWith(
-                          color:
-                              apply == null ? t.textDisabled : t.textPrimary)),
-                ),
-              ],
+              ),
             ),
-          ),
-          if (apply == null && widget.whyNot != null) ...[
-            const SizedBox(height: 6),
-            SizedBox(
-              width: _popupWidth,
-              child: Text(widget.whyNot!,
-                  style: t.caption.copyWith(color: t.textMuted)),
-            ),
+            if (apply == null && widget.whyNot != null) ...[
+              const SizedBox(height: 6),
+              SizedBox(
+                width: g.width,
+                child: Text(widget.whyNot!,
+                    style: t.caption.copyWith(color: t.textMuted)),
+              ),
+            ],
           ],
-        ],
-      ),
-    );
+        ),
+      );
+    });
   }
 
   /// The preset library: the shipped shapes and the user's own, each a
@@ -359,14 +440,14 @@ class _EasingEditorState extends State<EasingEditor> {
   /// the same in every way but one: they can be renamed and thrown away, from a
   /// right-click on the tile itself. A shipped preset has no such menu — there
   /// is nothing there the user put in.
-  Widget _presetGrid(LumitTheme t) => SizedBox(
-        width: _popupWidth,
+  Widget _presetGrid(LumitTheme t, _Geometry g) => SizedBox(
+        width: g.width,
         child: Wrap(
           spacing: _tileGap,
           runSpacing: _tileGap,
           children: [
             for (final preset in easingPresets)
-              _tile(t, easingPresetName(preset.id), preset.curve),
+              _tile(t, g, easingPresetName(preset.id), preset.curve),
             for (final saved in CustomEasings.all)
               HouseContextMenu(
                 itemBuilder: (close) => [
@@ -385,13 +466,13 @@ class _EasingEditorState extends State<EasingEditor> {
                     child: Text(l10n.delete, style: t.small),
                   ),
                 ],
-                child: _tile(t, saved.name, saved.curve),
+                child: _tile(t, g, saved.name, saved.curve),
               ),
           ],
         ),
       );
 
-  Widget _tile(LumitTheme t, String name, EasingCurve curve) {
+  Widget _tile(LumitTheme t, _Geometry g, String name, EasingCurve curve) {
     final current = _curve == curve;
     return HouseButton(
       small: true,
@@ -401,7 +482,10 @@ class _EasingEditorState extends State<EasingEditor> {
         widget.onApply?.call(curve);
       },
       child: SizedBox(
-        width: _tileWidth - 8,
+        // The button's 4px padding each side and the 1px edge it always
+        // draws: a tile any wider is one the row can't fit, and the last of
+        // every row would wrap.
+        width: g.tileWidth - _tileChrome,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -409,7 +493,7 @@ class _EasingEditorState extends State<EasingEditor> {
             // drawn margin, and the caption under it is not the place for it.
             ClipRect(
               child: CustomPaint(
-                size: const Size(_tileWidth - 8, _thumbHeight),
+                size: Size(g.tileWidth - _tileChrome, g.thumbHeight),
                 painter: _TilePainter(
                   curve: curve,
                   theme: t,

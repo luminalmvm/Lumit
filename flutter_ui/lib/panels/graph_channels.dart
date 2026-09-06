@@ -7,6 +7,7 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 
+import '../l10n/strings.dart';
 import 'effect_param_row_frb.dart';
 import 'graph_maths.dart';
 import 'layer_fold_frb.dart';
@@ -401,3 +402,37 @@ double keyFrame(BridgeKeyframe key, double fps) =>
 /// else to two places — the same hand the dope sheet's own numbers are set in.
 String graphNumberText(double v) =>
     v == v.roundToDouble() ? v.round().toString() : v.toStringAsFixed(2);
+
+/// What rides beside a graph channel's value, or null for a number with no
+/// unit - the readout row's answer to §12A.3's rule.
+///
+/// An effect parameter's unit is its **declaration's**, never its id.
+/// A transform axis has no declaration to ask, so it is read off the property
+/// itself: the two scales and opacity are per cent, the three rotations are
+/// degrees, and everything else is a distance - pixels at composition size.
+String? graphChannelUnit(GraphChannel channel) {
+  if (channel.param case final param?) return unitRiderText(param.unit);
+  if (channel.retime) return l10n.unitSymbolSeconds;
+  if (channel.maskValue case final value?) {
+    return switch (value) {
+      MaskValue.opacity => l10n.unitSymbolPercent,
+      MaskValue.feather ||
+      MaskValue.vertexFeather ||
+      MaskValue.expansion =>
+        l10n.unitSymbolPx,
+      MaskValue.path => null,
+    };
+  }
+  return switch (channel.prop) {
+    null => null,
+    BridgeTransformProp.opacity ||
+    BridgeTransformProp.scaleX ||
+    BridgeTransformProp.scaleY =>
+      l10n.unitSymbolPercent,
+    BridgeTransformProp.rotation ||
+    BridgeTransformProp.rotationX ||
+    BridgeTransformProp.rotationY =>
+      l10n.unitSymbolDegrees,
+    _ => l10n.unitSymbolPx,
+  };
+}

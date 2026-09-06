@@ -2020,8 +2020,16 @@ instead (§4.4).
   returning to Free is given back the exact ease it had before it went automatic. The
   arithmetic is [impl/keyframe-eval.md](impl/keyframe-eval.md) §6.
 - **Numeric entry**: double-click a keyframe for exact **frame, value and In/Out
-  influence** fields (a side's speed is what the tangent handle drags and what the
-  influence field writes at, so it is not a fifth number).
+  influence** fields.
+- **Keyframe speed**: a key's right-click menu offers *Keyframe speed…*, the same small
+  window Animation ▸ Keyframe speed… opens, holding the key's **speed and influence for
+  each side** as fields and a *Continuous* tick that keeps the two speeds equal. Only the
+  numbers typed are written; a side left alone stays what it was, so the two handles
+  come apart the moment one is typed into. In the value lens a key is one point and
+  both sides are offered; in the speed lens the menu is opened on one dot, which is one
+  side, and that side alone is offered. Clicking the selected key's readout pill opens
+  the same fields as a popover that writes each change as it is made, the handles
+  following. Speed is in the property's units per second (`px/s`, `%/s`, `°/s`).
 - **Preset eases**: Ease (`F9`), Ease in (`Shift+F9`), Ease out (`Ctrl+Shift+F9`), hold,
   linear, auto-bezier — buttons on the key-command strip and in the context menu.
 - **The graph's own commands stand at the outline's foot, not under the curves**:
@@ -2075,6 +2083,9 @@ the scale lands on and a readout pill under the box says live what it reaches. O
 step, `Escape` abandons it (as it now does the graph's key and tangent drags), and the
 badge is the lanes' `n keys · n f`. **Double-clicking a key** opens its exact frame, value
 and In/Out influence as fields, the frame bounded by the key's two neighbours.
+**Keyframe speed**: the key menu's *Keyframe speed…* window, the readout pill's popover,
+and the Easing panel's foot all hold one key's speed and influence per side as fields
+(`key_ease_fields.dart`), writing only the numbers typed.
 Still to build:
 the acceleration lens and auto view,
 snap-to-beat-markers in the graph, waveform ghosting, and the Retime lenses of §5.2.
@@ -2082,10 +2093,19 @@ snap-to-beat-markers in the graph, waveform ghosting, and the Retime lenses of �
 ### 5.4 The Easing panel
 
 A dockable panel holding the shape editor of §5.3 and its **preset library**: the unit
-box, the four `cubic-bezier` numbers as text, **Apply**, and a grid of preset tiles —
-each tile one shape, drawn as its own curve thumbnail with its name under it, the way
-Flow's library reads. No Close — a panel is closed from its tab or the Window menu, like
-every other.
+box, the four `cubic-bezier` numbers as text, labelled by the handle they belong to
+(`Out x, y · In x, y`), **Apply**, and a grid of preset tiles - each tile one shape,
+drawn as its own curve thumbnail with its name under it, the way Flow's library reads.
+No Close - a panel is closed from its tab or the Window menu, like every other.
+
+**It fills its width.** The grid takes three tiles to a row in a narrow panel and four
+from the width that fits four, and past that the tiles grow rather than a fifth arriving;
+the box grows with the panel too, up to a cap. The popup form keeps the smallest layout.
+
+**Under the editor, the selected key.** While exactly one keyframe is selected, the
+panel's foot shows that key's frame and its **speed and influence for each side** as
+fields, with the *Continuous* tick - the same fields the Keyframe speed window holds
+(§5.3), writing as they are typed. Nothing is shown for no key or for several.
 
 - **A tile applies in one click.** Clicking a tile loads its shape into the box
   *and* presses the same road Apply presses, so easing a selection is one gesture rather
@@ -2102,9 +2122,11 @@ every other.
   project (`easings.json` beside the settings file).
 - **One press is one undo step**, however many layers the selection spans — the apply is
   an undo group over the per-layer writes.
-- **It never learns what is selected.** The Timeline publishes a callback while it can take
-  a shape; the panel presses it and is told nothing about what it landed on. The keyframe
-  selection stays the Timeline's.
+- **The editor never learns what is selected.** The Timeline publishes a callback while it
+  can take a shape; the panel presses it and is told nothing about what it landed on. The
+  keyframe selection stays the Timeline's. The one thing published beside the callback is
+  the selected key's *numbers* (`LumitUiState.easingKey`, while exactly one key is
+  selected), for the fields under the editor; the editor itself reads none of it.
 - **Apply greys when there is nowhere to send a shape** — no Timeline on screen, or a graph
   showing the speed lens — with one line saying so. A popup that vanished could stay silent
   about this; a persistent panel showing a live button that does nothing cannot.
