@@ -92,6 +92,11 @@ class GraphChannel {
   /// Set for a transform channel; null for an effect parameter.
   final BridgeTransformProp? prop;
 
+  /// The axis that follows this one while the row is linked, or null. Not a
+  /// channel of its own: a linked pair is one curve, so the graph draws the
+  /// lead and every write to it is the pair's write ([withLinkedPartners]).
+  final BridgeTransformProp? linkedPartner;
+
   /// Set for an effect parameter channel.
   final BridgeEffectInstanceInfo? effect;
   final BridgeParamInfo? param;
@@ -129,6 +134,7 @@ class GraphChannel {
     required this.scalar,
     required this.entry,
     this.prop,
+    this.linkedPartner,
     this.effect,
     this.param,
     this.retime = false,
@@ -237,17 +243,22 @@ List<GraphChannel> graphChannels({
       for (final group in transformGroups(
           threeD: entry.info.switches.threeD, modes: entry.info.axisModes)) {
         if (group.axes.first.prop.name != lead) continue;
-        for (final axis in group.axes) {
+        // A linked pair is one curve, as it is one box on the row. The lead
+        // is drawn and edited; the partner follows every write at the ratio
+        // the pair holds ([withLinkedPartners]).
+        final axes = group.isLinked ? group.axes.sublist(0, 1) : group.axes;
+        for (final axis in axes) {
           out.add(GraphChannel(
             path: path,
             id: '$path@${axis.prop.name}',
-            label: group.axes.length == 1
+            label: axes.length == 1
                 ? '${entry.info.name} · ${group.label}'
                 : '${entry.info.name} · ${group.label} ${axisLetter(group.axes.indexOf(axis))}',
             colourIndex: out.length,
             scalar: read(entry.info.transform, axis.prop),
             entry: entry,
             prop: axis.prop,
+            linkedPartner: group.isLinked ? group.axes[1].prop : null,
           ));
         }
         break;

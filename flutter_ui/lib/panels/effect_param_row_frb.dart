@@ -1585,11 +1585,13 @@ class EffectPointRowFrb extends StatelessWidget {
     // all — every number is nought times something — so a pair dragged off
     // zero separates instead of staying stuck there.
     //
-    // A **keyed** sibling scales whole: every keyframe's value times
-    // the factor, each key keeping its time, its interpolation and its eased
-    // shape, which is the same arithmetic `scale_property` does engine-side
-    // ([scaledScalar]). Scaling only the value under the playhead would plant
-    // keys nobody made.
+    // A **keyed** sibling of a static well scales whole: every keyframe's
+    // value times the factor, each key keeping its time, its interpolation
+    // and its eased shape, which is the same arithmetic `scale_property` does
+    // engine-side ([scaledScalar]). Once the well is keyed too, its edit is a
+    // key at the playhead, so the sibling takes a key there as well, at the
+    // ratio the pair reads on that frame. Stretching its whole curve instead
+    // left the two halves agreeing at the playhead and nowhere else.
     double? currentOf(BridgeScalar? scalar) => switch (scalar) {
           BridgeScalar_Static(:final field0) => field0,
           final BridgeScalar_Keyframed keyed =>
@@ -1606,13 +1608,17 @@ class EffectPointRowFrb extends StatelessWidget {
           : scalarWithValueAt(scalar, next, comp, frame));
       final other = param.id == xParam.id ? yParam : xParam;
       final otherScalar = other.id == xParam.id ? sx : sy;
-      final scaled = (!linked ||
-              before == null ||
-              before == 0 ||
-              otherScalar == null ||
-              otherScalar is BridgeScalar_Expression)
-          ? null
-          : BridgeEffectValue.float(scaledScalar(otherScalar, next / before));
+      BridgeEffectValue? scaled;
+      if (linked && before != null && before != 0 && otherScalar != null) {
+        final otherBefore = currentOf(otherScalar);
+        if (otherBefore != null) {
+          scaled = BridgeEffectValue.float(scalar is BridgeScalar_Keyframed &&
+                  otherScalar is BridgeScalar_Keyframed
+              ? scalarWithValueAt(
+                  otherScalar, next * otherBefore / before, comp, frame)
+              : scaledScalar(otherScalar, next / before));
+        }
+      }
       // Both halves as **one** op where the caller can commit one: two writes
       // would be two undo steps for a gesture that moved one well.
       if (!live && scaled != null && onWritePair != null) {

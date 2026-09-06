@@ -13,6 +13,7 @@ import 'package:lumit_flutter/panels/graph_editor_frb.dart';
 import 'package:lumit_flutter/panels/layer_fold_frb.dart';
 import 'package:lumit_flutter/panels/transform_rows_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 
 import 'frb_test_support.dart';
@@ -130,7 +131,80 @@ void main() {
       expect(rows, containsAll(<String>['Scale x', 'Scale y']));
     });
 
-    testWidgets('a 3D layer separates Position into three rows', (tester) async {
+    /// A linked Scale is one curve as it is one box: the graph draws the lead
+    /// axis, and an edit to it reaches the other at the ratio the pair holds.
+    /// Two curves eased one at a time was the reported bug: easing x left y
+    /// linear, and the picture stretched on the way.
+    testWidgets(
+        'a linked Scale is one curve, and an ease on it reaches both axes',
+        (tester) async {
+      final p = withComp();
+      final layer = solid(p);
+      final id = layer.internallayerId.toString();
+      BridgeKeyframe key(int seconds, double value) => BridgeKeyframe(
+            time: BridgeRational(num: seconds, den: 1),
+            value: value,
+            interpIn: const BridgeSideInterp.linear(),
+            interpOut: const BridgeSideInterp.linear(),
+          );
+      layer.setTransforms(props: [
+        BridgeTransformProp.scaleX,
+        BridgeTransformProp.scaleY,
+      ], values: [
+        BridgeScalar.keyframed([key(0, 100), key(1, 200)]),
+        BridgeScalar.keyframed([key(0, 50), key(1, 100)]),
+      ]);
+      final scalePath = transformGroupPath(
+        id,
+        transformGroups(threeD: false, modes: entryOf(p).info.axisModes)
+            .firstWhere((g) => g.label == 'Scale'),
+      );
+
+      final channels =
+          graphChannels(layers: [entryOf(p)], selected: [scalePath]);
+      expect(channels.length, 1,
+          reason: 'one box on the row, one curve on the graph');
+      expect(channels.single.prop, BridgeTransformProp.scaleX);
+      expect(channels.single.linkedPartner, BridgeTransformProp.scaleY);
+      expect(channels.single.label, endsWith('Scale'),
+          reason: 'no axis letter on a row that shows none');
+
+      const eased =
+          BridgeSideInterp.bezier(BridgeBezierSide(speed: 0, influence: 0.5));
+      applyInterpToSelection(
+        channels: channels,
+        selectedKeys: {'${channels.single.id}#0', '${channels.single.id}#1'},
+        side: eased,
+      );
+
+      final tf = layer.getTransform();
+      final x = (tf.scaleX as BridgeScalar_Keyframed).field0;
+      final y = (tf.scaleY as BridgeScalar_Keyframed).field0;
+      expect(x.first.interpOut, eased);
+      expect(y.first.interpOut, eased,
+          reason: 'the ease reached the axis the graph does not draw');
+      expect([for (final k in y) k.value], [50.0, 100.0],
+          reason: 'the ratio held');
+      expect([for (final k in y) k.time], [for (final k in x) k.time]);
+
+      // The pair was one write, so one undo takes both back.
+      p.state.project!.undo();
+      expect(
+          (layer.getTransform().scaleY as BridgeScalar_Keyframed)
+              .field0
+              .first
+              .interpOut,
+          const BridgeSideInterp.linear());
+
+      // Unlinked, the pair is two curves again.
+      layer.setAxisMode(
+          pair: BridgeTransformPair.scale, mode: BridgeAxisMode.combined);
+      expect(
+          graphChannels(layers: [entryOf(p)], selected: [scalePath]).length, 2);
+    });
+
+    testWidgets('a 3D layer separates Position into three rows',
+        (tester) async {
       final p = withComp();
       final layer = solid(p)
         ..setSwitch(switch_: BridgeLayerSwitch.threeD, on_: true);

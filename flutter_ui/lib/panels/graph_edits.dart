@@ -10,20 +10,73 @@ import 'easing_curve.dart';
 import 'graph_channels.dart';
 import 'graph_maths.dart';
 import 'key_block.dart';
+import 'keyframe_controls_frb.dart' show scaledScalar;
 import 'layer_fold_frb.dart';
 import 'text_animator_rows_frb.dart';
 import 'transform_rows_frb.dart';
 
+/// [edits] with each linked partner's curve written beside its lead's.
+///
+/// A linked pair is one curve on the graph, so a write to the lead is the
+/// pair's write: the partner takes the same keys at the ratio the pair held.
+/// The commit and the preview both go through here, so a drag shows what its
+/// release will write. An expression on either side is left alone.
+Map<GraphChannel, BridgeScalar> withLinkedPartners(
+    Map<GraphChannel, BridgeScalar> edits) {
+  final out = Map.of(edits);
+  edits.forEach((channel, next) {
+    final partner = channel.linkedPartner;
+    if (partner == null) return;
+    final was = read(channel.entry.info.transform, partner);
+    if (channel.scalar is BridgeScalar_Expression ||
+        was is BridgeScalar_Expression ||
+        next is BridgeScalar_Expression) {
+      return;
+    }
+    out[GraphChannel(
+      path: channel.path,
+      id: '${channel.path}@${partner.name}',
+      label: channel.label,
+      colourIndex: channel.colourIndex,
+      scalar: was,
+      entry: channel.entry,
+      prop: partner,
+    )] = linkedPartnerScalar(channel.scalar, was, next);
+  });
+  return out;
+}
+
+/// The curve a linked partner takes when its lead is written [next]: the same
+/// keys and eases, every value at the ratio the pair held.
+///
+/// The ratio is read where the lead was furthest from nought, since a key at
+/// nought (a scale growing from nothing) has no ratio in it. A lead at nought
+/// everywhere has none to hold, so the partner simply matches it, as the
+/// row's drag does.
+BridgeScalar linkedPartnerScalar(
+    BridgeScalar lead, BridgeScalar partner, BridgeScalar next) {
+  var t = 0.0;
+  var x = evaluateScalar(lead, 0);
+  for (final key in keysOf(lead)) {
+    if (key.value.abs() > x.abs()) {
+      x = key.value;
+      t = rationalSeconds(key.time);
+    }
+  }
+  return scaledScalar(next, x == 0 ? 1 : evaluateScalar(partner, t) / x);
+}
+
 /// Commit new scalars for a set of channels in the fewest ops: one
 /// `setTransforms` batch per layer for its transform channels (one undo step),
-/// one staged `setEffects` per layer for its effect channels.
+/// one staged `setEffects` per layer for its effect channels. A linked lead's
+/// partner is written in the same batch ([withLinkedPartners]).
 void commitChannelEdits(Map<GraphChannel, BridgeScalar> edits) {
   // Transform channels, grouped by layer.
   final transforms = <String,
       (LayerReference, List<BridgeTransformProp>, List<BridgeScalar>)>{};
   final effects =
       <String, (LayerReference, Map<String, Map<String, BridgeScalar>>)>{};
-  edits.forEach((channel, next) {
+  withLinkedPartners(edits).forEach((channel, next) {
     final layerId = channel.entry.layer.internallayerId.toString();
     if (channel.prop != null) {
       final slot = transforms[layerId] ??= (channel.entry.layer, [], []);
@@ -58,8 +111,8 @@ void commitChannelEdits(Map<GraphChannel, BridgeScalar> edits) {
       // property; two curves on one mask are two writes and two undo steps,
       // which is what `SetLayerMasks` costs until it grows a per-key op.
       channel.entry.layer.setMask(
-        mask: maskWithScalar(mask, channel.maskValue!, next,
-            channel.maskVertex),
+        mask:
+            maskWithScalar(mask, channel.maskValue!, next, channel.maskVertex),
         at: null,
       );
     }
@@ -106,7 +159,8 @@ void previewChannelEdits({
   required double scale,
 }) {
   if (edits.isEmpty) return;
-  final lead = edits.keys.first;
+  final all = withLinkedPartners(edits);
+  final lead = all.keys.first;
   final layer = lead.entry.layer;
   final layerId = layer.internallayerId.toString();
   bool sameLayer(GraphChannel c) =>
@@ -118,14 +172,14 @@ void previewChannelEdits({
       frame: bigFrame,
       scale: scale,
       layer: layer,
-      retime: edits[lead]!,
+      retime: all[lead]!,
     );
     return;
   }
 
   if (lead.prop != null) {
     var transform = layer.getTransform();
-    edits.forEach((channel, next) {
+    all.forEach((channel, next) {
       if (!sameLayer(channel) || channel.prop == null) return;
       transform = writeScalar(transform, channel.prop!, next);
     });
