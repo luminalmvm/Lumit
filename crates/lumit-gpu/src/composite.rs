@@ -7,7 +7,7 @@
 //! stacking maths happens in linear light where "add two lights" is physically
 //! correct — the same working format the colour golden test locks.
 
-use crate::{ColourEngine, GpuContext, WORKING_FORMAT};
+use crate::{ColourEngine, GpuContext};
 use glam::Mat4;
 
 /// Premultiplied "over": the alpha component of every composite blend state,
@@ -356,7 +356,9 @@ pub struct Compositor {
     /// Built per multisample count on demand and kept — see [`PipelineSet`].
     /// The lock is held only long enough to look one up or insert it, never
     /// across a pass or a submit (docs/14-ENGINEERING-RULES.md).
-    pipelines: std::sync::Mutex<std::collections::HashMap<u32, std::sync::Arc<PipelineSet>>>,
+    pipelines: std::sync::Mutex<
+        std::collections::HashMap<(u32, wgpu::TextureFormat), std::sync::Arc<PipelineSet>>,
+    >,
     /// Kept so a set for a count not yet seen can be built later.
     shader: wgpu::ShaderModule,
     pipeline_layout: wgpu::PipelineLayout,
@@ -553,7 +555,7 @@ impl Compositor {
                         module: &shader,
                         entry_point: Some("fs_copy_f32"),
                         targets: &[Some(wgpu::ColorTargetState {
-                            format: WORKING_FORMAT,
+                            format: ctx.working(),
                             blend: None,
                             write_mask: wgpu::ColorWrites::ALL,
                         })],
@@ -611,7 +613,7 @@ impl Compositor {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: crate::WORKING_FORMAT,
+            format: ctx.working(),
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
@@ -640,7 +642,7 @@ impl Compositor {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: crate::WORKING_FORMAT,
+            format: ctx.working(),
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
@@ -649,8 +651,14 @@ impl Compositor {
         // it always did. Higher counts arrive on first use.
         let mut pipelines = std::collections::HashMap::new();
         pipelines.insert(
-            1,
-            std::sync::Arc::new(Self::build_set(&ctx.device, &shader, &pipeline_layout, 1)),
+            (1, ctx.working()),
+            std::sync::Arc::new(Self::build_set(
+                &ctx.device,
+                &shader,
+                &pipeline_layout,
+                1,
+                ctx.working(),
+            )),
         );
         Self {
             pipelines: std::sync::Mutex::new(pipelines),
@@ -676,6 +684,7 @@ impl Compositor {
         shader: &wgpu::ShaderModule,
         layout: &wgpu::PipelineLayout,
         samples: u32,
+        format: wgpu::TextureFormat,
     ) -> PipelineSet {
         // Linear-light blend states (docs/06-RENDER-PIPELINE.md §blend):
         // Normal = premultiplied over; Add = pure light addition; Multiply
@@ -718,7 +727,7 @@ impl Compositor {
                     module: shader,
                     entry_point: Some(entry),
                     targets: &[Some(wgpu::ColorTargetState {
-                        format: WORKING_FORMAT,
+                        format,
                         blend: state,
                         write_mask: wgpu::ColorWrites::ALL,
                     })],
@@ -778,16 +787,21 @@ impl Compositor {
     /// not cache it: a slower frame, never a dead engine
     /// (docs/14-ENGINEERING-RULES.md — no panics in engine crates).
     fn pipelines(&self, ctx: &GpuContext, samples: u32) -> std::sync::Arc<PipelineSet> {
+        // Keyed on the working format as well as the sample count, because
+        // wgpu bakes both into a pipeline: a project switched to thirty-two
+        // bits builds its own set once and then costs nothing (docs/06 §3.4).
+        let key = (samples, ctx.working());
         let build = || {
             std::sync::Arc::new(Self::build_set(
                 &ctx.device,
                 &self.shader,
                 &self.pipeline_layout,
                 samples,
+                ctx.working(),
             ))
         };
         match self.pipelines.lock() {
-            Ok(mut map) => std::sync::Arc::clone(map.entry(samples).or_insert_with(build)),
+            Ok(mut map) => std::sync::Arc::clone(map.entry(key).or_insert_with(build)),
             Err(_) => build(),
         }
     }
@@ -879,7 +893,7 @@ impl Compositor {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: WORKING_FORMAT,
+            format: ctx.working(),
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT
                 | wgpu::TextureUsages::TEXTURE_BINDING
                 | wgpu::TextureUsages::COPY_SRC
@@ -905,7 +919,7 @@ impl Compositor {
                 mip_level_count: 1,
                 sample_count: samples,
                 dimension: wgpu::TextureDimension::D2,
-                format: WORKING_FORMAT,
+                format: ctx.working(),
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
                 view_formats: &[],
             })
@@ -949,7 +963,7 @@ impl Compositor {
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
-                format: WORKING_FORMAT,
+                format: ctx.working(),
                 usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
                 view_formats: &[],
             })
@@ -1273,7 +1287,7 @@ impl Compositor {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: WORKING_FORMAT,
+            format: ctx.working(),
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT
                 | wgpu::TextureUsages::TEXTURE_BINDING
                 | wgpu::TextureUsages::COPY_SRC,
@@ -1399,7 +1413,7 @@ impl Compositor {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: WORKING_FORMAT,
+            format: ctx.working(),
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         });
@@ -1419,7 +1433,7 @@ impl Compositor {
                 mip_level_count: 1,
                 sample_count: aa_samples,
                 dimension: wgpu::TextureDimension::D2,
-                format: WORKING_FORMAT,
+                format: ctx.working(),
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
                 view_formats: &[],
             })
@@ -1679,7 +1693,7 @@ impl Compositor {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: WORKING_FORMAT,
+            format: ctx.working(),
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT
                 | wgpu::TextureUsages::TEXTURE_BINDING
                 | wgpu::TextureUsages::COPY_SRC,

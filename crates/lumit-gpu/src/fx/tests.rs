@@ -15640,7 +15640,7 @@ fn a_readback_inside_a_batch_waits_for_what_is_still_batched() {
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
-        format: WORKING_FORMAT,
+        format: crate::WORKING_FORMAT,
         usage: wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::COPY_DST,
         view_formats: &[],
     };

@@ -272,6 +272,7 @@ fn format_key(format: lumit_render::export::ExportFormat) -> &'static str {
         ExportFormat::Video(VideoCodec::Hevc) => "hevc",
         ExportFormat::Images(ImageFormat::Png) => "png",
         ExportFormat::Images(ImageFormat::Tiff) => "tiff",
+        ExportFormat::Images(ImageFormat::Exr) => "exr",
         ExportFormat::Audio(AudioFormat::M4a) => "m4a",
         ExportFormat::Audio(AudioFormat::Wav) => "wav",
     }
@@ -296,7 +297,13 @@ pub(crate) fn format_caps(codec: &str) -> BridgeFormatCaps {
             .iter()
             .map(|d| match d {
                 BitDepth::Eight => 8,
-                BitDepth::Sixteen => 16,
+                // Half and Sixteen are both "16" to the dialogue, and never
+                // both on offer: OpenEXR carries the float depths and nothing
+                // else, every other still format the integer ones. So the
+                // number says which within a format, which is the only place
+                // it is read.
+                BitDepth::Sixteen | BitDepth::Half => 16,
+                BitDepth::Float => 32,
             })
             .collect(),
         bit_rate: caps.bit_rate,
@@ -402,10 +409,24 @@ pub(crate) fn to_export_spec(
         } else {
             AudioLayout::Stereo
         },
-        depth: if spec.depth >= 16 {
-            BitDepth::Sixteen
-        } else {
-            BitDepth::Eight
+        // The number says which depth *within a format*: OpenEXR carries the
+        // float pair and nothing else, every other format the integer pair, so
+        // 16 means half in one and sixteen-bit codes in the other. A depth a
+        // format cannot write is answered with the one it can rather than
+        // refused, which is what the caps row already told the dialogue.
+        depth: match (export_format(&spec.codec)?, spec.depth) {
+            (
+                lumit_render::export::ExportFormat::Images(lumit_media::encode::ImageFormat::Exr),
+                d,
+            ) => {
+                if d >= 32 {
+                    BitDepth::Float
+                } else {
+                    BitDepth::Half
+                }
+            }
+            (_, d) if d >= 16 => BitDepth::Sixteen,
+            _ => BitDepth::Eight,
         },
         channels: if spec.alpha_channel {
             Channels::RgbAlpha
@@ -508,7 +529,8 @@ fn from_export_spec(spec: &lumit_render::export::ExportSpec) -> Option<BridgeExp
         audio_channels: u32::from(spec.audio_layout.channels()),
         depth: match spec.depth {
             BitDepth::Eight => 8,
-            BitDepth::Sixteen => 16,
+            BitDepth::Sixteen | BitDepth::Half => 16,
+            BitDepth::Float => 32,
         },
         alpha_channel: spec.channels == Channels::RgbAlpha,
         straight_alpha: spec.alpha == AlphaMode::Straight,

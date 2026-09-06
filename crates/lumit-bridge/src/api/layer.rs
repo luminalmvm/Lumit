@@ -5610,6 +5610,11 @@ impl LayerReference {
         // flare's Matte source, whose natural reading is "the lights in this
         // picture" — and on an adjustment layer, the composite below.
         lumit_core::fx::point_self_layer_params_at(&mut instance, self.layer_id);
+        // An Extract channels lands knowing what its layer's file holds, for
+        // the same reason: the useful state is a fact about where it was
+        // dropped, and making the user press Reload before the effect can do
+        // anything would be making them finish the drop themselves.
+        self.seed_extract_channels(&mut instance);
 
         if lumit_core::fx::BUILTIN_DEFS
             .get(&name)
@@ -5633,6 +5638,91 @@ impl LayerReference {
             effects.push(instance);
             Ok(())
         })
+    }
+
+    /// The OpenEXR this layer's picture comes from, when it comes from one.
+    ///
+    /// `None` for every layer that is not footage, footage that is not an EXR,
+    /// and an item whose file cannot be located — all of which mean the same
+    /// thing to Extract channels: no channel list, four dropdowns offering
+    /// None, and a Reload channels button to try again with.
+    ///
+    /// A sequence answers with its **first** file. Every frame of a run comes
+    /// out of one render with one set of passes, so which file is read for the
+    /// list does not matter, and the first is the one that is certainly there.
+    #[cfg(feature = "media")]
+    fn exr_path(&self) -> Option<std::path::PathBuf> {
+        let layer = self.item().ok()?;
+        let item = match &layer.kind {
+            lumit_core::model::LayerKind::Footage { item } => *item,
+            _ => return None,
+        };
+        let proj = self.project().ok()?;
+        let proj = proj.read().ok()?;
+        let doc = proj.store.snapshot();
+        let lumit_core::model::ProjectItem::Footage(f) = doc.item(item)? else {
+            return None;
+        };
+        let path = std::path::PathBuf::from(f.media.on_disk());
+        lumit_media::exr::is_exr(&path).then_some(path)
+    }
+
+    /// Read this layer's EXR channel list onto `instance`, when both the layer
+    /// and the effect are the kind that want one. Silent on every other case:
+    /// an effect with no list shows four None dropdowns, which is the honest
+    /// picture of "there is nothing here to extract".
+    #[cfg(feature = "media")]
+    fn seed_extract_channels(&self, instance: &mut lumit_core::model::EffectInstance) {
+        use lumit_core::fx::effects::extract_channels as ec;
+        if instance.effect.match_name != "extract_channels" {
+            return;
+        }
+        let Some(path) = self.exr_path() else { return };
+        let Ok(channels) = lumit_media::exr::channels(&path) else {
+            return;
+        };
+        instance
+            .extra
+            .insert(ec::EXTRA_KEY.to_owned(), ec::channels_extra(&channels));
+    }
+
+    /// Read the file's channel list again for one Extract channels effect —
+    /// the **Reload channels** button (docs/08 §3.97).
+    ///
+    /// For when the render changed shape under the project: a pass added, a
+    /// light group renamed. The four dropdowns are rebuilt from what the file
+    /// says now, and the stored choices keep their index — which is why this is
+    /// a button the user presses rather than something that happens to them.
+    ///
+    /// One op and one undo step, like every other effect-stack edit.
+    #[cfg(feature = "media")]
+    pub(crate) fn reload_extract_channels(&self, effect: Uuid) -> Result<(), BridgeError> {
+        use lumit_core::fx::effects::extract_channels as ec;
+        let path = self.exr_path().ok_or(BridgeError::NotFootage)?;
+        let channels =
+            lumit_media::exr::channels(&path).map_err(|_| BridgeError::MediaPathUnresolved)?;
+        self.with_effects(move |effects| {
+            let inst = effects
+                .iter_mut()
+                .find(|e| e.id == effect)
+                .ok_or(BridgeError::UnknownEffectName)?;
+            inst.extra
+                .insert(ec::EXTRA_KEY.to_owned(), ec::channels_extra(&channels));
+            Ok(())
+        })
+    }
+
+    /// Without the decoder there is no file to read a channel list off, so an
+    /// Extract channels lands with four None dropdowns. The same picture the
+    /// effect shows on a layer that is not an OpenEXR.
+    #[cfg(not(feature = "media"))]
+    fn seed_extract_channels(&self, _instance: &mut lumit_core::model::EffectInstance) {}
+
+    /// The Reload channels button in a build with no decoder: nothing to read,
+    /// said plainly rather than by doing nothing.
+    #[cfg(not(feature = "media"))]
+    pub(crate) fn reload_extract_channels(&self, _effect: Uuid) -> Result<(), BridgeError> {
+        Err(BridgeError::MediaPathUnresolved)
     }
 
     /// Remove `effect` from this layer's stack — **or from its style list**,

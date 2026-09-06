@@ -32,6 +32,11 @@ const List<int> _aaCounts = [1, 2, 4, 8];
 String _aaLabel(int samples) =>
     samples <= 1 ? l10n.off : l10n.samples('$samples');
 
+/// The colour depths the compositor works in (docs/06 §3.4).
+const List<int> _depths = [8, 16, 32];
+
+String _depthLabel(int bits) => l10n.bitsPerChannel('$bits');
+
 const Size _windowSize = Size(560, 420);
 
 Future<void> showProjectSettingsFrb(
@@ -144,8 +149,39 @@ class _ProjectSettingsWindowState extends State<_ProjectSettingsWindow> {
     final project = widget.project;
     final set = project.antiAliasing();
     final inUse = project.antiAliasingInUse();
+    final depth = project.colourDepth();
+    final depthInUse = project.colourDepthInUse();
     return [
       settingsSection(t, l10n.settingsGroupRendering, [
+        settingsRow(
+          t,
+          l10n.settingsColourDepth,
+          l10n.settingsHelpColourDepth,
+          SizedBox(
+            width: 130,
+            child: BareDropdown<int>(
+              key: const ValueKey('project-colour-depth'),
+              value: depth,
+              options: _depths,
+              label: _depthLabel,
+              onChanged: (n) =>
+                  setState(() => project.setColourDepth(bits: n)),
+            ),
+          ),
+        ),
+        // As the anti-aliasing row below: only when the card cannot manage what
+        // was asked for, and a statement rather than a warning.
+        if (depthInUse != depth)
+          settingsRow(
+            t,
+            l10n.settingsColourDepthInUse,
+            l10n.settingsHelpColourDepthInUse,
+            Text(
+              _depthLabel(depthInUse),
+              key: const ValueKey('project-colour-depth-in-use'),
+              style: t.small,
+            ),
+          ),
         settingsRow(
           t,
           l10n.settingsAntiAliasing,

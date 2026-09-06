@@ -17412,6 +17412,60 @@
       "matte_role": "strength"
     },
     {
+      "slug": "extract-channels",
+      "match_name": "extract_channels",
+      "label": "Extract channels",
+      "version": 1,
+      "category": "Utility",
+      "category_slug": "utility",
+      "params": [
+        {
+          "id": "reload",
+          "label": "Reload channels",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "bypass",
+          "label": "Bypass",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [],
+      "matte_role": "strength"
+    },
+    {
       "slug": "slider-control",
       "match_name": "slider_control",
       "label": "Slider control",

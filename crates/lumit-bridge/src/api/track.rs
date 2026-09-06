@@ -387,6 +387,15 @@ pub fn fire_effect_action(
     if fx.effect.match_name == lumit_core::roto::ROTO_BRUSH {
         return crate::api::roto::press(&layer, fx, &param);
     }
+    // Extract channels' one button, through the same doorway (docs/08 §3.97):
+    // read the layer's file again and rebuild the four dropdowns from what it
+    // says now.
+    if fx.effect.match_name == "extract_channels" {
+        return match param.as_str() {
+            "reload" => layer.reload_extract_channels(effect),
+            _ => Err(BridgeError::InvalidParam),
+        };
+    }
     // The Planar track's four buttons go the same way as the Camera track's
     // two: one doorway, so a press is one crossing whichever effect made it.
     if fx.effect.match_name == lumit_core::track::PLANAR_TRACK {

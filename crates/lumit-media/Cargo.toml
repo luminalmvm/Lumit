@@ -14,6 +14,10 @@ test-fixtures = []
 [dependencies]
 bincode = "1"
 blake3 = "1"
+# OpenEXR's own reader, for the one thing ffmpeg cannot do: say which channels
+# a file holds, and hand back one named channel rather than the RGB it guesses
+# at. ffmpeg's decoder has -layer and -part but no way to enumerate either.
+exr = "1.74"
 rsmpeg = { version = "0.18", default-features = false, features = ["ffmpeg8", "link_system_ffmpeg"] }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"

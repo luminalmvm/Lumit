@@ -10,6 +10,7 @@
 pub mod audio;
 pub mod decode;
 pub mod encode;
+pub mod exr;
 pub mod index;
 pub mod probe;
 pub mod sequence;
@@ -18,7 +19,7 @@ pub mod slate;
 use std::path::Path;
 
 pub use audio::AudioBuffer;
-pub use decode::{DecodedFrame, LumaFrame, VideoDecoder};
+pub use decode::{DecodedFrame, LumaFrame, PixelFormat, VideoDecoder};
 pub use encode::Encoder;
 pub use index::{FrameIndex, IndexEntry};
 pub use probe::{AudioInfo, MediaProbe, VideoInfo};

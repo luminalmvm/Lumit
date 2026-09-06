@@ -6212,6 +6212,58 @@ a similar tone it needs more correction strokes than a network would. The distan
 through any low-contrast gap in the boundary, and the fix is a stroke across the leak rather
 than beside it.
 
+### 3.97 Extract channels — the picture read out of channels the colour does not carry
+
+**Parameters:** **Reload channels** (action), **Bypass** (switch, off), and **Red from /
+Green from / Blue from / Alpha from** — four dropdowns whose options are *this file's own
+channel names*, None first and default. No Mix and no Matte row: neither has anything to
+gate, because nothing here is a picture operation.
+
+A **Utility** effect, `Trivial` cost, `Exact` ROI, temporal window `{0}`. After Effects'
+EXtractoR, and the first of the 3D-channel family — the AOV input
+[impl/ae-effect-parity.md](impl/ae-effect-parity.md) said did not exist yet.
+
+**What it is for.** A render leaves far more in an OpenEXR than a picture: a `Z` saying how
+far away every pixel is, normals, an object id, a light group per lamp, a cryptomatte. Open
+the file normally and all of it is dropped, because a picture has four channels and the file
+has thirty. Point Red from at `Z` and the layer becomes its own depth pass, ready to drive a
+Depth of field (§3.22). Point all three colour rows at one light group and the layer becomes
+that lamp's contribution alone.
+
+**It is not a picture operation, and has no kernel.** What it changes is *which numbers get
+decoded*, not what happens to them afterwards. The selection is read by the decode planner
+and travels on the decode job ([impl/media-io.md](impl/media-io.md) §5b), exactly as the Flow
+retiming parameters do, and by the time the stack runs the pixels are already the ones that
+were asked for. So the effect itself renders identity, and its position in the stack does not
+matter.
+
+**The rows are the file's, not the effect's.** Every other effect in the catalogue has the
+same controls wherever it is dropped. This one cannot: what it can offer is a fact about the
+file underneath it. The four dropdowns are therefore *derived* rows (§1.5), built from a
+channel list read off the file when the effect is added and kept on the instance — so they
+ride save, load, undo, copy/paste and the `.lumfx` preset with no format work.
+
+Four notes:
+
+- **The list is stored, not re-read every frame.** A dropdown's value is the index of the
+  option chosen, so the options have to hold still or a stored choice quietly comes to mean a
+  different channel. Reading the file on every build would let a re-render upstream renumber
+  somebody's project between one frame and the next. **Reload channels** is how the list is
+  re-taken, which is the moment the user is expecting the shape to have changed.
+- **An empty slot is black; an empty alpha is opaque.** A depth pass has no alpha of its own,
+  and an invisible layer is not what anybody meant by routing one into red.
+- **A channel the file no longer holds reads as empty**, not as a fault. A project whose EXRs
+  changed shape still opens, and the slot that went quiet is visible rather than fatal.
+- **Two on one layer is the lower one.** There is only one decode, so a second copy is a
+  contradiction rather than a chain; the one nearer the picture is the one that is asked for.
+
+**Only OpenEXR.** ffmpeg can be pointed at a named EXR layer but cannot enumerate one, so the
+channel list and the named read both come from the OpenEXR reader itself; every other format
+decodes as the picture it opens as, and the dropdowns offer None alone.
+
+**Not in v1:** AE's "Process in linear space" checkbox (Lumit's whole pipeline is linear, so
+it would be a switch between correct and wrong), and its UnMult companion.
+
 ---
 
 ### 3.97 OCIO - the four colour-management effects

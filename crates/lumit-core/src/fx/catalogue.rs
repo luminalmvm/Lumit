@@ -64,6 +64,7 @@ use super::effects::{
     emboss::{Emboss, EmbossDef},
     emit_from_image::{EmitFromImage, EmitFromImageDef},
     exposure::{Exposure, ExposureDef},
+    extract_channels::{ExtractChannels, ExtractChannelsDef},
     fill::{Fill, FillDef},
     find_edges::{FindEdges, FindEdgesDef},
     flash::{Flash, FlashDef},
@@ -297,6 +298,10 @@ crate::catalogue![
     // Utility family's end: it is a picture operation like any other, and the
     // only thing unusual about it is where its arithmetic came from.
     CustomShaderDef => CustomShader,
+    // Beside it, and for a related reason: its rows are a fact about the file
+    // under the layer rather than about the effect, so it is the second of the
+    // two whose controls are derived rather than declared.
+    ExtractChannelsDef => ExtractChannels,
     // The Controls family, last in the catalogue and so last in the
     // Add-effect menu, which groups by first appearance here. The order
     // inside it is After Effects' own Expression Controls order, which is what

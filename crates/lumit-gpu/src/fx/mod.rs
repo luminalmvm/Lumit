@@ -8,7 +8,7 @@
 //! compositor uses. The engine takes plain numbers (a blur radius in pixels,
 //! an edge mode), so it neither knows nor cares about the project model.
 
-use crate::{GpuContext, WORKING_FORMAT};
+use crate::GpuContext;
 
 mod blur;
 mod colour;
@@ -649,7 +649,7 @@ fn work_texture(ctx: &GpuContext, w: u32, h: u32, label: &str) -> wgpu::Texture 
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
-        format: WORKING_FORMAT,
+        format: ctx.working(),
         usage: wgpu::TextureUsages::TEXTURE_BINDING
             | wgpu::TextureUsages::STORAGE_BINDING
             | wgpu::TextureUsages::COPY_SRC

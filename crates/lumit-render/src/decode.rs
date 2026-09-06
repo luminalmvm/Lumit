@@ -11,6 +11,9 @@ pub struct FramePixels {
     pub width: u32,
     pub height: u32,
     pub rgba: Vec<u8>,
+    /// How wide `rgba`'s samples are: eight-bit sRGB for nearly everything,
+    /// scene-linear float for a float source such as OpenEXR.
+    pub format: lumit_media::PixelFormat,
     pub frame: usize,
     pub item: Uuid,
 }
@@ -26,6 +29,10 @@ pub struct Request {
     /// show the same bars a comp shows for it — the Viewer previously drew
     /// nothing at all here, which looks identical to a broken application.
     pub slate: Option<(u32, u32)>,
+    /// Read these four named channels of the file instead of the picture it
+    /// opens as (docs/08 §3.97). See [`CompJob::channels`]; `None` on every
+    /// ordinary request, which is nearly all of them.
+    pub channels: Option<[Option<String>; 4]>,
 }
 
 /// One layer's decode job inside a comp render request.
@@ -73,6 +80,15 @@ pub struct CompJob {
     /// missing footage shows unmistakably-absent bars rather than silent
     /// black — and never fails the whole frame.
     pub slate: bool,
+    /// Which of the file's own channels become red, green, blue and alpha, when
+    /// this layer carries an enabled Extract channels effect (docs/08 §3.97).
+    ///
+    /// Set here rather than read in the effect stack because it changes *which
+    /// numbers are decoded*, not what happens to them afterwards — the same
+    /// shape [`Self::flow`] has, and for the same reason: by the time a stack
+    /// runs, the decode has already happened. `None` on every ordinary layer,
+    /// which decodes the picture the file opens as.
+    pub channels: Option<[Option<String>; 4]>,
     /// The sub-frame moments an accumulation motion blur above this layer
     /// wants its footage at (docs/08 §3.26), one per shutter sample. Empty for
     /// a layer no such adjustment covers, so a plain layer decodes exactly one
@@ -107,6 +123,10 @@ pub struct CompLayerPixels {
     pub width: u32,
     pub height: u32,
     pub rgba: Vec<u8>,
+    /// How wide `rgba`'s samples are, and those of every neighbour in
+    /// `temporal` beside it — they come from the one decoder, so they agree.
+    /// Float here is a source (OpenEXR) that kept its range and precision.
+    pub format: lumit_media::PixelFormat,
     /// Native source size (see [`CompJob::natural_w`]); drives geometry.
     pub natural_w: u32,
     pub natural_h: u32,
@@ -258,10 +278,16 @@ impl Default for PreviewEngine {
     }
 }
 
+/// What names one decoded source frame: the item, the source frame, the decode
+/// width, and which of the file's channels were read (docs/08 §3.97). The last
+/// is `None` for every ordinary decode.
+type FrameCacheKey = (Uuid, usize, Option<u32>, Option<[Option<String>; 4]>);
+
 struct CachedFrame {
     width: u32,
     height: u32,
     rgba: Vec<u8>,
+    format: lumit_media::PixelFormat,
 }
 
 impl lumit_cache::ByteSized for CachedFrame {
@@ -288,7 +314,7 @@ impl lumit_cache::ByteSized for CachedFrame {
 /// up, in [`crate::cache`].
 pub struct DecodePool {
     decoders: HashMap<Uuid, lumit_media::VideoDecoder>,
-    frame_cache: lumit_cache::ByteLru<(Uuid, usize, Option<u32>), CachedFrame>,
+    frame_cache: lumit_cache::ByteLru<FrameCacheKey, CachedFrame>,
     /// Flow backend, created on the first Flow-policy frame. Uses [`Self::gpu`]
     /// — the renderer's own device — when the pool was given one, so flow runs
     /// where the frames are already going rather than on a second device of its
@@ -437,16 +463,15 @@ impl DecodePool {
         item: Uuid,
         frame: usize,
         target_width: Option<u32>,
-        width: u32,
-        height: u32,
-        rgba: Vec<u8>,
+        decoded: lumit_media::DecodedFrame,
     ) {
         self.frame_cache.insert(
-            (item, frame, target_width),
+            (item, frame, target_width, None),
             CachedFrame {
-                width,
-                height,
-                rgba,
+                width: decoded.width,
+                height: decoded.height,
+                rgba: decoded.rgba,
+                format: decoded.format,
             },
         );
     }
@@ -482,7 +507,7 @@ impl DecodePool {
 
 fn decode(
     decoders: &mut HashMap<Uuid, lumit_media::VideoDecoder>,
-    cache: &mut lumit_cache::ByteLru<(Uuid, usize, Option<u32>), CachedFrame>,
+    cache: &mut lumit_cache::ByteLru<FrameCacheKey, CachedFrame>,
     req: &Request,
 ) -> Result<FramePixels, String> {
     if let Some((w, h)) = req.slate {
@@ -491,19 +516,55 @@ fn decode(
             width: w,
             height: h,
             rgba: lumit_media::slate::colour_bars(w, h),
+            // The slate is drawn here, in bytes, whatever the missing file
+            // would have been.
+            format: lumit_media::PixelFormat::Srgb8,
             frame: req.frame,
             item: req.item,
         });
     }
-    let cache_key = (req.item, req.frame, req.target_width);
+    // The extracted channels name the pixels as surely as the frame number
+    // does — the same file read as `Z` is not the picture it opens as — so they
+    // are part of the key rather than something the cache could get wrong.
+    let cache_key = (req.item, req.frame, req.target_width, req.channels.clone());
     if let Some(hit) = cache.get(&cache_key) {
         return Ok(FramePixels {
             width: hit.width,
             height: hit.height,
             rgba: hit.rgba.clone(),
+            format: hit.format,
             frame: req.frame,
             item: req.item,
         });
+    }
+    // Extract channels: the file's own reader, because the named channels are
+    // the thing ffmpeg cannot reach (docs/impl/media-io.md §5b). Only an EXR
+    // takes this path; anything else falls through and decodes as itself, which
+    // is what the effect's dropdowns offering nothing already told the user.
+    if let Some(slots) = &req.channels {
+        if let Some(path) = lumit_media::exr::file_for(&req.source, req.frame) {
+            let out = lumit_media::exr::downsample(
+                lumit_media::exr::read_channels(&path, slots).map_err(|e| e.to_string())?,
+                req.target_width,
+            );
+            cache.insert(
+                cache_key,
+                CachedFrame {
+                    width: out.width,
+                    height: out.height,
+                    rgba: out.rgba.clone(),
+                    format: out.format,
+                },
+            );
+            return Ok(FramePixels {
+                width: out.width,
+                height: out.height,
+                rgba: out.rgba,
+                format: out.format,
+                frame: req.frame,
+                item: req.item,
+            });
+        }
     }
     let dec = match decoders.entry(req.item) {
         std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
@@ -529,12 +590,14 @@ fn decode(
             width: out.width,
             height: out.height,
             rgba: out.rgba.clone(),
+            format: out.format,
         },
     );
     Ok(FramePixels {
         width: out.width,
         height: out.height,
         rgba: out.rgba,
+        format: out.format,
         frame,
         item: req.item,
     })
@@ -580,6 +643,9 @@ impl PreviewEngine {
             frame,
             target_width,
             slate,
+            // The Viewer shows a footage item as itself; the effect that
+            // extracts channels lives on a layer, which is the comp path.
+            channels: None,
         }));
     }
 
@@ -705,7 +771,7 @@ fn moment_key(source_key: u128, offset: f64) -> u128 {
 #[allow(clippy::too_many_arguments)]
 fn combine_pair(
     decoders: &mut HashMap<Uuid, lumit_media::VideoDecoder>,
-    cache: &mut lumit_cache::ByteLru<(Uuid, usize, Option<u32>), CachedFrame>,
+    cache: &mut lumit_cache::ByteLru<FrameCacheKey, CachedFrame>,
     flow_engine: &mut Option<lumit_flow::FlowEngine>,
     flow_cache: &mut lumit_cache::ByteLru<FlowKey, CachedFlow>,
     gpu: Option<&lumit_gpu::GpuContext>,
@@ -724,14 +790,28 @@ fn combine_pair(
         frame: ceil,
         target_width: job.target_width,
         slate: None,
+        // The retime's other end is read through the same channels, or the
+        // crossfade would be between two different pictures.
+        channels: job.channels.clone(),
     };
     let b = decode(decoders, cache, &req2)?;
+    // Both policies keep the plate's own width: a retimed OpenEXR is still an
+    // OpenEXR (docs/impl/media-io.md §5a).
+    let float = a.format == lumit_media::PixelFormat::LinearF32;
     let Some(params) = flow else {
-        return Ok(lumit_core::pixels::blend_rgba(&a.rgba, &b.rgba, w));
+        return Ok(if float {
+            lumit_core::pixels::blend_f32(&a.rgba, &b.rgba, w)
+        } else {
+            lumit_core::pixels::blend_rgba(&a.rgba, &b.rgba, w)
+        });
     };
     let set = flow_settings(params);
     let (fw, fh) = (a.width as usize, a.height as usize);
-    let (ga, gb, _) = lumit_flow::flow_grays(&a.rgba, &b.rgba, fw, fh, &set);
+    let (ga, gb, _) = if float {
+        lumit_flow::flow_grays_f32(&a.rgba, &b.rgba, fw, fh, &set)
+    } else {
+        lumit_flow::flow_grays(&a.rgba, &b.rgba, fw, fh, &set)
+    };
     let (fwd, bwd) = flow_for(
         flow_engine,
         flow_cache,
@@ -743,15 +823,21 @@ fn combine_pair(
         &gb,
         &set,
     );
-    Ok(flow_engine
-        .get_or_insert_with(|| flow_engine_for(gpu))
-        .synthesize_at(&a.rgba, &b.rgba, fw, fh, &fwd, &bwd, w, &set))
+    let engine = flow_engine.get_or_insert_with(|| flow_engine_for(gpu));
+    // The float synthesis runs on the processor rather than the card — see
+    // `synthesize_at_f32` for why — and gives the same picture the eight-bit
+    // one would, without rounding it.
+    Ok(if float {
+        engine.synthesize_at_f32(&a.rgba, &b.rgba, fw, fh, &fwd, &bwd, w, &set)
+    } else {
+        engine.synthesize_at(&a.rgba, &b.rgba, fw, fh, &fwd, &bwd, w, &set)
+    })
 }
 
 #[allow(clippy::too_many_arguments)] // one worker call; bundling would hide it
 fn decode_comp(
     decoders: &mut HashMap<Uuid, lumit_media::VideoDecoder>,
-    cache: &mut lumit_cache::ByteLru<(Uuid, usize, Option<u32>), CachedFrame>,
+    cache: &mut lumit_cache::ByteLru<FrameCacheKey, CachedFrame>,
     flow_engine: &mut Option<lumit_flow::FlowEngine>,
     flow_cache: &mut lumit_cache::ByteLru<FlowKey, CachedFlow>,
     gpu: Option<&lumit_gpu::GpuContext>,
@@ -771,6 +857,7 @@ fn decode_comp(
             frame: job.source_frame,
             target_width: job.target_width,
             slate: None, // the comp path builds its slate below, from natural size
+            channels: job.channels.clone(),
         };
         // Missing media renders the slate; nothing else about the layer
         // changes, so transforms, effects and blending all still apply.
@@ -780,6 +867,7 @@ fn decode_comp(
                 width: w,
                 height: h,
                 rgba: lumit_media::slate::colour_bars(w, h),
+                format: lumit_media::PixelFormat::Srgb8,
                 frame: job.source_frame,
                 item: job.item,
             }
@@ -801,6 +889,10 @@ fn decode_comp(
                     frame,
                     target_width: job.target_width,
                     slate: None,
+                    // A neighbour frame is the same picture at another moment,
+                    // so it is read through the same channels — an echo of an
+                    // extracted depth pass is an echo of the depth pass.
+                    channels: job.channels.clone(),
                 };
                 decode(decoders, cache, &nreq)
                     .ok()
@@ -888,6 +980,10 @@ fn decode_comp(
         // and a moment that fails to decode is dropped: that sample then shows
         // the frame-time pixels, which degrades the blur, never the frame.
         let source_key = job.source_key();
+        // Read off the primary frame before it is combined away: every moment
+        // of this clip is the same file at the same width, so they all carry
+        // the plate's own sample width (docs/impl/media-io.md §5a).
+        let format = px.format;
         let shutter: Vec<(f64, Box<CompLayerPixels>)> = job
             .shutter
             .iter()
@@ -899,6 +995,9 @@ fn decode_comp(
                     frame: s.source_frame,
                     target_width: job.target_width,
                     slate: None,
+                    // A shutter moment is the same picture at another instant,
+                    // so it is read through the same channels.
+                    channels: job.channels.clone(),
                 };
                 let spx = decode(decoders, cache, &sreq).ok()?;
                 let (width, height) = (spx.width, spx.height);
@@ -921,6 +1020,7 @@ fn decode_comp(
                         width,
                         height,
                         rgba,
+                        format,
                         natural_w: job.natural_w,
                         natural_h: job.natural_h,
                         // A sample render strips temporal inputs anyway, so
@@ -955,6 +1055,7 @@ fn decode_comp(
             width,
             height,
             rgba,
+            format,
             natural_w: job.natural_w,
             natural_h: job.natural_h,
             temporal,
@@ -990,7 +1091,17 @@ mod tests {
     fn a_preloaded_frame_is_served_without_touching_the_file() {
         let mut pool = DecodePool::new();
         let item = Uuid::now_v7();
-        pool.preload(item, 3, Some(64), 2, 2, vec![200u8; 16]);
+        pool.preload(
+            item,
+            3,
+            Some(64),
+            lumit_media::DecodedFrame {
+                width: 2,
+                height: 2,
+                rgba: vec![200u8; 16],
+                format: lumit_media::PixelFormat::Srgb8,
+            },
+        );
 
         let hit = pool.decode_footage(&Request {
             generation: 0,
@@ -999,6 +1110,7 @@ mod tests {
             frame: 3,
             target_width: Some(64),
             slate: None,
+            channels: None,
         });
         let px = hit.expect("preloaded pixels are a cache hit; the file does not exist");
         assert_eq!((px.width, px.height, px.rgba[0]), (2, 2, 200));
@@ -1012,6 +1124,7 @@ mod tests {
                 frame: 3,
                 target_width: None,
                 slate: None,
+                channels: None,
             })
             .is_err());
     }
@@ -1047,6 +1160,7 @@ mod tests {
                 frame: 40,
                 target_width: None,
                 slate: None,
+                channels: None,
             })
         })
         .expect("the fixture decodes");
@@ -1097,6 +1211,7 @@ mod tests {
                 frame: 40,
                 target_width: None,
                 slate: None,
+                channels: None,
             })
         })
         .expect("the replacement decodes");

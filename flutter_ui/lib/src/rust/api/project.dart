@@ -228,6 +228,27 @@ class ProjectReference {
         that: this,
       );
 
+  /// How many bits a channel this project's compositor works in — 8, 16 or
+  /// 32 (docs/06 §3.4).
+  int colourDepth() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceColourDepth(
+        that: this,
+      );
+
+  /// The depth this machine is actually working at — the project's setting
+  /// resolved against what the graphics card offers.
+  ///
+  /// Equal to [`Self::colour_depth`] on any adapter that can sample a
+  /// thirty-two-bit float texture, which is nearly all of them. Where it
+  /// differs the difference is a fact about the machine and never an error,
+  /// exactly as with the sample count beside it: the Settings row shows what
+  /// is being used beside what is set, and the project keeps the value its
+  /// author chose.
+  int colourDepthInUse() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceColourDepthInUse(
+        that: this,
+      );
+
   /// What the project's colour config is, and every name it puts in a picker.
   ///
   /// **Not for a rebuild path.** It reads the config file to see whether it
@@ -435,6 +456,14 @@ class ProjectReference {
   /// a config that moved relinks by fingerprint like any other file.
   void setColourConfig({String? path}) => BridgeLib.instance.api
       .crateApiProjectProjectReferenceSetColourConfig(that: this, path: path);
+
+  /// Set how many bits a channel the compositor works in.
+  ///
+  /// Takes 8, 16 or 32. Anything else reads as 16 rather than failing: an
+  /// unknown depth is not a reason to refuse an edit. An ordinary op, so it
+  /// is undoable, journalled and saved in the `.lum`.
+  void setColourDepth({required int bits}) => BridgeLib.instance.api
+      .crateApiProjectProjectReferenceSetColourDepth(that: this, bits: bits);
 
   /// Choose the project's working space: Lumit's own linear Rec.709, or the
   /// loaded config's `scene_linear` role (docs/impl/ocio.md §2.1). An

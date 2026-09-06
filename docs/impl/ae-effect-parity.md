@@ -19,9 +19,12 @@ Three scope rules, all deliberate:
 - **"Default AE effects" means Adobe's own** (`ADBE` match names). The Cycore (`CC …`)
   set ships in the AE installer but is third-party; it is tier C here and may end up
   plugin-era territory.
-- **Audio effects, 3D-channel effects and the obsolete category are out of scope** —
-  Lumit's audio effects are their own future programme (docs/09), 3D-channel needs
-  AOV inputs that do not exist yet, and "obsolete" is obsolete.
+- **Audio effects and the obsolete category are out of scope** — Lumit's audio effects are
+  their own future programme (docs/09), and "obsolete" is obsolete. **3D-channel is no
+  longer**: the AOV input it was waiting on is docs/08 §3.97 Extract channels, which reads a
+  named channel of an OpenEXR into the layer's picture. EXtractoR is that effect; ID Matte,
+  Depth Matte and Fog 3D are ordinary picture operations once a pass can be got at, and are
+  schedulable from here.
 
 ## What Lumit already covers (mapped, not always 1:1)
 

@@ -116,6 +116,47 @@ impl Realiser<'_> {
         self.colour_inputs?.get(space.as_deref())
     }
 
+    /// Source pixels to a linear working texture, whichever width they arrived
+    /// at. Every picture that comes from a file goes through here — a layer's
+    /// own, a matte source's, a depth pass fed to an effect — so there is one
+    /// answer to "what happens to a float plate" rather than three.
+    ///
+    /// **Eight-bit** is uploaded sRGB-encoded and decoded by the linearise
+    /// pass, as it always was.
+    ///
+    /// **Float** is already scene-linear, so with no colour space assigned the
+    /// upload *is* the answer and no pass runs at all. With one assigned — an
+    /// ACEScg render, say — the same pass runs on the float values as they
+    /// stand: an input transform is a colour conversion, not a decode, and
+    /// `lumit_gpu::unencoded` leaves a float format alone, which is what makes
+    /// the one pass right for both widths.
+    fn upload_source(
+        &self,
+        rgba: &[u8],
+        w: u32,
+        h: u32,
+        format: lumit_media::PixelFormat,
+        colour_space: &Option<String>,
+    ) -> wgpu::Texture {
+        let ocio = self.input_transform(colour_space);
+        match (format, ocio) {
+            (lumit_media::PixelFormat::LinearF32, None) => {
+                self.engine.upload_float_frame(&self.ctx, rgba, w, h)
+            }
+            (lumit_media::PixelFormat::LinearF32, ocio) => {
+                let src = self.engine.upload_float_frame(&self.ctx, rgba, w, h);
+                // Into the source's own format, not the narrower working one:
+                // the transform must not be where the precision goes.
+                let format = src.format();
+                self.engine.linearise_into(&self.ctx, &src, ocio, format)
+            }
+            (lumit_media::PixelFormat::Srgb8, ocio) => {
+                let src = self.engine.upload_srgb8(&self.ctx, rgba, w, h);
+                self.engine.linearise_through(&self.ctx, &src, ocio)
+            }
+        }
+    }
+
     /// Start one layer's measurement: the clock, and the list its effect stack
     /// writes a millisecond into per op. Both `None` unless this render is
     /// being measured, which is what keeps an ordinary frame free of them.
@@ -251,18 +292,11 @@ impl Realiser<'_> {
                 let linear = if let Some(n) = &d.nested {
                     self.realise_nested(n.key, n.camera, n.width, n.height, n.background, &n.draws)
                 } else {
-                    let src = self
-                        .engine
-                        .upload_srgb8(&self.ctx, &d.rgba, d.tex_w, d.tex_h);
                     // Through the referenced layer's own colour space:
                     // a background plate is a picture like any other, and it is
                     // read as what it is rather than as what the layer reading
                     // it happens to be.
-                    self.engine.linearise_through(
-                        &self.ctx,
-                        &src,
-                        self.input_transform(&d.colour_space),
-                    )
+                    self.upload_source(&d.rgba, d.tex_w, d.tex_h, d.format, &d.colour_space)
                 };
                 // Effects-and-masks depth: run the depth layer's own
                 // stack on its texture before it is resampled, when the consumer's
@@ -807,15 +841,11 @@ impl Realiser<'_> {
         let linear = if let Some(n) = &m.nested {
             self.realise_nested(n.key, n.camera, n.width, n.height, n.background, &n.draws)
         } else {
-            let src = self
-                .engine
-                .upload_srgb8(&self.ctx, &m.rgba, m.tex_w, m.tex_h);
             // Through the matte source's own colour space,
             // as its own picture would be: log footage read as
             // sRGB gates by the wrong shape, and a matte is
             // nothing but a shape.
-            self.engine
-                .linearise_through(&self.ctx, &src, self.input_transform(&m.colour_space))
+            self.upload_source(&m.rgba, m.tex_w, m.tex_h, m.format, &m.colour_space)
         };
         // After-effects matte: run the matte source's own
         // stack on its texture before it gates the consumer, so a keyed
@@ -980,15 +1010,9 @@ impl Realiser<'_> {
                     rgba,
                     tex_w,
                     tex_h,
+                    format,
                     colour_space,
-                } => {
-                    let src = self.engine.upload_srgb8(&self.ctx, rgba, *tex_w, *tex_h);
-                    self.engine.linearise_through(
-                        &self.ctx,
-                        &src,
-                        self.input_transform(colour_space),
-                    )
-                }
+                } => self.upload_source(rgba, *tex_w, *tex_h, *format, colour_space),
                 DrawSource::Nested {
                     width,
                     height,

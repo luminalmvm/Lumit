@@ -351,6 +351,10 @@ pub fn collect_comp_jobs(
                         temporal: Vec::new(),
                         flow_neighbours: Vec::new(),
                         slate: false,
+                        channels: lumit_core::fx::stack_extracted_channels(
+                            &layer.effects,
+                            layer.switches.fx,
+                        ),
                         shutter: Vec::new(),
                         shutter_flow: None,
                     });
@@ -405,6 +409,8 @@ pub fn collect_comp_jobs(
                         temporal: Vec::new(),
                         flow_neighbours: Vec::new(),
                         slate: true,
+                        // Nothing was decoded, so nothing was extracted.
+                        channels: None,
                         shutter: Vec::new(),
                         shutter_flow: None,
                     });
@@ -527,6 +533,10 @@ pub fn collect_comp_jobs(
                     // since they want opposite directions.
                     flow_neighbours,
                     slate: false,
+                    channels: lumit_core::fx::stack_extracted_channels(
+                        &layer.effects,
+                        layer.switches.fx,
+                    ),
                     shutter,
                     shutter_flow,
                 });
@@ -591,6 +601,7 @@ pub fn same_decode(a: &[CompJob], b: &[CompJob]) -> bool {
                 && x.flow == y.flow
                 && x.temporal == y.temporal
                 && x.flow_neighbours == y.flow_neighbours
+                && x.channels == y.channels
                 && x.shutter == y.shutter
                 && x.shutter_flow == y.shutter_flow
         })
@@ -637,6 +648,17 @@ impl CompJob {
         }
         for offset in &self.flow_neighbours {
             h.update(&offset.to_le_bytes());
+        }
+        // The extracted channels name the pixels as surely as the frame number
+        // does: the same file at the same frame is a different picture read as
+        // `Z` than read as RGB, and without this the cache would hand back
+        // whichever was asked for first.
+        if let Some(slots) = &self.channels {
+            h.update(b"channels/");
+            for slot in slots {
+                h.update(slot.as_deref().unwrap_or("").as_bytes());
+                h.update(&[0]);
+            }
         }
         // The shutter moments are content too: the same frame decoded for a
         // wider shutter carries different in-between pictures.
@@ -835,6 +857,7 @@ mod tests {
             temporal: Vec::new(),
             flow_neighbours: Vec::new(),
             slate: false,
+            channels: None,
             shutter: Vec::new(),
             shutter_flow: None,
         }

@@ -341,6 +341,29 @@ pub(crate) fn over(px: &mut [u8], rgb: [u8; 3], a: f32) {
     px[3] = (out_a * 255.0).round().clamp(0.0, 255.0) as u8;
 }
 
+/// [`over`] for a scene-linear float pixel.
+///
+/// The same source-over, minus the two conversions: the colour is already
+/// linear and the destination already float, so nothing is decoded, encoded or
+/// rounded on the way through. Only alpha is clamped — a colour here may sit
+/// above white and must stay there.
+pub(crate) fn over_f32(px: &mut [f32; 4], rgb: [f32; 3], a: f32) {
+    let a = a.clamp(0.0, 1.0);
+    if a <= 0.0 {
+        return;
+    }
+    let dst_a = px[3];
+    let out_a = a + dst_a * (1.0 - a);
+    if out_a <= 0.0 {
+        *px = [0.0; 4];
+        return;
+    }
+    for c in 0..3 {
+        px[c] = (rgb[c] * a + px[c] * dst_a * (1.0 - a)) / out_a;
+    }
+    px[3] = out_a;
+}
+
 /// Per-channel linear crossfade of two equal-length RGBA8 buffers:
 /// `a·(1−t) + b·t`. `t` is clamped to 0..1 (0 = all `a`). The shared frame-blend
 /// used by both preview and export so a blended slow-mo frame is identical in
@@ -355,6 +378,64 @@ pub fn blend_rgba(a: &[u8], b: &[u8], t: f32) -> Vec<u8> {
                 .clamp(0.0, 255.0) as u8
         })
         .collect()
+}
+
+/// One float sample out of a byte buffer, or nought where the buffer stops
+/// short. Every float helper reads through this, so a mismatched length is a
+/// calm black pixel rather than a panic (docs/14 §4).
+#[must_use]
+pub fn f32_at(buf: &[u8], i: usize) -> f32 {
+    let at = i.saturating_mul(4);
+    buf.get(at..at + 4)
+        .and_then(|b| <[u8; 4]>::try_from(b).ok())
+        .map_or(0.0, f32::from_le_bytes)
+}
+
+/// Pixel `n`'s four channels out of a `LinearF32` buffer.
+#[must_use]
+pub fn f32_px(buf: &[u8], n: usize) -> [f32; 4] {
+    let base = n.saturating_mul(4);
+    [
+        f32_at(buf, base),
+        f32_at(buf, base + 1),
+        f32_at(buf, base + 2),
+        f32_at(buf, base + 3),
+    ]
+}
+
+/// Write pixel `n`'s four channels back into a `LinearF32` buffer. A write past
+/// the end does nothing, for [`f32_at`]'s reason.
+pub fn set_f32_px(buf: &mut [u8], n: usize, v: [f32; 4]) {
+    let at = n.saturating_mul(16);
+    let Some(px) = buf.get_mut(at..at + 16) else {
+        return;
+    };
+    for (slot, value) in px.chunks_exact_mut(4).zip(v) {
+        slot.copy_from_slice(&value.to_le_bytes());
+    }
+}
+
+/// [`blend_rgba`] for the float frames a float source decodes to
+/// (`lumit_media::PixelFormat::LinearF32`).
+///
+/// The same crossfade, done on the numbers rather than on bytes. Blending
+/// floats *as* bytes would not dim a highlight, it would shred it: the four
+/// bytes of a float are a sign, an exponent and a mantissa, and averaging those
+/// separately is not averaging anything.
+///
+/// No clamp at the top. Both inputs are scene-linear and may sit well above
+/// white, and a crossfade between two bright frames has no business darkening
+/// either of them to 1.0.
+#[must_use]
+pub fn blend_f32(a: &[u8], b: &[u8], t: f32) -> Vec<u8> {
+    let t = t.clamp(0.0, 1.0);
+    let n = a.len().min(b.len()) / 4;
+    let mut out = Vec::with_capacity(n * 4);
+    for i in 0..n {
+        let v = f32_at(a, i) * (1.0 - t) + f32_at(b, i) * t;
+        out.extend_from_slice(&v.to_le_bytes());
+    }
+    out
 }
 
 /// Which source frame(s) show `source_time` seconds of footage at `fps` over

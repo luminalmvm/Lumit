@@ -46,6 +46,7 @@ pub mod echo;
 pub mod emboss;
 pub mod emit_from_image;
 pub mod exposure;
+pub mod extract_channels;
 pub mod fill;
 pub mod find_edges;
 pub mod flash;

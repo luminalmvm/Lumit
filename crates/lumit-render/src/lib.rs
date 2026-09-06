@@ -98,7 +98,16 @@ pub use realise::Realiser;
 /// Re-exported so callers that already depend on the renderer — the bridge,
 /// reporting what the Settings row is really drawing at — need not take a
 /// direct dependency on `lumit-gpu` just to ask.
-pub use lumit_gpu::adapter_sample_count;
+pub use lumit_gpu::{adapter_colour_depth, adapter_sample_count};
+
+/// The decoder's own frame type, re-exported so a caller that has a decoded
+/// frame in hand can name it without depending on `lumit-media` itself.
+///
+/// The bridge is the caller that needs this: its decoder is optional, so in a
+/// build with the media feature off it cannot name `lumit_media` at all — but
+/// it still hands prefetched frames to `preload_decoded`, and a type it can
+/// always name is what keeps that one call free of feature gates.
+pub use lumit_media::DecodedFrame;
 
 /// How much memory the graphics card has, re-exported for the same reason: the
 /// bridge answers Settings' VRAM ceiling with it and would otherwise need a

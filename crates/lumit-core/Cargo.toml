@@ -27,6 +27,7 @@ i_overlay = { version = "8.1.0", default-features = false }
 spade = "2.15"
 # The puppet mesh cache key (docs/impl/puppet.md §1.4). Already in the lock.
 blake3 = "1"
+half = "2"
 
 [dev-dependencies]
 proptest = "1"

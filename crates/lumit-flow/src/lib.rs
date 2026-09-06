@@ -265,6 +265,23 @@ pub fn to_gray(rgba: &[u8], w: usize, h: usize) -> Gray {
     Gray { w, h, data }
 }
 
+/// [`to_gray`] over whichever width [`Texel`] describes.
+///
+/// The 0..1 range is kept for the eight-bit case exactly as it was. A float
+/// frame is scene-linear and may run above white, and the HUD guard's own
+/// gradient measure works on differences, so nothing is clamped on the way in.
+pub fn to_gray_as<T: Texel>(rgba: &[u8], w: usize, h: usize) -> Gray {
+    let mut data = vec![0f32; w * h];
+    let scale = if T::BYTES == 4 { 1.0 / 255.0 } else { 1.0 };
+    for (i, px) in data.iter_mut().enumerate() {
+        let r = T::get(rgba, i, 0);
+        let g = T::get(rgba, i, 1);
+        let b = T::get(rgba, i, 2);
+        *px = (0.2126 * r + 0.7152 * g + 0.0722 * b) * scale;
+    }
+    Gray { w, h, data }
+}
+
 fn sample_scalar(data: &[f32], w: usize, h: usize, x: f32, y: f32) -> f32 {
     if w == 0 || h == 0 {
         return 0.0;
@@ -1170,7 +1187,59 @@ fn dilate3(mask: &[u8], w: usize, h: usize) -> Vec<u8> {
     out
 }
 
-fn sample_rgba(rgba: &[u8], w: usize, h: usize, x: f32, y: f32) -> [f32; 4] {
+/// How wide one frame's samples are, for the synthesis that warps them.
+///
+/// The synthesis is already arithmetic in `f32` from end to end — the warp,
+/// the occlusion weights, the guard, all of it. The only thing that ever
+/// depended on a byte was reading a frame in and writing one out, so this is
+/// that, and the synthesis itself is written once.
+pub trait Texel {
+    /// Bytes one pixel occupies.
+    const BYTES: usize;
+    /// Channel `c` of pixel `i`, in the units the synthesis works in.
+    fn get(buf: &[u8], i: usize, c: usize) -> f32;
+    /// Write channel `c` of pixel `i` back.
+    fn put(buf: &mut [u8], i: usize, c: usize, v: f32);
+}
+
+/// Eight-bit frames, counted 0..255 — what the synthesis has always carried,
+/// down to the rounding and the clamp.
+pub struct Bytes;
+
+impl Texel for Bytes {
+    const BYTES: usize = 4;
+    fn get(buf: &[u8], i: usize, c: usize) -> f32 {
+        buf.get(i * 4 + c).map_or(0.0, |v| f32::from(*v))
+    }
+    fn put(buf: &mut [u8], i: usize, c: usize, v: f32) {
+        if let Some(slot) = buf.get_mut(i * 4 + c) {
+            *slot = v.round().clamp(0.0, 255.0) as u8;
+        }
+    }
+}
+
+/// Scene-linear float frames (`lumit_media::PixelFormat::LinearF32`), counted
+/// in their own units — so nothing rounds and nothing clips at white.
+pub struct Floats;
+
+impl Texel for Floats {
+    const BYTES: usize = 16;
+    fn get(buf: &[u8], i: usize, c: usize) -> f32 {
+        let at = (i * 4 + c) * 4;
+        buf.get(at..at + 4)
+            .and_then(|b| <[u8; 4]>::try_from(b).ok())
+            .map_or(0.0, f32::from_le_bytes)
+    }
+    fn put(buf: &mut [u8], i: usize, c: usize, v: f32) {
+        let at = (i * 4 + c) * 4;
+        if let Some(slot) = buf.get_mut(at..at + 4) {
+            slot.copy_from_slice(&v.to_le_bytes());
+        }
+    }
+}
+
+/// [`sample_rgba`] over whichever width [`Texel`] describes.
+fn sample_texel<T: Texel>(rgba: &[u8], w: usize, h: usize, x: f32, y: f32) -> [f32; 4] {
     if w == 0 || h == 0 {
         return [0.0; 4];
     }
@@ -1184,7 +1253,7 @@ fn sample_rgba(rgba: &[u8], w: usize, h: usize, x: f32, y: f32) -> [f32; 4] {
     let fy = y - y0 as f32;
     let mut out = [0f32; 4];
     for (c, o) in out.iter_mut().enumerate() {
-        let p = |px: usize, py: usize| f32::from(rgba[(py * w + px) * 4 + c]);
+        let p = |px: usize, py: usize| T::get(rgba, py * w + px, c);
         let a = p(x0, y0) * (1.0 - fx) + p(x1, y0) * fx;
         let b = p(x0, y1) * (1.0 - fx) + p(x1, y1) * fx;
         *o = a * (1.0 - fy) + b * fy;
@@ -1192,16 +1261,21 @@ fn sample_rgba(rgba: &[u8], w: usize, h: usize, x: f32, y: f32) -> [f32; 4] {
     out
 }
 
-/// Plain crossfade — the soft-failure floor everything degrades to.
-fn crossfade(a: &[u8], b: &[u8], phi: f32) -> Vec<u8> {
-    a.iter()
-        .zip(b.iter())
-        .map(|(x, y)| {
-            (f32::from(*x) * (1.0 - phi) + f32::from(*y) * phi)
-                .round()
-                .clamp(0.0, 255.0) as u8
-        })
-        .collect()
+/// [`crossfade`] over whichever width [`Texel`] describes.
+fn crossfade_as<T: Texel>(a: &[u8], b: &[u8], phi: f32) -> Vec<u8> {
+    let n = a.len().min(b.len()) / T::BYTES;
+    let mut out = vec![0u8; n * T::BYTES];
+    for i in 0..n {
+        for c in 0..4 {
+            T::put(
+                &mut out,
+                i,
+                c,
+                T::get(a, i, c) * (1.0 - phi) + T::get(b, i, c) * phi,
+            );
+        }
+    }
+    out
 }
 
 /// Synthesise the frame at phase `phi` ∈ [0,1] between A and B (impl note §3):
@@ -1230,6 +1304,22 @@ pub fn synthesize_with(
     set: &FlowSettings,
     hud: Option<&[f32]>,
 ) -> Vec<u8> {
+    synthesize_with_as::<Bytes>(a, b, w, h, fwd, bwd, phi, set, hud)
+}
+
+/// [`synthesize_with`] over whichever width [`Texel`] describes.
+#[allow(clippy::too_many_arguments)]
+pub fn synthesize_with_as<T: Texel>(
+    a: &[u8],
+    b: &[u8],
+    w: usize,
+    h: usize,
+    fwd: &FlowField,
+    bwd: &FlowField,
+    phi: f32,
+    set: &FlowSettings,
+    hud: Option<&[f32]>,
+) -> Vec<u8> {
     if phi <= 0.0 {
         return a.to_vec();
     }
@@ -1244,18 +1334,18 @@ pub fn synthesize_with(
         || bwd.h != h
         || fwd.u.len() != n
         || bwd.u.len() != n
-        || a.len() < n * 4
-        || b.len() < n * 4
+        || a.len() < n * T::BYTES
+        || b.len() < n * T::BYTES
         || a.len() != b.len()
     {
-        return crossfade(a, b, phi);
+        return crossfade_as::<T>(a, b, phi);
     }
     // Occlusion masks (§2): occ_a marks A-pixels with no match in B (content
     // that gets covered); occ_b marks B-pixels with no match in A (content
     // that gets revealed).
     let occ_a = occlusion(fwd, bwd);
     let occ_b = occlusion(bwd, fwd);
-    let mut out = vec![0u8; n * 4];
+    let mut out = vec![0u8; n * T::BYTES];
     for y in 0..h {
         for x in 0..w {
             let i = y * w + x;
@@ -1268,18 +1358,18 @@ pub fn synthesize_with(
             let (b0u, b0v) = (bwd.u[i], bwd.v[i]);
             let b1u = sample_scalar(&bwd.u, w, h, xf - (1.0 - phi) * b0u, yf - (1.0 - phi) * b0v);
             let b1v = sample_scalar(&bwd.v, w, h, xf - (1.0 - phi) * b0u, yf - (1.0 - phi) * b0v);
-            let sa = sample_rgba(a, w, h, xf - phi * f1u, yf - phi * f1v);
+            let sa = sample_texel::<T>(a, w, h, xf - phi * f1u, yf - phi * f1v);
             // The backward field points B→A; the forward velocity seen from
             // B's grid is its negation, hence the minus sign here too.
-            let sb = sample_rgba(b, w, h, xf - (1.0 - phi) * b1u, yf - (1.0 - phi) * b1v);
+            let sb = sample_texel::<T>(b, w, h, xf - (1.0 - phi) * b1u, yf - (1.0 - phi) * b1v);
             let (oa, ob) = (occ_a[i], occ_b[i]);
             // How much this pixel should be left alone (HUD guard, §3.1 step 5):
             // a static, detailed overlay must not be dragged by the motion of
             // the world sliding underneath it.
             let guard = hud.map_or(0.0, |g| g.get(i).copied().unwrap_or(0.0));
             for c in 0..4 {
-                let la = f32::from(a[i * 4 + c]);
-                let lb = f32::from(b[i * 4 + c]);
+                let la = T::get(a, i, c);
+                let lb = T::get(b, i, c);
                 let synth = if oa == 1 && ob == 1 {
                     // Neither frame can explain this pixel — revealed
                     // background with no source anywhere (§3 soft failure).
@@ -1312,7 +1402,7 @@ pub fn synthesize_with(
                 // agree there — so a full guard costs nothing but the smear.
                 let plain = la * (1.0 - phi) + lb * phi;
                 let v = synth * (1.0 - guard) + plain * guard;
-                out[i * 4 + c] = v.round().clamp(0.0, 255.0) as u8;
+                T::put(&mut out, i, c, v);
             }
         }
     }
@@ -1322,9 +1412,15 @@ pub fn synthesize_with(
 /// Luma pair at the settings' working resolution. Returns the pair and whether
 /// it was actually reduced (a source too small to divide stays whole, since
 /// halving an already-tiny frame starves the pyramid).
-fn grays_at(a: &[u8], b: &[u8], w: usize, h: usize, set: &FlowSettings) -> (Gray, Gray, bool) {
-    let ga = to_gray(a, w, h);
-    let gb = to_gray(b, w, h);
+fn grays_at<T: Texel>(
+    a: &[u8],
+    b: &[u8],
+    w: usize,
+    h: usize,
+    set: &FlowSettings,
+) -> (Gray, Gray, bool) {
+    let ga = to_gray_as::<T>(a, w, h);
+    let gb = to_gray_as::<T>(b, w, h);
     let (ww, _) = set.working_size(w, h);
     if ww == w {
         return (ga, gb, false);
@@ -1352,7 +1448,24 @@ pub fn flow_grays(
     h: usize,
     set: &FlowSettings,
 ) -> (Gray, Gray, bool) {
-    grays_at(a, b, w, h, set)
+    grays_at::<Bytes>(a, b, w, h, set)
+}
+
+/// [`flow_grays`] for scene-linear float frames
+/// (`lumit_media::PixelFormat::LinearF32`).
+///
+/// Motion is measured on brightness, and brightness is brightness at any
+/// width — this exists so the read finds the samples where they actually are,
+/// not because the measurement wants anything different.
+#[must_use]
+pub fn flow_grays_f32(
+    a: &[u8],
+    b: &[u8],
+    w: usize,
+    h: usize,
+    set: &FlowSettings,
+) -> (Gray, Gray, bool) {
+    grays_at::<Floats>(a, b, w, h, set)
 }
 
 /// Bring a measured field and its confidence up to `w × h`, for a consumer
@@ -1508,7 +1621,7 @@ impl FlowEngine {
         if phi >= 1.0 {
             return b.to_vec();
         }
-        let (ga, gb, reduced) = grays_at(a, b, w, h, set);
+        let (ga, gb, reduced) = grays_at::<Bytes>(a, b, w, h, set);
         let (fwd, bwd) = self.flow_pair_with(&ga, &gb, set);
         // The card paints straight from the working-resolution field: no
         // upsample, no per-pixel CPU, no round trip. A failure here
@@ -1566,11 +1679,59 @@ impl FlowEngine {
                 Err(_) => self.synth = None,
             }
         }
-        // CPU fallback: here the field *must* be brought up to frame size,
-        // since `synthesize_with` indexes it per output pixel.
+        self.synthesize_cpu::<Bytes>(a, b, w, h, fwd, bwd, phi, set)
+    }
+
+    /// [`Self::synthesize_at`] for scene-linear float frames
+    /// (`lumit_media::PixelFormat::LinearF32`), sixteen bytes a pixel.
+    ///
+    /// **This one always takes the CPU path**, and deliberately. The compute
+    /// kernel keeps its two frames in storage buffers of packed bytes, four to
+    /// a pixel, so a float frame does not fit it — and widening those buffers
+    /// would quadruple them for the eight-bit case that is nearly every case.
+    /// The arithmetic is the same either way: the synthesis has always worked
+    /// in `f32` internally, and the only thing the card was doing faster was
+    /// the same sums. So a float plate retimed by Flow is correct and lossless
+    /// and costs a CPU pass per frame, where an eight-bit one costs a compute
+    /// dispatch.
+    #[allow(clippy::too_many_arguments)]
+    pub fn synthesize_at_f32(
+        &mut self,
+        a: &[u8],
+        b: &[u8],
+        w: usize,
+        h: usize,
+        fwd: &FlowField,
+        bwd: &FlowField,
+        phi: f32,
+        set: &FlowSettings,
+    ) -> Vec<u8> {
+        if phi <= 0.0 {
+            return a.to_vec();
+        }
+        if phi >= 1.0 {
+            return b.to_vec();
+        }
+        self.synthesize_cpu::<Floats>(a, b, w, h, fwd, bwd, phi, set)
+    }
+
+    /// The CPU synthesis, at whichever width. Here the field *must* be brought
+    /// up to frame size, since the synthesis indexes it per output pixel.
+    #[allow(clippy::too_many_arguments)]
+    fn synthesize_cpu<T: Texel>(
+        &mut self,
+        a: &[u8],
+        b: &[u8],
+        w: usize,
+        h: usize,
+        fwd: &FlowField,
+        bwd: &FlowField,
+        phi: f32,
+        set: &FlowSettings,
+    ) -> Vec<u8> {
         let reduced = fwd.w != w || fwd.h != h;
         let hud = set.hud_guard.then(|| {
-            let ga = to_gray(a, w, h);
+            let ga = to_gray_as::<T>(a, w, h);
             let ga = if reduced {
                 let mut g = ga;
                 while g.w > fwd.w {
@@ -1595,7 +1756,7 @@ impl FlowEngine {
         } else {
             (fwd, bwd)
         };
-        synthesize_with(a, b, w, h, fwd, bwd, phi, set, hud.as_deref())
+        synthesize_with_as::<T>(a, b, w, h, fwd, bwd, phi, set, hud.as_deref())
     }
 }
 
@@ -2718,5 +2879,97 @@ mod tests {
             "end-to-end 1080p interpolate at phi 0.5: {:?}",
             t0.elapsed()
         );
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod float_synth_tests {
+    use super::*;
+
+    /// `n` pixels of float RGBA, every colour channel `v`, opaque.
+    fn frame(n: usize, v: f32) -> Vec<u8> {
+        let mut out = Vec::new();
+        for _ in 0..n {
+            for c in [v, v, v, 1.0] {
+                out.extend_from_slice(&c.to_le_bytes());
+            }
+        }
+        out
+    }
+
+    fn read(buf: &[u8], i: usize, c: usize) -> f32 {
+        Floats::get(buf, i, c)
+    }
+
+    /// A still field at half phase is a plain average of the two frames, and on
+    /// float frames that average keeps its range: 2.0 and 6.0 give 4.0, not the
+    /// 1.0 an eight-bit synthesis would have clamped both ends to first.
+    #[test]
+    fn float_synthesis_keeps_values_above_white() {
+        let (w, h) = (4, 4);
+        let n = w * h;
+        let a = frame(n, 2.0);
+        let b = frame(n, 6.0);
+        let still = FlowField {
+            w,
+            h,
+            u: vec![0.0; n],
+            valid: vec![1; n],
+            v: vec![0.0; n],
+        };
+        let out = synthesize_with_as::<Floats>(
+            &a,
+            &b,
+            w,
+            h,
+            &still,
+            &still,
+            0.5,
+            &FlowSettings::default(),
+            None,
+        );
+
+        assert_eq!(out.len(), n * 16);
+        for i in 0..n {
+            let got = read(&out, i, 0);
+            assert!(
+                (got - 4.0).abs() < 1e-5,
+                "pixel {i} synthesised as {got}, wanted 4.0"
+            );
+        }
+    }
+
+    /// The degrade path — anything inconsistent falls back to a crossfade — has
+    /// to keep the width too, or a mismatched field would turn a float frame
+    /// into a quarter-length buffer of nonsense.
+    #[test]
+    fn the_float_crossfade_fallback_keeps_its_width() {
+        let (w, h) = (4, 4);
+        let n = w * h;
+        let a = frame(n, 2.0);
+        let b = frame(n, 6.0);
+        // A field of the wrong size is what sends it down the fallback.
+        let wrong = FlowField {
+            w: 2,
+            h: 2,
+            u: vec![0.0; 4],
+            valid: vec![1; 4],
+            v: vec![0.0; 4],
+        };
+        let out = synthesize_with_as::<Floats>(
+            &a,
+            &b,
+            w,
+            h,
+            &wrong,
+            &wrong,
+            0.5,
+            &FlowSettings::default(),
+            None,
+        );
+
+        assert_eq!(out.len(), n * 16);
+        assert!((read(&out, 0, 0) - 4.0).abs() < 1e-5);
     }
 }
