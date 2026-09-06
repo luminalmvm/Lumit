@@ -32,6 +32,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 
+import 'cache_dir.dart';
 import 'install_site.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
 
@@ -166,7 +167,9 @@ class UpdateRelease {
         if (raw is! Map) continue;
         final asset = raw.cast<String, dynamic>();
         final name = asset['name'];
-        if (name is String && name.toLowerCase().endsWith(suffix)) {
+        if (name is String &&
+            isPlainFileName(name) &&
+            name.toLowerCase().endsWith(suffix)) {
           chosen = asset;
           break;
         }
@@ -320,6 +323,12 @@ UpdateDelivery deliveryFor(
 
 /// `v0.2.0` → `0.2.0`. Anything else is handed back unchanged, so an oddly
 /// named tag is compared rather than silently treated as version zero.
+/// Whether [name] is a bare file name, so a separator, a `..` or a drive
+/// letter in it can't name a file outside the download folder.
+bool isPlainFileName(String name) => _plainFileName.hasMatch(name);
+
+final RegExp _plainFileName = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]*$');
+
 String versionFromTag(String tag) =>
     tag.startsWith('v') ? tag.substring(1) : tag;
 
@@ -427,9 +436,9 @@ class UpdateService extends ChangeNotifier {
   /// be tested without waiting a day.
   final int Function() _now;
 
-  /// Where the installer is put. The system temporary folder in the shipped
-  /// application: it is a file the operating system may clean up, and once the
-  /// update is installed there is no reason to keep it.
+  /// Where the installer is put, which in the shipped application is Lumit's
+  /// own cache folder (`cache_dir.dart`), one nobody else on the machine can
+  /// write to.
   final Directory Function() _downloadFolder;
 
   UpdateService({
@@ -745,7 +754,7 @@ class UpdateService extends ChangeNotifier {
     try {
       if (file.existsSync()) file.deleteSync();
     } catch (_) {
-      // A file we cannot delete is litter in a temporary folder, not a fault
+      // A file we cannot delete is litter in a cache folder, not a fault
       // worth showing anybody.
     }
   }
@@ -765,8 +774,7 @@ int _epochMillis() => DateTime.now().millisecondsSinceEpoch;
 void _exitProcess() => exit(0);
 
 Directory _defaultDownloadFolder() =>
-    Directory('${Directory.systemTemp.path}${Platform.pathSeparator}'
-        'lumit-update');
+    Directory('${lumitCacheDir().path}${Platform.pathSeparator}update');
 
 /// GitHub wants a user agent and answers JSON. Nothing is authenticated: the
 /// releases of a public repository are public, and asking anonymously means

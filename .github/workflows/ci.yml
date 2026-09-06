@@ -17,6 +17,10 @@ on:
   # on something outside the tree (a runner hiccup, a registry timeout).
   workflow_dispatch:
 
+# Nothing here writes to the repository, so the token cannot either.
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -25,9 +29,10 @@ jobs:
     name: fmt + clippy + tests (macOS)
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@d1031067263f94b142dd6c0ce24c5eb9d02d52a0 # master
         with:
+          toolchain: stable
           components: rustfmt, clippy
       # Homebrew has no ffmpeg@8 formula (only @2.8, @4, @5, @6, @7) and its
       # plain `ffmpeg` is already 9.x, which no published rsmpeg supports — so
@@ -49,7 +54,7 @@ jobs:
         uses: ./.github/actions/ffmpeg8-macos
       # Cellar paths are versioned; a cached rusty_ffmpeg build script must not
       # outlive its keg, so the keg's version is part of the Rust cache key.
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: ffmpeg-${{ steps.ffmpeg.outputs.version }}
       - run: cargo fmt --all -- --check
@@ -74,10 +79,12 @@ jobs:
       # A dated tag's assets are immutable, so re-pin deliberately rather than
       # tracking a moving URL.
       FFMPEG_ASSET: ffmpeg-n8.1.2-50-g1a748fe2cd-win64-gpl-shared-8.1
+      FFMPEG_SHA256: 0a41f31caff48e3035b48f09f5d840bd8d1863008240fc43e457f15e589cf5b3
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@d1031067263f94b142dd6c0ce24c5eb9d02d52a0 # master
         with:
+          toolchain: stable
           components: rustfmt, clippy
       # FFmpeg 8.1 dev libs for lumit-media. rusty_ffmpeg links the import libs in
       # FFMPEG_LIBS_DIR and reads headers from FFMPEG_INCLUDE_DIR (it ignores
@@ -88,6 +95,9 @@ jobs:
         run: |
           $url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/$env:FFMPEG_ASSET.zip"
           Invoke-WebRequest -Uri $url -OutFile "$env:RUNNER_TEMP\ffmpeg.zip"
+          # The archive must match the hash pinned beside its name above.
+          $hash = (Get-FileHash "$env:RUNNER_TEMP\ffmpeg.zip" -Algorithm SHA256).Hash
+          if ($hash -ne $env:FFMPEG_SHA256) { throw "FFmpeg archive hash $hash is not the pinned $env:FFMPEG_SHA256" }
           Expand-Archive "$env:RUNNER_TEMP\ffmpeg.zip" -DestinationPath "$env:RUNNER_TEMP\ffmpeg"
           $root = (Get-ChildItem "$env:RUNNER_TEMP\ffmpeg" -Directory | Select-Object -First 1).FullName
           "FFMPEG_LIBS_DIR=$root\lib"        >> $env:GITHUB_ENV
@@ -97,7 +107,7 @@ jobs:
       # broken opaque structs against very new libclang (20+). Installed to a temp
       # dir so it never clashes with any LLVM preinstalled on the runner.
       - name: Install LLVM 18 (libclang for bindgen)
-        uses: KyleMayes/install-llvm-action@v2
+        uses: KyleMayes/install-llvm-action@ebc0426251bc40c7cd31162802432c68818ab8f0 # v2.0.9
         with:
           version: "18.1.8"
           directory: ${{ runner.temp }}/llvm
@@ -105,7 +115,7 @@ jobs:
         shell: pwsh
         run: |
           "LIBCLANG_PATH=$env:RUNNER_TEMP\llvm\bin" >> $env:GITHUB_ENV
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       # The shipping target runs the full gate, media included — this is the parity
       # the desktop-dev setup unlocked (previously Windows built --no-default-features).
       - run: cargo clippy --workspace --all-targets -- -D warnings
@@ -137,6 +147,7 @@ jobs:
       # three platforms link an identical FFmpeg. The distro's own is 6.x,
       # which the crate's `ffmpeg8` feature does not match.
       FFMPEG_ASSET: ffmpeg-n8.1.2-50-g1a748fe2cd-linux64-gpl-shared-8.1
+      FFMPEG_SHA256: 35dc428bf78d3f8a4447a68707338ecf9560ebcc7459967974f9ff5b1f84be24
       # This runner installs Mesa's lavapipe below, so every GPU test MUST run
       # here: a missing adapter is a broken runner, not a machine without a
       # graphics card, and `lumit_gpu::no_adapter` turns the polite skip into a
@@ -148,9 +159,10 @@ jobs:
       # has been verified. Flip it on there the day a run proves they do.
       LUMIT_REQUIRE_GPU: 1
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@d1031067263f94b142dd6c0ce24c5eb9d02d52a0 # master
         with:
+          toolchain: stable
           components: rustfmt, clippy
       # The desktop stack's system libraries: ALSA (cpal), GL/EGL (eframe's
       # glow backend), X11 / Wayland / xkb (winit), and Mesa's lavapipe so
@@ -171,6 +183,8 @@ jobs:
         run: |
           url="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/${FFMPEG_ASSET}.tar.xz"
           curl -fsSL "$url" -o "$RUNNER_TEMP/ffmpeg.tar.xz"
+          # Checked against the hash pinned beside the asset name above.
+          echo "$FFMPEG_SHA256  $RUNNER_TEMP/ffmpeg.tar.xz" | sha256sum -c -
           mkdir -p "$RUNNER_TEMP/ffmpeg"
           tar -xJf "$RUNNER_TEMP/ffmpeg.tar.xz" -C "$RUNNER_TEMP/ffmpeg" --strip-components=1
           root="$RUNNER_TEMP/ffmpeg"
@@ -194,7 +208,7 @@ jobs:
       # structs and rsmpeg stops compiling) — installed above from the distro.
       - name: Point bindgen at libclang
         run: echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> "$GITHUB_ENV"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: cargo clippy --workspace --all-targets -- -D warnings
       # GPU crates included: the tests share one device under a lock (see the
       # `windows` job), so a software rasteriser neither races nor thrashes.
@@ -245,13 +259,16 @@ jobs:
     timeout-minutes: 60
     env:
       FFMPEG_ASSET: ffmpeg-n8.1.2-50-g1a748fe2cd-linux64-gpl-shared-8.1
+      FFMPEG_SHA256: 35dc428bf78d3f8a4447a68707338ecf9560ebcc7459967974f9ff5b1f84be24
       BENCH_SPAN_FRACTION: "10"
       # A missing adapter is a broken runner here, exactly as in the `linux` job:
       # a benchmark that measured nothing must not report green.
       LUMIT_REQUIRE_GPU: 1
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@d1031067263f94b142dd6c0ce24c5eb9d02d52a0 # master
+        with:
+          toolchain: stable
       - name: Install build dependencies
         run: |
           sudo apt-get update
@@ -266,6 +283,8 @@ jobs:
         run: |
           url="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/${FFMPEG_ASSET}.tar.xz"
           curl -fsSL "$url" -o "$RUNNER_TEMP/ffmpeg.tar.xz"
+          # Checked against the hash pinned beside the asset name above.
+          echo "$FFMPEG_SHA256  $RUNNER_TEMP/ffmpeg.tar.xz" | sha256sum -c -
           mkdir -p "$RUNNER_TEMP/ffmpeg"
           tar -xJf "$RUNNER_TEMP/ffmpeg.tar.xz" -C "$RUNNER_TEMP/ffmpeg" --strip-components=1
           root="$RUNNER_TEMP/ffmpeg"
@@ -275,7 +294,7 @@ jobs:
           echo "$root/bin" >> "$GITHUB_PATH"
       - name: Point bindgen at libclang
         run: echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> "$GITHUB_ENV"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       # Released, always: the harness's own loop is only comparable with itself
       # when the whole thing is optimised, and a debug number means nothing.
       #
@@ -312,7 +331,7 @@ jobs:
       # looking at it, and a passing run's are what the next baseline is made from.
       - name: Keep the numbers
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: bench-results-linux
           path: bench-results.json
@@ -325,9 +344,12 @@ jobs:
       # The same BtbN "shared, GPL" n8.1 build the other jobs take, so the
       # bridge .so links the identical FFmpeg lumit-media expects.
       FFMPEG_ASSET: ffmpeg-n8.1.2-50-g1a748fe2cd-linux64-gpl-shared-8.1
+      FFMPEG_SHA256: 35dc428bf78d3f8a4447a68707338ecf9560ebcc7459967974f9ff5b1f84be24
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@d1031067263f94b142dd6c0ce24c5eb9d02d52a0 # master
+        with:
+          toolchain: stable
       # `cargo build -p lumit_bridge` (default features) pulls lumit-media
       # (FFmpeg) and, through `render`, lumit-render (wgpu/GL). The Flutter Linux
       # runner additionally needs GTK 3 + clang/cmake/ninja. This is the
@@ -352,6 +374,8 @@ jobs:
         run: |
           url="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/${FFMPEG_ASSET}.tar.xz"
           curl -fsSL "$url" -o "$RUNNER_TEMP/ffmpeg.tar.xz"
+          # Checked against the hash pinned beside the asset name above.
+          echo "$FFMPEG_SHA256  $RUNNER_TEMP/ffmpeg.tar.xz" | sha256sum -c -
           mkdir -p "$RUNNER_TEMP/ffmpeg"
           tar -xJf "$RUNNER_TEMP/ffmpeg.tar.xz" -C "$RUNNER_TEMP/ffmpeg" --strip-components=1
           root="$RUNNER_TEMP/ffmpeg"
@@ -365,19 +389,19 @@ jobs:
           echo "$root/bin" >> "$GITHUB_PATH"
       - name: Point bindgen at libclang
         run: echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> "$GITHUB_ENV"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       # Flutter stable pinned to the SAME version the desktop dev box runs
       # (3.47.1), so CI and the owner's machine agree. It has to be: the runner
       # calls `DartProject::set_impeller_switch`, which 3.44.7's Windows
       # embedder does not have, so a stale pin fails to compile main.cpp. `cache: true` caches the
       # SDK; the pub cache is cached separately below.
-      - uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           flutter-version: 3.47.1
           channel: stable
           cache: true
       - name: Cache pub packages
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.pub-cache
           key: pub-${{ runner.os }}-${{ hashFiles('flutter_ui/pubspec.lock') }}
@@ -457,8 +481,10 @@ jobs:
     name: flutter frontend (macOS runner build)
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@d1031067263f94b142dd6c0ce24c5eb9d02d52a0 # master
+        with:
+          toolchain: stable
       # The same extracted FFmpeg 8 keg the macOS Rust jobs take (the `check`
       # job explains it). The build_pod.sh phase inside the Xcode build compiles
       # the bridge crate, so rusty_ffmpeg needs the keg here, and the podspec's
@@ -470,17 +496,17 @@ jobs:
       - name: FFmpeg 8.1.2 (extracted formula, cached keg)
         id: ffmpeg
         uses: ./.github/actions/ffmpeg8-macos
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: ffmpeg-${{ steps.ffmpeg.outputs.version }}
       # The same pinned Flutter the Linux job takes, so the two agree.
-      - uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           flutter-version: 3.47.1
           channel: stable
           cache: true
       - name: Cache pub packages
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.pub-cache
           key: pub-${{ runner.os }}-${{ hashFiles('flutter_ui/pubspec.lock') }}
@@ -543,12 +569,15 @@ jobs:
     runs-on: ubuntu-latest
     env:
       FFMPEG_ASSET: ffmpeg-n8.1.2-50-g1a748fe2cd-linux64-gpl-shared-8.1
+      FFMPEG_SHA256: 35dc428bf78d3f8a4447a68707338ecf9560ebcc7459967974f9ff5b1f84be24
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@d1031067263f94b142dd6c0ce24c5eb9d02d52a0 # master
+        with:
+          toolchain: stable
       # The generator formats its Dart output, so it needs the SDK — pinned to
       # the same version the other Flutter job takes.
-      - uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           flutter-version: 3.47.1
           channel: stable
@@ -569,6 +598,8 @@ jobs:
         run: |
           url="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/${FFMPEG_ASSET}.tar.xz"
           curl -fsSL "$url" -o "$RUNNER_TEMP/ffmpeg.tar.xz"
+          # Checked against the hash pinned beside the asset name above.
+          echo "$FFMPEG_SHA256  $RUNNER_TEMP/ffmpeg.tar.xz" | sha256sum -c -
           mkdir -p "$RUNNER_TEMP/ffmpeg"
           tar -xJf "$RUNNER_TEMP/ffmpeg.tar.xz" -C "$RUNNER_TEMP/ffmpeg" --strip-components=1
           root="$RUNNER_TEMP/ffmpeg"
@@ -580,7 +611,7 @@ jobs:
           echo "$root/bin" >> "$GITHUB_PATH"
       - name: Point bindgen at libclang
         run: echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> "$GITHUB_ENV"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       # The version is pinned once, on the runtime crate the generated glue links
       # against (`flutter_rust_bridge = { version = "=2.12.0", … }`). Read it from
       # there rather than restating it here: a generator that drifts from its
@@ -625,18 +656,21 @@ jobs:
     name: engine-crate coverage gate
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@d1031067263f94b142dd6c0ce24c5eb9d02d52a0 # master
         with:
+          toolchain: stable
           components: llvm-tools-preview
-      - uses: taiki-e/install-action@cargo-llvm-cov
+      - uses: taiki-e/install-action@5f8ff1a44efd92cf3d48505f1adfee33393eb853 # main
+        with:
+          tool: cargo-llvm-cov
       # As in the `check` job above, which explains the extracted formula: the
       # action exports the pkg-config path rather than .cargo/config.toml
       # carrying it.
       - name: FFmpeg 8.1.2 (extracted formula, cached keg)
         id: ffmpeg
         uses: ./.github/actions/ffmpeg8-macos
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: ffmpeg-${{ steps.ffmpeg.outputs.version }}
       # Engine crates must hold the line; the threshold may rise, never fall.
@@ -672,10 +706,13 @@ jobs:
     runs-on: ubuntu-latest
     env:
       FFMPEG_ASSET: ffmpeg-n8.1.2-50-g1a748fe2cd-linux64-gpl-shared-8.1
+      FFMPEG_SHA256: 35dc428bf78d3f8a4447a68707338ecf9560ebcc7459967974f9ff5b1f84be24
       LUMIT_OFX_BENCH: ${{ github.workspace }}/target/ofx-bench
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@d1031067263f94b142dd6c0ce24c5eb9d02d52a0 # master
+        with:
+          toolchain: stable
       - name: Install build dependencies
         run: |
           sudo apt-get update
@@ -684,6 +721,8 @@ jobs:
         run: |
           url="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/${FFMPEG_ASSET}.tar.xz"
           curl -fsSL "$url" -o "$RUNNER_TEMP/ffmpeg.tar.xz"
+          # Checked against the hash pinned beside the asset name above.
+          echo "$FFMPEG_SHA256  $RUNNER_TEMP/ffmpeg.tar.xz" | sha256sum -c -
           mkdir -p "$RUNNER_TEMP/ffmpeg"
           tar -xJf "$RUNNER_TEMP/ffmpeg.tar.xz" -C "$RUNNER_TEMP/ffmpeg" --strip-components=1
           root="$RUNNER_TEMP/ffmpeg"
@@ -693,13 +732,13 @@ jobs:
           echo "$root/bin" >> "$GITHUB_PATH"
       - name: Point bindgen at libclang
         run: echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> "$GITHUB_ENV"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       # The **bundles only**, not the checkouts they were built from: the
       # runner's `ensure` hands back a folder that already has bundles in it
       # without looking at a compiler, so a green run pays for the eighty
       # plugins once and never unpacks their source again.
       - name: Cache the built bench
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: target/ofx-bench/*.ofx.bundle
           key: ofx-bench-${{ runner.os }}-v1
@@ -718,7 +757,7 @@ jobs:
           fi
       - name: Keep the table
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ofx-conformance
           path: target/ofx-conformance.md
@@ -746,9 +785,11 @@ jobs:
       # nothing else.
       LUMIT_OFX_FUZZ_ITERS: 20000
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@nightly
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@d1031067263f94b142dd6c0ce24c5eb9d02d52a0 # master
+        with:
+          toolchain: nightly
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       # `+nightly` explicitly: rust-toolchain.toml pins stable for the whole
       # repository, and it wins over whichever toolchain the step above made the
       # default - so without this cargo runs stable and `-Zsanitizer` is refused.
@@ -758,7 +799,7 @@ jobs:
     name: design-token lint (no hex literals outside the theme module)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # All colours live in the Flutter theme (flutter_ui/lib/theme/); no Rust
       # crate may carry one.
       - run: |
@@ -830,11 +871,11 @@ jobs:
     name: dependency hygiene (licences, advisories, sources)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # The upstream action rather than `cargo install cargo-deny`: it ships the
       # binary and caches the advisory database, so this job is seconds rather
       # than a three-minute build of a tool that checks a lock file.
-      - uses: EmbarkStudios/cargo-deny-action@v2
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:
           command: check
 
@@ -842,7 +883,7 @@ jobs:
     name: bridge lint (no panic paths in the frb API surface)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: |
           # Only the *shipping* half of each file is linted: everything from a
           # `#[cfg(test)]` onward is test code, which may legitimately `expect`
