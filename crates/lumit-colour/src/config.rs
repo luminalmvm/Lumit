@@ -346,6 +346,11 @@ pub enum TransformSpec {
         style: String,
         dir: Direction,
     },
+    /// A transform Lumit does not implement, kept by name so that only the
+    /// space, view or look that needs it refuses, and only when asked for.
+    Unsupported {
+        name: String,
+    },
 }
 
 /// How a space says its values are spread, which sets the shaper a bake uses
@@ -436,6 +441,10 @@ pub struct Config {
     pub space_order: Vec<String>,
     /// Every alias a space declares, to the space's own name.
     pub aliases: BTreeMap<String, String>,
+    /// Every space name and alias lowercased, to the space's own name. The
+    /// reference library matches names without regard to case, and the
+    /// PixelManager config leans on that.
+    pub lowercase: BTreeMap<String, String>,
     pub inactive: BTreeSet<String>,
     pub displays: Vec<Display>,
     pub active_displays: Vec<String>,
@@ -488,7 +497,17 @@ fn negative_style(
     }
 }
 
+/// A transform outside the op set is not a reason to refuse the whole file:
+/// Blender's config keeps its grading transforms in looks most people never
+/// pick. The name is kept, and the resolve says it back when something asks.
 fn parse_transform(what: &str, value: &Tagged) -> Result<TransformSpec> {
+    match parse_transform_kind(what, value) {
+        Err(ColourError::UnsupportedTransform { name }) => Ok(TransformSpec::Unsupported { name }),
+        other => other,
+    }
+}
+
+fn parse_transform_kind(what: &str, value: &Tagged) -> Result<TransformSpec> {
     let tag = value.tag.clone().unwrap_or_default();
     if REFUSED_TRANSFORMS.contains(&tag.as_str()) {
         return Err(ColourError::UnsupportedTransform { name: tag });
@@ -656,9 +675,6 @@ fn parse_transform(what: &str, value: &Tagged) -> Result<TransformSpec> {
         ),
         "FileTransform" => {
             let src = value.string("src").unwrap_or_default();
-            if src.contains('$') || src.contains('%') {
-                return Err(ColourError::ContextVariable { path: src });
-            }
             if value.get("cccid").is_some() {
                 return Err(ColourError::UnsupportedTransform {
                     name: "a FileTransform that selects a grade by cccid".to_string(),
@@ -822,8 +838,14 @@ impl Config {
                     continue;
                 }
                 config.space_order.push(space.name.clone());
+                config
+                    .lowercase
+                    .insert(space.name.to_lowercase(), space.name.clone());
                 for alias in &space.aliases {
                     config.aliases.insert(alias.clone(), space.name.clone());
+                    config
+                        .lowercase
+                        .insert(alias.to_lowercase(), space.name.clone());
                 }
                 config.spaces.insert(space.name.clone(), space);
             }
@@ -941,11 +963,19 @@ impl Config {
         self.roles.get(name).map(String::as_str)
     }
 
-    /// The space an alias stands for, which is how Blender's config reaches
-    /// its XYZ spaces.
+    /// The space a name stands for: the name itself, one of a space's aliases,
+    /// or either of those matched without regard to case, which is how the
+    /// reference library matches. Blender's config reaches its XYZ spaces by
+    /// alias and the PixelManager config a Sony space by a different case.
     #[must_use]
-    pub fn alias(&self, name: &str) -> Option<&str> {
-        self.aliases.get(name).map(String::as_str)
+    pub fn canonical<'a>(&'a self, name: &'a str) -> Option<&'a str> {
+        if self.spaces.contains_key(name) {
+            return Some(name);
+        }
+        self.aliases
+            .get(name)
+            .or_else(|| self.lowercase.get(&name.to_lowercase()))
+            .map(String::as_str)
     }
 
     #[must_use]
@@ -1127,19 +1157,21 @@ colorspaces:
     }
 
     #[test]
-    fn a_transform_outside_the_op_set_refuses_by_name() {
+    fn a_transform_outside_the_op_set_is_kept_by_name_for_the_resolve() {
         let text = r#"
 ocio_profile_version: 2
 colorspaces:
   - !<ColorSpace>
     name: fancy
     to_scene_reference: !<FixedFunctionTransform> {style: ACES_RedMod03}
+  - !<ColorSpace>
+    name: plain
 "#;
-        let err = Config::parse(Path::new("."), text);
+        let config = Config::parse(Path::new("."), text).expect("the file itself is fine");
         assert!(
-            matches!(&err, Err(ColourError::UnsupportedTransform { name }) if name == "FixedFunctionTransform"),
-            "{err:?}"
+            matches!(&config.spaces["fancy"].to_reference, Some(TransformSpec::Unsupported { name }) if name == "FixedFunctionTransform")
         );
+        assert!(config.spaces.contains_key("plain"));
     }
 
     #[test]
@@ -1151,7 +1183,8 @@ colorspaces:
     name: shot
     to_scene_reference: !<FileTransform> {src: $SHOT/grade.spi1d}
 "#;
-        let err = Config::parse(Path::new("."), text);
+        let config = Config::parse(Path::new("."), text).expect("parses");
+        let err = config.resolve_lut_path("$SHOT/grade.spi1d");
         assert!(
             matches!(&err, Err(ColourError::ContextVariable { path }) if path.contains("$SHOT")),
             "{err:?}"
@@ -1228,14 +1261,15 @@ colorspaces:
             }
             other => panic!("expected a matrix, got {other:?}"),
         }
-        // An allocation Lumit has not heard of still refuses by name.
-        let err = Config::parse(
+        // An allocation Lumit has not heard of is kept by name for the
+        // resolve to refuse with.
+        let odd = Config::parse(
             Path::new("."),
             "ocio_profile_version: 1\ncolorspaces:\n  - !<ColorSpace>\n    name: odd\n    to_reference: !<AllocationTransform> {allocation: lg10, vars: [0, 1]}\n",
-        );
+        )
+        .expect("parses");
         assert!(
-            matches!(&err, Err(ColourError::UnsupportedTransform { name }) if name == "AllocationTransform with allocation lg10"),
-            "{err:?}"
+            matches!(&odd.spaces["odd"].to_reference, Some(TransformSpec::Unsupported { name }) if name == "AllocationTransform with allocation lg10")
         );
     }
 

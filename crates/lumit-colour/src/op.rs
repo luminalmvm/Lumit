@@ -74,6 +74,29 @@ impl LogParams {
     }
 }
 
+/// One gamma-and-log curve: a power curve up to a break, a logarithm above it,
+/// and a point it is odd about so negatives have somewhere to go.
+///
+/// This is the reference library's own parameter block (its `GAMMA_LOG` fixed
+/// function), and it is here because two of the built-in styles are that shape
+/// and no other op is: an [`Op::Log`] with a break goes *straight* below it,
+/// not curved. HLG and Apple Log are both this curve with different numbers.
+/// The reference's lin-side slope is 1 in both, so it is not carried.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GammaLogParams {
+    /// The linear value the curve is odd about. Zero for HLG.
+    pub mirror: f32,
+    /// The linear value the power curve gives way to the logarithm at.
+    pub brk: f32,
+    pub gamma_power: f32,
+    pub gamma_slope: f32,
+    pub gamma_offset: f32,
+    pub base: f32,
+    pub log_slope: f32,
+    pub log_offset: f32,
+    pub lin_offset: f32,
+}
+
 /// One ASC CDL step: slope, offset, power per channel, then saturation.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CdlParams {
@@ -161,6 +184,20 @@ pub enum Op {
     /// display encodings hand it. Defined for non-negative light only; the
     /// configs that use it wrap it in [`Negatives::Mirror`].
     Pq {
+        dir: Direction,
+    },
+    /// A gamma-and-log camera curve ([`GammaLogParams`]), forward = scene light
+    /// to code value. HLG's OETF and Apple Log are both this.
+    GammaLog {
+        params: GammaLogParams,
+        dir: Direction,
+    },
+    /// ITU-R BT.2100's surround compensation: scale the three channels by their
+    /// own luminance raised to a power, which is how the HLG system gamma is
+    /// put on and taken off. Forward = the exponent as stated, and it mixes the
+    /// channels, so a chain carrying one bakes to a cube.
+    Surround {
+        exp: f32,
         dir: Direction,
     },
     Cdl {
@@ -320,14 +357,90 @@ fn pq_forward(x: f32) -> f32 {
     ((PQ_C1 + PQ_C2 * y) / (1.0 + PQ_C3 * y)).powf(PQ_M2)
 }
 
+/// The decode's arithmetic is done in double and returned in single, the way
+/// [`crate::matrix`] holds its coefficients. The denominator is the reason:
+/// `c2 - c3·p` subtracts two numbers near 18.8 to leave about 0.3, which throws
+/// away two of an f32's seven digits, and the power that follows multiplies
+/// what is left of the error by 6.28. Measured against the reference library it
+/// costs 2 × 10⁻⁵ at a PQ code of 0.5, twice the promise the fixtures make.
+/// The encode has no such subtraction and stays in single.
 fn pq_inverse(n: f32) -> f32 {
-    let p = n.max(0.0).powf(1.0 / PQ_M2);
-    let num = (p - PQ_C1).max(0.0);
-    let den = PQ_C2 - PQ_C3 * p;
+    let p = f64::from(n).max(0.0).powf(1.0 / f64::from(PQ_M2));
+    let num = (p - f64::from(PQ_C1)).max(0.0);
+    let den = f64::from(PQ_C2) - f64::from(PQ_C3) * p;
     if den == 0.0 {
         return 0.0;
     }
-    (num / den).powf(1.0 / PQ_M1) * PQ_PEAK
+    ((num / den).powf(1.0 / f64::from(PQ_M1)) * f64::from(PQ_PEAK)) as f32
+}
+
+/// The natural-log slope: the curve states its slope against its own base, and
+/// every evaluation below is written with `ln`.
+fn gamma_log_slope(p: &GammaLogParams) -> f32 {
+    let denom = p.base.ln();
+    if denom == 0.0 || !denom.is_finite() {
+        return 0.0;
+    }
+    p.log_slope / denom
+}
+
+/// Scene light to code value: the power curve below the break, the logarithm
+/// above it, both about the mirror point.
+fn gamma_log_forward(p: &GammaLogParams, x: f32) -> f32 {
+    let mirrored = x - p.mirror;
+    let e = mirrored.abs() + p.mirror;
+    let code = if e < p.brk {
+        p.gamma_slope * (e + p.gamma_offset).max(0.0).powf(p.gamma_power)
+    } else {
+        gamma_log_slope(p) * (e + p.lin_offset).max(f32::MIN_POSITIVE).ln() + p.log_offset
+    };
+    code * mirrored.signum()
+}
+
+/// And back. The break in code values is where the power curve reaches it, so
+/// the two halves meet in both directions by construction.
+fn gamma_log_inverse(p: &GammaLogParams, y: f32) -> f32 {
+    let at = |x: f32| p.gamma_slope * (x + p.gamma_offset).max(0.0).powf(p.gamma_power);
+    let (mirror, brk) = (at(p.mirror), at(p.brk));
+    let mirrored = y - mirror;
+    let code = mirrored.abs() + mirror;
+    let e = if code < brk {
+        if p.gamma_slope == 0.0 || p.gamma_power == 0.0 {
+            0.0
+        } else {
+            (code / p.gamma_slope).max(0.0).powf(1.0 / p.gamma_power) - p.gamma_offset
+        }
+    } else {
+        let slope = gamma_log_slope(p);
+        if slope == 0.0 {
+            0.0
+        } else {
+            ((code - p.log_offset) / slope).exp() - p.lin_offset
+        }
+    };
+    e * mirrored.signum()
+}
+
+/// The Rec.2100 luma weights, which the surround op is defined with.
+const REC2100_LUMA: [f32; 3] = [0.2627, 0.6780, 0.0593];
+
+/// The luminance is floored before the power so a colour whose channels are far
+/// from zero cannot be gained up by a luminance that is nearly zero. It is the
+/// reference library's own guard, at its own 10⁻⁴.
+const SURROUND_MIN_LUMINANCE: f32 = 1e-4;
+
+fn surround(exp: f32, dir: Direction, rgb: [f32; 3]) -> [f32; 3] {
+    let (power, floor) = match dir {
+        Direction::Forward => (exp, SURROUND_MIN_LUMINANCE),
+        Direction::Inverse => (1.0 / exp, SURROUND_MIN_LUMINANCE.powf(exp)),
+    };
+    let luma = REC2100_LUMA[0] * rgb[0] + REC2100_LUMA[1] * rgb[1] + REC2100_LUMA[2] * rgb[2];
+    let gain = luma.abs().max(floor).powf(power - 1.0);
+    let mut out = [0.0_f32; 3];
+    for (c, o) in out.iter_mut().enumerate() {
+        *o = rgb[c] * gain;
+    }
+    out
 }
 
 fn cdl_forward(p: &CdlParams, rgb: [f32; 3]) -> [f32; 3] {
@@ -411,6 +524,8 @@ impl Op {
             Op::Negatives { curve, .. } => curve.name(),
             Op::Exponent { .. } => "an exponent",
             Op::Pq { .. } => "the ST 2084 curve",
+            Op::GammaLog { .. } => "a gamma-and-log curve",
+            Op::Surround { .. } => "the Rec.2100 surround compensation",
             Op::MonCurve { .. } => "an exponent with a linear segment",
             Op::Log { .. } => "a log curve",
             Op::Cdl { .. } => "a CDL grade",
@@ -451,6 +566,17 @@ impl Op {
                 }
                 out
             }
+            Op::GammaLog { params, dir } => {
+                let mut out = [0.0_f32; 3];
+                for (c, o) in out.iter_mut().enumerate() {
+                    *o = match dir {
+                        Direction::Forward => gamma_log_forward(params, rgb[c]),
+                        Direction::Inverse => gamma_log_inverse(params, rgb[c]),
+                    };
+                }
+                out
+            }
+            Op::Surround { exp, dir } => surround(*exp, *dir, rgb),
             Op::Exponent { exp, dir } => {
                 let mut out = [0.0_f32; 3];
                 for (c, o) in out.iter_mut().enumerate() {
@@ -524,6 +650,14 @@ impl Op {
                 curve: Box::new(curve.inverted(what)?),
             },
             Op::Pq { dir } => Op::Pq { dir: dir.flipped() },
+            Op::GammaLog { params, dir } => Op::GammaLog {
+                params: *params,
+                dir: dir.flipped(),
+            },
+            Op::Surround { exp, dir } => Op::Surround {
+                exp: *exp,
+                dir: dir.flipped(),
+            },
             Op::Exponent { exp, dir } => Op::Exponent {
                 exp: *exp,
                 dir: dir.flipped(),
@@ -568,7 +702,9 @@ impl Op {
     #[must_use]
     pub fn is_channel_independent(&self) -> bool {
         match self {
-            Op::Matrix(_) | Op::Lut3d { .. } => false,
+            // The surround scales all three channels by their own luminance,
+            // so it mixes them exactly as a matrix does.
+            Op::Matrix(_) | Op::Lut3d { .. } | Op::Surround { .. } => false,
             // The wrapper only decides what happens below zero; whether the
             // channels stay apart is the curve inside's business.
             Op::Negatives { curve, .. } => curve.is_channel_independent(),
@@ -821,6 +957,55 @@ mod tests {
             dir: Direction::Forward,
         };
         round_trip(&op, &[[0.0, 0.001, 0.18]], 1e-4);
+    }
+
+    /// HLG's numbers, which are the ones the built-in registry hands this op.
+    fn hlg() -> GammaLogParams {
+        let a = 0.178_832_77_f64;
+        GammaLogParams {
+            mirror: 0.0,
+            brk: 0.25,
+            gamma_power: 0.5,
+            gamma_slope: 1.0,
+            gamma_offset: 0.0,
+            base: std::f32::consts::E,
+            log_slope: a as f32,
+            log_offset: ((4.0_f64).ln() * a + 0.5 - a * (4.0 * a).ln()) as f32,
+            lin_offset: -((1.0 - 4.0 * a) / 4.0) as f32,
+        }
+    }
+
+    #[test]
+    fn a_gamma_log_curve_joins_its_two_halves_and_reverses() {
+        let op = Op::GammaLog {
+            params: hlg(),
+            dir: Direction::Forward,
+        };
+        // The square root reaches 0.5 at a twelfth of the scene range, which is
+        // exactly where the logarithm takes over.
+        let below = op.eval([0.25 - 1e-6; 3]);
+        let above = op.eval([0.25 + 1e-6; 3]);
+        assert!(close(below, [0.5; 3], 1e-5), "{below:?}");
+        assert!(close(below, above, 1e-5), "{below:?} vs {above:?}");
+        // HLG's own published pair: 18% grey of the scene range encodes to 0.42.
+        assert!(close(op.eval([0.1764; 3]), [0.42; 3], 1e-5));
+        // And it is odd about the mirror point rather than clamping.
+        assert!(close(op.eval([-0.1764; 3]), [-0.42; 3], 1e-5));
+        round_trip(&op, &SAMPLES, 1e-5);
+        round_trip(&op, &[[-0.05, 0.4, 2.9]], 1e-5);
+    }
+
+    #[test]
+    fn the_surround_scales_by_luminance_and_reverses() {
+        let op = Op::Surround {
+            exp: 1.0 / 1.2,
+            dir: Direction::Forward,
+        };
+        // The luma weights sum to one, so a neutral is its own luminance and
+        // the whole thing collapses to a power of it.
+        let got = op.eval([0.5; 3]);
+        assert!(close(got, [(0.5_f32).powf(1.0 / 1.2); 3], 1e-6), "{got:?}");
+        round_trip(&op, &SAMPLES, 1e-4);
     }
 
     #[test]

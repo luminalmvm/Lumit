@@ -223,7 +223,7 @@ mod tests {
             },
             ColourError::SingularMatrix,
             ColourError::UnsupportedLutFormat {
-                extension: ".cube".into(),
+                extension: ".csp".into(),
             },
             ColourError::ContextVariable {
                 path: "$SHOT/lut.spi3d".into(),

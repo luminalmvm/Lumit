@@ -33,8 +33,8 @@
 //! - [`sample`] — the two samplers: tetrahedral for cubes, linear for curves.
 //!   Binding maths: WP3's WGSL must match it byte for byte.
 //! - [`bake`] — the chain baked into the one artefact the pipeline executes.
-//! - [`spi`], [`clf`] — the look-up table file formats `lumit-core::lut` does
-//!   not already own.
+//! - [`spi`], [`clf`], [`truelight`], [`autodesk`] — the look-up table file
+//!   formats `lumit-core::lut` does not already own.
 //! - [`config`] — the `config.ocio` grammar.
 //! - [`resolve`] — a loaded config: roles, displays, views, and the bridge from
 //!   the config's reference space to Lumit's fixed working space.
@@ -46,6 +46,7 @@
 //! so a loaded config and a baked artefact are `Send + Sync` and may be shared
 //! across worker threads (docs/14 §1.2).
 
+pub mod autodesk;
 pub mod bake;
 pub mod builtin;
 pub mod clf;
@@ -57,6 +58,7 @@ pub mod op;
 pub mod resolve;
 pub mod sample;
 pub mod spi;
+pub mod truelight;
 
 pub use bake::{bake, Artefact, Shaper, Stage, VendoredArtefact};
 pub use config::Config;

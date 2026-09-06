@@ -9,9 +9,12 @@ other golden data.
 
 ## What is vendored
 
-Five artefacts, 47 MiB, all from one PyOpenColorIO 2.5.2 session on 2026-08-25
-against `cg-config-v4.0.0_aces-v2.0_ocio-v2.5.ocio` — the same session that
-produced `../tests/fixtures/aces-cg.fixture`:
+Eight artefacts, 76 MiB, from two PyOpenColorIO 2.5.2 sessions against
+`cg-config-v4.0.0_aces-v2.0_ocio-v2.5.ocio`. The first five are from the
+2026-08-25 session that produced `../tests/fixtures/aces-cg.fixture`; the three
+ACES 1.x output transforms, which Blender's config and the PixelManager config
+name for their ACES views, from 2026-09-06 with the rows in
+`../tests/fixtures/builtins.fixture`:
 
 | Style | Size |
 |---|---|
@@ -20,6 +23,9 @@ produced `../tests/fixtures/aces-cg.fixture`:
 | `ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - HDR-1000nit-P3-D65_2.0` | 9.3 MiB |
 | `ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - HDR-1000nit-REC2020_2.0` | 9.3 MiB |
 | `ACES-LMT - ACES 1.3 Reference Gamut Compression` | 9.3 MiB |
+| `ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - SDR-VIDEO_1.0` | 9.8 MiB |
+| `ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - SDR-VIDEO-P3lim_1.1` | 9.8 MiB |
+| `ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - HDR-VIDEO-1000nit-15nit-REC2020lim_1.1` | 9.4 MiB |
 
 Each is 65³ samples at nine significant digits, which is what an `f32` needs to
 round-trip and about a third of the size of Python's own `repr`. They are **not**

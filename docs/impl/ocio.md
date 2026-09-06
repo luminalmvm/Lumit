@@ -232,9 +232,14 @@ A missing, moved, unreadable or refused config must never hold the project hosta
   refusing, as it always did: a wrong colour space in a delivered file is worse than
   an export that did not run. Preview degrades, delivery refuses; that asymmetry is
   deliberate.
-- **A refused config says why** (the unsupported op, the missing LUT file, the parse
-  error), in one calm sentence on the project settings row (§6.4), and behaves exactly
-  like a missing one otherwise.
+- **A config that cannot be parsed says why** in one calm sentence on the project
+  settings row (§6.4), and behaves exactly like a missing one otherwise.
+- **A config that parses is in force, name by name.** A space, view or look that needs
+  something Lumit does not do (an unsupported op, a missing LUT file, a 3D table asked
+  for backwards) refuses on its own, at load, with its reason, and the picker lists it
+  greyed out with that reason as its tooltip (§6.2). Everything else the config names
+  works. Blender's own config keeps camera log spaces and grading looks most people
+  never pick, and refusing the whole file for those lost the views they came for.
 
 ## 4. The transform core (`lumit-colour`)
 
@@ -248,16 +253,18 @@ The transforms real configs are made of, each with forward and (where noted) inv
 
 | Op | Config forms | Inverse |
 |---|---|---|
-| Matrix | `MatrixTransform` (3×4: 3×3 + offset) | exact |
+| Matrix | `MatrixTransform` (3×4: 3×3 + offset), `FileTransform` → `.spimtx` | exact |
 | Exponent | `ExponentTransform`, `ExponentWithLinearTransform` (sRGB-style linear toe) | exact |
 | Negatives | the `style` key on either exponent form: `mirror`, `pass_thru` | exact |
 | ST 2084 | the PQ display encodings' curve, `Op::Pq` | exact |
+| Gamma-log | `Op::GammaLog`: a power curve to a break and a logarithm above it, odd about a stated point (HLG's OETF, Apple Log) | exact |
+| Surround | `Op::Surround`: Rec.2100's surround compensation, each channel scaled by a power of its own luminance | exact |
 | Log | `LogTransform` (base only), `LogAffineTransform`, `LogCameraTransform` (lin-side break) | exact |
 | Allocation | `AllocationTransform` (`lg2`, `uniform`): the log or the fit a space's `allocation` line stands for | exact |
 | CDL | `CDLTransform` (slope/offset/power + saturation, ASC ordering) | exact except clamp |
 | Range | `RangeTransform` (scale + clamp) | exact on the non-clamped part |
-| 1D LUT | `FileTransform` → `.spi1d`, `.cube` 1D, CLF `LUT1D` | by monotone bisection (§4.3) |
-| 3D LUT | `FileTransform` → `.spi3d`, `.cube` 3D, CLF `LUT3D`, **tetrahedral** interpolation | **refused** (§4.3) |
+| 1D LUT | `FileTransform` → `.spi1d`, `.cube` 1D, `.cub` input LUT, `.3dl` shaper, CLF `LUT1D` | by monotone bisection (§4.3) |
+| 3D LUT | `FileTransform` → `.spi3d`, `.cube` 3D, `.cub` cube, `.3dl` cube, CLF `LUT3D`, **tetrahedral** interpolation | **refused** (§4.3) |
 | Group | `GroupTransform` — ordered children | children reversed, each inverted |
 | Space-to-space | `ColorSpaceTransform` — resolved through the reference space | by construction |
 | Display/view | display + view → the view's transform (+ its look's transform if the view names one) | n/a |
@@ -293,16 +300,28 @@ reference bakes** — high-resolution shaper+cube artefacts generated offline wi
 reference library, provenance (library version, generation script) recorded in the
 fixture header, checked in like any golden data. Exact Rust ports of those styles are
 recorded follow-up work, one style at a time, each landing against the same fixtures.
-A `BuiltinTransform` style in neither tier refuses the config by name. Note the
+A `BuiltinTransform` style in neither tier refuses the space or view that names it,
+by name, and the rest of the config stays in force (§3.3). Note the
 happy accident of history: the *legacy* ACES configs (1.0.3/1.2, the most widespread)
 are pure config-data — matrices, logs and `.spi1d`/`.spi3d` files — and need no
 builtins at all; the file-transform path covers them wholesale.
 
-**Both tiers are populated** as of the ACES CG drop. Tier one holds fourteen styles:
-`IDENTITY` and `pass_thru`, the three ACES log/primaries conversions, the AP0→XYZ utility,
-and all eight display encodings the CG config names. Tier two holds five artefacts — the
-four ACES 2.0 output transforms and the ACES 1.3 Reference Gamut Compression LMT — at 47
-MiB in `crates/lumit-colour/vendored/`, read at runtime from a `colour/` data directory
+**Both tiers are populated** as of the ACES CG drop, and tier one grew again for the two
+real configs (Blender 5.2's bundled one and PixelManager's). It holds twenty-nine styles:
+`IDENTITY` and `pass_thru`, the three ACES log/primaries conversions, the AP0 and AP1
+XYZ utilities, fourteen display encodings (each in the reading of negatives its name
+states, clamping or mirrored), the four transfer curves on their own, PQ and HLG each
+way round, and the four camera entries, Apple Log and the two Canon Logs. Every one is
+gated row by row against the reference library's own processor for that style, forwards
+and backwards, in `tests/fixtures/builtins.fixture`. `ADX10_to_ACES2065-1` and
+`ADX16_to_ACES2065-1` are the two styles those configs name and tier one does not answer:
+the film-density curve inside both is an eleven-knot table at spacings of the reference's
+own choosing, with a straight extrapolation and a clamp at each end, and the op set holds
+no table that is not evenly spaced. Tier two holds eight artefacts — the
+four ACES 2.0 output transforms, the ACES 1.3 Reference Gamut Compression LMT, and the
+three ACES 1.x renderings the Blender and PixelManager configs name for their ACES views
+(SDR, SDR limited to P3, and 1000 nit HDR; the 2000 and 4000 nit ones refuse by name) — at
+76 MiB in `crates/lumit-colour/vendored/`, read at runtime from a `colour/` data directory
 shipped beside the executable (`data/colour/` on Windows and Linux,
 `Contents/Resources/colour/` on macOS, the crate's own `vendored/` in a development
 checkout) rather than compiled into every binary; a style whose file is absent refuses by
@@ -374,6 +393,21 @@ CLF (`.clf`, and `.ctf` same grammar): XML; v1 reads `LUT1D`, `LUT3D`, `Matrix`,
 `Range`, `Log`, `Exponent`, `ASC_CDL` process nodes — the same op set — with
 `rawHalfs` and `halfDomain` refused by name; the CLF spec's own test files are part of
 the conformance suite (§7).
+
+**The three formats the real configs added**, each with a way of being wrong that no
+neutral notices. `.spimtx` is twelve numbers and no header at all, three rows of four,
+and the fourth column is an offset written as a 16-bit code value: it is divided by
+65535, and skipping that divide moves the picture by a stop and more. Truelight `.cub`
+(FilmLight) is an `# InputLUT` block and a `# Cube` block under `#` header lines. Its
+cube is **red fastest**, Lumit's own order, but its input LUT's numbers are positions
+in that cube, 0 to `width−1`, and come back down by that factor before the cube reads
+them. `.3dl` (Autodesk Flame and Lustre) is whole numbers with no scale stated
+anywhere: the bit depth is inferred from the largest value, shaper and cube separately,
+with twice the nominal maximum allowed for overshoot, exactly as the reference reader
+infers it. Its cube is **blue fastest** and is transposed on the way in, and a shaper
+within two code values of a straight line is dropped, because that half of the format
+was never written down and its writers disagree by about that much. All three are gated
+file by file against the reference library in `tests/fixtures/files.fixture` (§7).
 
 ### 4.4 Parsing the config file
 
@@ -600,9 +634,11 @@ Following docs/17's shapes — commands down, references up, no polling in rebui
 paths:
 
 - **Read**: `ProjectReference::colour_summary() -> BridgeColourSummary` — the state
-  (none / loaded / missing / refused + its one-sentence reason), the config's display
+  (none / loaded / missing or unreadable + its one-sentence reason), the config's display
   path, the colour space names (active only), the displays each with its view names,
-  and the resolved role names v1 uses (`scene_linear`, interchange). Fetched on
+  the resolved role names v1 uses (`scene_linear`, interchange), and `problems`: every
+  listed name the config cannot make, as input, output, view or look, each with the
+  same keyed reason a config-level refusal carries (§3.3). Fetched on
   document change, cached Dart-side; the budget test stays at 0 for rebuild paths.
 - **Write**: `ProjectReference::set_colour_config(path: Option<String>)`;
   `FootageReference::set_colour_space(space: Option<String>)`. Both lower to the §3.1
@@ -627,7 +663,10 @@ label, then rows), each view a tick-row; the tone-map row stays at the bottom an
 composes with whichever transform is ticked (it sits inside the display stage,
 and that does not change). The closed face names the view in force ("sRGB — ACES
 1.0"), keeps the amber engaged tint for exposure/tone-map, and shows the calm missing
-state ("Config missing") when degraded (§3.3). No new panel, no new widget kind.
+state ("Config missing") when degraded (§3.3). No new panel, no new widget kind. A view
+the config cannot make is a row drawn quiet with its reason as the tooltip, the
+disabled-not-hidden rule, and the same goes for a space in the footage submenu (§6.5)
+and for the OCIO effects' name rows.
 
 ### 6.3 The export dialog's Colour section
 
@@ -642,7 +681,8 @@ unchanged.
 Colour management is the project's, not the machine's — docs/07 §13.5 already says it
 "lands here when built". A **Colour** group: a config row (path well + browse +
 clear, the §12A.4 dialog-row conventions), a state line in the calm voice ("Loaded:
-42 colour spaces, 3 displays" / the missing or refused sentence), and a read-only
+42 colour spaces, 3 displays", or with a count of the greyed-out names when some
+refuse, or the missing or unreadable sentence), and a read-only
 working-space line stating §2.1's mode ("Working space: linear Rec.709" or, legacy,
 "Working space: taken as *scene_linear* (ACEScg)"). Settings ▸ Colour (machine
 defaults for new projects) is unchanged in v1; a "default config for new projects"

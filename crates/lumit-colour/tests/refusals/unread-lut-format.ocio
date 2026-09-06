@@ -1,7 +1,7 @@
-# refuses: .3dl
+# refuses: does not read look-up tables in .csp
 ocio_profile_version: 1
 search_path: luts
 colorspaces:
   - !<ColorSpace>
     name: old_format
-    to_reference: !<FileTransform> {src: look.3dl}
+    to_reference: !<FileTransform> {src: look.csp}

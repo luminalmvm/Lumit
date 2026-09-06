@@ -1,15 +1,16 @@
-//! The two Sony Pictures Imageworks look-up table formats, `.spi1d` and
-//! `.spi3d`.
+//! The three Sony Pictures Imageworks table formats, `.spi1d`, `.spi3d` and
+//! `.spimtx`.
 //!
 //! In plain terms: these are the plain-text table files the widely-used legacy
 //! ACES configs are built from — the reason those configs need no code-named
-//! built-in transforms at all. Both are a tiny header followed by numbers.
-//! The one detail worth stating twice is that `.spi1d` declares its **input
-//! domain** on a `From` line and it is frequently not `0 1`; assuming `0 1`
-//! silently squashes the curve, which looks like a grading error rather than a
-//! parsing one.
+//! built-in transforms at all. All three are a tiny header, or none at all,
+//! followed by numbers. The one detail worth stating twice is that `.spi1d`
+//! declares its **input domain** on a `From` line and it is frequently not
+//! `0 1`; assuming `0 1` silently squashes the curve, which looks like a
+//! grading error rather than a parsing one.
 
 use crate::error::{ColourError, Result};
+use crate::matrix::Matrix34;
 use crate::sample::{Cube, Curve};
 
 fn bad(what: &str, reason: impl Into<String>) -> ColourError {
@@ -239,6 +240,37 @@ pub fn parse_spi3d(what: &str, text: &str) -> Result<Cube> {
     Cube::new(what, n, [0.0; 3], [1.0; 3], data)
 }
 
+/// Parse `.spimtx` text into a 3×4 matrix.
+///
+/// The whole file is twelve numbers, three rows of four, and there is no header
+/// at all. The fourth number of each row is an offset written as a 16-bit code
+/// value, so it is divided by 65535 to reach the 0 to 1 range everything else
+/// here works in. Getting that divide wrong moves a picture by a whole stop and
+/// upwards, which is why it is the one line worth pointing at.
+pub fn parse_spimtx(what: &str, text: &str) -> Result<Matrix34> {
+    let mut values: Vec<f64> = Vec::with_capacity(12);
+    for token in text.split_whitespace() {
+        values.push(
+            token
+                .parse::<f64>()
+                .map_err(|_| bad(what, format!("could not read the number {token:?}")))?,
+        );
+    }
+    let mut m: Matrix34 = values.try_into().map_err(|v: Vec<f64>| {
+        bad(
+            what,
+            format!(
+                "a matrix file holds twelve numbers, this one has {}",
+                v.len()
+            ),
+        )
+    })?;
+    for i in [3, 7, 11] {
+        m[i] /= 65535.0;
+    }
+    Ok(m)
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
@@ -316,5 +348,20 @@ mod tests {
         assert!(parse_spi1d("t", "Version 1\nLength two\n").is_err());
         assert!(parse_spi3d("t", "SPILUT 1.0\n").is_err());
         assert!(parse_spi3d("t", "").is_err());
+        assert!(parse_spimtx("t", "1 0 0 0\n0 1 0 0\n").is_err());
+        assert!(parse_spimtx("t", "1 0 0 0 0 1 0 0 0 0 1 x").is_err());
+    }
+
+    /// The offset column is in 16-bit code values, and the divide by 65535 is
+    /// the one thing this format can get quietly wrong.
+    #[test]
+    fn a_matrix_files_offsets_are_scaled_out_of_16_bit_code_values() {
+        let text = "0.5 0 0 6553.5\n0 2 0 -65535\n0 0 1 0\n";
+        let m = parse_spimtx("t.spimtx", text).expect("parses");
+        assert_eq!(m[0], 0.5);
+        assert_eq!(m[5], 2.0);
+        assert!((m[3] - 0.1).abs() < 1e-9, "{m:?}");
+        assert_eq!(m[7], -1.0);
+        assert_eq!(m[11], 0.0);
     }
 }

@@ -29,8 +29,9 @@
 //!   compose through, so its reference space is taken as the working space.
 //!   Same honesty, less information.
 
-use std::collections::BTreeSet;
-use std::path::Path;
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 use crate::bake::Shaper;
 use crate::config::{Allocation, Config, TransformSpec, View};
@@ -82,6 +83,12 @@ pub struct LoadedConfig {
     bridge: Bridge,
     /// The project composites in the config's `scene_linear` role.
     from_config: bool,
+    /// Look-up table files already parsed, by path. A config names each file
+    /// from many spaces and views, and some of those files are megabytes.
+    /// Held only while a map entry is read or written, never across a
+    /// parse. ponytail: grows to the config's own file list and no further,
+    /// which is the bound; drop entries by size if a config ever outgrows it.
+    lut_cache: Arc<Mutex<BTreeMap<PathBuf, Chain>>>,
 }
 
 impl LoadedConfig {
@@ -113,6 +120,7 @@ impl LoadedConfig {
                     config,
                     bridge: Bridge::ComposeThrough { space },
                     from_config: true,
+                    lut_cache: Arc::default(),
                 };
             }
         }
@@ -135,6 +143,7 @@ impl LoadedConfig {
             config,
             bridge,
             from_config: false,
+            lut_cache: Arc::default(),
         }
     }
 
@@ -280,9 +289,10 @@ impl LoadedConfig {
 
     fn space(&self, name: &str) -> Result<&crate::config::ColourSpace> {
         // A role is one indirection, resolved here so every caller may pass
-        // either a space name or a role name (§4.2), and an alias is one more.
+        // either a space name or a role name (§4.2), and an alias or a
+        // different case is one more.
         let named = self.config.role(name).unwrap_or(name);
-        let resolved = self.config.alias(named).unwrap_or(named);
+        let resolved = self.config.canonical(named).unwrap_or(named);
         self.config
             .spaces
             .get(resolved)
@@ -703,7 +713,7 @@ impl LoadedConfig {
             }
             TransformSpec::File { src, dir } => {
                 let path = self.config.resolve_lut_path(src)?;
-                let chain = file::load(&path)?;
+                let chain = self.file_chain(&path)?;
                 match dir {
                     Direction::Forward => chain,
                     Direction::Inverse => chain.inverted(what)?,
@@ -717,7 +727,26 @@ impl LoadedConfig {
                 self.space_to_space_at(src, dst, depth + 1)?
             }
             TransformSpec::Builtin { style, dir } => builtin::resolve(style, *dir)?,
+            TransformSpec::Unsupported { name } => {
+                return Err(ColourError::UnsupportedTransform { name: name.clone() })
+            }
         })
+    }
+
+    /// A look-up table file, parsed once per loaded config. Every space, view
+    /// and look that names it gets a copy of the parsed steps, rather than
+    /// another read of a file that can run to megabytes.
+    fn file_chain(&self, path: &Path) -> Result<Chain> {
+        if let Ok(cache) = self.lut_cache.lock() {
+            if let Some(chain) = cache.get(path) {
+                return Ok(chain.clone());
+            }
+        }
+        let chain = file::load(path)?;
+        if let Ok(mut cache) = self.lut_cache.lock() {
+            cache.insert(path.to_path_buf(), chain.clone());
+        }
+        Ok(chain)
     }
 }
 
@@ -748,8 +777,9 @@ pub fn all_views(config: &Config) -> Vec<(&str, &View)> {
 }
 
 /// Names this crate cannot resolve, gathered rather than found one at a time:
-/// every colour space a config declares, walked to a chain. Used by the refusal
-/// taxonomy test, and by WP3's load path to decide whether a config is usable.
+/// every colour space a config declares, walked to the reference. The refusal
+/// taxonomy test reads it; the renderer walks its own list, per name and in
+/// both directions, so a picker can grey out exactly the rows that refuse.
 pub fn unresolvable(loaded: &LoadedConfig) -> Vec<(String, ColourError)> {
     let mut out = Vec::new();
     let mut seen = BTreeSet::new();
@@ -900,8 +930,47 @@ colorspaces:
         // Asked for by alias, and reached by alias from another space.
         let by_alias = loaded.from_reference("xyz_e").expect("resolves");
         assert!(close(by_alias.eval([1.0, 1.0, 1.0]), [2.0, 2.0, 2.0], 1e-6));
+        // And in the wrong case, which the reference library also allows.
+        let by_case = loaded
+            .from_reference("linear CIE-xyz I-E")
+            .expect("resolves");
+        assert!(close(by_case.eval([1.0, 1.0, 1.0]), [2.0, 2.0, 2.0], 1e-6));
         let through = loaded.from_reference("through").expect("resolves");
         assert!(close(through.eval([2.0, 2.0, 2.0]), [1.0, 1.0, 1.0], 1e-6));
+    }
+
+    #[test]
+    fn an_unsupported_transform_refuses_only_where_it_is_used() {
+        let loaded = load(
+            r#"
+ocio_profile_version: 2
+colorspaces:
+  - !<ColorSpace>
+    name: fancy
+    to_scene_reference: !<FixedFunctionTransform> {style: ACES_RedMod03}
+  - !<ColorSpace>
+    name: plain
+    to_scene_reference: !<ExponentTransform> {value: 2.2}
+looks:
+  - !<Look>
+    name: graded
+    process_space: plain
+    transform: !<GradingToneTransform> {style: log}
+"#,
+        );
+        let err = loaded.to_reference("fancy");
+        assert!(
+            matches!(&err, Err(ColourError::UnsupportedTransform { name }) if name == "FixedFunctionTransform"),
+            "{err:?}"
+        );
+        assert!(loaded.to_reference("plain").is_ok());
+        let err = loaded.looks("graded");
+        assert!(
+            matches!(&err, Err(ColourError::UnsupportedTransform { name }) if name == "GradingToneTransform"),
+            "{err:?}"
+        );
+        let bad: Vec<String> = unresolvable(&loaded).into_iter().map(|(n, _)| n).collect();
+        assert_eq!(bad, ["fancy"]);
     }
 
     #[test]

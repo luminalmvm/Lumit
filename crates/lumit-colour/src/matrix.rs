@@ -219,11 +219,22 @@ pub const P3_D65: Chromaticities = Chromaticities {
     white: [0.3127, 0.3290],
 };
 
-/// ITU-R BT.2020 primaries, D65 — the `REC.2100` displays' container.
+/// ITU-R BT.2020 primaries, D65: the `REC.2100` displays' container, and the
+/// primaries Apple Log is carried in.
 pub const REC2020: Chromaticities = Chromaticities {
     red: [0.708, 0.292],
     green: [0.170, 0.797],
     blue: [0.131, 0.046],
+    white: [0.3127, 0.3290],
+};
+
+/// Canon Cinema Gamut, D65: the primaries the Canon Log built-ins start from.
+/// Green sits above the spectral locus and blue below zero, which is legal: a
+/// camera's primaries are a coding space, not a set of real lights.
+pub const CANON_CGAMUT: Chromaticities = Chromaticities {
+    red: [0.7400, 0.2700],
+    green: [0.1700, 1.1400],
+    blue: [0.0800, -0.1000],
     white: [0.3127, 0.3290],
 };
 
@@ -269,8 +280,24 @@ const BRADFORD: [f64; 9] = [
     0.0389, -0.0685, 1.0296,
 ];
 
+/// The CAT02 cone-response matrix, CIECAM02's. Bradford is the default
+/// everywhere here; the Canon Log built-ins are the one place the reference
+/// library names this one instead, and the two disagree by enough to see.
+const CAT02: [f64; 9] = [
+    0.7328, 0.4296, -0.1624, //
+    -0.7036, 1.6975, 0.0061, //
+    0.0030, 0.0136, 0.9834,
+];
+
 /// The XYZ→XYZ matrix that moves a white point, Bradford-adapted.
 pub fn bradford(src_white: [f64; 2], dst_white: [f64; 2]) -> Result<[f64; 9]> {
+    von_kries(&BRADFORD, src_white, dst_white)
+}
+
+/// The XYZ→XYZ matrix that moves a white point through a stated cone response:
+/// the white points into cone space, a scaling that takes one to the other, and
+/// back out again.
+fn von_kries(cone: &[f64; 9], src_white: [f64; 2], dst_white: [f64; 2]) -> Result<[f64; 9]> {
     let xyz = |xy: [f64; 2]| -> Option<[f64; 3]> {
         if xy[1] == 0.0 {
             return None;
@@ -281,16 +308,14 @@ pub fn bradford(src_white: [f64; 2], dst_white: [f64; 2]) -> Result<[f64; 9]> {
         (Some(s), Some(d)) => (s, d),
         _ => return Err(ColourError::SingularMatrix),
     };
-    let cone = |v: [f64; 3]| -> [f64; 3] {
+    let to_cone = |v: [f64; 3]| -> [f64; 3] {
         let mut out = [0.0_f64; 3];
         for (row, o) in out.iter_mut().enumerate() {
-            *o = BRADFORD[row * 3] * v[0]
-                + BRADFORD[row * 3 + 1] * v[1]
-                + BRADFORD[row * 3 + 2] * v[2];
+            *o = cone[row * 3] * v[0] + cone[row * 3 + 1] * v[1] + cone[row * 3 + 2] * v[2];
         }
         out
     };
-    let (cs, cd) = (cone(s), cone(d));
+    let (cs, cd) = (to_cone(s), to_cone(d));
     if cs.contains(&0.0) {
         return Err(ColourError::SingularMatrix);
     }
@@ -305,22 +330,41 @@ pub fn bradford(src_white: [f64; 2], dst_white: [f64; 2]) -> Result<[f64; 9]> {
         0.0,
         cd[2] / cs[2],
     ];
-    let inv = invert3(&BRADFORD).ok_or(ColourError::SingularMatrix)?;
-    Ok(mul3(&inv, &mul3(&scale, &BRADFORD)))
+    let inv = invert3(cone).ok_or(ColourError::SingularMatrix)?;
+    Ok(mul3(&inv, &mul3(&scale, cone)))
 }
 
 /// The matrix from one RGB space to another, Bradford-adapted when their white
 /// points differ. This is the derivation behind both interchange bridges
 /// (docs/impl/ocio.md §2.1).
 pub fn rgb_to_rgb(from: &Chromaticities, to: &Chromaticities) -> Result<Matrix34> {
+    convert(from, to, &BRADFORD)
+}
+
+/// The same, adapted with CAT02: what the Canon Log built-ins ask for.
+pub fn rgb_to_rgb_cat02(from: &Chromaticities, to: &Chromaticities) -> Result<Matrix34> {
+    convert(from, to, &CAT02)
+}
+
+fn convert(from: &Chromaticities, to: &Chromaticities, cone: &[f64; 9]) -> Result<Matrix34> {
     let a = rgb_to_xyz(from)?;
     let b = invert3(&rgb_to_xyz(to)?).ok_or(ColourError::SingularMatrix)?;
     let m = if from.white == to.white {
         mul3(&b, &a)
     } else {
-        mul3(&b, &mul3(&bradford(from.white, to.white)?, &a))
+        mul3(&b, &mul3(&von_kries(cone, from.white, to.white)?, &a))
     };
     Ok(from_3x3(&m))
+}
+
+/// A set of primaries into CIE XYZ with a **D65** white, Bradford-adapted: the
+/// matrix behind the `_BFD` utility built-ins. [`rgb_to_xyz`] lands on the
+/// space's own white, which for the ACES primaries is D60; this carries it on
+/// to D65.
+pub fn rgb_to_xyz_d65(from: &Chromaticities) -> Result<Matrix34> {
+    let to_xyz = rgb_to_xyz(from)?;
+    let adapt = bradford(from.white, REC709.white)?;
+    Ok(from_3x3(&mul3(&adapt, &to_xyz)))
 }
 
 /// CIE XYZ with a D65 white → the linear RGB of a **D65** set of primaries.

@@ -18,6 +18,14 @@ use lumit_colour::{Chain, LoadedConfig};
 /// The chains the fixture rows name. A fixture naming an id that is not here
 /// fails the run rather than being skipped.
 fn chain(id: &str) -> Option<Chain> {
+    // A `BuiltinTransform` style names code rather than data, so its rows name
+    // the style and resolve through the registry that answers it.
+    if let Some(style) = id.strip_prefix("builtin:") {
+        return lumit_colour::builtin::resolve(style.trim(), Direction::Forward).ok();
+    }
+    if let Some(style) = id.strip_prefix("builtin-inverse:") {
+        return lumit_colour::builtin::resolve(style.trim(), Direction::Inverse).ok();
+    }
     let srgb = |dir| Op::MonCurve {
         gamma: [2.4; 3],
         offset: [0.055; 3],
@@ -249,6 +257,29 @@ fn agrees(got: f32, expected: f32, bound: f32) -> bool {
     }
 }
 
+/// The chain a look-up table FILE row names, read by the crate's own reader:
+/// `file: <path under tests/fixtures>` forwards, `file-inverse: <path>` back.
+fn file_chain(id: &str, line: usize) -> Chain {
+    let dir = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures"));
+    let (rest, backwards) = match id.strip_prefix("file-inverse:") {
+        Some(rest) => (rest, true),
+        None => match id.strip_prefix("file:") {
+            Some(rest) => (rest, false),
+            None => panic!("line {line}: an id must start with `file:` or `file-inverse:`"),
+        },
+    };
+    let path = dir.join(rest.trim());
+    let chain = lumit_colour::file::load(&path)
+        .unwrap_or_else(|e| panic!("line {line}: {} did not load ({e})", path.display()));
+    if backwards {
+        chain
+            .inverted(rest.trim())
+            .unwrap_or_else(|e| panic!("line {line}: {} does not invert ({e})", path.display()))
+    } else {
+        chain
+    }
+}
+
 /// §7.2's two gates over rows whose chains come from a config: exact on the
 /// processor, then the baked artefact the graphics card would sample.
 ///
@@ -256,13 +287,18 @@ fn agrees(got: f32, expected: f32, bound: f32) -> bool {
 /// is the point of it existing before the data does — the offline run drops a
 /// config directory and a table in, and nothing has to be written to read them.
 fn gate_config_rows(loaded: &LoadedConfig, rows: &[Row]) {
+    gate_rows(rows, |id, line| config_edge(loaded, id, line));
+}
+
+/// The gates themselves, over whatever a row's id resolves to.
+fn gate_rows(rows: &[Row], mut resolve: impl FnMut(&str, usize) -> Chain) {
     // One resolve and one bake per **edge**, not per row. A fixture gives an
     // edge sixteen probes in a row, and baking a 65³ cube sixteen times over to
     // ask it sixteen questions turned one gate into a minute of CI (docs/13).
     let mut cached: Option<(&str, Chain, lumit_colour::Artefact)> = None;
     for row in rows {
         if cached.as_ref().map(|(id, _, _)| *id) != Some(row.id.as_str()) {
-            let chain = config_edge(loaded, &row.id, row.line);
+            let chain = resolve(&row.id, row.line);
             let baked = bake(&chain, Shaper::DEFAULT)
                 .unwrap_or_else(|e| panic!("line {}: the chain did not bake ({e})", row.line));
             cached = Some((&row.id, chain, baked));
@@ -364,6 +400,54 @@ fn the_legacy_aces_config_matches_the_reference() {
 fn the_aces_cg_config_matches_the_reference() {
     let (loaded, rows) = reference_fixture("aces-cg");
     gate_config_rows(&loaded, &rows);
+}
+
+/// The look-up table FILE suite: one grammar at a time, against the reference
+/// library reading the very same file.
+///
+/// A config fixture proves a whole edge and says nothing about which half of it
+/// was wrong. These rows exist because the three formats the real Blender and
+/// PixelManager configs need, `.spimtx`, Truelight `.cub` and `.3dl`, each
+/// have a step that is invisible when it is missing: an offset scaled out of
+/// 16-bit code values, an input LUT counting in cube cells, and a cube written
+/// blue fastest. `fixtures/files-generate.py` carries the recipe and writes the
+/// three files no small real one covers.
+#[test]
+fn every_vendored_lut_file_matches_the_reference() {
+    let rows = read_fixture(include_str!("fixtures/files.fixture"));
+    gate_rows(&rows, file_chain);
+}
+
+/// The `BuiltinTransform` suite: every style tier one answers by code, against
+/// the reference library's own processor for that style, both directions.
+///
+/// One gate rather than §7.2's two, deliberately. What a row here proves is the
+/// **port**, that Lumit's matrices and curves are the ones the reference's code
+/// builds, and the bake is a separate machine, already gated by 912 config
+/// rows and by the styles these compose into there. A second gate would mostly
+/// restate `generate.py`'s domain and floor bounds around a table nobody is
+/// asking a new question of.
+#[test]
+fn every_builtin_row_matches_the_reference() {
+    for row in read_fixture(include_str!("fixtures/builtins.fixture")) {
+        let chain = chain(&row.id)
+            .unwrap_or_else(|| panic!("line {}: no chain named {:?}", row.line, row.id));
+        let got = chain.eval(row.input);
+        for k in 0..3 {
+            let off = (got[k] - row.expected[k]).abs();
+            // Absolute below one, relative above, as the config rows do: these
+            // curves answer in the millions at one end.
+            let bound = row.tolerance * row.expected[k].abs().max(1.0);
+            assert!(
+                agrees(got[k], row.expected[k], bound),
+                "line {} ({}): {:?} → {got:?}, expected {:?}, off by {off}",
+                row.line,
+                row.id,
+                row.input,
+                row.expected
+            );
+        }
+    }
 }
 
 /// "Resolves end to end" said as a test rather than as a claim: **every** space

@@ -13,6 +13,8 @@ the code is consistent with itself.
 | `clf/clf.fixture` | The CLF suite (§7.3): eight specification documents, vendored byte for byte, each row anchored in the document's own worked numbers, stated formula, or arithmetic on its own coefficients | 26 |
 | `aces-1.2.fixture` | The legacy ACES 1.2 config, run through the reference OpenColorIO library | 128 |
 | `aces-cg.fixture` | `cg-config-v4.0.0_aces-v2.0_ocio-v2.5`, the same way | 784 |
+| `files.fixture` | Five small look-up table files under `luts/`, `.spimtx`, `.cub` and `.3dl` among them, run through the reference library's own file readers (`files-generate.py`) | 128 |
+| `builtins.fixture` | Every tier-one `BuiltinTransform` style the Blender and PixelManager configs name, forwards and backwards, and the three ACES 1.x output bakes at the cube form's bounds (`builtins-generate.py`) | 497 |
 
 Every one gates on both of §7.2's gates — the resolved chain evaluated exactly on
 the processor, and the baked artefact sampled by the CPU sampler — at the

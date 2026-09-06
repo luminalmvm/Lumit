@@ -1,20 +1,23 @@
 //! Reading whatever file a `FileTransform` points at.
 //!
 //! In plain terms: a config's `FileTransform` says "the maths is in that file
-//! over there". This module works out which of the four grammars the file is in
-//! from its extension and hands back a chain — one step for a table file,
-//! several for a CLF, which is a list of steps by design. An extension Lumit
-//! does not read is refused by name rather than guessed at.
+//! over there". This module works out which grammar the file is in from its
+//! extension and hands back a chain: one step for a table file, two for a
+//! format that carries a shaper as well as a cube, several for a CLF, which is
+//! a list of steps by design. An extension Lumit does not read is refused by
+//! name rather than guessed at.
 
 use std::path::Path;
 
 use crate::error::{ColourError, Result};
 use crate::op::{Chain, Direction, Op};
 use crate::sample::{Cube, Curve};
-use crate::{clf, spi};
+use crate::{autodesk, clf, spi, truelight};
 
 /// The look-up table and grade file extensions this crate reads.
-pub const READABLE: [&str; 8] = ["cube", "spi1d", "spi3d", "clf", "ctf", "cc", "ccc", "cdl"];
+pub const READABLE: [&str; 11] = [
+    "cube", "spi1d", "spi3d", "spimtx", "cub", "3dl", "clf", "ctf", "cc", "ccc", "cdl",
+];
 
 /// Read a table file into a chain. `path` is used for the grammar and for the
 /// sentence any refusal shows.
@@ -60,6 +63,11 @@ pub fn parse(name: &str, extension: &str, text: &str) -> Result<Chain> {
         "spi3d" => Chain::new(vec![Op::Lut3d {
             cube: spi::parse_spi3d(name, text)?,
         }]),
+        "spimtx" => Chain::new(vec![Op::Matrix(spi::parse_spimtx(name, text)?)]),
+        // FilmLight's Truelight cube and Autodesk's Flame/Lustre table both
+        // carry a shaper curve and a cube, so both can become two steps.
+        "cub" => truelight::parse_cub(name, text)?,
+        "3dl" => autodesk::parse_3dl(name, text)?,
         // `.ctf` is CTF: the same grammar with vendor-specific extras, which
         // this reader refuses individually when it meets one.
         "clf" | "ctf" => clf::parse_clf(name, text)?,
@@ -132,11 +140,27 @@ mod tests {
 
     #[test]
     fn an_unread_extension_refuses_by_name() {
-        let err = parse("look.3dl", "3dl", "");
+        let err = parse("look.csp", "csp", "");
         assert!(
-            matches!(&err, Err(ColourError::UnsupportedLutFormat { extension }) if extension == ".3dl"),
+            matches!(&err, Err(ColourError::UnsupportedLutFormat { extension }) if extension == ".csp"),
             "{err:?}"
         );
+    }
+
+    /// The three formats the real Blender and PixelManager configs name, each
+    /// landing on the steps it should. The grammars themselves are tested in
+    /// their own modules; this is the dispatch.
+    #[test]
+    fn the_grading_suite_formats_land_on_their_own_steps() {
+        let chain = parse("m.spimtx", "spimtx", "2 0 0 0 0 2 0 0 0 0 2 0").expect("parses");
+        assert!(matches!(chain.ops.first(), Some(Op::Matrix(_))));
+
+        let cub = "# Truelight Cube v2.0\n# lutLength 2\n# InputLUT\n0 0 0\n1 1 1\n# end\n";
+        let chain = parse("t.cub", "cub", cub).expect("parses");
+        assert!(matches!(chain.ops.first(), Some(Op::Lut1d { .. })));
+
+        let chain = parse("t.3dl", "3dl", &"4095 2048 1024\n".repeat(8)).expect("parses");
+        assert!(matches!(chain.ops.first(), Some(Op::Lut3d { .. })));
     }
 
     #[test]
