@@ -22,6 +22,7 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
+import 'package:lumit_flutter/panels/effect_param_row_frb.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -127,6 +128,7 @@ Future<bool> showShaderEditor({
     final agreed = await showLumitModal<bool>(
       context: context,
       id: 'shader-detach',
+      dimBackground: false,
       builder: (close) => _DetachOffer(
         onDetach: () => close(true),
         onCancel: () => close(null),
@@ -160,6 +162,7 @@ Future<bool> showShaderEditor({
     // and the placement is remembered per id - all of which showLumitModal
     // already does; this window simply never asked. The floor is a well worth
     // typing in, not the modal's own 320x240.
+    dimBackground: false,
     initialSize: const Size(shaderEditorWidth, shaderEditorHeight),
     minSize: const Size(360, 280),
     builder: (close) => _ShaderEditor(
@@ -243,7 +246,7 @@ class _ShaderEditor extends StatefulWidget {
 
 class _ShaderEditorState extends State<_ShaderEditor> {
   late final TextEditingController _text =
-      TextEditingController(text: widget.source);
+      ExpressionTextEditingController(text: widget.source, language: "wgsl");
   final ScrollController _scroll = ScrollController();
 
   /// The engine's last answer about what is in the box.
@@ -450,7 +453,8 @@ class _CodeWell extends StatelessWidget {
         .split('\n')
         .fold<int>(0, (most, line) => line.length > most ? line.length : most);
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisAlignment: MainAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
           width: gutterWidth,
@@ -493,12 +497,14 @@ class _CodeWell extends StatelessWidget {
                 scrollDirection: Axis.horizontal,
                 child: SizedBox(
                   width: width,
+                  height: double.infinity,
                   child: HouseTextField(
                     key: const ValueKey<String>('shader-editor-code'),
                     controller: text,
                     multiline: true,
                     scrollController: scroll,
                     autofocus: true,
+                    topAlign: true,
                     style: code,
                     // The width is the box above's, not a number of this
                     // field's own - an infinity inside a horizontal viewport
