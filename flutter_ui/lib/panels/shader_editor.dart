@@ -492,21 +492,25 @@ class _CodeWell extends StatelessWidget {
               final wanted = longest * probe.width + probe.width * 2;
               final width =
                   wanted > box.maxWidth ? wanted : box.maxWidth;
-              return SizedBox(
-                width: width,
-                height: double.infinity,
-                child: HouseTextField(
-                  key: const ValueKey<String>('shader-editor-code'),
-                  controller: text,
-                  multiline: true,
-                  scrollController: scroll,
-                  autofocus: true,
-                  topAlign: true,
-                  style: code,
-                  // The width is the box above's, not a number of this
-                  // field's own - an infinity inside a horizontal viewport
-                  // has nothing to be infinite against.
+              return SingleChildScrollView(
+                key: const ValueKey<String>('shader-editor-hscroll'),
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(
                   width: width,
+                  height: double.infinity,
+                  child: HouseTextField(
+                    key: const ValueKey<String>('shader-editor-code'),
+                    controller: text,
+                    multiline: true,
+                    scrollController: scroll,
+                    autofocus: true,
+                    topAlign: true,
+                    style: code,
+                    // The width is the box above's, not a number of this
+                    // field's own - an infinity inside a horizontal viewport
+                    // has nothing to be infinite against.
+                    width: width,
+                  ),
                 ),
               );
             },
