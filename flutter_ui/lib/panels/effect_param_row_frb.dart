@@ -16,7 +16,6 @@
 // Getting this wrong is what stopped effect parameters being draggable at all:
 // the first preview tick killed the handles and the rest of the gesture threw.
 
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
