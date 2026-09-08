@@ -16,6 +16,7 @@
 // Getting this wrong is what stopped effect parameters being draggable at all:
 // the first preview tick killed the handles and the rest of the gesture threw.
 
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
@@ -28,6 +29,7 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/graph.dart' show BridgePortType;
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
+import 'package:flutter/services.dart' show rootBundle;
 
 import '../icons/icons.dart' show iconSize;
 import '../icons/lumit_icon.dart';
@@ -2338,12 +2340,18 @@ const _defaultDarkThemeFiles = [
   'packages/syntax_highlight/themes/dark_plus.json',
 ];
 
+
 class ExpressionTextEditingController extends TextEditingController {
   static HighlighterTheme? darkTheme;
   static HighlighterTheme? lightTheme;
 
+  String language;
+
   static Future<void> initSyntaxHighlighting() async {
     await Highlighter.initialize(["dart"]);
+
+    /// YOINK: https://github.com/PolyMeilex/vscode-wgsl/blob/master/syntaxes/wgsl.tmLanguage.json
+    Highlighter.addLanguage("wgsl", await rootBundle.loadString("assets/data/grammar/wgsl.json"));
 
     darkTheme = await HighlighterTheme.loadFromAssets(
         _defaultDarkThemeFiles, LumitTheme.dark().mono);
@@ -2352,7 +2360,7 @@ class ExpressionTextEditingController extends TextEditingController {
         _defaultLightThemeFiles, LumitTheme.light().mono);
   }
 
-  ExpressionTextEditingController({super.text});
+  ExpressionTextEditingController({super.text, this.language = "dart"});
 
   @override
   TextSpan buildTextSpan(
@@ -2374,7 +2382,7 @@ class ExpressionTextEditingController extends TextEditingController {
     }
 
     var highlighter = Highlighter(
-      language: 'dart',
+      language: language,
       theme: theme,
     );
 

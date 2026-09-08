@@ -39,6 +39,7 @@ Future<T?> showLumitModal<T>({
   String? id,
   Size? initialSize,
   Size minSize = const Size(320, 240),
+  bool dimBackground = true,
 }) {
   final overlay = Overlay.of(context);
   final completer = Completer<T?>();
@@ -64,7 +65,7 @@ Future<T?> showLumitModal<T>({
             behavior: HitTestBehavior.opaque,
             onTap: () => close(null),
             child: ColoredBox(
-              color: ThemeScope.of(overlayContext).theme.scrim,
+              color: dimBackground ? ThemeScope.of(overlayContext).theme.scrim : Color(0x00000000),
             ),
           ),
         ),

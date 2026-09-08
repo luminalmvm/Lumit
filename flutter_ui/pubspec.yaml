@@ -47,6 +47,7 @@ flutter:
     # The brand's own drawings — the wordmark on the welcome screen.
     # The site's file, copied rather than redrawn (shell/wordmark.dart).
     - assets/brand/
+    - assets/data/grammar/
   fonts:
     # The two redesign faces (docs/15-DESIGN.md §7.1): Hanken Grotesk
     # for UI text, Geist Mono for every number, timecode and container label.

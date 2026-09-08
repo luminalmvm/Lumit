@@ -101,6 +101,8 @@ class HouseTextField extends StatefulWidget {
   /// in a box (the 2026-08-30 board draws none).
   final bool frameless;
 
+  final bool topAlign;
+
   const HouseTextField({
     super.key,
     required this.controller,
@@ -116,6 +118,7 @@ class HouseTextField extends StatefulWidget {
     this.autofocus = false,
     this.focusNode,
     this.style,
+    this.topAlign = false,
     this.hint,
     this.multiline = false,
     this.scrollController,
@@ -332,7 +335,7 @@ class _HouseTextFieldState extends State<HouseTextField>
           ? null
           : BoxDecoration(
               color: widget.fill ?? t.surface0,
-              borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+              borderRadius: BorderRadius.circular(t.tokens.controlRadius.clamp(0, 10)),
               // `animated`, not `accent`: a focused well is the one focus that
               // means "you are about to change a value" (§3.1, §6.5), and the
               // drawings draw the focused well's edge in that token.
@@ -346,6 +349,7 @@ class _HouseTextFieldState extends State<HouseTextField>
         leading,
         widget.leadingInteractive,
         Stack(
+          fit: widget.topAlign ? StackFit.expand : StackFit.loose,
           children: [
             if (hint != null && widget.controller.text.isEmpty)
               Text(hint, style: t.body.copyWith(color: t.textMuted)),
