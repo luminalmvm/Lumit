@@ -32,6 +32,29 @@ use uuid::Uuid;
 /// moment they stop). Chosen to keep even 4K sources instant to draft.
 pub const DRAFT_MAX_WIDTH: u32 = 640;
 
+/// The widest and tallest a decoded frame may be. 8 192 is `wgpu`'s
+/// guaranteed `max_texture_dimension_2d`, and the context asks for no more:
+/// a 9 000-pixel photograph uploaded at its own size is a validation error
+/// on every pass that touches it, and the layer comes out blank. Shrunk to
+/// fit, it is a picture.
+pub const MAX_TEXTURE_SIDE: u32 = 8192;
+
+/// A decode width that also fits the texture limit. `target` is what the
+/// quality policy asked for (`None` for native); the answer is the same
+/// unless the source at that width would still be wider or taller than
+/// [`MAX_TEXTURE_SIDE`], in which case it is the widest that fits, aspect
+/// kept. Applied after the policy, and to the native path too, so no
+/// footage is ever asked for at a size the card cannot hold.
+#[must_use]
+pub fn fit_texture(target: Option<u32>, natural_w: u32, natural_h: u32) -> Option<u32> {
+    let side = natural_w.max(natural_h);
+    if side <= MAX_TEXTURE_SIDE {
+        return target;
+    }
+    let widest = (u64::from(natural_w) * u64::from(MAX_TEXTURE_SIDE) / u64::from(side)) as u32;
+    Some(target.map_or(widest, |t| t.min(widest)).max(16))
+}
+
 /// How coarsely to decode this preview — the quality axis of both the decode
 /// plan and the frame-cache key. Keeping the two in one type is deliberate: if
 /// they could disagree, a frame decoded at one width could be served from a
@@ -332,6 +355,7 @@ pub fn collect_comp_jobs(
                     } else {
                         quality.target_width(nat_w)
                     };
+                    let target_width = fit_texture(target_width, nat_w, nat_h);
                     let (source_frame, blend) =
                         lumit_core::pixels::frame_pick(st, fps, src_frames, blend_on, sample_fps);
                     jobs.push(CompJob {
@@ -456,6 +480,7 @@ pub fn collect_comp_jobs(
                 } else {
                     quality.target_width(nat_w)
                 };
+                let target_width = fit_texture(target_width, nat_w, nat_h);
                 let (source_frame, blend) = lumit_core::pixels::frame_pick(
                     source_time,
                     fps,
@@ -752,6 +777,30 @@ mod tests {
         // And a step that IS a step still separates them.
         assert_ne!(at(0.42).tag(), at(0.43).tag());
         assert_ne!(at(0.42).target_width(1920), at(0.43).target_width(1920));
+    }
+
+    /// A source wider or taller than the texture limit decodes shrunk to fit,
+    /// whatever the quality asked for; anything that fits is left alone.
+    #[test]
+    fn oversize_footage_decodes_within_the_texture_limit() {
+        assert_eq!(fit_texture(None, 7680, 4320), None, "8K fits");
+        assert_eq!(fit_texture(Some(960), 7680, 4320), Some(960));
+        assert_eq!(fit_texture(None, 9000, 5000), Some(8192), "wide: capped");
+        assert_eq!(
+            fit_texture(None, 5000, 9000),
+            Some(4551),
+            "tall: the height caps"
+        );
+        assert_eq!(
+            fit_texture(Some(4000), 9000, 5000),
+            Some(4000),
+            "smaller ask kept"
+        );
+        assert_eq!(
+            fit_texture(Some(8500), 9000, 5000),
+            Some(8192),
+            "larger ask capped"
+        );
     }
 
     /// Full quality decodes at native width; a divisor and Auto both shrink it,
