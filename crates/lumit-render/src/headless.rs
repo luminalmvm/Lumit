@@ -1195,7 +1195,7 @@ impl HeadlessRenderer {
                     return false;
                 };
                 let scale = composite_scale(quality);
-                let samples = self.gpu.sample_count(doc.anti_aliasing.samples());
+                let samples = self.gpu.sample_count(doc.anti_aliasing.samples_for(cw, ch));
                 parts
                     .fx_cache
                     .borrow_mut()
@@ -1272,7 +1272,7 @@ impl HeadlessRenderer {
                 // will actually give. Preview and export both read the
                 // same document field — unlike `render_scale`, which is a
                 // preview-only reduction — so the two stay the same picture.
-                samples: self.gpu.sample_count(doc.anti_aliasing.samples()),
+                samples: self.gpu.sample_count(doc.anti_aliasing.samples_for(cw, ch)),
                 profiler: watcher.as_ref(),
                 colour_inputs: inputs.as_ref(),
                 colour_config: self.colour.loaded().filter(|l| l.usable()),
