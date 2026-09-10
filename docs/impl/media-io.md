@@ -83,7 +83,11 @@ GpuFrame }` with the CPU path as the always-working fallback:
     `hardware_and_software_decode_agree_on_the_pixels` regression test.
   - Also shipped with it: `thread_count = 0` on every codec context — library-default libav
     is single-threaded (unlike the ffmpeg CLI), so the software fallback was grinding one
-    core.
+    core. Since 2026-09-09 the count is bounded by frame size (`thread_cap`): every thread
+    keeps a picture in flight, and the hardware surface pool grows with it, so 8K on
+    sixteen threads held a gigabyte before the first frame. The pictures in flight stay
+    under 256 MB, which leaves 1080p and 4K at libav's own count and gives 8K five threads
+    at the same speed.
 - **v1 target (the "one copy")**, Windows: create the decoder with a D3D11 hw device ctx;
   frames arrive as `AV_PIX_FMT_D3D11` (ID3D11Texture2D array slices). Copy the slice into
   a **shared** `ID3D11Texture2D` (created with `D3D11_RESOURCE_MISC_SHARED_NTHANDLE |

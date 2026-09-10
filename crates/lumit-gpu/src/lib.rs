@@ -87,6 +87,23 @@ pub struct GpuContext {
     /// sample — so the batch is closed by the *outermost* caller, not the first
     /// one to finish.
     frame_depth: std::cell::Cell<u32>,
+    /// Work textures an earlier pass in this frame has finished with, waiting
+    /// to be handed out again.
+    ///
+    /// A frame is one command buffer, so nothing a pass allocates comes back
+    /// until the frame ends: three effects on an 8K layer held six frame-sized
+    /// textures at once, about a gigabyte above the plain frame. The commands
+    /// on one queue run in the order they were recorded, so a pass may safely
+    /// write into a texture an earlier recorded pass read. [`Self::recycle`]
+    /// puts one here and `fx::work_texture` takes it back.
+    ///
+    /// A `RefCell` beside the frame batch and for the batch's own reason: a
+    /// context is used by one thread at a time. Emptied at the outermost
+    /// [`Self::end_frame`], so nothing outlives the frame that ordered it.
+    pool: std::cell::RefCell<Vec<wgpu::Texture>>,
+    /// How many work textures this context has created rather than taken from
+    /// the pool ([`Self::work_textures_made`]).
+    work_made: std::cell::Cell<u64>,
     /// How many command buffers **this context** has handed to the driver
     /// ([`Self::submits_so_far`]).
     ///
@@ -436,6 +453,8 @@ impl GpuContext {
             sample_flags: wgpu::TextureFormatFeatureFlags::empty(),
             frame: std::cell::RefCell::new(None),
             frame_depth: std::cell::Cell::new(0),
+            pool: std::cell::RefCell::new(Vec::new()),
+            work_made: std::cell::Cell::new(0),
             submits: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
             // No callback is installed on a device somebody else opened, so
             // this stays down: a context built this way does not know when its
@@ -501,6 +520,8 @@ impl GpuContext {
             sample_flags: self.sample_flags,
             frame: std::cell::RefCell::new(None),
             frame_depth: std::cell::Cell::new(0),
+            pool: std::cell::RefCell::new(Vec::new()),
+            work_made: std::cell::Cell::new(0),
             submits: std::sync::Arc::clone(&self.submits),
             lost: std::sync::Arc::clone(&self.lost),
         }
@@ -650,13 +671,68 @@ impl GpuContext {
     }
 
     /// Close one [`Self::begin_frame`]. On the outermost one, submit whatever
-    /// the batch holds.
+    /// the batch holds and empty the work-texture pool.
     pub fn end_frame(&self) {
         let depth = self.frame_depth.get().saturating_sub(1);
         self.frame_depth.set(depth);
         if depth == 0 {
             self.flush();
+            // The pool is only safe because one command buffer orders it, so it
+            // ends with that command buffer. What is dropped here the driver
+            // hands back on the next `reclaim` (§7.0.2).
+            self.pool.borrow_mut().clear();
         }
+    }
+
+    /// Offer a work texture back to the frame's pool, for a later pass in the
+    /// same frame to write into (see [`Self::pool`]).
+    ///
+    /// The caller promises that nothing recorded from here on reads it. Outside
+    /// a frame batch this does nothing, which is what keeps the pool inside the
+    /// one command buffer whose order makes it safe.
+    ///
+    /// The texture is cleared on the way in, so no pass can tell a reused one
+    /// from a fresh one: wgpu zeroes a new texture before its first use, and an
+    /// effect that loads its target instead of overwriting it would otherwise
+    /// read the last picture.
+    pub fn recycle(&self, tex: wgpu::Texture) {
+        if self.frame_depth.get() == 0
+            || tex.usage() != WORK_USAGE
+            || tex.dimension() != wgpu::TextureDimension::D2
+            || tex.sample_count() != 1
+            || tex.mip_level_count() != 1
+            || tex.depth_or_array_layers() != 1
+        {
+            return;
+        }
+        let view = tex.create_view(&Default::default());
+        let mut enc = self.encoder("recycle");
+        let _ = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("work-texture-clear"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        });
+        drop(enc);
+        // ponytail: one flat list, scanned by shape. A frame holds a handful of
+        // spare textures, so the scan is shorter than a hash of the key would
+        // be; key it by (size, format) if a frame ever holds dozens.
+        self.pool.borrow_mut().push(tex);
+    }
+
+    /// How many work textures this context has created rather than taken from
+    /// the pool. The reuse gate reads it; nothing else does.
+    #[must_use]
+    pub fn work_textures_made(&self) -> u64 {
+        self.work_made.get()
     }
 
     /// Submit whatever the batch holds right now and leave it open.
@@ -857,6 +933,8 @@ impl GpuContext {
             sample_flags,
             frame: std::cell::RefCell::new(None),
             frame_depth: std::cell::Cell::new(0),
+            pool: std::cell::RefCell::new(Vec::new()),
+            work_made: std::cell::Cell::new(0),
             submits: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
             lost,
         })
@@ -1054,6 +1132,14 @@ struct ViewParamsRaw {
 /// reason `ColourDepth::Sixteen` is: it is what the effect catalogue was
 /// written against.
 pub const WORKING_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
+
+/// What every effect pass's output texture is made with. One set, so a
+/// texture handed back to [`GpuContext::pool`] fits whatever asks next.
+pub(crate) const WORK_USAGE: wgpu::TextureUsages = wgpu::TextureUsages::TEXTURE_BINDING
+    .union(wgpu::TextureUsages::STORAGE_BINDING)
+    .union(wgpu::TextureUsages::COPY_SRC)
+    .union(wgpu::TextureUsages::COPY_DST)
+    .union(wgpu::TextureUsages::RENDER_ATTACHMENT);
 
 /// The working format for a project colour depth in bits (8, 16 or 32).
 ///

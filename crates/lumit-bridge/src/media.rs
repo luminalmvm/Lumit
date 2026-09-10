@@ -71,10 +71,15 @@ impl MediaCache {
 /// helper ([`lumit_render::media_index`]), the same one the probe and the Viewer's
 /// decode use, then a decoder is opened for this one call — synchronous, and not
 /// yet pooled across calls (a later phase caches decoders per item).
+///
+/// `target_width` is handed to the decoder, which scales on the way out and
+/// keeps the aspect; it never upscales, so a width larger than the file's own
+/// decodes at the file's own size. `None` asks for the native width.
 #[cfg(feature = "media")]
 pub(crate) fn decode_frame(
     src: &lumit_media::MediaSource,
     frame: u64,
+    target_width: Option<u32>,
 ) -> Option<lumit_media::DecodedFrame> {
     if !src.on_disk().is_file() {
         return None;
@@ -86,7 +91,7 @@ pub(crate) fn decode_frame(
         return None;
     }
     let n = (frame as usize).min(count - 1);
-    decoder.frame_rgba(n, None).ok()
+    decoder.frame_rgba(n, target_width).ok()
 }
 
 /// A thumbnail already decoded, if there is one. Read-only, so a caller can
@@ -118,7 +123,10 @@ pub(crate) fn thumb_decode(
     frame: i64,
 ) -> Option<Thumb> {
     let max_edge = max_edge.clamp(1, 4096);
-    let decoded = decode_frame(src, frame.max(0).unsigned_abs())?;
+    // Ask the decoder for the small picture rather than the whole one: an 8K
+    // frame never lands in memory at full size. Portrait media comes back
+    // taller than `max_edge`, which the box filter below still trims.
+    let decoded = decode_frame(src, frame.max(0).unsigned_abs(), Some(max_edge))?;
     Some(downscale_to_max_edge(
         decoded.width,
         decoded.height,
@@ -193,4 +201,34 @@ fn downscale_to_max_edge(sw: u32, sh: u32, src: &[u8], max_edge: u32) -> (u32, u
         }
     }
     (dw, dh, out)
+}
+
+#[cfg(all(test, feature = "media"))]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests {
+    use super::*;
+
+    /// A thumbnail is decoded at thumbnail size, not decoded whole and shrunk
+    /// afterwards, and it still comes back the size it always was. Needs an
+    /// ffmpeg on PATH to make the fixture; skips itself without one.
+    #[test]
+    fn a_thumbnail_is_decoded_small() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let Some(clip) = lumit_media::index::tests_support::fixture(dir.path()) else {
+            return; // no ffmpeg on this machine
+        };
+        let src = lumit_media::MediaSource::file(clip);
+
+        // The fixture is 320x240, so 64 across the long edge is 64x48.
+        let decoded = decode_frame(&src, 0, Some(64)).expect("the fixture decodes");
+        assert_eq!(
+            (decoded.width, decoded.height),
+            (64, 48),
+            "the decoder shrinks on the way out, so no full-size frame is made"
+        );
+
+        let (w, h, rgba) = thumb_decode(&src, 64, 0).expect("a thumbnail");
+        assert_eq!((w, h), (64, 48), "the thumbnail is the size it always was");
+        assert_eq!(rgba.len(), 64 * 48 * 4);
+    }
 }

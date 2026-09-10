@@ -176,6 +176,13 @@ always meant.
   rather than copying it (trap 1). `motion_blur_average` takes the same count (trap 4).
 - **The walk.** `Realiser::samples`, beside `render_scale` — but read from the project by
   both the preview and the export path, which is what makes §4 hold.
+- **The budget.** `AntiAliasing::samples_for` caps the count by the comp's own size
+  before the adapter check: the multisample attachment is `width × height × samples`
+  texels, 2.1 GB at 8K and 8×, and every nested comp and motion-blur sample allocates
+  another. The line is a 4K frame at 8× (`SAMPLE_BUDGET`), so 4K keeps the project's count,
+  5K gets at most 4× and 8K at most 2×. A rule about the comp, never the preview scale, so
+  §4 still holds: the same count at every zoom, and on export. The frame name folds in
+  the capped count, so a frame banked under one count is never served for another.
 - **The cache.** The count is fed into `comp_frame_key`, and `ALGO_VERSION` went to 3: every
   frame banked before this was made without anti-aliasing and may not be served again.
 - **The interface.** The **Project settings** window (`File ▸ Project settings…`,

@@ -179,7 +179,11 @@ fn feed_comp(
     // comp, so it belongs in the name of every frame: without it a frame banked
     // before the setting moved would be handed back after it, and the picture
     // would silently disagree with the setting.
-    h.update(&doc.anti_aliasing.samples().to_le_bytes());
+    h.update(
+        &doc.anti_aliasing
+            .samples_for(comp.width, comp.height)
+            .to_le_bytes(),
+    );
     for c in comp.background.0 {
         h.update(&c.to_le_bytes());
     }

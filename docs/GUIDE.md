@@ -370,7 +370,7 @@ One job per crate.
 | `lumit-project` | The `.lum` container, the operation journal, autosave and crash recovery |
 | `lumit-eval` | The evaluator: content-hash frame keys, the graph compiler, epochs, the worker pool, the scheduler core |
 | `lumit-render` | The pixel pass: the decode worker, draw lists, the compositor, effect dispatch, cache tiers, export, the headless renderer |
-| `lumit-gpu` | The one wgpu device, the WGSL effect kernels, the compositor, the colour engine, readback |
+| `lumit-gpu` | The one wgpu device, the frame batch and its work-texture pool, the WGSL effect kernels, the compositor, the colour engine, readback |
 | `lumit-cache` | The frame cache (Nebula): byte-budgeted RAM and disk tiers |
 | `lumit-flow` | Optical flow (DIS): a CPU oracle and its WGSL twin, for Retime interpolation and flow motion blur |
 | `lumit-media` | FFmpeg through rsmpeg: probing, the frame index, exact seeking, hardware decode, encode |

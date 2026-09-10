@@ -35,6 +35,12 @@ anywhere is at the two ends:
   egui's own expectations is the classic double-gamma bug; one explicit encode in one
   named shader (`display_transform.wgsl`) is auditable.
 
+An eight-bit layer with nothing to run on it never gets a working-format copy. It goes to
+the composite as the `Rgba8UnormSrgb` texture it was uploaded as, and the composite's own
+sampler does the decode the linearise pass was asking the hardware for anyway. The moment
+anything else reads that layer, an effect, the lighting pass or a motion-blur average, it
+linearises first, because those all work in the format above.
+
 Rule for every WGSL effect: sample premultiplied linear, write premultiplied linear. The
 host wraps unpremultiply/premultiply around the few effects that declare they need straight
 alpha ([08-EFFECTS.md](../08-EFFECTS.md)).

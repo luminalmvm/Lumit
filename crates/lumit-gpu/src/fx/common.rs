@@ -3,22 +3,28 @@
 //! reading a working texture back to linear f32, and the fp16 conversions the
 //! oracle tests round-trip through.
 
+use half::slice::{HalfBitsSliceExt, HalfFloatSliceExt};
+
 use crate::{GpuContext, GpuError};
 
-use super::work_texture;
+use super::new_work_texture;
 
 /// Upload a linear f32 RGBA image as a working (fp16) texture — test and
 /// tooling support for effect kernels.
 pub fn upload_linear_f32(ctx: &GpuContext, rgba: &[f32], w: u32, h: u32) -> wgpu::Texture {
-    let halfs: Vec<u16> = rgba.iter().map(|v| f16_bits(*v)).collect();
-    upload_linear_f16(ctx, &halfs, w, h)
+    // The whole plane in one call. `half` narrows eight values an instruction
+    // where the card's host has F16C, and rounds to nearest even either way, so
+    // the bits are the ones the per-value loop gave. At 8K the loop was 294 ms.
+    let mut halfs = vec![half::f16::ZERO; rgba.len()];
+    halfs.convert_from_f32_slice(rgba);
+    upload_linear_f16(ctx, halfs.reinterpret_cast(), w, h)
 }
 
 /// The same upload, for a caller that already holds the fp16 bits — one that
 /// can produce them without an f32 plane in between. `halfs` is RGBA, four
 /// per pixel.
 pub fn upload_linear_f16(ctx: &GpuContext, halfs: &[u16], w: u32, h: u32) -> wgpu::Texture {
-    let tex = work_texture(ctx, w, h, "fx-upload");
+    let tex = new_work_texture(ctx, w, h, "fx-upload");
     ctx.queue.write_texture(
         wgpu::TexelCopyTextureInfo {
             texture: &tex,
@@ -268,12 +274,21 @@ pub fn readback_linear_f32(
         .map_err(|e| GpuError::Readback(e.to_string()))?
         .map_err(|e| GpuError::Readback(e.to_string()))?;
     let data = slice.get_mapped_range();
-    let mut out = Vec::with_capacity((w * h * 4) as usize);
-    for y in 0..h {
-        let row = &data[(y * padded) as usize..(y * padded + row_bytes) as usize];
-        for c in row.chunks_exact(2) {
-            out.push(f16_to_f32(u16::from_le_bytes([c[0], c[1]])));
-        }
+    // A row at a time, straight out of the mapped bytes: same widening, eight
+    // values an instruction where the host has F16C. The chunk is the padded
+    // row and the slice is the real one, so the padding is skipped rather than
+    // converted. At 8K the per-value loop was 237 ms.
+    let bits: &[u16] =
+        bytemuck::try_cast_slice(&data).map_err(|e| GpuError::Readback(e.to_string()))?;
+    let halfs: &[half::f16] = bits.reinterpret_cast();
+    let mut out = vec![0f32; (w * h * 4) as usize];
+    for (row, dst) in halfs
+        .chunks_exact((padded / 2) as usize)
+        .zip(out.chunks_mut(row_bytes as usize / 2))
+    {
+        row.get(..dst.len())
+            .ok_or_else(|| GpuError::Readback("short readback row".into()))?
+            .convert_to_f32_slice(dst);
     }
     Ok(out)
 }
@@ -286,4 +301,41 @@ pub fn f16_bits(v: f32) -> u16 {
 /// IEEE 754 half bits → f32.
 pub fn f16_to_f32(bits: u16) -> f32 {
     half::f16::from_bits(bits).to_f32()
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests {
+    use super::*;
+
+    /// Upload a plane of the awkward values and read it straight back: the
+    /// largest half, both zeroes, a float too small to be a half at all, and
+    /// negatives of each. Every channel returns the bits the per-value
+    /// narrowing gives, and a width whose row is 264 bytes, not a multiple of
+    /// 256, says the padding at the end of a row is skipped and not read as
+    /// picture.
+    #[test]
+    fn a_padded_row_round_trips_to_the_same_bits() {
+        let Some(ctx) = crate::test_support::lease() else {
+            crate::no_adapter();
+            return;
+        };
+        let (w, h) = (33u32, 5u32);
+        let awkward = [
+            65504.0f32, -65504.0, 0.0, -0.0, 1e-8, -1e-8, 1.0, -1.0, 6.1e-5, 0.333, -0.333, 1024.5,
+        ];
+        let src: Vec<f32> = (0..(w * h * 4) as usize)
+            .map(|i| awkward[i % awkward.len()])
+            .collect();
+        let tex = upload_linear_f32(&ctx, &src, w, h);
+        let out = readback_linear_f32(&ctx, &tex, w, h).unwrap();
+        assert_eq!(out.len(), src.len());
+        for (i, (got, want)) in out.iter().zip(&src).enumerate() {
+            assert_eq!(
+                got.to_bits(),
+                f16_to_f32(f16_bits(*want)).to_bits(),
+                "channel {i}: {want}"
+            );
+        }
+    }
 }

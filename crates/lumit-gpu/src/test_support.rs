@@ -59,6 +59,8 @@ impl SharedGpu {
         // test starts on a closed one.
         self.ctx.frame.replace(None);
         self.ctx.frame_depth.set(0);
+        // The pool belongs to the frame that was open, and that frame is gone.
+        self.ctx.pool.borrow_mut().clear();
         self.fx.reset_for_tests();
     }
 }

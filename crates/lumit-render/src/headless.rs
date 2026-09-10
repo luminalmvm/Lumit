@@ -1195,7 +1195,7 @@ impl HeadlessRenderer {
                     return false;
                 };
                 let scale = composite_scale(quality);
-                let samples = self.gpu.sample_count(doc.anti_aliasing.samples());
+                let samples = self.gpu.sample_count(doc.anti_aliasing.samples_for(cw, ch));
                 parts
                     .fx_cache
                     .borrow_mut()
@@ -1272,7 +1272,7 @@ impl HeadlessRenderer {
                 // will actually give. Preview and export both read the
                 // same document field — unlike `render_scale`, which is a
                 // preview-only reduction — so the two stay the same picture.
-                samples: self.gpu.sample_count(doc.anti_aliasing.samples()),
+                samples: self.gpu.sample_count(doc.anti_aliasing.samples_for(cw, ch)),
                 profiler: watcher.as_ref(),
                 colour_inputs: inputs.as_ref(),
                 colour_config: self.colour.loaded().filter(|l| l.usable()),
@@ -8390,7 +8390,17 @@ surfaces:
         let (cw, ch) = (32u32, 16u32);
         let (mut doc, comp_id, _) = matrix_base(cw, ch, LinearColour([0.8, 0.1, 0.1, 1.0]));
         for _ in 0..15 {
-            matrix_top(&mut doc, comp_id, LinearColour([0.1, 0.2, 0.9, 1.0]));
+            let (_, id) = matrix_top(&mut doc, comp_id, LinearColour([0.1, 0.2, 0.9, 1.0]));
+            // An effect apiece. The property is about work being handed over
+            // layer by layer, and a layer with nothing on it has none to hand:
+            // its picture goes straight from its upload to the composite.
+            if let Some(l) = doc
+                .comp_mut(comp_id)
+                .and_then(|c| c.layers.iter_mut().find(|l| l.id == id))
+            {
+                l.effects
+                    .push(lumit_core::fx::instantiate("exposure").expect("a built-in"));
+            }
         }
         let store = DocumentStore::new(doc);
         let doc = store.snapshot();

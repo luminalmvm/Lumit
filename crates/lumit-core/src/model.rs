@@ -2721,6 +2721,10 @@ impl ColourDepth {
     }
 }
 
+/// The most texels a composition's multisample attachment may hold: a 4K
+/// frame at 8× ([`AntiAliasing::samples_for`]).
+pub const SAMPLE_BUDGET: u64 = 3840 * 2160 * 8;
+
 impl AntiAliasing {
     /// The sample count to hand the renderer.
     #[must_use]
@@ -2731,6 +2735,33 @@ impl AntiAliasing {
             Self::X4 => 4,
             Self::X8 => 8,
         }
+    }
+
+    /// The count a `width × height` composition may actually use: the
+    /// setting's own while its multisample attachment stays within
+    /// [`SAMPLE_BUDGET`], the largest count that does otherwise, and 1 where
+    /// none does. The attachment is `width × height × samples` texels of
+    /// the working format, and it is the one allocation in a frame that
+    /// grows with both the picture and the setting: 2.1 GB at 8K and 8×, four
+    /// times the rest of the frame put together, and every nested comp and
+    /// motion-blur sample allocates another.
+    ///
+    /// A rule about the comp's own size, never the preview scale, so a comp
+    /// gets the same count at every zoom and on export
+    /// (docs/impl/anti-aliasing.md §4). The frame name reads this rather
+    /// than [`Self::samples`], so a frame banked at one count is never served
+    /// for another.
+    #[must_use]
+    pub fn samples_for(self, width: u32, height: u32) -> u32 {
+        let requested = self.samples();
+        let pixels = u64::from(width) * u64::from(height);
+        if requested <= 1 || pixels == 0 {
+            return requested;
+        }
+        [8u32, 4, 2]
+            .into_iter()
+            .find(|&n| n <= requested && pixels * u64::from(n) <= SAMPLE_BUDGET)
+            .unwrap_or(1)
     }
 
     /// The setting a sample count corresponds to; anything not one of the four
@@ -4473,5 +4504,22 @@ mod tests {
         let unified = group.unified_axes(TransformPair::Scale);
         assert!(unified.is_empty(), "nothing to merge onto a constant");
         assert!(!group.scale_y.is_animated());
+    }
+
+    /// The anti-aliasing budget bites only above 4K, and only as far as it
+    /// must: 4K keeps 8×, 8K gets 2× (its attachment then costs what 4K's
+    /// does), and a setting that asked for less is never raised.
+    #[test]
+    fn anti_aliasing_steps_down_where_the_attachment_would_not_fit() {
+        use super::AntiAliasing::{Off, X2, X4, X8};
+        assert_eq!(X8.samples_for(1920, 1080), 8);
+        assert_eq!(X8.samples_for(3840, 2160), 8, "4K is the budget itself");
+        assert_eq!(X8.samples_for(5120, 2880), 4, "5K halves");
+        assert_eq!(X8.samples_for(7680, 4320), 2, "8K quarters");
+        assert_eq!(X4.samples_for(7680, 4320), 2, "a lower ask is capped too");
+        assert_eq!(X2.samples_for(7680, 4320), 2, "and kept where it fits");
+        assert_eq!(X8.samples_for(16384, 16384), 1, "nothing fits: off");
+        assert_eq!(Off.samples_for(7680, 4320), 1);
+        assert_eq!(X8.samples_for(0, 0), 8, "an empty comp is left alone");
     }
 }
