@@ -1115,6 +1115,18 @@ The library of assets: footage items, audio items, comps, folders.
 - **Hover-scrub thumbnails**: hovering a footage item's thumbnail and moving horizontally
   scrubs a low-resolution preview. This MUST be served from proxy/thumbnail data only and
   MUST NOT trigger full decodes. Double-click opens the item in a Viewer (footage mode).
+  **Shipped on the preview card (2026-09-09)**, which is where the thumbnail is: moving
+  across the poster frame draws the moment under the pointer, and leaving puts the poster
+  frame back. Quantised to two dozen steps across the 96 px square, so a pass of the mouse
+  asks for two dozen small scaled decodes and not one per pixel; each is cached by item,
+  size and frame, so going back over the same ground never decodes again, and the cache
+  lets its scrubbed frames go before its poster frames when it fills. A still, a sound
+  file and a clip that has not probed have one frame between them and so get no hover at
+  all. **A sound file gets a play button** in the same square instead, which is what a
+  file with nothing to look at has to offer: it plays the file as it is, with no
+  composition behind it and no layer made, through the one transport a comp plays through
+  — so starting a composition silences it, and it silences itself when the selection
+  moves on.
   **Shipped (owner request, 2026-07-28):** selection lands on the pointer's *down* stroke.
   A second click on the lone selected row **opens** it (§4.2); it no longer renames —
   `Enter` on the selection does, as it does in every panel. Double-clicking

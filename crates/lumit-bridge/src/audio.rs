@@ -115,6 +115,11 @@ struct AudioState {
     /// One prepare worker at a time; a request landing while it runs parks in
     /// the one-slot latest-wins mailbox.
     worker_busy: bool,
+    /// Which footage item's **preview** the Project panel last asked for, if
+    /// any. Cleared by anything else that takes the engine, so a preview whose
+    /// file was still decoding when a comp started playing is dropped rather
+    /// than stamped over the comp's mix.
+    wanted_preview: Option<Uuid>,
     /// The comp waiting for the worker, with the document to build it from —
     /// the snapshot is captured at request time so a later edit cannot change
     /// what a queued prepare is about to mix.
@@ -142,6 +147,7 @@ impl AudioState {
             playing: false,
             pending_start: None,
             worker_busy: false,
+            wanted_preview: None,
             pending_prepare: None,
             jobs: AudioJobsBuilder::new(),
             decoded: HashMap::new(),
@@ -654,6 +660,9 @@ pub(crate) fn prepare(comp: Uuid, doc: Arc<lumit_core::Document>) {
 pub(crate) fn play(comp: Uuid, start: f64, doc: Arc<lumit_core::Document>) {
     let mut st = lock();
     st.playing = true;
+    // The comp is what the user wants to hear now, so a preview still decoding
+    // must not land on top of it.
+    st.wanted_preview = None;
     if st.loaded_comp == Some(comp) {
         send(&st, Cmd::Seek(start.max(0.0)));
         send(&st, Cmd::Play);
@@ -670,6 +679,108 @@ pub(crate) fn play(comp: Uuid, start: f64, doc: Arc<lumit_core::Document>) {
     }
     st.pending_start = Some(start.max(0.0));
     kick_prepare(&mut st, comp, doc);
+}
+
+/// Play one footage file's own sound from the top, with no composition behind
+/// it — the Project panel's preview button (docs/07 §3.1).
+///
+/// The mix is a single clip at unity, loaded under the **item's** id. A footage
+/// id is never a comp id, so a preview and a comp's mix cannot be taken for one
+/// another, and starting either silences the other — which is what one pair of
+/// speakers means. Stopping is [`stop`] and where it has got to is [`clock`],
+/// exactly as for a comp.
+///
+/// Returns at once: the decode runs on its own thread, so a long file does not
+/// hold the press.
+pub(crate) fn preview(item: Uuid, path: std::path::PathBuf) {
+    {
+        let mut st = lock();
+        if matches!(st.device, Device::Unavailable) {
+            return;
+        }
+        st.wanted_preview = Some(item);
+        // This file's preview is already in the engine: a second press is a
+        // rewind, not a re-decode.
+        if st.loaded_comp == Some(item) {
+            st.playing = true;
+            send(&st, Cmd::Seek(0.0));
+            send(&st, Cmd::Play);
+            return;
+        }
+    }
+
+    std::thread::spawn(move || {
+        let Some((tx, rate, generation)) = ensure_device() else {
+            return;
+        };
+
+        // The same per-item buffer a comp's mix decodes into: previewing a clip
+        // and then dropping it in a comp decodes the file once.
+        let hit = {
+            let st = lock();
+            st.decoded
+                .get(&item)
+                .filter(|b| b.rate == rate)
+                .map(Arc::clone)
+        };
+        let buffer = match hit {
+            Some(buffer) => buffer,
+            None => {
+                let Ok(buffer) = lumit_media::audio::decode_all(&path, rate) else {
+                    return; // a file with no sound in it, or one that will not open
+                };
+                let buffer = Arc::new(buffer);
+                lock().decoded.insert(item, Arc::clone(&buffer));
+                buffer
+            }
+        };
+
+        // How long the preview is, is how long the file is — the buffer that
+        // just came back knows, so nothing has to probe for it.
+        let frames = buffer.samples.len() / 2;
+        if frames == 0 {
+            return;
+        }
+        let duration_s = frames as f64 / f64::from(rate);
+
+        let jobs = vec![AudioJob {
+            item,
+            layer: item,
+            path,
+            in_s: 0.0,
+            out_s: duration_s,
+            offset_s: 0.0,
+            volume: lumit_core::anim::Property::zero(),
+            pan: lumit_core::anim::Property::zero(),
+            carriers: Vec::new(),
+            fade: None,
+            driven: None,
+            chain: None,
+        }];
+        let mut decoded = HashMap::new();
+        decoded.insert(item, buffer);
+        let (plan, strips) = build_plan(&jobs, &decoded, rate, duration_s, 0.0);
+
+        let mut st = lock();
+        // The output moved, or something else took the engine while this file
+        // decoded (a comp played, or another preview was pressed). Drop the
+        // work rather than stamping it over what the user is listening to now.
+        if st.device_gen != generation || st.wanted_preview != Some(item) {
+            return;
+        }
+        let _ = tx.send(Cmd::Load {
+            plan,
+            start: Some(0.0),
+            play: true,
+        });
+        st.loaded_comp = Some(item);
+        // No signature: a preview is not a comp, so no edit can arrive that
+        // would want to be recognised as the same mix.
+        st.loaded_sig = None;
+        st.playing = true;
+        st.meter_strips = strips;
+        trim_decoded(&mut st, &jobs);
+    });
 }
 
 /// Pause playback (the transport's pause — the clock holds its position).
@@ -708,6 +819,9 @@ pub(crate) fn seek(secs: f64) {
 pub(crate) fn stop() {
     let mut st = lock();
     st.playing = false;
+    // Stop means stop: a preview whose file is still decoding does not then
+    // start on its own a second later.
+    st.wanted_preview = None;
     send(&st, Cmd::Pause);
     send(&st, Cmd::Seek(0.0));
 }

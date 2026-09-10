@@ -47,6 +47,15 @@ type ThumbKey = (Uuid, u32, i64);
 #[cfg(feature = "media")]
 type Thumb = (u32, u32, Vec<u8>);
 
+/// How much RGBA the thumbnail cache may hold before it starts letting go.
+///
+/// Poster frames alone would never reach it — a project of a thousand clips is
+/// a few tens of megabytes. Hover-scrubbing does: every column of the preview
+/// card is another frame of another file, and a session spent looking through a
+/// folder would otherwise keep all of them for ever.
+#[cfg(feature = "media")]
+const THUMB_BUDGET_BYTES: usize = 64 * 1024 * 1024;
+
 impl MediaCache {
     pub fn clear(&mut self) {
         #[cfg(feature = "media")]
@@ -60,9 +69,23 @@ impl MediaCache {
     }
 
     /// Store a decoded thumbnail for `(id, max_edge)`.
+    ///
+    /// Past [`THUMB_BUDGET_BYTES`] the **scrubbed** frames go and the poster
+    /// frames stay: frame zero is what every Project row and every Timeline
+    /// clip draws, so throwing those away would make a panel redecode itself,
+    /// while a scrub the pointer has left is worth nothing to anybody.
+    ///
+    /// ponytail: a whole-cache sweep of everything past frame zero, not an LRU.
+    /// The scrub that is happening at the time is the one that pays, and it
+    /// pays by decoding again on the way back. Give it recency ordering if that
+    /// ever shows up as a stutter.
     #[cfg(feature = "media")]
     fn thumb_put(&mut self, id: Uuid, max_edge: u32, frame: i64, w: u32, h: u32, rgba: Vec<u8>) {
         self.thumbs.insert((id, max_edge, frame), (w, h, rgba));
+        let bytes: usize = self.thumbs.values().map(|(_, _, rgba)| rgba.len()).sum();
+        if bytes > THUMB_BUDGET_BYTES {
+            self.thumbs.retain(|(_, _, frame), _| *frame == 0);
+        }
     }
 }
 /// Decode one footage frame to tightly-packed RGBA8 (`media` feature only).

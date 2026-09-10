@@ -251,6 +251,11 @@ class FootageReference {
         that: this,
       );
 
+  bool previewAudio() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferencePreviewAudio(
+        that: this,
+      );
+
   /// Where MAKE-PROXY would write this item's proxy: beside the original,
   /// with `_proxy` before a `.mov` extension.
   ///
@@ -304,9 +309,10 @@ class FootageReference {
   void setUseProxy({required bool on_}) => BridgeLib.instance.api
       .crateApiFootageFootageReferenceSetUseProxy(that: this, on_: on_);
 
-  Future<BridgeRenderedFrame?> thumbnail({required int maxEdge}) => BridgeLib
-      .instance.api
-      .crateApiFootageFootageReferenceThumbnail(that: this, maxEdge: maxEdge);
+  Future<BridgeRenderedFrame?> thumbnail(
+          {required int maxEdge, required PlatformInt64 frame}) =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceThumbnail(
+          that: this, maxEdge: maxEdge, frame: frame);
 
   @override
   int get hashCode => internalproject.hashCode ^ internalid.hashCode;

@@ -38,6 +38,16 @@ const double _thumbHeight = 54;
 /// The gap between the card's three text lines.
 const double _previewLineGap = 3;
 
+/// How many moments a hover across the poster frame can land on (docs/07
+/// §3.1).
+///
+/// The frame is 96 px wide, so this is a step every four pixels: close enough
+/// that a pass of the mouse reads as movement, coarse enough that no file is
+/// asked to decode a hundred separate frames for one pass. Each step is one
+/// small scaled decode, cached, so going back over ground already covered
+/// costs nothing.
+const int projectScrubSteps = 24;
+
 /// The search row: 8 above the well, 6 under it, and the well itself the 20 a
 /// value well is everywhere (§12A.6).
 const double projectSearchRowHeight = 34;
@@ -567,6 +577,19 @@ Widget projectPreviewCard(
   required bool missing,
   required ui.Image? thumb,
   required BridgeMediaInfo? info,
+
+  /// Called as the pointer crosses the poster frame, with the frame of the
+  /// **file** under it, and with null when the pointer leaves or the item has
+  /// nothing to scrub — which puts the poster frame back.
+  ValueChanged<int?>? onScrub,
+
+  /// Press the play button that stands where the poster frame would be. Given
+  /// only for a sound file that is actually on disc; every other item has a
+  /// picture there instead.
+  VoidCallback? onPlaySound,
+
+  /// Whether that button is showing sound already running.
+  bool soundPlaying = false,
 }) =>
     Container(
       key: const ValueKey('project-preview-card'),
@@ -577,7 +600,10 @@ Widget projectPreviewCard(
       padding: const EdgeInsets.all(_previewPad),
       child: item == null
           ? const SizedBox.expand()
-          : _previewContent(t, item, name, missing, thumb, info),
+          : _previewContent(t, item, name, missing, thumb, info,
+              onScrub: onScrub,
+              onPlaySound: onPlaySound,
+              soundPlaying: soundPlaying),
     );
 
 Widget _previewContent(
@@ -586,8 +612,11 @@ Widget _previewContent(
   String name,
   bool missing,
   ui.Image? image,
-  BridgeMediaInfo? info,
-) {
+  BridgeMediaInfo? info, {
+  ValueChanged<int?>? onScrub,
+  VoidCallback? onPlaySound,
+  bool soundPlaying = false,
+}) {
   final type = switch (item) {
     ItemReference_Footage() => l10n.projectTypeFootage,
     ItemReference_Folder() => l10n.projectTypeFolder,
@@ -599,21 +628,37 @@ Widget _previewContent(
   if (item case ItemReference_Footage() when !missing) {
     // The picture comes straight from the RAM cache the walk prefilled, so
     // switching the selection redraws it in the same frame.
-    thumb = SizedBox(
-      width: _thumbWidth,
-      height: _thumbHeight,
-      child: image == null
-          ? Center(
-              child: lumitIcon(LumitIcon.footage,
-                  size: iconSize, color: t.textMuted))
-          : ClipRRect(
-              borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-              child: Container(
-                color: t.surface0,
-                child: RawImage(image: image, fit: BoxFit.contain),
-              ),
+    Widget face = image == null
+        ? Center(
+            child: lumitIcon(LumitIcon.footage,
+                size: iconSize, color: t.textMuted))
+        : ClipRRect(
+            borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+            child: Container(
+              color: t.surface0,
+              child: RawImage(image: image, fit: BoxFit.contain),
             ),
-    );
+          );
+    // A sound file has no picture to show or to scrub, so the same square
+    // carries the one thing there is to do with it: hear it.
+    if (onPlaySound != null) {
+      face = _previewSoundButton(t, soundPlaying, onPlaySound);
+    }
+    thumb = SizedBox(width: _thumbWidth, height: _thumbHeight, child: face);
+    // Only where there is something to scrub: a still, a sound file and a
+    // clip that has not probed all answer the same frame wherever the pointer
+    // is, so they get no hover at all rather than one that does nothing.
+    if (onScrub != null && projectScrubFrame(info, 0) != null) {
+      thumb = MouseRegion(
+        key: const ValueKey('project-preview-scrub'),
+        // Hover only: nothing is pressed, nothing is dragged, and the poster
+        // frame comes back the moment the pointer goes elsewhere.
+        onHover: (event) =>
+            onScrub(projectScrubFrame(info, event.localPosition.dx)),
+        onExit: (_) => onScrub(null),
+        child: thumb,
+      );
+    }
   }
 
   return Row(
@@ -648,6 +693,56 @@ Widget _previewContent(
     ],
   );
 }
+
+/// Which frame of the file the pointer is over, `dx` logical pixels across the
+/// poster frame — or null when there is nothing to scrub, which is a still, a
+/// sound file, and anything that has not probed.
+///
+/// Quantised to [projectScrubSteps], so a slow drag across the square asks for
+/// two dozen moments rather than one per pixel. The last step lands on the
+/// last frame: a scrub that stopped short of the end would never show it.
+int? projectScrubFrame(BridgeMediaInfo? info, double dx) {
+  if (info == null || info.videoCodec == null || info.isStill) return null;
+  final fps = info.fpsDen == 0 ? 0.0 : info.fpsNum / info.fpsDen;
+  final seconds =
+      info.duration.den == 0 ? 0.0 : info.duration.num / info.duration.den;
+  final frames = (seconds * fps).round();
+  if (frames <= 1) return null;
+  final step = (dx / _thumbWidth * projectScrubSteps)
+      .floor()
+      .clamp(0, projectScrubSteps - 1);
+  return (step * (frames - 1) / (projectScrubSteps - 1)).round();
+}
+
+/// The play button that stands where a sound file's poster frame would be.
+Widget _previewSoundButton(LumitTheme t, bool playing, VoidCallback onPress) =>
+    Semantics(
+      button: true,
+      label: playing ? l10n.projectPreviewStop : l10n.projectPreviewPlay,
+      child: LumitTooltip(
+        message: playing ? l10n.projectPreviewStop : l10n.projectPreviewPlay,
+        child: GestureDetector(
+          key: const ValueKey('project-preview-sound'),
+          onTap: onPress,
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: Container(
+              decoration: BoxDecoration(
+                color: t.surface0,
+                borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+              ),
+              child: Center(
+                child: lumitIcon(
+                  playing ? LumitIcon.pause : LumitIcon.play,
+                  size: iconSizeTransport,
+                  color: playing ? t.accent : t.textSecondary,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
 
 /// The card's first fact line: what this item can truthfully state. The
 /// length reads as `HH:MM:SS:FF` timecode at the item's own rate — the same
