@@ -972,6 +972,55 @@ struct EmbossParams {
     _pad2: f32,
 }
 
+/// One resolved Mood lighting (docs/08 §3.98). Mirrors
+/// `lumit_core::fx::cpu::MoodLightingParams` with its `FractalField` flattened,
+/// which is the shape the uniform wants anyway.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MoodLightingOp {
+    pub seed: u32,
+    /// 1..=10.
+    pub octaves: u32,
+    /// Each octave's amplitude, as a share of the last.
+    pub gain: f32,
+    /// Each octave's frequency, as a multiple of the last.
+    pub lacunarity: f32,
+    pub perlin: bool,
+    pub turbulent: bool,
+    /// Depth loop length in cells; 0 for a field that never repeats.
+    pub cycle: i32,
+    /// `1 ÷ pool size`, raster pixels.
+    pub inv_scale: f32,
+    /// The field's depth coordinate (Drift ÷ 360).
+    pub z: f32,
+    /// Intensity ÷ 100.
+    pub intensity: f32,
+    /// Scene-linear RGB: the colour of the light in the pools.
+    pub light: [f32; 3],
+    /// Scene-linear RGB: the colour of the light between them.
+    pub shade: [f32; 3],
+    /// Contrast's own factor, `1 + t|t|` (§3.14's curve).
+    pub contrast: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct MoodLightingParams {
+    light: [f32; 4],
+    shade: [f32; 4],
+    inv_scale_z_int_con: [f32; 4],
+    mix_amt: f32,
+    /// 1 = the matte scales Intensity and Contrast per pixel.
+    matte_on: f32,
+    gain: f32,
+    lacunarity: f32,
+    seed: u32,
+    octaves: u32,
+    cycle: i32,
+    flags: u32,
+}
+
 /// One resolved Texturize (docs/08 §3.68). Mirrors
 /// `lumit_core::fx::cpu::TexturizeParams`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -1129,6 +1178,49 @@ impl FxEngine {
                 _pad0: 0.0,
                 _pad1: 0.0,
                 _pad2: 0.0,
+            }),
+        );
+        out
+    }
+
+    /// Apply one Mood lighting (docs/08 §3.98) to a linear working texture,
+    /// returning a new texture of the same size. One pass: three octaves of 3-D
+    /// noise a pixel, then a multiply and a grade — no neighbour taps, so the
+    /// ROI is exact.
+    pub fn mood_lighting(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        matte: Option<&wgpu::Texture>,
+        op: &MoodLightingOp,
+    ) -> wgpu::Texture {
+        let out = work_texture(ctx, w, h, "fx-mood-lighting-out");
+        // bit 0 Perlin, bit 1 Turbulent — the field's own two switches, in the
+        // one lane fx_noise_core.wgsl reads them from.
+        let flags = u32::from(op.perlin) | (u32::from(op.turbulent) << 1);
+        self.dispatch_matted(
+            ctx,
+            &self.mood_lighting,
+            src,
+            src,
+            matte,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&MoodLightingParams {
+                light: [op.light[0], op.light[1], op.light[2], 0.0],
+                shade: [op.shade[0], op.shade[1], op.shade[2], 0.0],
+                inv_scale_z_int_con: [op.inv_scale, op.z, op.intensity, op.contrast],
+                mix_amt: op.mix,
+                matte_on: f32::from(matte.is_some()),
+                gain: op.gain,
+                lacunarity: op.lacunarity,
+                seed: op.seed,
+                octaves: op.octaves,
+                cycle: op.cycle,
+                flags,
             }),
         );
         out

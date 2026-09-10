@@ -69,6 +69,7 @@ pub mod lut;
 pub mod matte_key;
 pub mod median;
 pub mod mirror;
+pub mod mood_lighting;
 pub mod mosaic;
 pub mod motion_blur;
 pub mod noise;

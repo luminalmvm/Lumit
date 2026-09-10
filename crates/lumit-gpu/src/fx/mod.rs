@@ -237,6 +237,10 @@ pub struct FxEngine {
     /// multiplied into this one. The second kernel after Light wrap to read a
     /// layer of its own beside the universal Matte row.
     texturize: wgpu::ComputePipeline,
+    /// Mood lighting (docs/08 §3.98): pools of coloured light multiplied
+    /// over the picture, then §3.14's contrast. Another reader of the
+    /// shared `fx_noise_core.wgsl`.
+    mood_lighting: wgpu::ComputePipeline,
     /// Broadcast safe (docs/08 §3.69): the composite signal's amplitude measured
     /// and clamped, or the pixels that fail keyed out.
     broadcast_safe: wgpu::ComputePipeline,

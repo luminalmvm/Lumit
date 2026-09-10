@@ -1,0 +1,76 @@
+---
+title: Mood lighting
+description: "Lays pools of coloured light over the picture and lifts the contrast under them."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Mood lighting is a **Stylise** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Mood lighting" category="stylise" slug="mood-lighting" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Soft pools of light are laid over the picture, warm where a pool lands and cool
+between them, and the contrast is lifted under them. The pools are a noise field,
+repeatable from a seed. **Drift** moves through the field rather than redrawing
+it.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Intensity** | Slider | 0 to 200; higher | 100 | Per cent |
+| **Light colour** | Colour | Each channel 0 to 4, scene-linear | 0.98, 0.72, 0.42, 1 | - |
+| **Shade colour** | Colour | Each channel 0 to 4, scene-linear | 0.1, 0.16, 0.34, 1 | - |
+| **Scale** | Slider | 1 to 4000; higher | 900 | Pixels at composition size |
+| **Drift** | Dial | Any angle; snaps every 45° while a modifier is held | 0° | Degrees |
+| **Contrast** | Slider | 0 to 200; higher | 115 | Per cent |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales Intensity and Contrast per pixel: white lights and grades in full, grey more gently, black leaves the picture alone. **Invert** reads that matte inverted.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Intensity**: how far the light pulls the picture either side of neutral. At 0
+  only **Contrast** is left.
+- **Light colour**: the colour of the light inside a pool. A mid grey changes
+  nothing.
+- **Shade colour**: the colour of the light between the pools. A mid grey changes
+  nothing.
+- **Scale**: the size of one pool.
+- **Drift**: one full turn moves the pools on by one of their own widths.
+- **Contrast**: a scale about mid-grey, as [Contrast](/effects/colour/contrast/)
+  applies it.
+- **Seed**: which arrangement of pools this instance lights with.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+
+:::note[Not built]
+The **digital** and **streaks** variants of the After Effects preset are not
+built. The pools are round and soft, and there is no way to square them off or
+stretch them into streaks.
+:::
+
+## Related
+
+- [Fractal noise](/effects/generate/fractal-noise/)
+- [Contrast](/effects/colour/contrast/)
+- [Glow](/effects/stylise/glow/)
+- [Stylise](/effects/#stylise)
+- [Effects](/use/effects/)

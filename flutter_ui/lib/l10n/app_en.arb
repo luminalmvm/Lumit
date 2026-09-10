@@ -1998,6 +1998,10 @@
   "@fxDrag": {
     "description": "Effect controls — a control on Particulate: how quickly a particle's own speed settles towards the wind's."
   },
+  "fxDrift": "Drift",
+  "@fxDrift": {
+    "description": "Mood lighting parameter — degrees; moves the pools of light through the pattern rather than redrawing them."
+  },
   "fxDropShadow": "Drop shadow",
   "@fxDropShadow": {
     "description": "Effect name in the Add effect menu — casts the layer's own shape behind it."
@@ -2653,6 +2657,10 @@
   "fxLift": "Lift",
   "@fxLift": {
     "description": "Effect controls — a control on Colour balance."
+  },
+  "fxLightColour": "Light colour",
+  "@fxLightColour": {
+    "description": "Mood lighting parameter — the colour of the light inside a pool."
   },
   "fxLightTint": "Light tint",
   "@fxLightTint": {
@@ -8189,6 +8197,10 @@
   "@fxMidtoneContrast": {
     "description": "Effect controls — a control on Shadow highlight."
   },
+  "fxMoodLighting": "Mood lighting",
+  "@fxMoodLighting": {
+    "description": "Effect name in the Add effect menu — pools of coloured light laid over the picture, and a firmer contrast under them."
+  },
   "fxMoreOptions": "More options",
   "@fxMoreOptions": {
     "description": "Effect controls — a collapsible group heading on Shadow highlight."
@@ -8220,6 +8232,10 @@
   "fxShadowAmount": "Shadow amount",
   "@fxShadowAmount": {
     "description": "Effect controls — a control on Shadow highlight."
+  },
+  "fxShadeColour": "Shade colour",
+  "@fxShadeColour": {
+    "description": "Mood lighting parameter — the colour of the light between the pools."
   },
   "fxShadowHighlight": "Shadow highlight",
   "@fxShadowHighlight": {

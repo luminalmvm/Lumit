@@ -15901,3 +15901,202 @@ fn a_frame_hands_a_finished_work_texture_to_the_pass_after_it() {
         "a texture given back outside a frame is not handed out again"
     );
 }
+
+/// Mood lighting's kernel against its CPU oracle (docs/08 §3.98, §1.6).
+///
+/// The sweep covers both halves of the effect separately and together, because
+/// the two are independently neutral: Intensity 0 must leave nothing but the
+/// grade, and Contrast 100 nothing but the light. The tolerance is the
+/// `moderate` class's, scaled for a three-octave sum the way §3.37's own oracle
+/// is — the arithmetic order is identical on both paths, but a fractal sum
+/// followed by a multiply and a grade in fp32, stored to fp16, leaves more room
+/// than a pointwise grade does.
+#[test]
+fn wgsl_mood_lighting_matches_the_cpu_oracle() {
+    use lumit_core::fx::effects::mood_lighting::MoodLighting;
+    use lumit_core::fx::{EffectMetadata, Params};
+
+    let Some(ctx) = crate::test_support::lease() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = ctx.fx();
+    let (w, h) = (32u32, 24u32);
+    let img = alpha_corpus(w, h);
+
+    // Scale is px@comp; the resolve step would have scaled it to this 32×24
+    // raster, so the test does the same by hand — a 900 px pool on a 32 px
+    // raster is one flat wash and would prove nothing.
+    let base = {
+        let mut m = MoodLighting::read(Params::EMPTY);
+        m.scale = 12.0;
+        m.seed = 4242;
+        m
+    };
+    let mut strong = base;
+    strong.intensity = 150.0;
+    let mut no_light = base;
+    no_light.intensity = 0.0;
+    let mut no_grade = base;
+    no_grade.contrast = 100.0;
+    let mut flattened = base;
+    flattened.contrast = 40.0;
+    let mut firm = base;
+    firm.contrast = 190.0;
+    let mut swapped = base;
+    swapped.light = [0.10, 0.16, 0.34, 1.0];
+    swapped.shade = [0.98, 0.72, 0.42, 1.0];
+    let mut hdr_light = base;
+    hdr_light.light = [3.0, 2.4, 1.2, 1.0];
+    let mut drifted = base;
+    drifted.drift = 400.0;
+    let mut broad = base;
+    broad.scale = 40.0;
+    let mut tight = base;
+    tight.scale = 4.0;
+
+    for (name, mood, mix) in [
+        ("default", base, 1.0f32),
+        ("strong", strong, 1.0),
+        ("no-light", no_light, 1.0),
+        ("no-grade", no_grade, 1.0),
+        ("flattened", flattened, 1.0),
+        ("firm", firm, 1.0),
+        ("swapped", swapped, 1.0),
+        ("hdr-light", hdr_light, 1.0),
+        ("drifted", drifted, 1.0),
+        ("broad", broad, 1.0),
+        ("tight", tight, 1.0),
+        ("mixed", strong, 0.6),
+        ("mix-zero", strong, 0.0),
+    ] {
+        let mut m = mood;
+        m.mix = mix * 100.0;
+        let p = m.packed();
+        let op = MoodLightingOp {
+            seed: p.field.seed,
+            octaves: p.field.octaves,
+            gain: p.field.gain,
+            lacunarity: p.field.lacunarity,
+            perlin: p.field.perlin,
+            turbulent: p.field.turbulent,
+            cycle: p.field.cycle,
+            inv_scale: p.inv_scale,
+            z: p.z,
+            intensity: p.intensity,
+            light: p.light,
+            shade: p.shade,
+            contrast: p.contrast,
+            mix: p.mix,
+        };
+
+        let mut cpu = img.clone();
+        lumit_core::fx::cpu::mood_lighting(&mut cpu, w, h, &p);
+
+        let tex = upload_linear_f32(&ctx, &img, w, h);
+        let out = fx.mood_lighting(&ctx, &tex, w, h, None, &op);
+        let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+
+        let worst = worst_f16_ulp(&cpu, &gpu);
+        eprintln!("mood_lighting {name}: worst {worst} ulp");
+        assert!(worst <= 4, "{name}: worst {worst} fp16 ULP");
+
+        if name == "mix-zero" {
+            assert_eq!(gpu, img, "{name}: must be the bit-exact identity");
+        } else {
+            assert!(gpu != img, "{name}: the effect must actually do something");
+            // Alpha is this effect's to leave alone, whatever the light does.
+            for (g, o) in gpu.chunks_exact(4).zip(img.chunks_exact(4)) {
+                assert_eq!(g[3], o[3], "{name}: alpha must be untouched");
+            }
+        }
+
+        // ... and where there is light it must be a *field*, not a flat wash: a
+        // kernel that ignored the noise would pass every check above.
+        if name != "no-light" && name != "mix-zero" {
+            let lit: Vec<f32> = gpu
+                .chunks_exact(4)
+                .zip(img.chunks_exact(4))
+                .filter(|(_, o)| o[3] > 0.5)
+                .map(|(g, o)| g[0] - o[0])
+                .collect();
+            let lo = lit.iter().copied().fold(f32::MAX, f32::min);
+            let hi = lit.iter().copied().fold(f32::MIN, f32::max);
+            assert!(hi - lo > 1e-3, "{name}: the light is flat ({lo}..{hi})");
+        }
+
+        let out2 = fx.mood_lighting(&ctx, &tex, w, h, None, &op);
+        let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
+        assert_eq!(gpu, gpu2, "GPU mood lighting must be bit-stable");
+    }
+}
+
+/// Mood lighting's matte claim (docs/08 §2.6): the matte turns the **lamp** down
+/// and the **grade** back toward neutral, per pixel, before either runs — a
+/// dimmer light and a gentler contrast, which is not the same picture as a fade
+/// between the graded frame and the ungraded one.
+#[test]
+fn the_matte_scales_the_mood_lighting() {
+    use lumit_core::fx::effects::mood_lighting::MoodLighting;
+    use lumit_core::fx::{EffectMetadata, Params};
+
+    let Some(ctx) = crate::test_support::lease() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = ctx.fx();
+    let (w, h) = (32u32, 24u32);
+    let img = smooth_corpus(w, h);
+    // Strong on both halves, so the claim is visible well above the fp16 floor.
+    let of = |intensity: f32, contrast: f32| {
+        let mut m = MoodLighting::read(Params::EMPTY);
+        m.scale = 12.0;
+        m.seed = 4242;
+        m.intensity = intensity;
+        m.contrast = contrast;
+        m
+    };
+    let p = of(150.0, 190.0).packed();
+    let op = MoodLightingOp {
+        seed: p.field.seed,
+        octaves: p.field.octaves,
+        gain: p.field.gain,
+        lacunarity: p.field.lacunarity,
+        perlin: p.field.perlin,
+        turbulent: p.field.turbulent,
+        cycle: p.field.cycle,
+        inv_scale: p.inv_scale,
+        z: p.z,
+        intensity: p.intensity,
+        light: p.light,
+        shade: p.shade,
+        contrast: p.contrast,
+        mix: p.mix,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "mood_lighting",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::mood_lighting_matted(px, w, h, &p, m),
+            plain: &|px| lumit_core::fx::cpu::mood_lighting(px, w, h, &p),
+            gpu: &|t, m| fx.mood_lighting(&ctx, t, w, h, m, &op),
+            tol: 2e-2,
+        },
+    );
+
+    // **A black matte is the picture, untouched.** Both controls have a neutral
+    // — no light and no grade — so unlike §3.67's flat sheet the honest answer
+    // here really is the frame as it arrived, and the matted path must reach it
+    // by turning both down rather than by dissolving.
+    let mut dark = quantised(&img);
+    lumit_core::fx::cpu::mood_lighting_matted(&mut dark, w, h, &p, &flat_matte(w, h, 0.0));
+    let mut off = quantised(&img);
+    lumit_core::fx::cpu::mood_lighting(&mut off, w, h, &of(0.0, 100.0).packed());
+    assert_eq!(
+        dark, off,
+        "a black matte on Mood lighting must BE the unlit, ungraded frame, to the bit"
+    );
+}

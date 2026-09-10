@@ -87,6 +87,7 @@ use super::effects::{
     matte_key::{MatteKey, MatteKeyDef},
     median::{Median, MedianDef},
     mirror::{Mirror, MirrorDef},
+    mood_lighting::{MoodLighting, MoodLightingDef},
     mosaic::{Mosaic, MosaicDef},
     motion_blur::{MotionBlur, MotionBlurDef},
     noise::{Noise, NoiseDef},
@@ -286,6 +287,10 @@ crate::catalogue![
     FindEdgesDef => FindEdges,
     EmbossDef => Emboss,
     TexturizeDef => Texturize,
+    // Mood lighting (docs/08 §3.98), at the Stylise family's end after
+    // them: pools of light laid over the picture rather than a colour
+    // moved, which is what puts it here and not in Colour.
+    MoodLightingDef => MoodLighting,
     // The Transition family, in docs/08 §3.46–§3.47 order.
     LinearWipeDef => LinearWipe,
     RadialWipeDef => RadialWipe,

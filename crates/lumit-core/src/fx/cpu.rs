@@ -7997,6 +7997,87 @@ pub fn texturize_matted(
     }
 }
 
+/// One resolved Mood lighting (docs/08 §3.98), reduced to what both paths read.
+/// The pool size arrives as a reciprocal and Contrast as the factor it
+/// multiplies by, so the kernel runs no division (§1.6).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MoodLightingParams {
+    /// The light field's shape (§3.37's core), seed included.
+    pub field: FractalField,
+    /// `1 ÷ pool size`, in raster pixels.
+    pub inv_scale: f32,
+    /// The field's depth coordinate: Drift ÷ 360.
+    pub z: f32,
+    /// Intensity ÷ 100.
+    pub intensity: f32,
+    /// Scene-linear RGB: the colour of the light in the pools.
+    pub light: [f32; 3],
+    /// Scene-linear RGB: the colour of the light between them.
+    pub shade: [f32; 3],
+    /// Contrast's own factor, `1 + t|t|` — §3.14's curve, not a second one.
+    pub contrast: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// Mood lighting (docs/08 §3.98) — the CPU reference and §1.6 oracle.
+///
+/// **In plain terms.** Slow pools of light drift over the picture: warm where a
+/// pool lands, cool and darker between them, and the whole thing given a firmer
+/// contrast on the way out. The pools are §3.37's noise field, so they are
+/// seeded and repeatable, and Drift moves *through* them rather than redrawing
+/// them.
+///
+/// The light **multiplies**, which is what light does. A mid-grey tint is a
+/// factor of one and changes nothing, the two colours pull either side of that,
+/// and no highlight is ever clipped on the way — which a screen or a soft-light
+/// blend could not promise in a scene-linear working space (§2.1).
+///
+/// Unpremultiplied (§2.2); alpha is untouched. Intensity 0 with Contrast at 100
+/// is the identity, and Mix 0 is the bit-exact identity (the WGSL twin matches).
+pub fn mood_lighting(rgba: &mut [f32], w: u32, h: u32, p: &MoodLightingParams) {
+    mood_lighting_matted(rgba, w, h, p, &[]);
+}
+
+/// [`mood_lighting`] driven by a matte (docs/08 §2.6): each pixel's matte
+/// strength `k` pulls **Intensity toward 0 and Contrast toward neutral**
+/// ([`matte_toward`]) before the pixel is lit, so a grey matte gives a dimmer
+/// light and a gentler grade rather than a fade between two pictures. An empty
+/// matte is the unmatted path to the byte.
+pub fn mood_lighting_matted(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    p: &MoodLightingParams,
+    matte: &[f32],
+) {
+    for y in 0..h {
+        for x in 0..w {
+            let i = (y as usize * w as usize + x as usize) * 4;
+            let k = matte_strength(matte, i);
+            let intensity = matte_toward(p.intensity, 0.0, k);
+            let contrast = matte_toward(p.contrast, 1.0, k);
+            let n = fractal(
+                &p.field,
+                (x as f32 + 0.5) * p.inv_scale,
+                (y as f32 + 0.5) * p.inv_scale,
+                p.z,
+            );
+            // The field, spread to fill 0..1: a Perlin sum rarely reaches its
+            // own ends, and a light that never arrives is not a light.
+            let f = (n + 0.5).clamp(0.0, 1.0);
+            let a = rgba[i + 3];
+            let u = unpremult(&rgba[i..i + 4]);
+            for c in 0..3 {
+                let tint = p.shade[c] + (p.light[c] - p.shade[c]) * f;
+                let lit = u[c] * (1.0 + (tint - 0.5) * 2.0 * intensity);
+                let v = (lit - CONTRAST_PIVOT) * contrast + CONTRAST_PIVOT;
+                rgba[i + c] = rgba[i + c] * (1.0 - p.mix) + v * a * p.mix;
+            }
+        }
+    }
+}
+
 /// One resolved Broadcast safe (docs/08 §3.69).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BroadcastSafeParams {

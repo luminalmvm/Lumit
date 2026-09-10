@@ -384,6 +384,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &Median,
     &Mosaic,
     &FindEdges,
+    &MoodLighting,
     &Emboss,
     &Texturize,
     &Fill,
@@ -3853,6 +3854,48 @@ impl GpuEffect for FindEdges {
     ) -> Tex {
         let (invert, mix) = effects::find_edges::FindEdges::read(p).packed();
         fx.find_edges(ctx, tex, w, h, &lumit_gpu::fx::FindEdgesOp { invert, mix })
+    }
+}
+
+struct MoodLighting;
+impl GpuEffect for MoodLighting {
+    fn match_name(&self) -> &'static str {
+        "mood_lighting"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        let m = effects::mood_lighting::MoodLighting::read(p).packed();
+        fx.mood_lighting(
+            ctx,
+            tex,
+            w,
+            h,
+            aux.matte(),
+            &lumit_gpu::fx::MoodLightingOp {
+                seed: m.field.seed,
+                octaves: m.field.octaves,
+                gain: m.field.gain,
+                lacunarity: m.field.lacunarity,
+                perlin: m.field.perlin,
+                turbulent: m.field.turbulent,
+                cycle: m.field.cycle,
+                inv_scale: m.inv_scale,
+                z: m.z,
+                intensity: m.intensity,
+                light: m.light,
+                shade: m.shade,
+                contrast: m.contrast,
+                mix: m.mix,
+            },
+        )
     }
 }
 
