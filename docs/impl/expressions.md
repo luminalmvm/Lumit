@@ -143,6 +143,13 @@ interrupted, so a pathological one can stall a render thread. Rhai supports this
 `Engine::on_progress`; wiring it to the epoch token
 ([playback-scheduler.md](playback-scheduler.md)) is the known gap.
 
+What *is* bounded is the work, not the clock. `make_engine` caps one evaluation at 100,000
+Rhai operations, 1 MiB of string, and 16,384 items of array or map
+(`an_expression_cannot_build_something_enormous`). Loops do not parse in an expression, so
+the case these catch is a single allocating call: `blob(50_000_000)` and
+`[0].pad(5_000_000, 0)` both ran to completion before the caps, on every property read.
+Rhai's array literal refuses *at* the ceiling while `pad` refuses above it, one item apart.
+
 ## 6. Where an expression is read from
 
 - **Numeric properties** — `Property::value_at_with_context`, in `anim.rs`. The plain
@@ -178,12 +185,16 @@ Implemented in `expression.rs`'s test module unless noted.
    the number asked for (`an_uncompilable_expression_samples_to_nothing`).
 7. **Text** — printing, clearing, the typed words surviving underneath, and the field being
    optional on disk.
+8. **Resource ceilings** — one expression cannot allocate without bound, and a pooled
+   engine's operation count resets per evaluation
+   (`an_expression_cannot_build_something_enormous`).
 
 ## 8. Known gaps
 
 Named so they are not rediscovered as bugs:
 
-- **No evaluation budget** (§5) — the one with real teeth.
+- **No evaluation time budget** (§5), the one with real teeth. The work one evaluation
+  may do is capped, the time it may take is not.
 - **No AST cache** (§3) — cheap to add, no longer the bottleneck.
 - **`-1.0` is the failure value** for numeric expressions, so a broken expression becomes a
   plausible-looking coordinate. Text got this right by printing nothing. Surfacing the error

@@ -405,6 +405,12 @@ and twice over, since the frame-cache key resolves them too.
   rather than one shared engine because expressions nest. The reasoning, and the three
   properties of it that are load-bearing, are in [impl/expressions.md](impl/expressions.md)
   §3.
+- **Work and allocation are capped, elapsed time is not.** One evaluation gets 100,000 Rhai
+  operations, 1 MiB of string, and 16,384 items of array or map. Loops do not parse in an
+  expression, so the runaway case is a single allocating call, and `blob(50_000_000)` or an
+  array padded to five million items both ran untouched before the caps went in. The
+  ceilings sit far above any real property expression, and one that trips a ceiling refuses
+  the way any other failure does.
 - Expression results participate in content hashing, so a property whose expression inputs
   are unchanged hashes identically and frames above it stay cached
   ([05-ARCHITECTURE.md](05-ARCHITECTURE.md) §4.2). A frame-varying expression keys per
@@ -412,8 +418,8 @@ and twice over, since the frame-cache key resolves them too.
 
 Specified but **not built**, each a real gap rather than a nicety:
 
-- **No evaluation budget.** A runaway expression is not interrupted, so it can stall a
-  render thread. The requirement stands: an evaluation MUST be stoppable, the property MUST
+- **No evaluation time budget.** A slow expression is not interrupted, so it can stall a
+  render thread. Capping the work does not cover this. The requirement stands: an evaluation MUST be stoppable, the property MUST
   hold its last good value, and an export MUST complete with the expression disabled and
   say so in the log — never a frozen UI, never a killed export. Rhai offers
   `Engine::on_progress` for exactly this; wiring it to the epoch token
