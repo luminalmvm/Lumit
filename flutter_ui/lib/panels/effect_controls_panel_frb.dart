@@ -1849,13 +1849,23 @@ class _EffectSection extends StatelessWidget {
   /// - two adjacent Float params `foo_x`, `foo_y` fold into one point row
   ///   (with the position dropper for the declared %-of-frame pairs).
   List<Widget> _paramRows(UuidValue id, Map<String, BridgeEffectValue> values) {
-    final params = _rows;
+    // A plugin hides and shows its own rows, and the instance says which
+    // are hidden right now. A group with nothing left to show is not drawn.
+    final hidden = info.hiddenRows.toSet();
+    final params = [
+      for (final p in _rows)
+        if (!hidden.contains(p.id)) p,
+    ];
     final groups = cachedListParameterGroups(info.name);
     final byFirstMember = <String, BridgeParamGroup>{};
     final memberOf = <String, BridgeParamGroup>{};
     for (final g in groups) {
-      if (g.params.isNotEmpty) byFirstMember[g.params.first] = g;
-      for (final m in g.params) {
+      final members = [
+        for (final m in g.params)
+          if (!hidden.contains(m)) m,
+      ];
+      if (members.isNotEmpty) byFirstMember[members.first] = g;
+      for (final m in members) {
         memberOf[m] = g;
       }
     }

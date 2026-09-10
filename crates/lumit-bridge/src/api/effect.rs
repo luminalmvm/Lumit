@@ -1709,6 +1709,11 @@ pub struct BridgeEffectInstanceInfo {
     /// fact about the instance. The two concatenated are what
     /// [`BridgeEffectInstance::list_parameters`] answers in one piece.
     pub derived_params: Vec<BridgeParamInfo>,
+    /// The rows this instance is not showing right now, by id: a plugin's
+    /// own hidden controls, read off its last render (docs/12 §2.2). Empty for
+    /// every built-in. Here for the same reason as the rest: the panel draws
+    /// on every rebuild and may not call.
+    pub hidden_rows: Vec<String>,
 }
 
 /// Every value [`BridgeEffectInstanceInfo::badge_reason`] can take.
@@ -2106,7 +2111,21 @@ pub(crate) fn read_instance_info(
         badge_reason,
         badge_detail,
         derived_params: derived_params_of(effect),
+        hidden_rows: hidden_rows_of(effect),
     }
+}
+
+/// The rows the instance's plugin is hiding, or nothing for a built-in.
+#[frb(ignore)]
+fn hidden_rows_of(effect: &EffectInstance) -> Vec<String> {
+    lumit_core::fx::def(effect.effect.match_name.as_str())
+        .map(|def| {
+            def.hidden_rows(effect)
+                .into_iter()
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 impl BridgeEffectInstance {

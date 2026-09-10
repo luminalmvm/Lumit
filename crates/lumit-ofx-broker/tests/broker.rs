@@ -458,3 +458,41 @@ fn a_press_comes_back_with_what_the_plugin_wrote() {
         "a press that came back is not a strike"
     );
 }
+
+/// The ring is built for the scan's frame size. A bigger frame regrows it
+/// before the render rather than failing with "does not fit a ring slot",
+/// which is what a 3840 by 1620 clip in a 1080p comp reported.
+#[test]
+fn a_frame_bigger_than_the_ring_regrows_it() {
+    let Ok(root) = tempfile::tempdir() else {
+        return;
+    };
+    let Some((mut broker, plugin)) = a_broker(root.path(), &[]) else {
+        skipped("a_frame_bigger_than_the_ring_regrows_it");
+        return;
+    };
+    let instance = broker
+        .create_instance(plugin, Context::Filter, ParamSnapshot::new())
+        .expect("an instance");
+
+    let (width, height) = (FRAME.0 * 4, FRAME.1 * 3);
+    let pixels = vec![0.5_f32; width * height * 4];
+    let big = Frame16::from_f32(width, height, &pixels).expect("a frame");
+    let rendered = broker
+        .render(instance, &RenderRequest::filter(0.0, big), &|_, _| None)
+        .expect("the ring grew to fit");
+    assert!(!rendered.errored, "{:?}", rendered.error);
+    assert_eq!(rendered.frame.width(), width);
+    assert!((first(&rendered.frame) - 0.5).abs() < 1e-2);
+
+    // The small frame still fits the bigger ring.
+    let rendered = broker
+        .render(
+            instance,
+            &RenderRequest::filter(1.0, a_flat_frame(0.25)),
+            &|_, _| None,
+        )
+        .expect("a frame back");
+    assert!(!rendered.errored, "{:?}", rendered.error);
+    assert!((first(&rendered.frame) - 0.25).abs() < 1e-2);
+}

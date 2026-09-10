@@ -79,7 +79,19 @@ transcription; a test records what the plugin observed and compares the two verb
 earlier revisions of this note left them implicit.
 
 Param changed actions (`kOfxActionInstanceChanged`) must fire between renders, wrapped in
-`kOfxActionBeginInstanceChanged/End...` — Sapphire relies on it.
+`kOfxActionBeginInstanceChanged/End...` — Sapphire relies on it. A value the host changed
+since the last frame is told this way before the next render's first question, with the
+pictures already on the instance (`Instance::tell_changes`). An instance is created at the
+plugin's defaults and the document's values are told the same way before its first render,
+the way Resolve restores a project; spektrafilm ignores a change to a value it was created
+with, so a saved stock rendered as the default until this. A value the host has not
+changed is left as the plugin holds it, so a control the plugin writes from inside
+`instanceChanged` (spektrafilm derives its film profile from the stock choice) keeps what
+the plugin wrote until the host has something new for that control. A row that is keyframed
+or driven by an expression is never told: its value is the playhead's, not a person's, and
+the plugin reads it at `paramGetValue` the way every host treats an animated control. The
+resolve walk marks such rows in the bag (`derived.quiet.<row>`) and the snapshot carries the
+set across.
 
 Images: `clipGetImage(clip, time)` returns a property set with data pointer, bounds, row
 bytes, pixel depth, premultiplication state. **Row bytes are always positive: the host hands
@@ -129,12 +141,14 @@ What the built transport pins, beyond the sketch above:
   for good; the child's standard output goes nowhere.
 - **The broker's first word is the protocol version.** A mismatch refuses the broker with
   a sentence rather than deserialising bytes of another shape.
-- **The ring is sized by a byte budget, once per bundle**: 512 MiB, clamped to between
-  three slots (this note's triple buffering, as the floor) and sixty-four. Slot header:
-  bounds, row bytes, premultiplication, payload length, FNV-1a hash — checked on read,
-  because a stale slot is the one failure shared memory has and it is silent. At 1080p
-  that is fifteen slots; at 4K it is the floor of three, so a `t ± 5` prefetch at that
-  size does not fit and is refused — a bigger budget, not a different design.
+- **The ring is sized by a byte budget**: 512 MiB, clamped to between three slots (this
+  note's triple buffering, as the floor) and sixty-four. It is built at the scan's 1080p
+  and regrown, once, the first time a bigger frame is rendered: a new ring at that size,
+  handed to the broker with a second `Open`. Slot header: bounds, row bytes,
+  premultiplication, payload length, FNV-1a hash — checked on read, because a stale slot
+  is the one failure shared memory has and it is silent. At 1080p that is fifteen slots;
+  at 4K it is the floor of three, so a `t ± 5` prefetch at that size does not fit and is
+  refused — a bigger budget, not a different design.
 - Frames cross the ring as fp32 RGBA, tightly packed top-down. The header's row bytes
   describe *the ring*; the flip to OFX's bottom-up layout happens at the plugin boundary
   inside the broker.
@@ -221,8 +235,13 @@ registered into the same catalogue the built-ins live in — the seam
 - **A rescan is guarded by name before any work.** That is what keeps it idempotent and what
   stops the second scan re-leaking a schema — §4a's recorded ceiling, discharged.
 - **The ring is built for 1080p at scan time.** The scan runs before any composition is
-  open, and §4 sizes a ring once per broker. A 4K comp then renders through the three-slot
-  floor; the upgrade is a broker respawned at the comp's size.
+  open. The first frame that does not fit a slot (a 3840 by 1620 clip in a 1080p comp
+  was the report) regrows the ring before the render, §4.
+- **Hidden rows follow the plugin.** The describe-time secret flags are the rows the panel
+  starts without; after every render the broker reports which parameters the instance has
+  flagged secret now, groups and pages included, and `OfxEffectDef::hidden_rows` turns that
+  into row ids the panel skips. spektrafilm shows its HDR output rows only once the output
+  role says HDR.
 - **A bundle's plugins share one broker.** `BrokerHost` holds an `Arc<Mutex<Broker>>`;
   eighty plugins in one bundle are one process, not eighty.
 

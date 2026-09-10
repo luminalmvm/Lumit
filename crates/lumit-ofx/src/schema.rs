@@ -39,7 +39,8 @@
 //!   a run of rows behind a twirl. A page is the same thing with a flatter
 //!   name — the host advertises `kOfxParamHostPropMaxPages` = 0, so a
 //!   well-behaved plugin uses groups, and a plugin that defines a page anyway
-//!   gets its page drawn as a group rather than dropped.
+//!   gets its page drawn as a group rather than dropped. Rows follow the
+//!   pages' order, then their group's, so a group is drawn once.
 //! * **Traits.** `cost = Heavy`, because a plugin is somebody else's code
 //!   crossing a process boundary and the degradation ordering should give it up
 //!   first; `roi = FullFrame`, because the host advertises no tile support and
@@ -59,6 +60,8 @@
 //! matters. Recorded ceiling: a rescan re-leaks, so the rescan path P6 builds
 //! reuses the schema it already has for an identifier and version it has
 //! already seen.
+
+use std::collections::{BTreeMap, BTreeSet};
 
 use lumit_core::fx::{
     CostClass, EffectSchema, EffectTraits, FxCategory, MatteRole, ParamGroup, ParamId, ParamKind,
@@ -81,18 +84,42 @@ pub fn schema_of(plugin: &PluginDescriptor) -> Result<EffectSchema, Rejection> {
     let groups = group_owners(&plugin.params);
     let pages = page_owners(&plugin.params);
 
-    let mut rows: Vec<ParamSchema> = Vec::new();
-    // The group each row belongs to, in step with `rows`; `None` for a row at
-    // the top level.
-    let mut owners: Vec<Option<Owner>> = Vec::new();
-
+    // Each row with the group it belongs to (`None` at the top level), the
+    // plugin's name for it, and its place in the plugin's order.
+    let mut entries: Vec<(usize, ParamSchema, Option<Owner>, &str)> = Vec::new();
     for param in &plugin.params {
         let owner = owner_of(param, &groups, &pages);
         for row in rows_of(param) {
-            rows.push(row);
-            owners.push(owner.clone());
+            entries.push((entries.len(), row, owner.clone(), param.name.as_str()));
         }
     }
+
+    // Laid out the way Resolve lays them out: by the page that lists the row
+    // or its group, then by group, each group as one run. spektrafilm declares
+    // its groups in stretches, and the panel drew Film and Print twice each.
+    let page_of = page_ranks(&plugin.params);
+    let mut first_seen: BTreeMap<String, usize> = BTreeMap::new();
+    for (index, _, owner, _) in &entries {
+        if let Some(owner) = owner {
+            first_seen.entry(owner.name.clone()).or_insert(*index);
+        }
+    }
+    entries.sort_by_cached_key(|(index, _, owner, name)| {
+        let owner = owner.as_ref().map_or("", |owner| owner.name.as_str());
+        let page = page_of
+            .get(*name)
+            .or_else(|| page_of.get(owner))
+            .copied()
+            .unwrap_or(usize::MAX);
+        // A row with no group keeps its own place; a grouped row joins its
+        // group where the group first appeared.
+        let run = first_seen.get(owner).copied().unwrap_or(*index);
+        (page, run, *index)
+    });
+    let (rows, owners): (Vec<ParamSchema>, Vec<Option<Owner>>) = entries
+        .into_iter()
+        .map(|(_, row, owner, _)| (row, owner))
+        .unzip();
 
     // Two rows under one id is two controls the panel cannot tell apart and one
     // value in the bag. Refuse the effect rather than ship the ambiguity.
@@ -199,6 +226,46 @@ pub fn value_routes(plugin: &PluginDescriptor) -> Vec<ValueRoute> {
     routes
 }
 
+/// Every parameter the plugin marks secret at describe time, by name: the
+/// rows the panel starts without. A plugin hides and shows rows from inside
+/// `instanceChanged` too, so the live set is read after each render
+/// (`Instance::secret_names`) and `OfxEffectDef::hidden_rows` follows it.
+/// The rows stay in the schema either way: a row that starts hidden
+/// (spektrafilm's HDR output) has to be there to appear later.
+#[must_use]
+pub fn secret_names(plugin: &PluginDescriptor) -> BTreeSet<String> {
+    plugin
+        .params
+        .iter()
+        .filter(|param| int_at(&param.props, keys::PARAM_SECRET, 0) == Some(1))
+        .map(|param| param.name.clone())
+        .collect()
+}
+
+/// What each parameter sits inside, by name: its parent group, or the page
+/// that lists it. A group is in here under its own parent too, which is how
+/// a hidden group hides everything down to its last row.
+#[must_use]
+pub fn owner_names(plugin: &PluginDescriptor) -> BTreeMap<String, String> {
+    let mut owners = BTreeMap::new();
+    for page in plugin
+        .params
+        .iter()
+        .filter(|param| param.param_type == param_types::PAGE)
+    {
+        for child in strings(&page.props, keys::PARAM_PAGE_CHILD) {
+            owners.entry(child).or_insert_with(|| page.name.clone());
+        }
+    }
+    for param in &plugin.params {
+        let parent = string_at(&param.props, keys::PARAM_PARENT, 0).unwrap_or_default();
+        if !parent.is_empty() {
+            owners.insert(param.name.clone(), parent);
+        }
+    }
+    owners
+}
+
 /// What a group or page is called, and whether it starts closed.
 #[derive(Clone, PartialEq, Eq)]
 struct Owner {
@@ -227,6 +294,21 @@ fn group_owners(params: &[ParamDescription]) -> Vec<Owner> {
             collapsed: int_at(&group.props, keys::PARAM_GROUP_OPEN, 0) == Some(0),
         })
         .collect()
+}
+
+/// Which page lists each name, as that page's place in the plugin's order.
+fn page_ranks(params: &[ParamDescription]) -> BTreeMap<String, usize> {
+    let mut ranks = BTreeMap::new();
+    for (rank, page) in params
+        .iter()
+        .filter(|param| param.param_type == param_types::PAGE)
+        .enumerate()
+    {
+        for child in strings(&page.props, keys::PARAM_PAGE_CHILD) {
+            ranks.entry(child).or_insert(rank);
+        }
+    }
+    ranks
 }
 
 /// Which page lists each parameter, by parameter name.
@@ -273,9 +355,8 @@ fn owner_of(
 /// then cut the rows into contiguous runs.
 ///
 /// A [`ParamGroup`]'s members must be a contiguous run in schema order, which
-/// is how the panel draws them in place. A plugin that interleaves two groups
-/// gets each stretch as its own run under the same header — the rows keep the
-/// order the plugin gave them, which is the promise that matters.
+/// is how the panel draws them in place. [`schema_of`] has already put each
+/// group's rows together, so one group is one run.
 fn groups_of(rows: &[ParamSchema], owners: &[Option<Owner>]) -> Vec<ParamGroup> {
     let mut groups: Vec<ParamGroup> = Vec::new();
     let mut run: Vec<&'static str> = Vec::new();

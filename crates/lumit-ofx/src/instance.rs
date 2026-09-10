@@ -32,7 +32,7 @@
 //! Claiming more safety than it has is the plugin's bug, but obeying a claim of
 //! less is the host's job, and docs/12 §2.3 spells out all three answers.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use parking_lot::Mutex;
@@ -149,6 +149,12 @@ pub(crate) enum HeldGuard<'a> {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct ParamSnapshot {
     values: BTreeMap<String, PropValue>,
+    /// The controls whose value moves with time, by keyframes or an
+    /// expression. A change in one of these is the playhead, not a person, so
+    /// the plugin is not told and reads it at `paramGetValue`, which is what
+    /// every other host does with an animated control.
+    #[serde(default)]
+    pub quiet: BTreeSet<String>,
 }
 
 impl ParamSnapshot {
@@ -168,7 +174,10 @@ impl ParamSnapshot {
                 values.insert(param.name.clone(), default.clone());
             }
         }
-        Self { values }
+        Self {
+            values,
+            quiet: BTreeSet::new(),
+        }
     }
 
     /// Set one control's value, replacing whatever was there.
@@ -201,6 +210,12 @@ pub struct InstanceState {
     pub context: Context,
     /// What every control reads.
     pub params: ParamSnapshot,
+    /// What the host last handed over. A value that differs from this next
+    /// time is one the host changed, and the plugin is told so; a value that
+    /// matches leaves whatever the plugin itself wrote in [`Self::params`].
+    pub sent: ParamSnapshot,
+    /// The controls the host changed since the plugin was last told.
+    pub pending: Vec<String>,
     /// What the plugin said about running two renders at once.
     pub thread_safety: ThreadSafety,
     /// The pictures for the render **currently in flight**, by clip name.
@@ -224,6 +239,21 @@ pub struct InstanceState {
     pub lock: Arc<Mutex<()>>,
 }
 
+impl InstanceState {
+    /// Take the host's values, and note which ones it changed.
+    fn absorb(&mut self, params: &ParamSnapshot) {
+        for (name, value) in params.iter() {
+            if self.sent.get(name) != Some(value) {
+                self.params.set(name, value.clone());
+                self.sent.set(name, value.clone());
+                if !params.quiet.contains(name) {
+                    self.pending.push(name.clone());
+                }
+            }
+        }
+    }
+}
+
 /// One live instance of one plugin.
 ///
 /// Destroying it is [`Instance::destroy`] and not a `Drop`: the plugin has to
@@ -241,9 +271,11 @@ impl Instance {
     ///
     /// The order here is the order in the module note: property sets, then
     /// parameters at their defaults, then clips, then the action. `values`
-    /// overrides the defaults for the controls the host has values for, and is
-    /// applied **before** `kOfxActionCreateInstance` so the plugin's first read
-    /// is the real number.
+    /// goes in straight after `kOfxActionCreateInstance` and is told to the
+    /// plugin before its first render ([`Instance::tell_changes`]), which is
+    /// how Resolve restores a saved project. It is not in place for the create
+    /// action on purpose: spektrafilm ignores a change to a value it was
+    /// created with, so a stock saved in a project rendered as the default.
     ///
     /// # Errors
     ///
@@ -267,16 +299,11 @@ impl Instance {
         seed_instance_properties(&mut props, descriptor, context, thread_safety);
         let handle = new_descriptor(props)?;
 
-        let mut snapshot = ParamSnapshot::from_defaults(descriptor);
-        for param in &descriptor.params {
-            if let Some(value) = values.get(&param.name) {
-                snapshot.set(&param.name, value.clone());
-            }
-        }
+        let defaults = ParamSnapshot::from_defaults(descriptor);
 
         // Everything below can fail, and a half-built instance must not be left
         // in the registry, so the one failure path releases it.
-        let built = build(handle, descriptor, context, snapshot, thread_safety);
+        let built = build(handle, descriptor, context, defaults, thread_safety);
         if built.is_err() {
             release_descriptor(handle);
         }
@@ -286,6 +313,9 @@ impl Instance {
         if !matches!(status, Status::Ok | Status::ReplyDefault) {
             release_descriptor(handle);
             return Err(status);
+        }
+        if let Some(instance) = state().effects.get_mut(handle)?.instance.as_mut() {
+            instance.absorb(values);
         }
         Ok(Self {
             handle,
@@ -311,16 +341,24 @@ impl Instance {
         render_lock(self.thread_safety, &self.lock)
     }
 
-    /// Replace every control's value **without** telling the plugin.
+    /// Take the host's values, and note which ones it changed.
     ///
-    /// This is a scrub, an undo, or a keyframe moving under a playhead: the
-    /// values are the host's and the plugin reads them at its next
-    /// `paramGetValue` (docs/12 §2.2). `kOfxActionInstanceChanged` is for a
-    /// person turning a knob, which is [`Instance::changed`].
+    /// The values are the host's and the plugin reads them at its next
+    /// `paramGetValue` (docs/12 §2.2). The plugin is not told here, because
+    /// this is called with a render about to start and
+    /// `kOfxActionInstanceChanged` may not happen inside one; the render
+    /// driver tells it first thing ([`Instance::tell_changes`]). A value the
+    /// host has not changed since last time is left as the plugin holds it,
+    /// so what a plugin writes into its own controls from `instanceChanged`
+    /// (spektrafilm sets its film profile from its stock choice) stays until
+    /// the host has something new to say.
     ///
     /// # Errors
     ///
     /// [`Status::ErrBadHandle`] if the instance is gone.
+    // ponytail: a keyframed control changes every frame and is told every
+    // frame; telling animated rows apart is the upgrade if a plugin is slow
+    // in instanceChanged.
     pub fn set_params(&self, params: ParamSnapshot) -> Result<(), Status> {
         let mut state = state();
         let instance = state
@@ -329,8 +367,54 @@ impl Instance {
             .instance
             .as_mut()
             .ok_or(Status::ErrBadHandle)?;
-        instance.params = params;
+        instance.absorb(&params);
         Ok(())
+    }
+
+    /// The controls the plugin is hiding right now: every parameter, groups
+    /// and pages included, whose secret flag it has set on the live instance.
+    /// A plugin shows and hides rows from inside `instanceChanged`, so this is
+    /// read after every render and the panel follows it.
+    ///
+    /// # Errors
+    ///
+    /// [`Status::ErrBadHandle`] if the instance is gone.
+    pub fn secret_names(&self) -> Result<BTreeSet<String>, Status> {
+        let state = state();
+        let effect = state.effects.get(self.handle)?;
+        let mut names = BTreeSet::new();
+        for param in &effect.params {
+            if state.props.get(param.props)?.get_int(keys::PARAM_SECRET, 0) == Ok(1) {
+                names.insert(param.name.clone());
+            }
+        }
+        Ok(names)
+    }
+
+    /// Tell the plugin about every control the host changed since it was last
+    /// told, in one `kOfxActionBeginInstanceChanged` to
+    /// `kOfxActionEndInstanceChanged` bracket. Called by the render driver
+    /// before its first question, with the pictures already staged, so the
+    /// plugin may read its clip while it reacts.
+    ///
+    /// # Errors
+    ///
+    /// The plugin's own failure status; the values stand either way.
+    pub fn tell_changes(&self, plugin: &PluginRef, time: f64) -> Result<(), Status> {
+        let pending = {
+            let mut state = state();
+            let instance = state
+                .effects
+                .get_mut(self.handle)?
+                .instance
+                .as_mut()
+                .ok_or(Status::ErrBadHandle)?;
+            std::mem::take(&mut instance.pending)
+        };
+        if pending.is_empty() {
+            return Ok(());
+        }
+        self.notify(plugin, &pending, values::CHANGE_USER_EDITED, time)
     }
 
     /// Every control's value as the plugin last left it. After a press this is
@@ -377,55 +461,64 @@ impl Instance {
                 .instance
                 .as_mut()
                 .ok_or(Status::ErrBadHandle)?;
-            instance.params.set(name, value);
+            instance.params.set(name, value.clone());
+            instance.sent.set(name, value);
         }
+        self.notify(plugin, &[name.to_owned()], reason, time)
+    }
 
+    /// The bracket itself: begin, one `kOfxActionInstanceChanged` per name,
+    /// end.
+    fn notify(
+        &self,
+        plugin: &PluginRef,
+        names: &[String],
+        reason: &str,
+        time: f64,
+    ) -> Result<(), Status> {
         let mut wrapper = PropertySet::new();
         if let Ok(reason) = PropValue::string(reason) {
             wrapper.seed(keys::CHANGE_REASON, reason);
         }
         let wrapper = state().props.insert(wrapper)?;
 
-        let mut in_args = PropertySet::new();
-        if let Ok(kind) = PropValue::string(values::TYPE_PARAMETER) {
-            in_args.seed(keys::TYPE, kind);
-        }
-        if let Ok(name) = PropValue::string(name) {
-            in_args.seed(keys::NAME, name);
-        }
-        if let Ok(reason) = PropValue::string(reason) {
-            in_args.seed(keys::CHANGE_REASON, reason);
-        }
-        in_args.seed(keys::TIME, PropValue::double(time));
-        in_args.seed(keys::RENDER_SCALE, PropValue::Double(vec![1.0, 1.0]));
-        let in_args = state().props.insert(in_args)?;
-
-        let begin = plugin.action(
+        let mut statuses = vec![plugin.action(
             actions::BEGIN_INSTANCE_CHANGED,
             Some(self.handle),
             Some(wrapper),
             None,
-        );
-        let changed = plugin.action(
-            actions::INSTANCE_CHANGED,
-            Some(self.handle),
-            Some(in_args),
-            None,
-        );
-        let end = plugin.action(
+        )];
+        for name in names {
+            let mut in_args = PropertySet::new();
+            if let Ok(kind) = PropValue::string(values::TYPE_PARAMETER) {
+                in_args.seed(keys::TYPE, kind);
+            }
+            if let Ok(name) = PropValue::string(name) {
+                in_args.seed(keys::NAME, name);
+            }
+            if let Ok(reason) = PropValue::string(reason) {
+                in_args.seed(keys::CHANGE_REASON, reason);
+            }
+            in_args.seed(keys::TIME, PropValue::double(time));
+            in_args.seed(keys::RENDER_SCALE, PropValue::Double(vec![1.0, 1.0]));
+            let in_args = state().props.insert(in_args)?;
+            statuses.push(plugin.action(
+                actions::INSTANCE_CHANGED,
+                Some(self.handle),
+                Some(in_args),
+                None,
+            ));
+            let _ = state().props.remove(in_args);
+        }
+        statuses.push(plugin.action(
             actions::END_INSTANCE_CHANGED,
             Some(self.handle),
             Some(wrapper),
             None,
-        );
+        ));
+        let _ = state().props.remove(wrapper);
 
-        {
-            let mut state = state();
-            let _ = state.props.remove(in_args);
-            let _ = state.props.remove(wrapper);
-        }
-
-        for status in [begin, changed, end] {
+        for status in statuses {
             if !matches!(status, Status::Ok | Status::ReplyDefault) {
                 return Err(status);
             }
@@ -479,6 +572,14 @@ impl Instance {
         // Off again whatever the plugin did, so the next render starts clean.
         let _ = take_images(self.handle);
         outcome?;
+        // What the plugin wrote goes back to the document, which will hand it
+        // over again next frame; that is not a change to tell it about.
+        {
+            let mut state = state();
+            if let Some(instance) = state.effects.get_mut(self.handle)?.instance.as_mut() {
+                instance.sent = instance.params.clone();
+            }
+        }
         self.params()
     }
 
@@ -548,6 +649,8 @@ fn build(
 
     state.effects.get_mut(handle)?.instance = Some(InstanceState {
         context,
+        sent: params.clone(),
+        pending: Vec::new(),
         params,
         thread_safety,
         images: BTreeMap::new(),

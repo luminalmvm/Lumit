@@ -315,8 +315,13 @@ impl Session {
 
         let rendered =
             render_with_prefetch(plugin, &live.instance, &request, &token, &mut prefetch);
-        let (frame, frames_needed, identity_of) = match rendered {
-            Ok(rendered) => (rendered.frame, rendered.frames_needed, rendered.identity_of),
+        let (frame, frames_needed, identity_of, secret) = match rendered {
+            Ok(rendered) => (
+                rendered.frame,
+                rendered.frames_needed,
+                rendered.identity_of,
+                rendered.secret,
+            ),
             Err(error) => return self.failed("render", &error.to_string()),
         };
 
@@ -331,6 +336,7 @@ impl Session {
             slot: output,
             frames_needed,
             identity_of,
+            secret,
         })
     }
 

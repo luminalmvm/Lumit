@@ -14392,6 +14392,7 @@ impl SseDecode for crate::api::effect::BridgeEffectInstanceInfo {
         let mut var_badgeDetail = <Option<String>>::sse_decode(deserializer);
         let mut var_derivedParams =
             <Vec<crate::api::effect::BridgeParamInfo>>::sse_decode(deserializer);
+        let mut var_hiddenRows = <Vec<String>>::sse_decode(deserializer);
         return crate::api::effect::BridgeEffectInstanceInfo {
             id: var_id,
             name: var_name,
@@ -14402,6 +14403,7 @@ impl SseDecode for crate::api::effect::BridgeEffectInstanceInfo {
             badge_reason: var_badgeReason,
             badge_detail: var_badgeDetail,
             derived_params: var_derivedParams,
+            hidden_rows: var_hiddenRows,
         };
     }
 }
@@ -19966,6 +19968,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::effect::BridgeEffectInstanceI
             self.badge_reason.into_into_dart().into_dart(),
             self.badge_detail.into_into_dart().into_dart(),
             self.derived_params.into_into_dart().into_dart(),
+            self.hidden_rows.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -24056,6 +24059,7 @@ impl SseEncode for crate::api::effect::BridgeEffectInstanceInfo {
         <Option<String>>::sse_encode(self.badge_reason, serializer);
         <Option<String>>::sse_encode(self.badge_detail, serializer);
         <Vec<crate::api::effect::BridgeParamInfo>>::sse_encode(self.derived_params, serializer);
+        <Vec<String>>::sse_encode(self.hidden_rows, serializer);
     }
 }
 

@@ -13,7 +13,7 @@ import 'package:uuid/uuid.dart';
 import 'roto.dart';
 part 'effect.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `animation_at`, `badge_of`, `bridge_param`, `bridge_shader_ty`, `bridge_unit`, `catalogue`, `clamp_animation`, `derived_params_of`, `document_for`, `fill_derived`, `hard_bounds`, `is_audio_match_name`, `param`, `plugin_category_key`, `presets_in`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `sample_at`, `scan_audio_plugins`, `seconds_of`, `shader_error`, `validated`, `write_at`, `write_at`, `write`
+// These functions are ignored because they are not marked as `pub`: `animation_at`, `badge_of`, `bridge_param`, `bridge_shader_ty`, `bridge_unit`, `catalogue`, `clamp_animation`, `derived_params_of`, `document_for`, `fill_derived`, `hard_bounds`, `hidden_rows_of`, `is_audio_match_name`, `param`, `plugin_category_key`, `presets_in`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `sample_at`, `scan_audio_plugins`, `seconds_of`, `shader_error`, `validated`, `write_at`, `write_at`, `write`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `get_effects`, `new`
 
@@ -650,6 +650,12 @@ class BridgeEffectInstanceInfo {
   /// [`BridgeEffectInstance::list_parameters`] answers in one piece.
   final List<BridgeParamInfo> derivedParams;
 
+  /// The rows this instance is not showing right now, by id: a plugin's
+  /// own hidden controls, read off its last render (docs/12 §2.2). Empty for
+  /// every built-in. Here for the same reason as the rest: the panel draws
+  /// on every rebuild and may not call.
+  final List<String> hiddenRows;
+
   const BridgeEffectInstanceInfo({
     required this.id,
     required this.name,
@@ -660,6 +666,7 @@ class BridgeEffectInstanceInfo {
     this.badgeReason,
     this.badgeDetail,
     required this.derivedParams,
+    required this.hiddenRows,
   });
 
   @override
@@ -672,7 +679,8 @@ class BridgeEffectInstanceInfo {
       linkedPairs.hashCode ^
       badgeReason.hashCode ^
       badgeDetail.hashCode ^
-      derivedParams.hashCode;
+      derivedParams.hashCode ^
+      hiddenRows.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -687,7 +695,8 @@ class BridgeEffectInstanceInfo {
           linkedPairs == other.linkedPairs &&
           badgeReason == other.badgeReason &&
           badgeDetail == other.badgeDetail &&
-          derivedParams == other.derivedParams;
+          derivedParams == other.derivedParams &&
+          hiddenRows == other.hiddenRows;
 }
 
 @freezed

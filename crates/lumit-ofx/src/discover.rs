@@ -54,13 +54,10 @@ use crate::schema::schema_of;
 /// The frame size the shared-memory ring is built for when a bundle's broker is
 /// spawned at scan time.
 ///
-/// The ring is sized **once per broker** (docs/impl/ofx-host.md §4) and the scan
-/// happens before any composition is open, so there is no comp size to size it
-/// from. 1080p is the honest guess: it is the commonest delivery and it leaves
-/// the ring fifteen slots deep.
-// ponytail: a 4K comp then renders through a three-slot ring, which the note
-// already names as the floor. The upgrade is a broker respawned at the comp's
-// size when the first frame is asked for, not a different design.
+/// The scan happens before any composition is open, so there is no comp size
+/// to size the ring from. 1080p is the honest guess: it is the commonest
+/// delivery and it leaves the ring fifteen slots deep. The first bigger frame
+/// regrows it (docs/impl/ofx-host.md §4).
 pub const SCAN_FRAME: (usize, usize) = (1920, 1080);
 
 /// Which side of a process boundary a discovered plugin runs on.
@@ -206,6 +203,7 @@ impl PluginHost for Gated {
             return Rendering {
                 frame: source,
                 error: Some(DISABLED_REASON.to_owned()),
+                secret: None,
             };
         }
         self.inner.render(inst, time, params, source, neighbours)
@@ -363,6 +361,7 @@ impl PluginHost for Absent {
     ) -> Rendering {
         Rendering {
             frame: source,
+            secret: None,
             error: Some("the plugin's bundle could not be opened".to_owned()),
         }
     }

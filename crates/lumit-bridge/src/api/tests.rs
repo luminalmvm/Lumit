@@ -11515,6 +11515,7 @@ fn pressing_a_plugins_button_writes_what_it_did_into_the_document() {
             lumit_ofx::Rendering {
                 frame: source,
                 error: None,
+                secret: None,
             }
         }
 
@@ -11857,11 +11858,13 @@ fn a_plugin_that_fails_a_frame_badges_its_layer_and_the_next_frame_clears_it() {
                 return lumit_ofx::Rendering {
                     frame: source,
                     error: Some(self.why.clone()),
+                    secret: None,
                 };
             }
             lumit_ofx::Rendering {
                 frame: source,
                 error: None,
+                secret: None,
             }
         }
 
