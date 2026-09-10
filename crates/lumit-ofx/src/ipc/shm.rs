@@ -12,9 +12,10 @@
 //! The note asks for triple buffering, and that is the floor: at least three
 //! slots, so that the slot being written is never the slot being read, with
 //! one spare between them. A small frame gets many more, because the ring is
-//! sized by a byte budget rather than by a slot count, and it is sized
-//! **once per bundle** — at the moment the broker is spawned, from the comp's
-//! frame size — never per frame.
+//! sized by a byte budget rather than by a slot count. It is sized when the
+//! broker is spawned, and again only when a frame arrives that is bigger than
+//! a slot: the broker then gets a new ring the way it got the first, never a
+//! ring per frame.
 //!
 //! Every slot begins with a header, and the header is the whole contract for
 //! the bytes after it: what rectangle they are, how far apart the rows are,
@@ -70,8 +71,8 @@ pub enum ShmError {
     /// A slot number that is not in the ring.
     #[error("slot {0} is not in the frame ring")]
     NoSuchSlot(u32),
-    /// A frame bigger than a slot. The ring is sized once, so this is a comp
-    /// whose frame size changed under a live broker.
+    /// A frame bigger than a slot. The broker regrows its ring before a
+    /// render, so this is a frame that arrived by another road.
     #[error("a {needed}-byte frame does not fit a {slot_bytes}-byte ring slot")]
     TooBig {
         /// What the frame needs, header included.

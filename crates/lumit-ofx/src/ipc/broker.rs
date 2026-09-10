@@ -33,7 +33,7 @@
 //! back as its own input, with `errored` set, and the caller puts a calm badge
 //! on the layer.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -51,7 +51,7 @@ use crate::ipc::pipe::{self, PipeError};
 use crate::ipc::proto::{
     BrokerMessage, FrameRef, FrameWanted, HostMessage, InstanceId, Slot, PROTOCOL_VERSION,
 };
-use crate::ipc::shm::{Ring, ShmError};
+use crate::ipc::shm::{slot_bytes_for, Ring, ShmError};
 use crate::quirks::Quirks;
 use crate::render::{RenderRequest, SOURCE_CLIP};
 
@@ -190,8 +190,8 @@ pub struct BrokerConfig {
     pub bundle: PathBuf,
     /// The deadlines and workarounds for this bundle.
     pub quirks: Quirks,
-    /// The comp's frame size. The ring is sized from this **once**, when the
-    /// broker is spawned, and never again.
+    /// The frame size the ring starts at. A bigger frame regrows the ring
+    /// when it arrives ([`Broker::fit`]).
     pub frame: (usize, usize),
     /// Where the broker executable is, if not beside Lumit's own.
     pub exe: Option<PathBuf>,
@@ -238,6 +238,9 @@ pub struct BrokerRender {
     pub frames_needed: BTreeMap<String, (f64, f64)>,
     /// The clip the plugin said this frame simply is, if it said so.
     pub identity_of: Option<String>,
+    /// The controls the plugin is hiding after this render, or `None` when
+    /// no render happened to ask.
+    pub secret: Option<BTreeSet<String>>,
 }
 
 /// The live connection to one broker process.
@@ -276,6 +279,22 @@ pub struct Broker {
 /// A counter, so two brokers in one process never pick the same pipe name.
 static PIPE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
+/// A name no other pipe or ring in this process has had.
+fn fresh_identifier() -> String {
+    format!(
+        "{}-{}",
+        std::process::id(),
+        PIPE_COUNTER.fetch_add(1, Ordering::Relaxed)
+    )
+}
+
+/// Where the ring with this name lives.
+fn ring_path(identifier: &str) -> PathBuf {
+    let mut path = std::env::temp_dir();
+    path.push(format!("lumit-ofx-{identifier}.ring"));
+    path
+}
+
 impl Broker {
     /// Start a broker for one bundle, and describe what is in it.
     ///
@@ -284,14 +303,8 @@ impl Broker {
     /// [`BrokerError`] — the executable, the pipe, the ring, or a broker that
     /// speaks another protocol.
     pub fn spawn(config: BrokerConfig) -> Result<Self, BrokerError> {
-        let identifier = format!(
-            "{}-{}",
-            std::process::id(),
-            PIPE_COUNTER.fetch_add(1, Ordering::Relaxed)
-        );
-        let mut ring_path = std::env::temp_dir();
-        ring_path.push(format!("lumit-ofx-{identifier}.ring"));
-        let ring = Ring::create(&ring_path, config.frame.0, config.frame.1)?;
+        let identifier = fresh_identifier();
+        let ring = Ring::create(&ring_path(&identifier), config.frame.0, config.frame.1)?;
 
         let mut broker = Self {
             config,
@@ -500,6 +513,7 @@ impl Broker {
             i32::try_from(source.width()).unwrap_or(0),
             i32::try_from(source.height()).unwrap_or(0),
         );
+        self.fit(source.width(), source.height())?;
         let slot = self.take_slot();
         self.ring.write_frame(slot, source, bounds, true)?;
         let message = HostMessage::Press {
@@ -558,6 +572,7 @@ impl Broker {
         if self.disabled {
             return Ok(errored(identity, "the plugin is disabled for this session"));
         }
+        self.fit(request.bounds.width(), request.bounds.height())?;
 
         // Every input, plus one for the answer. The slots are taken before the
         // message goes out, because the message names them.
@@ -604,6 +619,7 @@ impl Broker {
                 slot,
                 frames_needed,
                 identity_of,
+                secret,
             }) => {
                 let (_, frame) = self.ring.read_frame(slot)?;
                 Ok(BrokerRender {
@@ -612,6 +628,7 @@ impl Broker {
                     error: None,
                     frames_needed,
                     identity_of,
+                    secret: Some(secret),
                 })
             }
             Ok(_) => Ok(errored(identity, "the broker answered out of turn")),
@@ -804,6 +821,21 @@ impl Broker {
         }
     }
 
+    /// Make room for a frame of this size. The ring is built for the scan's
+    /// 1080p, and the first 4K layer, or a 3840 by 1620 clip in a 1080p comp,
+    /// is bigger than a slot. A new ring at the bigger size replaces it, and
+    /// the broker is handed the new one the way it was handed the first. Only
+    /// ever called between renders, when neither side is reading a slot.
+    fn fit(&mut self, width: usize, height: usize) -> Result<(), BrokerError> {
+        if slot_bytes_for(width, height) <= self.ring.spec().slot_bytes {
+            return Ok(());
+        }
+        self.ring = Ring::create(&ring_path(&fresh_identifier()), width, height)?;
+        self.next_slot = 0;
+        let spec = self.ring.spec().clone();
+        self.send(&HostMessage::Open { ring: spec })
+    }
+
     /// The next slot, round-robin. A slot is not reused until every other slot
     /// has been, which is what keeps the one being written away from the one
     /// being read.
@@ -833,12 +865,7 @@ impl Broker {
     fn restart(&mut self) -> Result<(), BrokerError> {
         self.kill();
         self.restarts = self.restarts.saturating_add(1);
-        let identifier = format!(
-            "{}-{}",
-            std::process::id(),
-            PIPE_COUNTER.fetch_add(1, Ordering::Relaxed)
-        );
-        self.start(&identifier)?;
+        self.start(&fresh_identifier())?;
 
         let control = self.config.quirks.control_timeout;
         if let Ok(BrokerMessage::Described { plugins }) =
@@ -910,6 +937,7 @@ fn errored(frame: Frame16, why: &str) -> BrokerRender {
         error: Some(why.to_owned()),
         frames_needed: BTreeMap::new(),
         identity_of: None,
+        secret: None,
     }
 }
 

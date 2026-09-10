@@ -608,6 +608,7 @@ pub mod prop_keys {
     pub const PARAM_HINT: &str = "OfxParamPropHint";
     pub const PARAM_ANIMATES: &str = "OfxParamPropAnimates";
     pub const PARAM_GROUP_OPEN: &str = "OfxParamPropGroupOpen";
+    pub const PARAM_SECRET: &str = "OfxParamPropSecret";
 
     pub const CLIP_OPTIONAL: &str = "OfxImageClipPropOptional";
     pub const CLIP_IS_MASK: &str = "OfxImageClipPropIsMask";

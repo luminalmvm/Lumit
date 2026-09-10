@@ -318,6 +318,16 @@ pub trait EffectDef: Sync + Send + 'static {
         &[]
     }
 
+    /// The rows **this instance** is not showing right now, by id.
+    ///
+    /// Empty for every built-in, whose conditional rows are declared on the
+    /// schema (`visible_when`). A plugin hides and shows its own controls
+    /// from inside its code, so the answer is a fact about the instance, read
+    /// off its last render, and the panel skips these rows.
+    fn hidden_rows(&self, _inst: &EffectInstance) -> Vec<&'static str> {
+        Vec::new()
+    }
+
     /// Whether this effect has an image operation at all. `false` for the
     /// orchestration-only effects, which the render path skips and the
     /// registry-agreement test excuses from needing a GPU entry.

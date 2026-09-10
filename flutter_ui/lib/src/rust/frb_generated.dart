@@ -13444,8 +13444,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeEffectInstanceInfo dco_decode_bridge_effect_instance_info(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 9)
-      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
+    if (arr.length != 10)
+      throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
     return BridgeEffectInstanceInfo(
       id: dco_decode_Uuid(arr[0]),
       name: dco_decode_String(arr[1]),
@@ -13456,6 +13456,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       badgeReason: dco_decode_opt_String(arr[6]),
       badgeDetail: dco_decode_opt_String(arr[7]),
       derivedParams: dco_decode_list_bridge_param_info(arr[8]),
+      hiddenRows: dco_decode_list_String(arr[9]),
     );
   }
 
@@ -17200,6 +17201,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_badgeReason = sse_decode_opt_String(deserializer);
     var var_badgeDetail = sse_decode_opt_String(deserializer);
     var var_derivedParams = sse_decode_list_bridge_param_info(deserializer);
+    var var_hiddenRows = sse_decode_list_String(deserializer);
     return BridgeEffectInstanceInfo(
         id: var_id,
         name: var_name,
@@ -17209,7 +17211,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         linkedPairs: var_linkedPairs,
         badgeReason: var_badgeReason,
         badgeDetail: var_badgeDetail,
-        derivedParams: var_derivedParams);
+        derivedParams: var_derivedParams,
+        hiddenRows: var_hiddenRows);
   }
 
   @protected
@@ -21573,6 +21576,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_opt_String(self.badgeReason, serializer);
     sse_encode_opt_String(self.badgeDetail, serializer);
     sse_encode_list_bridge_param_info(self.derivedParams, serializer);
+    sse_encode_list_String(self.hiddenRows, serializer);
   }
 
   @protected

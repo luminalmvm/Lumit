@@ -44,12 +44,13 @@
 //! rather than the string, so a plugin's path parameter keeps whatever the
 //! plugin defaulted it to until the panel path that edits one lands.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
+use lumit_core::anim::{Animation, Property};
 use lumit_core::fx::{
     EffectDef, EffectSchema, ParamId, Params, PressFrame, Pressed, ResolveCx, Value,
 };
@@ -75,6 +76,9 @@ pub struct Rendering {
     pub frame: Frame16,
     /// What went wrong, in a sentence, or `None` when nothing did.
     pub error: Option<String>,
+    /// The controls the plugin is hiding after this render, by parameter
+    /// name, or `None` when no render happened to ask.
+    pub secret: Option<BTreeSet<String>>,
 }
 
 /// Where a plugin effect's frames actually come from.
@@ -152,6 +156,17 @@ thread_local! {
 pub struct OfxEffectDef {
     schema: &'static EffectSchema,
     routes: Vec<ValueRoute>,
+    /// One bag id per route, set by [`EffectDef::resolve_derived`] while that
+    /// row is keyframed or driven by an expression, so the snapshot can say
+    /// which values are the playhead's rather than a person's.
+    quiet_ids: Vec<ParamId>,
+    /// The rows hidden before any render has said otherwise: the describe-time
+    /// secret flags, through the same groups and pages a live answer goes
+    /// through.
+    initial_hidden: Vec<&'static str>,
+    /// Each parameter's group or page, by name, so a hidden group hides its
+    /// rows.
+    owners: BTreeMap<String, String>,
     /// The values the plugin declared, which is what a row Lumit cannot carry
     /// (a path, a vendor blob) keeps.
     defaults: ParamSnapshot,
@@ -171,9 +186,20 @@ impl OfxEffectDef {
         schema: &'static EffectSchema,
         host: Arc<dyn PluginHost>,
     ) -> Self {
+        let routes = value_routes(descriptor);
+        let quiet_ids = routes
+            .iter()
+            .map(|route| ParamId::new(&format!("derived.quiet.{}", route.row)))
+            .collect();
+        let owners = crate::schema::owner_names(descriptor);
+        let initial_hidden =
+            hidden_rows_of(&routes, &owners, &crate::schema::secret_names(descriptor));
         Self {
             schema,
-            routes: value_routes(descriptor),
+            routes,
+            quiet_ids,
+            initial_hidden,
+            owners,
             defaults: ParamSnapshot::from_defaults(descriptor),
             host,
         }
@@ -194,7 +220,13 @@ impl OfxEffectDef {
 
     /// The bag, as the values the plugin reads.
     fn snapshot(&self, p: Params<'_>) -> ParamSnapshot {
-        self.assemble(|route| p.get(route.id))
+        let mut snapshot = self.assemble(|route| p.get(route.id));
+        for (route, id) in self.routes.iter().zip(&self.quiet_ids) {
+            if p.get(*id) == Some(Value::Bool(true)) {
+                snapshot.quiet.insert(route.name.clone());
+            }
+        }
+        snapshot
     }
 
     /// The document's own rows at `lt`, with the plugin's memory laid over
@@ -415,6 +447,40 @@ fn remember(inst: &EffectInstance) -> i32 {
     hash as i32
 }
 
+/// The rows each instance's plugin is hiding, as its last render reported.
+/// An instance with no entry is at `OfxEffectDef::initial_hidden`.
+// ponytail: never pruned, a few strings per instance the document has ever
+// rendered; prune with the memory table if it ever shows.
+static HIDDEN: Mutex<BTreeMap<Uuid, Vec<&'static str>>> = Mutex::new(BTreeMap::new());
+
+/// The rows hidden when these parameters are secret: the row's own parameter,
+/// or any group or page above it.
+fn hidden_rows_of(
+    routes: &[ValueRoute],
+    owners: &BTreeMap<String, String>,
+    secret: &BTreeSet<String>,
+) -> Vec<&'static str> {
+    let hidden = |name: &str| {
+        let mut name = name;
+        // Bounded, so a plugin whose groups name each other cannot spin.
+        for _ in 0..16 {
+            if secret.contains(name) {
+                return true;
+            }
+            match owners.get(name) {
+                Some(parent) => name = parent,
+                None => return false,
+            }
+        }
+        false
+    };
+    routes
+        .iter()
+        .filter(|route| hidden(&route.name))
+        .map(|route| route.row)
+        .collect()
+}
+
 /// Lay a plugin's memory over a snapshot.
 fn recall(snapshot: &mut ParamSnapshot, memory: &ParamSnapshot) {
     for (name, value) in memory.iter() {
@@ -506,6 +572,11 @@ impl EffectDef for OfxEffectDef {
             .render(inst, frame_in_bag(p, lt), &snapshot, source, &frames);
         let failed = rendered.error.is_some();
         LAST_ERROR.with(|slot| *slot.borrow_mut() = rendered.error);
+        if let Some(secret) = &rendered.secret {
+            HIDDEN
+                .lock()
+                .insert(inst, hidden_rows_of(&self.routes, &self.owners, secret));
+        }
         if failed {
             // **Identity, byte for byte**. A failed render hands back the
             // input, and the input is already in `rgba` — writing it again
@@ -532,6 +603,14 @@ impl EffectDef for OfxEffectDef {
         LAST_ERROR.with(|slot| slot.borrow_mut().take())
     }
 
+    fn hidden_rows(&self, inst: &EffectInstance) -> Vec<&'static str> {
+        HIDDEN
+            .lock()
+            .get(&inst.id)
+            .cloned()
+            .unwrap_or_else(|| self.initial_hidden.clone())
+    }
+
     /// The plugin's memory reaches the render from here: this is the one hook
     /// that sees the document's instance every frame, so it files the memory
     /// for `apply_cpu_temporal` and puts its hash in the bag for the frame key.
@@ -546,6 +625,17 @@ impl EffectDef for OfxEffectDef {
             .map(|comp| comp.frame_rate.fps());
         if let Some(fps) = fps {
             push(DERIVED_FRAME, Value::Int((cx.lt * fps).round() as i32));
+        }
+        for (route, id) in self.routes.iter().zip(&self.quiet_ids) {
+            let moving = cx
+                .inst
+                .params
+                .iter()
+                .find(|param| param.id == route.row)
+                .is_some_and(|param| moves(&param.value));
+            if moving {
+                push(*id, Value::Bool(true));
+            }
         }
     }
 
@@ -572,6 +662,18 @@ impl EffectDef for OfxEffectDef {
 }
 
 // ----------------------------------------------------------- the two hosts --
+
+/// Whether a row's value changes with time on its own: keyframes or an
+/// expression on any of its properties.
+fn moves(value: &EffectValue) -> bool {
+    let moving = |property: &Property| !matches!(property.animation, Animation::Static(_));
+    match value {
+        EffectValue::Float(property) => moving(property),
+        EffectValue::Point(x, y) => moving(x) || moving(y),
+        EffectValue::Colour(channels) => channels.iter().any(moving),
+        _ => false,
+    }
+}
 
 /// The frame offsets an OFX absolute frame range comes to, relative to `time`.
 ///
@@ -642,7 +744,7 @@ impl LocalHost {
         &self,
         instance: Uuid,
         request: &RenderRequest,
-        params: &ParamSnapshot,
+        params: Option<&ParamSnapshot>,
     ) -> Result<Rendered, String> {
         self.with_instance(instance, params, |plugin, live| {
             let token = lumit_eval::epoch::Epoch::new().token();
@@ -652,10 +754,13 @@ impl LocalHost {
 
     /// The plugin and the live instance, made on first use and holding
     /// `params`, handed to `call`.
+    /// `None` leaves the values as they are: a question about frames, not a
+    /// render, and handing the defaults over would tell the plugin every
+    /// value had changed and then changed back.
     fn with_instance<T>(
         &self,
         instance: Uuid,
-        params: &ParamSnapshot,
+        params: Option<&ParamSnapshot>,
         call: impl FnOnce(&PluginRef, &Instance) -> Result<T, String>,
     ) -> Result<T, String> {
         let plugin = self
@@ -671,15 +776,23 @@ impl LocalHost {
         // the plugin, which is docs/14 §7's rule.
         let mut pool = self.instances.lock();
         if let std::collections::btree_map::Entry::Vacant(slot) = pool.entry(instance) {
-            let made = Instance::create(plugin, &self.descriptor, self.context, params)
-                .map_err(|status| format!("the plugin refused an instance ({status:?})"))?;
+            let empty = ParamSnapshot::new();
+            let made = Instance::create(
+                plugin,
+                &self.descriptor,
+                self.context,
+                params.unwrap_or(&empty),
+            )
+            .map_err(|status| format!("the plugin refused an instance ({status:?})"))?;
             slot.insert(made);
         }
         let live = pool
             .get(&instance)
             .ok_or_else(|| "the instance vanished".to_owned())?;
-        live.set_params(params.clone())
-            .map_err(|status| format!("the values would not go in ({status:?})"))?;
+        if let Some(params) = params {
+            live.set_params(params.clone())
+                .map_err(|status| format!("the values would not go in ({status:?})"))?;
+        }
         call(plugin, live)
     }
 }
@@ -695,25 +808,32 @@ impl PluginHost for LocalHost {
     ) -> Rendering {
         let mut request = RenderRequest::filter(time, source.clone());
         request.neighbours = neighbours.to_vec();
-        match self.attempt(instance, &request, params) {
+        match self.attempt(instance, &request, Some(params)) {
             Ok(rendered) => Rendering {
                 frame: rendered.frame,
                 error: None,
+                secret: Some(rendered.secret),
             },
             Err(why) => Rendering {
                 frame: source,
                 error: Some(why),
+                secret: None,
             },
         }
     }
 
-    fn frames_needed(&self, instance: Uuid, time: f64, params: &ParamSnapshot) -> Option<Vec<i32>> {
+    fn frames_needed(
+        &self,
+        instance: Uuid,
+        time: f64,
+        _params: &ParamSnapshot,
+    ) -> Option<Vec<i32>> {
         // A one-pixel frame: the question is which *times* the plugin wants, and
         // it is answered before any picture is looked at. The pixels that come
         // back are thrown away.
         let source = Frame16::black(1, 1).ok()?;
         let request = RenderRequest::filter(time, source);
-        let rendered = self.attempt(instance, &request, params).ok()?;
+        let rendered = self.attempt(instance, &request, None).ok()?;
         offsets_of(&rendered.frames_needed, time)
     }
 
@@ -725,7 +845,7 @@ impl PluginHost for LocalHost {
         name: &str,
         source: Frame16,
     ) -> Result<ParamSnapshot, String> {
-        self.with_instance(instance, params, |plugin, live| {
+        self.with_instance(instance, Some(params), |plugin, live| {
             live.press(plugin, name, time, &source)
                 .map_err(|status| format!("the plugin refused the press ({status:?})"))
         })
@@ -851,12 +971,14 @@ impl PluginHost for BrokerHost {
             return Rendering {
                 frame: source,
                 error: Some(BUSY.to_owned()),
+                secret: None,
             };
         };
         let Some(id) = self.instance_of(&mut broker, instance, params) else {
             return Rendering {
                 frame: source,
                 error: Some("the plugin would not make an instance".to_owned()),
+                secret: None,
             };
         };
         let _ = broker.set_params(id, params.clone());
@@ -873,10 +995,12 @@ impl PluginHost for BrokerHost {
             Ok(answer) => Rendering {
                 frame: answer.frame,
                 error: answer.error,
+                secret: answer.secret,
             },
             Err(error) => Rendering {
                 frame: source,
                 error: Some(error.to_string()),
+                secret: None,
             },
         }
     }

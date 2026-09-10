@@ -1021,6 +1021,8 @@ roi = FullFrame
 temporal = [-1, 0, 1]
 premultiplied = true
 matte = None
+param lutPath | LUT file | File { filter: [], filter_name: \"All files\" } | Raw
+param trigger | Trigger | Action | Raw
 param gain | Gain | Float { default: 0.5, slider: (0.0, 2.0), hard: (Some(0.0), Some(4.0)) } | Raw
 param rotation | Rotation | Angle { default: 45.0, dial_step: 1.0 } | Degrees
 param centre_x | Centre X | Float { default: 0.0, slider: (-100.0, 100.0), hard: (None, None) } | Px
@@ -1035,10 +1037,8 @@ param enabled | Enabled | Bool { default: true } | Raw
 param mode | Mode | Choice { options: [\"Soft\", \"Hard\", \"Wild\"], default: 1, dividers_after: [] } | Raw
 param tint | Tint | Colour { default: [0.25, 0.5, 0.75, 1.0], range: (0.0, 1.0) } | Raw
 param wash | Wash | Colour { default: [1.0, 0.0, 0.0, 1.0], range: (0.0, 1.0) } | Raw
-param lutPath | LUT file | File { filter: [], filter_name: \"All files\" } | Raw
-param trigger | Trigger | Action | Raw
-group Advanced | [\"offset_x\", \"offset_y\", \"offset_z\", \"count\"] | collapsed true
 group Files | [\"lutPath\", \"trigger\"] | collapsed false
+group Advanced | [\"offset_x\", \"offset_y\", \"offset_z\", \"count\"] | collapsed true
 ";
     assert_eq!(render(&full.schema), expected);
 
@@ -2586,6 +2586,7 @@ impl PluginHost for DeadHost {
         Rendering {
             frame: source,
             error: Some("the plugin is disabled for this session".to_owned()),
+            secret: None,
         }
     }
 
@@ -2804,7 +2805,7 @@ fn a_disabled_plugin_renders_identity_byte_for_byte() {
 fn a_pressed_button_brings_back_what_the_plugin_wrote() {
     let _ledger = image_ledger();
     let Some(schema) =
-        a_registered_plugin("a_pressed_button_brings_back", "com.lumitlab.testplug", 2)
+        a_registered_plugin("a_pressed_button_brings_back", "com.lumitlab.testplug", 1)
     else {
         return;
     };
@@ -2868,6 +2869,7 @@ fn a_plugins_memory_reaches_its_render() {
             Rendering {
                 frame: source,
                 error: None,
+                secret: None,
             }
         }
 
@@ -3015,6 +3017,7 @@ fn a_plugin_is_told_its_frame_and_handed_its_neighbours() {
             Rendering {
                 frame: source,
                 error: None,
+                secret: None,
             }
         }
 
@@ -3045,7 +3048,11 @@ fn a_plugin_is_told_its_frame_and_handed_its_neighbours() {
         grouping: String::new(),
         label: "Frame test plugin".to_owned(),
         contexts: vec![Context::Filter],
-        params: Vec::new(),
+        params: vec![crate::describe::ParamDescription {
+            name: "gain".to_owned(),
+            param_type: crate::ffi::param_types::DOUBLE.to_owned(),
+            props: PropertySet::new(),
+        }],
         clips: Vec::new(),
         temporal: true,
         render_thread_safety: None,
@@ -3071,7 +3078,16 @@ fn a_plugin_is_told_its_frame_and_handed_its_neighbours() {
             extra: serde_json::Map::new(),
         },
         enabled: true,
-        params: Vec::new(),
+        // Driven by an expression, so its value is the playhead's, not a
+        // person's, and the plugin is not told when it moves.
+        params: vec![lumit_core::model::EffectParam {
+            id: "gain".to_owned(),
+            value: EffectValue::Float(lumit_core::anim::Property {
+                animation: lumit_core::anim::Animation::Expression("time".to_owned()),
+                extra: serde_json::Map::new(),
+            }),
+            extra: serde_json::Map::new(),
+        }],
         sample_temporally: true,
         custom_name: None,
         linked_pairs: Vec::new(),
@@ -3117,6 +3133,13 @@ fn a_plugin_is_told_its_frame_and_handed_its_neighbours() {
     };
     let mut bag = Vec::new();
     def.resolve_derived(&cx, &mut |id, value| bag.push((id, value)));
+    assert!(
+        bag.contains(&(
+            lumit_core::fx::ParamId::new("derived.quiet.gain"),
+            Value::Bool(true)
+        )),
+        "a moving row is marked quiet in the bag: {bag:?}"
+    );
 
     let mut rgba = vec![0.5_f32; 2 * 2 * 4];
     let previous = vec![0.25_f32; 2 * 2 * 4];
@@ -3201,5 +3224,307 @@ fn a_forgotten_ring_goes_with_its_process() {
         !leaked,
         "the ring file outlived the process that made it: {}",
         path.display()
+    );
+}
+
+/// A parameter the plugin marks secret keeps its row and starts hidden, and
+/// so does everything inside a secret group. After a render the rows follow
+/// what the plugin reports: spektrafilm shows its HDR output rows only once
+/// the output role says HDR, and Resolve draws whatever is not secret now.
+#[test]
+fn a_secret_parameter_is_a_hidden_row_until_the_plugin_says_otherwise() {
+    struct Reporting(std::collections::BTreeSet<String>);
+
+    impl PluginHost for Reporting {
+        fn render(
+            &self,
+            _instance: uuid::Uuid,
+            _time: f64,
+            _params: &ParamSnapshot,
+            source: Frame16,
+            _neighbours: &[(i32, Frame16)],
+        ) -> Rendering {
+            Rendering {
+                frame: source,
+                error: None,
+                secret: Some(self.0.clone()),
+            }
+        }
+
+        fn frames_needed(
+            &self,
+            _instance: uuid::Uuid,
+            _time: f64,
+            _params: &ParamSnapshot,
+        ) -> Option<Vec<i32>> {
+            None
+        }
+
+        fn press(
+            &self,
+            _instance: uuid::Uuid,
+            _time: f64,
+            _params: &ParamSnapshot,
+            _name: &str,
+            _source: Frame16,
+        ) -> Result<ParamSnapshot, String> {
+            Err("not this test".to_owned())
+        }
+    }
+
+    let param = |name: &str, kind: &str, secret: bool, parent: &str| {
+        let mut props = PropertySet::new();
+        props.seed(keys::PARAM_DEFAULT, PropValue::double(0.5));
+        props.seed(keys::PARAM_SECRET, PropValue::int(i32::from(secret)));
+        if !parent.is_empty() {
+            props.seed(
+                keys::PARAM_PARENT,
+                PropValue::string(parent).expect("a name"),
+            );
+        }
+        crate::describe::ParamDescription {
+            name: name.to_owned(),
+            param_type: kind.to_owned(),
+            props,
+        }
+    };
+    let descriptor = PluginDescriptor {
+        identifier: "test.secret".to_owned(),
+        version: (1, 0),
+        grouping: String::new(),
+        label: "Secret test plugin".to_owned(),
+        contexts: vec![Context::Filter],
+        params: vec![
+            param("shown", crate::ffi::param_types::DOUBLE, false, ""),
+            param("hidden", crate::ffi::param_types::DOUBLE, true, ""),
+            param("advanced", crate::ffi::param_types::GROUP, true, ""),
+            param("inside", crate::ffi::param_types::DOUBLE, false, "advanced"),
+            param("deeper", crate::ffi::param_types::GROUP, false, "advanced"),
+            param("nested", crate::ffi::param_types::DOUBLE, false, "deeper"),
+        ],
+        clips: Vec::new(),
+        temporal: false,
+        render_thread_safety: None,
+    };
+    let schema: &'static EffectSchema = Box::leak(Box::new(
+        crate::schema::schema_of(&descriptor).expect("a schema"),
+    ));
+    let ids: Vec<&str> = schema.params.iter().map(|row| row.id).collect();
+    assert_eq!(
+        ids,
+        vec!["shown", "hidden", "inside", "nested"],
+        "every row is in the schema, hidden or not"
+    );
+
+    // The plugin will report the opposite of what it declared.
+    let live = std::collections::BTreeSet::from(["shown".to_owned()]);
+    let host = std::sync::Arc::new(Reporting(live));
+    let def = OfxEffectDef::new(&descriptor, schema, host);
+    let mut inst = lumit_core::model::EffectInstance {
+        id: uuid::Uuid::now_v7(),
+        effect: lumit_core::model::EffectKey {
+            namespace: lumit_core::model::EffectNamespace::Ofx,
+            match_name: schema.match_name.to_owned(),
+            version: 1,
+            extra: serde_json::Map::new(),
+        },
+        enabled: true,
+        params: Vec::new(),
+        sample_temporally: false,
+        custom_name: None,
+        linked_pairs: Vec::new(),
+        plugin_state: None,
+        roto: None,
+        extra: serde_json::Map::new(),
+    };
+    assert_eq!(
+        def.hidden_rows(&inst),
+        vec!["hidden", "inside", "nested"],
+        "before any render, the describe-time flags, groups included"
+    );
+
+    let mut rgba = vec![0.5_f32; 2 * 2 * 4];
+    def.apply_cpu_at(inst.id, 0.0, &mut rgba, 2, 2, Params::EMPTY);
+    assert_eq!(
+        def.hidden_rows(&inst),
+        vec!["shown"],
+        "after a render, what the plugin reported"
+    );
+    inst.id = uuid::Uuid::now_v7();
+    assert_eq!(
+        def.hidden_rows(&inst),
+        vec!["hidden", "inside", "nested"],
+        "another instance has not rendered and starts from describe"
+    );
+}
+
+/// A value the host changes reaches the plugin as `kOfxActionInstanceChanged`,
+/// wrapped, before the next render's first question. A value that has not
+/// changed is not mentioned. A value the instance is created with counts as a
+/// change too, told after the create action, since spektrafilm's stock did
+/// nothing when nothing ever told it the stock had changed, and it ignores a
+/// change to the value it was created with.
+#[test]
+fn a_changed_value_is_told_to_the_plugin_before_the_next_render() {
+    let _ledger = image_ledger();
+    let Some((_root, bundle, report)) = a_described_bundle("a_changed_value_is_told") else {
+        return;
+    };
+    let Some(probe) = a_probe(&bundle) else {
+        skipped("a_changed_value_is_told_to_the_plugin_before_the_next_render");
+        return;
+    };
+    let plugin = plugin_of(&bundle, "com.lumitlab.testplug");
+    let descriptor = &described(&report, "com.lumitlab.testplug").descriptor;
+    let mut values = ParamSnapshot::new();
+    values.set("gain", PropValue::double(0.25));
+    probe_call(&probe, b"LumitTestPlugResetProbes ");
+    let instance =
+        Instance::create(plugin, descriptor, Context::Filter, &values).expect("an instance");
+    let token = Epoch::new().token();
+    let request = RenderRequest::filter(0.0, a_test_frame(4, 4));
+    crate::render::render(plugin, &instance, &request, &token).expect("it rendered");
+    let seen = action_log(&probe);
+    let changed = seen
+        .iter()
+        .position(|action| action == actions::INSTANCE_CHANGED)
+        .expect("the plugin was told");
+    assert_eq!(
+        seen.get(changed.wrapping_sub(1)).map(String::as_str),
+        Some(actions::BEGIN_INSTANCE_CHANGED),
+        "wrapped: {seen:?}"
+    );
+    assert_eq!(
+        seen.get(changed + 1).map(String::as_str),
+        Some(actions::END_INSTANCE_CHANGED),
+        "wrapped: {seen:?}"
+    );
+    let render = seen
+        .iter()
+        .position(|action| action == actions::BEGIN_SEQUENCE_RENDER)
+        .expect("it rendered");
+    assert!(changed < render, "told before the render, never inside it");
+
+    let create = seen
+        .iter()
+        .position(|action| action == actions::CREATE_INSTANCE)
+        .expect("it was created");
+    assert!(create < changed, "told after the create action, not before");
+
+    // The same values again are nothing to tell.
+    instance
+        .set_params(values.clone())
+        .expect("the values went in");
+    probe_call(&probe, b"LumitTestPlugResetProbes ");
+    crate::render::render(plugin, &instance, &request, &token).expect("it rendered");
+    let seen = action_log(&probe);
+    assert!(
+        !seen
+            .iter()
+            .any(|action| action == actions::INSTANCE_CHANGED),
+        "an unchanged value is not a change: {seen:?}"
+    );
+
+    // A new value is.
+    values.set("gain", PropValue::double(0.75));
+    instance
+        .set_params(values.clone())
+        .expect("the values went in");
+    probe_call(&probe, b"LumitTestPlugResetProbes ");
+    crate::render::render(plugin, &instance, &request, &token).expect("it rendered");
+    let seen = action_log(&probe);
+    assert!(
+        seen.iter()
+            .any(|action| action == actions::INSTANCE_CHANGED),
+        "a changed value is told: {seen:?}"
+    );
+
+    // A value that moves with time is the playhead's doing, not a person's.
+    values.set("gain", PropValue::double(0.9));
+    values.quiet.insert("gain".to_owned());
+    instance.set_params(values).expect("the values went in");
+    probe_call(&probe, b"LumitTestPlugResetProbes ");
+    crate::render::render(plugin, &instance, &request, &token).expect("it rendered");
+    let seen = action_log(&probe);
+    assert!(
+        !seen
+            .iter()
+            .any(|action| action == actions::INSTANCE_CHANGED),
+        "an animated value is not told: {seen:?}"
+    );
+    instance.destroy(plugin).expect("it was destroyed");
+}
+
+/// Rows follow the page that lists them or their group, and a group whose
+/// members the plugin declared in stretches is still one run. spektrafilm
+/// declares its parameters that way and the panel drew Film and Print twice.
+#[test]
+fn rows_follow_the_pages_and_a_group_is_one_run() {
+    let param = |name: &str, kind: &str, parent: &str, children: &[&str]| {
+        let mut props = PropertySet::new();
+        props.seed(keys::PARAM_DEFAULT, PropValue::double(0.5));
+        props.seed(keys::LABEL, PropValue::string(name).expect("a label"));
+        if !parent.is_empty() {
+            props.seed(
+                keys::PARAM_PARENT,
+                PropValue::string(parent).expect("a name"),
+            );
+        }
+        if !children.is_empty() {
+            props.seed(
+                keys::PARAM_PAGE_CHILD,
+                PropValue::String(
+                    children
+                        .iter()
+                        .map(|child| std::ffi::CString::new(*child).expect("a name"))
+                        .collect(),
+                ),
+            );
+        }
+        crate::describe::ParamDescription {
+            name: name.to_owned(),
+            param_type: kind.to_owned(),
+            props,
+        }
+    };
+    let descriptor = PluginDescriptor {
+        identifier: "test.pages".to_owned(),
+        version: (1, 0),
+        grouping: String::new(),
+        label: "Pages test plugin".to_owned(),
+        contexts: vec![Context::Filter],
+        params: vec![
+            param("g1", crate::ffi::param_types::GROUP, "", &[]),
+            param("g2", crate::ffi::param_types::GROUP, "", &[]),
+            param("a", crate::ffi::param_types::DOUBLE, "g1", &[]),
+            param("b", crate::ffi::param_types::DOUBLE, "g2", &[]),
+            param("c", crate::ffi::param_types::DOUBLE, "g1", &[]),
+            param("top", crate::ffi::param_types::DOUBLE, "", &[]),
+            param("page", crate::ffi::param_types::PAGE, "", &["g2", "top"]),
+        ],
+        clips: Vec::new(),
+        temporal: false,
+        render_thread_safety: None,
+    };
+    let schema = crate::schema::schema_of(&descriptor).expect("a schema");
+    let ids: Vec<&str> = schema.params.iter().map(|row| row.id).collect();
+    assert_eq!(
+        ids,
+        vec!["b", "top", "a", "c"],
+        "the page first, then the rest"
+    );
+    let groups: Vec<(&str, Vec<&str>)> = schema
+        .groups
+        .iter()
+        .map(|group| (group.label, group.params.to_vec()))
+        .collect();
+    assert_eq!(
+        groups,
+        vec![
+            ("g2", vec!["b"]),
+            ("page", vec!["top"]),
+            ("g1", vec!["a", "c"])
+        ],
+        "a page is drawn as a group for the rows it lists that have none"
     );
 }

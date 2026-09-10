@@ -19,7 +19,7 @@
 //! [`PROTOCOL_VERSION`] ends the conversation with a sentence the user can read
 //! rather than a struct deserialised out of somebody else's layout.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -29,7 +29,7 @@ use crate::instance::ParamSnapshot;
 
 /// The version both sides must agree on. Bump it whenever a message changes
 /// shape: an old broker beside a new host is a mismatch, not a crash.
-pub const PROTOCOL_VERSION: u32 = 3;
+pub const PROTOCOL_VERSION: u32 = 4;
 
 /// Which instance a message is about. The host mints these; the broker only
 /// ever quotes one back.
@@ -58,8 +58,8 @@ pub struct FrameWanted {
     pub time: f64,
 }
 
-/// How the ring is laid out. Sent once, after the handshake, because the ring
-/// is sized once per bundle and never again ([`crate::ipc::shm`]).
+/// How the ring is laid out. Sent after the handshake, and again whenever a
+/// bigger frame than the ring holds arrives ([`crate::ipc::shm`]).
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RingSpec {
     /// The backing file both processes map.
@@ -92,9 +92,9 @@ pub enum HostMessage {
         /// Every control's value.
         params: ParamSnapshot,
     },
-    /// Replace an instance's values without telling the plugin. This is a
-    /// scrub or an undo landing: the plugin reads the new numbers at its next
-    /// `paramGetValue` (docs/12 §2.2).
+    /// Replace an instance's values. The plugin reads the new numbers at its
+    /// next `paramGetValue` (docs/12 §2.2), and is told which ones changed
+    /// through `kOfxActionInstanceChanged` just before its next render.
     ParamSnapshot {
         /// Which instance.
         instance: InstanceId,
@@ -193,6 +193,8 @@ pub enum BrokerMessage {
         frames_needed: BTreeMap<String, (f64, f64)>,
         /// The clip the plugin said this frame simply is, if it said so.
         identity_of: Option<String>,
+        /// The controls the plugin is hiding now, by parameter name.
+        secret: BTreeSet<String>,
     },
     /// Something went wrong, as a sentence rather than a status code: the host
     /// puts it on a badge and the user reads it.
