@@ -278,11 +278,16 @@ impl ShakeSample {
     };
 }
 
-/// The fixed number of sub-frame samples the shake's own motion blur averages
-/// (T18): odd, so the centre sample lands exactly on the frame time.
-/// A fixed count and order keep the smear deterministic (docs/14 §3), and the
-/// value is small because a shake moves little — a Cheap effect stays cheap.
-pub const SHAKE_MB_SAMPLES: usize = 9;
+/// The most sub-frame samples the shake's own motion blur averages (T18).
+/// The Samples row picks the count, 2 up to this; the default of 9 is odd, so
+/// its centre sample lands exactly on the frame time. The count and order keep
+/// the smear deterministic (docs/14 §3). This is also the uniform array's
+/// length in the averaging kernel, so it is a compile-time size everywhere.
+pub const SHAKE_MB_SAMPLES: usize = 64;
+
+/// The sub-frame count the shake's own motion blur uses when the Samples row is
+/// absent: what every shake made before the row had.
+pub const SHAKE_MB_DEFAULT_SAMPLES: usize = 9;
 
 /// The motion-blur shutter's full width in the noise base domain at amount 1
 /// (T18). The wobble is a pure function of time, so its motion blur
@@ -294,17 +299,16 @@ pub const SHAKE_MB_SAMPLES: usize = 9;
 /// smears more — the shake's own inter-frame movement, scaled by amount.
 pub const SHAKE_MB_SPAN_BASE: f64 = 1.0;
 
-/// The signed base offsets of the motion-blur sub-frames across the shutter
-/// (T18), symmetric about 0 so the centre sample is the frame itself.
-/// `amount` is the shutter fraction, clamped to 0..1.
-pub fn shake_mb_offsets(amount: f64) -> [f64; SHAKE_MB_SAMPLES] {
+/// The signed base offsets of `count` motion-blur sub-frames across the shutter
+/// (T18), symmetric about 0 so an odd count's centre sample is the frame
+/// itself. `amount` is the shutter fraction, clamped to 0..1; `count` is
+/// clamped to `2..=SHAKE_MB_SAMPLES`. More samples fill the same window more
+/// densely; the ends stay put.
+pub fn shake_mb_offsets(amount: f64, count: usize) -> impl Iterator<Item = f64> {
     let window = amount.clamp(0.0, 1.0) * SHAKE_MB_SPAN_BASE;
-    let last = (SHAKE_MB_SAMPLES - 1) as f64;
-    let mut out = [0.0f64; SHAKE_MB_SAMPLES];
-    for (k, o) in out.iter_mut().enumerate() {
-        *o = (k as f64 / last - 0.5) * window;
-    }
-    out
+    let count = count.clamp(2, SHAKE_MB_SAMPLES);
+    let last = (count - 1) as f64;
+    (0..count).map(move |k| (k as f64 / last - 0.5) * window)
 }
 
 /// A 32-bit avalanche mixer, in the same five-line-portability spirit as

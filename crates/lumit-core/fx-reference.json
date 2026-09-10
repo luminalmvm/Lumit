@@ -4096,6 +4096,17 @@
           "hard_max": 1.0
         },
         {
+          "id": "mb_samples",
+          "label": "Samples",
+          "kind": "float",
+          "unit": "raw",
+          "default": 9.0,
+          "slider_min": 2.0,
+          "slider_max": 64.0,
+          "hard_min": 2.0,
+          "hard_max": 64.0
+        },
+        {
           "id": "edge",
           "label": "Edges",
           "kind": "choice",
@@ -4208,7 +4219,8 @@
           "label": "Motion blur",
           "params": [
             "motion_blur",
-            "mb_amount"
+            "mb_amount",
+            "mb_samples"
           ],
           "collapsed": true
         }

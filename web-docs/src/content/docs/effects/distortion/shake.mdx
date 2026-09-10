@@ -35,6 +35,7 @@ Wobbles the layer as though the camera were handheld.
 | **Z frequency** | Slider | 0 to 4; higher | 1 | - |
 | **Motion blur** | Checkbox | On or off | Off | - |
 | **Shutter** | Slider | 0 to 1 | 0.5 | - |
+| **Samples** | Slider | 2 to 64 | 9 | - |
 | **Edges** | Dropdown | Transparent · Repeat · Mirror | Mirror | - |
 | **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
 | **Mix** | Slider | 0 to 100 | 100 | Per cent |
@@ -46,7 +47,7 @@ Wobbles the layer as though the camera were handheld.
 In the Effect Controls panel:
 
 - **Per-axis wobble** groups **X amount**, **X frequency**, **Y amount**, **Y frequency**, **Z amount**, **Z frequency**, and starts closed.
-- **Motion blur** groups **Motion blur**, **Shutter**, and starts closed.
+- **Motion blur** groups **Motion blur**, **Shutter**, **Samples**, and starts closed.
 - **Matte** scales the shake's displacement per pixel, read where the pixel lands: white moves it the full Amplitude and Rotation amount, grey less, black leaves it still, so a soft matte turns the shove into a warp. **Invert** reads that matte inverted.
 
 {/* END GENERATED */}
@@ -73,6 +74,8 @@ The **Motion blur** group adds the shake's own smear:
 - **Motion blur**: samples the wobble several times across the shutter and
   averages the results.
 - **Shutter**: how far across the shutter window those samples spread.
+- **Samples**: how many of them there are. A big amplitude at few samples
+  shows each one as a ghost; more samples make a smooth smear at more cost.
 
 ## Related
 

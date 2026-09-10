@@ -13,10 +13,11 @@
 //!   when a stack is reused at another raster size. The amplitude stays a
 //!   declared `Px` row, which does rescale, and the two are multiplied
 //!   together at dispatch in [`Shake::packed`].
-//! - **Its own motion blur** (T18) needs the same wobble at nine
-//!   sub-frame placements across the shutter. Each is four floats under one id
-//!   ([`Value::Vec4`]), which is what that kind exists for: forty flat
-//!   `derived.*` entries would have drowned the bag.
+//! - **Its own motion blur** (T18) needs the same wobble at every
+//!   sub-frame placement across the shutter, as many as the Samples row asks
+//!   for. Each is four floats under one id ([`Value::Vec4`]), which is what
+//!   that kind exists for: four flat `derived.*` entries per sub-frame would
+//!   have drowned the bag.
 //!
 //! [`Shake::packed`] reassembles [`ShakeWobble::at`](crate::fx::ShakeWobble::at)
 //! step for step — same association, same cast points — so a shake that has not
@@ -25,16 +26,24 @@
 use crate::fx::{
     cpu, shake_affine, shake_mb_offsets, shake_noise, transform_op, EdgesMode, EffectDef,
     EffectMetadata, EffectSchema, ParamGroup, ParamId, Params, ResolveCx, ShakeSample, Value,
-    NO_SKEW, SHAKE_MB_SAMPLES,
+    NO_SKEW, SHAKE_MB_DEFAULT_SAMPLES, SHAKE_MB_SAMPLES,
 };
 use crate::model::EffectValue;
 use lumit_fx_macros::Effect;
 
+/// `derived.mb_noise_<n>` for each listed n, as one const array.
+macro_rules! mb_noise_ids {
+    ($($n:literal),* $(,)?) => {
+        [$(ParamId::new(concat!("derived.mb_noise_", $n))),*]
+    };
+}
+
 /// Shake's twirls (P4): the per-axis wobble (FX-11) — the master
 /// Amplitude/Frequency drive x and y together while this group biases each axis
 /// and adds the z (depth/scale) shake that replaced the old Zoom pump — and the
-/// Motion blur group (T18), the shake's own inter-frame smear (toggle +
-/// amount). Each group's ids are a contiguous run of the schema's `params`.
+/// Motion blur group (T18), the shake's own inter-frame smear (toggle,
+/// shutter, samples). Each group's ids are a contiguous run of the schema's
+/// `params`.
 pub const SHAKE_GROUPS: &[ParamGroup] = &[
     ParamGroup {
         label: "Per-axis wobble",
@@ -45,7 +54,7 @@ pub const SHAKE_GROUPS: &[ParamGroup] = &[
     },
     ParamGroup {
         label: "Motion blur",
-        params: &["motion_blur", "mb_amount"],
+        params: &["motion_blur", "mb_amount", "mb_samples"],
         collapsed: true,
         visible_when: None,
         visible_when_lens_elements: None,
@@ -216,6 +225,22 @@ pub struct Shake {
     )]
     pub mb_amount: f32,
 
+    /// How many sub-frames the smear averages. A big amplitude at nine samples
+    /// shows the taps as ghosts; more samples fill the same shutter window more
+    /// densely. Defaults to what the smear always used, so an old shake
+    /// renders the bits it always did. Read by [`ShakeDef::resolve_derived`],
+    /// which is where the sub-frames are sampled.
+    #[slider(
+        label = "Samples",
+        min = 2.0,
+        max = 64.0,
+        default = 9.0,
+        hard_min = 2.0,
+        hard_max = 64.0,
+        unit = Raw
+    )]
+    pub mb_samples: f32,
+
     /// How the resample treats the border the wobble reveals (P3).
     /// Default Mirror (owner, 2026-07-19; was Repeat): the reflected border
     /// reads more naturally under the shake's own motion blur than a smeared
@@ -247,9 +272,12 @@ pub struct Shake {
 pub struct ShakeDerived {
     /// The frame's noise sample, `(x, y, rotation, z)`, each −1..1.
     pub noise: [f32; 4],
-    /// The same, at each motion-blur sub-frame across the shutter — `Some` only
-    /// when the smear is on, which is the one place that decision is taken.
-    pub mb_noise: Option<[[f32; 4]; SHAKE_MB_SAMPLES]>,
+    /// The same, at each motion-blur sub-frame across the shutter. The first
+    /// `mb_count` entries are live; the rest are zeros.
+    pub mb_noise: [[f32; 4]; SHAKE_MB_SAMPLES],
+    /// How many sub-frames the smear averages. 0 is the smear off, which is the
+    /// one place that decision is taken.
+    pub mb_count: usize,
     /// Depth (z) scale-pump magnitude, 0..1: the Z amount row as a fraction,
     /// or an old project's `zoom_pump`.
     pub z_amp: f32,
@@ -265,7 +293,12 @@ pub struct ShakeDerived {
 /// affine per sub-frame — exactly as RGB split's Wavelength is. One enum
 /// keeps the fork in one place, so the CPU reference and the GPU wrapper cannot
 /// disagree about which one an instance is in.
+///
+/// The smeared variant carries its sub-frames inline, so the enum is as wide as
+/// the widest smear (a kilobyte). It is built once per dispatch, never per
+/// pixel, and boxing it would cost the `Copy` both render paths read it through.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum Shaken {
     /// The plain single resample through the Transform kernel.
     Plain {
@@ -276,12 +309,15 @@ pub enum Shaken {
         /// 0..1.
         mix: f32,
     },
-    /// The shake's own motion blur (T18): the wobble at
-    /// [`SHAKE_MB_SAMPLES`] sub-frame placements, resampled and averaged in
-    /// premultiplied linear space. The centre sample is the frame itself.
+    /// The shake's own motion blur (T18): the wobble at `count` sub-frame
+    /// placements, resampled and averaged in premultiplied linear space. An
+    /// odd count's centre sample is the frame itself.
     Blurred {
-        /// One wobble per sub-frame, in shutter order.
+        /// One wobble per sub-frame, in shutter order; only the first `count`
+        /// are live.
         samples: [ShakeSample; SHAKE_MB_SAMPLES],
+        /// Live sub-frames, `2..=SHAKE_MB_SAMPLES`.
+        count: usize,
         /// [`EdgesMode`] wire code for the revealed border.
         edge: u32,
         /// 0..1.
@@ -294,20 +330,14 @@ impl Shake {
     /// row: it is what the seed, the frequencies and the clock produce.
     pub const DERIVED_NOISE: ParamId = ParamId::new("derived.noise");
 
-    /// The same at each motion-blur sub-frame, present only when the smear is
-    /// on. Fixed ids rather than a counted list, so the bag stays a flat
-    /// key/value set.
-    pub const DERIVED_MB_NOISE: [ParamId; SHAKE_MB_SAMPLES] = [
-        ParamId::new("derived.mb_noise_0"),
-        ParamId::new("derived.mb_noise_1"),
-        ParamId::new("derived.mb_noise_2"),
-        ParamId::new("derived.mb_noise_3"),
-        ParamId::new("derived.mb_noise_4"),
-        ParamId::new("derived.mb_noise_5"),
-        ParamId::new("derived.mb_noise_6"),
-        ParamId::new("derived.mb_noise_7"),
-        ParamId::new("derived.mb_noise_8"),
-    ];
+    /// The same at each motion-blur sub-frame, the first Samples of them
+    /// present only when the smear is on. Fixed ids rather than a counted list,
+    /// so the bag stays a flat key/value set.
+    pub const DERIVED_MB_NOISE: [ParamId; SHAKE_MB_SAMPLES] = mb_noise_ids!(
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+        25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
+        48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63
+    );
 
     /// The depth (z) pump as a 0..1 magnitude, with an old project's
     /// `zoom_pump` folded in.
@@ -320,16 +350,25 @@ impl Shake {
     /// resolved bag — so no caller has to know the ids.
     ///
     /// The motion-blur set is read by *presence*: [`ShakeDef::resolve_derived`]
-    /// pushes it only when the toggle is on and the shutter is non-zero, which
-    /// is the one place that decision is taken (the old arm took it in `f64`, on
-    /// the stored value, and it still does).
+    /// pushes the first Samples of it only when the toggle is on and the
+    /// shutter is non-zero, which is the one place that decision is taken (the
+    /// old arm took it in `f64`, on the stored value, and it still does).
+    /// The set runs from the front and stops at the first id the resolver did
+    /// not push, so a plain shake reads one absent id and no more.
     pub fn derived_of(p: Params<'_>) -> ShakeDerived {
+        let mut mb_noise = [[0.0f32; 4]; SHAKE_MB_SAMPLES];
+        let mut mb_count = 0;
+        for (slot, id) in mb_noise.iter_mut().zip(Self::DERIVED_MB_NOISE) {
+            match p.get(id) {
+                Some(_) => *slot = p.vec4(id, [0.0; 4]),
+                None => break,
+            }
+            mb_count += 1;
+        }
         ShakeDerived {
             noise: p.vec4(Self::DERIVED_NOISE, [0.0; 4]),
-            mb_noise: p
-                .get(Self::DERIVED_MB_NOISE[0])
-                .is_some()
-                .then(|| Self::DERIVED_MB_NOISE.map(|id| p.vec4(id, [0.0; 4]))),
+            mb_noise,
+            mb_count,
             z_amp: p.float(Self::DERIVED_Z_AMP, 0.0),
             edge: p.choice(Self::DERIVED_EDGE, EdgesMode::Repeat.code()),
         }
@@ -357,13 +396,14 @@ impl Shake {
             rotation_deg: rot_amount * n[2],
             zoom: 1.0 + d.z_amp * n[3],
         };
-        match d.mb_noise {
-            Some(noise) => Shaken::Blurred {
-                samples: noise.map(at),
+        match d.mb_count {
+            count if count >= 2 => Shaken::Blurred {
+                samples: d.mb_noise.map(at),
+                count,
                 edge: d.edge,
                 mix,
             },
-            None => Shaken::Plain {
+            _ => Shaken::Plain {
                 wobble: at(d.noise),
                 edge: d.edge,
                 mix,
@@ -444,10 +484,13 @@ impl EffectDef for ShakeDef {
         // frame-time wobble exactly.
         let motion_blur = e.bool_of("motion_blur").unwrap_or(false);
         let mb_amount = fl("mb_amount").unwrap_or(0.5);
+        // A shake saved before the Samples row keeps the nine it was made with.
+        let mb_samples =
+            fl("mb_samples").map_or(SHAKE_MB_DEFAULT_SAMPLES, |s| s.round().max(0.0) as usize);
         if motion_blur && mb_amount > 0.0 {
             for (id, db) in Shake::DERIVED_MB_NOISE
                 .iter()
-                .zip(shake_mb_offsets(mb_amount))
+                .zip(shake_mb_offsets(mb_amount, mb_samples))
             {
                 push(*id, noise(base + db));
             }
@@ -469,7 +512,12 @@ impl EffectDef for ShakeDef {
                     rgba, w, h, anchor, position, scale, rot, NO_SKEW, edge, 1.0, mix,
                 );
             }
-            Shaken::Blurred { samples, edge, mix } => {
+            Shaken::Blurred {
+                samples,
+                count,
+                edge,
+                mix,
+            } => {
                 let mut ops = [([1.0f32, 0.0, 0.0, 1.0], [0.0f32, 0.0]); SHAKE_MB_SAMPLES];
                 for (op, s) in ops.iter_mut().zip(samples.iter()) {
                     let (anchor, position, scale, rot) =
@@ -477,7 +525,7 @@ impl EffectDef for ShakeDef {
                     let (m, o, _opacity) = transform_op(anchor, position, scale, rot, NO_SKEW, 1.0);
                     *op = (m, o);
                 }
-                cpu::transform_average(rgba, w, h, &ops, edge, mix);
+                cpu::transform_average(rgba, w, h, &ops[..count], edge, mix);
             }
         }
     }

@@ -243,12 +243,13 @@ struct TransformParams {
     _pad2: f32,
 }
 
-/// The number of Shake motion-blur sub-frame taps (T18): the fixed-size
-/// end of the uniform array and the WGSL kernel's `array<Tap, 9>` / `MAX_TAPS`.
+/// The most Shake motion-blur sub-frame taps (T18): the fixed-size end of the
+/// uniform array and the WGSL kernel's `array<Tap, 64>` / `MAX_TAPS`. The
+/// Samples row picks how many of them are live.
 /// Must equal `lumit_core::fx::SHAKE_MB_SAMPLES` — the GPU crate can't name that
 /// const (lumit-core is a dev-dependency only), so the oracle tests assert the
 /// two agree, and the WGSL literal is kept in step by the same tests.
-pub const SHAKE_MB_SAMPLES: usize = 9;
+pub const SHAKE_MB_SAMPLES: usize = 64;
 
 /// One resolved Shake motion blur (docs/08 §3.4, T18): the shake's own
 /// inter-frame smear. Each tap is a host-computed inverse affine (the same

@@ -16,7 +16,7 @@
 
 // Must match lumit_core::fx::SHAKE_MB_SAMPLES (a compile-time assert in
 // stylise.rs pins the two together).
-const MAX_TAPS: u32 = 9u;
+const MAX_TAPS: u32 = 64u;
 
 struct Tap {
     m: vec4<f32>,   // row-major inverse linear 2×2: (m00, m01, m10, m11)
@@ -24,7 +24,7 @@ struct Tap {
 };
 
 struct Params {
-    taps: array<Tap, 9>,
+    taps: array<Tap, 64>,
     count: u32,     // active taps, 1..=MAX_TAPS
     edge: u32,      // 0 transparent, 1 repeat, 2 mirror
     mix_amt: f32,   // 0..1, blended against the unprocessed input
