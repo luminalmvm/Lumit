@@ -305,7 +305,7 @@ void main() {
         (tester) async {
       final p = withBlur();
       await mount(tester, p);
-      p.uiState.activePanel.value = Panel.graph;
+      p.uiState.activePane.value = Panel.graph.pane();
 
       expect(p.uiState.deleteClaim, isNotNull,
           reason: 'the panel claims Delete while it is mounted');
@@ -511,7 +511,7 @@ void main() {
       // the whole family is back.
       await tester.tapAt(const Offset(860, 560));
       await tester.pump();
-      p.uiState.activePanel.value = Panel.graph;
+      p.uiState.activePane.value = Panel.graph.pane();
       expect(p.uiState.consoleClaim!(), isTrue,
           reason: 'the graph claims the console while it is the focused panel');
       await tester.pump();
@@ -527,7 +527,7 @@ void main() {
       final p = withBlur();
       await mount(tester, p);
 
-      p.uiState.activePanel.value = Panel.graph;
+      p.uiState.activePane.value = Panel.graph.pane();
       expect(p.uiState.consoleClaim!(), isTrue);
       await tester.pump();
       expect(
@@ -554,7 +554,7 @@ void main() {
       final p = withBlur();
       await mount(tester, p);
 
-      p.uiState.activePanel.value = Panel.timeline;
+      p.uiState.activePane.value = Panel.timeline.pane();
       expect(p.uiState.consoleClaim!(), isFalse,
           reason: 'not this panel\'s key, so the shell\'s console opens');
       expect(find.byKey(const ValueKey<String>('fx-console-bar')), findsNothing);
@@ -1221,7 +1221,7 @@ void main() {
       final p = withTwoEffects();
       await mount(tester, p);
 
-      p.uiState.activePanel.value = Panel.graph;
+      p.uiState.activePane.value = Panel.graph.pane();
       expect(p.uiState.requestSelectAll(), isTrue,
           reason: 'the graph claims the chord now that it can answer it');
       await tester.pump();
@@ -1559,7 +1559,7 @@ void main() {
           groups: () => [BridgePresetInfo(name: 'Audio rig', path: path)]);
       await tester.tapAt(const Offset(600, 500));
       await tester.pump();
-      p.uiState.activePanel.value = Panel.graph;
+      p.uiState.activePane.value = Panel.graph.pane();
       expect(p.uiState.consoleClaim!(), isTrue);
       await tester.pump();
       // The saved groups list after every driver and effect, past the list's

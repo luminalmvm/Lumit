@@ -1321,7 +1321,7 @@ void main() {
         uiState: p.uiState,
       ));
       await tester.pump();
-      p.uiState.activePanel.value = Panel.project;
+      p.uiState.activePane.value = Panel.project.pane();
 
       await tester.tap(rowText('shot.mov'));
       await tester.pump(const Duration(milliseconds: 400));
@@ -1354,7 +1354,7 @@ void main() {
           reason: 'and writes nothing: the old name stands');
 
       // While another panel is the active one, the key is not this panel's.
-      p.uiState.activePanel.value = Panel.timeline;
+      p.uiState.activePane.value = Panel.timeline.pane();
       await tester.tap(rowText('Hero shot'));
       await tester.pump(const Duration(milliseconds: 400));
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);

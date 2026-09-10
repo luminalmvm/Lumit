@@ -138,7 +138,7 @@ void main() {
       await mount(tester, p);
       await enter(tester, p.layer);
 
-      p.uiState.activePanel.value = Panel.graph;
+      p.uiState.activePane.value = Panel.graph.pane();
       expect(p.uiState.consoleClaim!(), isTrue,
           reason: 'the inner graph claims Ctrl+Space while it is the face');
       await tester.pump();
@@ -176,7 +176,7 @@ void main() {
       final before =
           tester.getRect(find.byKey(const ValueKey<String>('shader-node-1')));
 
-      p.uiState.activePanel.value = Panel.graph;
+      p.uiState.activePane.value = Panel.graph.pane();
       expect(p.uiState.consoleClaim!(), isTrue);
       await tester.pump();
 

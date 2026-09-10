@@ -431,10 +431,11 @@ void main() {
             OverlayEntry(
               builder: (context) => DockWidget(
                 root: root,
-                buildPanel: (context, panel) => SizedBox.expand(
-                    key: ValueKey<String>('pane-${panel.name}')),
+                buildPanel: (context, pane) => SizedBox.expand(
+                    key: ValueKey<String>('pane-${pane.panel.name}')),
                 onLayoutChanged: () {},
-                activePanel: ValueNotifier<Panel?>(null),
+                activePanel: ValueNotifier<PaneId?>(null),
+                maximised: ValueNotifier<PaneId?>(null),
               ),
             ),
           ]),

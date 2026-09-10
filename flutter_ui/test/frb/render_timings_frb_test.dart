@@ -76,6 +76,7 @@ void main() {
           frame: BigInt.zero,
           scale: 1.0,
           mode: BridgePlaybackMode.everyFrame,
+        view: 0,
         );
         // Wait for *this* ask's profile - `isNotEmpty` was already true on
         // the second pass, so the loop never waited for the cache hit's
@@ -118,6 +119,7 @@ void main() {
         frame: BigInt.zero,
         scale: 1.0,
         mode: BridgePlaybackMode.everyFrame,
+        view: 0,
       );
       await tester.runAsync(() async {
         for (var i = 0; i < 150; i++) {
@@ -139,6 +141,7 @@ void main() {
         frame: BigInt.one,
         scale: 1.0,
         mode: BridgePlaybackMode.everyFrame,
+        view: 0,
       );
       await settleFrb(tester, minRounds: 10, maxRounds: 40);
       expect(timings.layerMs(f.layerId), isNull);

@@ -26,6 +26,7 @@ BridgeFrameProfile _profile() => BridgeFrameProfile(
         ),
         const BridgeLayerTiming(layer: 'layer-b', ms: 2.25, effects: []),
       ],
+      view: 0,
     );
 
 void main() {

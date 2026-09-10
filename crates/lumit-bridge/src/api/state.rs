@@ -100,6 +100,11 @@ pub struct BridgeSharedFrameInfoLinux {
     /// that only changes when a frame is made. The frame that changes it now
     /// brings it.
     pub tier: u32,
+    /// Which Viewer view this frame was made for (docs/impl/multi-viewer.md
+    /// §2.1). Several views can be on screen at once, each with its own
+    /// texture, so a frame that did not say who it was for could only be shown
+    /// by the one that asked last.
+    pub view: u32,
 }
 
 /// The Windows zero-copy Viewer frame: an NT handle to a shared D3D12
@@ -127,6 +132,11 @@ pub struct BridgeSharedFrameInfo {
     /// that only changes when a frame is made. The frame that changes it now
     /// brings it.
     pub tier: u32,
+    /// Which Viewer view this frame was made for (docs/impl/multi-viewer.md
+    /// §2.1). Several views can be on screen at once, each with its own
+    /// texture, so a frame that did not say who it was for could only be shown
+    /// by the one that asked last.
+    pub view: u32,
 }
 
 /// A small still picture as plain pixels — the thumbnail payload
@@ -202,6 +212,8 @@ pub struct BridgeSampledPixels {
     /// Which frame this is of, so a window that arrives after the playhead has
     /// moved on can be recognised as stale rather than drawn.
     pub frame: u64,
+    /// Which Viewer view the read was taken in.
+    pub view: u32,
     /// True when the window is of one layer rendered alone rather than of the
     /// composite — a depth pass being read for a focal point, say.
     pub layer_alone: bool,
@@ -262,6 +274,9 @@ pub struct BridgeRenderProgress {
     /// abandoned) and the bar should go. Sent by the worker rather than the
     /// engine, so a frame that failed still ends its own bar.
     pub done: bool,
+    /// Which Viewer view is waiting on this frame, so its own bar fills and
+    /// nobody else's does.
+    pub view: u32,
 }
 
 /// One effect's measured cost within its layer, in milliseconds.
@@ -312,6 +327,9 @@ pub struct BridgeFrameProfile {
     pub present_ms: f64,
     /// The composition's top-level layers, bottom-most first.
     pub layers: Vec<BridgeLayerTiming>,
+    /// Which Viewer view the measured frame was made for, so a readout
+    /// attributes the cost to the picture it belongs to.
+    pub view: u32,
 }
 
 /// What the render worker publishes for one frame. Which frame variant a build

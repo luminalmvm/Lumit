@@ -82,6 +82,7 @@ BridgeSampledPixels wholePicture({int width = 100, int height = 50}) {
     x: centreX,
     y: centreY,
     frame: BigInt.zero,
+    view: 0,
     layerAlone: false,
   );
 }

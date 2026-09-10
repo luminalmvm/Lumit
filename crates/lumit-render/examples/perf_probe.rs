@@ -122,7 +122,7 @@ fn run_present(
         let p = r
             .render_prepared(doc, comp, f, quality(scale), true, false)
             .expect("render");
-        r.present_prepared(&p).expect("present");
+        r.present_prepared(&p, 0).expect("present");
     }
     let ms = start.elapsed().as_secs_f64() * 1000.0 / N as f64;
     println!("{label:44} {ms:7.2} ms/frame  ({:.1} fps)", 1000.0 / ms);

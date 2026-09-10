@@ -302,7 +302,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     final ui = _boundUi;
     if (!mounted ||
         ui == null ||
-        ui.activePanel.value != Panel.effectControls) {
+        ui.activePanel != Panel.effectControls) {
       return _priorCopyClaim?.call() ?? false;
     }
     return _copyPickedEffects(ui) || (_priorCopyClaim?.call() ?? false);
@@ -312,7 +312,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     final ui = _boundUi;
     if (!mounted ||
         ui == null ||
-        ui.activePanel.value != Panel.effectControls) {
+        ui.activePanel != Panel.effectControls) {
       return _priorPasteClaim?.call() ?? false;
     }
     return _pastePickedEffects(ui) || (_priorPasteClaim?.call() ?? false);
@@ -322,7 +322,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     final ui = _boundUi;
     if (!mounted ||
         ui == null ||
-        ui.activePanel.value != Panel.effectControls) {
+        ui.activePanel != Panel.effectControls) {
       return _priorDeleteClaim?.call() ?? false;
     }
     return _deletePickedEffects(ui) || (_priorDeleteClaim?.call() ?? false);
@@ -403,7 +403,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
       return false;
     }
     final ui = Provider.of<LumitUiState>(context, listen: false);
-    if (ui.activePanel.value != Panel.effectControls) return false;
+    if (ui.activePanel != Panel.effectControls) return false;
     final action = ui.keymap.actionFor(BridgeKeyContext.effects, event);
     if (action == 'effect.rename') {
       final picked = ui.selectedEffects.value;

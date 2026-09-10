@@ -3950,7 +3950,7 @@ fn the_viewer_asks_for_a_prefix_on_the_render_it_was_making_anyway() {
     ] {
         assert!(
             matches!(
-                comp.render_frame(0, 1.0, BridgePlaybackMode::Adaptive, prefix),
+                comp.render_frame(0, 1.0, BridgePlaybackMode::Adaptive, prefix, 0),
                 Err(BridgeError::InvalidWorkerState) | Ok(())
             ),
             "a render with prefix {prefix:?} must dispatch or say the worker is not up"

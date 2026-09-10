@@ -264,7 +264,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     // A per-panel binding is live in the *focused* panel (docs/07 §15); this
     // handler hears every key wherever it lands, so the panel checks that it
     // is the active one itself.
-    if (ui.activePanel.value != Panel.project) return false;
+    if (ui.activePanel != Panel.project) return false;
     final action = ui.keymap.actionFor(BridgeKeyContext.project, event);
     if (action == 'item.rename') {
       if (_selectedIds.length != 1 || _renamingId != null) return false;
@@ -703,19 +703,34 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         _searchRow(t),
         projectColumnHeader(t, cols, onResize: _resizeColumn),
         Expanded(
-          // Wrapping the list rather than sitting behind it: a sibling under a
-          // ListView never sees a pointer, because the list is opaque across
-          // its whole extent. As the parent it gets what the rows leave — and
-          // a row's own double-tap wins the arena on the row itself.
-          child: _importOnDoubleTap(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              controller: _hScroll,
-              child: SizedBox(
-                width: width < projectMinWidth ? projectMinWidth : width,
-                child: ListView(children: rows),
+          // The import sits **behind** the list, and the list takes the pointer
+          // only where a row actually is. That is what makes the gesture the
+          // blank space's own. Wrapping the list put the import over every row
+          // instead: any two clicks inside the window were a double-tap to it,
+          // so a double-click that slipped across a row boundary, or two quick
+          // clicks picking one row and then the next, raised the file dialogue.
+          //
+          // Nothing is lost by a list that no longer takes the whole panel:
+          // dragging blank space to scroll only means something when there is
+          // no blank space to drag.
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: _importOnDoubleTap(child: const SizedBox.expand()),
               ),
-            ),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                controller: _hScroll,
+                hitTestBehavior: HitTestBehavior.deferToChild,
+                child: SizedBox(
+                  width: width < projectMinWidth ? projectMinWidth : width,
+                  child: ListView(
+                    hitTestBehavior: HitTestBehavior.deferToChild,
+                    children: rows,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
         projectScrollStrip(t, _hScroll),

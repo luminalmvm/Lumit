@@ -18,6 +18,7 @@ BridgeRenderProgress _report(
       stage: stage,
       fraction: fraction,
       done: done,
+      view: 0,
     );
 
 void main() {

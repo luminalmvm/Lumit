@@ -25,6 +25,8 @@ import 'package:lumit_flutter/src/rust/api/audio.dart' show setAudioDevice;
 import 'package:lumit_flutter/src/rust/api/cache.dart';
 import 'package:lumit_flutter/src/rust/api/colour.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/footage.dart'
+    show BridgeMediaInfo, FootageReference;
 import 'package:lumit_flutter/src/rust/api/graph.dart'
     show BridgeNodeRef, BridgeNodeRef_Source;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -38,6 +40,7 @@ import 'package:lumit_flutter/state/clipboard.dart';
 import 'package:lumit_flutter/state/comp_time.dart';
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/state/dropper.dart';
+import 'package:lumit_flutter/state/viewer_views.dart';
 import 'package:lumit_flutter/state/keymap.dart';
 import 'package:lumit_flutter/state/animated_mask_paths.dart';
 import 'package:lumit_flutter/state/layer_bounds.dart';
@@ -125,7 +128,15 @@ class LumitUiState extends ChangeNotifier {
   final ToolsState tools = ToolsState();
 
   DockSplit get split => workspace.dock;
-  ValueNotifier<Panel?> activePanel = ValueNotifier(null);
+
+  /// Which pane the keyboard is pointed at. A pane rather than a panel, since
+  /// the Viewer can be in the arrangement more than once and two Viewers are
+  /// two homes (docs/impl/multi-viewer.md §3.1).
+  ValueNotifier<PaneId?> activePane = ValueNotifier(null);
+
+  /// Which panel the keyboard is pointed at, which is what every keymap
+  /// context and search-box question actually asks.
+  Panel? get activePanel => activePane.value?.panel;
 
   /// Move the focus ring on by [by] panels in the arrangement's own order —
   /// `Ctrl+F6` forwards, `Ctrl+Shift+F6` back (docs/07 §15, "Panels").
@@ -140,15 +151,15 @@ class LumitUiState extends ChangeNotifier {
   /// Answers whether it moved, so an arrangement with nothing in it leaves the
   /// chord to whatever else might want it.
   bool cyclePanelFocus(int by) {
-    final panels = panelsIn(split);
-    if (panels.isEmpty) return false;
-    final current = activePanel.value;
-    final at = current == null ? -1 : panels.indexOf(current);
-    // Nothing focused yet: the first panel is where a cycle begins, whichever
+    final panes = panesIn(split);
+    if (panes.isEmpty) return false;
+    final current = activePane.value;
+    final at = current == null ? -1 : panes.indexOf(current);
+    // Nothing focused yet: the first pane is where a cycle begins, whichever
     // way it was asked to go.
-    final next = at < 0 ? panels.first : panels[(at + by) % panels.length];
-    activatePanelTab(split, next);
-    activePanel.value = next;
+    final next = at < 0 ? panes.first : panes[(at + by) % panes.length];
+    activatePanelTab(split, next.panel);
+    activePane.value = next;
     // Which tab a group fronts is part of the arrangement, and the arrangement
     // persists — `touch` both redraws the dock and writes it down.
     workspace.touch();
@@ -189,7 +200,7 @@ class LumitUiState extends ChangeNotifier {
   /// ask for. Only two panels have one (docs/07 §15); anywhere else the chord
   /// is left alone rather than swallowed.
   bool requestPanelSearch() {
-    final panel = activePanel.value;
+    final panel = activePanel;
     if (panel != Panel.project && panel != Panel.effectsAndPresets) {
       return false;
     }
@@ -198,7 +209,7 @@ class LumitUiState extends ChangeNotifier {
   }
 
   /// Whether [panel] is the one a [panelSearchRequest] is meant for.
-  bool searchRequestIsFor(Panel panel) => activePanel.value == panel;
+  bool searchRequestIsFor(Panel panel) => activePanel == panel;
 
   /// Bumped when `Ctrl+A` asks the focused panel to select everything it holds.
   ///
@@ -232,13 +243,13 @@ class LumitUiState extends ChangeNotifier {
   /// Ask the focused panel to select everything, and say whether one was asked.
   /// False means the shell should fall back to selecting every layer.
   bool requestSelectAll() {
-    if (!_selectAllPanels.contains(activePanel.value)) return false;
+    if (!_selectAllPanels.contains(activePanel)) return false;
     selectAllRequest.value++;
     return true;
   }
 
   /// Whether [panel] is the one a [selectAllRequest] is meant for.
-  bool selectAllRequestIsFor(Panel panel) => activePanel.value == panel;
+  bool selectAllRequestIsFor(Panel panel) => activePanel == panel;
 
   /// A finer selection's claim on Delete, set by the Timeline while it
   /// is mounted and cleared when it goes.
@@ -553,12 +564,16 @@ class LumitUiState extends ChangeNotifier {
     if (frame > playheadFrame.value) playheadFrame.value = frame;
   }
 
+  /// One view plays and the others hold the picture they were last given
+  /// (docs/impl/multi-viewer.md §2.5): the view named by "always preview this
+  /// view" when there is one, otherwise the active view.
   void _playFrom(CompositionReference comp, int frame) => comp.play(
         from: BigInt.from(frame),
         scale: viewerScale,
         mode: workspace.performance.playback == PlaybackMode.adaptive
             ? BridgePlaybackMode.adaptive
             : BridgePlaybackMode.everyFrame,
+        view: views.previewing?.engineId ?? activeViewId,
       );
 
   /// Stop the transport, and — unless the user is taking hold of the playhead
@@ -603,23 +618,324 @@ class LumitUiState extends ChangeNotifier {
   /// Ignored during playback, where the engine is already choosing frames.
   void requestFrame() {
     if (playing.value) return;
-    final comp = selectedComp;
+    _releaseClosedViews();
+    // **The view being worked in is asked whatever it last asked for.** This
+    // is the explicit ask: something moved, or a caller wants the frame made
+    // again for a reason the stamp below cannot see — the render-time column
+    // being switched on is the one that bites, since a frame served from the
+    // cache reports no numbers and the column never fills in.
+    final active = views.active;
+    if (active != null) _askForView(active, force: true);
+    // **Every other view asks only when its own inputs have moved**
+    // (docs/impl/multi-viewer.md §2.4 rule 1). Renders are serial on the one
+    // worker thread, so four views re-rendering on every edit would be four
+    // renders in front of the picture the pointer is in. A locked view on an
+    // untouched composition costs one render for its whole life.
+    for (final view in views.views) {
+      if (view.id != active?.id) _askForView(view);
+    }
+  }
+
+  /// What each view last asked for, so a view with nothing new to show asks
+  /// for nothing. Keyed by the engine's own view id.
+  final Map<int, String> _askedFor = {};
+
+  /// Ask for one view's picture, when what that view is showing has actually
+  /// moved (docs/impl/multi-viewer.md §2.4 rule 1).
+  ///
+  /// **Every view, the active one included.** Renders are serial on the one
+  /// worker thread, so a view with nothing new to show is a render in front of
+  /// the picture somebody is working in. The stamp is everything a picture is
+  /// made of: the composition, the frame, the scale, the document revision,
+  /// the way the view is looking and where it is cutting the stack short.
+  /// Anything outside it that changes a picture must be said with [force].
+  void _askForView(ViewerSurface view, {bool force = false}) {
+    if (view.mode == ViewMode.footage) {
+      _askForItem(view, force: force);
+      return;
+    }
+    final comp = compFor(view);
     if (comp == null) return;
+    // A layer's source before transform is the layer view, which draws its own
+    // picture when it lands.
+    if (view.mode != ViewMode.composition) return;
+    view.compId ??= comp.internalid.toString();
+    final frame = frameFor(view);
+    final scale = viewerScale;
+    final stamp = '${comp.internalid}/$frame/$scale/${model.heldRevision}/'
+        '${view.look.stops}/${view.look.toneMap}/${view.region}/'
+        '${view.colourView}/$viewerPrefixStamp';
+    if (!force && _askedFor[view.engineId] == stamp) return;
+    _askedFor[view.engineId] = stamp;
     try {
       comp.renderFrame(
-        frame: BigInt.from(playheadFrame.value),
-        scale: viewerScale,
+        frame: BigInt.from(frame),
+        scale: scale,
         mode: workspace.performance.playback == PlaybackMode.adaptive
             ? BridgePlaybackMode.adaptive
             : BridgePlaybackMode.everyFrame,
         // The "at effect" chip. The engine latches it, so the drags,
         // the playback and the idle fill that follow show the same picture.
-        prefix: viewerPrefix,
+        // Only the active view carries it: the chip belongs to the selection,
+        // and the selection is in one view.
+        prefix: view.id == views.activeId ? viewerPrefix : null,
+        view: view.engineId,
       );
     } catch (_) {
       // No worker yet, or a composition that has gone away. The next playhead
       // move or edit asks again; there is nothing to recover here.
+      _askedFor.remove(view.engineId);
     }
+  }
+
+  /// A footage view's picture (docs/impl/multi-viewer.md §3.6): the item drawn
+  /// on its own, through the scratch composition the engine builds around it.
+  ///
+  /// Same rule as the composition path — nothing is asked for twice — and the
+  /// stamp carries the document revision, because relinking a clip or changing
+  /// how it is read is exactly what makes the picture different.
+  void _askForItem(ViewerSurface view, {bool force = false}) {
+    final footage = footageOf(view);
+    if (footage == null) return;
+    final facts = itemFacts(footage);
+    // Still being probed, or a file with nothing in it to draw. The view shows
+    // its empty state, and the probe's own answer asks again.
+    if (facts == null || facts.width == 0 || facts.height == 0) return;
+    final frames = framesOf(facts);
+    final frame = view.sourceFrame.clamp(0, frames - 1);
+    final scale = viewerScale;
+    final stamp = '${view.itemId}/$frame/$scale/${model.heldRevision}/'
+        '${view.look.stops}/${view.look.toneMap}/${view.colourView}';
+    if (!force && _askedFor[view.engineId] == stamp) return;
+    _askedFor[view.engineId] = stamp;
+    try {
+      footage.renderView(
+        frame: BigInt.from(frame),
+        scale: scale,
+        width: facts.width,
+        height: facts.height,
+        rateNum: facts.fpsNum,
+        rateDen: facts.fpsDen,
+        frames: BigInt.from(frames),
+        view: view.engineId,
+      );
+    } catch (_) {
+      // No worker yet, or an item that has gone away.
+      _askedFor.remove(view.engineId);
+    }
+  }
+
+  /// What the "at effect" chip is cutting, as one short string, so a view's
+  /// stamp moves when the chip does. Empty when the picture is the whole
+  /// composition, which is nearly always.
+  String get viewerPrefixStamp {
+    final prefix = viewerPrefix;
+    if (prefix == null) return '';
+    return '${prefix.layer.internallayerId}/${prefix.effect}';
+  }
+
+  /// The composition a view is bound to.
+  ///
+  /// **A view bound to nothing shows what is fronted** (docs/impl/multi-viewer
+  /// §1.2): a view id the project has never heard of — a fresh workspace, a
+  /// workspace someone sent you, the first view of a new project — opens on
+  /// the active composition rather than on nothing. Only the active view gets
+  /// that, because a background view with no binding has no claim on the
+  /// fronted comp.
+  CompositionReference? compFor(ViewerSurface view) {
+    final id = view.compId;
+    final project = _app.project;
+    if (id == null) {
+      return view.id == views.activeId || views.views.length <= 1
+          ? _selectedComp
+          : null;
+    }
+    if (project == null) return null;
+    final uuid = UuidValue.withValidation(id);
+    if (uuid == _selectedComp?.internalid) return _selectedComp;
+    return CompositionReference(
+      internalproject: project.internalid,
+      internalid: uuid,
+    );
+  }
+
+  /// The first Viewer pane in the arrangement, which is where a view that has
+  /// to be invented goes. Null when no Viewer is on screen at all, in which
+  /// case there is nowhere to put a picture and nothing is opened into one.
+  PaneId? _firstViewerPane() {
+    for (final pane in panesIn(workspace.dock)) {
+      if (pane.panel == Panel.viewer) return pane;
+    }
+    return null;
+  }
+
+  /// Front a view: the Timeline, Effect controls, the Graph and Node panels,
+  /// the Mixer, the Audio panel and the composition-scoped menu rows all
+  /// follow it (docs/impl/multi-viewer.md §1.4).
+  ///
+  /// A view showing footage or a layer's source leaves those panels on the
+  /// composition they had. Double-clicking a piece of footage must not empty
+  /// the Timeline under it.
+  void frontView(String id) {
+    if (!views.front(id)) return;
+    final view = views.byId(id);
+    if (view != null && view.mode == ViewMode.composition) {
+      final comp = compFor(view);
+      if (comp != null && comp.internalid != _selectedComp?.internalid) {
+        setSelectedComp(comp);
+        return;
+      }
+    }
+    pushViewerLook();
+    notifyListeners();
+    rememberSession();
+  }
+
+  /// The Viewer pane the keyboard is pointed at, or the first one in the
+  /// arrangement when the focus is somewhere else. Null when the workspace has
+  /// no Viewer at all.
+  PaneId? get currentViewerPane {
+    final active = activePane.value;
+    if (active != null && active.panel == Panel.viewer) return active;
+    return _firstViewerPane();
+  }
+
+  /// Window ▸ New Viewer, and `Ctrl+Alt+V`. The new pane goes beside the one
+  /// the keyboard is in, sharing its share of the window.
+  void addViewerPanel() {
+    final made = addPane(split, Panel.viewer, beside: currentViewerPane);
+    activePane.value = made;
+    workspace.touch();
+    saveLayout();
+    // Its first view opens on whatever the active view was showing, which is
+    // what makes a second Viewer immediately useful.
+    views.forPane(made);
+    requestFrame();
+  }
+
+  /// The layout and the compare of the Viewer pane the keyboard is in, for
+  /// the menu's ticks. One view and no compare where there is no Viewer at
+  /// all, which is what the rows would show anyway.
+  ViewLayout get currentViewerLayout {
+    final pane = currentViewerPane;
+    return pane == null ? ViewLayout.one : views.layoutOf(pane);
+  }
+
+  CompareMode get currentCompare {
+    final pane = currentViewerPane;
+    return pane == null ? CompareMode.none : views.compareOf(pane);
+  }
+
+  /// One, two or four views in the Viewer pane the keyboard is in. Says
+  /// whether there was a Viewer to change.
+  bool setViewerLayout(ViewLayout layout) {
+    final pane = currentViewerPane;
+    if (pane == null) return false;
+    views.setLayout(pane, layout);
+    saveLayout();
+    requestFrame();
+    return true;
+  }
+
+  /// Swap a two-view layout between across and down. Nothing to turn in the
+  /// one-view and four-view layouts, which say so rather than doing something
+  /// arbitrary.
+  bool turnViewerLayout() {
+    final pane = currentViewerPane;
+    if (pane == null) return false;
+    final layout = views.layoutOf(pane);
+    if (layout == ViewLayout.twoAcross) return setViewerLayout(ViewLayout.twoDown);
+    if (layout == ViewLayout.twoDown) return setViewerLayout(ViewLayout.twoAcross);
+    return false;
+  }
+
+  /// Put two views together as a wipe, or take the compare away. Split is the
+  /// menu's other row; the chord toggles the wipe, which is the one a grade
+  /// reaches for.
+  bool toggleCompare() {
+    final pane = currentViewerPane;
+    if (pane == null) return false;
+    final now = views.compareOf(pane);
+    views.setCompare(
+      pane,
+      now == CompareMode.none ? CompareMode.wipe : CompareMode.none,
+    );
+    saveLayout();
+    requestFrame();
+    return true;
+  }
+
+  void setCompareMode(CompareMode mode) {
+    final pane = currentViewerPane;
+    if (pane == null) return;
+    views.setCompare(pane, mode);
+    saveLayout();
+    requestFrame();
+  }
+
+  /// Which view the transport plays (docs/07 §2, "always preview this view").
+  /// Pressing it on the view already named takes the naming away, so the
+  /// transport goes back to following whichever view is active.
+  void toggleAlwaysPreview() {
+    final view = views.active;
+    if (view == null) return;
+    views.alwaysPreviewId = views.alwaysPreviewId == view.id ? null : view.id;
+    views.touch();
+    saveLayout();
+  }
+
+  /// Share the way of looking across every view, as After Effects has it. Not
+  /// a second copy of the state: with it on, every view simply reads the
+  /// active view's, and turning it off leaves each holding what it was
+  /// showing.
+  void setShareViewOptions(bool share) {
+    if (views.shareViewOptions == share) return;
+    views.shareViewOptions = share;
+    views.touch();
+    saveLayout();
+    requestFrame();
+  }
+
+  /// The pane filling the window, or null when the arrangement is showing
+  /// normally (docs/07 §1.1's backtick).
+  final ValueNotifier<PaneId?> maximisedPane = ValueNotifier(null);
+
+  /// Fill the window with the pane the keyboard is in, or put the arrangement
+  /// back. **Not part of the arrangement**: it is a way of looking at one for
+  /// a moment, so it is not written down and a restart opens as it was.
+  void toggleMaximisedPane([PaneId? pane]) {
+    final want = pane ?? activePane.value;
+    if (want == null) return;
+    maximisedPane.value = maximisedPane.value == want ? null : want;
+  }
+
+  /// Cinema: the active view alone, filling the window. The same mechanism as
+  /// the panel maximise above, one level down, so Escape leaves both by the
+  /// same road (docs/07 §14.1).
+  void toggleCinema() {
+    final pane = currentViewerPane;
+    if (pane == null) return;
+    toggleMaximisedPane(pane);
+  }
+
+  /// Lock or unlock a view (docs/07 §2.6). Project state: a lock is a
+  /// reference to project content, so it rides in the project rather than the
+  /// workspace and Ctrl+Z never undoes one.
+  void setViewLocked(String id, bool locked) {
+    final view = views.byId(id);
+    if (view == null || view.locked == locked) return;
+    view.locked = locked;
+    views.touch();
+    notifyListeners();
+    rememberSession();
+  }
+
+  /// Which frame a view is standing on: the live playhead for the view the
+  /// user is working in, and the frame its own composition was left at for
+  /// every other.
+  int frameFor(ViewerSurface view) {
+    if (view.id == views.activeId) return playheadFrame.value;
+    return compViews[view.compId]?.frame ?? 0;
   }
 
   /// A frame arrived. While playing, the picture leads and the playhead follows
@@ -631,8 +947,8 @@ class LumitUiState extends ChangeNotifier {
     frameArrived.value++;
     if (!playing.value) return;
     _clockAnchor = (frame: frame, micros: _clockWatch.elapsedMicroseconds);
-    // The adaptive clock may already stand a frame past this picture, and
-    // pulling the playhead back would make it twitch at every present.
+    // The adaptive clock may already stand a frame past this picture, and pulling
+    // the playhead back would make it twitch at every present.
     if (frame > playheadFrame.value || !_clock.isActive) {
       playheadFrame.value = frame;
     }
@@ -709,13 +1025,55 @@ class LumitUiState extends ChangeNotifier {
   void setShape(ThemeShape next) => workspace.setShape(next);
 
   CompositionReference? _selectedComp;
+
+  /// The composition the panels that follow the active view are showing: the
+  /// Timeline, Effect controls, the Graph and Node panels, the Mixer, the
+  /// Audio panel and the composition-scoped menu rows
+  /// (docs/impl/multi-viewer.md §1.4).
+  ///
+  /// A reading of the active view rather than a global of its own, which is
+  /// what makes fronting a view move all of them at once. A view showing
+  /// footage or a layer's source leaves this where it was: double-clicking a
+  /// piece of footage must not empty the Timeline under it.
   CompositionReference? get selectedComp => _selectedComp;
+
+  /// The engine's id for the view being drawn into, which every render
+  /// request carries.
+  int get activeViewId => views.active?.engineId ?? 0;
 
   /// The fronted comp as the panels draw it — refreshed by one bridge
   /// call when the engine reports a change, read by everything else for free.
   final CompModel model = CompModel();
 
-  ViewerTextureController controller = ViewerTextureController();
+  /// Every Viewer view, which pane holds it, and which one is active
+  /// (docs/impl/multi-viewer.md §1). The panels that follow the active view
+  /// read [selectedComp], which is a reading of this.
+  final ViewerViews views = ViewerViews();
+
+  /// One texture controller per view, made when a view is first given a
+  /// picture: a view that has never drawn has nothing to register.
+  final Map<int, ViewerTextureController> _controllers = {};
+
+  ViewerTextureController controllerFor(int engineId) => _controllers
+      .putIfAbsent(engineId, () => ViewerTextureController());
+
+  /// The active view's controller, which is what the one-Viewer code paths
+  /// and the tests mean by "the" controller.
+  ViewerTextureController get controller =>
+      controllerFor(views.active?.engineId ?? 0);
+
+  /// Hand back the textures of views that have closed, on both sides: the
+  /// engine drops their pooled shared targets, and the runner unregisters.
+  void _releaseClosedViews() {
+    for (final engineId in views.takeClosed()) {
+      _controllers.remove(engineId)?.dispose();
+      try {
+        _app.project?.closeViewerView(view: engineId);
+      } catch (_) {
+        // No worker, or the project has gone. The textures go with it.
+      }
+    }
+  }
 
   /// The platform texture the Viewer draws — the only frame transport:
   /// every frame arrives as a GPU handle, never as pixels. Null before the
@@ -1329,6 +1687,7 @@ class LumitUiState extends ChangeNotifier {
         window: dropperWindow,
         scale: viewerScale,
         layer: arm.sampleLayer,
+        view: activeViewId,
       );
     } catch (_) {
       // No worker, or a composition that has gone away. The next pointer move
@@ -1483,7 +1842,9 @@ class LumitUiState extends ChangeNotifier {
         // only for a frame somebody is waiting on — never during playback —
         // and the tracker decides whether it is slow enough to draw.
         case WorkerResponse_RenderProgress(:final field0):
-          previewProgress.report(field0);
+          // The bar belongs to the view that is waiting; a background view
+          // filling in must not draw one over the picture being worked in.
+          if (field0.view == activeViewId) previewProgress.report(field0);
         // What the frame just made cost. Only sent while something is showing
         // the numbers (`RenderTimings.setMeasuring`).
         case WorkerResponse_FrameProfile(:final field0):
@@ -1512,14 +1873,14 @@ class LumitUiState extends ChangeNotifier {
   /// fd serves as that key — a non-null `fd` is also what tells the controller to
   /// send the DMA-BUF argument set rather than the DXGI one.
   void _showDmabuf(BridgeSharedFrameInfoLinux f) {
-    controller
+    controllerFor(f.view)
         .ensureRegistered(f.fd, f.width, f.height,
             fd: f.fd,
             stride: f.stride,
             offset: f.offset,
             fourcc: f.drmFourcc,
             modifier: f.modifier.toInt())
-        .then((id) => _adoptTexture(id, f.frame.toInt()));
+        .then((id) => _adoptTexture(id, f.frame.toInt(), f.view));
   }
 
   /// Windows and macOS zero-copy: register the surface by the one integer that
@@ -1527,18 +1888,36 @@ class LumitUiState extends ChangeNotifier {
   /// here. One case for both, because the payload is the same shape.
   /// Leaving `fd` null is what selects the handle argument set.
   void _showSharedTexture(BridgeSharedFrameInfo f) {
-    controller
+    controllerFor(f.view)
         .ensureRegistered(f.handle.toInt(), f.width, f.height)
-        .then((id) => _adoptTexture(id, f.frame.toInt()));
+        .then((id) => _adoptTexture(id, f.frame.toInt(), f.view));
   }
 
+  /// Which texture each view is drawing, by the engine's view id. A view with
+  /// no entry has not been given a picture yet and draws its empty state.
+  final Map<int, ValueNotifier<int?>> _viewTextures = {};
+
+  ValueNotifier<int?> textureOf(int engineId) =>
+      _viewTextures.putIfAbsent(engineId, () => ValueNotifier<int?>(null));
+
   /// A registered texture is now current: mark a frame available and, if the id
-  /// changed, point the Viewer at it.
-  void _adoptTexture(int? id, int frame) {
-    _arrived(frame);
+  /// changed, point that view at it.
+  ///
+  /// **Only the active view moves the playhead.** A frame arriving for a
+  /// background view says nothing about where the user is standing, and
+  /// letting one drive the transport would make a locked view's first frame
+  /// drag the playhead somewhere nobody asked for.
+  void _adoptTexture(int? id, int frame, int engineId) {
+    if (engineId == activeViewId) _arrived(frame);
     if (id == null) return;
-    controller.frameReady();
-    if (viewerFrameid.value != id) viewerFrameid.value = id;
+    controllerFor(engineId).frameReady();
+    final slot = textureOf(engineId);
+    if (slot.value != id) slot.value = id;
+    // The one-Viewer notifier still names the active view's texture, so
+    // everything that reads it (the snapshot, the tests) is unchanged.
+    if (engineId == activeViewId && viewerFrameid.value != id) {
+      viewerFrameid.value = id;
+    }
   }
 
   @override
@@ -1570,7 +1949,8 @@ class LumitUiState extends ChangeNotifier {
     graphNode.dispose();
     shaderGraphEntry.dispose();
     atSelectedEffect.dispose();
-    activePanel.dispose();
+    activePane.dispose();
+    maximisedPane.dispose();
     paletteRequest.dispose();
     consoleRequest.dispose();
     viewerZoomRequest.dispose();
@@ -1621,6 +2001,19 @@ class LumitUiState extends ChangeNotifier {
     if (reference != null && !openComps.contains(reference.internalid)) {
       openComps.add(reference.internalid);
     }
+    // **A locked view is not stolen** (docs/07 §2.6). The composition lands in
+    // the active view when it is unlocked, in the most recently active
+    // unlocked view otherwise, and in a new view when every one of them is
+    // locked — which is the only answer that still shows what was opened.
+    if (reference != null && !_restoring) {
+      final into = _viewForOpening();
+      if (into != null) {
+        into.mode = ViewMode.composition;
+        into.compId = reference.internalid.toString();
+        into.itemId = null;
+        views.front(into.id);
+      }
+    }
     final leaving = _selectedComp?.internalid;
     final arriving = reference?.internalid;
     final moved = arriving != leaving;
@@ -1646,6 +2039,104 @@ class LumitUiState extends ChangeNotifier {
     pushViewerLook();
     rememberSession();
     notifyListeners();
+  }
+
+  /// **Where an opened item lands** (docs/impl/multi-viewer.md §1.5): the
+  /// active view when it is unlocked, the most recently active unlocked one
+  /// when it is not, and a view that did not exist yet when every one of them
+  /// is locked — a new pane in the Viewer the keyboard is in, or a new Viewer
+  /// panel when that layout is full.
+  ///
+  /// Null only when the workspace has no Viewer at all, in which case there is
+  /// nowhere for a picture to go and nothing is opened.
+  ViewerSurface? _viewForOpening() {
+    final into = views.viewForOpening(currentViewerPane);
+    if (into != null) return into;
+    if (_firstViewerPane() == null) return null;
+    addViewerPanel();
+    return views.viewForOpening(currentViewerPane);
+  }
+
+  /// **Open a piece of footage on its own** — the footage view
+  /// (docs/impl/multi-viewer.md §3.6), which is what double-clicking a clip in
+  /// the Project panel does.
+  ///
+  /// The picture is the item at its own size with nothing composited over it,
+  /// so the panels that follow the active view stay where they were: looking
+  /// at a clip is not leaving the shot you are working on.
+  void openFootageView(FootageReference footage) {
+    final into = _viewForOpening();
+    if (into == null) return;
+    into.mode = ViewMode.footage;
+    into.itemId = footage.internalid.toString();
+    into.compId = null;
+    into.sourceFrame = 0;
+    views.front(into.id);
+    // The facts the request is made of. Already in hand for an item looked at
+    // once before, in which case this asks for the picture on the spot.
+    itemFacts(footage);
+    _askForView(into, force: true);
+    notifyListeners();
+    rememberSession();
+  }
+
+  /// What a footage view has to know about its item to ask for a picture: the
+  /// size to draw it at, the rate its frames are counted in, and how many of
+  /// them there are.
+  ///
+  /// Probed once per item and held — a file's facts do not move — and null
+  /// while the probe is out, which is the empty state for the one frame it
+  /// takes. The frontend is the side that has probed the file, which is why
+  /// these cross with the request rather than being read engine-side.
+  final Map<String, BridgeMediaInfo?> _itemFacts = {};
+
+  BridgeMediaInfo? itemFacts(FootageReference footage) {
+    final id = footage.internalid.toString();
+    if (_itemFacts.containsKey(id)) return _itemFacts[id];
+    // The slot is claimed first, so a rebuild mid-probe does not probe twice.
+    _itemFacts[id] = null;
+    footage.mediaInfo().then((info) {
+      _itemFacts[id] = info;
+      notifyListeners();
+      requestFrame();
+    }).catchError((Object _) {
+      // A file that cannot be probed shows the empty state. The next open
+      // asks again; there is nothing to recover here.
+      _itemFacts.remove(id);
+    });
+    return null;
+  }
+
+  /// The item behind a footage view, or null when the view is bound to nothing
+  /// or the project has gone.
+  FootageReference? footageOf(ViewerSurface view) {
+    final project = _app.project;
+    final id = view.itemId;
+    if (project == null || id == null) return null;
+    return FootageReference(
+      internalproject: project.internalid,
+      internalid: UuidValue.withValidation(id),
+    );
+  }
+
+  /// How many frames the item has: its length at its own rate, and one for a
+  /// still, which has no length to count.
+  static int framesOf(BridgeMediaInfo facts) {
+    final den = facts.duration.den.toInt();
+    final num = facts.duration.num.toInt();
+    if (den <= 0 || num <= 0 || facts.fpsDen <= 0) return 1;
+    final frames = num * facts.fpsNum ~/ (den * facts.fpsDen);
+    return frames < 1 ? 1 : frames;
+  }
+
+  /// Stand a footage view on another frame of its item, which is what its
+  /// source strip does. Its own time: the transport belongs to the composition
+  /// and is not touched.
+  void seekFootageView(ViewerSurface view, int frame) {
+    if (view.sourceFrame == frame) return;
+    view.sourceFrame = frame;
+    _askForView(view);
+    views.touch();
   }
 
   /// Open the composition a Precomp layer draws, landing on the frame that
@@ -1999,6 +2490,7 @@ class LumitUiState extends ChangeNotifier {
         transparentBackground: target.grid,
         region: roi == null ? null : Float32List.fromList(roi),
         colourView: _colourView,
+        view: activeViewId,
       );
     } catch (_) {
       // No worker yet, or a comp that has gone. The next change asks again —
@@ -2131,19 +2623,21 @@ class LumitUiState extends ChangeNotifier {
     // live playhead is folded in here: a session written mid-work has to say
     // where the user actually is, not where they last arrived from.
     final front = _selectedComp?.internalid.toString();
-    final views = Map.of(compViews);
+    final compRecords = Map.of(compViews);
     if (front != null) {
-      views[front] = (
+      compRecords[front] = (
         frame: playheadFrame.value,
-        zoom: views[front]?.zoom ?? newCompView.zoom,
-        scroll: views[front]?.scroll ?? newCompView.scroll,
+        zoom: compRecords[front]?.zoom ?? newCompView.zoom,
+        scroll: compRecords[front]?.scroll ?? newCompView.scroll,
       );
     }
     return SavedSession(
         openComps: [for (final id in openComps) id.toString()],
         activeComp: front,
         frame: playheadFrame.value,
-        compViews: views,
+        compViews: compRecords,
+        viewerViews: views.toProjectJson(),
+        viewerLayout: views.toWorkspaceJson(),
         selectedLayer: selectedLayer.value?.internallayerId.toString(),
         dock: workspace.dock.toJson(),
         viewerLooks: Map.of(viewerLooks),
@@ -2225,6 +2719,13 @@ class LumitUiState extends ChangeNotifier {
       previewResolutions.clear();
       viewerOverlaysByComp.clear();
       guidesByComp.clear();
+      // The views go with the project: what each was showing is a reference to
+      // project content, and their engine ids belong to a worker that has
+      // stopped (docs/impl/multi-viewer.md §4.2).
+      views.restore(null, null);
+      _controllers.clear();
+      _viewTextures.clear();
+      _askedFor.clear();
       // Another project's colour config names another project's views.
       _colourView = null;
       // A new project is a new worker, and a new worker is born knowing
@@ -2287,6 +2788,27 @@ class LumitUiState extends ChangeNotifier {
       compViews.addEntries(
         session.compViews.entries.where((e) => known.containsKey(e.key)),
       );
+      // The views, both halves: what each shows and its lock out of the
+      // project, the layout out of the workspace. Before the comps are
+      // fronted, because fronting one puts it into a view.
+      views.restore(session.viewerViews, session.viewerLayout);
+      // A view bound to a composition this document no longer has shows the
+      // empty state rather than a picture of something else, and its lock is
+      // the user's to clear.
+      for (final view in views.views) {
+        if (view.compId != null && !known.containsKey(view.compId)) {
+          view.compId = null;
+        }
+      }
+      // **The look was per composition and is now per view**
+      // (docs/impl/multi-viewer.md §1.3). A project written before that has
+      // its looks keyed by composition, so the first view bound to each takes
+      // that composition's, and no project opens looking different from how
+      // it was left.
+      for (final view in views.views) {
+        final stored = viewerLooks[view.compId];
+        if (stored != null && view.look == neutralLook) view.look = stored;
+      }
       for (final id in session.openComps) {
         final comp = known[id];
         if (comp != null) openComps.add(comp.internalid);

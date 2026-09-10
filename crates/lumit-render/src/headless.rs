@@ -267,30 +267,126 @@ pub struct HeadlessRenderer {
     ///
     /// Bounded and least-recently-used, because sizes are unbounded in
     /// principle: dragging the Viewer walks through a great many.
+    ///
+    /// **Keyed by the view that asked as well as by the size.** Several Viewer
+    /// views can be on screen at once, and two of them on same-sized comps
+    /// would otherwise find the same entry and overwrite each other's picture
+    /// every frame — two Viewers flickering between two comps, with nothing in
+    /// the code looking wrong (docs/impl/multi-viewer.md §2.2).
     #[cfg(all(windows, feature = "shared-texture"))]
-    shared: Vec<lumit_gpu::shared::SharedTexture>,
+    shared: Vec<(u32, lumit_gpu::shared::SharedTexture)>,
     /// The Linux DMA-BUF sibling of [`Self::shared`], same reasoning — one Dart
     /// controller serves all three platforms.
     #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
-    shared_dmabuf: Vec<lumit_gpu::shared_linux::SharedDmabuf>,
+    shared_dmabuf: Vec<(u32, lumit_gpu::shared_linux::SharedDmabuf)>,
     /// The macOS IOSurface sibling of [`Self::shared`].
     #[cfg(all(target_os = "macos", feature = "shared-texture-macos"))]
-    shared_iosurface: Vec<lumit_gpu::shared_metal::SharedIoSurface>,
+    shared_iosurface: Vec<(u32, lumit_gpu::shared_metal::SharedIoSurface)>,
 }
 
-/// How many differently-sized Viewer targets to keep alive at once.
+/// How many differently-sized Viewer targets to keep alive **per view**.
 ///
 /// Enough that the sizes actually in play — the outgoing comp, the incoming
 /// one, and a resolution tier either side — all stay resident, so switching
 /// between them re-uses handles instead of minting them. Small enough that a
-/// slow drag through many sizes does not accumulate: each is roughly two
-/// textures' worth of video memory.
+/// slow drag through many sizes does not accumulate.
 #[cfg(any(
     all(windows, feature = "shared-texture"),
     all(target_os = "linux", feature = "shared-texture-linux"),
     all(target_os = "macos", feature = "shared-texture-macos")
 ))]
 const SHARED_TARGET_POOL: usize = 4;
+
+/// The video memory the whole pool may hold across every view.
+///
+/// A count of entries is the wrong bound once there is more than one view:
+/// four 1080p entries are 66 MiB and four 4K entries are 265 MiB, and a 2x2 of
+/// 4K comps with one spare size each would hold half a gigabyte of graphics
+/// memory doing nothing but keeping handles alive. So the pool is bounded by
+/// bytes, and the per-view count above only stops one view accumulating sizes.
+///
+/// **A view's current size is exempt.** A view evicted out of the size it is
+/// drawing at would mint a new handle every frame, which is the registration
+/// churn the pool exists to prevent — so the ceiling governs the spares and
+/// never the picture on screen.
+#[cfg(any(
+    all(windows, feature = "shared-texture"),
+    all(target_os = "linux", feature = "shared-texture-linux"),
+    all(target_os = "macos", feature = "shared-texture-macos")
+))]
+const SHARED_TARGET_BYTES: u64 = 256 * 1024 * 1024;
+
+/// What one pooled target costs in video memory.
+///
+/// Two textures' worth: the shared resource itself plus the second,
+/// platform-shareable copy of it that the frontend actually samples.
+#[cfg(any(
+    all(windows, feature = "shared-texture"),
+    all(target_os = "linux", feature = "shared-texture-linux"),
+    all(target_os = "macos", feature = "shared-texture-macos")
+))]
+fn shared_target_bytes(w: u32, h: u32) -> u64 {
+    u64::from(w) * u64::from(h) * 4 * 2
+}
+
+/// Which entries of a shared-target pool to let go of, given the pool in
+/// least-recently-used-first order as `(view, width, height)`.
+///
+/// Two rules, in order. One view may hold at most [`SHARED_TARGET_POOL`]
+/// sizes, so a drag through many sizes cannot accumulate. Then the pool as a
+/// whole is brought under [`SHARED_TARGET_BYTES`] by dropping the oldest entry
+/// at a time — but never an entry that is the **last one its view has**, since
+/// that is the size that view is drawing at.
+///
+/// Pure, and separated out for exactly that reason: this is the part that is
+/// easy to get wrong and it can be tested on a machine with no adapter.
+#[cfg(any(
+    all(windows, feature = "shared-texture"),
+    all(target_os = "linux", feature = "shared-texture-linux"),
+    all(target_os = "macos", feature = "shared-texture-macos")
+))]
+fn shared_pool_evictions(entries: &[(u32, u32, u32)]) -> Vec<usize> {
+    let mut dropped = vec![false; entries.len()];
+    // Per view, oldest first, everything past the count.
+    for view in entries.iter().map(|e| e.0) {
+        let mine: Vec<usize> = entries
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| e.0 == view)
+            .map(|(i, _)| i)
+            .collect();
+        if mine.len() > SHARED_TARGET_POOL {
+            for &i in &mine[..mine.len() - SHARED_TARGET_POOL] {
+                dropped[i] = true;
+            }
+        }
+    }
+    let live = |dropped: &[bool]| -> u64 {
+        entries
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| !dropped[*i])
+            .map(|(_, e)| shared_target_bytes(e.1, e.2))
+            .sum()
+    };
+    while live(&dropped) > SHARED_TARGET_BYTES {
+        // The oldest survivor whose view still has a newer survivor after it.
+        let victim = (0..entries.len()).find(|&i| {
+            !dropped[i]
+                && entries[i + 1..]
+                    .iter()
+                    .enumerate()
+                    .any(|(j, e)| e.0 == entries[i].0 && !dropped[i + 1 + j])
+        });
+        match victim {
+            Some(i) => dropped[i] = true,
+            // Every view is down to the one size it is drawing at. Holding
+            // those is the point; there is nothing left that may go.
+            None => break,
+        }
+    }
+    (0..entries.len()).filter(|&i| dropped[i]).collect()
+}
 
 /// One frame's decoded per-layer pixels, kept alongside the decode plan that
 /// asked for them, so the next render can tell at a glance whether it needs new
@@ -2205,11 +2301,12 @@ impl HeadlessRenderer {
         frame: u64,
         quality: Quality,
         cacheable: bool,
+        view: u32,
     ) -> Result<SharedFrameInfo, String> {
         // BGRA, not the RGBA every other path uses: the shared texture's
         // consumer is ANGLE, which only opens BGRA share-handle surfaces.
         let prepared = self.render_prepared(doc, comp_id, frame, quality, true, cacheable)?;
-        self.present_prepared(&prepared)
+        self.present_prepared(&prepared, view)
     }
 
     /// Show an already-rendered frame: copy it into the Windows shared texture
@@ -2220,6 +2317,7 @@ impl HeadlessRenderer {
     pub fn present_prepared(
         &mut self,
         prepared: &PreparedFrame,
+        view: u32,
     ) -> Result<SharedFrameInfo, String> {
         let shown = &prepared.texture;
         // The texture's ACTUAL dims — the comp size times the preview scale the
@@ -2236,7 +2334,7 @@ impl HeadlessRenderer {
         let found = self
             .shared
             .iter()
-            .position(|sh| sh.width == aw && sh.height == ah);
+            .position(|(v, sh)| *v == view && sh.width == aw && sh.height == ah);
         match found {
             Some(i) => {
                 // Most recently used last, so the eviction below takes the
@@ -2246,16 +2344,14 @@ impl HeadlessRenderer {
             }
             None => {
                 let made = lumit_gpu::shared::SharedTexture::new(&self.gpu, aw, ah)?;
-                self.shared.push(made);
-                while self.shared.len() > SHARED_TARGET_POOL {
-                    self.shared.remove(0);
-                }
+                self.shared.push((view, made));
+                self.trim_shared_pool();
             }
         }
-        let target = self
-            .shared
-            .last()
-            .ok_or_else(|| "headless render: shared texture missing after create".to_string())?;
+        let target =
+            self.shared.last().map(|(_, sh)| sh).ok_or_else(|| {
+                "headless render: shared texture missing after create".to_string()
+            })?;
         target.present(&self.gpu, shown);
         Ok(SharedFrameInfo {
             handle: target.handle(),
@@ -2285,9 +2381,10 @@ impl HeadlessRenderer {
         frame: u64,
         quality: Quality,
         cacheable: bool,
+        view: u32,
     ) -> Result<SharedFrameInfoLinux, String> {
         let prepared = self.render_prepared(doc, comp_id, frame, quality, false, cacheable)?;
-        self.present_prepared_dmabuf(&prepared)
+        self.present_prepared_dmabuf(&prepared, view)
     }
 
     /// Show an already-rendered frame via the DMA-BUF texture — the Linux
@@ -2297,6 +2394,7 @@ impl HeadlessRenderer {
     pub fn present_prepared_dmabuf(
         &mut self,
         prepared: &PreparedFrame,
+        view: u32,
     ) -> Result<SharedFrameInfoLinux, String> {
         let shown = &prepared.texture;
         // The texture's ACTUAL dims (comp size × preview scale) — see the
@@ -2310,7 +2408,7 @@ impl HeadlessRenderer {
         let found = self
             .shared_dmabuf
             .iter()
-            .position(|sh| sh.width == aw && sh.height == ah);
+            .position(|(v, sh)| *v == view && sh.width == aw && sh.height == ah);
         match found {
             Some(i) => {
                 let sh = self.shared_dmabuf.remove(i);
@@ -2318,16 +2416,14 @@ impl HeadlessRenderer {
             }
             None => {
                 let made = lumit_gpu::shared_linux::SharedDmabuf::new(&self.gpu, aw, ah)?;
-                self.shared_dmabuf.push(made);
-                while self.shared_dmabuf.len() > SHARED_TARGET_POOL {
-                    self.shared_dmabuf.remove(0);
-                }
+                self.shared_dmabuf.push((view, made));
+                self.trim_shared_pool();
             }
         }
-        let target = self
-            .shared_dmabuf
-            .last()
-            .ok_or_else(|| "headless render: dmabuf texture missing after create".to_string())?;
+        let target =
+            self.shared_dmabuf.last().map(|(_, sh)| sh).ok_or_else(|| {
+                "headless render: dmabuf texture missing after create".to_string()
+            })?;
         target.present(&self.gpu, shown);
         let info = target.info();
         Ok(SharedFrameInfoLinux {
@@ -2361,12 +2457,13 @@ impl HeadlessRenderer {
         frame: u64,
         quality: Quality,
         cacheable: bool,
+        view: u32,
     ) -> Result<SharedFrameInfo, String> {
         // BGRA, as on Windows: the consumer here is a `CVPixelBuffer` of type
         // `kCVPixelFormatType_32BGRA`, the one format Flutter's macOS texture
         // path accepts.
         let prepared = self.render_prepared(doc, comp_id, frame, quality, true, cacheable)?;
-        self.present_prepared(&prepared)
+        self.present_prepared(&prepared, view)
     }
 
     /// Show an already-rendered frame via the IOSurface texture — the macOS
@@ -2376,6 +2473,7 @@ impl HeadlessRenderer {
     pub fn present_prepared(
         &mut self,
         prepared: &PreparedFrame,
+        view: u32,
     ) -> Result<SharedFrameInfo, String> {
         // The texture's ACTUAL dims (comp size × preview scale) — see the
         // Windows sibling above.
@@ -2387,7 +2485,7 @@ impl HeadlessRenderer {
         let found = self
             .shared_iosurface
             .iter()
-            .position(|sh| sh.width == aw && sh.height == ah);
+            .position(|(v, sh)| *v == view && sh.width == aw && sh.height == ah);
         match found {
             Some(i) => {
                 let sh = self.shared_iosurface.remove(i);
@@ -2395,15 +2493,14 @@ impl HeadlessRenderer {
             }
             None => {
                 let made = lumit_gpu::shared_metal::SharedIoSurface::new(&self.gpu, aw, ah)?;
-                self.shared_iosurface.push(made);
-                while self.shared_iosurface.len() > SHARED_TARGET_POOL {
-                    self.shared_iosurface.remove(0);
-                }
+                self.shared_iosurface.push((view, made));
+                self.trim_shared_pool();
             }
         }
         let target = self
             .shared_iosurface
             .last()
+            .map(|(_, sh)| sh)
             .ok_or_else(|| "headless render: iosurface missing after create".to_string())?;
         target.present(&self.gpu, &prepared.texture);
         Ok(SharedFrameInfo {
@@ -2421,11 +2518,11 @@ impl HeadlessRenderer {
     /// handles a run of presents hands out — which is the thing that crashed
     /// the compositor and is invisible to any assertion about pixels.
     #[cfg(all(windows, feature = "shared-texture"))]
-    pub fn present_probe_size(&mut self, w: u32, h: u32) -> Result<u64, String> {
+    pub fn present_probe_size(&mut self, view: u32, w: u32, h: u32) -> Result<u64, String> {
         let found = self
             .shared
             .iter()
-            .position(|sh| sh.width == w && sh.height == h);
+            .position(|(v, sh)| *v == view && sh.width == w && sh.height == h);
         match found {
             Some(i) => {
                 let sh = self.shared.remove(i);
@@ -2433,23 +2530,103 @@ impl HeadlessRenderer {
             }
             None => {
                 let made = lumit_gpu::shared::SharedTexture::new(&self.gpu, w, h)?;
-                self.shared.push(made);
-                while self.shared.len() > SHARED_TARGET_POOL {
-                    self.shared.remove(0);
-                }
+                self.shared.push((view, made));
+                self.trim_shared_pool();
             }
         }
         self.shared
             .last()
-            .map(lumit_gpu::shared::SharedTexture::handle)
+            .map(|(_, sh)| sh.handle())
             .ok_or_else(|| "shared target missing after acquire".to_string())
     }
 
-    /// How many differently-sized Viewer targets are being held.
+    /// How many Viewer targets are being held, over every view.
     #[cfg(all(windows, feature = "shared-texture"))]
     #[must_use]
     pub fn shared_target_count(&self) -> usize {
         self.shared.len()
+    }
+
+    /// The pool as `(view, width, height)`, least recently used first — what
+    /// the eviction rule reads, exposed so a test can read it too.
+    #[cfg(all(windows, feature = "shared-texture"))]
+    #[must_use]
+    pub fn shared_targets(&self) -> Vec<(u32, u32, u32)> {
+        self.shared
+            .iter()
+            .map(|(v, sh)| (*v, sh.width, sh.height))
+            .collect()
+    }
+
+    /// Let go of whatever [`shared_pool_evictions`] says may go.
+    ///
+    /// One method for all three platforms' pools because only one of them is
+    /// compiled into any given build, and the rule they apply is the same one.
+    #[cfg(any(
+        all(windows, feature = "shared-texture"),
+        all(target_os = "linux", feature = "shared-texture-linux"),
+        all(target_os = "macos", feature = "shared-texture-macos")
+    ))]
+    fn trim_shared_pool(&mut self) {
+        #[cfg(all(windows, feature = "shared-texture"))]
+        {
+            let entries: Vec<(u32, u32, u32)> = self
+                .shared
+                .iter()
+                .map(|(v, sh)| (*v, sh.width, sh.height))
+                .collect();
+            for i in shared_pool_evictions(&entries).into_iter().rev() {
+                self.shared.remove(i);
+            }
+        }
+        #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
+        {
+            let entries: Vec<(u32, u32, u32)> = self
+                .shared_dmabuf
+                .iter()
+                .map(|(v, sh)| (*v, sh.width, sh.height))
+                .collect();
+            for i in shared_pool_evictions(&entries).into_iter().rev() {
+                self.shared_dmabuf.remove(i);
+            }
+        }
+        #[cfg(all(target_os = "macos", feature = "shared-texture-macos"))]
+        {
+            let entries: Vec<(u32, u32, u32)> = self
+                .shared_iosurface
+                .iter()
+                .map(|(v, sh)| (*v, sh.width, sh.height))
+                .collect();
+            for i in shared_pool_evictions(&entries).into_iter().rev() {
+                self.shared_iosurface.remove(i);
+            }
+        }
+    }
+
+    /// Drop every pooled target belonging to `view` — what a Viewer view being
+    /// closed costs. The handles go with them, which is what the frontend's
+    /// unregister is already doing on its own side.
+    ///
+    /// **Always here, and empty where there is no zero-copy path** (the rule
+    /// docs/17 sets for the bridge surface: a call never disappears with a
+    /// feature, its body degrades). A build with no shared textures holds no
+    /// pools, so a view closing costs nothing and the caller needs no cfg of
+    /// its own.
+    #[cfg_attr(
+        not(any(
+            all(windows, feature = "shared-texture"),
+            all(target_os = "linux", feature = "shared-texture-linux"),
+            all(target_os = "macos", feature = "shared-texture-macos")
+        )),
+        allow(unused_variables)
+    )]
+    pub fn drop_view_targets(&mut self, view: u32) {
+        #[cfg(all(windows, feature = "shared-texture"))]
+        self.shared.retain(|(v, _)| *v != view);
+        #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
+        self.shared_dmabuf.retain(|(v, _)| *v != view);
+        #[cfg(all(target_os = "macos", feature = "shared-texture-macos"))]
+        self.shared_iosurface.retain(|(v, _)| *v != view);
     }
 
     /// Rebuild the `ItemInfo` map for what comp `comp` can show, probing any of
@@ -3302,6 +3479,102 @@ fn crop_texture(
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
+    /// The shared-target pool's eviction rule, which needs no graphics card to
+    /// be true and so is tested where every machine runs it
+    /// (docs/impl/multi-viewer.md §2.2).
+    #[cfg(any(
+        all(windows, feature = "shared-texture"),
+        all(target_os = "linux", feature = "shared-texture-linux"),
+        all(target_os = "macos", feature = "shared-texture-macos")
+    ))]
+    mod pool {
+        use super::super::{
+            shared_pool_evictions, shared_target_bytes, SHARED_TARGET_BYTES, SHARED_TARGET_POOL,
+        };
+
+        /// A small pool is left alone.
+        #[test]
+        fn a_pool_inside_both_bounds_evicts_nothing() {
+            let entries = [(0, 1920, 1080), (0, 960, 540), (1, 1920, 1080)];
+            assert!(shared_pool_evictions(&entries).is_empty());
+        }
+
+        /// One view walking through sizes, as dragging a Viewer does, is
+        /// bounded by the per-view count.
+        #[test]
+        fn one_view_keeps_only_its_last_few_sizes() {
+            let entries: Vec<(u32, u32, u32)> =
+                (0..12u32).map(|i| (0, 400 + i * 16, 300)).collect();
+            let dropped = shared_pool_evictions(&entries);
+            assert_eq!(dropped.len(), 12 - SHARED_TARGET_POOL);
+            // The oldest go, and the newest survive.
+            assert_eq!(dropped[0], 0);
+            assert!(!dropped.contains(&11));
+        }
+
+        /// The count is **per view**, so four views each holding a few sizes
+        /// are not trimmed as though they were one.
+        #[test]
+        fn the_count_is_per_view_not_per_pool() {
+            let mut entries = Vec::new();
+            for view in 0..4u32 {
+                for step in 0..SHARED_TARGET_POOL as u32 {
+                    entries.push((view, 320 + step * 8, 240));
+                }
+            }
+            assert!(
+                shared_pool_evictions(&entries).is_empty(),
+                "four views at the per-view count each were trimmed"
+            );
+        }
+
+        /// Past the byte ceiling the oldest spares go, and the size each view
+        /// is drawing at stays. A view evicted out of its current size mints a
+        /// new handle every frame, which is the churn the pool exists to stop.
+        #[test]
+        fn the_ceiling_takes_spares_and_never_a_views_current_size() {
+            // Four views, two 4K entries each: far past the ceiling.
+            let mut entries = Vec::new();
+            for view in 0..4u32 {
+                entries.push((view, 3840, 2160));
+                entries.push((view, 3840, 2160));
+            }
+            let dropped = shared_pool_evictions(&entries);
+            let kept: Vec<(u32, u32, u32)> = entries
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| !dropped.contains(i))
+                .map(|(_, e)| *e)
+                .collect();
+            for view in 0..4u32 {
+                assert_eq!(
+                    kept.iter().filter(|e| e.0 == view).count(),
+                    1,
+                    "view {view} should be down to the one size it draws at"
+                );
+            }
+            // And the survivor is each view's newest, not its oldest.
+            assert!(dropped.contains(&0) && !dropped.contains(&1));
+        }
+
+        /// **The floor beats the ceiling.** Five 4K views drawing at once are
+        /// over the byte budget with nothing spare to give up, and the rule
+        /// stops rather than blinding a view.
+        #[test]
+        fn a_pool_of_nothing_but_current_sizes_is_left_alone() {
+            let entries: Vec<(u32, u32, u32)> = (0..5u32).map(|v| (v, 3840, 2160)).collect();
+            let held: u64 = entries.iter().map(|e| shared_target_bytes(e.1, e.2)).sum();
+            assert!(
+                held > SHARED_TARGET_BYTES,
+                "the case needs to be over budget"
+            );
+            assert!(
+                shared_pool_evictions(&entries).is_empty(),
+                "a view was evicted out of the size it is drawing at"
+            );
+        }
+    }
+
     /// **What a frame is named under, once colour is in the picture**
     /// (docs/impl/ocio.md §5.5). Three separate sensitivities, and the third is
     /// the one worth having: switching view must rename the *display* frames
@@ -4250,7 +4523,7 @@ mod tests {
         let (store, comp_id) = doc_with_solid(LinearColour([0.0, 0.0, 1.0, 1.0]), 32, 16);
         let doc = store.snapshot();
         let first =
-            match r.render_to_shared(&doc, comp_id, 0, crate::plan::Quality::default(), true) {
+            match r.render_to_shared(&doc, comp_id, 0, crate::plan::Quality::default(), true, 0) {
                 Ok(info) => info,
                 Err(e) => {
                     // e.g. wgpu chose Vulkan over D3D12, or no shared-heap support.
@@ -4264,7 +4537,7 @@ mod tests {
 
         // A second frame re-uses the same texture: same dimensions, same handle.
         let second = r
-            .render_to_shared(&doc, comp_id, 1, crate::plan::Quality::default(), true)
+            .render_to_shared(&doc, comp_id, 1, crate::plan::Quality::default(), true, 0)
             .expect("second shared render");
         assert_eq!((second.width, second.height), (32, 16));
         assert_eq!(
@@ -4292,7 +4565,8 @@ mod tests {
                 Uuid::now_v7(),
                 0,
                 crate::plan::Quality::default(),
-                true
+                true,
+                0
             )
             .is_err());
     }

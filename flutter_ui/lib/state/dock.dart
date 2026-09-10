@@ -69,6 +69,24 @@ enum Panel {
       };
 }
 
+/// Which pane, when a panel can be in the arrangement more than once.
+///
+/// The dock used to identify a pane by its [Panel] alone, and kept the
+/// invariant that every panel appears exactly once. The Viewer broke that: a
+/// comp in one picture and its precomp in another is two Viewer panes
+/// (docs/impl/multi-viewer.md §3.1). So a pane is its panel plus an instance
+/// number, and only the Viewer is ever given one above zero.
+///
+/// Instance 0 is what every panel that appears once has, and it is left out of
+/// the saved arrangement, so a workspace with one Viewer writes exactly the
+/// bytes it always did and one written by an older build reads back unchanged.
+typedef PaneId = ({Panel panel, int instance});
+
+/// This panel's first (usually only) pane.
+extension PanelPane on Panel {
+  PaneId pane([int instance = 0]) => (panel: this, instance: instance);
+}
+
 enum DockAxis { horizontal, vertical }
 
 sealed class DockNode {
@@ -87,7 +105,9 @@ sealed class DockNode {
   /// has gone, which is exactly what it now means.
   static DockNode? fromJson(Map<String, dynamic> j) => switch (j['kind']) {
         'pane' => switch (Panel.values.asNameMap()[j['panel']]) {
-            final panel? => DockPane(panel),
+            // A missing or nonsense instance is the first one, which is what
+            // every arrangement written before panes had numbers means.
+            final panel? => DockPane(panel, instance: _instance(j['n'])),
             _ => null,
           },
         'tabs' => _tabs(j),
@@ -130,12 +150,30 @@ sealed class DockNode {
   }
 }
 
+/// An instance number out of a saved arrangement: a whole number at least
+/// zero, and zero for anything else.
+int _instance(Object? raw) =>
+    raw is num && raw.isFinite && raw >= 0 ? raw.toInt() : 0;
+
 class DockPane extends DockNode {
   final Panel panel;
-  DockPane(this.panel);
+
+  /// Which pane of this panel, for the panels that can appear more than once
+  /// (the Viewer, and only the Viewer). Zero for every other.
+  final int instance;
+
+  DockPane(this.panel, {this.instance = 0});
+
+  PaneId get id => (panel: panel, instance: instance);
 
   @override
-  Map<String, dynamic> toJson() => {'kind': 'pane', 'panel': panel.name};
+  Map<String, dynamic> toJson() => {
+        'kind': 'pane',
+        'panel': panel.name,
+        // Left out at zero, so an arrangement with one Viewer serialises to
+        // the bytes it always did.
+        if (instance != 0) 'n': instance,
+      };
 }
 
 /// A tab group. Children are panes (egui_tiles allows nesting, but the
@@ -392,14 +430,30 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
         ),
     };
 
-/// Every panel present in the tree, in visit order.
-List<Panel> panelsIn(DockNode node) => switch (node) {
-      DockPane(:final panel) => [panel],
-      DockTabs(:final children) => [for (final c in children) c.panel],
+/// Every pane present in the tree, in visit order. This is the one the
+/// invariants are stated over: a pane appears exactly once, and a panel may
+/// appear more than once only through its instance number.
+List<PaneId> panesIn(DockNode node) => switch (node) {
+      DockPane pane => [pane.id],
+      DockTabs(:final children) => [for (final c in children) c.id],
       DockSplit(:final children) => [
-          for (final c in children) ...panelsIn(c),
+          for (final c in children) ...panesIn(c),
         ],
     };
+
+/// Every panel present in the tree, in visit order, a panel with two panes
+/// appearing twice. What the Window menu's ticks and the width sweep read.
+List<Panel> panelsIn(DockNode node) =>
+    [for (final pane in panesIn(node)) pane.panel];
+
+/// The next free instance number for `panel` — what a new Viewer is given.
+int nextInstance(DockNode node, Panel panel) {
+  var next = 0;
+  for (final pane in panesIn(node)) {
+    if (pane.panel == panel && pane.instance >= next) next = pane.instance + 1;
+  }
+  return next;
+}
 
 /// Whether `panel` is anywhere in the tree — which is what "visible" means for
 /// a dock: a panel that is not in the arrangement is not on screen, and one
@@ -417,8 +471,12 @@ bool panelVisible(DockNode node, Panel panel) => panelsIn(node).contains(panel);
 void setPanelVisible(DockSplit root, Panel panel, bool visible) {
   if (panelsIn(root).contains(panel) == visible) return;
   if (!visible) {
-    if (panelsIn(root).length <= 1) return;
-    _removePanel(root, panel);
+    if (panesIn(root).length <= 1) return;
+    // Every pane of it, so ticking the Viewer off closes all of them rather
+    // than leaving the arrangement half agreeing with the menu.
+    for (final pane in panesIn(root).where((p) => p.panel == panel).toList()) {
+      _removePanel(root, pane);
+    }
     simplify(root);
     return;
   }
@@ -451,6 +509,52 @@ DockTabs? _firstTabs(DockNode node) {
       }
       return null;
   }
+}
+
+/// Close one pane, whichever tab group or split holds it, and simplify. The
+/// last pane standing cannot be closed: an empty dock has no way back.
+///
+/// What the Viewer's own close does, since a second Viewer goes without the
+/// panel type going with it.
+void closePane(DockSplit root, PaneId pane) {
+  if (panesIn(root).length <= 1) return;
+  if (!_removePanel(root, pane)) return;
+  simplify(root);
+}
+
+/// Add another pane of `panel`, beside `beside` when it is given and in the
+/// first tab group otherwise, and answer the pane it made.
+///
+/// Only the Viewer asks for this. Everything else is one pane and stays one.
+PaneId addPane(DockSplit root, Panel panel, {PaneId? beside}) {
+  final made = (panel: panel, instance: nextInstance(root, panel));
+  final loc = beside == null ? null : _tileOf(root, beside);
+  if (loc != null) {
+    // Beside the pane it was asked for, splitting its share in two — the same
+    // arithmetic a drop on that pane's right edge does.
+    final half = loc.split.shares[loc.index] / 2;
+    loc.split.shares[loc.index] = half;
+    loc.split.children.insert(
+      loc.index + 1,
+      DockPane(panel, instance: made.instance),
+    );
+    loc.split.shares.insert(loc.index + 1, half);
+    return made;
+  }
+  setPanelVisible(root, panel, true);
+  // `setPanelVisible` only adds a pane when the panel is absent, so put the
+  // new one in by hand when it is already there.
+  if (!panesIn(root).contains(made)) {
+    final tabs = _firstTabs(root);
+    if (tabs != null) {
+      tabs.children.add(DockPane(panel, instance: made.instance));
+      tabs.active = tabs.children.length - 1;
+    } else {
+      root.children.insert(0, DockPane(panel, instance: made.instance));
+      root.shares.insert(0, 0.2);
+    }
+  }
+  return made;
 }
 
 /// Bring `panel`'s tab to the front of whichever tab group holds it (the
@@ -491,12 +595,12 @@ enum DropPosition { left, right, above, below, stack }
 /// each shares list matches its children length, and all shares are positive.
 void movePanel(
   DockSplit root,
-  Panel dragged,
-  Panel target,
+  PaneId dragged,
+  PaneId target,
   DropPosition pos,
 ) {
   if (dragged == target) return;
-  final present = panelsIn(root).toSet();
+  final present = panesIn(root).toSet();
   if (!present.contains(dragged) || !present.contains(target)) return;
 
   _removePanel(root, dragged);
@@ -504,7 +608,7 @@ void movePanel(
   // The target should always survive the removal; bail defensively if not.
   if (loc == null) return;
 
-  final draggedPane = DockPane(dragged);
+  final draggedPane = DockPane(dragged.panel, instance: dragged.instance);
   if (pos == DropPosition.stack) {
     final tile = loc.tile;
     if (tile is DockTabs) {
@@ -546,12 +650,12 @@ void movePanel(
 /// split. Null when the panel is absent.
 ({DockSplit split, DockNode tile, int index})? _tileOf(
   DockSplit split,
-  Panel panel,
+  PaneId pane,
 ) {
   for (var i = 0; i < split.children.length; i++) {
     final child = split.children[i];
-    if (!panelsIn(child).contains(panel)) continue;
-    if (child is DockSplit) return _tileOf(child, panel);
+    if (!panesIn(child).contains(pane)) continue;
+    if (child is DockSplit) return _tileOf(child, pane);
     return (split: split, tile: child, index: i);
   }
   return null;
@@ -560,12 +664,12 @@ void movePanel(
 /// Remove `panel`'s pane wherever it sits, redistributing a split child's
 /// share proportionally over its siblings and clamping a tab group's active
 /// index. Returns whether it was found.
-bool _removePanel(DockNode node, Panel panel) {
+bool _removePanel(DockNode node, PaneId pane) {
   switch (node) {
     case DockPane():
       return false;
     case DockTabs(:final children):
-      final i = children.indexWhere((c) => c.panel == panel);
+      final i = children.indexWhere((c) => c.id == pane);
       if (i < 0) return false;
       children.removeAt(i);
       if (children.isNotEmpty) {
@@ -575,11 +679,11 @@ bool _removePanel(DockNode node, Panel panel) {
     case DockSplit(:final children):
       for (var i = 0; i < children.length; i++) {
         final child = children[i];
-        if (child is DockPane && child.panel == panel) {
+        if (child is DockPane && child.id == pane) {
           _removeSplitChild(node, i);
           return true;
         }
-        if (_removePanel(child, panel)) return true;
+        if (_removePanel(child, pane)) return true;
       }
       return false;
   }

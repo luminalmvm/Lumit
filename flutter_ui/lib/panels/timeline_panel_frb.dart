@@ -2362,7 +2362,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     }
     setPanelVisible(ui.split, Panel.easing, true);
     activatePanelTab(ui.split, Panel.easing);
-    ui.activePanel.value = Panel.easing;
+    ui.activePane.value = Panel.easing.pane();
     ui.workspace.touch();
   }
 
@@ -2521,7 +2521,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     if (action == 'layer.rename') {
       // A different panel is focused: its own rename answers this key. No
       // panel focused yet falls to the Timeline, as it always did.
-      final active = ui.activePanel.value;
+      final active = ui.activePanel;
       if (active != null && active != Panel.timeline) return false;
       // A group header chose the current selection: Enter renames the band
       // itself, through the same request road (the owner's "the same as any

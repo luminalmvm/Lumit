@@ -323,7 +323,7 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel> {
     final ui = _ui;
     if (!mounted ||
         ui == null ||
-        ui.activePanel.value != Panel.graph ||
+        ui.activePanel != Panel.graph ||
         _graph == null ||
         _searching) {
       return _priorConsoleClaim?.call() ?? false;

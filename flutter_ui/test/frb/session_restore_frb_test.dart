@@ -269,6 +269,7 @@ void main() {
       stage: 1,
       fraction: 0.25,
       done: false,
+      view: 0,
     ));
 
     ui.dispose();
@@ -302,6 +303,7 @@ void main() {
       stage: 2,
       fraction: 0.5,
       done: false,
+      view: 0,
     ));
   });
 }

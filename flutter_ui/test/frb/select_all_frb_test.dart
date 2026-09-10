@@ -31,12 +31,12 @@ void main() {
         Panel.effectControls,
         Panel.graph,
       ]) {
-        p.uiState.activePanel.value = panel;
+        p.uiState.activePane.value = panel.pane();
         expect(p.uiState.requestSelectAll(), isTrue,
             reason: '${panel.name} answers Ctrl+A itself');
       }
       for (final panel in [Panel.timeline, Panel.viewer, null]) {
-        p.uiState.activePanel.value = panel;
+        p.uiState.activePane.value = panel?.pane();
         expect(p.uiState.requestSelectAll(), isFalse,
             reason: 'the shell still means every layer in ${panel?.name}');
       }
@@ -55,7 +55,7 @@ void main() {
       ));
       await tester.pump();
 
-      p.uiState.activePanel.value = Panel.project;
+      p.uiState.activePane.value = Panel.project.pane();
       expect(p.uiState.requestSelectAll(), isTrue);
       await tester.pump();
 
@@ -81,7 +81,7 @@ void main() {
       await tester.enterText(find.byType(EditableText).first, 'alp');
       await tester.pump();
 
-      p.uiState.activePanel.value = Panel.project;
+      p.uiState.activePane.value = Panel.project.pane();
       expect(p.uiState.requestSelectAll(), isTrue);
       await tester.pump();
 
@@ -109,7 +109,7 @@ void main() {
       ));
       await tester.pump();
 
-      p.uiState.activePanel.value = Panel.effectControls;
+      p.uiState.activePane.value = Panel.effectControls.pane();
       expect(p.uiState.requestSelectAll(), isTrue);
       await tester.pump();
 

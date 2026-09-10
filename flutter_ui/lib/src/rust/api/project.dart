@@ -210,6 +210,10 @@ class ProjectReference {
       .crateApiProjectProjectReferenceCanDeliverColourSpace(
           that: this, name: name);
 
+  void close() => BridgeLib.instance.api.crateApiProjectProjectReferenceClose(
+        that: this,
+      );
+
   /// Close this project: forget it in both registries, so every later call
   /// through this reference answers `InvalidProject` — and, with the state
   /// dropped, the request channel its render worker waits on is dropped too.
@@ -224,9 +228,14 @@ class ProjectReference {
   /// one GPU device per project it has ever made. The frb test suite was the
   /// proof: a test process makes a project per test, and without a close the
   /// Linux CI runner ran out of memory under the pile of live renderers.
-  void close() => BridgeLib.instance.api.crateApiProjectProjectReferenceClose(
-        that: this,
-      );
+  /// A Viewer view has closed (docs/impl/multi-viewer.md §2.1).
+  ///
+  /// The pooled shared textures it was drawing into go with it, and so does
+  /// its stored look. A view id is minted per view and never reused, so
+  /// nothing dropped here can be wanted again. Harmless for a view that
+  /// never drew anything, and harmless with no worker running.
+  void closeViewerView({required int view}) => BridgeLib.instance.api
+      .crateApiProjectProjectReferenceCloseViewerView(that: this, view: view);
 
   /// How many bits a channel this project's compositor works in — 8, 16 or
   /// 32 (docs/06 §3.4).

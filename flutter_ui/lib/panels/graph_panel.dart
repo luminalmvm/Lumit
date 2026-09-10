@@ -724,7 +724,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
 
   bool _deleteClaim() {
     final ui = _ui;
-    if (!mounted || ui == null || ui.activePanel.value != Panel.graph) {
+    if (!mounted || ui == null || ui.activePanel != Panel.graph) {
       return _priorDeleteClaim?.call() ?? false;
     }
     return _deleteSelected() || (_priorDeleteClaim?.call() ?? false);
@@ -741,7 +741,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     final ui = _ui;
     if (!mounted ||
         ui == null ||
-        ui.activePanel.value != Panel.graph ||
+        ui.activePanel != Panel.graph ||
         ui.shaderGraphEntry.value != null ||
         _graph == null ||
         _searching) {

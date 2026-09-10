@@ -13,7 +13,7 @@ import '../state/dock.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 
-typedef PanelBuilder = Widget Function(BuildContext context, Panel panel);
+typedef PanelBuilder = Widget Function(BuildContext context, PaneId pane);
 
 /// A pointer must travel this far before a press on a tab becomes a re-dock
 /// drag rather than a click.
@@ -130,9 +130,17 @@ class DockWidget extends StatefulWidget {
   final PanelBuilder buildPanel;
   final VoidCallback onLayoutChanged;
 
+  /// The pane filling the window, or null when the arrangement is showing
+  /// normally (docs/07 §1.1's backtick, and the Viewer's cinema view).
+  ///
+  /// **Not part of the arrangement**: it is a way of looking at one for a
+  /// moment, so nothing here is written down and a restart opens as it was.
+  final ValueNotifier<PaneId?> maximised;
+
   /// The panel that last took a click — it wears the accent boundary so the
   /// keyboard's home is always visible (Shell::active_panel).
-  final ValueNotifier<Panel?> activePanel;
+  /// A pane, not a panel, because two Viewers are two homes.
+  final ValueNotifier<PaneId?> activePanel;
 
   const DockWidget({
     super.key,
@@ -140,6 +148,7 @@ class DockWidget extends StatefulWidget {
     required this.buildPanel,
     required this.onLayoutChanged,
     required this.activePanel,
+    required this.maximised,
   });
 
   @override
@@ -147,14 +156,17 @@ class DockWidget extends StatefulWidget {
 }
 
 class _DockWidgetState extends State<DockWidget> {
-  // One stable key per panel, used to hit-test the pane rects during a drag.
-  // A panel keeps its key even while it is an inactive tab (unbuilt, so its
-  // key resolves to no context and is skipped).
-  late final Map<Panel, GlobalKey> _paneKeys = {
-    for (final p in Panel.values) p: GlobalKey(),
-  };
+  // One stable key per pane, used to hit-test the pane rects during a drag.
+  // A pane keeps its key even while it is an inactive tab (unbuilt, so its
+  // key resolves to no context and is skipped). Made on demand, because the
+  // Viewer can be in the arrangement any number of times and the set is no
+  // longer known up front.
+  final Map<PaneId, GlobalKey> _paneKeys = {};
+
+  GlobalKey _paneKey(PaneId pane) => _paneKeys.putIfAbsent(pane, GlobalKey.new);
   late final _DragController _drag = _DragController(
-    paneKeys: _paneKeys,
+    paneKey: _paneKey,
+    panes: () => panesIn(widget.root),
     onGhostShow: _showGhost,
     onGhostHide: _removeGhost,
     onCommit: _commitMove,
@@ -179,34 +191,48 @@ class _DockWidgetState extends State<DockWidget> {
     _ghost = null;
   }
 
-  void _commitMove(Panel dragged, Panel target, DropPosition pos) {
+  void _commitMove(PaneId dragged, PaneId target, DropPosition pos) {
     setState(() => movePanel(widget.root, dragged, target, pos));
     widget.onLayoutChanged();
   }
 
-  /// Drop a panel out of the arrangement — the same thing the Window menu's
-  /// tick does, reached from the tab's own right-click menu.
-  void _closePanel(Panel panel) {
-    setState(() => setPanelVisible(widget.root, panel, false));
+  /// Drop one pane out of the arrangement, reached from the tab's own
+  /// right-click menu. One pane, not the panel: closing the second Viewer
+  /// leaves the first where it was.
+  void _closePanel(PaneId pane) {
+    setState(() => closePane(widget.root, pane));
     widget.onLayoutChanged();
   }
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return Container(
-      color: t.surface0,
-      padding: EdgeInsets.all(t.tokens.windowInset),
-      child: _buildNode(context, widget.root),
+    return ValueListenableBuilder<PaneId?>(
+      valueListenable: widget.maximised,
+      builder: (context, maximised, _) => Container(
+        color: t.surface0,
+        padding: EdgeInsets.all(t.tokens.windowInset),
+        // One pane filling the window, when one has been asked for and is
+        // still in the arrangement. A pane closed while it was maximised
+        // simply puts the arrangement back rather than showing nothing.
+        child: maximised != null && panesIn(widget.root).contains(maximised)
+            ? _PaneChrome(
+                pane: maximised,
+                activePanel: widget.activePanel,
+                drag: _drag,
+                child: widget.buildPanel(context, maximised),
+              )
+            : _buildNode(context, widget.root),
+      ),
     );
   }
 
   Widget _buildNode(BuildContext context, DockNode node) => switch (node) {
-        DockPane(:final panel) => _PaneChrome(
-            panel: panel,
+        DockPane pane => _PaneChrome(
+            pane: pane.id,
             activePanel: widget.activePanel,
             drag: _drag,
-            child: widget.buildPanel(context, panel),
+            child: widget.buildPanel(context, pane.id),
           ),
         DockTabs() => _TabGroup(
             tabs: node,
@@ -281,26 +307,28 @@ class _DockWidgetState extends State<DockWidget> {
 /// against the pane rects each update, because MouseRegion does not fire while
 /// a pointer is captured by a drag.
 class _DragController extends ChangeNotifier {
-  final Map<Panel, GlobalKey> paneKeys;
+  final GlobalKey Function(PaneId) paneKey;
+  final Iterable<PaneId> Function() panes;
   final VoidCallback onGhostShow;
   final VoidCallback onGhostHide;
-  final void Function(Panel dragged, Panel target, DropPosition pos) onCommit;
+  final void Function(PaneId dragged, PaneId target, DropPosition pos) onCommit;
 
   _DragController({
-    required this.paneKeys,
+    required this.paneKey,
+    required this.panes,
     required this.onGhostShow,
     required this.onGhostHide,
     required this.onCommit,
   });
 
-  Panel? dragged;
+  PaneId? dragged;
   LumitTheme? theme;
   Offset pointer = Offset.zero;
-  Panel? hoveredPanel;
+  PaneId? hoveredPanel;
   DropPosition? dropPosition;
 
-  void start(Panel panel, Offset globalPos, LumitTheme t) {
-    dragged = panel;
+  void start(PaneId pane, Offset globalPos, LumitTheme t) {
+    dragged = pane;
     theme = t;
     pointer = globalPos;
     _resolve();
@@ -343,8 +371,8 @@ class _DragController extends ChangeNotifier {
   void _resolve() {
     hoveredPanel = null;
     dropPosition = null;
-    for (final entry in paneKeys.entries) {
-      final ctx = entry.value.currentContext;
+    for (final id in panes()) {
+      final ctx = paneKey(id).currentContext;
       if (ctx == null) continue;
       final box = ctx.findRenderObject() as RenderBox?;
       if (box == null || !box.attached) continue;
@@ -355,7 +383,7 @@ class _DragController extends ChangeNotifier {
       if (!_onStage(box)) continue;
       final rect = box.localToGlobal(Offset.zero) & box.size;
       if (rect.contains(pointer)) {
-        hoveredPanel = entry.key;
+        hoveredPanel = id;
         dropPosition = _positionIn(rect, pointer);
         return;
       }
@@ -396,12 +424,12 @@ class _DragController extends ChangeNotifier {
 /// Listener so it stays out of the gesture arena and never fights the tab
 /// strip's horizontal scroll.
 class _DragSource extends StatefulWidget {
-  final Panel panel;
+  final PaneId pane;
   final _DragController drag;
   final Widget child;
 
   const _DragSource({
-    required this.panel,
+    required this.pane,
     required this.drag,
     required this.child,
   });
@@ -434,7 +462,7 @@ class _DragSourceState extends State<_DragSource> {
         if (!_dragging) {
           if ((e.position - _downAt!).distance < _dragSlop) return;
           _dragging = true;
-          widget.drag.start(widget.panel, e.position, theme);
+          widget.drag.start(widget.pane, e.position, theme);
         } else {
           widget.drag.update(e.position);
         }
@@ -463,9 +491,9 @@ class _GhostLayer extends StatelessWidget {
   Widget build(BuildContext context) => AnimatedBuilder(
         animation: drag,
         builder: (context, _) {
-          final panel = drag.dragged;
+          final pane = drag.dragged;
           final t = drag.theme;
-          if (panel == null || t == null) return const SizedBox.shrink();
+          if (pane == null || t == null) return const SizedBox.shrink();
           // The pointer is a window coordinate and the pill is placed in the
           // overlay's own space; at any UI scale but 100% those differ, and
           // the pill would trail the pointer by the difference.
@@ -474,7 +502,7 @@ class _GhostLayer extends StatelessWidget {
             left: at.dx + 10,
             top: at.dy + 8,
             child:
-                IgnorePointer(child: _GhostPill(title: panel.title, theme: t)),
+                IgnorePointer(child: _GhostPill(title: pane.panel.title, theme: t)),
           );
         },
       );
@@ -617,11 +645,11 @@ class _TabGroup extends StatelessWidget {
   final DockTabs tabs;
   final PanelBuilder buildPanel;
   final VoidCallback onChanged;
-  final ValueNotifier<Panel?> activePanel;
+  final ValueNotifier<PaneId?> activePanel;
   final _DragController drag;
 
-  /// Take a panel out of the arrangement, for the tab's right-click menu.
-  final void Function(Panel) onClose;
+  /// Take one pane out of the arrangement, for the tab's right-click menu.
+  final void Function(PaneId) onClose;
 
   const _TabGroup({
     required this.tabs,
@@ -655,7 +683,7 @@ class _TabGroup extends StatelessWidget {
                     children: [
                       for (var i = 0; i < tabs.children.length; i++)
                         _TabPill(
-                          panel: tabs.children[i].panel,
+                          pane: tabs.children[i].id,
                           title: tabs.children[i].panel.title,
                           active: i == tabs.active,
                           drag: drag,
@@ -685,7 +713,7 @@ class _TabGroup extends StatelessWidget {
           child: Stack(
             children: [
               for (final tab in tabs.children)
-                _paneBody(context, tab.panel, identical(tab, active)),
+                _paneBody(context, tab.id, identical(tab, active)),
             ],
           ),
         ),
@@ -695,16 +723,16 @@ class _TabGroup extends StatelessWidget {
 
   /// One tab's body. Keyed per panel so reordering the tabs never
   /// cross-matches one panel's State onto another.
-  Widget _paneBody(BuildContext context, Panel panel, bool visible) {
+  Widget _paneBody(BuildContext context, PaneId pane, bool visible) {
     return KeyedSubtree(
-      key: ValueKey(panel),
+      key: ValueKey(pane),
       child: _KeepAlivePane(
         visible: visible,
         builder: (context) => _PaneChrome(
-          panel: panel,
+          pane: pane,
           activePanel: activePanel,
           drag: drag,
-          child: buildPanel(context, panel),
+          child: buildPanel(context, pane),
         ),
       ),
     );
@@ -744,15 +772,15 @@ class _KeepAlivePaneState extends State<_KeepAlivePane> {
 }
 
 class _TabPill extends StatefulWidget {
-  final Panel panel;
+  final PaneId pane;
   final String title;
   final bool active;
   final VoidCallback onPressed;
   final _DragController drag;
-  final void Function(Panel) onClose;
+  final void Function(PaneId) onClose;
 
   const _TabPill({
-    required this.panel,
+    required this.pane,
     required this.title,
     required this.active,
     required this.onPressed,
@@ -831,7 +859,7 @@ class _TabPillState extends State<_TabPill> {
           : label,
     );
     return _DragSource(
-      panel: widget.panel,
+      pane: widget.pane,
       drag: widget.drag,
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
@@ -845,7 +873,7 @@ class _TabPillState extends State<_TabPill> {
           child: AnimatedBuilder(
             animation: widget.drag,
             builder: (context, child) => Opacity(
-              opacity: widget.drag.dragged == widget.panel ? 0.0 : 1.0,
+              opacity: widget.drag.dragged == widget.pane ? 0.0 : 1.0,
               child: child,
             ),
             child: pill,
@@ -880,7 +908,7 @@ class _TabPillState extends State<_TabPill> {
                 key: const ValueKey('tab-menu-close'),
                 onPressed: () {
                   close(null);
-                  widget.onClose(widget.panel);
+                  widget.onClose(widget.pane);
                 },
                 child: Text(l10n.closePanel),
               ),
@@ -910,13 +938,13 @@ class _TabPillState extends State<_TabPill> {
 /// (Shell::active_panel). A live re-dock drag paints the drop-zone preview
 /// over the hovered pane.
 class _PaneChrome extends StatelessWidget {
-  final Panel panel;
-  final ValueNotifier<Panel?> activePanel;
+  final PaneId pane;
+  final ValueNotifier<PaneId?> activePanel;
   final _DragController drag;
   final Widget child;
 
   const _PaneChrome({
-    required this.panel,
+    required this.pane,
     required this.activePanel,
     required this.drag,
     required this.child,
@@ -926,16 +954,16 @@ class _PaneChrome extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final round = t.shape == ThemeShape.round;
-    return ValueListenableBuilder<Panel?>(
+    return ValueListenableBuilder<PaneId?>(
       valueListenable: activePanel,
       builder: (context, active, _) => Listener(
         // Any press claims focus for this panel, before the content handles
         // the event (the egui edge follows the last click the same way).
-        onPointerDown: (_) => activePanel.value = panel,
+        onPointerDown: (_) => activePanel.value = pane,
         child: GestureDetector(
           behavior: HitTestBehavior.translucent,
           child: Container(
-            key: drag.paneKeys[panel],
+            key: drag.paneKey(pane),
             decoration: BoxDecoration(
               color: t.surface1,
               borderRadius:
@@ -954,7 +982,7 @@ class _PaneChrome extends StatelessWidget {
             foregroundDecoration: BoxDecoration(
               border: Border.all(
                 color:
-                    active == panel ? t.accent : t.accent.withValues(alpha: 0),
+                    active == pane ? t.accent : t.accent.withValues(alpha: 0),
                 width: 1,
               ),
               borderRadius:
@@ -970,8 +998,8 @@ class _PaneChrome extends StatelessWidget {
                 // than in each panel so a panel that has not thought about
                 // narrow widths still cannot overflow — and so there is one
                 // place to read the rule.
-                PanelFloor(minWidth: panelMinWidth(panel), child: child),
-                Positioned.fill(child: _DropPreview(panel: panel, drag: drag)),
+                PanelFloor(minWidth: panelMinWidth(pane.panel), child: child),
+                Positioned.fill(child: _DropPreview(pane: pane, drag: drag)),
               ],
             ),
           ),
@@ -985,16 +1013,16 @@ class _PaneChrome extends StatelessWidget {
 /// a re-dock drag is live: the whole pane for a stack, the near half for an
 /// edge split.
 class _DropPreview extends StatelessWidget {
-  final Panel panel;
+  final PaneId pane;
   final _DragController drag;
-  const _DropPreview({required this.panel, required this.drag});
+  const _DropPreview({required this.pane, required this.drag});
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
         animation: drag,
         builder: (context, _) {
           if (drag.dragged == null ||
-              drag.hoveredPanel != panel ||
+              drag.hoveredPanel != pane ||
               drag.dropPosition == null) {
             return const SizedBox.shrink();
           }

@@ -669,7 +669,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(panelVisible(p.uiState.split, Panel.easing), isTrue);
-      expect(p.uiState.activePanel.value, Panel.easing,
+      expect(p.uiState.activePanel, Panel.easing,
           reason: 'a panel you just asked for is the one you want to look at');
       expect(find.text('Apply'.toUpperCase()), findsNothing,
           reason: 'nothing floats over the footer in panel mode');

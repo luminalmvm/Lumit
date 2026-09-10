@@ -2233,6 +2233,9 @@ impl CompositionReference {
     /// render it was always going to cost — and the worker latches it, so the
     /// drags, the playback and the idle fill that follow show the same picture
     /// without each growing a parameter.
+    /// `view` names which Viewer view asked (docs/impl/multi-viewer.md §2.1).
+    /// The worker latches it, so the drag previews and the idle work that
+    /// follow serve the same view without each growing a parameter.
     #[frb(sync)]
     pub fn render_frame(
         &self,
@@ -2240,6 +2243,7 @@ impl CompositionReference {
         scale: f32,
         mode: BridgePlaybackMode,
         prefix: Option<crate::api::state::BridgePrefixPoint>,
+        view: u32,
     ) -> Result<(), BridgeError> {
         self.dispatch(RenderComp(RenderCompRequest {
             comp: self.clone(),
@@ -2247,6 +2251,7 @@ impl CompositionReference {
             scale,
             mode,
             prefix,
+            view,
         }))
     }
 
@@ -2269,7 +2274,13 @@ impl CompositionReference {
     /// `mode` comes from the frontend because it is a user *setting*, kept in the
     /// workspace file the frontend owns — stating it is not deciding anything.
     #[frb(sync)]
-    pub fn play(&self, from: u64, scale: f32, mode: BridgePlaybackMode) -> Result<(), BridgeError> {
+    pub fn play(
+        &self,
+        from: u64,
+        scale: f32,
+        mode: BridgePlaybackMode,
+        view: u32,
+    ) -> Result<(), BridgeError> {
         // The mix's document is snapshotted HERE — it must be the comp as it
         // was when play was pressed — but the sound is started by the worker,
         // once it has banked a frame or two to start alongside it (the
@@ -2296,6 +2307,7 @@ impl CompositionReference {
                 mode,
                 scale,
                 audio,
+                view,
             },
         ))
     }
@@ -2333,6 +2345,7 @@ impl CompositionReference {
         transparent_background: bool,
         region: Option<Vec<f32>>,
         colour_view: Option<Vec<String>>,
+        view: u32,
     ) -> Result<(), BridgeError> {
         // A region arrives as a list because that is what crosses the bridge
         // cleanly; anything that is not four numbers is no region, which is
@@ -2344,6 +2357,7 @@ impl CompositionReference {
             transparent_background,
             region,
             colour_view: colour_view_pair(colour_view),
+            view,
         })
     }
 
@@ -2678,6 +2692,9 @@ impl CompositionReference {
     /// `WorkerResponse::Sampled`, on the stream the frames and traces already
     /// ride; a frame with nothing to read publishes nothing, and the magnifier
     /// keeps what it had.
+    // The window, where in the picture, at what scale, in which view, of which
+    // layer: a dropper read genuinely names that many things.
+    #[allow(clippy::too_many_arguments)]
     #[frb(sync)]
     pub fn sample_pixels(
         &self,
@@ -2687,6 +2704,7 @@ impl CompositionReference {
         window: u32,
         scale: f32,
         layer: Option<LayerReference>,
+        view: u32,
     ) -> Result<(), BridgeError> {
         self.dispatch(WorkerRequest::SamplePixels(SamplePixelsRequest {
             comp: self.clone(),
@@ -2696,6 +2714,7 @@ impl CompositionReference {
             v,
             window,
             layer,
+            view,
         }))
     }
 

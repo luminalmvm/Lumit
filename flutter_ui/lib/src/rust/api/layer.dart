@@ -2458,35 +2458,6 @@ class LayerReference {
   void deleteStroke({required UuidValue id}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceDeleteStroke(that: this, id: id);
 
-  /// **Detach audio**: put this layer's sound on a row of its own.
-  ///
-  /// **In plain terms.** A clip that has both picture and sound arrives as
-  /// one row, and everything you do to its sound — a fade, a cut, a level
-  /// ride — has to be done on the row carrying the picture. Detaching makes
-  /// a second row directly below that holds the *same* media as sound only,
-  /// and turns the original row's speaker off. Nothing is heard twice and
-  /// nothing sounds different; the sound simply has its own bar to work on,
-  /// in the audio surfaces, while the picture keeps its own.
-  ///
-  /// The sibling is an Audio layer ([`lumit_core::model::Layer::audio_only`])
-  /// over the same source, with the same span, offset, retime, volume
-  /// and pan **copied** — not linked. Trimming one afterwards does not trim
-  /// the other; that is what makes them separately editable, which is the
-  /// point of the command. A Precomp layer detaches the same way, its sibling
-  /// naming the same nested comp.
-  ///
-  /// **One undo step**: the sibling and the mute go in as a single
-  /// [`lumit_core::Op::Batch`], so one Ctrl+Z puts the row back the way it
-  /// was — and a locked layer refuses the batch whole, as the lock does
-  /// everywhere.
-  ///
-  /// Refused with [`BridgeError::NoAudio`] on a layer that makes no sound to
-  /// separate — a solid, a title, silent footage — and on a layer that is
-  /// *already* only sound, which has nothing left to detach from.
-  ///
-  /// Not `#[frb(sync)]`: deciding whether the layer sounds opens the media
-  /// with FFmpeg, exactly as [`Self::has_audio`] does, and the document lock
-  /// is let go of before it.
   Future<LayerReference> detachAudio() =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceDetachAudio(
         that: this,
@@ -3008,6 +2979,63 @@ class LayerReference {
 
   void rename({required String name}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceRename(that: this, name: name);
+
+  /// **Detach audio**: put this layer's sound on a row of its own.
+  ///
+  /// **In plain terms.** A clip that has both picture and sound arrives as
+  /// one row, and everything you do to its sound — a fade, a cut, a level
+  /// ride — has to be done on the row carrying the picture. Detaching makes
+  /// a second row directly below that holds the *same* media as sound only,
+  /// and turns the original row's speaker off. Nothing is heard twice and
+  /// nothing sounds different; the sound simply has its own bar to work on,
+  /// in the audio surfaces, while the picture keeps its own.
+  ///
+  /// The sibling is an Audio layer ([`lumit_core::model::Layer::audio_only`])
+  /// over the same source, with the same span, offset, retime, volume
+  /// and pan **copied** — not linked. Trimming one afterwards does not trim
+  /// the other; that is what makes them separately editable, which is the
+  /// point of the command. A Precomp layer detaches the same way, its sibling
+  /// naming the same nested comp.
+  ///
+  /// **One undo step**: the sibling and the mute go in as a single
+  /// [`lumit_core::Op::Batch`], so one Ctrl+Z puts the row back the way it
+  /// was — and a locked layer refuses the batch whole, as the lock does
+  /// everywhere.
+  ///
+  /// Refused with [`BridgeError::NoAudio`] on a layer that makes no sound to
+  /// separate — a solid, a title, silent footage — and on a layer that is
+  /// *already* only sound, which has nothing left to detach from.
+  ///
+  /// Not `#[frb(sync)]`: deciding whether the layer sounds opens the media
+  /// with FFmpeg, exactly as [`Self::has_audio`] does, and the document lock
+  /// is let go of before it.
+  /// Draw this layer's source on its own, into Viewer view `view`
+  /// (docs/impl/multi-viewer.md §3.6) — the layer view.
+  ///
+  /// **Before transform**, which is what a layer view is for: the source in
+  /// its own frame, with its masks and its anchor point on it, at the
+  /// composition's own rate and length. `effects` is After Effects' Render
+  /// tick: off shows what the source is, on shows what this layer makes of
+  /// it.
+  ///
+  /// The same shape as the footage view beside it: a scratch composition on
+  /// a clone of the document, down the ordinary transport, nothing
+  /// committed.
+  void renderView(
+          {required BigInt frame,
+          required double scale,
+          required int width,
+          required int height,
+          required bool effects,
+          required int view}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceRenderView(
+          that: this,
+          frame: frame,
+          scale: scale,
+          width: width,
+          height: height,
+          effects: effects,
+          view: view);
 
   /// Move this layer to `new_index` in the stack (0 = top).
   void reorder({required BigInt newIndex}) => BridgeLib.instance.api

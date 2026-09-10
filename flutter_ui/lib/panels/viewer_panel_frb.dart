@@ -63,13 +63,16 @@ import 'package:uuid/uuid.dart';
 
 import '../l10n/strings.dart';
 import '../shell/welcome_frb.dart' show EmptyStageFrb;
+import '../state/dock.dart';
 import '../state/settings.dart';
+import '../state/viewer_views.dart';
 import '../state/viewer_view.dart';
 import '../state/workspace.dart';
 import '../widgets/controls.dart';
 import '../theme/theme.dart';
 import '../widgets/colour_picker.dart';
 import 'viewer_bar.dart';
+import 'viewer_compare.dart';
 import 'viewer_rulers.dart' show viewerRulerBand;
 import 'viewer_stage.dart';
 import 'viewer_strips.dart';
@@ -150,27 +153,155 @@ Rect visiblePictureCrop(RenderRepaintBoundary picture, RenderBox panel) {
       .intersect(Offset.zero & picture.size);
 }
 
+/// One Viewer panel: the views it holds, laid out (docs/impl/multi-viewer.md
+/// §3.2).
+///
+/// The panel is what the dock knows about and the views live inside it. One,
+/// two or four of them, across or down, and a compare puts two of them
+/// together as a wipe or a split with a draggable divider.
 class ViewerPanelFrb extends StatefulWidget {
-  const ViewerPanelFrb({super.key});
+  /// Which Viewer pane this is. The dock can hold more than one.
+  final PaneId pane;
+
+  const ViewerPanelFrb({
+    super.key,
+    this.pane = const (panel: Panel.viewer, instance: 0),
+  });
 
   @override
-  State<ViewerPanelFrb> createState() => _ViewerPanelFrbState();
+  State<ViewerPanelFrb> createState() => _ViewerPanelLayoutState();
 }
 
-class _ViewerPanelFrbState extends State<ViewerPanelFrb>
-    with SingleTickerProviderStateMixin {
-  /// The magnification the Viewer is *heading for*: a multiple of comp
-  /// resolution, or null for fit-to-panel, which is the only mode that follows
-  /// the panel as it is resized.
-  double? _zoom;
-  ViewerChannel _channel = ViewerChannel.rgb;
+class _ViewerPanelLayoutState extends State<ViewerPanelFrb> {
+  @override
+  Widget build(BuildContext context) {
+    final ui = context.watch<LumitUiState>();
+    return ListenableBuilder(
+      listenable: ui.views,
+      builder: (context, _) {
+        final views = ui.views.forPane(widget.pane);
+        final layout = ui.views.layoutOf(widget.pane);
+        final compare = ui.views.compareOf(widget.pane);
+        if (views.isEmpty) return const EmptyStageFrb();
+        if (views.length == 1) return _surface(ui, views.first);
+        if (compare != CompareMode.none && views.length >= 2) {
+          return ViewerCompare(
+            pane: widget.pane,
+            mode: compare,
+            at: ui.views.dividerOf(widget.pane),
+            onDivider: (at) => ui.views.setDivider(widget.pane, at),
+            left: _surface(ui, views[0]),
+            right: _surface(ui, views[1]),
+          );
+        }
+        return _grid(ui, views, layout);
+      },
+    );
+  }
 
-  /// Whether the layer controls — the wireframe boxes, the handles and the
-  /// hover highlight — are drawn over the picture. On by default,
-  /// because a selected layer with no box is a layer you cannot see the extent
-  /// of; the switch exists for judging the picture itself, where any mark over
-  /// it is in the way.
-  Offset _pan = Offset.zero;
+  /// One view, wearing the accent edge when it is the active one: with several
+  /// pictures on screen, which one the Timeline and the menus are following
+  /// has to be visible without hunting for it.
+  ///
+  /// A press anywhere in it fronts it, before the content sees the event —
+  /// the same rule the dock's own pane chrome follows, one level down.
+  Widget _surface(LumitUiState ui, ViewerSurface view) {
+    final surface = ViewerViewSurface(
+      key: ValueKey(view.id),
+      pane: widget.pane,
+      view: view,
+    );
+    // One view in the pane is the pane, so it needs no edge of its own: the
+    // dock already draws one round the active pane.
+    if (ui.views.forPane(widget.pane).length < 2) return surface;
+    final t = ThemeScope.of(context).theme;
+    final active = view.id == ui.views.activeId;
+    return Listener(
+      onPointerDown: (_) => ui.frontView(view.id),
+      child: Container(
+        foregroundDecoration: BoxDecoration(
+          border: Border.all(
+            // Always drawn, transparent when it is not the active one: a
+            // border that comes and goes resizes the picture under it.
+            color: active ? t.accent : t.accent.withValues(alpha: 0),
+            width: 1,
+          ),
+        ),
+        child: surface,
+      ),
+    );
+  }
+
+  Widget _grid(LumitUiState ui, List<ViewerSurface> views, ViewLayout layout) {
+    final t = ThemeScope.of(context).theme;
+    final gap = t.tokens.tileGap;
+    Widget row(List<ViewerSurface> pair) => Row(
+          children: [
+            for (var i = 0; i < pair.length; i++) ...[
+              if (i > 0) SizedBox(width: gap),
+              Expanded(child: _surface(ui, pair[i])),
+            ],
+          ],
+        );
+    if (layout == ViewLayout.twoDown) {
+      return Column(
+        children: [
+          Expanded(child: _surface(ui, views[0])),
+          SizedBox(height: gap),
+          Expanded(child: _surface(ui, views[1])),
+        ],
+      );
+    }
+    if (layout == ViewLayout.four && views.length >= 4) {
+      return Column(
+        children: [
+          Expanded(child: row(views.sublist(0, 2))),
+          SizedBox(height: gap),
+          Expanded(child: row(views.sublist(2, 4))),
+        ],
+      );
+    }
+    return row(views);
+  }
+}
+
+/// One picture surface, with its own bars: the Viewer as it was, now bound to
+/// one view rather than to "the" composition.
+class ViewerViewSurface extends StatefulWidget {
+  final PaneId pane;
+  final ViewerSurface view;
+
+  const ViewerViewSurface({super.key, required this.pane, required this.view});
+
+  @override
+  State<ViewerViewSurface> createState() => _ViewerPanelFrbState();
+}
+
+class _ViewerPanelFrbState extends State<ViewerViewSurface>
+    with SingleTickerProviderStateMixin {
+  /// This surface's view. Every piece of "how you are looking" is read from
+  /// and written back to it, so it survives a rebuild, a workspace switch and
+  /// a reopen, and two views on one composition can differ
+  /// (docs/impl/multi-viewer.md §1.3).
+  ///
+  /// With *share view options* on, the options come from the active view
+  /// instead, which is what the switch means.
+  ViewerSurface get _view => _uiOrNull?.views.optionsFor(widget.view) ?? widget.view;
+
+  LumitUiState? get _uiOrNull => _boundUi;
+
+  double? get _zoom => _view.magnification;
+  set _zoom(double? z) => _view.magnification = z;
+
+  Offset get _pan => Offset(_view.panX, _view.panY);
+  set _pan(Offset p) {
+    _view.panX = p.dx;
+    _view.panY = p.dy;
+  }
+
+  ViewerChannel get _channel => _view.channel;
+  set _channel(ViewerChannel c) => _view.channel = c;
+
 
   /// The composition this Viewer has already asked for a frame of — so
   /// fronting another one asks once, not on every rebuild.
@@ -436,6 +567,12 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
   @override
   Widget build(BuildContext context) {
     final ui = Provider.of<LumitUiState>(context);
+    // **A view of a piece of footage is not a view of a composition**
+    // (docs/impl/multi-viewer.md §3.6). It has no playhead, no layers and no
+    // transport, so it takes none of the chrome below.
+    if (widget.view.mode == ViewMode.footage) {
+      return FootageStageFrb(view: widget.view);
+    }
     if (!identical(_boundUi, ui)) {
       _unbind();
       _boundUi = ui;
@@ -453,7 +590,11 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
         if (mounted) _onPlayheadChanged();
       });
     }
-    final comp = ui.selectedComp;
+    // **This view's own composition**, not the one: with several views on
+    // screen each shows what it is bound to, and only the active one is
+    // guaranteed to agree with the panels that follow it
+    // (docs/impl/multi-viewer.md §1.4).
+    final comp = ui.compFor(widget.view) ?? ui.selectedComp;
     // Nothing to show: the ways to start work, or this panel's ordinary empty
     // line when the project does have compositions (shell/welcome_frb).
     if (comp == null) return const EmptyStageFrb();
@@ -619,6 +760,7 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
             valueListenable: ui.playheadFrame,
             builder: (context, frame, _) => ViewerStage(
               comp: comp,
+              viewId: widget.view.engineId,
               uiState: ui,
               fitted: fitted,
               grid: ui.viewerGrid,
@@ -947,4 +1089,146 @@ Future<void> showViewerBackgroundPicker({
       state.notifyDocumentChanged();
     },
   );
+}
+
+/// **A footage view**: the item drawn on its own, at its own size, standing on
+/// its own frame of the file (docs/impl/multi-viewer.md §3.6).
+///
+/// In plain terms: double-clicking a clip in the Project panel shows the clip.
+/// Everything the composition surface carries — the layer outlines, the
+/// gizmos, the grid, the transport — is a composition's and not a file's, so
+/// none of it is here. A file has a picture and a length, and that is what
+/// this draws.
+///
+/// The picture itself comes down the ordinary transport: the engine builds a
+/// scratch composition around the item and composites it, so a footage view is
+/// the same pixels at the same quality as everything else.
+class FootageStageFrb extends StatelessWidget {
+  final ViewerSurface view;
+
+  const FootageStageFrb({super.key, required this.view});
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = Provider.of<LumitUiState>(context);
+    final footage = ui.footageOf(view);
+    final facts = footage == null ? null : ui.itemFacts(footage);
+    // Being probed, gone from the project, or a file with no picture in it:
+    // the empty state is the honest answer to all three.
+    if (facts == null || facts.width <= 0 || facts.height <= 0) {
+      return const EmptyStageFrb();
+    }
+    final t = ThemeScope.of(context).theme;
+    final frames = LumitUiState.framesOf(facts);
+    return ColoredBox(
+      color: t.surface0,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: LayoutBuilder(
+              key: const ValueKey('footage-view-picture'),
+              builder: (context, box) {
+                final drawn = _fitted(box, facts);
+                // How much of the item's own resolution is actually on screen,
+                // which is what the picture is asked for at. Reported after the
+                // frame, not during it: a render asked for from a layout would
+                // rebuild the tree it is measuring.
+                WidgetsBinding.instance.addPostFrameCallback((_) =>
+                    ui.reportViewerScale(drawn.width / facts.width));
+                return Center(
+                  child: SizedBox(
+                    width: drawn.width,
+                    height: drawn.height,
+                    child: _FootagePicture(uiState: ui, view: view),
+                  ),
+                );
+              },
+            ),
+          ),
+          _SourceStrip(
+            view: view,
+            frames: frames,
+            onSeek: (frame) => ui.seekFootageView(view, frame),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The item at the size that fits the pane, its shape kept.
+  static Size _fitted(BoxConstraints box, BridgeMediaInfo facts) {
+    final scale = math.min(
+      box.maxWidth / facts.width,
+      box.maxHeight / facts.height,
+    );
+    if (!scale.isFinite || scale <= 0) return Size.zero;
+    return Size(facts.width * scale, facts.height * scale);
+  }
+}
+
+/// Whatever the worker last published for this view, in the channel the view is
+/// looking through. A platform texture, like every other picture in the Viewer.
+class _FootagePicture extends StatelessWidget {
+  final LumitUiState uiState;
+  final ViewerSurface view;
+
+  const _FootagePicture({required this.uiState, required this.view});
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<int?>(
+        valueListenable: uiState.textureOf(view.engineId),
+        builder: (context, textureId, _) => textureId == null
+            ? const SizedBox.expand()
+            : pictureChannelFilter(
+                view.channel, Texture(textureId: textureId)),
+      );
+}
+
+/// **The item's own time**, under the picture (docs/07 §2.1): the one control a
+/// file has. A press or a drag anywhere along it stands the view on that frame.
+///
+/// ponytail: the source in and out points the note asks for are not here yet.
+/// Trimming a clip before it is placed is the next rung, and it hangs off this
+/// same strip.
+class _SourceStrip extends StatelessWidget {
+  final ViewerSurface view;
+  final int frames;
+  final ValueChanged<int> onSeek;
+
+  const _SourceStrip({
+    required this.view,
+    required this.frames,
+    required this.onSeek,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return LayoutBuilder(
+      builder: (context, box) {
+        void seekTo(double x) {
+          if (box.maxWidth <= 0) return;
+          onSeek((x / box.maxWidth * frames).floor().clamp(0, frames - 1));
+        }
+
+        return GestureDetector(
+          key: const ValueKey('footage-source-strip'),
+          behavior: HitTestBehavior.opaque,
+          onTapDown: (down) => seekTo(down.localPosition.dx),
+          onHorizontalDragUpdate: (drag) => seekTo(drag.localPosition.dx),
+          child: Container(
+            height: viewerStripHeight,
+            decoration: viewerStripDecoration(t, false),
+            alignment: Alignment.centerLeft,
+            child: FractionallySizedBox(
+              widthFactor: frames <= 1 ? 1 : (view.sourceFrame + 1) / frames,
+              heightFactor: 1,
+              child: ColoredBox(color: t.accent.withValues(alpha: 0.35)),
+            ),
+          ),
+        );
+      },
+    );
+  }
 }

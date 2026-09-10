@@ -130,6 +130,16 @@ class SavedSession {
   /// panel this build has never heard of survives being read and written back.
   final Map<String, dynamic>? dock;
 
+  /// What each Viewer view is showing and whether it is locked
+  /// (docs/impl/multi-viewer.md §4.2). Project state, because a view bound to
+  /// a composition is a reference to project content and a workspace is a
+  /// file people send each other (docs/07 §1.5).
+  final List<dynamic> viewerViews;
+
+  /// Which Viewer pane lays out which views, and how. The other half of the
+  /// same thing, and workspace state, because it is the panel arrangement.
+  final Map<String, dynamic>? viewerLayout;
+
   const SavedSession({
     this.openComps = const [],
     this.activeComp,
@@ -142,6 +152,8 @@ class SavedSession {
     this.viewerOverlays = const {},
     this.guides = const {},
     this.compViews = const {},
+    this.viewerViews = const [],
+    this.viewerLayout,
   });
 
   Map<String, dynamic> toJson() => {
@@ -150,6 +162,8 @@ class SavedSession {
         'frame': frame,
         'selected_layer': selectedLayer,
         'dock': dock,
+        'viewer_views': viewerViews,
+        'viewer_layout': viewerLayout,
         'viewer_looks': {
           for (final e in viewerLooks.entries)
             e.key: {'stops': e.value.stops, 'tone_map': e.value.toneMap},
@@ -233,6 +247,10 @@ class SavedSession {
         viewerOverlays: _overlaysFromJson(j['viewer_overlays']),
         guides: _guidesFromJson(j['guides']),
         compViews: _compViewsFromJson(j['comp_views']),
+        viewerViews: j['viewer_views'] is List ? j['viewer_views'] as List : const [],
+        viewerLayout: j['viewer_layout'] is Map
+            ? (j['viewer_layout'] as Map).cast<String, dynamic>()
+            : null,
       );
 
   /// The arrangement compared by value. Encoding is the cheap deep compare

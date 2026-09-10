@@ -45,6 +45,7 @@ import '../panels/timeline_group_row_frb.dart';
 import '../panels/viewer_panel_frb.dart' show captureViewerPicturePng;
 import '../state/beats_notice.dart';
 import '../state/clipboard.dart';
+import '../state/viewer_views.dart';
 import '../state/dock.dart';
 import '../state/external_links.dart';
 import '../state/file_dialogs.dart';
@@ -537,7 +538,7 @@ class LumitMenuBarFrb extends StatelessWidget {
           PaletteCommand(
             label: panel.title,
             category: l10n.palettePanels,
-            run: () => ui.activePanel.value = panel,
+            run: () => ui.activePane.value = panel.pane(),
           ),
         // The View menu's magnification and preview resolution, so the palette
         // carries them too rather than the menu being the only route.
@@ -1217,6 +1218,84 @@ List<MenuSection> lumitMenus(
           () => ui.tools.snapToGrid = !ui.tools.snapToGrid,
           checked: () => ui.tools.snapToGrid,
         ),
+        MenuEntry.divider(),
+        // Several views in one Viewer panel (docs/07 §2, and After Effects'
+        // own view-layout menu). Option rows: picking one runs it and leaves
+        // the menu open, so two layouts can be compared without reopening it.
+        MenuEntry.submenu(l10n.menuViewLayout, [
+          MenuEntry.option(
+            l10n.menuOneView,
+            () => ui.setViewerLayout(ViewLayout.one),
+            action: 'viewer.layout.one',
+            checked: () => ui.currentViewerLayout == ViewLayout.one,
+          ),
+          MenuEntry.option(
+            l10n.menuTwoViewsAcross,
+            () => ui.setViewerLayout(ViewLayout.twoAcross),
+            action: 'viewer.layout.two',
+            checked: () => ui.currentViewerLayout == ViewLayout.twoAcross,
+          ),
+          MenuEntry.option(
+            l10n.menuTwoViewsDown,
+            () => ui.setViewerLayout(ViewLayout.twoDown),
+            checked: () => ui.currentViewerLayout == ViewLayout.twoDown,
+          ),
+          MenuEntry.option(
+            l10n.menuFourViews,
+            () => ui.setViewerLayout(ViewLayout.four),
+            action: 'viewer.layout.four',
+            checked: () => ui.currentViewerLayout == ViewLayout.four,
+          ),
+        ]),
+        MenuEntry.submenu(l10n.menuCompare, [
+          MenuEntry.option(
+            l10n.menuCompareOff,
+            () => ui.setCompareMode(CompareMode.none),
+            checked: () => ui.currentCompare == CompareMode.none,
+          ),
+          MenuEntry.option(
+            l10n.menuCompareWipe,
+            () => ui.setCompareMode(CompareMode.wipe),
+            action: 'viewer.compare',
+            checked: () => ui.currentCompare == CompareMode.wipe,
+          ),
+          MenuEntry.option(
+            l10n.menuCompareSplit,
+            () => ui.setCompareMode(CompareMode.split),
+            checked: () => ui.currentCompare == CompareMode.split,
+          ),
+        ]),
+        // The way of looking, shared or each view's own.
+        MenuEntry.toggle(
+          l10n.menuShareViewOptions,
+          () => ui.setShareViewOptions(!ui.views.shareViewOptions),
+          checked: () => ui.views.shareViewOptions,
+        ),
+        MenuEntry.divider(),
+        // The active view's own two switches, and the way out of the panels.
+        MenuEntry.toggle(
+          l10n.menuLockView,
+          () {
+            final view = ui.views.active;
+            if (view != null) ui.setViewLocked(view.id, !view.locked);
+          },
+          action: 'viewer.lock.toggle',
+          checked: () => ui.views.active?.locked ?? false,
+        ),
+        MenuEntry.toggle(
+          l10n.menuAlwaysPreviewThisView,
+          ui.toggleAlwaysPreview,
+          action: 'viewer.preview.always',
+          checked: () =>
+              ui.views.alwaysPreviewId != null &&
+              ui.views.alwaysPreviewId == ui.views.activeId,
+        ),
+        MenuEntry.toggle(
+          l10n.menuCinema,
+          ui.toggleCinema,
+          action: 'viewer.cinema',
+          checked: () => ui.maximisedPane.value != null,
+        ),
       ]
     ),
     (
@@ -1260,6 +1339,11 @@ List<MenuSection> lumitMenus(
             },
             checked: () => panelVisible(ui.split, panel),
           ),
+        MenuEntry.divider(),
+        // Another Viewer panel, beside the one being worked in. The Viewer is
+        // the one panel that can be in the arrangement more than once
+        // (docs/impl/multi-viewer.md §3.1); everything else is a tick above.
+        MenuEntry(l10n.menuNewViewer, ui.addViewerPanel, action: 'viewer.new'),
         MenuEntry.divider(),
         MenuEntry(
             l10n.menuExportQueue, () => showExportQueueFrb(context: context)),
