@@ -870,7 +870,8 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                         // holds, not by asking the engine per rebuild.
                         threeD: info.switches.threeD ||
                             info.kind == BridgeLayerKind.camera,
-                        isCamera: info.kind == BridgeLayerKind.camera,
+                        kind: info.kind,
+                        twoNode: info.camera?.twoNode ?? false,
                         corrected: info.trackCorrected,
                         playheadFrame: playhead,
                         onSeek: (frame) => ui.playheadFrame.value = frame,
@@ -2348,10 +2349,14 @@ class _TransformSection extends StatelessWidget {
   /// How each two-axis property is shown.
   final BridgeAxisModes axisModes;
 
-  /// Whether this layer is a Camera — the one kind whose transform can be
-  /// **derived** rather than held, and so the one kind whose heading
-  /// carries a link badge.
-  final bool isCamera;
+  /// What the layer is, and - on a camera - how it aims: which rows the
+  /// section shows, and whether its heading carries a solve-link badge. A
+  /// Camera is the one kind whose transform can be **derived** rather than
+  /// held, which is what the badge says.
+  final BridgeLayerKind kind;
+  final bool twoNode;
+
+  bool get isCamera => kind == BridgeLayerKind.camera;
 
   /// This camera's solve link carries a correction — the dot beside the
   /// badge, and what makes Clear corrections worth offering.
@@ -2369,7 +2374,8 @@ class _TransformSection extends StatelessWidget {
     required this.transform,
     required this.threeD,
     required this.axisModes,
-    required this.isCamera,
+    required this.kind,
+    required this.twoNode,
     required this.corrected,
     required this.playheadFrame,
     required this.onSeek,
@@ -2414,6 +2420,8 @@ class _TransformSection extends StatelessWidget {
           layer: layer,
           transform: transform,
           threeD: threeD,
+          kind: kind,
+          twoNode: twoNode,
           axisModes: axisModes,
           playheadFrame: playheadFrame,
           onSeek: onSeek,

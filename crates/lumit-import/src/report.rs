@@ -191,10 +191,6 @@ pub enum Reason {
     /// the one trio, and two Euler triples do not add, so the rotations are
     /// what arrives and the orientation is named here.
     OrientationNotCarried,
-    /// A two-node camera, which After Effects aims at its point of interest.
-    /// Lumit's camera is aimed by its own rotation, so the point of interest
-    /// is named rather than approximated.
-    PointOfInterestNotCarried,
 
     // --- properties and keyframes ---
     /// The property is spatial in AE (a motion path with tangents); Lumit
@@ -419,11 +415,6 @@ impl std::fmt::Display for Reason {
                 f,
                 "the layer turns by orientation as well as by rotation — the rotation is what \
                  arrives, and the orientation is not carried"
-            ),
-            Self::PointOfInterestNotCarried => write!(
-                f,
-                "a two-node camera aims at its point of interest — Lumit's camera aims by its own \
-                 rotation, so the point of interest is not carried"
             ),
             Self::SpatialTangentsFlattened => write!(
                 f,

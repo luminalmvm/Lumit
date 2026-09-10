@@ -32,6 +32,9 @@ import '../panels/effect_param_row_frb.dart' show offeredStyles;
 import '../panels/graph_maths.dart' show evaluateKeys;
 import '../panels/layer_fold_frb.dart';
 import '../panels/timeline_mask_rows_frb.dart' show maskModeLabel, maskWith;
+import '../panels/transform_rows_frb.dart'
+    show hasThreeDSwitch, transformGroups;
+import 'camera_settings_dialog.dart';
 import 'menu_bar_frb.dart' show MenuEntry;
 import 'number_dialog_frb.dart';
 
@@ -324,10 +327,29 @@ List<MenuEntry> transformRows(LumitState app, LumitUiState ui) {
     MenuEntry(
       l10n.reset,
       onSelection(app, ui, (entry) {
+        // The layer's **own** rows, not every property there is: a camera
+        // channel written to a solid is refused outright and would take the
+        // whole reset with it (docs/impl/camera.md §10). Asked with the 3D and
+        // two-node rows in, so a property the layer holds but is not showing
+        // this minute still goes back to its default.
+        final props = [
+          for (final group in transformGroups(
+            threeD: true,
+            modes: entry.info.axisModes,
+            kind: entry.info.kind,
+            twoNode: true,
+          ))
+            // The camera options are left alone: a lens is seeded from the
+            // composition it was made in, so there is no still number here
+            // that means "untouched" - and a zoom of nought is a camera that
+            // sees nothing.
+            if (!group.cameraOption)
+              for (final axis in group.axes) axis.prop,
+        ];
         entry.layer.setTransforms(
-          props: BridgeTransformProp.values,
+          props: props,
           values: [
-            for (final prop in BridgeTransformProp.values)
+            for (final prop in props)
               BridgeScalar.static_(_transformDefault(prop)),
           ],
         );
@@ -433,19 +455,64 @@ MenuEntry flowRow(LumitState app, LumitUiState ui) {
 
 /// Layer ▸ 3D layer: the switch the Timeline's own column carries, reached
 /// from the menu as well.
-MenuEntry threeDRow(LumitState app, LumitUiState ui) => MenuEntry(
-      l10n.menu3dLayer,
-      onSelection(
-        app,
-        ui,
-        (entry) => entry.layer.setSwitch(
-          switch_: BridgeLayerSwitch.threeD,
-          on_: !entry.info.switches.threeD,
-        ),
+///
+/// A Camera and a Light are skipped, and the row greys out when they are all
+/// that is picked: both are three-dimensional by being what they are, so
+/// there is no switch on them to flip ([hasThreeDSwitch]).
+MenuEntry threeDRow(LumitState app, LumitUiState ui) {
+  bool spatial(BridgeLayerEntry entry) => hasThreeDSwitch(entry.info.kind);
+  return MenuEntry(
+    l10n.menu3dLayer,
+    onSelection(
+      app,
+      ui,
+      (entry) => entry.layer.setSwitch(
+        switch_: BridgeLayerSwitch.threeD,
+        on_: !entry.info.switches.threeD,
       ),
-      checked:
-          selectedEntries(ui).firstOrNull?.info.switches.threeD ?? false,
-    );
+      when: spatial,
+    ),
+    checked: selectedEntries(ui)
+            .where(spatial)
+            .firstOrNull
+            ?.info
+            .switches
+            .threeD ??
+        false,
+  );
+}
+
+/// Layer ▸ Camera settings…: the non-animatable half of a camera
+/// (docs/impl/camera.md §9), in a window of its own. Greyed until a camera is
+/// picked, because there is otherwise nothing for it to be about.
+///
+/// The comp's width is read here rather than in the window: the lens
+/// arithmetic needs it, it costs one call at the moment of opening, and a
+/// dialog that asked the engine per rebuild would be the habit the
+/// rebuild-path rule exists to stop.
+MenuEntry cameraSettingsRow(
+    BuildContext context, LumitState app, LumitUiState ui) {
+  final comp = ui.selectedComp;
+  final picked = selectedEntries(ui)
+      .where((entry) => entry.info.camera != null)
+      .firstOrNull;
+  final channels = picked?.info.transform.camera;
+  return MenuEntry(
+    l10n.cameraSettings,
+    picked == null || channels == null || comp == null
+        ? null
+        : () async {
+            final applied = await showCameraSettingsFrb(
+              context: context,
+              layer: picked.layer,
+              settings: picked.info.camera!,
+              channels: channels,
+              compWidth: comp.getSettings().width.toDouble(),
+            );
+            if (applied) app.notifyDocumentChanged();
+          },
+  );
+}
 
 /// Layer ▸ Markers: the layer's own cues, which travel with its bar and are
 /// its own copy — deleting one never reaches the comp it came from.

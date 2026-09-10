@@ -26,6 +26,8 @@ import 'sequence_view_frb.dart';
 import 'timeline_timings.dart';
 import 'timeline_metrics_frb.dart';
 import 'timeline_outline_frb.dart';
+import 'transform_rows_frb.dart'
+    show hasThreeDSwitch, hasVisibilitySwitch;
 
 /// The blend-mode names, fetched once per session: the list is static for the
 /// life of the process, and every outline row was re-fetching it per rebuild.
@@ -402,7 +404,8 @@ class _OutlineRowState extends State<OutlineRow> {
     final switches = info.switches;
     final blank = SizedBox(width: switchCellWidth, height: t.density.laneRow);
     Widget cell(SwitchCell which) => switch (which) {
-          SwitchCell.visible => widget.hasPicture
+          SwitchCell.visible => hasVisibilitySwitch(info.kind,
+                  hasPicture: widget.hasPicture)
               ? _switch(context, id, 'visible', null, switches.visible,
                   BridgeLayerSwitch.visible,
                   mark: LumitIcons.visible,
@@ -597,9 +600,14 @@ class _OutlineRowState extends State<OutlineRow> {
               switches.motionBlur,
               BridgeLayerSwitch.motionBlur,
               tip: l10n.switchMotionBlur),
-          ModeCell.threeD => _switch(context, id, '3d', LumitIcon.cube3d,
-              switches.threeD, BridgeLayerSwitch.threeD,
-              tip: l10n.switchThreeD),
+          // Blank on a camera and a light: both are three-dimensional by being
+          // what they are, so a switch there would be one you cannot turn off
+          // (docs/impl/camera.md §1).
+          ModeCell.threeD => hasThreeDSwitch(info.kind)
+              ? _switch(context, id, '3d', LumitIcon.cube3d, switches.threeD,
+                  BridgeLayerSwitch.threeD,
+                  tip: l10n.switchThreeD)
+              : blank,
           // The adjustment cell, where accepts lights used to stand. An
           // ordinary switch cell like the ones beside it: it writes
           // `BridgeLayerSwitch.adjustment`, so it inherits the plural handler

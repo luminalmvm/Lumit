@@ -213,6 +213,20 @@ LumitClipGroup _transformClipGroup(
         l10n.unitDegrees
       ),
     BridgeTransformProp.opacity => (l10n.transformOpacity, l10n.unitPercent),
+    BridgeTransformProp.poiX ||
+    BridgeTransformProp.poiY ||
+    BridgeTransformProp.poiZ =>
+      (l10n.transformPointOfInterest, l10n.unitPixels),
+    BridgeTransformProp.zoom => (l10n.sourceZoom, l10n.unitPixels),
+    BridgeTransformProp.focusDistance => (
+        l10n.cameraFocusDistance,
+        l10n.unitPixels
+      ),
+    BridgeTransformProp.aperture => (l10n.cameraAperture, l10n.unitPixels),
+    BridgeTransformProp.blurLevel => (
+        l10n.cameraBlurLevel,
+        l10n.unitPercent
+      ),
   };
   // The union of the axes' key frames: an axis with no key on some frame
   // contributes the value its curve reads there, so every row is complete.

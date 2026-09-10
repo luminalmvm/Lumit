@@ -72,6 +72,11 @@ pub struct WorkerState {
     /// a parameter. Set by the render request that carries it — the chip
     /// toggling is a render — and cleared by the first request that does not.
     prefix: Option<crate::api::state::BridgePrefixPoint>,
+    /// The Viewer's 3D view (docs/impl/camera.md §6): a camera placement that
+    /// stands in for the named comp's active camera while set. Held here for
+    /// the reason the prefix is: it says what the Viewer is looking through,
+    /// and every render, playback and drag preview looks through the same.
+    view: Option<(Uuid, lumit_core::model::CameraPose)>,
     /// The disk tier (docs/06 §5.4) and its IO thread. Owned here because this
     /// is the thread that has both halves of every hand-off: the renderer whose
     /// evictions fall to disk, and the frame keys to file them under.
@@ -1371,7 +1376,7 @@ fn republish_last_frame(state: &mut WorkerState, stream: &mut WorkerResponseStre
     drop(project);
     // The chip is part of what the Viewer is showing, so the republish shows it
     // too — otherwise a finished bake quietly put the full stack back.
-    let document = viewed(state.prefix, document);
+    let document = viewed_through(state.prefix, state.view, document);
     publish_frame(
         state,
         comp_ref.id,
@@ -1424,7 +1429,7 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
     // The fill banks what the Viewer will ask for, and while the chip is on
     // that is the cut picture — a fill under the other name would be work
     // nothing ever reads back.
-    let document = viewed(state.prefix, document);
+    let document = viewed_through(state.prefix, state.view, document);
     let Some(comp) = document.comp(comp_ref.id) else {
         state.fill_exhausted = true;
         return;
@@ -1611,6 +1616,13 @@ pub enum WorkerRequest {
     /// an export builds its own renderer, which nobody sends this to. One
     /// message rather than one per control, so the renderer can never hold
     /// half a look.
+    /// The Viewer's 3D view for `comp` (docs/impl/camera.md §6), or `None`
+    /// for the active camera. Latched like the prefix chip; see
+    /// [`viewed_through`].
+    SetCameraView {
+        comp: Uuid,
+        view: Option<crate::api::layer::BridgeCameraPose>,
+    },
     SetViewerLook {
         stops: f64,
         tone_map: bool,
@@ -2473,6 +2485,7 @@ fn worker_loop(
         // held.
         look: ViewerLook::default(),
         prefix: None,
+        view: None,
         disk: lumit_render::diskio::spawn(),
         disk_wanted: std::collections::HashMap::new(),
         names: crate::names::NameCache::default(),
@@ -2780,7 +2793,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             // plays the cut picture, and every name below is of the cut
             // document so the look-ahead and the tiers agree with the frame
             // that gets composited.
-            let document = viewed(state.prefix, document);
+            let document = viewed_through(state.prefix, state.view, document);
             // The adaptive tier applies at RENDER time — the whole point of a
             // coarser tier is a cheaper composite, so it must be in
             // force while the frame is made, not when it is shown. Read before
@@ -3049,7 +3062,7 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
     };
     // The pre-roll names the frames it is about to ask the disk for, so it has
     // to name them under the picture the run will actually play.
-    let document = viewed(state.prefix, document);
+    let document = viewed_through(state.prefix, state.view, document);
     let comp = document.comp(req.comp.id).ok_or(BridgeError::InvalidComp)?;
     let comp_id = req.comp.id;
     let fps = comp.frame_rate.fps();
@@ -3197,6 +3210,10 @@ fn handle_requests(
                     state.playback = None;
                     Ok(())
                 }
+                WorkerRequest::SetCameraView { comp, view } => {
+                    set_view(state, view.map(|v| (comp, v.core())));
+                    Ok(())
+                }
                 WorkerRequest::SetViewerLook {
                     stops,
                     tone_map,
@@ -3262,6 +3279,7 @@ fn classify_request(r: &WorkerRequest) -> DrainClass {
         WorkerRequest::SamplePixels(_) => DrainClass::Sample,
         WorkerRequest::Play(_)
         | WorkerRequest::StopPlayback
+        | WorkerRequest::SetCameraView { .. }
         | WorkerRequest::SetViewerLook { .. } => DrainClass::PictureKeepAll,
         WorkerRequest::RenderComp(_) | WorkerRequest::RenderCompWithPreview(_) => {
             DrainClass::PictureNewestWins
@@ -3454,6 +3472,63 @@ fn viewed(
     cut_to_prefix(&prefix, &document).unwrap_or(document)
 }
 
+/// The id the Viewer's view camera is inserted under: fixed, so every render
+/// through the same view builds the same document and names the same frames.
+#[frb(ignore)]
+const VIEW_CAMERA_ID: Uuid = Uuid::from_u128(0x6c75_6d69_7420_7669_6577_2063_616d_6572);
+
+/// [`viewed`], then looked through the Viewer's 3D view when one is set
+/// (docs/impl/camera.md §6): a Camera layer holding the view's pose is put at
+/// the top of the named comp, where it is the active camera for the render,
+/// the frame key and every nested reading alike. No second render path: a
+/// patched copy of the snapshot goes down the ordinary one. Another comp's
+/// view leaves the document alone.
+#[frb(ignore)]
+fn viewed_through(
+    prefix: Option<crate::api::state::BridgePrefixPoint>,
+    view: Option<(Uuid, lumit_core::model::CameraPose)>,
+    document: std::sync::Arc<lumit_core::Document>,
+) -> std::sync::Arc<lumit_core::Document> {
+    let document = viewed(prefix, document);
+    let Some((comp_id, pose)) = view else {
+        return document;
+    };
+    let Some(comp) = document.comp(comp_id) else {
+        return document;
+    };
+    let mut layer = crate::edits::fresh_camera(comp, "View".into(), None);
+    layer.id = VIEW_CAMERA_ID;
+    if let lumit_core::model::LayerKind::Camera { zoom, .. } = &mut layer.kind {
+        *zoom = lumit_core::anim::Property::fixed(pose.zoom);
+    }
+    let tr = &mut layer.transform;
+    tr.position_x = lumit_core::anim::Property::fixed(pose.position.0);
+    tr.position_y = lumit_core::anim::Property::fixed(pose.position.1);
+    tr.position_z = lumit_core::anim::Property::fixed(pose.position.2);
+    tr.rotation_x = lumit_core::anim::Property::fixed(pose.rotation_deg.0);
+    tr.rotation_y = lumit_core::anim::Property::fixed(pose.rotation_deg.1);
+    tr.rotation = lumit_core::anim::Property::fixed(pose.rotation_deg.2);
+    let mut doc = (*document).clone();
+    if let Some(c) = doc.comp_mut(comp_id) {
+        c.layers.insert(0, layer);
+    }
+    std::sync::Arc::new(doc)
+}
+
+/// Latch the Viewer's 3D view, the way [`set_prefix`] latches the chip: a
+/// change renames every frame of the comp, so the name memo and both of its
+/// readers start over.
+#[frb(ignore)]
+fn set_view(state: &mut WorkerState, view: Option<(Uuid, lumit_core::model::CameraPose)>) {
+    if state.view == view {
+        return;
+    }
+    state.view = view;
+    state.names.clear();
+    state.published_bar = None;
+    state.fill_exhausted = false;
+}
+
 /// The cut itself, apart from the worker's state so a test can make one.
 #[frb(ignore)]
 fn cut_to_prefix(
@@ -3501,7 +3576,7 @@ fn render_comp(
     state.last_shown = Some((req.comp.clone(), req.frame, req.scale));
     state.fill_exhausted = false;
     set_prefix(state, req.prefix);
-    let document = viewed(state.prefix, document);
+    let document = viewed_through(state.prefix, state.view, document);
     watched(state, stream, req.frame, |state, stream| {
         publish_frame(
             state,
@@ -3679,8 +3754,7 @@ fn render_comp_with_preview(
     if let Some(transform) = &req.transform {
         // The preview's keys arrive on the composition's clock like every other
         // read; the layer's own offset carries them back.
-        let offset = comp.layers[index].start_offset.0;
-        transform.write_at(&mut comp.layers[index].transform, offset)?;
+        transform.write_layer(&mut comp.layers[index])?;
     }
 
     // A drag is not playback, so EveryFrame: the adaptive tier learns from a
@@ -3699,7 +3773,7 @@ fn render_comp_with_preview(
     // The cut goes on **after** the drag's patches, so dragging the very effect
     // the chip names shows that effect's own picture moving — which is the
     // gesture the chip exists for.
-    let document = viewed(state.prefix, std::sync::Arc::new(document));
+    let document = viewed_through(state.prefix, state.view, std::sync::Arc::new(document));
     let scale = crate::realtime::drag_scale(comp_width, comp_height, req.scale);
     watched(state, stream, req.frame, |state, stream| {
         publish_frame(
@@ -4493,6 +4567,57 @@ mod tests {
         );
     }
 
+    /// **A view puts its own camera on top of the comp it names**
+    /// (docs/impl/camera.md §6): one Camera layer at index 0, under the fixed
+    /// id every render through that view shares, holding the pose's numbers.
+    /// Another comp is left exactly as it stands, and no view at all hands the
+    /// document straight back.
+    #[test]
+    fn a_comp_viewed_through_a_view_gains_that_view_as_its_top_camera() {
+        use lumit_core::model::{CameraPose, ProjectItem};
+
+        let (project, comp) = project_with_solid_of(4);
+        let document = {
+            let state = project.state().expect("state");
+            let state = state.read().expect("read");
+            state.store.snapshot()
+        };
+        // A second comp, so "the named comp" is a choice rather than the only
+        // one there is.
+        let mut two = (*document).clone();
+        let mut other = two.comp(comp).expect("comp").clone();
+        other.id = Uuid::now_v7();
+        let (other_id, other_layers) = (other.id, other.layers.len());
+        two.items.push(ProjectItem::Composition(other));
+        let two = std::sync::Arc::new(two);
+
+        let pose = CameraPose {
+            zoom: 500.0,
+            position: (10.0, 20.0, -500.0),
+            rotation_deg: (5.0, -10.0, 15.0),
+            dof: None,
+        };
+        let through = super::viewed_through(None, Some((comp, pose)), two.clone());
+        let layers = &through.comp(comp).expect("comp").layers;
+        assert_eq!(layers.len(), two.comp(comp).expect("comp").layers.len() + 1);
+        assert_eq!(layers[0].id, super::VIEW_CAMERA_ID);
+        assert_eq!(
+            lumit_core::model::stored_camera_pose_lt(&layers[0], 0.0),
+            Some(pose),
+            "the view's camera holds the pose it was given"
+        );
+        assert_eq!(
+            through.comp(other_id).expect("the other comp").layers.len(),
+            other_layers,
+            "another comp's view is not this comp's business"
+        );
+
+        assert!(
+            std::sync::Arc::ptr_eq(&super::viewed_through(None, None, two.clone()), &two),
+            "no view, no copy"
+        );
+    }
+
     /// **Turning the chip on renames every frame without moving the document** —
     /// the one case the name memo's revision check cannot see, and the same
     /// trap the viewer look fell into. Left standing, the memo serves the full
@@ -4790,6 +4915,7 @@ mod tests {
             last_shown: None,
             look: super::ViewerLook::default(),
             prefix: None,
+            view: None,
             disk: lumit_render::diskio::spawn(),
             disk_wanted: std::collections::HashMap::new(),
             names: crate::names::NameCache::default(),

@@ -27,11 +27,13 @@ Rules:
   `{ "format": "lumit-project", "schema_version": "…", "written_by": "lumit x.y.z",
   "min_reader": "…" }`. A reader newer than `schema_version` migrates; older than
   `min_reader` refuses with a clear message; otherwise it loads and preserves unknowns.
-  The current schema is **`0.2.0`**. The one migration in the chain, `0.1.0` → `0.2.0`,
+  The current schema is **`0.3.0`**. The chain has two migrations. `0.1.0` → `0.2.0`
   moves a Footage layer's own retime segment store onto the layer as the Retime
-  **property**, and lifts the frame-interpolation policy out beside it; `min_reader` stays
-  `0.1.0`, because the fields a `0.1.0` reader does not know about are preserved rather
-  than fatal (§1.1).
+  **property**, and lifts the frame-interpolation policy out beside it. `0.2.0` → `0.3.0`
+  makes a Camera layer's position the eye: the old position, which was the point looked
+  at, becomes the point of interest, and the position moves back by the zoom along the
+  camera's forward axis (docs/impl/camera.md §7). `min_reader` stays `0.1.0`, because
+  the fields a `0.1.0` reader does not know about are preserved rather than fatal (§1.1).
 - `project.json` is pretty-printed with stable key order and stable array order, so two
   saves of the same document are byte-identical and version-control diffs are meaningful.
 - Thumbnails are disposable previews for the Project panel and file browsers; a reader MUST

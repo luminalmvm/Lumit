@@ -13,6 +13,8 @@ dependencies:
     sdk: flutter
   intl: any
   crypto: ^3.0.7
+  # The clock a widget test drives, so double-click timing holds on a slow machine.
+  clock: ^1.1.2
   ffi: ^2.1.0
   # Draws Lumit's own glyphs, which are inline SVG (docs/15-DESIGN.md §5).
   flutter_svg: ^2.3.0

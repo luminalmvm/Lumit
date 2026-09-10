@@ -9,6 +9,7 @@
 
 import 'dart:math';
 
+import 'package:clock/clock.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
@@ -184,6 +185,9 @@ class CompTabsFrb extends StatelessWidget {
 /// coming — which delays the selection a single click makes, and beside the
 /// razor's `onTapUp` stops it cutting at all. Two timestamps owe the arena
 /// nothing. One instance per surface that wants the gesture.
+///
+/// Timed on `clock`, which a widget test drives, so a slow machine cannot split
+/// one double-click into two single taps.
 class DoubleTap {
   DateTime? _last;
   Offset? _lastAt;
@@ -191,7 +195,7 @@ class DoubleTap {
   /// Record a tap; true when it is the second inside [kDoubleTapTimeout] —
   /// and, when [at] is given, within [slop] of the first.
   bool tap({Offset? at, double slop = 0}) {
-    final now = DateTime.now();
+    final now = clock.now();
     final last = _last;
     final lastAt = _lastAt;
     _last = now;

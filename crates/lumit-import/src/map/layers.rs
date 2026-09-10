@@ -226,26 +226,52 @@ fn layer_kind(
     }
 
     match kind {
-        "camera" => LayerKind::Camera {
-            zoom: {
-                // A two-node camera is aimed by its point of interest rather
-                // than by its own angles, and Lumit's camera has no such
-                // second node, so an imported one keeps its place and loses
-                // its aim — which is worth saying out loud.
-                if ae.auto_orient.as_deref() == Some("CAMERA_OR_POINT_OF_INTEREST") {
-                    conv.report.row(
-                        path.clone(),
-                        Outcome::Adjusted,
-                        Reason::PointOfInterestNotCarried,
-                    );
-                }
-                scalar(conv, path, props, "ADBE Camera Zoom", 0, 1000.0)
-            },
-            // An imported camera is the file's own; nothing has been solved,
-            // so there is no link and no correction lane to zero.
-            solve_link: None,
-            correction_base: None,
-        },
+        "camera" => {
+            // After Effects' Position is the eye, as Lumit's is
+            // (docs/impl/camera.md §8), and its Point of Interest is the
+            // transform group's anchor point. A two-node camera is aimed by
+            // that point rather than by its own angles.
+            let two_node = ae.auto_orient.as_deref() == Some("CAMERA_OR_POINT_OF_INTEREST");
+            let group = child(props, "ADBE Transform Group").map_or(&[][..], |g| g.children());
+            let zoom = scalar(conv, path, props, "ADBE Camera Zoom", 0, 1000.0);
+            let zoom_now = zoom.value_at(0.0);
+            LayerKind::Camera {
+                options: Box::new(lumit_core::model::CameraOptions {
+                    two_node,
+                    point_of_interest: [
+                        scalar(conv, path, group, "ADBE Anchor Point", 0, 0.0),
+                        scalar(conv, path, group, "ADBE Anchor Point", 1, 0.0),
+                        scalar(conv, path, group, "ADBE Anchor Point", 2, 0.0),
+                    ],
+                    depth_of_field: still(props, "ADBE Camera Depth of Field", 0)
+                        .is_some_and(|v| v != 0.0),
+                    focus_distance: scalar(
+                        conv,
+                        path,
+                        props,
+                        "ADBE Camera Focus Distance",
+                        0,
+                        zoom_now,
+                    ),
+                    aperture: scalar(
+                        conv,
+                        path,
+                        props,
+                        "ADBE Camera Aperture",
+                        0,
+                        lumit_core::camera::default_aperture(zoom_now),
+                    ),
+                    blur_level: scalar(conv, path, props, "ADBE Camera Blur Level", 0, 100.0),
+                    lock_to_zoom: false,
+                    film_size_mm: lumit_core::camera::FILM_MM,
+                }),
+                zoom,
+                // An imported camera is the file's own; nothing has been solved,
+                // so there is no link and no correction lane to zero.
+                solve_link: None,
+                correction_base: None,
+            }
+        }
         "light" => LayerKind::Light {
             light: Box::new(light(conv, path, ae, props)),
         },

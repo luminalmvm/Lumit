@@ -15,6 +15,7 @@ import '../icons/icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../state/timecode.dart';
+import '../state/viewer_view.dart' show ViewerView;
 import '../state/workspace.dart' show ViewerLook;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
@@ -237,6 +238,11 @@ class ViewerBar extends StatelessWidget {
         // a glance during a key, where "Green" spelled out is a word to read
         // and a green mark is a thing to see. The menu still lists the names.
         _ChannelPicker(channel: channel, onChannel: onChannel),
+        viewerBarGapBox(viewerBarGap),
+        // Which way the composition is looked at (docs/impl/camera.md §6):
+        // through its own camera, or from one of the fixed and custom
+        // viewpoints a 3D scene is arranged from.
+        const _ViewPicker(),
         viewerBarGapBox(viewerBarGap),
         // **The aperture names the number, and is the way back to nothing**
         // (owner ruling, superseding the appears-with-the-value reading):
@@ -595,6 +601,69 @@ class _Readout extends StatelessWidget {
 /// channel's own colour for R, G and B. Alpha is not a colour, so its circle is
 /// the near-white a matte is drawn in, which is also the only light circle on
 /// the bar and so tells itself apart from the three.
+/// The 3D view picker: the camera glyph, lit while the Viewer is looking
+/// through anything but the composition's own camera.
+///
+/// It reads and writes the view kept for the comp directly, as the guides menu beside it
+/// does: the view is not the panel's, it is the comp's, and a picker that took
+/// it as a parameter would have to be threaded through the bar for no gain.
+class _ViewPicker extends StatelessWidget {
+  const _ViewPicker();
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    // Watched, not read: the menu closes on a pick, so the face has to catch up
+    // from the state rather than from its own rebuild.
+    final ui = context.watch<LumitUiState>();
+    final view = ui.viewerView;
+    return LumitTooltip(
+      message: l10n.tipViewerView,
+      child: Builder(
+        builder: (context) => HouseButton(
+          key: const ValueKey('viewer-view'),
+          frameless: true,
+          padding: EdgeInsets.zero,
+          onPressed: () {
+            final box = context.findRenderObject();
+            if (box is! RenderBox) return;
+            showMenuAt<void>(
+              context: context,
+              position: box.localToGlobal(Offset(0, box.size.height + 2)),
+              rows: (close) => [
+                for (final v in ViewerView.values)
+                  MenuRow(
+                    key: ValueKey<String>('viewer-view-${v.name}'),
+                    onPressed: () {
+                      close(null);
+                      ui.setViewerView(v);
+                    },
+                    child: Row(children: [
+                      menuTick(v == view),
+                      Text(v.title),
+                    ]),
+                  ),
+              ],
+            );
+          },
+          child: SizedBox(
+            width: viewerBarIconSize,
+            height: viewerStripHeight - 2 * viewerMarkEdge,
+            child: Center(
+              child: lumitIcon(
+                LumitIcon.camera,
+                size: viewerBarIconSize,
+                color:
+                    view == ViewerView.activeCamera ? t.textMuted : t.accent,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ChannelPicker extends StatelessWidget {
   final ViewerChannel channel;
   final ValueChanged<ViewerChannel> onChannel;

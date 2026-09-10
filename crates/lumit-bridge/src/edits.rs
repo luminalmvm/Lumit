@@ -41,6 +41,37 @@ pub(crate) fn centred_transform(
     }
 }
 
+/// A fresh Camera layer for `comp` (docs/impl/camera.md §1): the eye sits
+/// the After Effects 50 mm zoom behind the comp centre looking down +z, the
+/// point of interest is the centre, and the focus is on that plane. A camera
+/// made this way changes no picture. `solve_link` makes it a solved camera.
+pub(crate) fn fresh_camera(
+    comp: &lumit_core::model::Composition,
+    name: String,
+    solve_link: Option<Uuid>,
+) -> Layer {
+    use lumit_core::anim::Property;
+    let (w, h) = (f64::from(comp.width), f64::from(comp.height));
+    let zoom = lumit_core::camera::default_zoom(w);
+    let at = (w * 0.5, h * 0.5, 0.0);
+    base_layer(
+        name,
+        LayerKind::Camera {
+            zoom: Property::fixed(zoom),
+            solve_link,
+            correction_base: None,
+            options: Box::new(lumit_core::model::CameraOptions::fresh(zoom, at)),
+        },
+        comp.duration.0,
+        TransformGroup {
+            position_x: Property::fixed(at.0),
+            position_y: Property::fixed(at.1),
+            position_z: Property::fixed(-zoom),
+            ..TransformGroup::default()
+        },
+    )
+}
+
 /// A layer with the house defaults every add path shares, given the parts that
 /// differ (name, kind, span end, transform). The span starts at comp 0 and the
 /// switches are the model defaults — exactly as the egui add-layer paths build.

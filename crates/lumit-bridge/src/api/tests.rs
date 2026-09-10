@@ -6358,6 +6358,166 @@ fn a_camera_zoom_reads_and_writes_as_a_scalar() {
     ));
 }
 
+/// The seven camera channels ride the transform (docs/impl/camera.md §1), so
+/// every row the panel already draws draws them too. A layer that is not a
+/// camera carries none of them, and naming one on it is refused.
+#[test]
+fn a_camera_carries_its_own_channels_and_a_solid_does_not() {
+    use crate::api::layer::BridgeTransformProp;
+
+    let (project, layer) = project_with_layer();
+    let comp = CompositionReference::new(project.id, layer.comp_id());
+    let camera = comp.add_camera_layer(None).expect("a camera");
+    let solid = comp.add_solid_layer(None).expect("a solid");
+
+    // The comp is 1920 × 1080, so a fresh camera is the 50 mm lens on it,
+    // focused on its own zoom and looking at the middle of the frame.
+    let zoom = lumit_core::camera::default_zoom(1920.0);
+    let channels = camera
+        .get_transform()
+        .expect("transform")
+        .camera
+        .expect("a camera carries its channels");
+    assert_eq!(channels.zoom, BridgeScalar::Static(zoom));
+    assert_eq!(channels.focus_distance, BridgeScalar::Static(zoom));
+    assert_eq!(channels.poi_x, BridgeScalar::Static(960.0));
+    assert_eq!(channels.poi_y, BridgeScalar::Static(540.0));
+    assert_eq!(channels.poi_z, BridgeScalar::Static(0.0));
+    assert!(
+        solid.get_transform().expect("transform").camera.is_none(),
+        "a solid has no camera channels to carry"
+    );
+
+    camera
+        .set_transforms(
+            vec![BridgeTransformProp::Zoom],
+            vec![BridgeScalar::Static(1500.0)],
+        )
+        .expect("a camera takes its own channel");
+    assert_eq!(
+        camera
+            .get_transform()
+            .expect("transform")
+            .camera
+            .expect("channels")
+            .zoom,
+        BridgeScalar::Static(1500.0)
+    );
+    assert!(matches!(
+        solid.set_transforms(
+            vec![BridgeTransformProp::Zoom],
+            vec![BridgeScalar::Static(1500.0)],
+        ),
+        Err(BridgeError::OpError(
+            lumit_core::ops::OpError::PropNotOnLayer
+        ))
+    ));
+}
+
+/// The settings dialog's four (docs/impl/camera.md §9) go over and come back,
+/// and a layer that is not a camera has none to set.
+#[test]
+fn camera_settings_round_trip_and_a_solid_refuses_them() {
+    use crate::api::layer::BridgeCameraSettings;
+
+    let (project, layer) = project_with_layer();
+    let comp = CompositionReference::new(project.id, layer.comp_id());
+    let camera = comp.add_camera_layer(None).expect("a camera");
+    let solid = comp.add_solid_layer(None).expect("a solid");
+
+    let fresh = camera
+        .get_camera_settings()
+        .expect("settings")
+        .expect("it is a camera");
+    assert!(!fresh.two_node && !fresh.depth_of_field && !fresh.lock_to_zoom);
+    assert_eq!(fresh.film_size_mm, lumit_core::camera::FILM_MM);
+
+    let wanted = BridgeCameraSettings {
+        two_node: true,
+        depth_of_field: true,
+        lock_to_zoom: true,
+        film_size_mm: 24.0,
+    };
+    camera.set_camera_settings(wanted).expect("set");
+    assert_eq!(
+        camera
+            .get_camera_settings()
+            .expect("settings")
+            .expect("camera"),
+        wanted
+    );
+
+    assert!(solid.get_camera_settings().expect("settings").is_none());
+    assert!(matches!(
+        solid.set_camera_settings(wanted),
+        Err(BridgeError::NotCamera)
+    ));
+}
+
+/// A fresh camera's eye is `zoom` in front of the comp's own plane, looking
+/// straight down z (docs/impl/camera.md §1) - so adding one changes no picture,
+/// and the camera tools start their drag from there.
+#[test]
+fn a_fresh_cameras_pose_is_the_eye_behind_the_comp_centre() {
+    let (project, layer) = project_with_layer();
+    let comp = CompositionReference::new(project.id, layer.comp_id());
+    let camera = comp.add_camera_layer(None).expect("a camera");
+
+    let pose = camera
+        .camera_pose_at(0)
+        .expect("a pose")
+        .expect("it is a camera");
+    let zoom = lumit_core::camera::default_zoom(1920.0);
+    assert_eq!(
+        (pose.zoom, pose.x, pose.y, pose.z),
+        (zoom, 960.0, 540.0, -zoom)
+    );
+    assert_eq!(
+        (pose.rotation_x, pose.rotation_y, pose.rotation_z),
+        (0.0, 0.0, 0.0)
+    );
+    assert!(layer.camera_pose_at(0).expect("pose").is_none());
+}
+
+/// The Front view's wireframes (docs/impl/camera.md §6): a fresh camera's
+/// frustum is the comp itself, so its four corners land on the comp's four
+/// corners and its eye lands on the middle.
+#[test]
+fn the_front_view_wireframes_put_a_fresh_cameras_frustum_on_the_comp_corners() {
+    use crate::api::layer::{camera_view_pose, BridgeCameraView};
+
+    let (project, layer) = project_with_layer();
+    let comp = CompositionReference::new(project.id, layer.comp_id());
+    comp.add_camera_layer(None).expect("a camera");
+
+    let view = camera_view_pose(BridgeCameraView::Front, 1920.0, 1080.0);
+    let wires = comp.wireframes(0, view, Vec::new()).expect("wireframes");
+    let cam = match wires.cameras.as_slice() {
+        [only] => only,
+        other => panic!("one camera, not {}", other.len()),
+    };
+    let close = |got: f64, want: f64| assert!((got - want).abs() < 1.0, "{got} is not {want}");
+    for (corner, (x, y)) in
+        cam.corners
+            .iter()
+            .zip([(0.0, 0.0), (1920.0, 0.0), (1920.0, 1080.0), (0.0, 1080.0)])
+    {
+        assert!(corner.in_front, "the frustum is in front of the Front view");
+        close(corner.x, x);
+        close(corner.y, y);
+    }
+    close(cam.eye.x, 960.0);
+    close(cam.eye.y, 540.0);
+    assert!(
+        cam.eye.in_front,
+        "the eye sits between the view and the comp"
+    );
+    assert!(
+        cam.point_of_interest.is_none(),
+        "a one-node camera has no line to draw"
+    );
+}
+
 /// Editing a solid changes the **asset**, so every layer drawing it changes at
 /// once. That is the point of solids being assets, and the thing a test should
 /// pin down before somebody "fixes" it into a per-layer setting.

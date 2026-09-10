@@ -79,16 +79,38 @@ class TransformGroup {
   /// it; [BridgeAxisMode.linked] means the row draws one box for two axes.
   final BridgeAxisMode mode;
 
+  /// One of a camera's lens numbers rather than its placement
+  /// (docs/impl/camera.md §1), so the fold-out can put the Camera options
+  /// heading in front of them.
+  final bool cameraOption;
+
   const TransformGroup(
     this.label,
     this.axes, {
     this.pair,
     this.mode = BridgeAxisMode.combined,
+    this.cameraOption = false,
   });
 
   /// A linked row draws one box and carries the other axis with it.
   bool get isLinked => mode == BridgeAxisMode.linked && axes.length > 1;
 }
+
+/// Whether a layer of this kind has a 3D switch to flip.
+///
+/// A Camera and a Light are three-dimensional by being what they are
+/// (docs/impl/camera.md §1), so the switch would be one you cannot turn off:
+/// the Timeline leaves their cell blank and the Layer menu skips them.
+bool hasThreeDSwitch(BridgeLayerKind kind) =>
+    kind != BridgeLayerKind.camera && kind != BridgeLayerKind.light;
+
+/// Whether a layer of this kind carries the visibility eye.
+///
+/// A camera puts no pixels on the screen and keeps the eye all the same: on a
+/// camera the switch is what makes it the composition's active one
+/// (docs/impl/camera.md §6), which is the most useful thing on the row.
+bool hasVisibilitySwitch(BridgeLayerKind kind, {required bool hasPicture}) =>
+    hasPicture || kind == BridgeLayerKind.camera;
 
 /// The rows a layer shows, in order.
 ///
@@ -104,9 +126,18 @@ class TransformGroup {
 /// stopwatch, its own lane and its own curve. Which is why every surface that
 /// walks this list — the fold-out, the lanes, the graph editor, the Effect
 /// controls card — follows without knowing the feature exists.
+///
+/// **A camera and a light show a different list.** Neither has an anchor, a
+/// scale or an opacity - they are viewpoints, not pictures - and both carry z
+/// whatever the 3D switch says, because being three-dimensional is what they
+/// are (docs/impl/camera.md §1). A camera adds its point of interest when it
+/// is two-node, and the four lens numbers the fold-out heads with Camera
+/// options.
 List<TransformGroup> transformGroups({
   required bool threeD,
   required BridgeAxisModes modes,
+  BridgeLayerKind kind = BridgeLayerKind.footage,
+  bool twoNode = false,
 }) {
   List<TransformGroup> pairRows(
     BridgeTransformPair pair,
@@ -127,6 +158,63 @@ List<TransformGroup> transformGroups({
         TransformGroup(axisLabels[i], [axes[i]], pair: pair, mode: mode),
     ];
   }
+
+  // The placement a viewpoint has: where it stands, and which way it faces.
+  List<TransformGroup> placement() => [
+        ...pairRows(
+          BridgeTransformPair.position,
+          l10n.transformPosition,
+          [
+            l10n.transformPositionX,
+            l10n.transformPositionY,
+            l10n.transformPositionZ,
+          ],
+          const [
+            TransformAxis(BridgeTransformProp.positionX),
+            TransformAxis(BridgeTransformProp.positionY),
+            TransformAxis(BridgeTransformProp.positionZ),
+          ],
+        ),
+        TransformGroup(l10n.transformRotationX, const [
+          TransformAxis(BridgeTransformProp.rotationX, suffix: '°', speed: 0.5),
+        ]),
+        TransformGroup(l10n.transformRotationY, const [
+          TransformAxis(BridgeTransformProp.rotationY, suffix: '°', speed: 0.5),
+        ]),
+        TransformGroup(l10n.transformRotation, const [
+          TransformAxis(BridgeTransformProp.rotation, suffix: '°', speed: 0.5),
+        ]),
+      ];
+
+  if (kind == BridgeLayerKind.camera) {
+    return [
+      // Inert on a one-node camera, so it is not shown there: the rows a
+      // camera has follow how it aims.
+      if (twoNode)
+        TransformGroup(l10n.transformPointOfInterest, const [
+          TransformAxis(BridgeTransformProp.poiX),
+          TransformAxis(BridgeTransformProp.poiY),
+          TransformAxis(BridgeTransformProp.poiZ),
+        ]),
+      ...placement(),
+      TransformGroup(l10n.sourceZoom, const [
+        TransformAxis(BridgeTransformProp.zoom,
+            min: 1, decimals: 0, speed: 4),
+      ], cameraOption: true),
+      TransformGroup(l10n.cameraFocusDistance, const [
+        TransformAxis(BridgeTransformProp.focusDistance,
+            min: 1, decimals: 0, speed: 4),
+      ], cameraOption: true),
+      TransformGroup(l10n.cameraAperture, const [
+        TransformAxis(BridgeTransformProp.aperture, min: 0),
+      ], cameraOption: true),
+      TransformGroup(l10n.cameraBlurLevel, const [
+        TransformAxis(BridgeTransformProp.blurLevel,
+            suffix: '%', min: 0, max: 100, decimals: 0, speed: 0.5),
+      ], cameraOption: true),
+    ];
+  }
+  if (kind == BridgeLayerKind.light) return placement();
 
   return [
     ...pairRows(
@@ -193,6 +281,11 @@ class TransformRowsFrb extends StatelessWidget {
   final BridgeTransform transform;
   final bool threeD;
 
+  /// What the layer is, and - on a camera - how it aims: the two other things
+  /// that decide which rows there are.
+  final BridgeLayerKind kind;
+  final bool twoNode;
+
   /// How each pair is shown — which decides how many rows there are.
   final BridgeAxisModes axisModes;
   final int playheadFrame;
@@ -219,6 +312,8 @@ class TransformRowsFrb extends StatelessWidget {
     required this.layer,
     required this.transform,
     required this.threeD,
+    this.kind = BridgeLayerKind.footage,
+    this.twoNode = false,
     required this.axisModes,
     required this.playheadFrame,
     required this.onSeek,
@@ -232,7 +327,8 @@ class TransformRowsFrb extends StatelessWidget {
   /// One widget per transform row — for a caller that has to put each row in its
   /// own chrome (the Effect controls panel's hairline-separated rows).
   List<Widget> rows(BuildContext context) => [
-        for (final group in transformGroups(threeD: threeD, modes: axisModes))
+        for (final group in transformGroups(
+            threeD: threeD, modes: axisModes, kind: kind, twoNode: twoNode))
           TransformRowFrb(
             comp: comp,
             layer: layer,
@@ -881,6 +977,11 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
   }
 }
 
+/// What a camera channel reads on a transform that carries none - every layer
+/// but a camera. A still zero rather than a throw: the rows are built from the
+/// kind, so nothing asks unless there is something to answer with.
+const BridgeScalar _noChannel = BridgeScalar.static_(0);
+
 /// One property out of a transform.
 BridgeScalar read(BridgeTransform tf, BridgeTransformProp prop) =>
     switch (prop) {
@@ -895,6 +996,14 @@ BridgeScalar read(BridgeTransform tf, BridgeTransformProp prop) =>
       BridgeTransformProp.rotationX => tf.rotationX,
       BridgeTransformProp.rotationY => tf.rotationY,
       BridgeTransformProp.opacity => tf.opacity,
+      BridgeTransformProp.poiX => tf.camera?.poiX ?? _noChannel,
+      BridgeTransformProp.poiY => tf.camera?.poiY ?? _noChannel,
+      BridgeTransformProp.poiZ => tf.camera?.poiZ ?? _noChannel,
+      BridgeTransformProp.zoom => tf.camera?.zoom ?? _noChannel,
+      BridgeTransformProp.focusDistance =>
+        tf.camera?.focusDistance ?? _noChannel,
+      BridgeTransformProp.aperture => tf.camera?.aperture ?? _noChannel,
+      BridgeTransformProp.blurLevel => tf.camera?.blurLevel ?? _noChannel,
     };
 
 /// A copy of `tf` with one property replaced — what the preview renders.
@@ -912,6 +1021,7 @@ BridgeTransform writeScalar(
   BridgeScalar pick(BridgeTransformProp p, BridgeScalar current) =>
       p == prop ? replacement : current;
 
+  final camera = tf.camera;
   return BridgeTransform(
     anchorX: pick(BridgeTransformProp.anchorX, tf.anchorX),
     anchorY: pick(BridgeTransformProp.anchorY, tf.anchorY),
@@ -924,6 +1034,20 @@ BridgeTransform writeScalar(
     rotationX: pick(BridgeTransformProp.rotationX, tf.rotationX),
     rotationY: pick(BridgeTransformProp.rotationY, tf.rotationY),
     opacity: pick(BridgeTransformProp.opacity, tf.opacity),
+    // A layer that is not a camera has no channels to replace one in, and a
+    // camera prop never reaches it: the rows come from the kind.
+    camera: camera == null
+        ? null
+        : BridgeCameraChannels(
+            poiX: pick(BridgeTransformProp.poiX, camera.poiX),
+            poiY: pick(BridgeTransformProp.poiY, camera.poiY),
+            poiZ: pick(BridgeTransformProp.poiZ, camera.poiZ),
+            zoom: pick(BridgeTransformProp.zoom, camera.zoom),
+            focusDistance:
+                pick(BridgeTransformProp.focusDistance, camera.focusDistance),
+            aperture: pick(BridgeTransformProp.aperture, camera.aperture),
+            blurLevel: pick(BridgeTransformProp.blurLevel, camera.blurLevel),
+          ),
   );
 }
 

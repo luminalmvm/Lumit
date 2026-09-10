@@ -215,7 +215,12 @@ pub fn camera_pose_of(
 #[must_use]
 fn correct(solved: CameraPose, stored: CameraPose, base: Option<&CameraPose>) -> CameraPose {
     let Some(base) = base else {
-        return solved;
+        // No lane, so the solve is followed exactly - but a solve carries no
+        // depth of field, and the camera's own is not a correction.
+        return CameraPose {
+            dof: stored.dof,
+            ..solved
+        };
     };
     CameraPose {
         zoom: solved.zoom + (stored.zoom - base.zoom),
@@ -229,6 +234,8 @@ fn correct(solved: CameraPose, stored: CameraPose, base: Option<&CameraPose>) ->
             solved.rotation_deg.1 + (stored.rotation_deg.1 - base.rotation_deg.1),
             solved.rotation_deg.2 + (stored.rotation_deg.2 - base.rotation_deg.2),
         ),
+        // A solve has no depth of field; the camera's own is what applies.
+        dof: stored.dof,
     }
 }
 
@@ -245,6 +252,7 @@ pub fn has_correction(layer: &Layer) -> bool {
         zoom,
         solve_link: Some(_),
         correction_base: Some(base),
+        ..
     } = &layer.kind
     else {
         return false;
@@ -901,7 +909,7 @@ pub fn transform_from_track(
         let raw = angle - origin_angle;
         let tau = std::f64::consts::TAU;
         turned = raw + ((turned - raw) / tau).round() * tau;
-        let base = |prop| layer.transform.get(prop).value_at(t);
+        let base = |prop| layer.transform.get(prop).map_or(0.0, |p| p.value_at(t));
         let scale = span / origin_span;
         for (slot, value) in keys.iter_mut().zip([
             base(TransformProp::PositionX) + (centre[0] - origin[0]),
@@ -979,6 +987,7 @@ mod tests {
                 zoom: 1000.0 + f,
                 position: (f, f * 2.0, f * 3.0),
                 rotation_deg: (f * 0.5, f * 0.25, f * 0.125),
+                dof: None,
             }
         }
     }
@@ -1078,6 +1087,7 @@ mod tests {
                 zoom: Property::fixed(777.0),
                 solve_link: link,
                 correction_base: None,
+                options: Default::default(),
             },
             4,
         )
@@ -1411,6 +1421,7 @@ mod tests {
                         want.rotation_deg.1 - 2.5,
                         want.rotation_deg.2
                     ),
+                    dof: None,
                 },
                 "frame {n}"
             );
@@ -1429,6 +1440,45 @@ mod tests {
         assert_eq!(lost.state, LinkState::Unresolved);
         assert_eq!(lost.pose.position.0, base.position.0 + 40.0);
         assert_eq!(lost.pose.zoom, base.zoom + 7.0);
+    }
+
+    /// A solve has no depth of field, so the camera's own reaches the pose the
+    /// renderer draws with (docs/impl/camera.md §2) - with a correction lane
+    /// under it and without one.
+    #[test]
+    fn a_linked_camera_keeps_its_own_depth_of_field() {
+        let media = Uuid::now_v7();
+        let footage = tracked(layer("shot", LayerKind::Footage { item: media }, 2));
+        let mut cam = camera(Some(footage.id));
+        if let LayerKind::Camera { options, .. } = &mut cam.kind {
+            options.depth_of_field = true;
+            options.focus_distance = Property::fixed(800.0);
+            options.aperture = Property::fixed(30.0);
+            options.blur_level = Property::fixed(75.0);
+        }
+        let c = comp("main", vec![cam, footage]);
+        let (comp_id, cam_id) = (c.id, c.layers[0].id);
+        let mut doc = document(vec![c]);
+        let store = Synthetic::new(media);
+        let want = Some(crate::model::CameraDof {
+            focus_distance: 800.0,
+            aperture: 30.0,
+            blur_level: 75.0,
+        });
+
+        // No lane yet: the solve is followed exactly, and it has no depth of
+        // field of its own to follow.
+        let got = camera_pose_at(&doc, doc.comp(comp_id).unwrap(), 0.0, &store).unwrap();
+        assert_eq!(got.pose.dof, want);
+        assert_eq!(
+            got.pose.position,
+            Synthetic::pose(0).position,
+            "the solve still places the eye"
+        );
+
+        set_base(&mut doc, comp_id, cam_id);
+        let got = camera_pose_at(&doc, doc.comp(comp_id).unwrap(), 0.0, &store).unwrap();
+        assert_eq!(got.pose.dof, want);
     }
 
     /// A keyed correction is an ordinary keyframed property, and it is added at
@@ -1994,7 +2044,11 @@ mod tests {
         prop: crate::model::TransformProp,
         t: f64,
     ) -> f64 {
-        layer_of(doc, comp, layer).transform.get(prop).value_at(t)
+        layer_of(doc, comp, layer)
+            .transform
+            .get(prop)
+            .unwrap()
+            .value_at(t)
     }
 
     /// Whether a transform property was left as the constant it was.
@@ -2005,7 +2059,11 @@ mod tests {
         prop: crate::model::TransformProp,
     ) -> bool {
         matches!(
-            layer_of(doc, comp, layer).transform.get(prop).animation,
+            layer_of(doc, comp, layer)
+                .transform
+                .get(prop)
+                .unwrap()
+                .animation,
             Animation::Static(_)
         )
     }

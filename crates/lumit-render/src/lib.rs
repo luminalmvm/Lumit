@@ -98,7 +98,7 @@ pub use realise::Realiser;
 /// Re-exported so callers that already depend on the renderer — the bridge,
 /// reporting what the Settings row is really drawing at — need not take a
 /// direct dependency on `lumit-gpu` just to ask.
-pub use lumit_gpu::{adapter_colour_depth, adapter_sample_count};
+pub use lumit_gpu::{adapter_colour_depth, adapter_sample_count, place_matrix};
 
 /// The decoder's own frame type, re-exported so a caller that has a decoded
 /// frame in hand can name it without depending on `lumit-media` itself.

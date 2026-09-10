@@ -46,6 +46,10 @@ pub enum OpError {
     /// has a picture of its own, and nothing else.
     #[error("only solid and adjustment layers convert to one another")]
     KindNotConvertible,
+    /// A camera channel was named on a layer that is not a camera
+    /// (docs/impl/camera.md §1).
+    #[error("the property is not on this layer")]
+    PropNotOnLayer,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -479,6 +483,15 @@ pub enum Op {
         layer: Uuid,
         animation: Animation,
     },
+    /// Replace the non-animatable part of a Camera layer: node type, depth of
+    /// field on or off, lock to zoom and the film size
+    /// (docs/impl/camera.md §9). One op for the four, so the settings dialog
+    /// is one undo step.
+    SetCameraSettings {
+        comp: Uuid,
+        layer: Uuid,
+        settings: crate::model::CameraSettings,
+    },
     /// Point a Camera layer's **solve link** at a tracked layer, or clear it
     /// with `None` (docs/03 §5.6).
     ///
@@ -797,6 +810,7 @@ impl Op {
             Op::SetTransformProperty { .. } => "Edit transform",
             Op::SetTransformAxisMode { .. } => "Set axis mode",
             Op::SetCameraZoom { .. } => "Set camera zoom",
+            Op::SetCameraSettings { .. } => "Set camera settings",
             Op::SetCameraSolveLink { .. } => "Link camera to solve",
             Op::SetLayerVolume { .. } => "Edit volume",
             Op::SetLayerPan { .. } => "Edit pan",
@@ -882,6 +896,7 @@ fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
         | Op::SetTransformProperty { comp, layer, .. }
         | Op::SetTransformAxisMode { comp, layer, .. }
         | Op::SetCameraZoom { comp, layer, .. }
+        | Op::SetCameraSettings { comp, layer, .. }
         | Op::SetCameraSolveLink { comp, layer, .. }
         | Op::SetLayerVolume { comp, layer, .. }
         | Op::SetLayerPan { comp, layer, .. }
@@ -1774,7 +1789,7 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 .iter_mut()
                 .find(|l| l.id == *layer)
                 .ok_or(OpError::UnknownLayer)?;
-            let slot = l.transform.get_mut(*prop);
+            let slot = l.prop_mut(*prop).ok_or(OpError::PropNotOnLayer)?;
             let previous = std::mem::replace(&mut slot.animation, animation.clone());
             Ok(Op::SetTransformProperty {
                 comp: *comp,
@@ -1823,6 +1838,28 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 comp: *comp,
                 layer: *layer,
                 animation: previous,
+            })
+        }
+        Op::SetCameraSettings {
+            comp,
+            layer,
+            settings,
+        } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            let crate::model::LayerKind::Camera { options, .. } = &mut l.kind else {
+                return Err(OpError::PropNotOnLayer);
+            };
+            let previous = options.settings();
+            options.set_settings(*settings);
+            Ok(Op::SetCameraSettings {
+                comp: *comp,
+                layer: *layer,
+                settings: previous,
             })
         }
         Op::SetCameraSolveLink {

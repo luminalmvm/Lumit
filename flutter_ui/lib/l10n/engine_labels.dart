@@ -1131,6 +1131,7 @@ Map<String, String> get _table => {
       "Edit transform": l10n.histEditTransform,
       "Set axis mode": l10n.histSetAxisMode,
       "Set camera zoom": l10n.histSetCameraZoom,
+      "Set camera settings": l10n.histSetCameraSettings,
       "Link camera to solve": l10n.histLinkCameraToSolve,
       "Edit volume": l10n.histEditVolume,
       "Edit Retime": l10n.histEditRetime,
@@ -1248,8 +1249,6 @@ String? importReason(String key, Map<String, String> args) {
       return l10n.aeLightKindApproximated(a('ae_kind'));
     case 'orientation_not_carried':
       return l10n.aeOrientationNotCarried;
-    case 'point_of_interest_not_carried':
-      return l10n.aePointOfInterestNotCarried;
 
     // Properties and keyframes.
     case 'spatial_tangents_flattened':

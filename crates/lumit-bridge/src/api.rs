@@ -31,6 +31,7 @@ pub mod solid;
 pub mod state;
 pub mod system;
 pub mod track;
+pub mod wireframes;
 
 mod worker_thread;
 

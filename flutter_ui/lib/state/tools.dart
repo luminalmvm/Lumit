@@ -110,7 +110,11 @@ enum ToolMode {
   puppetBend(ToolGroup.puppet, LumitIcon.puppetBend, ready: true),
 
   // Moving the composition's active camera by dragging on the picture:
-  // orbit round what it is looking at, track across, dolly in.
+  // orbit round what it is looking at, track across, dolly in. The unified
+  // tool leads the group, as it does under After Effects' C: it is all three
+  // at once, one to a mouse button, and the three on their own are for a
+  // trackpad or a tablet with one button to give.
+  cameraUnified(ToolGroup.camera, LumitIcon.camera, ready: true),
   cameraOrbit(ToolGroup.camera, LumitIcon.cameraOrbit, ready: true),
   cameraPan(ToolGroup.camera, LumitIcon.cameraPan, ready: true),
   cameraDolly(ToolGroup.camera, LumitIcon.cameraDolly, ready: true);
@@ -153,6 +157,7 @@ enum ToolMode {
         ToolMode.puppetStarch => l10n.toolPuppetStarch,
         ToolMode.puppetOverlap => l10n.toolPuppetOverlap,
         ToolMode.puppetBend => l10n.toolPuppetBend,
+        ToolMode.cameraUnified => l10n.toolCameraUnified,
         ToolMode.cameraOrbit => l10n.toolCameraOrbit,
         ToolMode.cameraPan => l10n.toolCameraPan,
         ToolMode.cameraDolly => l10n.toolCameraDolly,

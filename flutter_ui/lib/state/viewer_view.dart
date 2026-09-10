@@ -18,6 +18,64 @@
 // not a display trick, and it MUST never reach the export (glossary §5).
 
 import 'package:lumit_flutter/l10n/strings.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeCameraView;
+
+/// Which way the Viewer looks at a 3D composition (docs/impl/camera.md §6).
+///
+/// **Active camera** is the composition's own: what an export sees, and the
+/// only view that is not a pose of the panel's own. The six fixed ones look at
+/// the comp centre from far enough away to be orthographic to the pixel, and
+/// the three custom ones start from a three-quarter view and keep whatever the
+/// camera tools do to them until the comp is closed.
+enum ViewerView {
+  activeCamera,
+  front,
+  back,
+  left,
+  right,
+  top,
+  bottom,
+  custom1,
+  custom2,
+  custom3;
+
+  /// The view the engine builds this one's starting pose from, or null for the
+  /// active camera, which has no pose of its own.
+  BridgeCameraView? get fixed => switch (this) {
+        ViewerView.activeCamera => null,
+        ViewerView.front => BridgeCameraView.front,
+        ViewerView.back => BridgeCameraView.back,
+        ViewerView.left => BridgeCameraView.left,
+        ViewerView.right => BridgeCameraView.right,
+        ViewerView.top => BridgeCameraView.top,
+        ViewerView.bottom => BridgeCameraView.bottom,
+        ViewerView.custom1 ||
+        ViewerView.custom2 ||
+        ViewerView.custom3 =>
+          BridgeCameraView.custom,
+      };
+
+  /// Whether the camera tools move this view. Only the custom three: a Front
+  /// view that could be dragged off square would not be a front view.
+  bool get movable =>
+      this == ViewerView.custom1 ||
+      this == ViewerView.custom2 ||
+      this == ViewerView.custom3;
+
+  /// What the picker's row reads.
+  String get title => switch (this) {
+        ViewerView.activeCamera => l10n.viewerViewActiveCamera,
+        ViewerView.front => l10n.viewerViewFront,
+        ViewerView.back => l10n.viewerViewBack,
+        ViewerView.left => l10n.viewerViewLeft,
+        ViewerView.right => l10n.viewerViewRight,
+        ViewerView.top => l10n.viewerViewTop,
+        ViewerView.bottom => l10n.viewerViewBottom,
+        ViewerView.custom1 => l10n.viewerViewCustom1,
+        ViewerView.custom2 => l10n.viewerViewCustom2,
+        ViewerView.custom3 => l10n.viewerViewCustom3,
+      };
+}
 
 /// A named magnification the Viewer can be asked to take.
 ///

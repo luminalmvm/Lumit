@@ -1630,6 +1630,9 @@ pub struct BridgeLayerInfo {
     /// `get_graph` per layer. Nearly every layer has never been wired, and this
     /// says so for nothing: an unwired layer is not asked about.
     pub wired: bool,
+    /// A Camera layer's non-animatable settings, `None` on every other kind.
+    /// What decides whether the fold-out shows a Point of interest row.
+    pub camera: Option<BridgeCameraSettings>,
 }
 
 /// One marker on a layer's bar: the marker itself plus where it lands at the
@@ -1696,7 +1699,7 @@ pub(crate) fn read_layer_info(
                 .find(|l| l.id == p)
                 .map(|l| l.name.clone())
         }),
-        transform: BridgeTransform::read_at(&layer.transform, layer.start_offset.0),
+        transform: BridgeTransform::read_layer(layer),
         axis_modes: BridgeAxisModes::of(layer.transform.axis_modes),
         effects: layer
             .effects
@@ -1830,6 +1833,12 @@ pub(crate) fn read_layer_info(
         volume_db: BridgeScalar::read_at(&layer.volume_db, layer.start_offset.0),
         pan: BridgeScalar::read_at(&layer.pan, layer.start_offset.0),
         wired: !layer.graph.edges.is_empty(),
+        camera: match &layer.kind {
+            lumit_core::model::LayerKind::Camera { options, .. } => {
+                Some(BridgeCameraSettings::of(options.settings()))
+            }
+            _ => None,
+        },
     }
 }
 
@@ -1975,6 +1984,171 @@ pub struct BridgeTransform {
     pub rotation_y: BridgeScalar,
     /// Percent, 0..100.
     pub opacity: BridgeScalar,
+    /// A Camera layer's own channels (docs/impl/camera.md §1); `None` on every
+    /// other kind. Beside the eleven rather than among them, so a layer that is
+    /// not a camera carries nothing for them.
+    pub camera: Option<BridgeCameraChannels>,
+}
+
+/// The seven animatable channels a Camera layer has beyond its transform.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeCameraChannels {
+    pub poi_x: BridgeScalar,
+    pub poi_y: BridgeScalar,
+    pub poi_z: BridgeScalar,
+    /// Focal distance, comp pixels.
+    pub zoom: BridgeScalar,
+    pub focus_distance: BridgeScalar,
+    pub aperture: BridgeScalar,
+    /// Percent.
+    pub blur_level: BridgeScalar,
+}
+
+/// The non-animatable part of a camera, what the settings dialog edits as one
+/// op ([`lumit_core::model::CameraSettings`]).
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BridgeCameraSettings {
+    pub two_node: bool,
+    pub depth_of_field: bool,
+    pub lock_to_zoom: bool,
+    pub film_size_mm: f64,
+}
+
+impl BridgeCameraSettings {
+    #[frb(ignore)]
+    pub(crate) fn of(s: lumit_core::model::CameraSettings) -> Self {
+        Self {
+            two_node: s.two_node,
+            depth_of_field: s.depth_of_field,
+            lock_to_zoom: s.lock_to_zoom,
+            film_size_mm: s.film_size_mm,
+        }
+    }
+
+    #[frb(ignore)]
+    pub(crate) fn core(self) -> lumit_core::model::CameraSettings {
+        lumit_core::model::CameraSettings {
+            two_node: self.two_node,
+            depth_of_field: self.depth_of_field,
+            lock_to_zoom: self.lock_to_zoom,
+            film_size_mm: self.film_size_mm,
+        }
+    }
+}
+
+/// A camera placement the frontend holds or asks about: the Viewer's 3D views
+/// and the wireframes are drawn through one ([`lumit_core::model::CameraPose`]
+/// without its depth of field, which a view never has).
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BridgeCameraPose {
+    pub zoom: f64,
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+    pub rotation_x: f64,
+    pub rotation_y: f64,
+    pub rotation_z: f64,
+}
+
+impl BridgeCameraPose {
+    #[frb(ignore)]
+    pub(crate) fn of(p: lumit_core::model::CameraPose) -> Self {
+        Self {
+            zoom: p.zoom,
+            x: p.position.0,
+            y: p.position.1,
+            z: p.position.2,
+            rotation_x: p.rotation_deg.0,
+            rotation_y: p.rotation_deg.1,
+            rotation_z: p.rotation_deg.2,
+        }
+    }
+
+    #[frb(ignore)]
+    pub(crate) fn core(self) -> lumit_core::model::CameraPose {
+        lumit_core::model::CameraPose {
+            zoom: self.zoom,
+            position: (self.x, self.y, self.z),
+            rotation_deg: (self.rotation_x, self.rotation_y, self.rotation_z),
+            dof: None,
+        }
+    }
+}
+
+/// The Viewer's fixed 3D views ([`lumit_core::camera::View`]).
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeCameraView {
+    Front,
+    Back,
+    Left,
+    Right,
+    Top,
+    Bottom,
+    Custom,
+}
+
+/// Where a fixed view looks from, for a comp of this size
+/// (docs/impl/camera.md §6).
+#[frb(sync)]
+pub fn camera_view_pose(view: BridgeCameraView, width: f64, height: f64) -> BridgeCameraPose {
+    use lumit_core::camera::View as V;
+    let view = match view {
+        BridgeCameraView::Front => V::Front,
+        BridgeCameraView::Back => V::Back,
+        BridgeCameraView::Left => V::Left,
+        BridgeCameraView::Right => V::Right,
+        BridgeCameraView::Top => V::Top,
+        BridgeCameraView::Bottom => V::Bottom,
+        BridgeCameraView::Custom => V::Custom,
+    };
+    BridgeCameraPose::of(lumit_core::camera::view_pose(view, width, height))
+}
+
+/// What the settings dialog shows for a zoom: focal length and angle of view
+/// (docs/impl/camera.md §9).
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BridgeCameraLens {
+    pub focal_mm: f64,
+    pub angle_deg: f64,
+}
+
+#[frb(sync)]
+pub fn camera_lens(zoom: f64, film_mm: f64, comp_w: f64) -> BridgeCameraLens {
+    BridgeCameraLens {
+        focal_mm: lumit_core::camera::focal_mm(zoom, film_mm, comp_w),
+        angle_deg: lumit_core::camera::angle_deg(zoom, comp_w),
+    }
+}
+
+#[frb(sync)]
+pub fn camera_zoom_for_focal(focal_mm: f64, film_mm: f64, comp_w: f64) -> f64 {
+    lumit_core::camera::zoom_for_focal(focal_mm, film_mm, comp_w)
+}
+
+#[frb(sync)]
+pub fn camera_zoom_for_angle(angle_deg: f64, comp_w: f64) -> f64 {
+    lumit_core::camera::zoom_for_angle(angle_deg, comp_w)
+}
+
+#[frb(sync)]
+pub fn camera_f_stop(zoom: f64, aperture: f64) -> f64 {
+    lumit_core::camera::f_stop(zoom, aperture)
+}
+
+#[frb(sync)]
+pub fn camera_aperture_for_f_stop(f_stop: f64, zoom: f64) -> f64 {
+    lumit_core::camera::aperture_for_f_stop(f_stop, zoom)
+}
+
+/// The preset focal lengths, millimetres.
+#[frb(sync)]
+pub fn camera_presets_mm() -> Vec<f64> {
+    lumit_core::camera::PRESETS_MM.to_vec()
 }
 
 /// Which transform property an edit names ([`lumit_core::model::TransformProp`]).
@@ -1992,6 +2166,13 @@ pub enum BridgeTransformProp {
     RotationX,
     RotationY,
     Opacity,
+    PoiX,
+    PoiY,
+    PoiZ,
+    Zoom,
+    FocusDistance,
+    Aperture,
+    BlurLevel,
 }
 
 /// Which two-axis transform property an axis-mode edit names
@@ -2105,6 +2286,13 @@ impl BridgeTransformProp {
             BridgeTransformProp::RotationX => P::RotationX,
             BridgeTransformProp::RotationY => P::RotationY,
             BridgeTransformProp::Opacity => P::Opacity,
+            BridgeTransformProp::PoiX => P::PoiX,
+            BridgeTransformProp::PoiY => P::PoiY,
+            BridgeTransformProp::PoiZ => P::PoiZ,
+            BridgeTransformProp::Zoom => P::Zoom,
+            BridgeTransformProp::FocusDistance => P::FocusDistance,
+            BridgeTransformProp::Aperture => P::Aperture,
+            BridgeTransformProp::BlurLevel => P::BlurLevel,
         }
     }
 }
@@ -2112,7 +2300,8 @@ impl BridgeTransformProp {
 impl BridgeTransform {
     #[frb(ignore)]
     /// `offset` is the layer's `start_offset`: keys cross on the composition's
-    /// clock, not the layer's own.
+    /// clock, not the layer's own. The group alone, so `camera` is `None`;
+    /// [`Self::read_layer`] reads a whole layer.
     #[allow(clippy::similar_names)]
     pub(crate) fn read_at(
         group: &lumit_core::model::TransformGroup,
@@ -2130,7 +2319,51 @@ impl BridgeTransform {
             rotation_x: BridgeScalar::read_at(&group.rotation_x, offset),
             rotation_y: BridgeScalar::read_at(&group.rotation_y, offset),
             opacity: BridgeScalar::read_at(&group.opacity, offset),
+            camera: None,
         }
+    }
+
+    /// A layer's transform with its camera channels, when it has any.
+    #[frb(ignore)]
+    pub(crate) fn read_layer(layer: &lumit_core::model::Layer) -> BridgeTransform {
+        let offset = layer.start_offset.0;
+        let mut out = Self::read_at(&layer.transform, offset);
+        if let lumit_core::model::LayerKind::Camera { zoom, options, .. } = &layer.kind {
+            out.camera = Some(BridgeCameraChannels {
+                poi_x: BridgeScalar::read_at(&options.point_of_interest[0], offset),
+                poi_y: BridgeScalar::read_at(&options.point_of_interest[1], offset),
+                poi_z: BridgeScalar::read_at(&options.point_of_interest[2], offset),
+                zoom: BridgeScalar::read_at(zoom, offset),
+                focus_distance: BridgeScalar::read_at(&options.focus_distance, offset),
+                aperture: BridgeScalar::read_at(&options.aperture, offset),
+                blur_level: BridgeScalar::read_at(&options.blur_level, offset),
+            });
+        }
+        out
+    }
+
+    /// Write the whole transform onto `layer` for the drag preview, camera
+    /// channels included where the layer is a camera and the preview carries
+    /// them.
+    #[frb(ignore)]
+    pub(crate) fn write_layer(
+        &self,
+        layer: &mut lumit_core::model::Layer,
+    ) -> Result<(), BridgeError> {
+        let offset = layer.start_offset.0;
+        self.write_at(&mut layer.transform, offset)?;
+        if let (Some(c), lumit_core::model::LayerKind::Camera { zoom, options, .. }) =
+            (&self.camera, &mut layer.kind)
+        {
+            options.point_of_interest[0].animation = c.poi_x.animation_at(offset)?;
+            options.point_of_interest[1].animation = c.poi_y.animation_at(offset)?;
+            options.point_of_interest[2].animation = c.poi_z.animation_at(offset)?;
+            zoom.animation = c.zoom.animation_at(offset)?;
+            options.focus_distance.animation = c.focus_distance.animation_at(offset)?;
+            options.aperture.animation = c.aperture.animation_at(offset)?;
+            options.blur_level.animation = c.blur_level.animation_at(offset)?;
+        }
+        Ok(())
     }
 
     /// Write this whole group onto `target`, for the drag preview — which needs
@@ -4793,10 +5026,7 @@ impl LayerReference {
     #[frb(sync)]
     pub fn get_transform(&self) -> Result<BridgeTransform, BridgeError> {
         let layer = self.item()?;
-        Ok(BridgeTransform::read_at(
-            &layer.transform,
-            layer.start_offset.0,
-        ))
+        Ok(BridgeTransform::read_layer(&layer))
     }
 
     /// The layer's source audio summarised across `[start_seconds,

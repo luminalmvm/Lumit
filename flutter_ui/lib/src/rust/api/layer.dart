@@ -21,10 +21,49 @@ import 'solid.dart';
 import 'state.dart';
 part 'layer.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_ops`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `edit_shape_item`, `empty`, `empty`, `exr_path`, `instance_home`, `item`, `layer_time_of_frame`, `map_end_value`, `of`, `of`, `placed`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read`, `read`, `read`, `reanchored_span`, `reload_extract_channels`, `retime_or_identity`, `seed_extract_channels`, `source_length`, `unretime_op`, `with_effects`, `with_instances`, `write_at`, `write_at`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_over`, `write`, `write`, `write`, `write`
+// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_ops`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `core`, `core`, `edit_shape_item`, `empty`, `empty`, `exr_path`, `instance_home`, `item`, `layer_time_of_frame`, `map_end_value`, `of`, `of`, `of`, `of`, `placed`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read_layer`, `read`, `read`, `read`, `reanchored_span`, `reload_extract_channels`, `retime_or_identity`, `seed_extract_channels`, `source_length`, `unretime_op`, `with_effects`, `with_instances`, `write_at`, `write_at`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_layer`, `write_over`, `write`, `write`, `write`, `write`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `InstanceHome`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `try_from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `try_from`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `comp_id`, `id`, `new`, `project_id`
+
+/// Where a fixed view looks from, for a comp of this size
+/// (docs/impl/camera.md §6).
+BridgeCameraPose cameraViewPose(
+        {required BridgeCameraView view,
+        required double width,
+        required double height}) =>
+    BridgeLib.instance.api
+        .crateApiLayerCameraViewPose(view: view, width: width, height: height);
+
+BridgeCameraLens cameraLens(
+        {required double zoom,
+        required double filmMm,
+        required double compW}) =>
+    BridgeLib.instance.api
+        .crateApiLayerCameraLens(zoom: zoom, filmMm: filmMm, compW: compW);
+
+double cameraZoomForFocal(
+        {required double focalMm,
+        required double filmMm,
+        required double compW}) =>
+    BridgeLib.instance.api.crateApiLayerCameraZoomForFocal(
+        focalMm: focalMm, filmMm: filmMm, compW: compW);
+
+double cameraZoomForAngle({required double angleDeg, required double compW}) =>
+    BridgeLib.instance.api
+        .crateApiLayerCameraZoomForAngle(angleDeg: angleDeg, compW: compW);
+
+double cameraFStop({required double zoom, required double aperture}) =>
+    BridgeLib.instance.api
+        .crateApiLayerCameraFStop(zoom: zoom, aperture: aperture);
+
+double cameraApertureForFStop({required double fStop, required double zoom}) =>
+    BridgeLib.instance.api
+        .crateApiLayerCameraApertureForFStop(fStop: fStop, zoom: zoom);
+
+/// The preset focal lengths, millimetres.
+Float64List cameraPresetsMm() =>
+    BridgeLib.instance.api.crateApiLayerCameraPresetsMm();
 
 /// Stand the puppet mesh preview down (see
 /// [`LayerReference::arm_puppet_preview`]) — a puppet tool put away, or the
@@ -148,6 +187,168 @@ enum BridgeBrushShape {
 
   /// A square with flat sides and square corners.
   square,
+  ;
+}
+
+/// The seven animatable channels a Camera layer has beyond its transform.
+class BridgeCameraChannels {
+  final BridgeScalar poiX;
+  final BridgeScalar poiY;
+  final BridgeScalar poiZ;
+
+  /// Focal distance, comp pixels.
+  final BridgeScalar zoom;
+  final BridgeScalar focusDistance;
+  final BridgeScalar aperture;
+
+  /// Percent.
+  final BridgeScalar blurLevel;
+
+  const BridgeCameraChannels({
+    required this.poiX,
+    required this.poiY,
+    required this.poiZ,
+    required this.zoom,
+    required this.focusDistance,
+    required this.aperture,
+    required this.blurLevel,
+  });
+
+  @override
+  int get hashCode =>
+      poiX.hashCode ^
+      poiY.hashCode ^
+      poiZ.hashCode ^
+      zoom.hashCode ^
+      focusDistance.hashCode ^
+      aperture.hashCode ^
+      blurLevel.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeCameraChannels &&
+          runtimeType == other.runtimeType &&
+          poiX == other.poiX &&
+          poiY == other.poiY &&
+          poiZ == other.poiZ &&
+          zoom == other.zoom &&
+          focusDistance == other.focusDistance &&
+          aperture == other.aperture &&
+          blurLevel == other.blurLevel;
+}
+
+/// What the settings dialog shows for a zoom: focal length and angle of view
+/// (docs/impl/camera.md §9).
+class BridgeCameraLens {
+  final double focalMm;
+  final double angleDeg;
+
+  const BridgeCameraLens({
+    required this.focalMm,
+    required this.angleDeg,
+  });
+
+  @override
+  int get hashCode => focalMm.hashCode ^ angleDeg.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeCameraLens &&
+          runtimeType == other.runtimeType &&
+          focalMm == other.focalMm &&
+          angleDeg == other.angleDeg;
+}
+
+/// A camera placement the frontend holds or asks about: the Viewer's 3D views
+/// and the wireframes are drawn through one ([`lumit_core::model::CameraPose`]
+/// without its depth of field, which a view never has).
+class BridgeCameraPose {
+  final double zoom;
+  final double x;
+  final double y;
+  final double z;
+  final double rotationX;
+  final double rotationY;
+  final double rotationZ;
+
+  const BridgeCameraPose({
+    required this.zoom,
+    required this.x,
+    required this.y,
+    required this.z,
+    required this.rotationX,
+    required this.rotationY,
+    required this.rotationZ,
+  });
+
+  @override
+  int get hashCode =>
+      zoom.hashCode ^
+      x.hashCode ^
+      y.hashCode ^
+      z.hashCode ^
+      rotationX.hashCode ^
+      rotationY.hashCode ^
+      rotationZ.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeCameraPose &&
+          runtimeType == other.runtimeType &&
+          zoom == other.zoom &&
+          x == other.x &&
+          y == other.y &&
+          z == other.z &&
+          rotationX == other.rotationX &&
+          rotationY == other.rotationY &&
+          rotationZ == other.rotationZ;
+}
+
+/// The non-animatable part of a camera, what the settings dialog edits as one
+/// op ([`lumit_core::model::CameraSettings`]).
+class BridgeCameraSettings {
+  final bool twoNode;
+  final bool depthOfField;
+  final bool lockToZoom;
+  final double filmSizeMm;
+
+  const BridgeCameraSettings({
+    required this.twoNode,
+    required this.depthOfField,
+    required this.lockToZoom,
+    required this.filmSizeMm,
+  });
+
+  @override
+  int get hashCode =>
+      twoNode.hashCode ^
+      depthOfField.hashCode ^
+      lockToZoom.hashCode ^
+      filmSizeMm.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeCameraSettings &&
+          runtimeType == other.runtimeType &&
+          twoNode == other.twoNode &&
+          depthOfField == other.depthOfField &&
+          lockToZoom == other.lockToZoom &&
+          filmSizeMm == other.filmSizeMm;
+}
+
+/// The Viewer's fixed 3D views ([`lumit_core::camera::View`]).
+enum BridgeCameraView {
+  front,
+  back,
+  left,
+  right,
+  top,
+  bottom,
+  custom,
   ;
 }
 
@@ -530,6 +731,10 @@ class BridgeLayerInfo {
   /// says so for nothing: an unwired layer is not asked about.
   final bool wired;
 
+  /// A Camera layer's non-animatable settings, `None` on every other kind.
+  /// What decides whether the fold-out shows a Point of interest row.
+  final BridgeCameraSettings? camera;
+
   const BridgeLayerInfo({
     required this.name,
     required this.kind,
@@ -564,6 +769,7 @@ class BridgeLayerInfo {
     required this.volumeDb,
     required this.pan,
     required this.wired,
+    this.camera,
   });
 
   @override
@@ -600,7 +806,8 @@ class BridgeLayerInfo {
       sourceFrames.hashCode ^
       volumeDb.hashCode ^
       pan.hashCode ^
-      wired.hashCode;
+      wired.hashCode ^
+      camera.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -639,7 +846,8 @@ class BridgeLayerInfo {
           sourceFrames == other.sourceFrames &&
           volumeDb == other.volumeDb &&
           pan == other.pan &&
-          wired == other.wired;
+          wired == other.wired &&
+          camera == other.camera;
 }
 
 /// What kind of source a layer has — what the Timeline draws its bar and its
@@ -1642,6 +1850,11 @@ class BridgeTransform {
   /// Percent, 0..100.
   final BridgeScalar opacity;
 
+  /// A Camera layer's own channels (docs/impl/camera.md §1); `None` on every
+  /// other kind. Beside the eleven rather than among them, so a layer that is
+  /// not a camera carries nothing for them.
+  final BridgeCameraChannels? camera;
+
   const BridgeTransform({
     required this.anchorX,
     required this.anchorY,
@@ -1654,6 +1867,7 @@ class BridgeTransform {
     required this.rotationX,
     required this.rotationY,
     required this.opacity,
+    this.camera,
   });
 
   @override
@@ -1668,7 +1882,8 @@ class BridgeTransform {
       rotation.hashCode ^
       rotationX.hashCode ^
       rotationY.hashCode ^
-      opacity.hashCode;
+      opacity.hashCode ^
+      camera.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1685,7 +1900,8 @@ class BridgeTransform {
           rotation == other.rotation &&
           rotationX == other.rotationX &&
           rotationY == other.rotationY &&
-          opacity == other.opacity;
+          opacity == other.opacity &&
+          camera == other.camera;
 }
 
 /// Which two-axis transform property an axis-mode edit names
@@ -1710,6 +1926,13 @@ enum BridgeTransformProp {
   rotationX,
   rotationY,
   opacity,
+  poiX,
+  poiY,
+  poiZ,
+  zoom,
+  focusDistance,
+  aperture,
+  blurLevel,
   ;
 }
 
@@ -1965,6 +2188,14 @@ class LayerReference {
           startSeconds: startSeconds,
           endSeconds: endSeconds,
           columns: columns);
+
+  /// This camera's evaluated placement at `frame`: the eye, the effective
+  /// rotation with a two-node camera's aim already in it, and the zoom, with
+  /// a solve link followed (docs/impl/camera.md §2). What the camera tools
+  /// start a drag from. `None` on any other kind.
+  BridgeCameraPose? cameraPoseAt({required BigInt frame}) =>
+      BridgeLib.instance.api
+          .crateApiLayerLayerReferenceCameraPoseAt(that: this, frame: frame);
 
   /// Stop the shape animating, keeping the shape it shows at `time`.
   ///
@@ -2319,6 +2550,13 @@ class LayerReference {
 
   /// This layer's blend mode, as an index into [`list_blend_modes`].
   int getBlend() => BridgeLib.instance.api.crateApiLayerLayerReferenceGetBlend(
+        that: this,
+      );
+
+  /// A camera's non-animatable settings (docs/impl/camera.md §9); `None`
+  /// on any other kind.
+  BridgeCameraSettings? getCameraSettings() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceGetCameraSettings(
         that: this,
       );
 
@@ -2891,6 +3129,11 @@ class LayerReference {
 
   void setBlend({required int index}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetBlend(that: this, index: index);
+
+  /// Replace a camera's settings as one undo step.
+  void setCameraSettings({required BridgeCameraSettings settings}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetCameraSettings(
+          that: this, settings: settings);
 
   /// Set a camera's zoom. Animatable, so it takes a whole `BridgeScalar` like
   /// every other curve-capable value.

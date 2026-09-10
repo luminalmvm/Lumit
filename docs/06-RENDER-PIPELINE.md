@@ -124,7 +124,10 @@ For a visual layer at comp time `t`, the compiled subgraph is, in order:
 
 Comp evaluation runs bottom layer first; each layer composites onto the result. 3D layer sets,
 cameras, and lights follow [03-DATA-MODEL.md](03-DATA-MODEL.md) (contiguous 3D runs are
-z-sorted and rendered through the active camera; a 2D layer breaks the run).
+z-sorted and rendered through the active camera; a 2D layer breaks the run). While the active
+camera carries depth of field, each 3D layer is blurred by its circle of confusion before it
+is placed, one radius per layer read at its anchor ([impl/camera.md](impl/camera.md) §5); the
+pose the frame key hashes carries the depth-of-field numbers, so the key changes with them.
 
 ### 1.3 Sequence layer evaluation
 

@@ -588,6 +588,34 @@ pub enum TransformProp {
     RotationX,
     RotationY,
     Opacity,
+    /// The seven camera channels (docs/impl/camera.md §1). They live in
+    /// [`LayerKind::Camera`] rather than the transform group, and answer
+    /// through [`Layer::prop`]; on any other layer they are not there.
+    PoiX,
+    PoiY,
+    PoiZ,
+    Zoom,
+    FocusDistance,
+    Aperture,
+    BlurLevel,
+}
+
+impl TransformProp {
+    /// Whether this channel is one of the camera's own rather than the
+    /// transform group's.
+    #[must_use]
+    pub fn is_camera_channel(self) -> bool {
+        matches!(
+            self,
+            Self::PoiX
+                | Self::PoiY
+                | Self::PoiZ
+                | Self::Zoom
+                | Self::FocusDistance
+                | Self::Aperture
+                | Self::BlurLevel
+        )
+    }
 }
 
 impl TransformGroup {
@@ -610,13 +638,19 @@ impl TransformGroup {
     ) -> Vec<(TransformProp, crate::anim::Animation)> {
         let mut times: Vec<Rational> = Vec::new();
         for prop in pair.props() {
-            if let crate::anim::Animation::Keyframed(keys) = &self.get(*prop).animation {
+            if let Some(crate::anim::Animation::Keyframed(keys)) =
+                self.get(*prop).map(|p| &p.animation)
+            {
                 times.extend(keys.iter().map(|k| k.time));
             }
         }
         let mut out = Vec::new();
         for prop in pair.props() {
-            let mut property = self.get(*prop).clone();
+            // A pair names transform channels only, so the lookup cannot miss;
+            // a miss is skipped rather than unwrapped, engine crates not panicking.
+            let Some(mut property) = self.get(*prop).cloned() else {
+                continue;
+            };
             if !property.is_animated() {
                 continue;
             }
@@ -631,8 +665,11 @@ impl TransformGroup {
         out
     }
 
-    pub fn get(&self, prop: TransformProp) -> &Property {
-        match prop {
+    /// The group's own channel, or `None` for a camera channel, which is not
+    /// here: [`Layer::prop`] answers both.
+    #[must_use]
+    pub fn get(&self, prop: TransformProp) -> Option<&Property> {
+        Some(match prop {
             TransformProp::AnchorX => &self.anchor_x,
             TransformProp::AnchorY => &self.anchor_y,
             TransformProp::PositionX => &self.position_x,
@@ -644,11 +681,12 @@ impl TransformGroup {
             TransformProp::RotationX => &self.rotation_x,
             TransformProp::RotationY => &self.rotation_y,
             TransformProp::Opacity => &self.opacity,
-        }
+            _ => return None,
+        })
     }
 
-    pub fn get_mut(&mut self, prop: TransformProp) -> &mut Property {
-        match prop {
+    pub fn get_mut(&mut self, prop: TransformProp) -> Option<&mut Property> {
+        Some(match prop {
             TransformProp::AnchorX => &mut self.anchor_x,
             TransformProp::AnchorY => &mut self.anchor_y,
             TransformProp::PositionX => &mut self.position_x,
@@ -660,8 +698,116 @@ impl TransformGroup {
             TransformProp::RotationX => &mut self.rotation_x,
             TransformProp::RotationY => &mut self.rotation_y,
             TransformProp::Opacity => &mut self.opacity,
+            _ => return None,
+        })
+    }
+}
+
+/// What a Camera layer is beyond its zoom and placement
+/// (docs/impl/camera.md §1). Boxed on the variant for the reason
+/// [`LightDef`] is: six animatable channels would make Camera the widest
+/// variant, and every layer would carry the width.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CameraOptions {
+    /// One-node aims by its rotation; two-node aims at `point_of_interest`.
+    #[serde(default)]
+    pub two_node: bool,
+    /// Where a two-node camera looks, comp pixels. Kept on a one-node camera
+    /// too, so switching node types loses nothing.
+    #[serde(default = "CameraOptions::zero3")]
+    pub point_of_interest: [Property; 3],
+    #[serde(default)]
+    pub depth_of_field: bool,
+    /// Distance from the eye to the sharp plane, comp pixels.
+    #[serde(default = "Property::zero")]
+    pub focus_distance: Property,
+    /// Circle-of-confusion scale, comp pixels (docs/impl/camera.md §5).
+    #[serde(default = "Property::zero")]
+    pub aperture: Property,
+    /// Percent; 100 is the full circle of confusion.
+    #[serde(default = "CameraOptions::hundred")]
+    pub blur_level: Property,
+    /// Focus distance follows zoom while set; the dialog writes both.
+    #[serde(default)]
+    pub lock_to_zoom: bool,
+    /// The sensor's width in millimetres, the presentation unit the settings
+    /// dialog converts zoom through. Never read by the renderer.
+    #[serde(default = "CameraOptions::film")]
+    pub film_size_mm: f64,
+}
+
+impl CameraOptions {
+    fn zero3() -> [Property; 3] {
+        [Property::zero(), Property::zero(), Property::zero()]
+    }
+    fn hundred() -> Property {
+        Property::fixed(100.0)
+    }
+    fn film() -> f64 {
+        crate::camera::FILM_MM
+    }
+
+    /// A fresh camera's options: looking at `at` from `zoom` away, focused on
+    /// that plane, with the aperture that reads f/5.6.
+    #[must_use]
+    pub fn fresh(zoom: f64, at: (f64, f64, f64)) -> Self {
+        Self {
+            two_node: false,
+            point_of_interest: [
+                Property::fixed(at.0),
+                Property::fixed(at.1),
+                Property::fixed(at.2),
+            ],
+            depth_of_field: false,
+            focus_distance: Property::fixed(zoom),
+            aperture: Property::fixed(crate::camera::default_aperture(zoom)),
+            blur_level: Self::hundred(),
+            lock_to_zoom: false,
+            film_size_mm: Self::film(),
         }
     }
+
+    /// The part the settings dialog edits as one op.
+    #[must_use]
+    pub fn settings(&self) -> CameraSettings {
+        CameraSettings {
+            two_node: self.two_node,
+            depth_of_field: self.depth_of_field,
+            lock_to_zoom: self.lock_to_zoom,
+            film_size_mm: self.film_size_mm,
+        }
+    }
+
+    pub fn set_settings(&mut self, s: CameraSettings) {
+        self.two_node = s.two_node;
+        self.depth_of_field = s.depth_of_field;
+        self.lock_to_zoom = s.lock_to_zoom;
+        self.film_size_mm = s.film_size_mm;
+    }
+}
+
+impl Default for CameraOptions {
+    fn default() -> Self {
+        Self {
+            two_node: false,
+            point_of_interest: Self::zero3(),
+            depth_of_field: false,
+            focus_distance: Property::zero(),
+            aperture: Property::zero(),
+            blur_level: Self::hundred(),
+            lock_to_zoom: false,
+            film_size_mm: Self::film(),
+        }
+    }
+}
+
+/// The non-animatable part of a camera, what `Op::SetCameraSettings` carries.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct CameraSettings {
+    pub two_node: bool,
+    pub depth_of_field: bool,
+    pub lock_to_zoom: bool,
+    pub film_size_mm: f64,
 }
 
 /// How a layer-input parameter samples the layer it references, in place of the
@@ -1313,6 +1459,49 @@ pub struct Switches {
 }
 
 impl Layer {
+    /// One animatable channel by name: the eleven transform channels from the
+    /// transform group, the seven camera channels from a Camera's own kind,
+    /// and `None` for a camera channel on any other layer
+    /// (docs/impl/camera.md §1).
+    #[must_use]
+    pub fn prop(&self, prop: TransformProp) -> Option<&Property> {
+        if !prop.is_camera_channel() {
+            return self.transform.get(prop);
+        }
+        let LayerKind::Camera { zoom, options, .. } = &self.kind else {
+            return None;
+        };
+        Some(match prop {
+            TransformProp::PoiX => &options.point_of_interest[0],
+            TransformProp::PoiY => &options.point_of_interest[1],
+            TransformProp::PoiZ => &options.point_of_interest[2],
+            TransformProp::Zoom => zoom,
+            TransformProp::FocusDistance => &options.focus_distance,
+            TransformProp::Aperture => &options.aperture,
+            TransformProp::BlurLevel => &options.blur_level,
+            _ => return None,
+        })
+    }
+
+    pub fn prop_mut(&mut self, prop: TransformProp) -> Option<&mut Property> {
+        if !prop.is_camera_channel() {
+            return self.transform.get_mut(prop);
+        }
+        let LayerKind::Camera { zoom, options, .. } = &mut self.kind else {
+            return None;
+        };
+        Some(match prop {
+            TransformProp::PoiX => &mut options.point_of_interest[0],
+            TransformProp::PoiY => &mut options.point_of_interest[1],
+            TransformProp::PoiZ => &mut options.point_of_interest[2],
+            TransformProp::Zoom => zoom,
+            TransformProp::FocusDistance => &mut options.focus_distance,
+            TransformProp::Aperture => &mut options.aperture,
+            TransformProp::BlurLevel => &mut options.blur_level,
+            _ => return None,
+        })
+    }
+
     /// Whether this layer is a Light — asked often enough by the
     /// lighting path that it is worth a name rather than a `matches!` at each
     /// call site.
@@ -1466,10 +1655,14 @@ pub enum LayerKind {
     Text { document: TextDocument },
     /// A 3D viewpoint (docs/01-GLOSSARY.md: Camera layer). Only affects
     /// layers with the 3D switch; the topmost visible camera is active.
-    /// `zoom` is the AE model: focal distance in comp pixels — the z=0
-    /// plane maps 1:1.
+    /// `zoom` is the AE model: focal distance in comp pixels. The layer's
+    /// position is the eye, and the plane `zoom` in front of it maps 1:1
+    /// (docs/impl/camera.md §1).
     Camera {
         zoom: Property,
+        /// Node type, point of interest, depth of field and the sensor size.
+        #[serde(default)]
+        options: Box<CameraOptions>,
         /// The **solve link** (docs/03 §5.6): the id of a layer whose
         /// camera solve drives this camera, in the same composition.
         ///
@@ -1668,11 +1861,25 @@ pub struct ResolvedLight {
 /// can never disagree.
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct CameraPose {
-    /// Focal distance in comp pixels (the z=0 plane maps 1:1).
+    /// Focal distance in comp pixels: the plane that far in front of the eye
+    /// maps 1:1.
     pub zoom: f64,
+    /// The eye, comp pixels.
     pub position: (f64, f64, f64),
-    /// (x, y, z) rotation in degrees.
+    /// The effective (x, y, z) rotation in degrees, the compositor's
+    /// `Ry · Rx · Rz` order. A two-node camera's aim is already in it.
     pub rotation_deg: (f64, f64, f64),
+    /// Present while depth of field is on (docs/impl/camera.md §5).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dof: Option<CameraDof>,
+}
+
+/// The depth-of-field numbers a pose carries to the renderer.
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct CameraDof {
+    pub focus_distance: f64,
+    pub aperture: f64,
+    pub blur_level: f64,
 }
 
 /// One Camera layer's placement at comp time `t`, from its own properties.
@@ -1690,22 +1897,42 @@ pub fn stored_camera_pose(layer: &Layer, t: f64) -> Option<CameraPose> {
 /// along the timeline never moves the correction with it.
 #[must_use]
 pub fn stored_camera_pose_lt(layer: &Layer, lt: f64) -> Option<CameraPose> {
-    let LayerKind::Camera { zoom, .. } = &layer.kind else {
+    let LayerKind::Camera { zoom, options, .. } = &layer.kind else {
         return None;
     };
     let tr = &layer.transform;
+    let position = (
+        tr.position_x.value_at(lt),
+        tr.position_y.value_at(lt),
+        tr.position_z.value_at(lt),
+    );
+    let stored = (
+        tr.rotation_x.value_at(lt),
+        tr.rotation_y.value_at(lt),
+        tr.rotation.value_at(lt),
+    );
+    // A two-node camera aims at its point of interest and the rows add on
+    // top (docs/impl/camera.md §2); with nothing to aim at, the rows alone.
+    let rotation_deg = if options.two_node {
+        let poi = (
+            options.point_of_interest[0].value_at(lt),
+            options.point_of_interest[1].value_at(lt),
+            options.point_of_interest[2].value_at(lt),
+        );
+        crate::camera::look_at(position, poi, stored).unwrap_or(stored)
+    } else {
+        stored
+    };
+    let dof = options.depth_of_field.then(|| CameraDof {
+        focus_distance: options.focus_distance.value_at(lt),
+        aperture: options.aperture.value_at(lt),
+        blur_level: options.blur_level.value_at(lt),
+    });
     Some(CameraPose {
         zoom: zoom.value_at(lt),
-        position: (
-            tr.position_x.value_at(lt),
-            tr.position_y.value_at(lt),
-            tr.position_z.value_at(lt),
-        ),
-        rotation_deg: (
-            tr.rotation_x.value_at(lt),
-            tr.rotation_y.value_at(lt),
-            tr.rotation.value_at(lt),
-        ),
+        position,
+        rotation_deg,
+        dof,
     })
 }
 
@@ -3636,6 +3863,7 @@ mod tests {
                 zoom: Property::zero(),
                 solve_link: None,
                 correction_base: None,
+                options: Default::default(),
             },
             LayerKind::Null,
         ] {
@@ -3676,6 +3904,7 @@ mod tests {
                 zoom: Property::fixed(zoom),
                 solve_link: None,
                 correction_base: None,
+                options: Default::default(),
             },
             in_point: secs(in_s),
             out_point: secs(out_s),
@@ -3924,6 +4153,101 @@ mod tests {
         let mut flat = comp_with_cameras();
         flat.layers.clear();
         assert!(flat.camera_pose(1.0).is_none());
+    }
+
+    /// The seven camera channels (docs/impl/camera.md §1) live in the kind, so
+    /// they answer on a Camera layer and nowhere else. Everything the new rows
+    /// get for nothing rests on this one lookup.
+    #[test]
+    fn layer_prop_answers_the_camera_channels_only_on_a_camera() {
+        use TransformProp as P;
+        let mut camera = comp_with_cameras().layers.remove(2);
+        let mut solid = camera.clone();
+        solid.kind = LayerKind::Solid {
+            def: Uuid::now_v7(),
+        };
+
+        for prop in [
+            P::PoiX,
+            P::PoiY,
+            P::PoiZ,
+            P::Zoom,
+            P::FocusDistance,
+            P::Aperture,
+            P::BlurLevel,
+        ] {
+            assert!(prop.is_camera_channel(), "{prop:?}");
+            assert!(camera.prop(prop).is_some(), "{prop:?} is on a camera");
+            assert!(solid.prop(prop).is_none(), "{prop:?} is not on a solid");
+        }
+        // Zoom is the kind's own property, not a copy of something else.
+        assert_eq!(camera.prop(P::Zoom).map(|p| p.value_at(0.0)), Some(1200.0));
+        // The eleven transform channels answer on both, as they always did.
+        assert!(camera.prop(P::Opacity).is_some());
+        assert!(solid.prop(P::Opacity).is_some());
+        // And a write goes to the slot the read came from.
+        camera
+            .prop_mut(P::BlurLevel)
+            .expect("a camera has one")
+            .animation = crate::anim::Animation::Static(40.0);
+        assert_eq!(
+            camera.prop(P::BlurLevel).map(|p| p.value_at(0.0)),
+            Some(40.0)
+        );
+        assert!(solid.prop_mut(P::Zoom).is_none());
+    }
+
+    /// A two-node camera's forward points at its point of interest, and the
+    /// pose carries a depth of field only while the switch is on
+    /// (docs/impl/camera.md §2).
+    #[test]
+    fn a_two_node_pose_aims_at_the_point_of_interest_and_carries_dof_when_on() {
+        let mut layer = comp_with_cameras().layers.remove(2);
+        let eye = (100.0, 200.0, -300.0);
+        layer.transform.position_x = Property::fixed(eye.0);
+        layer.transform.position_y = Property::fixed(eye.1);
+        layer.transform.position_z = Property::fixed(eye.2);
+        let poi = (400.0, -50.0, 500.0);
+        let LayerKind::Camera { options, .. } = &mut layer.kind else {
+            panic!("the third camera is a camera");
+        };
+        options.two_node = true;
+        options.point_of_interest = [
+            Property::fixed(poi.0),
+            Property::fixed(poi.1),
+            Property::fixed(poi.2),
+        ];
+        options.focus_distance = Property::fixed(700.0);
+        options.aperture = Property::fixed(25.0);
+        options.blur_level = Property::fixed(60.0);
+
+        let pose = stored_camera_pose_lt(&layer, 0.0).expect("a camera");
+        let f = crate::camera::forward(pose.rotation_deg);
+        let d = (poi.0 - eye.0, poi.1 - eye.1, poi.2 - eye.2);
+        let len = (d.0 * d.0 + d.1 * d.1 + d.2 * d.2).sqrt();
+        for (got, want) in [(f.0, d.0 / len), (f.1, d.1 / len), (f.2, d.2 / len)] {
+            assert!(
+                (got - want).abs() < 1e-9,
+                "the forward {f:?} does not point at {poi:?}"
+            );
+        }
+        assert!(
+            pose.dof.is_none(),
+            "the switch is off, so the pose has none"
+        );
+
+        let LayerKind::Camera { options, .. } = &mut layer.kind else {
+            panic!("still a camera");
+        };
+        options.depth_of_field = true;
+        assert_eq!(
+            stored_camera_pose_lt(&layer, 0.0).expect("a camera").dof,
+            Some(CameraDof {
+                focus_distance: 700.0,
+                aperture: 25.0,
+                blur_level: 60.0,
+            })
+        );
     }
 
     #[test]
@@ -4504,7 +4828,7 @@ mod tests {
         let unified = group.unified_axes(TransformPair::Position);
         assert_eq!(unified.len(), 2, "both axes gained the other's times");
         for (prop, animation) in unified {
-            group.get_mut(prop).animation = animation;
+            group.get_mut(prop).unwrap().animation = animation;
         }
 
         let times = |a: &Animation| match a {

@@ -1,38 +1,47 @@
 // The camera tools: orbit, track and dolly the composition's camera
-// (docs/07 §2.3.5).
+// (docs/07 §2.3.5, docs/impl/camera.md §4).
 //
 // **In plain terms.** A 3D composition is looked at through a **camera layer**,
-// and these three tools are how you move it by dragging on the picture instead
-// of typing numbers into the Timeline. Orbit swings the camera around whatever
-// it is pointed at; Track slides it sideways and up and down; Dolly moves it in
-// and out. They are After Effects' three camera tools, and they act on the
-// **active camera** — the topmost visible camera layer whose span covers the
-// playhead — whatever is selected, because the camera is the thing you are
-// looking through rather than a thing you are editing.
+// and these tools are how you move it by dragging on the picture instead of
+// typing numbers into the Timeline. Orbit swings the camera around whatever it
+// is pointed at; Track slides it sideways and up and down; Dolly moves it in
+// and out; the unified tool is the three at once, one to a mouse button. They
+// are After Effects' camera tools, and they act on the **active camera** - the
+// topmost visible camera layer whose span covers the playhead - whatever is
+// selected, because the camera is the thing you are looking through rather than
+// a thing you are editing.
 //
-// **What the camera's numbers mean here.** Lumit's camera is a position, three
-// rotations and a *zoom* (the focal distance, in composition pixels). The plane
-// at the camera's own position renders 1:1 and centred — so **the camera's
-// position is the point it is looking at**, and the eye sits `zoom` behind it
-// along the camera's own forward axis. That is the whole geometry, and it makes
-// the three tools very simple:
+// **What the camera's numbers mean here.** A camera is an eye, three rotations
+// and a *zoom* (the focal distance, in composition pixels). The layer's
+// position is the eye, and the plane `zoom` in front of it along the camera's
+// own forward axis renders 1:1 and centred. A camera can also be **two-node**:
+// it is aimed at a point of interest rather than by its rotation rows, and the
+// aim is composed into the pose the tools read.
 //
-// * **Orbit** changes the rotations and leaves the position alone. The eye,
-//   being derived from both, swings round the point being looked at.
-// * **Track** slides the position along the camera's own right and up axes, so
-//   the eye travels with it and the picture slides.
-// * **Dolly** slides the position along the camera's forward axis, moving the
-//   eye and what it is looking at together, in and out of the scene.
+// The **pivot** is what a drag turns around: the point of interest on a
+// two-node camera, and `eye + zoom · forward` on a one-node one. Both sit dead
+// centre of the frame, which is where the gizmo's mark goes.
 //
-// Lumit's camera has **no separate point of interest** (After Effects' two-node
-// camera): the pivot is the point the camera is already looking at. Adding one
-// is an engine change and is in TODO.md.
+// * **Orbit** swings the eye round the pivot. A one-node camera takes the new
+//   angles and its eye moves to keep the pivot in front at `zoom`; a two-node
+//   camera's eye circles the point of interest at the distance it already had,
+//   and its rotation rows are left alone, because the aim follows the eye.
+// * **Track** slides the eye along its own right and up axes, taking a two-node
+//   camera's point of interest with it, so the framing moves rather than the
+//   aim.
+// * **Dolly** slides the eye along forward. The point of interest stays, so a
+//   dolly changes the distance to it.
+//
+// In a view other than Active camera the same drags move the **view** rather
+// than any layer. The six fixed views are not movable: dragging in one says so
+// and changes nothing.
 //
 // The maths below is pure and in composition pixels; the widget under it only
 // turns drags into these calls and commits transform properties.
 
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
@@ -41,8 +50,9 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/system.dart';
+import 'package:lumit_flutter/state/preview_throttle.dart';
 import 'package:lumit_flutter/state/tools.dart';
-import 'package:uuid/uuid.dart';
+import 'package:lumit_flutter/state/viewer_view.dart';
 
 import 'viewer_tool_cursor.dart';
 
@@ -60,12 +70,13 @@ const double orbitDegreesPerPixel = 0.25;
 /// halves or doubles the distance to what you are looking at.
 const double dollyFraction = 0.0015;
 
-/// A camera's pose in the shape the tools work in: where it looks from, what it
-/// looks at, and how far apart those are.
+/// A camera's pose in the shape the tools work in: where the eye is, which way
+/// it faces, how far ahead the plane it renders 1:1 sits, and what it is aimed
+/// at when it is aimed at something.
 ///
-/// [position] is the point being looked at — the plane that renders 1:1 —
-/// exactly as the document stores it. [distance] is the focal distance (the
-/// document's zoom), which is how far the eye sits behind it.
+/// [position] is the **eye**, as the document stores it. [rotation] is the
+/// *effective* rotation - a two-node camera's aim is already composed into it  - 
+/// so the axes below are always the ones the picture is drawn with.
 @immutable
 class CameraPose {
   final (double, double, double) position;
@@ -73,23 +84,36 @@ class CameraPose {
   /// Rotation in degrees about x, y and z, in the order the compositor applies
   /// them (`Ry · Rx · Rz`).
   final (double, double, double) rotation;
-  final double distance;
+
+  /// The focal distance, comp pixels.
+  final double zoom;
+
+  /// Where a two-node camera looks. Kept but inert on a one-node one, exactly
+  /// as the document keeps it.
+  final (double, double, double) pointOfInterest;
+
+  final bool twoNode;
 
   const CameraPose({
     required this.position,
     required this.rotation,
-    required this.distance,
+    required this.zoom,
+    this.pointOfInterest = (0, 0, 0),
+    this.twoNode = false,
   });
 
   CameraPose copyWith({
     (double, double, double)? position,
     (double, double, double)? rotation,
-    double? distance,
+    double? zoom,
+    (double, double, double)? pointOfInterest,
   }) =>
       CameraPose(
         position: position ?? this.position,
         rotation: rotation ?? this.rotation,
-        distance: distance ?? this.distance,
+        zoom: zoom ?? this.zoom,
+        pointOfInterest: pointOfInterest ?? this.pointOfInterest,
+        twoNode: twoNode,
       );
 
   /// The camera's own three axes in composition space, from its rotations.
@@ -128,33 +152,39 @@ class CameraPose {
     );
     return (right: right, up: up, forward: forward);
   }
+
+  /// The point a drag turns around: what a two-node camera is aimed at, and
+  /// the middle of the 1:1 plane otherwise. Both land in the centre of frame.
+  (double, double, double) get pivot {
+    if (twoNode) return pointOfInterest;
+    final f = axes.forward;
+    return (
+      position.$1 + f.$1 * zoom,
+      position.$2 + f.$2 * zoom,
+      position.$3 + f.$3 * zoom,
+    );
+  }
+}
+
+/// Shift: the larger of the two movements wins and the other is dropped, so a
+/// level orbit stays level and a track keeps to one axis.
+(double, double) _onOneAxis(double dx, double dy, bool lockAxis) {
+  if (!lockAxis) return (dx, dy);
+  return dx.abs() >= dy.abs() ? (dx, 0.0) : (0.0, dy);
 }
 
 /// The pose after an **orbit** drag of [dx], [dy] screen pixels.
 ///
-/// Horizontal movement swings the camera around the point it is looking at
-/// (yaw); vertical movement lifts it over the top or drops it underneath
-/// (pitch). The position never changes, which is precisely what makes this an
-/// orbit rather than a pan: the eye is derived from the rotations, so it travels
-/// round a fixed centre.
-///
-/// [lockAxis] is `Shift`: the larger of the two movements wins and the other is
-/// dropped, so a level orbit stays level.
+/// Horizontal movement swings the camera around the pivot (yaw); vertical
+/// movement lifts it over the top or drops it underneath (pitch). The pivot
+/// never moves, which is precisely what makes this an orbit rather than a pan.
 CameraPose orbitCamera(
   CameraPose pose,
   double dx,
   double dy, {
   bool lockAxis = false,
 }) {
-  var ax = dx;
-  var ay = dy;
-  if (lockAxis) {
-    if (ax.abs() >= ay.abs()) {
-      ay = 0;
-    } else {
-      ax = 0;
-    }
-  }
+  final (ax, ay) = _onOneAxis(dx, dy, lockAxis);
   final yaw = pose.rotation.$2 + ax * orbitDegreesPerPixel;
   // Dragging **up** lifts the camera over the top, which means tilting it to
   // look *down* — a negative x rotation in the compositor's frame, where +y is
@@ -166,11 +196,32 @@ CameraPose orbitCamera(
   // orbit control anywhere does.
   final pitch =
       (pose.rotation.$1 + ay * orbitDegreesPerPixel).clamp(-89.9, 89.9);
-  return pose.copyWith(rotation: (pitch, yaw, pose.rotation.$3));
+  final turned = (pitch, yaw, pose.rotation.$3);
+  final pivot = pose.pivot;
+  final f = pose.copyWith(rotation: turned).axes.forward;
+  // A two-node camera keeps whatever distance it had to the point it is aimed
+  // at; a one-node one keeps its pivot on the plane it renders 1:1.
+  final reach = pose.twoNode
+      ? math.sqrt([
+          pose.position.$1 - pivot.$1,
+          pose.position.$2 - pivot.$2,
+          pose.position.$3 - pivot.$3,
+        ].fold(0.0, (sum, v) => sum + v * v))
+      : pose.zoom;
+  return pose.copyWith(
+    position: (
+      pivot.$1 - f.$1 * reach,
+      pivot.$2 - f.$2 * reach,
+      pivot.$3 - f.$3 * reach,
+    ),
+    // The rows of a two-node camera are left alone: its aim is worked out from
+    // where the eye now is, so turning them as well would double the swing.
+    rotation: pose.twoNode ? pose.rotation : turned,
+  );
 }
 
-/// The pose after a **track** drag: the camera slides along its own right and
-/// up axes, taking what it is looking at with it.
+/// The pose after a **track** drag: the eye slides along its own right and up
+/// axes, taking a two-node camera's point of interest with it.
 ///
 /// The picture follows the pointer rather than running away from it — dragging
 /// right moves the *view* right, which means moving the camera left, the same
@@ -185,31 +236,35 @@ CameraPose trackCamera(
   required double scale,
   bool lockAxis = false,
 }) {
-  var ax = dx;
-  var ay = dy;
-  if (lockAxis) {
-    if (ax.abs() >= ay.abs()) {
-      ay = 0;
-    } else {
-      ax = 0;
-    }
-  }
+  final (ax, ay) = _onOneAxis(dx, dy, lockAxis);
   final k = scale <= 0 ? 1.0 : 1 / scale;
   final right = pose.axes.right;
   final up = pose.axes.up;
   final mx = -ax * k;
   final my = -ay * k;
+  final step = (
+    right.$1 * mx + up.$1 * my,
+    right.$2 * mx + up.$2 * my,
+    right.$3 * mx + up.$3 * my,
+  );
   return pose.copyWith(
     position: (
-      pose.position.$1 + right.$1 * mx + up.$1 * my,
-      pose.position.$2 + right.$2 * mx + up.$2 * my,
-      pose.position.$3 + right.$3 * mx + up.$3 * my,
+      pose.position.$1 + step.$1,
+      pose.position.$2 + step.$2,
+      pose.position.$3 + step.$3,
     ),
+    pointOfInterest: pose.twoNode
+        ? (
+            pose.pointOfInterest.$1 + step.$1,
+            pose.pointOfInterest.$2 + step.$2,
+            pose.pointOfInterest.$3 + step.$3,
+          )
+        : pose.pointOfInterest,
   );
 }
 
-/// The pose after a **dolly** drag: the camera moves along its forward axis,
-/// eye and subject together, in or out of the scene.
+/// The pose after a **dolly** drag: the eye moves along its forward axis, in or
+/// out of the scene, leaving what it is aimed at where it is.
 ///
 /// Dragging **down or right** goes in, which is After Effects' sense. The
 /// distance moved is proportional to how far away the camera already is, so a
@@ -217,7 +272,7 @@ CameraPose trackCamera(
 CameraPose dollyCamera(CameraPose pose, double dx, double dy) {
   // Whichever axis carries the movement, so the gesture works either way round.
   final travel = dx.abs() >= dy.abs() ? dx : dy;
-  final step = travel * dollyFraction * pose.distance;
+  final step = travel * dollyFraction * pose.zoom;
   final forward = pose.axes.forward;
   return pose.copyWith(
     position: (
@@ -227,6 +282,32 @@ CameraPose dollyCamera(CameraPose pose, double dx, double dy) {
     ),
   );
 }
+
+/// Which move a mouse button asks the unified tool for: left orbits, middle
+/// tracks, right dollies (docs/impl/camera.md §4).
+ToolMode cameraMoveForButtons(int buttons) {
+  if (buttons & kMiddleMouseButton != 0) return ToolMode.cameraPan;
+  if (buttons & kSecondaryMouseButton != 0) return ToolMode.cameraDolly;
+  return ToolMode.cameraOrbit;
+}
+
+/// A view's pose as the tools work in it: one-node, and never aimed.
+CameraPose poseOfView(BridgeCameraPose view) => CameraPose(
+      position: (view.x, view.y, view.z),
+      rotation: (view.rotationX, view.rotationY, view.rotationZ),
+      zoom: view.zoom,
+    );
+
+/// The same pose on the way back to the engine.
+BridgeCameraPose viewOfPose(CameraPose pose) => BridgeCameraPose(
+      zoom: pose.zoom,
+      x: pose.position.$1,
+      y: pose.position.$2,
+      z: pose.position.$3,
+      rotationX: pose.rotation.$1,
+      rotationY: pose.rotation.$2,
+      rotationZ: pose.rotation.$3,
+    );
 
 /// The camera tools over the picture.
 class ViewerCameraLayer extends StatefulWidget {
@@ -278,14 +359,24 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
     // the pointer frozen where the drag began: the freeze is a platform-wide
     // state, and only this widget knows it was asked for.
     if (_locked) thawCursor();
+    _throttle.cancel();
     super.dispose();
   }
 
-  /// The camera being moved and the pose it had when the drag began — the whole
+  /// What is being moved and the pose it had when the drag began - the whole
   /// gesture is relative to that, so a drag never compounds its own rounding.
+  /// A null layer with a pose is the Viewer's own custom view.
   LayerReference? _acting;
+  bool _actingView = false;
   CameraPose? _start;
   Offset _delta = Offset.zero;
+
+  /// Which move the unified tool was given by the button that started the drag.
+  ToolMode _move = ToolMode.cameraOrbit;
+
+  /// A custom view is a message to the engine per movement, so it goes out at
+  /// the rate every other live drag uses.
+  final PreviewThrottle _throttle = PreviewThrottle();
 
   /// Where the pointer is being held for the length of the drag, and whether
   /// this platform could hold it there at all. Off the lock, the drag
@@ -297,40 +388,46 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   ///
   /// Held, because this layer rebuilds on every movement of the pointer — the
   /// drawn pointer has to follow it — and finding the camera is **not** free:
-  /// the layer's focal distance and the composition's rate are both reads
-  /// across the bridge. Moving the mouse over the picture with a camera tool in
-  /// hand was making both of them, dozens of times a second, to re-answer a
-  /// question only an edit or the playhead can change.
+  /// the evaluated pose and the composition's rate are both reads across the
+  /// bridge. Moving the mouse over the picture with a camera tool in hand was
+  /// making both of them, dozens of times a second, to re-answer a question
+  /// only an edit or the playhead can change.
   ({LayerReference layer, CameraPose pose})? _held;
   BigInt? _heldRevision;
   int? _heldFrame;
 
-  /// The comp's rate and each camera's focal distance, held against the
-  /// revision the walk last crossed the bridge at. Only an edit can move
-  /// either, so a playhead move re-walks the held model — which camera is live
-  /// can change with the frame — without re-asking the engine anything.
+  /// The comp's rate, held against the revision the walk last crossed the
+  /// bridge at. Only an edit can move it, so a playhead move re-walks the held
+  /// model - which camera is live can change with the frame - without asking
+  /// the engine for the rate again.
   double? _fps;
-  final Map<UuidValue, double> _zooms = {};
 
-  /// The active camera layer: the topmost visible Camera whose span covers the
-  /// playhead, which is the one the renderer looks through.
-  ({LayerReference layer, CameraPose pose})? get _camera {
+  /// What a drag moves: the fronted comp's active camera, or the Viewer's own
+  /// custom view. Null when there is nothing to move, which is a comp with no
+  /// live camera, one whose camera is keyframed, or a fixed view.
+  ({LayerReference? layer, CameraPose pose})? get _target {
+    final view = widget.uiState.viewerView;
+    if (view != ViewerView.activeCamera) {
+      final pose = widget.uiState.viewerViewPose;
+      if (!view.movable || pose == null) return null;
+      // Read fresh rather than held: a custom view moves without the document
+      // or the playhead moving, and this costs nothing to build.
+      return (layer: null, pose: poseOfView(pose));
+    }
     // The **held** revision, not a checked one. Reading the checking
     // getter asks the engine whether the document has moved — and this runs on
     // every rebuild, which for a tool that draws its own pointer means every
     // movement of the mouse. That was the whole of the camera tools' chatter.
     final revision = widget.uiState.model.heldRevision;
     final frame = widget.uiState.playheadFrame.value;
-    if (_heldRevision != revision) {
-      _fps = null;
-      _zooms.clear();
-    }
+    if (_heldRevision != revision) _fps = null;
     if (_heldRevision != revision || _heldFrame != frame) {
       _heldRevision = revision;
       _heldFrame = frame;
       _held = _findCamera(frame);
     }
-    return _held;
+    final held = _held;
+    return held == null ? null : (layer: held.layer, pose: held.pose);
   }
 
   /// The walk itself. Everything but the two reads noted above comes off the
@@ -341,36 +438,57 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
       if (info.kind != BridgeLayerKind.camera) continue;
       if (!info.switches.visible) continue;
       if (!_liveAt(info.span, frame)) continue;
-      final tf = info.transform;
+      final channels = info.transform.camera;
+      if (channels == null) continue;
       double still(BridgeScalar s) =>
           s is BridgeScalar_Static ? s.field0 : double.nan;
-      final pose = CameraPose(
-        position: (
-          still(tf.positionX),
-          still(tf.positionY),
-          still(tf.positionZ)
-        ),
-        rotation: (
-          still(tf.rotationX),
-          still(tf.rotationY),
-          still(tf.rotation)
-        ),
-        distance: _distanceOf(entry.layer),
-      );
+      final tf = info.transform;
+      final twoNode = info.camera?.twoNode ?? false;
       // A camera whose placement is keyframed has no single value for a drag to
-      // add to — the same rule the layer gizmo follows.
-      if ([
-        pose.position.$1,
-        pose.position.$2,
-        pose.position.$3,
-        pose.rotation.$1,
-        pose.rotation.$2,
-        pose.rotation.$3,
-        pose.distance,
-      ].any((v) => v.isNaN)) {
-        return null;
+      // add to - the same rule the layer gizmo follows. The point of interest
+      // only counts on a camera that is aimed by it.
+      final placement = [
+        still(tf.positionX),
+        still(tf.positionY),
+        still(tf.positionZ),
+        still(tf.rotationX),
+        still(tf.rotationY),
+        still(tf.rotation),
+        still(channels.zoom),
+        if (twoNode) ...[
+          still(channels.poiX),
+          still(channels.poiY),
+          still(channels.poiZ),
+        ],
+      ];
+      if (placement.any((v) => v.isNaN)) return null;
+      // The *effective* pose: a two-node camera's aim and a solve link are
+      // already composed into it, which the rows on their own do not carry.
+      BridgeCameraPose? evaluated;
+      try {
+        evaluated = entry.layer.cameraPoseAt(frame: BigInt.from(frame));
+      } catch (_) {
+        // The layer went away between the model and the read.
       }
-      return (layer: entry.layer, pose: pose);
+      if (evaluated == null) return null;
+      return (
+        layer: entry.layer,
+        pose: CameraPose(
+          position: (evaluated.x, evaluated.y, evaluated.z),
+          rotation: (
+            evaluated.rotationX,
+            evaluated.rotationY,
+            evaluated.rotationZ
+          ),
+          zoom: evaluated.zoom,
+          pointOfInterest: (
+            still(channels.poiX),
+            still(channels.poiY),
+            still(channels.poiZ),
+          ),
+          twoNode: twoNode,
+        ),
+      );
     }
     return null;
   }
@@ -397,77 +515,78 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
     return t >= seconds(span.inPoint) && t < seconds(span.outPoint);
   }
 
-  /// The layer's focal distance, held against the revision for the same
-  /// reason as the rate. NaN — keyframed, or a layer that went away between
-  /// the model and the read — is held too; the answer is the same until the
-  /// document moves.
-  double _distanceOf(LayerReference layer) {
-    final held = _zooms[layer.internallayerId];
-    if (held != null) return held;
-    var distance = double.nan;
-    try {
-      final zoom = layer.getCameraZoom();
-      if (zoom is BridgeScalar_Static) distance = zoom.field0;
-    } catch (_) {
-      // The layer went away between the model and the read.
-    }
-    _zooms[layer.internallayerId] = distance;
-    return distance;
-  }
-
   @override
   Widget build(BuildContext context) {
     if (!widget.active) return const SizedBox.shrink();
+    final unified = widget.tool == ToolMode.cameraUnified;
+    final stack = Stack(
+      children: [
+        Positioned.fill(
+          child: CustomPaint(
+            painter: _CameraGizmoPainter(
+              // The pivot is what the camera is looking at, which is by
+              // construction the middle of the frame - a one-node camera's
+              // 1:1 plane and a two-node camera's point of interest both sit
+              // on its forward axis.
+              pivot: _target == null ? null : widget.fitted.center,
+              orbiting: widget.tool == ToolMode.cameraOrbit ||
+                  (unified && _move == ToolMode.cameraOrbit),
+              mark: widget.mark,
+              outline: widget.outline,
+              accent: widget.accent,
+            ),
+          ),
+        ),
+        ToolPointer(
+          at: _pointer,
+          tool: widget.tool,
+          mark: widget.mark,
+          outline: widget.outline,
+        ),
+      ],
+    );
     return Positioned.fill(
       // The hardware crosshair leads; the badge beside it, drawn by
       // the app, only says which camera move.
       child: DrawnPointerRegion(
         cursor: SystemMouseCursors.precise,
         onPointer: (at) => setState(() => _pointer = at),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTapUp: (_) {
-            if (_camera == null) _sayNoCamera();
-          },
-          onPanStart: _onPanStart,
-          onPanUpdate: _onPanUpdate,
-          onPanEnd: (_) => _onPanEnd(),
-          onPanCancel: _onPanEnd,
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: CustomPaint(
-                  painter: _CameraGizmoPainter(
-                    // The pivot is the point the camera looks at, which is by
-                    // construction the middle of the frame.
-                    pivot: _camera == null ? null : widget.fitted.center,
-                    orbiting: widget.tool == ToolMode.cameraOrbit,
-                    mark: widget.mark,
-                    outline: widget.outline,
-                    accent: widget.accent,
-                  ),
-                ),
+        // The unified tool reads raw pointers, because a pan recogniser is
+        // told nothing about which button is down and the button is the whole
+        // of what picks the move. The stage's own pan is switched off while a
+        // camera tool is armed, so nothing underneath takes the drag instead.
+        child: unified
+            ? Listener(
+                behavior: HitTestBehavior.opaque,
+                onPointerDown: (e) {
+                  _move = cameraMoveForButtons(e.buttons);
+                  _begin(e.localPosition);
+                },
+                onPointerMove: (e) => _drag(e.localPosition, e.delta),
+                onPointerUp: (_) => _end(),
+                onPointerCancel: (_) => _end(),
+                child: stack,
+              )
+            : GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapUp: (_) {
+                  if (_target == null) _sayNoCamera();
+                },
+                onPanStart: (d) => _begin(d.localPosition),
+                onPanUpdate: (d) => _drag(d.localPosition, d.delta),
+                onPanEnd: (_) => _end(),
+                onPanCancel: _end,
+                child: stack,
               ),
-              ToolPointer(
-                at: _pointer,
-                tool: widget.tool,
-                mark: widget.mark,
-                outline: widget.outline,
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
 
-  void _sayNoCamera() => widget.state.postNotice(
-        l10n.noCameraToMove,
-      );
+  void _sayNoCamera() => widget.state.postNotice(l10n.noCameraToMove);
 
-  void _onPanStart(DragStartDetails details) {
-    final camera = _camera;
-    if (camera == null) {
+  void _begin(Offset at) {
+    final target = _target;
+    if (target == null) {
       _sayNoCamera();
       return;
     }
@@ -477,17 +596,18 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
     // into the corner of the screen where it stops moving at all, is a drag
     // that ends before the user does. It reappears where it started when the
     // button comes up, which is what every 3D application does.
-    _anchor = details.localPosition;
+    _anchor = at;
     _locked = freezeCursor();
     setState(() {
-      _acting = camera.layer;
-      _start = camera.pose;
+      _acting = target.layer;
+      _actingView = target.layer == null;
+      _start = target.pose;
       _delta = Offset.zero;
     });
   }
 
-  void _onPanUpdate(DragUpdateDetails details) {
-    if (_acting == null) return;
+  void _drag(Offset at, Offset delta) {
+    if (_start == null) return;
     final anchor = _anchor;
     if (_locked && anchor != null) {
       // Measured from where the pointer is *held*, not from the last event:
@@ -495,23 +615,24 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
       // framework reports for that one exactly undoes the real one. Against the
       // anchor, the put-back event reads as no movement at all, which is the
       // truth of it.
-      final moved = details.localPosition - anchor;
+      final moved = at - anchor;
       if (moved == Offset.zero) return;
       setState(() => _delta += moved);
       restoreFrozenCursor();
     } else {
-      setState(() => _delta += details.delta);
+      setState(() => _delta += delta);
     }
     _write(preview: true);
   }
 
-  void _onPanEnd() {
-    if (_acting != null && _delta != Offset.zero) _write(preview: false);
+  void _end() {
+    if (_start != null && _delta != Offset.zero) _write(preview: false);
     if (_locked) thawCursor();
     _locked = false;
     _anchor = null;
     setState(() {
       _acting = null;
+      _actingView = false;
       _start = null;
       _delta = Offset.zero;
     });
@@ -525,7 +646,9 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
     final scale = widget.compSize.width == 0
         ? 1.0
         : widget.fitted.width / widget.compSize.width;
-    return switch (widget.tool) {
+    final move =
+        widget.tool == ToolMode.cameraUnified ? _move : widget.tool;
+    return switch (move) {
       ToolMode.cameraOrbit =>
         orbitCamera(start, _delta.dx, _delta.dy, lockAxis: shift),
       ToolMode.cameraPan =>
@@ -544,26 +667,54 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   /// preview patches *one layer's* transform, and moving the camera changes
   /// what every layer looks like).
   void _write({required bool preview}) {
-    final layer = _acting;
     final pose = _moved();
-    if (layer == null || pose == null) return;
+    if (pose == null) return;
+    if (_actingView) {
+      // A view is not the document, so this is a message and a re-render and
+      // nothing else. Throttled while the drag runs, sent outright at the end.
+      final view = viewOfPose(pose);
+      if (preview) {
+        _throttle.request(() => widget.uiState.setViewerViewPose(view));
+      } else {
+        _throttle.cancel();
+        widget.uiState.setViewerViewPose(view);
+      }
+      return;
+    }
+    final layer = _acting;
+    if (layer == null) return;
+    // A two-node camera's rows are left alone by an orbit, and its point of
+    // interest travels with a track: what is written is what moved.
+    final props = <BridgeTransformProp>[
+      BridgeTransformProp.positionX,
+      BridgeTransformProp.positionY,
+      BridgeTransformProp.positionZ,
+      if (!pose.twoNode) ...[
+        BridgeTransformProp.rotationX,
+        BridgeTransformProp.rotationY,
+      ],
+      if (pose.twoNode) ...[
+        BridgeTransformProp.poiX,
+        BridgeTransformProp.poiY,
+        BridgeTransformProp.poiZ,
+      ],
+    ];
+    final values = <BridgeScalar>[
+      BridgeScalar.static_(pose.position.$1),
+      BridgeScalar.static_(pose.position.$2),
+      BridgeScalar.static_(pose.position.$3),
+      if (!pose.twoNode) ...[
+        BridgeScalar.static_(pose.rotation.$1),
+        BridgeScalar.static_(pose.rotation.$2),
+      ],
+      if (pose.twoNode) ...[
+        BridgeScalar.static_(pose.pointOfInterest.$1),
+        BridgeScalar.static_(pose.pointOfInterest.$2),
+        BridgeScalar.static_(pose.pointOfInterest.$3),
+      ],
+    ];
     try {
-      layer.setTransforms(
-        props: const [
-          BridgeTransformProp.positionX,
-          BridgeTransformProp.positionY,
-          BridgeTransformProp.positionZ,
-          BridgeTransformProp.rotationX,
-          BridgeTransformProp.rotationY,
-        ],
-        values: [
-          BridgeScalar.static_(pose.position.$1),
-          BridgeScalar.static_(pose.position.$2),
-          BridgeScalar.static_(pose.position.$3),
-          BridgeScalar.static_(pose.rotation.$1),
-          BridgeScalar.static_(pose.rotation.$2),
-        ],
-      );
+      layer.setTransforms(props: props, values: values);
       widget.onChanged();
     } catch (_) {
       // The camera was deleted mid-drag.
@@ -571,8 +722,8 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   }
 }
 
-/// The camera gizmo: the point the camera is looking at, and — while orbiting —
-/// the circle it would swing round.
+/// The camera gizmo: the point the camera is turning around, and - while
+/// orbiting - the circle it would swing round.
 class _CameraGizmoPainter extends CustomPainter {
   final Offset? pivot;
   final bool orbiting;

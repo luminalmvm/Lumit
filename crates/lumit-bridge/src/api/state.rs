@@ -586,6 +586,7 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         | Op::SetTransformProperty { comp, layer, .. }
         | Op::SetTransformAxisMode { comp, layer, .. }
         | Op::SetCameraZoom { comp, layer, .. }
+        | Op::SetCameraSettings { comp, layer, .. }
         | Op::SetCameraSolveLink { comp, layer, .. }
         | Op::SetLayerVolume { comp, layer, .. }
         | Op::SetLayerPan { comp, layer, .. }

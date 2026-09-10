@@ -227,8 +227,13 @@ pub fn patch_layer_prop(
     value: f64,
 ) -> lumit_core::model::Composition {
     let mut patched = comp.clone();
-    if let Some(l) = patched.layers.iter_mut().find(|l| l.id == layer) {
-        *l.transform.get_mut(prop) = lumit_core::anim::Property::fixed(value);
+    if let Some(slot) = patched
+        .layers
+        .iter_mut()
+        .find(|l| l.id == layer)
+        .and_then(|l| l.prop_mut(prop))
+    {
+        *slot = lumit_core::anim::Property::fixed(value);
     }
     patched
 }
@@ -3206,7 +3211,7 @@ mod points_projection_tests {
             1920.0,
             1080.0,
             900.0,
-            (860.0, 600.0, 0.0),
+            (860.0, 600.0, -900.0),
             (8.0, -20.0, 5.0),
         );
         let place = lumit_gpu::place_matrix(
