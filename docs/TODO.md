@@ -467,8 +467,6 @@ imported theme travels with the user rather than the machine's settings.
     wants a *smooth* follow and a setting to choose between them. `Shift+=` (zoom
     to the work area) is unbound for the same reason: neither was in TI-9's own
     sentence list.
-- **Volume keyframes draw no lane diamonds and no graph curve** - volume is not
-    in the comp read model; fold it into `BridgeLayerInfo` if either matters.
 
 **Render-time indicator follow-ups (the column landed).** What ships measures by
 *fencing* — the render waits for the card at each layer and each effect before reading

@@ -106,6 +106,10 @@ class GraphChannel {
   /// property nor an effect parameter but reads and writes like both.
   final bool retime;
 
+  /// True for the layer's Volume channel, in dB, written back through
+  /// `setVolumeDb` the way the Retime goes through its own setter.
+  final bool volume;
+
   /// Set for one of a mask's values: the mask it belongs to, and which
   /// of its values this is.
   final BridgeMask? mask;
@@ -139,6 +143,7 @@ class GraphChannel {
     this.effect,
     this.param,
     this.retime = false,
+    this.volume = false,
     this.mask,
     this.maskValue,
     this.maskVertex = -1,
@@ -202,8 +207,8 @@ class GraphChannel {
 /// entirely from the read model, so building them costs no bridge calls.
 ///
 /// A transform row yields one channel per axis (Position → x and y, the AE
-/// red/green pair); a float effect parameter yields one. Volume is not in the
-/// read model (one of its deliberate exceptions) and is skipped — docs/TODO.md.
+/// red/green pair); a float effect parameter yields one, and so does the
+/// Volume row, off the same `volumeDb` the rubber band draws.
 List<GraphChannel> graphChannels({
   required List<BridgeLayerEntry> layers,
   required List<String> selected,
@@ -236,6 +241,22 @@ List<GraphChannel> graphChannels({
           retime: true,
         ));
       }
+      continue;
+    }
+
+    // Volume: one channel in dB. The lane's diamonds, the rubber band and
+    // this curve are three views of `volumeDb`, so a key deleted or eased
+    // here is gone from all of them.
+    if (path == '${audioPath(layerId)}/volume') {
+      out.add(GraphChannel(
+        path: path,
+        id: path,
+        label: '${entry.info.name} · ${l10n.volume}',
+        colourIndex: out.length,
+        scalar: entry.info.volumeDb,
+        entry: entry,
+        volume: true,
+      ));
       continue;
     }
 
@@ -424,6 +445,7 @@ String graphNumberText(double v) =>
 String? graphChannelUnit(GraphChannel channel) {
   if (channel.param case final param?) return unitRiderText(param.unit);
   if (channel.retime) return l10n.unitSymbolSeconds;
+  if (channel.volume) return l10n.unitSymbolDb;
   if (channel.maskValue case final value?) {
     return switch (value) {
       MaskValue.opacity => l10n.unitSymbolPercent,
