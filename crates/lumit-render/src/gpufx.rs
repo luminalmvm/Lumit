@@ -385,6 +385,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &Mosaic,
     &FindEdges,
     &MoodLighting,
+    &PixelSort,
     &Emboss,
     &Texturize,
     &Fill,
@@ -3894,6 +3895,43 @@ impl GpuEffect for MoodLighting {
                 shade: m.shade,
                 contrast: m.contrast,
                 mix: m.mix,
+            },
+        )
+    }
+}
+
+struct PixelSort;
+impl GpuEffect for PixelSort {
+    fn match_name(&self) -> &'static str {
+        "pixel_sort"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        let s = effects::pixel_sort::PixelSort::read(p).packed();
+        fx.pixel_sort(
+            ctx,
+            tex,
+            w,
+            h,
+            aux.matte(),
+            &lumit_gpu::fx::PixelSortOp {
+                sort_by: s.sort_by,
+                vertical: s.vertical,
+                span_mode: s.span_mode,
+                reverse: s.reverse,
+                min: s.min,
+                max: s.max,
+                stride: s.stride,
+                seed: s.seed,
+                mix: s.mix,
             },
         )
     }

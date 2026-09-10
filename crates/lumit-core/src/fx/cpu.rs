@@ -1,3 +1,4 @@
+use super::maths::lattice_hash;
 use super::noise::{fractal, hash01, value3, FractalField};
 use super::{MatteKeyParams, MbQuality, MbView, MAX_BLADES};
 
@@ -9129,4 +9130,223 @@ pub fn stroke_geometry(
         p.arcs[i] = arc;
     }
     p.count = n as u32;
+}
+/// The most pixels one span may hold (docs/08 §3.99), and the Maximum span
+/// length row's hard maximum. A span costs its own length in reads for every
+/// pixel in it, so this is where the cost stops being anyone's idea of
+/// interactive rather than a limit of the kernel.
+pub const PIXEL_SORT_MAX_SPAN: u32 = 1024;
+
+/// How finely a sort key's value is quantised: twenty-two bits, which leaves
+/// the top ten of the `u32` for the span's own start. Far finer than the fp16
+/// the picture is stored in, so the order the key gives is the order the
+/// values have.
+const PIXEL_SORT_LEVELS: u32 = 0x003f_ffff;
+
+/// One resolved Pixel sort (docs/08 §3.99), reduced to what both paths read.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PixelSortParams {
+    /// Which property the sort orders by: 0 Red, 1 Green, 2 Blue, 3 Luminance,
+    /// 4 Hue, 5 Saturation.
+    pub sort_by: u32,
+    /// True when spans run down columns instead of along rows.
+    pub vertical: bool,
+    /// What a sorted span is written back as: 0 Sort, 1 Stretch, 2 Mirror.
+    pub span_mode: u32,
+    /// True when a span is ordered the other way round.
+    pub reverse: bool,
+    /// The bottom of the band that sorts, 0..1.
+    pub min: f32,
+    /// The top of it, 0..1 and never below `min`.
+    pub max: f32,
+    /// The most pixels one span may hold, `1..=PIXEL_SORT_MAX_SPAN`, raster
+    /// pixels.
+    pub stride: u32,
+    /// Which offsets the chunk grid takes on each line.
+    pub seed: u32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// The 0..1 value one pixel sorts by (== `ps_value` in `fx_pixelsort.wgsl`).
+///
+/// `u` is straight (unpremultiplied) scene-linear colour, so a half-transparent
+/// red sorts as red rather than as a dark red. A value above 1 reads as 1: an
+/// HDR highlight sits at the top of the band rather than outside every band,
+/// which is what makes the default Min 0 and Max 1 mean all of it.
+#[must_use]
+pub fn pixel_sort_value(u: [f32; 3], sort_by: u32) -> f32 {
+    let v = match sort_by {
+        0 => u[0],
+        1 => u[1],
+        2 => u[2],
+        3 => u[0] * LUMA[0] + u[1] * LUMA[1] + u[2] * LUMA[2],
+        4 => {
+            let hi = u[0].max(u[1]).max(u[2]);
+            let lo = u[0].min(u[1]).min(u[2]);
+            // §3.33's own hue, in turns rather than degrees so the Min and Max
+            // sliders read 0..1 whichever Sort by is picked.
+            hsv_hue(u, hi, hi - lo) / 360.0
+        }
+        _ => {
+            let hi = u[0].max(u[1]).max(u[2]);
+            let lo = u[0].min(u[1]).min(u[2]);
+            if hi > 0.0 {
+                (hi - lo) / hi
+            } else {
+                0.0
+            }
+        }
+    };
+    v.clamp(0.0, 1.0)
+}
+
+/// A pixel's place in the sort (== `ps_key`): its span's start in the top ten
+/// bits, its own value in the low twenty-two.
+///
+/// Sorting by this one number is what keeps the spans apart without a branch. A
+/// span's members all carry its start, the starts already run up the line, so
+/// ordering by the whole key can only ever move a pixel within its own span —
+/// and a pixel that is in no span is a span of one and cannot move at all.
+///
+/// The quantisation truncates and never rounds: WGSL rounds a half to even and
+/// Rust rounds it away from zero, and one bucket of disagreement is a swapped
+/// pixel rather than a last-bit difference.
+#[must_use]
+fn pixel_sort_key(value: f32, span_start: u32, reverse: bool) -> u32 {
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let q = (value * PIXEL_SORT_LEVELS as f32) as u32;
+    let q = if reverse { PIXEL_SORT_LEVELS - q } else { q };
+    (span_start << 22) | q
+}
+
+/// Pixel sort (docs/08 §3.99): runs of pixels picked out by a threshold, each
+/// one sorted along its own line.
+pub fn pixel_sort(rgba: &mut [f32], w: u32, h: u32, p: &PixelSortParams) {
+    pixel_sort_matted(rgba, w, h, p, &[]);
+}
+
+/// [`pixel_sort`] driven by a matte (docs/08 §2.6): the matte says **where the
+/// spans are**, alongside the threshold, so a pixel sorts only where the matte
+/// is at least half lit and its value is inside the band. An empty matte is the
+/// unmatted path to the byte.
+///
+/// The matte is read at a hard half rather than as a ramp because a span is a
+/// yes or a no: a pixel is in one or it is not, and there is no half a pixel to
+/// give a grey matte.
+#[allow(clippy::too_many_lines)]
+pub fn pixel_sort_matted(rgba: &mut [f32], w: u32, h: u32, p: &PixelSortParams, matte: &[f32]) {
+    if p.mix <= 0.0 {
+        return; // bit-exact identity (the WGSL twin matches)
+    }
+    let stride = p.stride.clamp(1, PIXEL_SORT_MAX_SPAN) as usize;
+    let (len, lines) = if p.vertical { (h, w) } else { (w, h) };
+    let (len, lines) = (len as usize, lines as usize);
+    let src = rgba.to_vec();
+    // Where pixel `pos` of `line` starts in the buffer. The whole of what
+    // Direction changes is this one swap; everything below counts along a line
+    // without knowing which way the line runs.
+    let at = |line: usize, pos: usize| -> usize {
+        (if p.vertical {
+            pos * w as usize + line
+        } else {
+            line * w as usize + pos
+        }) * 4
+    };
+
+    // One chunk's working set, taken once for the whole frame rather than once
+    // per chunk (14-ENGINEERING-RULES §5).
+    let mut masked = vec![false; stride];
+    let mut value = vec![0.0f32; stride];
+    let mut start = vec![0u32; stride];
+    let mut end = vec![0u32; stride];
+    let mut order: Vec<(u32, u32)> = Vec::with_capacity(stride);
+
+    for line in 0..lines {
+        // The chunk grid's own offset on this line. Without it every line would
+        // break its spans at the same places and the cap would draw itself as a
+        // column down the frame; with it the breaks scatter and the cap is only
+        // a cap.
+        #[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
+        let offset = (lattice_hash(p.seed, 0, line as i32, 0, 0) % stride as u32) as i32;
+        let mut base = -offset;
+        while base < len as i32 {
+            for i in 0..stride {
+                let pos = base + i as i32;
+                masked[i] = false;
+                value[i] = 0.0;
+                if pos < 0 || pos >= len as i32 {
+                    continue;
+                }
+                #[allow(clippy::cast_sign_loss)]
+                let d = at(line, pos as usize);
+                let v = pixel_sort_value(unpremult(&src[d..d + 4]), p.sort_by);
+                value[i] = v;
+                masked[i] = v >= p.min && v <= p.max && matte_strength(matte, d) >= 0.5;
+            }
+            // Each pixel's span, as its first and last slot. A pixel outside the
+            // band — or off the end of the line — is a span of one.
+            #[allow(clippy::cast_possible_truncation)]
+            for i in 0..stride {
+                start[i] = if masked[i] && i > 0 && masked[i - 1] {
+                    start[i - 1]
+                } else {
+                    i as u32
+                };
+            }
+            #[allow(clippy::cast_possible_truncation)]
+            for i in (0..stride).rev() {
+                end[i] = if masked[i] && i + 1 < stride && masked[i + 1] {
+                    end[i + 1]
+                } else {
+                    i as u32
+                };
+            }
+
+            order.clear();
+            #[allow(clippy::cast_possible_truncation)]
+            order.extend(
+                (0..stride).map(|i| (pixel_sort_key(value[i], start[i], p.reverse), i as u32)),
+            );
+            // Tuples sort by key and then by slot, which is the comparator the
+            // kernel's network spells out: equal values keep the order they
+            // arrived in, on both paths and from either direction.
+            order.sort_unstable();
+
+            for i in 0..stride {
+                let pos = base + i as i32;
+                if pos < 0 || pos >= len as i32 {
+                    continue;
+                }
+                let (s, e) = (start[i] as usize, end[i] as usize);
+                let (l, o) = (e - s + 1, i - s);
+                let from = match p.span_mode {
+                    // Stretch: the whole span takes the pixel the sort put at
+                    // its far end, so the span reads as one long streak.
+                    1 => e,
+                    // Mirror: the sorted run laid out from both ends inward, so
+                    // the span climbs to its middle and falls back. Every
+                    // sorted pixel is still used exactly once.
+                    2 => {
+                        if o * 2 < l {
+                            s + 2 * o
+                        } else {
+                            s + 2 * (l - 1 - o) + 1
+                        }
+                    }
+                    _ => i,
+                };
+                #[allow(clippy::cast_sign_loss)]
+                let d = at(line, pos as usize);
+                #[allow(clippy::cast_sign_loss)]
+                let sd = at(line, (base + order[from].1 as i32) as usize);
+                // The whole texel travels, alpha with it: this is a
+                // rearrangement of the picture, not a grade of it.
+                for c in 0..4 {
+                    rgba[d + c] = src[sd + c] * p.mix + src[d + c] * (1.0 - p.mix);
+                }
+            }
+            base += stride as i32;
+        }
+    }
 }

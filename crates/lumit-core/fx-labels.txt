@@ -425,6 +425,7 @@ Matte
 Matte inverted
 Matte key
 Matte mode
+Max
 Max clones
 Max connections
 Max distance
@@ -434,9 +435,11 @@ Max points
 Max trails
 Maximum
 Maximum signal
+Maximum span length
 Median
 Midtone contrast
 Midtones
+Min
 Minimum
 Mirror
 Mirror edges
@@ -507,6 +510,7 @@ Pillow emboss
 Pin layer
 Pin light
 Pinning
+Pixel sort
 Placement
 Planar track
 Planes
@@ -545,6 +549,7 @@ Radio waves
 Radius
 Ramp
 Random
+Random span offsets
 Randomness
 Rate
 Rec. 709
@@ -655,6 +660,8 @@ Smooth
 Soft colour
 Soft light
 Softness
+Sort
+Sort by
 Source
 Source alpha
 Source blue
@@ -668,6 +675,7 @@ Spacing
 Spacing x
 Spacing y
 Spacing z
+Span mode
 Speed jitter
 Spherize
 Spiky

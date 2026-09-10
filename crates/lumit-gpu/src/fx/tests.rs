@@ -16100,3 +16100,268 @@ fn the_matte_scales_the_mood_lighting() {
         "a black matte on Mood lighting must BE the unlit, ungraded frame, to the bit"
     );
 }
+
+/// The corpus a sort needs: §3.99's own, because every other one in this file
+/// runs uphill.
+///
+/// A smooth gradient is *already sorted*, so a kernel that did nothing at all
+/// would pass a parity check against an oracle that also did nothing. This
+/// keeps the smooth hump's broad shape — so a threshold still picks out a long
+/// contiguous run rather than a scatter of single pixels — and scrambles each
+/// channel locally with a seeded hash, so inside that run there is a genuine
+/// order to find.
+fn jumbled_corpus(w: u32, h: u32) -> Vec<f32> {
+    let mut img = speckled_corpus(w, h);
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let a = img[i + 3];
+            if a <= 0.0 {
+                continue;
+            }
+            for c in 0..3usize {
+                let n = lumit_core::fx::lattice_hash(4242, c as u32, x as i32, y as i32, 0);
+                let k = (n >> 8) as f32 / 16_777_216.0;
+                let u = img[i + c] / a;
+                img[i + c] = (u + (k - 0.5) * 0.5).clamp(0.0, 3.0) * a;
+            }
+        }
+    }
+    img.iter().map(|v| f16_to_f32(f16_bits(*v))).collect()
+}
+
+/// Pixel sort's kernel against its CPU oracle (docs/08 §3.99, §1.6).
+///
+/// **This one is exact, and the test says so.** Nothing here is arithmetic on a
+/// colour: the network settles an *order*, and what comes out of it is the
+/// texels that went in, moved. Both paths order the same integer keys from the
+/// same fp16 picture, so at Mix 100 the two images must agree to the bit. A
+/// tolerance here would hide the only failure that matters, which is two pixels
+/// having swapped.
+#[test]
+#[allow(clippy::too_many_lines)]
+fn wgsl_pixel_sort_matches_the_cpu_oracle() {
+    use lumit_core::fx::effects::pixel_sort::PixelSort;
+    use lumit_core::fx::{EffectMetadata, Params};
+
+    let Some(ctx) = crate::test_support::lease() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = ctx.fx();
+    let (w, h) = (48u32, 32u32);
+    let img = jumbled_corpus(w, h);
+    let tex = upload_linear_f32(&ctx, &img, w, h);
+
+    // The ceiling is one number in three places (the declaration's hard maximum,
+    // the CPU reference and the length of the kernel's workgroup arrays); two of
+    // the three are checkable from here.
+    assert_eq!(
+        PIXEL_SORT_MAX_SPAN,
+        lumit_core::fx::cpu::PIXEL_SORT_MAX_SPAN
+    );
+
+    let base = {
+        let mut s = PixelSort::read(Params::EMPTY);
+        s.seed = 90_909;
+        // Maximum span length is px@comp; the resolve step would have scaled it
+        // to this 48 × 32 raster, so the test does it by hand — a 300 px span on
+        // a 48 px line is one span and would prove nothing about the chunking.
+        s.max_span = 20.0;
+        s.min = 0.15;
+        s.max = 0.80;
+        s
+    };
+    let with = |f: &dyn Fn(&mut PixelSort)| {
+        let mut s = base;
+        f(&mut s);
+        s
+    };
+    let op_of = |s: PixelSort| {
+        let p = s.packed();
+        PixelSortOp {
+            sort_by: p.sort_by,
+            vertical: p.vertical,
+            span_mode: p.span_mode,
+            reverse: p.reverse,
+            min: p.min,
+            max: p.max,
+            stride: p.stride,
+            seed: p.seed,
+            mix: p.mix,
+        }
+    };
+
+    for (name, s) in [
+        ("luminance", base),
+        ("red", with(&|s| s.sort_by = 0)),
+        ("green", with(&|s| s.sort_by = 1)),
+        ("blue", with(&|s| s.sort_by = 2)),
+        ("hue", with(&|s| s.sort_by = 4)),
+        ("saturation", with(&|s| s.sort_by = 5)),
+        ("vertical", with(&|s| s.direction = 1)),
+        ("reverse", with(&|s| s.reverse = true)),
+        ("stretch", with(&|s| s.span_mode = 1)),
+        ("stretch-reverse", {
+            with(&|s| {
+                s.span_mode = 1;
+                s.reverse = true;
+            })
+        }),
+        ("mirror", with(&|s| s.span_mode = 2)),
+        ("mirror-vertical", {
+            with(&|s| {
+                s.span_mode = 2;
+                s.direction = 1;
+            })
+        }),
+        // The widest network the kernel carries: one span over the whole line,
+        // ten stages of it, 55 compare-and-swap passes.
+        ("widest", with(&|s| s.max_span = 1000.0)),
+        ("narrow", with(&|s| s.max_span = 3.0)),
+        ("whole-band", {
+            with(&|s| {
+                s.min = 0.0;
+                s.max = 1.0;
+            })
+        }),
+        ("reseeded", with(&|s| s.seed = 7)),
+        // The three that must come back untouched.
+        ("span-of-one", with(&|s| s.max_span = 0.0)),
+        ("empty-band", {
+            with(&|s| {
+                s.min = 0.9;
+                s.max = 0.1;
+            })
+        }),
+        ("mix-zero", with(&|s| s.mix = 0.0)),
+        // ... and one that must not.
+        ("mixed", with(&|s| s.mix = 60.0)),
+    ] {
+        let p = s.packed();
+        let mut cpu = img.clone();
+        lumit_core::fx::cpu::pixel_sort(&mut cpu, w, h, &p);
+        let out = fx.pixel_sort(&ctx, &tex, w, h, None, &op_of(s));
+        let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+
+        if (p.mix - 1.0).abs() < f32::EPSILON {
+            assert_eq!(cpu, gpu, "{name}: the two paths must agree to the bit");
+        } else {
+            // Mix is the one place either path does arithmetic, and the GPU's
+            // lands in fp16.
+            let worst = worst_f16_ulp(&cpu, &gpu);
+            assert!(worst <= 2, "{name}: worst {worst} fp16 ULP");
+        }
+
+        let untouched = matches!(name, "span-of-one" | "empty-band" | "mix-zero");
+        if untouched {
+            assert_eq!(gpu, img, "{name}: must be the bit-exact identity");
+        } else {
+            assert!(gpu != img, "{name}: the sort must actually move something");
+        }
+
+        let out2 = fx.pixel_sort(&ctx, &tex, w, h, None, &op_of(s));
+        let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
+        assert_eq!(gpu, gpu2, "{name}: GPU pixel sort must be bit-stable");
+    }
+
+    // **It moves pixels, it does not make them.** Sort and Mirror are both
+    // permutations of the line, so every row must come back holding exactly the
+    // texels it went in with — a kernel that sampled or blended anything would
+    // pass every check above and fail this one.
+    for (name, s) in [("luminance", base), ("mirror", with(&|s| s.span_mode = 2))] {
+        let mut cpu = img.clone();
+        lumit_core::fx::cpu::pixel_sort(&mut cpu, w, h, &s.packed());
+        for y in 0..h as usize {
+            let row = |v: &[f32]| {
+                let mut px: Vec<[u32; 4]> = v[y * w as usize * 4..(y + 1) * w as usize * 4]
+                    .chunks_exact(4)
+                    .map(|c| {
+                        [
+                            c[0].to_bits(),
+                            c[1].to_bits(),
+                            c[2].to_bits(),
+                            c[3].to_bits(),
+                        ]
+                    })
+                    .collect();
+                px.sort_unstable();
+                px
+            };
+            assert_eq!(
+                row(&cpu),
+                row(&img),
+                "{name}: row {y} must hold the same texels it arrived with"
+            );
+        }
+    }
+}
+
+/// Pixel sort's matte claim (docs/08 §2.6): the matte says **where the spans
+/// are**, alongside Min and Max — it decides which pixels may move, which is
+/// not the same picture as a fade between the sorted frame and the unsorted
+/// one.
+#[test]
+fn the_matte_says_where_the_pixel_sort_spans_are() {
+    use lumit_core::fx::effects::pixel_sort::PixelSort;
+    use lumit_core::fx::{EffectMetadata, Params};
+
+    let Some(ctx) = crate::test_support::lease() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = ctx.fx();
+    let (w, h) = (32u32, 24u32);
+    let img = jumbled_corpus(w, h);
+    let mut s = PixelSort::read(Params::EMPTY);
+    s.seed = 90_909;
+    s.max_span = 12.0;
+    let p = s.packed();
+    let op = PixelSortOp {
+        sort_by: p.sort_by,
+        vertical: p.vertical,
+        span_mode: p.span_mode,
+        reverse: p.reverse,
+        min: p.min,
+        max: p.max,
+        stride: p.stride,
+        seed: p.seed,
+        mix: p.mix,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "pixel_sort",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| lumit_core::fx::cpu::pixel_sort_matted(px, w, h, &p, m),
+            plain: &|px| lumit_core::fx::cpu::pixel_sort(px, w, h, &p),
+            // A permutation, so the two paths are exact and the tolerance only
+            // has to cover the fp16 store.
+            gpu: &|t, m| fx.pixel_sort(&ctx, t, w, h, m, &op),
+            tol: 1e-3,
+        },
+    );
+
+    // **A black matte is the picture, untouched.** No span may form anywhere, so
+    // there is nothing to move — and the matted path has to reach that by
+    // holding the spans back rather than by dissolving toward the input.
+    let mut dark = quantised(&img);
+    lumit_core::fx::cpu::pixel_sort_matted(&mut dark, w, h, &p, &flat_matte(w, h, 0.0));
+    assert_eq!(
+        dark,
+        quantised(&img),
+        "a black matte on Pixel sort must BE the frame as it arrived, to the bit"
+    );
+
+    // **And a white one is the unmatted sort.** The row is off, not merely weak.
+    let mut lit = quantised(&img);
+    lumit_core::fx::cpu::pixel_sort_matted(&mut lit, w, h, &p, &flat_matte(w, h, 1.0));
+    let mut plain = quantised(&img);
+    lumit_core::fx::cpu::pixel_sort(&mut plain, w, h, &p);
+    assert_eq!(
+        lit, plain,
+        "a white matte on Pixel sort must BE the unmatted sort, to the bit"
+    );
+}

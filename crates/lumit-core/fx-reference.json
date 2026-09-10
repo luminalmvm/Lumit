@@ -16799,6 +16799,185 @@
       "matte_role": "own"
     },
     {
+      "slug": "pixel-sort",
+      "match_name": "pixel_sort",
+      "label": "Pixel sort",
+      "version": 1,
+      "category": "Stylise",
+      "category_slug": "stylise",
+      "params": [
+        {
+          "id": "sort_by",
+          "label": "Sort by",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 3,
+          "options": [
+            "Red",
+            "Green",
+            "Blue",
+            "Luminance",
+            "Hue",
+            "Saturation"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "direction",
+          "label": "Direction",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Horizontal",
+            "Vertical"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "span_mode",
+          "label": "Span mode",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Sort",
+            "Stretch",
+            "Mirror"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "reverse",
+          "label": "Reverse",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "min",
+          "label": "Min",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
+          "id": "max",
+          "label": "Max",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
+          "id": "max_span",
+          "label": "Maximum span length",
+          "kind": "float",
+          "unit": "px",
+          "default": 300.0,
+          "slider_min": 0.0,
+          "slider_max": 1000.0,
+          "hard_min": 0.0,
+          "hard_max": 1024.0
+        },
+        {
+          "id": "seed",
+          "label": "Random span offsets",
+          "kind": "seed",
+          "unit": "raw"
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "says where the spans may form, alongside Min and Max: a pixel sorts only where the matte is at least half lit"
+      },
+      "matte_role": "own"
+    },
+    {
       "slug": "linear-wipe",
       "match_name": "linear_wipe",
       "label": "Linear wipe",

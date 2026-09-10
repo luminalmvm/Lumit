@@ -11266,6 +11266,7 @@ fn every_parameter_declares_a_unit() {
             ("emboss", "relief"),
             ("texturize", "relief"),
             ("mood_lighting", "scale"),
+            ("pixel_sort", "max_span"),
             ("linear_wipe", "centre_x"),
             ("linear_wipe", "centre_y"),
             ("linear_wipe", "feather"),
@@ -12270,6 +12271,11 @@ fn every_effect_carries_a_matte_row() {
                 | "emboss"
                 | "texturize"
                 | "mood_lighting"
+                // Pixel sort: the matte is *where the spans are*, which is
+                // as deep inside an effect's own maths as a matte gets — it
+                // decides which pixels move rather than fading the picture
+                // they moved in.
+                | "pixel_sort"
                 | "echo"
                 | "motion_blur"
                 | "accumulation_mb"
@@ -17532,4 +17538,171 @@ fn a_plugin_instance_resolves_between_two_builtins() {
         (plugin_op.lt - 1.5).abs() < 1e-9,
         "the op carries the layer time its values were read at"
     );
+}
+
+/// Pixel sort (docs/08 §3.99) on the CPU alone: the four promises the effect
+/// makes about *which* pixels may move, none of which needs a card.
+///
+/// The §1.6 oracle in `lumit-gpu` holds the kernel to this function, and it
+/// skips on a machine with no adapter — so the guarantees themselves are
+/// stated here, where they always run.
+#[test]
+fn pixel_sort_moves_pixels_only_inside_their_own_span() {
+    use super::cpu::{self, PixelSortParams};
+    use super::effects::pixel_sort::PixelSort;
+    use super::{EffectMetadata, Params};
+
+    // A line of distinct greys, so a pixel can be recognised wherever it lands.
+    // Luminance is the weighted sum of the three, which for a grey is the grey.
+    let grey = |g: f32| [g, g, g, 1.0];
+    let line = |w: usize, f: &dyn Fn(usize) -> f32| -> Vec<f32> {
+        (0..w).flat_map(|i| grey(f(i))).collect()
+    };
+    let base = PixelSortParams {
+        sort_by: 3,
+        vertical: false,
+        span_mode: 0,
+        reverse: false,
+        min: 0.0,
+        max: 1.0,
+        stride: 4,
+        seed: 20_260_909,
+        mix: 1.0,
+    };
+
+    // 1. **The cap really caps.** Sixteen greys running downhill, with a span
+    //    length of four: no pixel may travel further than a span is long, and
+    //    the line as a whole must come back unsorted.
+    let w = 16usize;
+    let img = line(w, &|i| (16 - i) as f32 / 20.0);
+    let mut out = img.clone();
+    cpu::pixel_sort(&mut out, w as u32, 1, &base);
+    for i in 0..w {
+        let v = out[i * 4];
+        let was = img
+            .chunks_exact(4)
+            .position(|c| c[0] == v)
+            .expect("every pixel that comes out went in");
+        assert!(
+            i.abs_diff(was) < base.stride as usize,
+            "pixel {was} travelled to {i}, further than a span of {}",
+            base.stride
+        );
+    }
+    let mut sorted: Vec<f32> = img.chunks_exact(4).map(|c| c[0]).collect();
+    sorted.sort_by(f32::total_cmp);
+    let got: Vec<f32> = out.chunks_exact(4).map(|c| c[0]).collect();
+    assert_ne!(
+        got, sorted,
+        "a span of four must not sort a line of sixteen"
+    );
+
+    // 2. **It is a rearrangement, never a grade.** Whatever the span mode, the
+    //    line comes back holding texels it already had — and under Sort and
+    //    Mirror it holds every one of them exactly once.
+    for mode in [0u32, 1, 2] {
+        let mut out = img.clone();
+        cpu::pixel_sort(
+            &mut out,
+            w as u32,
+            1,
+            &PixelSortParams {
+                span_mode: mode,
+                ..base
+            },
+        );
+        for c in out.chunks_exact(4) {
+            assert!(
+                img.chunks_exact(4).any(|o| o == c),
+                "mode {mode} invented a pixel that was not in the line"
+            );
+        }
+        if mode != 1 {
+            let mut a: Vec<u32> = out.chunks_exact(4).map(|c| c[0].to_bits()).collect();
+            let mut b: Vec<u32> = img.chunks_exact(4).map(|c| c[0].to_bits()).collect();
+            a.sort_unstable();
+            b.sort_unstable();
+            assert_eq!(a, b, "mode {mode} must be a permutation of the line");
+        }
+    }
+
+    // 3. **A pixel outside the band never moves.** The greys either side of
+    //    0.15 and 0.85 are in no span at all, so they must come back where they
+    //    were whatever the pixels around them did.
+    let outside = [0.05f32, 0.95];
+    let img = line(w, &|i| {
+        if i % 5 == 0 {
+            outside[(i / 5) % 2]
+        } else {
+            0.8 - (i % 5) as f32 * 0.12
+        }
+    });
+    let banded = PixelSortParams {
+        min: 0.15,
+        max: 0.85,
+        stride: 1000,
+        ..base
+    };
+    let mut out = img.clone();
+    cpu::pixel_sort(&mut out, w as u32, 1, &banded);
+    assert_ne!(out, img, "something inside the band has to have moved");
+    for i in (0..w).step_by(5) {
+        assert_eq!(
+            out[i * 4..i * 4 + 4],
+            img[i * 4..i * 4 + 4],
+            "the pixel at {i} is outside the band and must not have moved"
+        );
+    }
+
+    // 4. **Direction is a transpose and nothing else.** Sorting a turned
+    //    picture down its columns has to give the turned answer, offsets and
+    //    all — which is the whole of what the Direction row is allowed to
+    //    change.
+    let (w, h) = (7usize, 5usize);
+    let flat: Vec<f32> = (0..w * h)
+        .flat_map(|i| grey(0.1 + (i * 37 % 61) as f32 / 80.0))
+        .collect();
+    let turn = |v: &[f32], w: usize, h: usize| -> Vec<f32> {
+        let mut t = vec![0.0; v.len()];
+        for y in 0..h {
+            for x in 0..w {
+                t[(x * h + y) * 4..(x * h + y) * 4 + 4]
+                    .copy_from_slice(&v[(y * w + x) * 4..(y * w + x) * 4 + 4]);
+            }
+        }
+        t
+    };
+    let across = PixelSortParams {
+        stride: 3,
+        ..banded
+    };
+    let mut rows = flat.clone();
+    cpu::pixel_sort(&mut rows, w as u32, h as u32, &across);
+    let mut cols = turn(&flat, w, h);
+    cpu::pixel_sort(
+        &mut cols,
+        h as u32,
+        w as u32,
+        &PixelSortParams {
+            vertical: true,
+            ..across
+        },
+    );
+    assert_eq!(
+        turn(&rows, w, h),
+        cols,
+        "Vertical on a turned picture must be the turned Horizontal answer"
+    );
+
+    // 5. **The ceiling is the declaration's, and it is enforced once.** A span
+    //    longer than the workgroup arrays cannot be asked for, and a span of
+    //    nothing is a span of one.
+    let of = |max_span: f32| {
+        let mut s = PixelSort::read(Params::EMPTY);
+        s.max_span = max_span;
+        s.packed().stride
+    };
+    assert_eq!(of(5000.0), cpu::PIXEL_SORT_MAX_SPAN);
+    assert_eq!(of(0.0), 1);
+    assert_eq!(of(300.0), 300);
 }

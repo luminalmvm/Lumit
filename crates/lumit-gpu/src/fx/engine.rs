@@ -400,6 +400,10 @@ impl FxEngine {
             &format!("{noise_core}{}", include_str!("../fx_mood_lighting.wgsl")),
             "fx-mood-lighting",
         );
+        let pixel_sort_mod = module(
+            &format!("{noise_core}{}", include_str!("../fx_pixelsort.wgsl")),
+            "fx-pixel-sort",
+        );
         let broadcast_safe_mod = module(
             include_str!("../fx_broadcastsafe.wgsl"),
             "fx-broadcast-safe",
@@ -535,6 +539,7 @@ impl FxEngine {
         let emboss = pipeline(&emboss_mod, "fx-emboss", "emboss");
         let texturize = pipeline(&texturize_mod, "fx-texturize", "texturize");
         let mood_lighting = pipeline(&mood_lighting_mod, "fx-mood-lighting", "mood_lighting");
+        let pixel_sort = pipeline(&pixel_sort_mod, "fx-pixel-sort", "pixel_sort");
         let broadcast_safe = pipeline(&broadcast_safe_mod, "fx-broadcast-safe", "broadcast_safe");
         let channel_blur = pipeline(&chan_blur_mod, "fx-channel-blur", "channel_blur");
         let drop_shadow = pipeline(&drop_shadow_mod, "fx-drop-shadow", "drop_shadow");
@@ -770,6 +775,7 @@ impl FxEngine {
             emboss,
             texturize,
             mood_lighting,
+            pixel_sort,
             broadcast_safe,
             channel_blur,
             drop_shadow,

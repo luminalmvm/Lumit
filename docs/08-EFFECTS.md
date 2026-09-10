@@ -6415,6 +6415,100 @@ separately and together.
 blocks and **streaks** wants it scaled anisotropically, which is one more row each through
 the same loop; they land when a real project asks rather than to fill out a menu.
 
+### 3.99 Pixel sort — runs of pixels put in order along their own line
+
+Requested, after [Pixel Sorter](https://aaeplugins.com/plugins/pixel-sorter/). A **Stylise**
+effect: it rearranges the pixels that are already there rather than changing the colour of
+any of them, which is as squarely Stylise as an effect gets.
+
+Walk a row and note every run of pixels whose brightness — or red, or hue — falls inside a
+band. Sort each run on its own and put it back where it was; leave the rest of the row
+alone. That is the whole effect, and the whole of the difference between a good one and a
+mess is which pixels get into a run. The **matte** is the second way of saying that, and it
+works alongside the band rather than instead of it.
+
+**Parameters**, in panel order:
+
+| Parameter | Kind | Default | Notes |
+|---|---|---|---|
+| Sort by | choice: Red, Green, Blue, Luminance, Hue, Saturation | Luminance | which property a run is ordered by |
+| Direction | choice: Horizontal, Vertical | Horizontal | along rows, or down columns |
+| Span mode | choice: Sort, Stretch, Mirror | Sort | what a sorted run is written back as |
+| Reverse | checkbox | off | orders every run the other way round |
+| Min | slider, 0..1 closed | 0 | the bottom of the band that sorts |
+| Max | slider, 0..1 closed | 1 | the top of it |
+| Maximum span length | px@comp, 0..1000, hard 0..1024 | 300 | the most pixels one run may hold |
+| Random span offsets | seed | per instance | which offsets the runs take on each line |
+| Mix | per cent | 100 | |
+
+**Algorithm sketch.** Every pixel works out where it goes, on its own:
+
+```
+offset = lattice_hash(seed, line) mod stride    # this line's own grid offset
+v      = clamp(value(u, Sort by), 0, 1)         # u is unpremultiplied colour
+in     = Min ≤ v ≤ Max and matte ≥ ½            # is this pixel in a run
+key    = ⌊v·(2²²−1)⌋                            # Reverse flips it; ties break
+                                                # on the position
+s, e   = walk out from this pixel while `in`,   # its run, never leaving the
+         never past the piece's ends            # piece this pixel sits in
+rank   = how many of s..e come before it        # counted on the same walk
+```
+
+The pixel then writes itself at `s + rank` (Sort), or at the mirrored place in the run
+(Mirror); under Stretch the one pixel whose rank is the run's last writes the whole run.
+
+Seven decisions worth stating, because none of them is arithmetic:
+
+1. **The runs are kept apart by the walk, not by a key.** A pixel stops the moment it
+   meets one outside the band, so it can never see past its own run, and a pixel that is in
+   no run walks nowhere and cannot move at all. No pixel needs to know anything about any
+   other run, which is what lets every pixel in the frame be worked out at once with
+   nothing shared between them.
+2. **Every pixel reads its own run, rather than a network sorting the run for it.** The
+   other way round is far cheaper on paper — a run of a thousand costs ten passes rather
+   than a thousand reads — and it is what the first version of this effect did. It is not
+   what ships. That kernel needs the run in workgroup memory, four bytes a slot, and the
+   HLSL compiler's time grows much faster than the array does: measured on the software
+   rasteriser a machine with no graphics card falls back to, 2 kB took 95 ms to compile,
+   6 kB took twelve seconds, and 12 kB — what a run of a thousand needs — never finished.
+   An effect that cannot be compiled without a graphics card cannot be tested, and an
+   untestable effect is worse than a slower one. 1080p costs about 20 ms at the default
+   run length, against about 6 ms for the network.
+3. **Maximum span length is therefore what the effect costs.** A pixel reads its own run,
+   so a frame costs roughly width × height × the cap. Setting it low is a look as much as a
+   saving, which is why it is a slider and not a preference.
+4. **And that is why there is a seed beside it.** The cap chops each line into equal pieces,
+   and equal pieces on every line would draw the chop as a column down the frame. The seed
+   offsets each line's pieces by its own amount, so the breaks scatter and the cap stays a
+   cap instead of becoming a pattern.
+5. **The matte says where the runs are, alongside the band** (§2.6). A pixel sorts only
+   where the matte is at least half lit *and* its value is inside the band, so a bound matte
+   with the band left open is a hand-drawn mask, an unbound matte with a narrow band is the
+   plain threshold, and the two together are both. The matte is read at a hard half rather
+   than as a ramp because a run is a yes or a no; there is no half a pixel to give a grey
+   matte.
+6. **A value above 1 reads as 1.** The band's ends are 0 and 1, and an HDR highlight sits at
+   the top of it rather than outside every band — which is what makes the default pair mean
+   *all of it*. Highlights that share the clamp keep the order they arrived in.
+7. **Min and Max are not swapped when they cross.** Min above Max is an empty band and sorts
+   nothing, which is the honest answer to what the panel shows rather than a silent guess at
+   what was meant.
+
+`heavy` cost (Maximum span length taps a pixel, not one), `FullFrame` ROI, not `seeded` — the pixels are a function of the parameters and the
+input, and nothing here reads the playhead. Premultiplied (§2.2): the whole texel travels,
+alpha with it, because this is a rearrangement of the picture and not a grade of it. Mix 0,
+an empty band and a Maximum span length below two are all the bit-exact identity.
+
+**Determinism** (§2.4) is stronger here than an ULP bound. The walk settles an *order*,
+and both paths order the same integer keys built from the same fp16 picture — so the §1.6
+oracle holds the kernel to the CPU reference **to the bit**, not to a tolerance. A
+tolerance would hide the only failure that matters, which is two pixels having swapped.
+
+**Not in v1:** an angle between Horizontal and Vertical. A run at an angle is a resampled
+line rather than a rearrangement of pixels that already exist, so it would want a filtering
+decision, a gap policy and an overlap policy that none of the prior art has; it lands when
+a real project asks.
+
 ## 4. Tier 2 — AE parity direction (post-v1)
 
 One-line scope each; specs written when scheduled ([16-ROADMAP.md](16-ROADMAP.md)). Order
