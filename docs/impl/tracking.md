@@ -552,12 +552,11 @@ Eight things are deviations from, or decisions under, the design's wording:
 1. **The conversion is derived, not chosen, and tested against the real matrix.**
    The tracker puts a world point at `centre + f · p.xy / p.z` with
    `p = R(P − C)`; `lumit_gpu::composite::camera_matrix` puts it at
-   `centre + zoom · a.xy / (a.z + zoom)` with `a = Rot⁻¹(P − position)` and
-   `Rot = Ry·Rx·Rz`. Setting those equal for every `P` leaves no freedom:
-   `zoom = f`, `Rot = Rᵀ`, and `position = C + Rᵀ·(0, 0, f)` — the camera centre
-   pushed forward along its own optical axis by the focal length, because Lumit's
-   perspective matrix has already put the eye `zoom` behind `position`. The Euler
-   angles come out of `Rᵀ` in the compositor's own `Ry·Rx·Rz` order. The test does
+   `centre + zoom · a.xy / a.z` with `a = Rot⁻¹(P − position)`, the eye at
+   `position`, and `Rot = Ry·Rx·Rz` (docs/impl/camera.md §3). Setting those equal
+   for every `P` leaves no freedom: `zoom = f`, `Rot = Rᵀ`, and `position = C`, the
+   camera centre itself. The Euler angles come out of `Rᵀ` in the compositor's own
+   `Ry·Rx·Rz` order. The test does
    not re-derive any of this: it calls `camera_matrix` and asserts that every
    solved point lands within a twentieth of a pixel of where the tracker put it,
    over every frame — an algebraic identity, so it cannot flake on solve quality

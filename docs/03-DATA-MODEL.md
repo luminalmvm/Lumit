@@ -346,7 +346,7 @@ Invariants:
 | `Precomp { comp: Uuid }` | yes | Another composition | `collapse` switch defers rasterisation. Cycles invalid. **Precomp-level retime is future** — the `retime` field is not on the kind yet; nest through a Sequence clip to retime a comp for now. |
 | `Solid { def: Uuid }` | yes | A SolidDef | |
 | `Text { document: TextDocument }` | yes | §9.1 | v1: one run. |
-| `Camera { zoom: Property, solve_link: Option<Uuid>, correction_base: Option<Box<CameraPose>> }` | yes | — | AE camera: `zoom` is focal distance in comp pixels (z=0 maps 1:1). Only affects 3D-switch layers; the topmost visible camera is active. `solve_link` is §5.6's solve link; `None` — the usual case — is a camera the user drives by hand. `correction_base` is §5.6's correction lane's nought, present only while a link is. |
+| `Camera { zoom: Property, options: Box<CameraOptions>, solve_link: Option<Uuid>, correction_base: Option<Box<CameraPose>> }` | yes | [impl/camera.md](impl/camera.md) | AE camera: the layer position is the eye and `zoom` is the focal distance in comp pixels, so the plane `zoom` in front of the eye maps 1:1. `options` holds the node type, the point of interest a two-node camera aims at, depth of field (focus distance, aperture, blur level), lock to zoom and the film size. Only affects 3D-switch layers; the topmost visible camera is active. `solve_link` is §5.6's solve link; `None` - the usual case - is a camera the user drives by hand. `correction_base` is §5.6's correction lane's nought, present only while a link is. |
 | `Adjustment` | yes | — | No source of its own; its masks + effect stack apply to the composite of every layer beneath it, within its span. What *New adjustment layer* makes. **Any layer can behave this way** — that is the `adjustment` switch in §5.1 — and this kind is simply the one that was born with nothing else to show. Turning the switch off on one hands it a fresh comp-sized white solid and normalises it to `Solid`, because it has no picture to give back. |
 | `Null` | yes | — | No source and no size; carries only a transform, so layers parent to it and move as a rig. Never draws, emits no node in the evaluation graph, and reports no picture — so it is not offered as a matte or a layer-valued effect parameter. Masks and effects can be added to it but never run (as on a Camera). The bridge enum names this kind `NullLayer` for Dart's sake only. |
 | `Shape { contents: Vec<ShapeItem> }` | yes | Its vector art, its repeated copies included | §7.2. Flat list, modifiers as fields (§7.2.1); nested groups are future (§9.2). |
@@ -1199,14 +1199,17 @@ thing.
 ### 9.3 2.5D
 
 All transforms are 4×4 internally from day one; the `three_d` switch exposes z and full
-rotation. The Phase 1 camera is the seed of `CameraProps`: `Camera { zoom: Property }` —
-a one-node camera whose zoom is the AE model (focal distance in comp pixels; the z=0
-plane maps 1:1, a layer at depth z scales by zoom/(z+zoom)), positioned and rotated by
-the layer's own transform group, with the topmost visible camera active. `CameraProps`
-v1 grows from there: one-node/two-node, focal length presets, depth of field (focus
-distance, aperture, blur level). `LightProps` v1: ambient/point/spot/directional with
-intensity, colour, cone; shadows post-v1. 2D layers ignore cameras (render in a fixed
-orthographic pass), matching AE's mental model.
+rotation. A Camera and a Light are three-dimensional by being what they are: they carry no
+3D switch, and their Position always has a z. The camera is the After Effects model
+([impl/camera.md](impl/camera.md)): the layer's position is the eye, `zoom` is the focal
+distance in comp pixels, the plane `zoom` in front of the eye maps 1:1 and a layer `d` in
+front of the eye scales by `zoom / d`. A one-node camera aims by its rotation; a two-node
+camera aims at its point of interest, with the rotation rows adding on top. Depth of field
+(focus distance, aperture, blur level) blurs each 3D layer by its circle of confusion; the
+focal length presets, film size and angle of view are presentation units the settings
+dialog converts zoom through. The topmost visible camera is active. `LightProps` v1:
+ambient/point/spot/directional with intensity, colour, cone; shadows post-v1. 2D layers
+ignore cameras (render in a fixed orthographic pass), matching AE's mental model.
 
 ## 10. Undo, journal, dirty state
 

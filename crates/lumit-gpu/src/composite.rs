@@ -301,8 +301,9 @@ fn half_bits(v: f32) -> u16 {
 }
 
 /// Build the comp-space camera matrix (view * perspective) from the AE
-/// model: the camera sits `zoom` px back from its position, and the z=0
-/// plane maps 1:1 when the camera is at the comp centre with no rotation.
+/// model: `position` is the eye, and the plane `zoom` px in front of it
+/// maps 1:1. The default camera at `(cx, cy, -zoom)` with no rotation
+/// draws every 3D layer where the 2D pass would (docs/impl/camera.md §3).
 pub fn camera_matrix(
     comp_w: f32,
     comp_h: f32,
@@ -323,14 +324,16 @@ pub fn camera_matrix(
         [cx / zoom, cy / zoom, 0.0, 1.0 / zoom],
         [0.0, 0.0, 0.0, 1.0],
     ]);
-    // View: undo the camera's own placement (rotate about its position).
-    // cam_place maps "default camera at the comp centre" to the actual pose,
-    // so its inverse is the identity when the camera hasn't moved.
+    // View: undo the camera's own placement (rotate about the eye).
+    // cam_place maps "default camera, zoom behind the comp centre" to the
+    // actual pose, so its inverse is the identity when the camera hasn't
+    // moved. The perspective above puts the eye at z = -zoom of its own
+    // frame, which is why the last translation carries +zoom.
     let cam_place = Mat4::from_translation(glam::vec3(position.0, position.1, position.2))
         * Mat4::from_rotation_y(rotation_deg.1.to_radians())
         * Mat4::from_rotation_x(rotation_deg.0.to_radians())
         * Mat4::from_rotation_z(rotation_deg.2.to_radians())
-        * Mat4::from_translation(glam::vec3(-cx, -cy, 0.0));
+        * Mat4::from_translation(glam::vec3(-cx, -cy, zoom));
     persp * cam_place.inverse()
 }
 
@@ -2135,8 +2138,9 @@ mod tests {
         );
     }
 
-    /// The AE camera model: at default placement the z=0 plane maps 1:1;
-    /// pushing a 3D layer back in z shrinks it by zoom/(z+zoom).
+    /// The AE camera model: the default camera sits `zoom` behind the comp
+    /// centre and the z=0 plane maps 1:1; pushing a 3D layer back in z
+    /// shrinks it by zoom/(z+zoom).
     #[test]
     fn camera_perspective_scales_by_depth() {
         let Some(ctx) = crate::test_support::lease() else {
@@ -2146,7 +2150,7 @@ mod tests {
         let colour = ctx.colour();
         let compositor = ctx.compositor();
         let white = solid_linear(&ctx, colour, [255, 255, 255, 255], 8, 8);
-        let cam = camera_matrix(32.0, 32.0, 100.0, (16.0, 16.0, 0.0), (0.0, 0.0, 0.0));
+        let cam = camera_matrix(32.0, 32.0, 100.0, (16.0, 16.0, -100.0), (0.0, 0.0, 0.0));
         let layer = |z: f32| CompositeLayer {
             texture: &white,
             size: (8.0, 8.0),

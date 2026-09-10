@@ -32,6 +32,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/panels/transform_rows_frb.dart' show writeScalar;
 import 'package:lumit_flutter/panels/viewer_gizmo.dart';
+import 'package:lumit_flutter/panels/viewer_camera.dart' show CameraPose;
 import 'package:lumit_flutter/panels/viewer_layer_map.dart';
 import 'package:lumit_flutter/panels/viewer_overlays.dart';
 import 'package:lumit_flutter/panels/viewer_panel_frb.dart';
@@ -831,7 +832,7 @@ void main() {
 
       expect(barKeys(tester), [
         // The ways of looking, then the seam and the snapshot.
-        'viewer-grid', 'viewer-guides-menu', 'viewer-channel',
+        'viewer-grid', 'viewer-guides-menu', 'viewer-channel', 'viewer-view',
         'viewer-exposure-reset', 'viewer-exposure',
         // The snapshot pair: take, then show.
         'viewer-snapshot', 'viewer-snapshot-show',
@@ -3282,12 +3283,31 @@ void main() {
         await tester.pumpAndSettle();
       }
 
-      // Orbit: the rotations change and the point being looked at does not.
+      // The pose the tools work in: the layer's position is the **eye**, and
+      // the pivot is the point `zoom` in front of it (docs/impl/camera.md §4).
+      CameraPose poseOf(BridgeTransform tf) => CameraPose(
+            position: (
+              still(tf.positionX),
+              still(tf.positionY),
+              still(tf.positionZ)
+            ),
+            rotation: (
+              still(tf.rotationX),
+              still(tf.rotationY),
+              still(tf.rotation)
+            ),
+            zoom: still(tf.camera!.zoom),
+          );
+
+      // Orbit: the rotations change, the eye swings, and what the camera is
+      // looking at stays exactly where it was.
       await drag(const Offset(120, 0));
       var after = camera.getTransform();
       expect(still(after.rotationY), isNot(still(before.rotationY)));
-      expect(still(after.positionX), closeTo(still(before.positionX), 0.001),
+      expect(poseOf(after).pivot.$1, closeTo(poseOf(before).pivot.$1, 0.001),
           reason: 'an orbit swings round what the camera looks at');
+      expect(still(after.positionX), isNot(still(before.positionX)),
+          reason: 'and the eye is what moved');
 
       // Track: the position moves, the rotations do not.
       p.uiState.tools.select(ToolMode.cameraPan);

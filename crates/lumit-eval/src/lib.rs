@@ -201,6 +201,16 @@ fn feed_comp(
             ] {
                 feed_f64(h, v);
             }
+            // Depth of field is drawn into the picture (docs/impl/camera.md
+            // §5), so it belongs in the frame's name. Fed only when the camera
+            // carries one, so a comp without it names its frames as it always
+            // did and nothing already banked is retired.
+            if let Some(dof) = pose.dof {
+                h.update(b"dof");
+                for v in [dof.focus_distance, dof.aperture, dof.blur_level] {
+                    feed_f64(h, v);
+                }
+            }
         }
         None => {
             h.update(b"flat");
@@ -2505,6 +2515,7 @@ mod tests {
                     zoom: Property::fixed(1000.0),
                     solve_link: None,
                     correction_base: None,
+                    options: Default::default(),
                 },
                 ..text_layer("", 0.0, 5.0, 0.0)
             },

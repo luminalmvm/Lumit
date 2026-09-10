@@ -74,6 +74,75 @@
   "@cacheLocationWithLumit": {
     "description": "Choice of where parked frames live: in Lumit's own application data folder."
   },
+  "cameraAngleOfView": "Angle of view",
+  "@cameraAngleOfView": {
+    "description": "Camera settings row: how wide a view the lens takes in, in degrees."
+  },
+  "cameraAperture": "Aperture",
+  "@cameraAperture": {
+    "description": "A camera's aperture: how wide the lens opens, which decides how strong the depth-of-field blur is."
+  },
+  "cameraBlurLevel": "Blur level",
+  "@cameraBlurLevel": {
+    "description": "A camera's blur level, a percentage: how much of the depth-of-field blur is applied."
+  },
+  "cameraDepthOfField": "Depth of field",
+  "@cameraDepthOfField": {
+    "description": "Camera settings row: whether layers away from the focus plane are blurred."
+  },
+  "cameraFStop": "F-stop",
+  "@cameraFStop": {
+    "description": "Camera settings row: the aperture written the way a photographer writes it, such as 5.6."
+  },
+  "cameraFilmSize": "Film size",
+  "@cameraFilmSize": {
+    "description": "Camera settings row: the width of the sensor the focal length is measured against, in millimetres."
+  },
+  "cameraFocalLength": "Focal length",
+  "@cameraFocalLength": {
+    "description": "Camera settings row: the lens length in millimetres, such as 50."
+  },
+  "cameraFocusDistance": "Focus distance",
+  "@cameraFocusDistance": {
+    "description": "A camera's focus distance: how far in front of it the sharp plane sits."
+  },
+  "cameraLockToZoom": "Lock to zoom",
+  "@cameraLockToZoom": {
+    "description": "Camera settings tick: keep the focus distance equal to the zoom, so what fills the frame is what is sharp."
+  },
+  "cameraOneNode": "One-node",
+  "@cameraOneNode": {
+    "description": "Camera type: a camera that aims by its own rotation."
+  },
+  "cameraOptions": "Camera options",
+  "@cameraOptions": {
+    "description": "Heading in a camera's Transform group, over the rows about the lens rather than about where the camera stands."
+  },
+  "cameraPresetMm": "{mm} mm",
+  "@cameraPresetMm": {
+    "description": "One of the lens presets in the camera settings, named by its focal length.",
+    "placeholders": {
+      "mm": {
+        "type": "String"
+      }
+    }
+  },
+  "cameraSettings": "Camera settings",
+  "@cameraSettings": {
+    "description": "Layer menu item, and the title of the window it opens: everything about a camera that is not animated."
+  },
+  "cameraTwoNode": "Two-node",
+  "@cameraTwoNode": {
+    "description": "Camera type: a camera that aims at its point of interest."
+  },
+  "cameraType": "Type",
+  "@cameraType": {
+    "description": "Camera settings row: whether the camera is one-node or two-node."
+  },
+  "cameraUnits": "Units",
+  "@cameraUnits": {
+    "description": "Camera settings row: which units the distances in the window are shown in."
+  },
   "cancel": "Cancel",
   "@cancel": {
     "description": "Button that abandons a dialogue or a running job."
@@ -6741,6 +6810,10 @@
   "@tipViewerToneMap": {
     "description": "Tooltip on the Viewer's tone-map toggle, which has an icon and no label, so this names it. Tone mapping rolls off detail brighter than the display can show; it is a preview, which the colour badge beside it says by reading \"Preview only\" while it is on."
   },
+  "tipViewerView": "3D view",
+  "@tipViewerView": {
+    "description": "Tooltip on the Viewer bar's view dropdown, which shows a mark and no words, so this is the only name it has. It chooses whether the picture is what the composition's own camera sees or one of the fixed and custom viewpoints used to arrange a 3D scene."
+  },
   "tipZoomIn": "Zoom in",
   "@tipZoomIn": {
     "description": "Tooltip on the large landscape glyph at the right end of the Timeline's zoom slider. Clicking it zooms one step in."
@@ -7067,6 +7140,10 @@
   "@toolCameraPan": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
+  "toolCameraUnified": "Unified camera",
+  "@toolCameraUnified": {
+    "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip. One tool that does all three camera moves, picked by which mouse button is dragged."
+  },
   "toolCloneStamp": "Clone stamp",
   "@toolCloneStamp": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
@@ -7387,6 +7464,10 @@
   "@transformOpacity": {
     "description": "How solid a layer is."
   },
+  "transformPointOfInterest": "Point of interest",
+  "@transformPointOfInterest": {
+    "description": "A two-node camera's transform row: the place it looks at."
+  },
   "transformPosition": "Position",
   "@transformPosition": {
     "description": "Where a layer sits."
@@ -7476,6 +7557,14 @@
   "@unitMb": {
     "description": "The megabyte unit, shown after an amount of memory."
   },
+  "unitInches": "inches",
+  "@unitInches": {
+    "description": "A unit the camera settings can show its distances in. Lower case."
+  },
+  "unitMillimetres": "millimetres",
+  "@unitMillimetres": {
+    "description": "A unit the camera settings can show its distances in. Lower case."
+  },
   "unitMinutes": "minutes",
   "@unitMinutes": {
     "description": "The minutes unit, shown after a number of minutes — Settings → Autosave's interval."
@@ -7496,6 +7585,16 @@
   "unitSymbolFrames": "frames",
   "@unitSymbolFrames": {
     "description": "The unit rider beside an effect parameter's value when the number is a count of frames at the composition's rate. Lower case.",
+    "type": "text"
+  },
+  "unitSymbolInches": "in",
+  "@unitSymbolInches": {
+    "description": "The inch symbol, shown after a distance in the camera settings.",
+    "type": "text"
+  },
+  "unitSymbolMm": "mm",
+  "@unitSymbolMm": {
+    "description": "The millimetre symbol, shown after a focal length or a film size. Most languages keep the SI symbol.",
     "type": "text"
   },
   "unitSymbolPercent": "%",
@@ -7828,6 +7927,46 @@
   "viewerOverlaySafeAreas": "Title/action safe",
   "@viewerOverlaySafeAreas": {
     "description": "Entry in the Viewer bar's grid-and-guides menu, with a tick beside it when it is on. It draws the two broadcast rectangles over the picture: action safe at 90% of the frame and title safe at 80%. Both are long-standing television terms."
+  },
+  "viewerViewActiveCamera": "Active camera",
+  "@viewerViewActiveCamera": {
+    "description": "Entry in the Viewer bar's 3D view menu, and the one it starts on: the picture is what the composition's own camera sees, which is also what an export gets."
+  },
+  "viewerViewBack": "Back",
+  "@viewerViewBack": {
+    "description": "Entry in the Viewer bar's 3D view menu: the scene seen from behind. One of six fixed viewpoints named as the sides of a box, the same set every 3D application offers."
+  },
+  "viewerViewBottom": "Bottom",
+  "@viewerViewBottom": {
+    "description": "Entry in the Viewer bar's 3D view menu: the scene seen from underneath. One of six fixed viewpoints named as the sides of a box."
+  },
+  "viewerViewCustom1": "Custom view 1",
+  "@viewerViewCustom1": {
+    "description": "Entry in the Viewer bar's 3D view menu: the first of three viewpoints that start at an angle and keep wherever the camera tools move them. The number distinguishes the three and nothing else."
+  },
+  "viewerViewCustom2": "Custom view 2",
+  "@viewerViewCustom2": {
+    "description": "Entry in the Viewer bar's 3D view menu: the second of three viewpoints that start at an angle and keep wherever the camera tools move them."
+  },
+  "viewerViewCustom3": "Custom view 3",
+  "@viewerViewCustom3": {
+    "description": "Entry in the Viewer bar's 3D view menu: the third of three viewpoints that start at an angle and keep wherever the camera tools move them."
+  },
+  "viewerViewFront": "Front",
+  "@viewerViewFront": {
+    "description": "Entry in the Viewer bar's 3D view menu: the scene seen square on from the front. One of six fixed viewpoints named as the sides of a box."
+  },
+  "viewerViewLeft": "Left",
+  "@viewerViewLeft": {
+    "description": "Entry in the Viewer bar's 3D view menu: the scene seen from its left side. One of six fixed viewpoints named as the sides of a box."
+  },
+  "viewerViewRight": "Right",
+  "@viewerViewRight": {
+    "description": "Entry in the Viewer bar's 3D view menu: the scene seen from its right side. One of six fixed viewpoints named as the sides of a box."
+  },
+  "viewerViewTop": "Top",
+  "@viewerViewTop": {
+    "description": "Entry in the Viewer bar's 3D view menu: the scene seen from above. One of six fixed viewpoints named as the sides of a box."
   },
   "volume": "Volume",
   "@volume": {
@@ -8840,10 +8979,6 @@
   "aeOrientationNotCarried": "the layer turns by orientation as well as by rotation — the rotation is what arrives, and the orientation is not carried",
   "@aeOrientationNotCarried": {
     "description": "Import report row reason, lower case. After Effects turns a 3D layer by an orientation and by three rotations; Lumit has the rotations only."
-  },
-  "aePointOfInterestNotCarried": "a two-node camera aims at its point of interest — Lumit's camera aims by its own rotation, so the point of interest is not carried",
-  "@aePointOfInterestNotCarried": {
-    "description": "Import report row reason, lower case. After Effects' two-node camera is aimed by a point of interest Lumit has no equivalent for."
   },
   "aeSpatialTangentsFlattened": "the motion path's spatial tangents are not carried — each axis animates on its own",
   "@aeSpatialTangentsFlattened": {
@@ -11701,6 +11836,10 @@
   },
   "histSetAxisMode": "Set axis mode",
   "@histSetAxisMode": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSetCameraSettings": "Set camera settings",
+  "@histSetCameraSettings": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
   },
   "histSetCameraZoom": "Set camera zoom",

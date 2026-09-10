@@ -608,34 +608,24 @@ impl Solved {
 /// `centre + f · p.xy / p.z`, where `p = R(P − C)`, `R` is the world-to-camera
 /// rotation and `C` the camera centre. The compositor's own matrix
 /// ([`lumit_gpu::composite::camera_matrix`]) puts it at
-/// `centre + zoom · a.xy / (a.z + zoom)`, where `a = Rot⁻¹(P − position)` and
-/// `Rot = Ry·Rx·Rz` is built from the pose's Euler angles. Setting those equal
-/// for every `P` leaves no freedom at all:
+/// `centre + zoom · a.xy / a.z`, where `a = Rot⁻¹(P − position)`, the eye is
+/// `position`, and `Rot = Ry·Rx·Rz` is built from the pose's Euler angles
+/// (docs/impl/camera.md §3). Setting those equal for every `P` leaves no
+/// freedom at all:
 ///
 /// - `zoom = f`, because the two scale factors must agree;
 /// - `Rot⁻¹ = R`, so the Euler angles are those of `Rᵀ`;
-/// - `a.z = p.z − f`, so `position = C + Rᵀ·(0, 0, f)` — the camera centre
-///   pushed forward along its own optical axis by the focal length, which is the
-///   film-plane centre. That is precisely what Lumit's `position` names, since
-///   its perspective matrix has already put the eye `zoom` behind it.
+/// - `position = C`, the camera centre itself.
 ///
 /// The rotation stays a rotation through the conversion: transposing an
 /// orthonormal matrix inverts it, so nothing is fitted or normalised here.
 fn to_camera_pose(p: &SolvedPose) -> CameraPose {
-    let f = p.focal_px;
-    let r = p.rotation;
-    // Rᵀ·(0, 0, f) is `f` times R's third **row**, transposition being what
-    // turns a row into a column.
-    let axis = [f * r[2][0], f * r[2][1], f * r[2][2]];
-    let (rx, ry, rz) = euler_of_transpose(&r);
+    let (rx, ry, rz) = euler_of_transpose(&p.rotation);
     CameraPose {
-        zoom: f,
-        position: (
-            p.position[0] + axis[0],
-            p.position[1] + axis[1],
-            p.position[2] + axis[2],
-        ),
+        zoom: p.focal_px,
+        position: (p.position[0], p.position[1], p.position[2]),
         rotation_deg: (rx.to_degrees(), ry.to_degrees(), rz.to_degrees()),
+        dof: None,
     }
 }
 
@@ -2235,6 +2225,42 @@ mod tests {
         })
     }
 
+    /// The conversion in the small (docs/impl/camera.md §3): the eye is the
+    /// solve's own centre, the zoom is its focal, and the compositor then puts
+    /// a world point exactly where the tracker does. The whole-solve version
+    /// below proves the same over a real shot; this says which line moved when
+    /// it stops.
+    #[test]
+    fn to_camera_pose_places_the_eye_at_the_solves_centre() {
+        let (rotation, position) = truth(9);
+        let solved = SolvedPose {
+            frame: 9,
+            rotation,
+            position,
+            segment: 0,
+            focal_px: FOCAL,
+            mean_reprojection_px: 0.0,
+            source: lumit_track::PoseSource::Keyframe,
+        };
+        let pose = to_camera_pose(&solved);
+        assert_eq!(pose.position, (position[0], position[1], position[2]));
+        assert_eq!(pose.zoom, FOCAL);
+        assert!(pose.dof.is_none(), "a solve has no depth of field");
+
+        for p in [
+            [10.0, -20.0, 400.0],
+            [-300.0, 120.0, 900.0],
+            [0.0, 0.0, 250.0],
+        ] {
+            let want = project_through_solve(&solved, p).expect("in front of the eye");
+            let got = project_through_compositor(&pose, p);
+            assert!(
+                (got[0] - want[0]).abs() < 0.05 && (got[1] - want[1]).abs() < 0.05,
+                "{p:?}: the compositor says {got:?} and the tracker {want:?}"
+            );
+        }
+    }
+
     // --- A comp with a camera linked to the tracked layer -------------------
 
     fn secs(n: i64, d: i64) -> CompTime {
@@ -2293,6 +2319,7 @@ mod tests {
                 zoom: Property::fixed(999.0),
                 solve_link: Some(footage.id),
                 correction_base: None,
+                options: Default::default(),
             },
             secs(20, 1),
         );

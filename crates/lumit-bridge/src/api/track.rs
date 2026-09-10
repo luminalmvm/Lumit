@@ -677,24 +677,8 @@ fn write_row(value: &mut EffectValue, written: Value, at: Rational) {
 /// it — and they start at the pose captured here, which is that lane's nought.
 #[frb(sync)]
 pub fn add_solved_camera(tracked: LayerReference) -> Result<LayerReference, BridgeError> {
-    use lumit_core::anim::Property;
-    use lumit_core::model::TransformGroup;
-
     let comp = tracked.composition()?;
-    let mut layer = crate::edits::base_layer(
-        "Camera".into(),
-        LayerKind::Camera {
-            zoom: Property::fixed(f64::from(comp.width) * 50.0 / 36.0),
-            solve_link: Some(tracked.layer_id),
-            correction_base: None,
-        },
-        comp.duration.0,
-        TransformGroup {
-            position_x: Property::fixed(f64::from(comp.width) * 0.5),
-            position_y: Property::fixed(f64::from(comp.height) * 0.5),
-            ..TransformGroup::default()
-        },
-    );
+    let mut layer = crate::edits::fresh_camera(&comp, "Camera".into(), Some(tracked.layer_id));
     // The layer arrives already linked, so `Op::SetCameraSolveLink` — which is
     // where the base is normally captured — is never applied to it. Captured
     // here instead, off the layer that is about to be added, which is the same

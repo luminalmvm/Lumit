@@ -156,21 +156,24 @@ void main() {
           reason: 'a retype must not straighten the line');
     });
 
-    testWidgets('a camera layer shows its zoom and commits it', (tester) async {
+    testWidgets('a camera keeps its zoom on the Transform card', (tester) async {
       final p = withComp();
       final camera = p.comp.addCameraLayer();
       p.uiState.selectedLayer.value = camera;
       await mount(tester, p);
 
-      expect(find.text('Zoom'), findsOneWidget);
-      final field = find.byKey(const ValueKey('src-camera-zoom'));
+      expect(find.byKey(const ValueKey('src-camera-zoom')), findsNothing,
+          reason: 'Zoom is a Camera options row now, where it can be keyed');
+      final field = find.byKey(const ValueKey('tf-zoom'));
+      expect(field, findsOneWidget);
+
       await tester.tap(field);
       await tester.pump();
       await tester.enterText(find.byType(EditableText).first, '1200');
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pump();
 
-      final zoom = camera.getCameraZoom()!;
+      final zoom = camera.getTransform().camera!.zoom;
       expect((zoom as BridgeScalar_Static).field0, 1200);
     });
 

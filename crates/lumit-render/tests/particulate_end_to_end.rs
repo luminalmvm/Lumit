@@ -442,9 +442,17 @@ fn project_3d(
             zoom: Property::fixed(f64::from(H) * 1.5),
             solve_link: None,
             correction_base: None,
+            options: Default::default(),
         };
-        camera.transform.position_x = Property::fixed(f64::from(W) * 0.35);
-        camera.transform.position_y = Property::fixed(f64::from(H) * 0.65);
+        // The eye sits the zoom behind the point it looks at, along its own forward axis.
+        let eye = lumit_core::camera::eye_behind(
+            (f64::from(W) * 0.35, f64::from(H) * 0.65, 0.0),
+            (0.0, -12.0, 0.0),
+            f64::from(H) * 1.5,
+        );
+        camera.transform.position_x = Property::fixed(eye.0);
+        camera.transform.position_y = Property::fixed(eye.1);
+        camera.transform.position_z = Property::fixed(eye.2);
         camera.transform.rotation_y = Property::fixed(-12.0);
         comp.layers.insert(0, camera);
     }

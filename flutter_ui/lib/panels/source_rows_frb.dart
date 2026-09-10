@@ -1,8 +1,9 @@
 // The rows for what a layer is *made of*, above its Transform.
 //
-// A text layer gets its words, size and fill; a camera gets its zoom; a solid
-// gets the asset's colour and size. Which rows appear is decided by asking the
-// layer, so a footage layer simply has none.
+// A text layer gets its words, size and fill; a solid gets the asset's colour
+// and size. Which rows appear is decided by asking the layer, so a footage
+// layer simply has none. A camera's Zoom used to sit here and is now a Camera
+// options row in the Transform group, where it can be keyed.
 //
 // **The solid row says who else it affects, and means it.** A solid is an asset
 // in the Project panel, not a per-layer setting, so recolouring one recolours
@@ -64,12 +65,10 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final text = widget.layer.getText();
-    final zoom = widget.layer.getCameraZoom();
     final solid = _solidOf(widget.layer);
 
     final rows = <Widget>[
       if (text != null) ..._textRows(t, text),
-      if (zoom != null) _zoomRow(t, zoom),
       if (solid != null) ..._solidRows(t, solid),
       ..._retimeRows(t),
     ];
@@ -258,36 +257,6 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
       if (m.id == id) return m.name;
     }
     return l10n.missingMask;
-  }
-
-  Widget _zoomRow(LumitTheme t, BridgeScalar zoom) {
-    if (zoom is! BridgeScalar_Static) {
-      return _row(
-        t,
-        l10n.sourceZoom,
-        Text(l10n.animated, style: t.small.copyWith(color: t.textMuted)),
-      );
-    }
-    return _row(
-      t,
-      l10n.sourceZoom,
-      SizedBox(
-        width: _cellWidth,
-        child: DragValueField(
-          key: const ValueKey('src-camera-zoom'),
-          value: zoom.field0,
-          min: 1,
-          max: 100000,
-          speed: 4,
-          decimals: 0,
-          onChanged: (v) {
-            widget.layer
-                .setCameraZoom(zoom: BridgeScalar.static_(v.toDouble()));
-            widget.onChanged();
-          },
-        ),
-      ),
-    );
   }
 
   List<Widget> _solidRows(LumitTheme t, SolidReference solid) {

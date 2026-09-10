@@ -6196,16 +6196,19 @@ surfaces:
                 l.switches.three_d = true;
                 l.transform.rotation_y = Property::fixed(35.0);
                 l.transform.position_z = Property::fixed(40.0);
-                let camera = matrix_layer(
+                let mut camera = matrix_layer(
                     "Camera",
                     LayerKind::Camera {
                         zoom: Property::fixed(f64::from(h) * 2.0),
                         solve_link: None,
                         correction_base: None,
+                        options: Default::default(),
                     },
                     w,
                     h,
                 );
+                // The default camera: its eye the zoom behind the comp centre.
+                camera.transform.position_z = Property::fixed(-f64::from(h) * 2.0);
                 comp.layers.insert(0, camera);
                 (doc, comp_id, 0)
             }),
@@ -6231,6 +6234,124 @@ surfaces:
                 "{name}: the interactive and export paths must be bit-identical"
             );
         }
+    }
+
+    /// **Depth of field reaches the picture** (docs/impl/camera.md §5).
+    ///
+    /// One comp, one camera focused on its own zoom, and the same nested tile
+    /// shown twice: once on the focus plane and once at twice the distance. The
+    /// blur runs on the layer's own raster with the edge repeated, so the edge
+    /// it can soften has to be *inside* that raster - hence a white square in a
+    /// black tile rather than a bare solid, which is one flat colour edge to
+    /// edge and would come out of any blur exactly as it went in.
+    ///
+    /// The far tile draws at half size, so a pixel or two of its edge is
+    /// intermediate however sharp it is; the gate is the width of the ramp, not
+    /// its presence. And the aperture is in the frame's name, or a frame banked
+    /// at one aperture would be handed back at another.
+    #[test]
+    fn depth_of_field_softens_the_layer_off_the_focus_plane() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        const ZOOM: f64 = 200.0;
+        let (cw, ch) = (128u32, 64u32);
+
+        // A white square inside a black tile, shown at both depths.
+        let mut doc = Document::new();
+        let white = Uuid::now_v7();
+        doc.items.push(ProjectItem::Solid(SolidDef {
+            id: white,
+            name: "Square".into(),
+            colour: LinearColour([1.0, 1.0, 1.0, 1.0]),
+            width: 24,
+            height: 24,
+            extra: serde_json::Map::new(),
+        }));
+        let tile = push_comp(&mut doc, "Tile", 48, 48);
+        let mut square = matrix_layer("Square", LayerKind::Solid { def: white }, 24, 24);
+        square.transform.position_x = Property::fixed(24.0);
+        square.transform.position_y = Property::fixed(24.0);
+        doc.comp_mut(tile).unwrap().layers.push(square);
+
+        let comp_id = push_comp(&mut doc, "Scene", cw, ch);
+        let mut camera = matrix_layer(
+            "Camera",
+            LayerKind::Camera {
+                zoom: Property::fixed(ZOOM),
+                solve_link: None,
+                correction_base: None,
+                options: Box::new(lumit_core::model::CameraOptions {
+                    depth_of_field: true,
+                    aperture: Property::fixed(16.0),
+                    ..lumit_core::model::CameraOptions::fresh(
+                        ZOOM,
+                        (f64::from(cw) * 0.5, f64::from(ch) * 0.5, 0.0),
+                    )
+                }),
+            },
+            cw,
+            ch,
+        );
+        camera.transform.position_z = Property::fixed(-ZOOM);
+
+        let at = |x: f64, z: f64| {
+            let mut l = matrix_layer("Tile", LayerKind::Precomp { comp: tile }, 48, 48);
+            l.switches.three_d = true;
+            l.transform.position_x = Property::fixed(x);
+            l.transform.position_y = Property::fixed(f64::from(ch) * 0.5);
+            l.transform.position_z = Property::fixed(z);
+            l
+        };
+        // On the focus plane, and at twice the distance from the eye.
+        let near = at(32.0, 0.0);
+        let far = at(96.0, ZOOM);
+        let scene = doc.comp_mut(comp_id).unwrap();
+        scene.layers.push(camera);
+        scene.layers.push(near);
+        scene.layers.push(far);
+
+        let doc = Arc::new(doc);
+        let (rgba, w, _) = r.render_rgba(&doc, comp_id, 0, 1.0).expect("a frame");
+        // How many pixels of the middle row are neither lit nor dark: the
+        // width of the edge's ramp, counted over each tile's own extent.
+        let ramp = |from: u32, to: u32| {
+            (from..to)
+                .filter(|x| {
+                    let v = rgba[((ch / 2 * w + x) * 4) as usize];
+                    (25..230).contains(&v)
+                })
+                .count()
+        };
+        let (sharp, soft) = (ramp(8, 56), ramp(68, 92));
+        assert!(
+            sharp <= 2,
+            "the layer on the focus plane came out with a {sharp}-pixel edge"
+        );
+        assert!(
+            soft >= 5,
+            "the layer at twice the focus distance came out with a {soft}-pixel edge"
+        );
+
+        // The aperture is content, so it is part of the frame's name.
+        let q = Quality::default();
+        let wide = r.frame_key(&doc, comp_id, 0, q).expect("a nameable frame");
+        let mut narrower = (*doc).clone();
+        if let LayerKind::Camera { options, .. } =
+            &mut narrower.comp_mut(comp_id).unwrap().layers[0].kind
+        {
+            options.aperture = Property::fixed(4.0);
+        }
+        assert_ne!(
+            wide,
+            r.frame_key(&Arc::new(narrower), comp_id, 0, q)
+                .expect("still nameable"),
+            "a different aperture is a different picture and takes a different name"
+        );
     }
 
     /// **A wire reaches the picture.**

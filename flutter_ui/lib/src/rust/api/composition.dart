@@ -18,6 +18,7 @@ import 'package:uuid/uuid.dart';
 import 'project_item.dart';
 import 'solid.dart';
 import 'state.dart';
+import 'wireframes.dart';
 
 // These functions are ignored because they are not marked as `pub`: `add_at`, `bridge_marker`, `colour_view_pair`, `commit_slide`, `commit`, `composition`, `core_marker`, `core_markers`, `dispatch`, `document`, `footage_span_and_size`, `has_picture`, `insert_row`, `layer_switch_op`, `place_footage`, `project`, `read_groups`, `runs_as_video`, `to_engine`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
@@ -466,8 +467,9 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceAddAudioLayer(
               that: this, footage: footage);
 
-  /// Add a Camera layer at the comp centre. The default zoom is the After
-  /// Effects 50 mm model, `comp width × 50/36`.
+  /// Add a Camera layer looking at the comp centre from the After Effects
+  /// 50 mm distance, `comp width × 50/36`, so a fresh camera changes no
+  /// picture (docs/impl/camera.md §1).
   LayerReference addCameraLayer({int? row}) => BridgeLib.instance.api
       .crateApiCompositionCompositionReferenceAddCameraLayer(
           that: this, row: row);
@@ -1278,6 +1280,15 @@ class CompositionReference {
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceSetBeatGrid(
           that: this, grid: grid);
 
+  /// Look at this comp through `view` rather than its active camera
+  /// (docs/impl/camera.md §6), or through the active camera again with
+  /// `None`. Panel state, so the frontend sends it whenever the Viewer's
+  /// 3D view changes and the next render looks through it. Export never
+  /// sees a view.
+  void setCameraView({BridgeCameraPose? view}) => BridgeLib.instance.api
+      .crateApiCompositionCompositionReferenceSetCameraView(
+          that: this, view: view);
+
   void setGroupLabel({required UuidValue group, required int label}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceSetGroupLabel(
@@ -1551,6 +1562,15 @@ class CompositionReference {
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceUngroupSelection(
               that: this, layerIds: layerIds);
+
+  /// The wireframes at `frame`, projected through `view`. Asked once per
+  /// frame change or view change, never per rebuild.
+  BridgeWireframes wireframes(
+          {required BigInt frame,
+          required BridgeCameraPose view,
+          required List<BridgeMediaSize> mediaSizes}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceWireframes(
+          that: this, frame: frame, view: view, mediaSizes: mediaSizes);
 
   @override
   int get hashCode => internalproject.hashCode ^ internalid.hashCode;

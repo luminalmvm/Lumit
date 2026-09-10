@@ -18,7 +18,7 @@ use zip::write::SimpleFileOptions;
 use zip::{ZipArchive, ZipWriter};
 
 pub const FORMAT: &str = "lumit-project";
-pub const SCHEMA_VERSION: &str = "0.2.0";
+pub const SCHEMA_VERSION: &str = "0.3.0";
 pub const MIN_READER: &str = "0.1.0";
 
 #[derive(Debug, thiserror::Error)]
@@ -86,11 +86,180 @@ struct Migration {
 /// The ordered migration chain. Each schema bump appends one `Migration` here
 /// (from the previous version to the new one); [`run_migrations`] then walks a
 /// file up the chain to the current schema on open.
-static MIGRATIONS: &[Migration] = &[Migration {
-    from: "0.1.0",
-    to: "0.2.0",
-    apply: retime_onto_the_layer,
-}];
+static MIGRATIONS: &[Migration] = &[
+    Migration {
+        from: "0.1.0",
+        to: "0.2.0",
+        apply: retime_onto_the_layer,
+    },
+    Migration {
+        from: "0.2.0",
+        to: "0.3.0",
+        apply: camera_position_to_the_eye,
+    },
+];
+
+/// `0.2.0` → `0.3.0`: a Camera layer's position becomes the eye
+/// (docs/impl/camera.md §7).
+///
+/// A camera used to store the point it looked at, with the eye `zoom` behind
+/// it along its forward axis. Now the position is the eye, as in After Effects,
+/// and the old point is exactly the new point of interest. So every camera
+/// gets its old position copied into `point_of_interest`, and its position
+/// moved back by `zoom · forward(rotation)`.
+///
+/// When zoom and both out-of-plane rotations are static the shift is one
+/// constant per axis, subtracted from every key's value with the tangents
+/// untouched, which is exact. When any of them is animated the three position
+/// channels are resampled at the union of all their key times with linear
+/// keys, which is what a baked solve already is. A `correction_base`, when
+/// present, gets the same shift.
+fn camera_position_to_the_eye(value: &mut serde_json::Value) {
+    let Some(comps) = value.get_mut("comps").and_then(|c| c.as_array_mut()) else {
+        return;
+    };
+    for comp in comps {
+        let Some(layers) = comp.get_mut("layers").and_then(|l| l.as_array_mut()) else {
+            continue;
+        };
+        for layer in layers {
+            if layer.pointer("/kind/Camera").is_none() {
+                continue;
+            }
+            move_camera_to_the_eye(layer);
+        }
+    }
+}
+
+fn read_property(layer: &serde_json::Value, path: &str) -> Option<lumit_core::anim::Property> {
+    serde_json::from_value(layer.pointer(path)?.clone()).ok()
+}
+
+fn write_property(
+    layer: &mut serde_json::Value,
+    path: &str,
+    property: &lumit_core::anim::Property,
+) {
+    if let (Some(slot), Ok(v)) = (layer.pointer_mut(path), serde_json::to_value(property)) {
+        *slot = v;
+    }
+}
+
+fn move_camera_to_the_eye(layer: &mut serde_json::Value) {
+    use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};
+
+    let zoom = read_property(layer, "/kind/Camera/zoom").unwrap_or_else(|| Property::fixed(0.0));
+    let read = |name: &str| read_property(layer, &format!("/transform/{name}"));
+    let (Some(px), Some(py), Some(pz)) =
+        (read("position_x"), read("position_y"), read("position_z"))
+    else {
+        return;
+    };
+    let rx = read("rotation_x").unwrap_or_else(Property::zero);
+    let ry = read("rotation_y").unwrap_or_else(Property::zero);
+    let rz = read("rotation").unwrap_or_else(Property::zero);
+
+    // The old position is the point of interest, exactly.
+    if let Some(options) = layer.pointer_mut("/kind/Camera") {
+        if let Some(fields) = options.as_object_mut() {
+            let mut opts = fields
+                .remove("options")
+                .unwrap_or_else(|| serde_json::json!({}));
+            if let (Some(o), Ok(poi)) = (
+                opts.as_object_mut(),
+                serde_json::to_value([px.clone(), py.clone(), pz.clone()]),
+            ) {
+                o.insert("point_of_interest".into(), poi);
+            }
+            fields.insert("options".into(), opts);
+        }
+    }
+
+    let shift_at = |lt: f64| {
+        let f = lumit_core::camera::forward((rx.value_at(lt), ry.value_at(lt), rz.value_at(lt)));
+        let z = zoom.value_at(lt);
+        (f.0 * z, f.1 * z, f.2 * z)
+    };
+    let aim_static = !zoom.is_animated() && !rx.is_animated() && !ry.is_animated();
+
+    let shifted = if aim_static {
+        // One constant per axis: every value moves, every tangent stays.
+        let s = shift_at(0.0);
+        let shift = |p: &Property, by: f64| Property {
+            animation: match &p.animation {
+                Animation::Static(v) => Animation::Static(v - by),
+                Animation::Keyframed(keys) => Animation::Keyframed(
+                    keys.iter()
+                        .map(|k| Keyframe {
+                            value: k.value - by,
+                            ..*k
+                        })
+                        .collect(),
+                ),
+                // An expression's value is the expression's business; the
+                // shift is folded in as text so the row keeps saying what it
+                // says and the picture stays where it was.
+                Animation::Expression(e) => Animation::Expression(format!("({e}) - ({by})")),
+            },
+            extra: p.extra.clone(),
+        };
+        [shift(&px, s.0), shift(&py, s.1), shift(&pz, s.2)]
+    } else {
+        // Resample at every key time any of the six channels has.
+        let mut times: Vec<lumit_core::time::Rational> = Vec::new();
+        for p in [&px, &py, &pz, &rx, &ry, &zoom] {
+            if let Animation::Keyframed(keys) = &p.animation {
+                times.extend(keys.iter().map(|k| k.time));
+            }
+        }
+        times.sort();
+        times.dedup();
+        let sample = |axis: usize| {
+            let keys: Vec<Keyframe> = times
+                .iter()
+                .map(|t| {
+                    let lt = t.to_f64();
+                    let s = shift_at(lt);
+                    let (p, by) = match axis {
+                        0 => (&px, s.0),
+                        1 => (&py, s.1),
+                        _ => (&pz, s.2),
+                    };
+                    Keyframe {
+                        time: *t,
+                        value: p.value_at(lt) - by,
+                        interp_in: SideInterp::Linear,
+                        interp_out: SideInterp::Linear,
+                    }
+                })
+                .collect();
+            Property {
+                animation: Animation::Keyframed(keys),
+                extra: serde_json::Map::new(),
+            }
+        };
+        [sample(0), sample(1), sample(2)]
+    };
+    write_property(layer, "/transform/position_x", &shifted[0]);
+    write_property(layer, "/transform/position_y", &shifted[1]);
+    write_property(layer, "/transform/position_z", &shifted[2]);
+
+    // The correction lane's zero was a pose in the old terms too.
+    if let Some(base) = layer.pointer_mut("/kind/Camera/correction_base") {
+        if let Ok(mut pose) = serde_json::from_value::<lumit_core::model::CameraPose>(base.clone())
+        {
+            let f = lumit_core::camera::forward(pose.rotation_deg);
+            pose.position = (
+                pose.position.0 - f.0 * pose.zoom,
+                pose.position.1 - f.1 * pose.zoom,
+                pose.position.2 - f.2 * pose.zoom,
+            );
+            if let Ok(v) = serde_json::to_value(pose) {
+                *base = v;
+            }
+        }
+    }
+}
 
 /// `0.1.0` → `0.2.0`: a Footage layer's own retime segment store moves
 /// onto the layer as the Retime **property**, and the frame-interpolation
@@ -1830,6 +1999,170 @@ mod tests {
     /// the same source moments it always did.
     ///
     /// Half speed is the case worth pinning: at four seconds of layer time the
+    fn old_camera(
+        position: [lumit_core::anim::Property; 3],
+        rotation: [lumit_core::anim::Property; 3],
+        zoom: lumit_core::anim::Property,
+    ) -> serde_json::Value {
+        let mut transform = lumit_core::model::TransformGroup::default();
+        let [px, py, pz] = position;
+        let [rx, ry, rz] = rotation;
+        transform.position_x = px;
+        transform.position_y = py;
+        transform.position_z = pz;
+        transform.rotation_x = rx;
+        transform.rotation_y = ry;
+        transform.rotation = rz;
+        serde_json::json!({
+            "comps": [{
+                "layers": [{
+                    "kind": { "Camera": {
+                        "zoom": serde_json::to_value(&zoom).unwrap(),
+                    }},
+                    "transform": serde_json::to_value(&transform).unwrap(),
+                }]
+            }]
+        })
+    }
+
+    /// The migrated camera's transform and options, read back typed. Only
+    /// the two parts the migration touches are in the fixture, so only they
+    /// are read: a whole `Layer` would want every other field too.
+    fn migrated_camera(
+        doc: serde_json::Value,
+    ) -> (
+        lumit_core::model::TransformGroup,
+        lumit_core::model::CameraOptions,
+    ) {
+        let out = run_migrations(MIGRATIONS, doc, (0, 2, 0));
+        let layer = &out["comps"][0]["layers"][0];
+        (
+            serde_json::from_value(layer["transform"].clone()).expect("a transform"),
+            serde_json::from_value(layer["kind"]["Camera"]["options"].clone())
+                .expect("camera options"),
+        )
+    }
+
+    /// A hand-placed camera (docs/impl/camera.md §7): the old position was the
+    /// point looked at, so it becomes the point of interest exactly, and the
+    /// eye lands `zoom` behind it along the forward axis.
+    #[test]
+    fn a_camera_from_the_old_schema_opens_with_the_eye_behind_the_old_position() {
+        use lumit_core::anim::Property;
+        let (tr, options) = migrated_camera(old_camera(
+            [
+                Property::fixed(960.0),
+                Property::fixed(540.0),
+                Property::fixed(0.0),
+            ],
+            [Property::zero(), Property::zero(), Property::zero()],
+            Property::fixed(1000.0),
+        ));
+        assert_eq!(tr.position_x.value_at(0.0), 960.0);
+        assert_eq!(tr.position_y.value_at(0.0), 540.0);
+        assert!((tr.position_z.value_at(0.0) + 1000.0).abs() < 1e-9);
+        assert_eq!(options.point_of_interest[0].value_at(0.0), 960.0);
+        assert_eq!(options.point_of_interest[1].value_at(0.0), 540.0);
+        assert_eq!(options.point_of_interest[2].value_at(0.0), 0.0);
+        assert!(!options.two_node, "aimed by its rows, as it always was");
+        // A turned camera moves back along where it points, not along z.
+        let turned = migrated_camera(old_camera(
+            [
+                Property::fixed(0.0),
+                Property::fixed(0.0),
+                Property::fixed(0.0),
+            ],
+            [Property::zero(), Property::fixed(90.0), Property::zero()],
+            Property::fixed(500.0),
+        ));
+        assert!((turned.0.position_x.value_at(0.0) + 500.0).abs() < 1e-6);
+        assert!(turned.0.position_z.value_at(0.0).abs() < 1e-6);
+    }
+
+    /// Keyed position with a still aim: every key's value moves by the same
+    /// constant and the keys themselves are kept, tangents and all.
+    #[test]
+    fn a_keyed_position_with_a_still_aim_shifts_every_key_exactly() {
+        use lumit_core::anim::{Animation, Keyframe, Property, EASY_EASE};
+        use lumit_core::time::Rational;
+        let keys = vec![
+            Keyframe {
+                time: Rational::ZERO,
+                value: 100.0,
+                interp_in: EASY_EASE,
+                interp_out: EASY_EASE,
+            },
+            Keyframe {
+                time: Rational::new(2, 1).unwrap(),
+                value: 300.0,
+                interp_in: EASY_EASE,
+                interp_out: EASY_EASE,
+            },
+        ];
+        let (tr, _) = migrated_camera(old_camera(
+            [
+                Property::fixed(0.0),
+                Property::fixed(0.0),
+                Property {
+                    animation: Animation::Keyframed(keys.clone()),
+                    extra: serde_json::Map::new(),
+                },
+            ],
+            [Property::zero(), Property::zero(), Property::zero()],
+            Property::fixed(1000.0),
+        ));
+        let Animation::Keyframed(after) = &tr.position_z.animation else {
+            panic!("still keyed");
+        };
+        assert_eq!(after.len(), 2);
+        for (was, now) in keys.iter().zip(after) {
+            assert_eq!(now.time, was.time);
+            assert!((now.value - (was.value - 1000.0)).abs() < 1e-9);
+            assert_eq!(now.interp_in, was.interp_in, "tangents untouched");
+        }
+    }
+
+    /// An animated aim has no single shift, so position is resampled at the
+    /// union of every key time, and the picture stays put at each of them.
+    #[test]
+    fn an_animated_aim_resamples_position_at_the_union_of_key_times() {
+        use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};
+        use lumit_core::time::Rational;
+        let key = |t: i64, v: f64| Keyframe {
+            time: Rational::new(t, 1).unwrap(),
+            value: v,
+            interp_in: SideInterp::Linear,
+            interp_out: SideInterp::Linear,
+        };
+        let keyed = |keys: Vec<Keyframe>| Property {
+            animation: Animation::Keyframed(keys),
+            extra: serde_json::Map::new(),
+        };
+        let (tr, _) = migrated_camera(old_camera(
+            [
+                keyed(vec![key(0, 0.0), key(4, 400.0)]),
+                Property::fixed(0.0),
+                Property::fixed(0.0),
+            ],
+            [
+                Property::zero(),
+                keyed(vec![key(0, 0.0), key(2, 90.0)]),
+                Property::zero(),
+            ],
+            Property::fixed(500.0),
+        ));
+        let Animation::Keyframed(xs) = &tr.position_x.animation else {
+            panic!("keyed");
+        };
+        let times: Vec<i64> = xs.iter().map(|k| k.time.to_f64() as i64).collect();
+        assert_eq!(times, vec![0, 2, 4], "the union of both channels' times");
+        // At t=0 the aim is +z, so x is untouched; at t=2 it has turned to
+        // +x, so the eye sits 500 back along x from the old 200.
+        assert!((xs[0].value - 0.0).abs() < 1e-6);
+        assert!((xs[1].value - (200.0 - 500.0)).abs() < 1e-6);
+        assert!((xs[2].value - (400.0 - 500.0)).abs() < 1e-6);
+    }
+
     /// layer shows two seconds of source, before and after.
     #[test]
     fn the_old_segment_store_becomes_the_retime_property() {

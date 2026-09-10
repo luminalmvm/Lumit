@@ -1573,6 +1573,138 @@ mod tests {
         assert_eq!(layer.transform.opacity.value_at(1.0), 100.0);
     }
 
+    /// A store holding the scripted footage layer and a camera beside it.
+    fn store_with_camera() -> (DocumentStore, Uuid, Uuid, Uuid) {
+        let store = DocumentStore::new(Document::new());
+        let (ops, comp_id) = scripted_ops(&store.snapshot());
+        let mut footage_id = None;
+        for op in &ops {
+            if let Op::AddLayer { layer, .. } = op {
+                footage_id = Some(layer.id);
+            }
+        }
+        for op in ops {
+            store.commit(op).unwrap();
+        }
+        let mut camera = test_layer(Uuid::now_v7());
+        camera.kind = LayerKind::Camera {
+            zoom: crate::anim::Property::fixed(1000.0),
+            options: Box::default(),
+            solve_link: None,
+            correction_base: None,
+        };
+        let camera_id = camera.id;
+        store
+            .commit(Op::AddLayer {
+                comp: comp_id,
+                index: 0,
+                layer: Box::new(camera),
+            })
+            .unwrap();
+        (store, comp_id, camera_id, footage_id.unwrap())
+    }
+
+    /// A camera channel is an ordinary transform op (docs/impl/camera.md §1):
+    /// it writes through the kind, undoes exactly, and is refused on a layer
+    /// that has no such channel without moving anything.
+    #[test]
+    fn a_camera_channel_op_round_trips_and_is_refused_elsewhere() {
+        use crate::anim::Animation;
+        let (store, comp_id, camera_id, footage_id) = store_with_camera();
+        let zoom = |doc: &Document| {
+            doc.comp(comp_id)
+                .unwrap()
+                .layers
+                .iter()
+                .find(|l| l.id == camera_id)
+                .unwrap()
+                .prop(TransformProp::Zoom)
+                .unwrap()
+                .value_at(0.0)
+        };
+
+        store
+            .commit(Op::SetTransformProperty {
+                comp: comp_id,
+                layer: camera_id,
+                prop: TransformProp::Zoom,
+                animation: Animation::Static(2400.0),
+            })
+            .unwrap();
+        assert_eq!(zoom(&store.snapshot()), 2400.0);
+        store.undo().unwrap();
+        assert_eq!(
+            zoom(&store.snapshot()),
+            1000.0,
+            "undo puts back exactly what was there"
+        );
+
+        let before = json(&store.snapshot());
+        assert_eq!(
+            store.commit(Op::SetTransformProperty {
+                comp: comp_id,
+                layer: footage_id,
+                prop: TransformProp::Zoom,
+                animation: Animation::Static(5.0),
+            }),
+            Err(crate::ops::OpError::PropNotOnLayer)
+        );
+        assert_eq!(
+            json(&store.snapshot()),
+            before,
+            "a refused op leaves the document alone"
+        );
+    }
+
+    /// The settings dialog's one op (docs/impl/camera.md §9): the four land
+    /// together and its inverse puts back the four it replaced.
+    #[test]
+    fn a_camera_settings_op_applies_and_inverts() {
+        let (store, comp_id, camera_id, footage_id) = store_with_camera();
+        let read = |doc: &Document| {
+            let l = doc
+                .comp(comp_id)
+                .unwrap()
+                .layers
+                .iter()
+                .find(|l| l.id == camera_id)
+                .unwrap();
+            match &l.kind {
+                LayerKind::Camera { options, .. } => options.settings(),
+                _ => panic!("it is a camera"),
+            }
+        };
+        let before = read(&store.snapshot());
+        assert_eq!(before, CameraOptions::default().settings());
+
+        let settings = CameraSettings {
+            two_node: true,
+            depth_of_field: true,
+            lock_to_zoom: true,
+            film_size_mm: 24.0,
+        };
+        store
+            .commit(Op::SetCameraSettings {
+                comp: comp_id,
+                layer: camera_id,
+                settings,
+            })
+            .unwrap();
+        assert_eq!(read(&store.snapshot()), settings);
+        store.undo().unwrap();
+        assert_eq!(read(&store.snapshot()), before);
+
+        // A layer with no camera options has no settings to replace.
+        assert_eq!(
+            store.commit(Op::SetCameraSettings {
+                comp: comp_id,
+                layer: footage_id,
+                settings,
+            }),
+            Err(crate::ops::OpError::PropNotOnLayer)
+        );
+    }
+
     #[test]
     fn reorder_layer_moves_and_undoes_exactly() {
         let store = DocumentStore::new(Document::new());
@@ -1841,6 +1973,7 @@ mod tests {
             zoom: crate::anim::Property::zero(),
             solve_link: None,
             correction_base: None,
+            options: Default::default(),
         };
         let camera_id = camera.id;
         store
@@ -2002,6 +2135,7 @@ mod tests {
                         zoom: crate::anim::Property::fixed(1000.0),
                         solve_link: None,
                         correction_base: None,
+                        options: Default::default(),
                     },
                     in_point: CompTime(Rational::ZERO),
                     out_point: CompTime(duration),

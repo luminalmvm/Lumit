@@ -1176,29 +1176,16 @@ impl CompositionReference {
         self.add_at(layer, None)
     }
 
-    /// Add a Camera layer at the comp centre. The default zoom is the After
-    /// Effects 50 mm model, `comp width × 50/36`.
+    /// Add a Camera layer looking at the comp centre from the After Effects
+    /// 50 mm distance, `comp width × 50/36`, so a fresh camera changes no
+    /// picture (docs/impl/camera.md §1).
     #[frb(sync)]
     pub fn add_camera_layer(&self, row: Option<u32>) -> Result<LayerReference, BridgeError> {
-        use lumit_core::anim::Property;
-        use lumit_core::model::TransformGroup;
-
         let comp = self.composition()?;
-        let layer = crate::edits::base_layer(
-            "Camera".into(),
-            lumit_core::model::LayerKind::Camera {
-                zoom: Property::fixed(f64::from(comp.width) * 50.0 / 36.0),
-                solve_link: None,
-                correction_base: None,
-            },
-            comp.duration.0,
-            TransformGroup {
-                position_x: Property::fixed(f64::from(comp.width) * 0.5),
-                position_y: Property::fixed(f64::from(comp.height) * 0.5),
-                ..TransformGroup::default()
-            },
-        );
-        self.add_at(layer, row)
+        self.add_at(
+            crate::edits::fresh_camera(&comp, "Camera".into(), None),
+            row,
+        )
     }
 
     /// Add a Light layer at the comp centre.
@@ -1981,6 +1968,22 @@ impl CompositionReference {
             transparent_background,
             region,
             colour_view: colour_view_pair(colour_view),
+        })
+    }
+
+    /// Look at this comp through `view` rather than its active camera
+    /// (docs/impl/camera.md §6), or through the active camera again with
+    /// `None`. Panel state, so the frontend sends it whenever the Viewer's
+    /// 3D view changes and the next render looks through it. Export never
+    /// sees a view.
+    #[frb(sync)]
+    pub fn set_camera_view(
+        &self,
+        view: Option<crate::api::layer::BridgeCameraPose>,
+    ) -> Result<(), BridgeError> {
+        self.dispatch(WorkerRequest::SetCameraView {
+            comp: self.id,
+            view,
         })
     }
 

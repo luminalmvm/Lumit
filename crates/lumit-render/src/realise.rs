@@ -1180,6 +1180,24 @@ impl Realiser<'_> {
                     .fx
                     .lighting(&self.ctx, &tex, tex.width(), tex.height(), &op);
             }
+            // Depth of field (docs/impl/camera.md §5): a 3D layer off the
+            // active camera's focus plane is blurred by its circle of
+            // confusion before it is placed. None unless the camera carries
+            // one, so a comp without it renders byte-for-byte as before.
+            if let Some(radius_px) = dof_radius(camera, l, self.render_scale) {
+                tex = self.fx.blur(
+                    &self.ctx,
+                    &tex,
+                    tex.width(),
+                    tex.height(),
+                    None,
+                    &lumit_gpu::fx::BlurOp {
+                        radius_px,
+                        edge: 1,
+                        mix: 1.0,
+                    },
+                );
+            }
             self.layer_done(l, started, fx_ms);
             grown.push((
                 tex.width() as f32 / source_w as f32,
@@ -1381,6 +1399,60 @@ fn grow_offset(natural: (f32, f32), grow: (f32, f32)) -> (f32, f32) {
 /// works out the same whether the layer is being rendered at full resolution
 /// or a quarter of it, because the steps are measured against the raster this
 /// pass is actually running on.
+/// The gaussian radius, in the layer's own texels, that depth of field
+/// blurs this draw by (docs/impl/camera.md §5), or `None` for a sharp one:
+/// no camera, no depth of field, a 2D layer, a layer at or behind the eye,
+/// or a radius under half a texel.
+///
+/// The layer's depth is read at its anchor, through its parent placement, so
+/// a plane leaning through the focus plane blurs evenly rather than across
+/// itself. The circle of confusion is a diameter on screen in comp pixels;
+/// halved for the radius, scaled back to the layer's texels by its
+/// projection (`d / zoom`) and its own scale, and by the render scale the
+/// texture was made at.
+fn dof_radius(
+    camera: Option<lumit_core::model::CameraPose>,
+    l: &crate::draw::CompLayerDraw,
+    render_scale: f32,
+) -> Option<f32> {
+    let cam = camera?;
+    let dof = cam.dof?;
+    if !l.three_d {
+        return None;
+    }
+    let p = [
+        f64::from(l.position.0),
+        f64::from(l.position.1),
+        f64::from(l.z),
+    ];
+    // `pre` is column-major (`to_cols_array_2d`): column `c`, row `r`.
+    let world = match l.pre {
+        Some(m) => {
+            let m = m.map(|c| c.map(f64::from));
+            [
+                m[0][0] * p[0] + m[1][0] * p[1] + m[2][0] * p[2] + m[3][0],
+                m[0][1] * p[0] + m[1][1] * p[1] + m[2][1] * p[2] + m[3][1],
+                m[0][2] * p[0] + m[1][2] * p[1] + m[2][2] * p[2] + m[3][2],
+            ]
+        }
+        None => p,
+    };
+    let f = lumit_core::camera::forward(cam.rotation_deg);
+    let d = (world[0] - cam.position.0) * f.0
+        + (world[1] - cam.position.1) * f.1
+        + (world[2] - cam.position.2) * f.2;
+    let coc = lumit_core::camera::coc_px(&dof, cam.zoom, d);
+    if coc <= 0.0 {
+        return None;
+    }
+    let scale = (f64::from(l.scale.0.abs()) + f64::from(l.scale.1.abs())) / 200.0;
+    if scale <= 1e-6 || cam.zoom <= 0.0 {
+        return None;
+    }
+    let radius = coc / 2.0 * d / cam.zoom / scale * f64::from(render_scale);
+    (radius >= 0.5).then_some(radius as f32)
+}
+
 fn lighting_op(
     l: &crate::draw::CompLayerDraw,
     w: u32,

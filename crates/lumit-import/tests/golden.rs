@@ -913,13 +913,14 @@ fn the_3d_layer_the_camera_and_the_light_come_across_as_far_as_they_map() {
         Some(&serde_json::json!("CAMERA_OR_POINT_OF_INTEREST")),
         "the two-node flag rides in the ae namespace"
     );
-    assert!(
-        reported(|r| matches!(r, Reason::PointOfInterestNotCarried)),
-        "and the aim it stands for is reported as not carried"
-    );
-    // ROW NOT CARRIED: the Point of Interest arrives as the anchor point.
-    assert_eq!(camera.transform.anchor_x.value_at(0.0), 320.0);
-    assert_eq!(camera.transform.anchor_y.value_at(0.0), 180.0);
+    // The Point of Interest is the camera's own second node
+    // (docs/impl/camera.md §8), and the flag makes it a two-node camera.
+    let LayerKind::Camera { options, .. } = &camera.kind else {
+        panic!("a camera");
+    };
+    assert!(options.two_node, "aimed by its point of interest");
+    assert_eq!(options.point_of_interest[0].value_at(0.0), 320.0);
+    assert_eq!(options.point_of_interest[1].value_at(0.0), 180.0);
 
     let LayerKind::Light { light } = &layer(c, "key light").kind else {
         panic!("a light");
@@ -1140,13 +1141,12 @@ fn the_report_counts_what_it_says_and_names_its_placeholder() {
             // One fewer Adjusted row now the guide flag is a switch Lumit has,
             // so it crosses over instead of being reported.
             // One more since Invert joined the table: the fixture's Channel is
-            // Red, which is a row rather than a placeholder now. One more
-            // since two-node cameras arrived: the fixture's camera is a
-            // two-node one, and the point of interest that aims it is named
-            // rather than dropped. Two fewer since the Transform effect gained
-            // a Skew pair, so the fixture's Skew and Skew Axis carry rather
-            // than report.
-            adjusted: 58,
+            // Red, which is a row rather than a placeholder now. Two fewer
+            // since the Transform effect gained a Skew pair, so the fixture's
+            // Skew and Skew Axis carry rather than report. One fewer since
+            // the camera gained its second node: the fixture's two-node
+            // camera and its point of interest cross over whole.
+            adjusted: 57,
             placeholders: 1,
             skipped: 1,
         }

@@ -778,6 +778,18 @@ double? _transformDefault(BridgeTransformProp prop, double w, double h) =>
       BridgeTransformProp.scaleY ||
       BridgeTransformProp.opacity =>
         100,
+      // A full circle of confusion, which is what a fresh camera carries.
+      BridgeTransformProp.blurLevel => 100,
+      // The rest of a camera's channels are seeded from the comp and from
+      // each other (docs/impl/camera.md §1), so there is no number here that
+      // means "untouched". Exempt, exactly as the Anchor is.
+      BridgeTransformProp.poiX ||
+      BridgeTransformProp.poiY ||
+      BridgeTransformProp.poiZ ||
+      BridgeTransformProp.zoom ||
+      BridgeTransformProp.focusDistance ||
+      BridgeTransformProp.aperture =>
+        null,
     };
 
 /// What a keyed row is called when it is read **out of its fold-out** — the
@@ -1443,6 +1455,14 @@ String flowPath(String layerId) => '$layerId/flow';
 /// The path of a layer's Transform group in the open set.
 String transformPath(String layerId) => '$layerId/transform';
 
+/// The path of the Camera options heading inside it - the second twirl a
+/// camera's Transform group carries (docs/impl/camera.md §1).
+///
+/// Its rows keep [transformGroupPath], as every other transform row does: the
+/// heading is a place to fold them away, not a place they live.
+String cameraOptionsPath(String layerId) =>
+    '${transformPath(layerId)}/camera-options';
+
 /// The path of one Transform row — Position, Scale, Rotation and the rest.
 ///
 /// Named after the group's first axis rather than its label, because the label
@@ -1589,8 +1609,12 @@ List<LayerFoldRow> layerFoldRows({
   // than passed in because the lanes build their rows from this same list and
   // must leave room for the same ones (docs/07 §4.3).
   final transformOpen = open.contains(transformPath(id));
-  final groups =
-      transformGroups(threeD: info.switches.threeD, modes: info.axisModes);
+  final groups = transformGroups(
+    threeD: info.switches.threeD,
+    modes: info.axisModes,
+    kind: info.kind,
+    twoNode: info.camera?.twoNode ?? false,
+  );
   final soloed = !transformOpen &&
       groups.any((g) => open.contains(transformGroupPath(id, g)));
 
@@ -1634,8 +1658,31 @@ List<LayerFoldRow> layerFoldRows({
     depth: 1,
   ));
   for (final group in groups) {
+    if (group.cameraOption) continue;
     if (transformOpen || open.contains(transformGroupPath(id, group))) {
       rows.add(FoldTransformRow(group, info.transform, depth: 2));
+    }
+  }
+
+  // Camera options: a second heading under Transform, after the placement rows
+  // (docs/impl/camera.md §1). The four numbers under it are about the lens
+  // rather than about where the camera stands, and a camera is the only kind
+  // that has any.
+  final options = [for (final g in groups) if (g.cameraOption) g];
+  if (options.isNotEmpty) {
+    final optionsOpen = open.contains(cameraOptionsPath(id));
+    if (transformOpen) {
+      rows.add(FoldGroupRow(
+        path: cameraOptionsPath(id),
+        label: l10n.cameraOptions,
+        open: optionsOpen,
+        depth: 2,
+      ));
+    }
+    for (final group in options) {
+      if (optionsOpen || open.contains(transformGroupPath(id, group))) {
+        rows.add(FoldTransformRow(group, info.transform, depth: 3));
+      }
     }
   }
 

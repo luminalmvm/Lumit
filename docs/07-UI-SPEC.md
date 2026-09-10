@@ -192,7 +192,7 @@ strip whatever workspace is active.
 | Paint | Brush, Clone stamp, Eraser | `Ctrl+B` |
 | Roto | Roto brush, Refine edge | `Alt+W` |
 | Puppet | Puppet position pin, Puppet starch pin, Puppet overlap pin, Puppet bend pin | `Ctrl+P` |
-| Camera | Orbit camera, Pan camera, Dolly camera | `Shift+C` |
+| Camera | Unified camera, Orbit camera, Pan camera, Dolly camera | `Shift+C` |
 
 The right-hand end carries the **tool options** area (below) and the **workspace strip** §1.4
 requires in the window chrome.
@@ -257,7 +257,7 @@ Selection (§2.3), Hand, Zoom (§2.2), Rotation, Anchor point, Razor (§4.4), th
 tools and the Pen (§2.3.1), Horizontal type (§2.3.2), the three painting tools (§2.3.4), the
 four Puppet pins ([docs/impl/puppet.md](impl/puppet.md)), the Roto pair
 (§2.3.7, [docs/impl/roto.md](impl/roto.md)) and the
-three camera tools (§2.3.5). **Disabled** (shown, not armable): vertical type and the
+four camera tools (§2.3.5). **Disabled** (shown, not armable): vertical type and the
 Pen's four editing siblings. Each tool's behaviour is tracked
 separately in [TODO.md](TODO.md).
 
@@ -361,7 +361,10 @@ anywhere, including other monitors.
 - **The bottom bar**, 22 tall, padded 10 either end, glyphs at 14 and gaps of 8: the
   **transparency board** (item 4), the **view menu** (items 5–6, which also carries the
   layer-controls switch, the region of interest of item 7 and the composition background
-  of item 10), the **channel** (item 3) and the **exposure** (item 12, with its reset mark
+  of item 10), the **channel** (item 3), the **3D view** (Active camera, the six fixed views
+  and three custom ones, [impl/camera.md](impl/camera.md) §6: a view other than Active camera
+  looks through a pose of its own, wears wireframes for every 3D layer, camera and light, and
+  never reaches an export) and the **exposure** (item 12, with its reset mark
   to the left of the number while it is engaged); a hairline seam;
   the **snapshot pair** (item 14). Then, spaced 10, the five transport marks and the **clock**
   (item 11). At the right-hand end the **reading** — `comp · time · source → preview ·
@@ -910,22 +913,28 @@ only: no tool gains a gesture on a button it did not already handle.
 
 ### 2.3.5 The camera tools
 
-- The three camera tools act on the **active camera** — the topmost visible camera layer whose
+- The camera tools act on the **active camera** - the topmost visible camera layer whose
   span covers the playhead — regardless of the selection, because the camera is what the
   composition is being looked *through* rather than a thing that has been picked. With no
-  camera at all the tool MUST say so.
-- Lumit's camera has no separate point of interest: its **position is the point it is looking
-  at** (that plane renders 1:1 and centred) and the eye sits its *zoom* — the focal distance —
-  behind that, along the camera's forward axis. So:
-  - **Orbit** changes the rotations only, swinging the eye round the point being looked at.
-    Dragging up MUST lift the camera over the top (tilting it to look down). The pitch MUST be
-    clamped just short of the poles rather than wrapped: one pixel past straight down flips the
-    picture over.
-  - **Track** slides the position along the camera's own right and up axes, *against* the drag,
-    so the picture follows the pointer as it does under the Hand tool. The Viewer's
-    magnification MUST be undone, so the picture keeps up with the pointer.
-  - **Dolly** slides the position along the forward axis by a fraction of the distance already
-    in hand, so a wide shot covers ground and a close-up creeps.
+  camera at all the tool MUST say so. In a 3D view other than Active camera (§2.2) the same
+  drags move the **view** and never a layer.
+- The camera is the After Effects model ([impl/camera.md](impl/camera.md)): its **position is
+  the eye**, the plane its *zoom* in front of it renders 1:1 and centred, and a two-node camera
+  aims at its **point of interest**. The tools swing round a **pivot**: the point of interest
+  on a two-node camera, the point *zoom* in front of the eye on a one-node one. So:
+  - **Orbit** swings the eye round the pivot. On a one-node camera the rotations take the new
+    angles and the eye moves to keep the pivot in front; on a two-node camera the eye moves and
+    the rotation rows are left alone, because the aim follows the eye by itself. Dragging up
+    MUST lift the camera over the top (tilting it to look down). The pitch MUST be clamped just
+    short of the poles rather than wrapped: one pixel past straight down flips the picture over.
+  - **Track** slides the eye along the camera's own right and up axes, *against* the drag, so
+    the picture follows the pointer as it does under the Hand tool; a two-node camera's point of
+    interest slides with it. The Viewer's magnification MUST be undone, so the picture keeps up
+    with the pointer.
+  - **Dolly** slides the eye along the forward axis by a fraction of the zoom, so a wide shot
+    covers ground and a close-up creeps; a two-node camera's point of interest stays where it is.
+  - **Unified camera**, the group's first tool: the left button orbits, the middle tracks, the
+    right dollies.
 - `Shift` locks an orbit or a track to one axis.
 - **The pointer MUST be held still for the length of the drag** and only its movement
   read. Moving a camera aims at nothing on the picture, so a pointer free to wander leaves the
@@ -934,12 +943,11 @@ only: no tool gains a gesture on a button it did not already handle.
   events rather than refusing.
 - The camera's axes MUST be built the way the compositor builds its matrix (`Ry · Rx · Rz`), or
   a tool sends the camera sideways when it is asked for forward.
-- The **gizmo** marks the point the camera is looking at, and the Orbit tool draws the circle it
-  swings round. Each tool wears the drawn pointer of §2.3.3, badged with its own icon.
+- The **gizmo** marks the pivot, and the Orbit tool draws the circle it swings round. Each
+  tool wears the drawn pointer of §2.3.3, badged with its own icon.
 - A camera whose placement is keyframed is left alone — there is no single value for a drag to
   add to, the same rule §2.3's gizmo follows.
-- Not built: a **point of interest** (After Effects' two-node camera), the **Unified Camera**
-  tool, and depth-of-field handles on the picture.
+- Not built: depth-of-field handles on the picture.
 
 ### 2.3.6 The camera-track point cloud
 
@@ -1614,7 +1622,12 @@ the one sanctioned way a group reaches the picture.
     source and plays at source rate again rather than freezing on a single frame. A freeze is
     still asked for the way After Effects asks — a map with one key holds that moment.
   - **Transform**, always: one row per property group with the stopwatch, the ◄ ◆ ► navigator,
-    the label, and a scrub-drag/click-to-type value per axis. **Right-clicking the name of
+    the label, and a scrub-drag/click-to-type value per axis. A **Camera** or a **Light**
+    shows only what a viewpoint has: Position with its z, and the three rotations; a two-node
+    camera adds Point of interest above them, and a camera carries a **Camera options** group
+    under them (Zoom, Depth of field, Focus distance, Aperture, Blur level,
+    [impl/camera.md](impl/camera.md) §1). Neither shows anchor, scale or opacity, and neither
+    has a 3D switch. **Right-clicking the name of
     Anchor point, Position or Scale offers Separate axes** (docs/03 §6.5): each axis
     takes a row of its own, with its own stopwatch, its own lane and its own curve, and
     *Combine axes* puts them back — merging the axes' key times as it goes, exactly, so the

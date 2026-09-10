@@ -120,8 +120,8 @@ void main() {
       // horizontal type makes and edits text layers, the three painting tools
       // paint, erase and clone, the Roto pair scribbles what a subject is and
       // where its edge may be soft, the four puppet pins place and drag pins on
-      // the layer's mesh, and the three camera tools move the active camera;
-      // everything else is on the strip and disabled.
+      // the layer's mesh, and the four camera tools move the active camera or
+      // the Viewer's own view; everything else is on the strip and disabled.
       expect(ToolMode.values.where((t) => t.ready).toSet(), {
         ToolMode.select,
         ToolMode.hand,
@@ -145,6 +145,7 @@ void main() {
         ToolMode.puppetStarch,
         ToolMode.puppetOverlap,
         ToolMode.puppetBend,
+        ToolMode.cameraUnified,
         ToolMode.cameraOrbit,
         ToolMode.cameraPan,
         ToolMode.cameraDolly,

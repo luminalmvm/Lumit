@@ -24,6 +24,7 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
+import 'package:lumit_flutter/src/rust/api/wireframes.dart';
 import 'package:lumit_flutter/panels/graph_maths.dart' show evaluateScalar;
 import 'package:lumit_flutter/panels/layer_fold_frb.dart' show maxShapeCopies;
 import 'package:uuid/uuid.dart';
@@ -220,6 +221,20 @@ class LayerBoundsCache extends ChangeNotifier {
   final Set<UuidValue> _probing = {};
 
   BigInt? _revision;
+
+  /// The probed sizes, in the shape the engine's wireframe call takes: its own
+  /// probe lives on the worker and that call runs on the caller's thread, so
+  /// what is already measured here goes along rather than being asked for
+  /// again. An item nothing has probed yet is simply absent, and the engine
+  /// falls back to the comp's size for it.
+  List<BridgeMediaSize> get mediaSizes => [
+        for (final e in _media.entries)
+          BridgeMediaSize(
+            item: e.key,
+            width: e.value.width.round(),
+            height: e.value.height.round(),
+          ),
+      ];
 
   /// Forget the per-layer answers when the document has moved on.
   ///

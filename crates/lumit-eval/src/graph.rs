@@ -375,6 +375,7 @@ mod tests {
                 zoom: Property::fixed(1000.0),
                 solve_link: None,
                 correction_base: None,
+                options: Default::default(),
             },
             Vec::new(),
         );

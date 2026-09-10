@@ -7,6 +7,7 @@
 extern crate self as lumit_core;
 
 pub mod anim;
+pub mod camera;
 pub mod expression;
 pub mod fx;
 /// The layer driver graph: the additive wiring beside the effect stack.

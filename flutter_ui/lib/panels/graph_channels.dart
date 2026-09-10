@@ -263,7 +263,11 @@ List<GraphChannel> graphChannels({
     if (path.startsWith('${transformPath(layerId)}/')) {
       final lead = path.substring(path.lastIndexOf('/') + 1);
       for (final group in transformGroups(
-          threeD: entry.info.switches.threeD, modes: entry.info.axisModes)) {
+        threeD: entry.info.switches.threeD,
+        modes: entry.info.axisModes,
+        kind: entry.info.kind,
+        twoNode: entry.info.camera?.twoNode ?? false,
+      )) {
         if (group.axes.first.prop.name != lead) continue;
         // A linked pair is one curve, as it is one box on the row. The lead
         // is drawn and edited; the partner follows every write at the ratio

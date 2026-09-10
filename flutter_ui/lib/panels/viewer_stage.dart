@@ -16,6 +16,7 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/wireframes.dart';
 import 'package:provider/provider.dart';
 
 import '../icons/icons.dart';
@@ -340,7 +341,13 @@ class ViewerStage extends StatelessWidget {
     // picking a colour dragged the whole preview about. The one place the two
     // can be told apart is here, where the pan is declared: an armed pick
     // means no pan recogniser exists at all, and disarming brings it back.
-    final picking = uiState.dropper.value != null;
+    //
+    // A camera tool is the same shape of problem: its unified member reads raw
+    // pointers, for the button, and a [Listener] never joins the arena either.
+    // The camera layer covers the picture whichever member is armed, so there
+    // is nothing under it a pan could have been meant for.
+    final picking = uiState.dropper.value != null ||
+        uiState.tools.tool.group == ToolGroup.camera;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       // Panning the picture, not the layer: the overlay's own handle takes
@@ -407,6 +414,34 @@ class ViewerStage extends StatelessWidget {
                       gridLine: t.hairline,
                       safeLine: t.hairlineStrong,
                     ),
+                  ),
+                ),
+              ),
+            // The wireframes, in every view but the composition's own camera
+            // (docs/impl/camera.md §6): a scene is arranged from a viewpoint
+            // that shows where the cameras and the lights actually are, and
+            // nothing in the picture says that by itself.
+            if (uiState.viewerViewPose case final view?)
+              Positioned.fill(
+                key: const ValueKey('viewer-wireframes'),
+                child: IgnorePointer(
+                  child: ViewerWireframeLayer(
+                    comp: comp,
+                    view: view,
+                    frame: uiState.playheadFrame.value,
+                    revision: uiState.model.heldRevision,
+                    mediaSizes: uiState.layerBounds.mediaSizes,
+                    fitted: fitted,
+                    compSize: Size(
+                      compSize.width.toDouble(),
+                      compSize.height.toDouble(),
+                    ),
+                    layerLine: t.textPrimary,
+                    cameraLine: t.layer.camera,
+                    // The theme names no light colour, so the accent stands
+                    // for one: a light is the other thing in the scene you
+                    // place by hand.
+                    lightLine: t.accent,
                   ),
                 ),
               ),
@@ -968,6 +1003,199 @@ Rect snapToDevicePixels(Rect rect, double dpr) {
   double snap(double v) => (v * dpr).roundToDouble() / dpr;
   return Rect.fromLTRB(
       snap(rect.left), snap(rect.top), snap(rect.right), snap(rect.bottom));
+}
+
+/// The wireframes over the picture in a 3D view (docs/impl/camera.md §6): every
+/// 3D layer's rectangle, every camera's frustum, and every light.
+///
+/// **Asked for once per change, never in a build.** The engine gathers them and
+/// projects them through the view's own matrix, which is a walk of the whole
+/// composition; three things can change the answer - the frame, the document
+/// and the view - and this asks when one of them does and holds the reply.
+class ViewerWireframeLayer extends StatefulWidget {
+  final CompositionReference comp;
+
+  /// The pose the picture is being drawn through, which is also the pose the
+  /// wireframes are projected through.
+  final BridgeCameraPose view;
+
+  final int frame;
+  final BigInt? revision;
+
+  /// The footage sizes the frontend has already probed. The engine's own probe
+  /// lives on the worker and this call does not, so what is known travels with
+  /// the ask.
+  final List<BridgeMediaSize> mediaSizes;
+
+  /// Where the picture sits on screen, and the comp's own size: together they
+  /// turn a comp pixel into a screen one.
+  final Rect fitted;
+  final Size compSize;
+
+  final Color layerLine;
+  final Color cameraLine;
+  final Color lightLine;
+
+  const ViewerWireframeLayer({
+    super.key,
+    required this.comp,
+    required this.view,
+    required this.frame,
+    required this.revision,
+    required this.mediaSizes,
+    required this.fitted,
+    required this.compSize,
+    required this.layerLine,
+    required this.cameraLine,
+    required this.lightLine,
+  });
+
+  @override
+  State<ViewerWireframeLayer> createState() => _ViewerWireframeLayerState();
+}
+
+class _ViewerWireframeLayerState extends State<ViewerWireframeLayer> {
+  BridgeWireframes? _wires;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetch();
+  }
+
+  @override
+  void didUpdateWidget(ViewerWireframeLayer old) {
+    super.didUpdateWidget(old);
+    // The rectangle and the colours move with the panel and the theme, and
+    // neither changes what the engine would answer.
+    if (old.comp != widget.comp ||
+        old.view != widget.view ||
+        old.frame != widget.frame ||
+        old.revision != widget.revision) {
+      _fetch();
+    }
+  }
+
+  /// Assigned rather than set: this runs from [initState] and
+  /// [didUpdateWidget], both of which are followed by a build anyway.
+  void _fetch() {
+    try {
+      _wires = widget.comp.wireframes(
+        frame: BigInt.from(widget.frame),
+        view: widget.view,
+        mediaSizes: widget.mediaSizes,
+      );
+    } catch (_) {
+      // No worker yet, or a comp that has gone.
+      _wires = null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+        painter: ViewerWireframePainter(
+          wires: _wires,
+          fitted: widget.fitted,
+          compSize: widget.compSize,
+          layerLine: widget.layerLine,
+          cameraLine: widget.cameraLine,
+          lightLine: widget.lightLine,
+        ),
+      );
+}
+
+/// The wireframes themselves, in comp pixels taken through the picture's own
+/// rectangle. A point behind the view's eye carries a number that means
+/// nothing, so any line with an end behind is left out.
+class ViewerWireframePainter extends CustomPainter {
+  final BridgeWireframes? wires;
+  final Rect fitted;
+  final Size compSize;
+  final Color layerLine;
+  final Color cameraLine;
+  final Color lightLine;
+
+  const ViewerWireframePainter({
+    required this.wires,
+    required this.fitted,
+    required this.compSize,
+    required this.layerLine,
+    required this.cameraLine,
+    required this.lightLine,
+  });
+
+  Offset _at(BridgeWirePoint p) => Offset(
+        fitted.left +
+            (compSize.width == 0 ? 0 : p.x / compSize.width * fitted.width),
+        fitted.top +
+            (compSize.height == 0 ? 0 : p.y / compSize.height * fitted.height),
+      );
+
+  void _line(Canvas canvas, BridgeWirePoint a, BridgeWirePoint b, Paint paint) {
+    if (!a.inFront || !b.inFront) return;
+    canvas.drawLine(_at(a), _at(b), paint);
+  }
+
+  /// A closed outline round [corners], each edge drawn on its own so one
+  /// corner behind the eye costs that edge and not the whole shape.
+  void _loop(Canvas canvas, List<BridgeWirePoint> corners, Paint paint) {
+    for (var i = 0; i < corners.length; i++) {
+      _line(canvas, corners[i], corners[(i + 1) % corners.length], paint);
+    }
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final wires = this.wires;
+    if (wires == null) return;
+    Paint stroke(Color colour) => Paint()
+      ..color = colour
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+
+    final layers = stroke(layerLine);
+    for (final layer in wires.layers) {
+      _loop(canvas, layer.corners, layers);
+    }
+
+    final cameras = stroke(cameraLine);
+    for (final camera in wires.cameras) {
+      _loop(canvas, camera.corners, cameras);
+      for (final corner in camera.corners) {
+        _line(canvas, camera.eye, corner, cameras);
+      }
+      if (camera.pointOfInterest case final poi?) {
+        _line(canvas, camera.eye, poi, cameras);
+      }
+    }
+
+    final lights = stroke(lightLine);
+    for (final light in wires.lights) {
+      if (!light.at.inFront) continue;
+      // A small diamond: a light has no shape of its own to draw, and a mark
+      // that is not a rectangle tells itself apart from everything that has.
+      const reach = 6.0;
+      final at = _at(light.at);
+      canvas.drawPath(
+        Path()
+          ..moveTo(at.dx, at.dy - reach)
+          ..lineTo(at.dx + reach, at.dy)
+          ..lineTo(at.dx, at.dy + reach)
+          ..lineTo(at.dx - reach, at.dy)
+          ..close(),
+        lights,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(ViewerWireframePainter old) =>
+      old.wires != wires ||
+      old.fitted != fitted ||
+      old.compSize != compSize ||
+      old.layerLine != layerLine ||
+      old.cameraLine != cameraLine ||
+      old.lightLine != lightLine;
 }
 
 /// The transparency checkerboard behind the picture.

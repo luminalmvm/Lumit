@@ -422,6 +422,72 @@ impl LayerReference {
             animation,
         })
     }
+
+    /// A camera's non-animatable settings (docs/impl/camera.md §9); `None`
+    /// on any other kind.
+    #[frb(sync)]
+    pub fn get_camera_settings(
+        &self,
+    ) -> Result<Option<crate::api::layer::BridgeCameraSettings>, BridgeError> {
+        let layer = self.item()?;
+        let lumit_core::model::LayerKind::Camera { options, .. } = &layer.kind else {
+            return Ok(None);
+        };
+        Ok(Some(crate::api::layer::BridgeCameraSettings::of(
+            options.settings(),
+        )))
+    }
+
+    /// Replace a camera's settings as one undo step.
+    #[frb(sync)]
+    pub fn set_camera_settings(
+        &self,
+        settings: crate::api::layer::BridgeCameraSettings,
+    ) -> Result<(), BridgeError> {
+        let layer = self.item()?;
+        let lumit_core::model::LayerKind::Camera { .. } = layer.kind else {
+            return Err(BridgeError::NotCamera);
+        };
+        self.commit(lumit_core::Op::SetCameraSettings {
+            comp: self.comp_id,
+            layer: self.layer_id,
+            settings: settings.core(),
+        })
+    }
+
+    /// This camera's evaluated placement at `frame`: the eye, the effective
+    /// rotation with a two-node camera's aim already in it, and the zoom, with
+    /// a solve link followed (docs/impl/camera.md §2). What the camera tools
+    /// start a drag from. `None` on any other kind.
+    #[frb(sync)]
+    pub fn camera_pose_at(
+        &self,
+        frame: u64,
+    ) -> Result<Option<crate::api::layer::BridgeCameraPose>, BridgeError> {
+        let doc = {
+            let proj = self.project()?;
+            let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+            proj.store.snapshot()
+        };
+        let comp = doc.comp(self.comp_id).ok_or(BridgeError::InvalidComp)?;
+        let Some(layer) = comp.layers.iter().find(|l| l.id == self.layer_id) else {
+            return Err(BridgeError::InvalidLayer);
+        };
+        let Ok(t) = comp
+            .frame_rate
+            .time_of_frame(i64::try_from(frame).unwrap_or(i64::MAX))
+        else {
+            return Ok(None);
+        };
+        Ok(lumit_core::track::camera_pose_of(
+            &doc,
+            comp,
+            layer,
+            t.0.to_f64(),
+            &lumit_render::track::Store,
+        )
+        .map(|p| crate::api::layer::BridgeCameraPose::of(p.pose)))
+    }
 }
 
 impl SolidReference {

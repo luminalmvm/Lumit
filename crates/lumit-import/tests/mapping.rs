@@ -1262,9 +1262,9 @@ fn a_tracked_cameras_keyframes_arrive_on_the_rotation_lanes_and_the_zoom() {
 ///
 /// A camera that turns by orientation *and* by its own rotations is asking for
 /// two Euler triples where Lumit has one, and they do not add: the rotations
-/// are what arrives and the orientation is reported. A two-node camera is
-/// aimed by a point of interest Lumit's camera has no second node for, and
-/// that is reported as well.
+/// are what arrives and the orientation is reported. A two-node camera brings
+/// its point of interest whole (docs/impl/camera.md §8), so nothing is said
+/// about that.
 #[test]
 fn a_camera_says_what_it_could_not_bring() {
     let mut capture = camera_capture();
@@ -1296,10 +1296,10 @@ fn a_camera_says_what_it_could_not_bring() {
         r,
         Reason::OrientationNotCarried
     )));
-    assert!(reported(&report, |r| matches!(
-        r,
-        Reason::PointOfInterestNotCarried
-    )));
+    let LayerKind::Camera { options, .. } = &camera.kind else {
+        panic!("a camera");
+    };
+    assert!(options.two_node, "the flag makes it a two-node camera");
 }
 
 /// A tracked camera as an exporter writes one: keyed Position, Orientation and
