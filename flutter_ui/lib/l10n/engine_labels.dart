@@ -439,6 +439,7 @@ Map<String, String> get _table => {
       "Extract channels": l10n.fxExtractChannels,
       "F-stop": l10n.fxFStop,
       "Fade": l10n.fxFade,
+      "Falloff": l10n.fxFalloff,
       "Far blur": l10n.fxFarBlur,
       "Feature density": l10n.fxFeatureDensity,
       "Feather": l10n.fxFeather,

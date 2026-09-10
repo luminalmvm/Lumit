@@ -125,13 +125,123 @@ pub fn glow(
     mix: f32,
     matte: &[f32],
 ) {
+    glow_shaped(
+        rgba,
+        w,
+        h,
+        &GlowHalo {
+            radius_px,
+            octaves: 1,
+            falloff: 0.0,
+            chromatic_px: 0.0,
+            fringe_angle_deg: 0.0,
+            fringe_tints: HALO_FRINGE_TINTS,
+            fringe_wavelength: false,
+            fringe_samples: 0,
+        },
+        threshold,
+        knee,
+        intensity,
+        tint,
+        mix,
+        matte,
+    );
+}
+
+/// How a glow's halo is built (docs/08 §3.3): the widest gaussian, how many
+/// octaves are stacked under it, the falloff between them, and the fringe left
+/// on the finished halo. One octave and no fringe is the plain bloom
+/// [`glow`] asks for, to the byte.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GlowHalo {
+    /// The widest gaussian's half-width, raster pixels.
+    pub radius_px: f32,
+    /// How many gaussians the halo is summed from. Octave `i` is blurred at
+    /// `radius ÷ 2ⁱ`, so 1 is the single gaussian and 5 reaches a sixteenth of
+    /// the radius.
+    pub octaves: u32,
+    /// How much of the weight each octave takes from the wider one above it:
+    /// octave `i` weighs `falloff^i` before the stack is normalised, so the
+    /// tightest gaussian carries the most light and the halo falls away from a
+    /// bright core instead of spreading evenly. Zero leaves the widest octave
+    /// holding everything, which is the single gaussian. Ignored at one octave.
+    pub falloff: f32,
+    /// How far the finished halo's channels are displaced, raster pixels. The
+    /// same everywhere in the frame, so the colour lands on the bloom's edges.
+    /// Zero reads no taps at all.
+    pub chromatic_px: f32,
+    /// Degrees: the direction of that displacement.
+    pub fringe_angle_deg: f32,
+    /// The fringe taps' colours. Already normalised per channel for the classic
+    /// tier and left as authored for Wavelength, which is the packing step's
+    /// job, not this one's.
+    pub fringe_tints: [[f32; 3]; 3],
+    /// Run the fringe as `fringe_samples` spectral taps rather than three
+    /// tinted ones: a smooth rainbow instead of three coloured ghosts.
+    pub fringe_wavelength: bool,
+    /// Wavelength's tap count, 3 to 64. Unread while it is off.
+    pub fringe_samples: i32,
+}
+
+/// Red one way, green on its own pixel, blue the other: the three normalised
+/// tint columns [`rgb_split`] wants for the classic split (docs/08 §3.6), and
+/// what the fringe reads when nobody has touched its colours.
+pub const HALO_FRINGE_TINTS: [[f32; 3]; 3] = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+
+/// The fringe's per-tap displacement scales: the outer two taps move a full
+/// Amount each way and the middle one stays put, which is [`rgb_split`]'s
+/// classic split. Not a control here, because a glow's fringe is one distance
+/// and one direction.
+pub const HALO_FRINGE_SCALE: [f32; 3] = [1.0, 0.0, 1.0];
+
+/// [`glow`] with the halo shaped rather than left as one gaussian (docs/08
+/// §3.3). The §1.6 oracle for **Exponential** and **Chromatic aberration**.
+///
+/// # The octave stack
+///
+/// A single gaussian spreads a highlight evenly, which is the flat grey mush a
+/// wide bloom turns into. Real light falls away from a bright core: most of it
+/// stays near the source and a little of it reaches a long way. Summing
+/// gaussians at `radius ÷ 2ⁱ`, each weighted `falloff^i` so the tightest weighs
+/// most, draws that shape with the blur that is already here. The stack
+/// is a running weighted mean, `light = light·(1 − t) + octave·t` with
+/// `t = wᵢ ÷ Σw`. That is one lerp an octave, and the same arithmetic the WGSL
+/// twin gets for nothing out of the blur kernel's own Mix.
+///
+/// Because the weights are normalised the stack holds the light the single
+/// gaussian held. A higher Falloff gathers it toward the core rather than
+/// adding any.
+///
+/// # The fringe
+///
+/// The finished halo is displaced per channel before it is added back, one
+/// distance in one direction, so the colour shows up along the bloom's own edges
+/// while the picture under it stays where it was. Zero is skipped outright.
+/// Wavelength picks the tier, exactly as it does on RGB split itself:
+/// [`rgb_split`]'s three tinted taps, or [`spectral_split`]'s gradient of them.
+///
+/// The matte gate, the bright pass and the recombine are [`glow`]'s own, word
+/// for word.
+#[allow(clippy::too_many_arguments)]
+pub fn glow_shaped(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    halo: &GlowHalo,
+    threshold: f32,
+    knee: f32,
+    intensity: f32,
+    tint: [f32; 4],
+    mix: f32,
+    matte: &[f32],
+) {
     if intensity == 0.0 {
         return; // neutral: bit-exact identity (the WGSL twin matches)
     }
     let original = rgba.to_vec();
-    let mut halo = vec![0.0f32; rgba.len()];
+    let mut seed = vec![0.0f32; rgba.len()];
     if matte.is_empty() {
-        for (dst, src) in halo.iter_mut().zip(original.iter()) {
+        for (dst, src) in seed.iter_mut().zip(original.iter()) {
             *dst = super::glow_bright(*src, threshold, knee);
         }
     } else {
@@ -141,14 +251,57 @@ pub fn glow(
             // degrade, never fault (14-ENGINEERING-RULES §4).
             let k = matte_strength(matte, i);
             for c in 0..4 {
-                halo[i + c] = super::glow_bright(original[i + c] * k, threshold, knee);
+                seed[i + c] = super::glow_bright(original[i + c] * k, threshold, knee);
             }
         }
     }
-    blur_gaussian(&mut halo, w, h, radius_px, 1, 1.0);
+    let mut light = seed.clone();
+    blur_gaussian(&mut light, w, h, halo.radius_px, 1, 1.0);
+    // The weight ratio between one octave and the next, walked as a running
+    // product rather than `falloff^i`. The WGSL twin walks it the same way, so
+    // the two agree on every octave's weight to the last bit.
+    let ratio = halo.falloff;
+    let (mut radius, mut wi, mut weight) = (halo.radius_px, 1.0f32, 1.0f32);
+    for _ in 1..halo.octaves {
+        radius *= 0.5;
+        wi *= ratio;
+        let t = wi / (weight + wi);
+        weight += wi;
+        let mut octave = seed.clone();
+        blur_gaussian(&mut octave, w, h, radius, 1, 1.0);
+        for (l, o) in light.iter_mut().zip(octave.iter()) {
+            *l = *l * (1.0 - t) + *o * t;
+        }
+    }
+    if halo.chromatic_px > 0.0 {
+        if halo.fringe_wavelength {
+            spectral_split(
+                &mut light,
+                w,
+                h,
+                halo.chromatic_px,
+                halo.fringe_angle_deg,
+                false,
+                halo.fringe_samples,
+                halo.fringe_tints,
+                1.0,
+            );
+        } else {
+            rgb_split(
+                &mut light,
+                w,
+                h,
+                halo.chromatic_px,
+                halo.fringe_angle_deg,
+                HALO_FRINGE_SCALE,
+                halo.fringe_tints,
+                1.0,
+            );
+        }
+    }
     for i in (0..rgba.len()).step_by(4) {
         let o = &original[i..i + 4];
-        let hl = &halo[i..i + 4];
+        let hl = &light[i..i + 4];
         for c in 0..3 {
             let glowed = o[c] + intensity * (hl[c] * tint[c]);
             rgba[i + c] = o[c] * (1.0 - mix) + glowed * mix;

@@ -336,6 +336,9 @@ fn wgsl_matted_glow_seeds_only_inside_the_matte_and_spills_past_it() {
     let matte_tex = upload_linear_f32(&ctx, &matte, w, h);
     let op = GlowOp {
         radius_px: 6.0,
+        octaves: 1,
+        falloff: 0.0,
+        fringe: None,
         threshold: 0.8,
         knee: 0.5,
         intensity: 1.0,
@@ -2437,6 +2440,9 @@ fn wgsl_glow_matches_the_cpu_oracle() {
         let tex = upload_linear_f32(&ctx, &img, w, h);
         let op = GlowOp {
             radius_px: radius,
+            octaves: 1,
+            falloff: 0.0,
+            fringe: None,
             threshold,
             knee,
             intensity,
@@ -2458,6 +2464,105 @@ fn wgsl_glow_matches_the_cpu_oracle() {
         let out2 = fx.glow(&ctx, &tex, w, h, None, &op);
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "GPU glow must be bit-stable");
+    }
+}
+
+/// The §1.6 oracle for the glow's **Exponential** stack and its **Chromatic
+/// aberration** (docs/08 §3.3). The octaves fold themselves into the running
+/// mean through the blur kernel's own Mix, so what this proves is that the
+/// weights the host walks are the weights the CPU reference walks, octave for
+/// octave. The fringe is the ordinary directional split, spent on the halo
+/// before the recombine, at whatever angle it was given. The tolerance is looser than the single gaussian's for the
+/// reason the stack exists: five octaves are five more roundings through an
+/// fp16 texture, where the reference stays in f32 throughout (measured worst
+/// on NVIDIA: 5.6e-3, on the steepest falloff, the case that leans hardest on
+/// the tightest octave).
+#[test]
+fn wgsl_glow_octaves_and_fringe_match_the_cpu_oracle() {
+    let Some(ctx) = crate::test_support::lease() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = ctx.fx();
+    let (w, h) = (32u32, 24u32);
+    let img = corpus(w, h);
+    // Off-white tints on the spectral cases, so a gradient that read the
+    // columns normalised would show up as the wrong colour rather than as
+    // nothing.
+    let tints = [[1.0, 0.2, 0.0], [0.1, 1.0, 0.1], [0.0, 0.3, 1.0]];
+    for (name, octaves, falloff, chromatic_px, angle, wavelength, samples) in [
+        ("octaves", 5u32, 2.0f32, 0.0f32, 0.0f32, false, 16),
+        ("steep", 5, 16.0, 0.0, 0.0, false, 16),
+        ("fringe", 1, 0.0, 3.0, 0.0, false, 16),
+        ("fringe-angled", 1, 0.0, 3.0, 35.0, false, 16),
+        ("both", 5, 4.0, 3.0, 120.0, false, 16),
+        ("wavelength", 1, 0.0, 3.0, 0.0, true, 16),
+        ("wavelength-few", 5, 2.0, 4.0, -60.0, true, 5),
+    ] {
+        let halo = lumit_core::fx::cpu::GlowHalo {
+            radius_px: 8.0,
+            octaves,
+            falloff,
+            chromatic_px,
+            fringe_angle_deg: angle,
+            fringe_tints: if wavelength {
+                tints
+            } else {
+                lumit_core::fx::normalise_tint_columns(tints)
+            },
+            fringe_wavelength: wavelength,
+            fringe_samples: samples,
+        };
+        let mut cpu = img.clone();
+        lumit_core::fx::cpu::glow_shaped(&mut cpu, w, h, &halo, 0.8, 0.5, 1.0, [1.0; 4], 1.0, &[]);
+
+        let tex = upload_linear_f32(&ctx, &img, w, h);
+        // Built exactly as `gpufx.rs` builds it for a real frame.
+        let fringe = (chromatic_px > 0.0).then(|| {
+            let (dx, dy) = lumit_core::fx::rgb_split_offset(chromatic_px, angle);
+            if wavelength {
+                let (basis, count) =
+                    lumit_core::fx::spectral_basis_uniform(samples, halo.fringe_tints);
+                GlowFringe::Spectral(SpectralSplitOp {
+                    dx,
+                    dy,
+                    amount_px: chromatic_px,
+                    radial: false,
+                    basis,
+                    count,
+                    mix: 1.0,
+                })
+            } else {
+                GlowFringe::Classic(RgbSplitOp {
+                    dx,
+                    dy,
+                    scale: lumit_core::fx::cpu::HALO_FRINGE_SCALE,
+                    tints: halo.fringe_tints,
+                    mix: 1.0,
+                })
+            }
+        });
+        let op = GlowOp {
+            radius_px: halo.radius_px,
+            octaves,
+            falloff,
+            fringe,
+            threshold: 0.8,
+            knee: 0.5,
+            intensity: 1.0,
+            tint: [1.0; 4],
+            mix: 1.0,
+        };
+        let out = fx.glow(&ctx, &tex, w, h, None, &op);
+        let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+
+        let worst = worst_diff(&cpu, &gpu);
+        eprintln!("glow {name}: worst {worst:.2e}");
+        assert!(worst < 2e-2, "{name}: worst diff {worst}");
+
+        let out2 = fx.glow(&ctx, &tex, w, h, None, &op);
+        let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
+        assert_eq!(gpu, gpu2, "{name}: GPU glow must be bit-stable");
     }
 }
 

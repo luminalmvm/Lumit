@@ -234,6 +234,7 @@ F-stop
 Fade
 Fade in
 Fade out
+Falloff
 Far blur
 Feather
 Feature density

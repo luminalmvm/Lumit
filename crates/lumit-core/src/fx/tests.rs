@@ -3922,10 +3922,66 @@ fn glow_instantiates_resolves_and_pins_the_one_sided_threshold() {
     assert_eq!(e.float_at("radius", 0.0), Some(24.0));
     assert_eq!(e.float_at("intensity", 0.0), Some(1.0));
     assert_eq!(e.colour_at("tint", 0.0), Some([1.0; 4]));
+    // A fresh instance is the single gaussian with no fringe: the halo's
+    // shape is the picture, so the octaves arrive only when asked for.
+    assert_eq!(e.float_at("falloff", 0.0), Some(0.0));
+    assert_eq!(e.float_at("chromatic", 0.0), Some(0.0));
+    assert_eq!(e.float_at("chromatic_angle", 0.0), Some(0.0));
     // Radius is px@comp scaled by the preview factor: 24 px × a half-res
     // (0.5) factor = 12 raster px; diag_px no longer feeds Radius.
     let g = resolve_migrated::<effects::glow::Glow>(&[e], 0.0, 1000.0, 0.5, &MarkerContext::NONE);
-    assert_eq!(g.packed(), (12.0, 0.8, 0.5, 1.0, [1.0; 4], 1.0));
+    assert_eq!(
+        g.packed(),
+        (
+            cpu::GlowHalo {
+                radius_px: 12.0,
+                // Falloff 0 packs one octave: the stack is never dispatched.
+                octaves: 1,
+                falloff: 0.0,
+                chromatic_px: 0.0,
+                fringe_angle_deg: 0.0,
+                // Red, green and blue normalise to themselves, so a fresh
+                // instance packs the classic split's own columns.
+                fringe_tints: cpu::HALO_FRINGE_TINTS,
+                fringe_wavelength: false,
+                fringe_samples: 16,
+            },
+            0.8,
+            0.5,
+            1.0,
+            [1.0; 4],
+            1.0
+        )
+    );
+    // Any Falloff above zero picks the octave stack up, and the fringe is a
+    // fraction of the *scaled* radius, so it follows the halo it sits on into a
+    // preview. The angle rides through untouched.
+    let mut on = instantiate("glow").unwrap();
+    for p in &mut on.params {
+        match p.id.as_str() {
+            "falloff" => p.value = EffectValue::Float(Property::fixed(2.0)),
+            "chromatic" => p.value = EffectValue::Float(Property::fixed(50.0)),
+            "chromatic_angle" => p.value = EffectValue::Float(Property::fixed(30.0)),
+            "chromatic_wavelength" => p.value = EffectValue::Bool(true),
+            "chromatic_samples" => p.value = EffectValue::Float(Property::fixed(24.0)),
+            _ => {}
+        }
+    }
+    let g = resolve_migrated::<effects::glow::Glow>(&[on], 0.0, 1000.0, 0.5, &MarkerContext::NONE);
+    assert_eq!(
+        g.packed().0,
+        cpu::GlowHalo {
+            radius_px: 12.0,
+            octaves: effects::glow::OCTAVES,
+            falloff: 2.0,
+            chromatic_px: 6.0,
+            fringe_angle_deg: 30.0,
+            // Wavelength reads the colours as authored rather than normalised.
+            fringe_tints: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+            fringe_wavelength: true,
+            fringe_samples: 24,
+        }
+    );
     // The Radius schema is now open above (px@comp).
     let s = schema("glow").unwrap();
     let radius = s.params.iter().find(|p| p.id == "radius").unwrap();
@@ -4030,6 +4086,194 @@ fn cpu_glow_blooms_spreads_alpha_and_keeps_neutral_exact() {
     );
     assert!(t[at(1, 4)] > 0.0, "red halo over the border");
     assert_eq!(t[at(1, 4) + 1], 0.0, "no green in a red-tinted halo");
+}
+
+/// **Falloff** (docs/08 §3.3): one bright pixel on black, so the halo is the
+/// profile and both shapes can be read off the row through it. The stack keeps
+/// the light near the source and lets a little of it travel, which is the whole
+/// difference between a bloom that reads as light and one that reads as grey
+/// mush. Falloff steers how hard it does that, and **zero is the plain gaussian
+/// to the byte** even with the octaves dispatched, which is what lets one slider
+/// carry the whole range.
+#[test]
+fn cpu_glow_octaves_gather_the_halo_into_a_core() {
+    let (w, h) = (65u32, 9u32);
+    let at = |x: u32, y: u32| ((y * w + x) * 4) as usize;
+    let mut img = vec![0.0f32; (w * h * 4) as usize];
+    let mid = at(32, 4);
+    img[mid..mid + 4].copy_from_slice(&[8.0, 8.0, 8.0, 1.0]);
+    let bloom = |octaves: u32, falloff: f32| {
+        let mut out = img.clone();
+        cpu::glow_shaped(
+            &mut out,
+            w,
+            h,
+            &cpu::GlowHalo {
+                radius_px: 16.0,
+                octaves,
+                falloff,
+                chromatic_px: 0.0,
+                fringe_angle_deg: 0.0,
+                fringe_tints: cpu::HALO_FRINGE_TINTS,
+                fringe_wavelength: false,
+                fringe_samples: 16,
+            },
+            1.0,
+            0.0,
+            1.0,
+            [1.0; 4],
+            1.0,
+            &[],
+        );
+        out
+    };
+
+    // One octave is the single gaussian this effect shipped with, to the byte.
+    let flat = bloom(1, 0.0);
+    let mut plain = img.clone();
+    cpu::glow(&mut plain, w, h, 16.0, 1.0, 0.0, 1.0, [1.0; 4], 1.0, &[]);
+    assert_eq!(flat, plain, "one octave is the gaussian bloom unchanged");
+
+    // And so is the full stack at Falloff 0: every tighter octave weighs
+    // nothing, so the widest keeps all of the light. The pack skips the passes,
+    // but the arithmetic agrees with it rather than merely rounding to it.
+    assert_eq!(
+        bloom(effects::glow::OCTAVES, 0.0),
+        plain,
+        "falloff 0 is the plain gaussian even with the stack dispatched"
+    );
+
+    // Two pixels out the stack is the brighter of the two. Twelve out, still
+    // inside the gaussian's own kernel, it is the fainter.
+    let stacked = bloom(effects::glow::OCTAVES, 2.0);
+    assert!(
+        stacked[at(34, 4)] > flat[at(34, 4)],
+        "the core gathers light"
+    );
+    assert!(stacked[at(44, 4)] < flat[at(44, 4)], "the reach thins out");
+
+    // A steeper Falloff pulls harder on both ends of that.
+    let steep = bloom(effects::glow::OCTAVES, 16.0);
+    assert!(
+        steep[at(44, 4)] < stacked[at(44, 4)],
+        "falloff 16 reaches less far than falloff 2"
+    );
+    assert!(
+        steep[at(33, 4)] > stacked[at(33, 4)],
+        "and holds more of the light against the source"
+    );
+}
+
+/// **Chromatic aberration** (docs/08 §3.3): the fringe is spent on the halo
+/// alone, so the bloom breaks into colour along its own edges and the picture
+/// under it is never resampled. The displacement is one distance in one
+/// direction, the same everywhere in the frame, which is what Angle steers.
+/// Zero is the unfringed path to the byte.
+#[test]
+fn cpu_glow_fringe_colours_the_halo_and_leaves_the_picture() {
+    let (w, h) = (33u32, 9u32);
+    let at = |x: u32, y: u32| ((y * w + x) * 4) as usize;
+    let mut img = vec![0.0f32; (w * h * 4) as usize];
+    let spike = at(16, 4);
+    // Dead centre, which the fringe used to be blind to: a displacement that
+    // grew from the middle of the frame left a centred bloom untouched.
+    img[spike..spike + 4].copy_from_slice(&[8.0, 8.0, 8.0, 1.0]);
+    let bloom = |chromatic_px: f32, angle: f32, wavelength: bool, tints: [[f32; 3]; 3]| {
+        let mut out = img.clone();
+        cpu::glow_shaped(
+            &mut out,
+            w,
+            h,
+            &cpu::GlowHalo {
+                radius_px: 6.0,
+                octaves: 1,
+                falloff: 0.0,
+                chromatic_px,
+                fringe_angle_deg: angle,
+                fringe_tints: tints,
+                fringe_wavelength: wavelength,
+                fringe_samples: 16,
+            },
+            1.0,
+            0.0,
+            1.0,
+            [1.0; 4],
+            1.0,
+            &[],
+        );
+        out
+    };
+
+    // No fringe is the bloom exactly as it was, and its halo is neutral grey
+    // everywhere: a white spike under a white tint has no colour to find.
+    let none = bloom(0.0, 0.0, false, cpu::HALO_FRINGE_TINTS);
+    let mut plain = img.clone();
+    cpu::glow(&mut plain, w, h, 6.0, 1.0, 0.0, 1.0, [1.0; 4], 1.0, &[]);
+    assert_eq!(none, plain, "chromatic 0 reads no taps at all");
+    for i in (0..none.len()).step_by(4) {
+        assert_eq!(none[i], none[i + 2], "an unfringed halo is grey");
+    }
+
+    // Fringed, the halo's red and blue part company, on a bloom sitting in the
+    // middle of the frame.
+    let fringed = bloom(4.0, 0.0, false, cpu::HALO_FRINGE_TINTS);
+    let split = (0..fringed.len())
+        .step_by(4)
+        .any(|i| (fringed[i] - fringed[i + 2]).abs() > 1e-4);
+    assert!(split, "the halo broke into colour");
+
+    // **Angle steers it.** At 0 the taps move along x, so the colour shows up
+    // beside the bloom and not above it; at 90 the two swap over. Directly
+    // across the axis the two outer taps read the same symmetrical halo, which
+    // is why the off-axis pixel comes back grey.
+    let beside = at(20, 4);
+    let above = at(16, 7);
+    let rb = |px: &[f32], i: usize| (px[i] - px[i + 2]).abs();
+    assert!(rb(&fringed, beside) > 1e-4, "angle 0 splits along x");
+    assert!(rb(&fringed, above) < 1e-5, "and leaves the y axis grey");
+    let turned = bloom(4.0, 90.0, false, cpu::HALO_FRINGE_TINTS);
+    assert!(rb(&turned, above) > 1e-4, "angle 90 splits along y");
+    assert!(rb(&turned, beside) < 1e-5, "and leaves the x axis grey");
+
+    // The picture keeps its own pixels: a corner the halo never reaches is
+    // untouched, fringe or no fringe.
+    let far = at(30, 0);
+    assert_eq!(fringed[far..far + 4], img[far..far + 4]);
+
+    // **Wavelength** runs the same offset as a gradient of taps rather than
+    // three, so it is a different picture at the same Amount, and it still
+    // leaves the picture under the bloom alone.
+    let spectral = bloom(4.0, 0.0, true, cpu::HALO_FRINGE_TINTS);
+    assert_ne!(spectral, fringed, "wavelength is its own tier");
+    assert!(
+        (0..spectral.len())
+            .step_by(4)
+            .any(|i| (spectral[i] - spectral[i + 2]).abs() > 1e-4),
+        "the spectral halo broke into colour too"
+    );
+    assert_eq!(spectral[far..far + 4], img[far..far + 4]);
+
+    // **The three colours** are read on both tiers: swap red and blue and the
+    // fringe swaps with them.
+    let swapped = [[0.0, 0.0, 1.0], [0.0, 1.0, 0.0], [1.0, 0.0, 0.0]];
+    let classic_swapped = bloom(4.0, 0.0, false, swapped);
+    assert_ne!(
+        classic_swapped, fringed,
+        "the classic tier reads the colours"
+    );
+    assert_ne!(
+        bloom(4.0, 0.0, true, swapped),
+        spectral,
+        "and so does wavelength"
+    );
+    // Swapping the outer two mirrors the fringe: what was red on one side of
+    // the spike is now blue there.
+    let side = at(12, 4);
+    assert!(
+        (fringed[side] - classic_swapped[side + 2]).abs() < 1e-5
+            && (fringed[side + 2] - classic_swapped[side]).abs() < 1e-5,
+        "red and blue changed places"
+    );
 }
 
 #[test]

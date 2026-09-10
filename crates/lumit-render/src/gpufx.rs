@@ -3189,12 +3189,39 @@ impl GpuEffect for Glow {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Tex {
-        let (radius_px, threshold, knee, intensity, tint, mix) =
-            effects::glow::Glow::read(p).packed();
+        let (halo, threshold, knee, intensity, tint, mix) = effects::glow::Glow::read(p).packed();
         // **The glow claims its matte**: it gates the bright pass, so
         // the matte decides which pixels are allowed to seed the halo — light
         // still spills out of them across dark matte, which is the difference
         // from dissolving the finished glow.
+        // The halo's fringe, built the way RGB split builds its own: the
+        // classic three taps, or Wavelength's gradient between them, displaced
+        // along one direction. No amount, no pass.
+        let fringe = (halo.chromatic_px > 0.0).then(|| {
+            let (dx, dy) =
+                lumit_core::fx::rgb_split_offset(halo.chromatic_px, halo.fringe_angle_deg);
+            if halo.fringe_wavelength {
+                let (basis, count) =
+                    lumit_core::fx::spectral_basis_uniform(halo.fringe_samples, halo.fringe_tints);
+                lumit_gpu::fx::GlowFringe::Spectral(lumit_gpu::fx::SpectralSplitOp {
+                    dx,
+                    dy,
+                    amount_px: halo.chromatic_px,
+                    radial: false,
+                    basis,
+                    count,
+                    mix: 1.0,
+                })
+            } else {
+                lumit_gpu::fx::GlowFringe::Classic(lumit_gpu::fx::RgbSplitOp {
+                    dx,
+                    dy,
+                    scale: lumit_core::fx::cpu::HALO_FRINGE_SCALE,
+                    tints: halo.fringe_tints,
+                    mix: 1.0,
+                })
+            }
+        });
         fx.glow(
             ctx,
             tex,
@@ -3202,7 +3229,10 @@ impl GpuEffect for Glow {
             h,
             aux.matte(),
             &lumit_gpu::fx::GlowOp {
-                radius_px,
+                radius_px: halo.radius_px,
+                octaves: halo.octaves,
+                falloff: halo.falloff,
+                fringe,
                 threshold,
                 knee,
                 intensity,

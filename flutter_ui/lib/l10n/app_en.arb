@@ -2366,6 +2366,10 @@
   "@fxFade": {
     "description": "Effect controls — a control on Flash."
   },
+  "fxFalloff": "Falloff",
+  "@fxFalloff": {
+    "description": "Effect controls — a control on Glow."
+  },
   "fxFarBlur": "Far blur",
   "@fxFarBlur": {
     "description": "Effect controls — a control on Depth of field."
