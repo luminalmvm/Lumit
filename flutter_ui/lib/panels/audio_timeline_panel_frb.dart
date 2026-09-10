@@ -286,7 +286,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     // deactivated, where an ancestor lookup is no longer safe.
     _ui = Provider.of<LumitUiState>(context, listen: false);
     _cacheRevision = Listenable.merge([_ui!.frameArrived, _ui!.cacheChanged]);
-    _ui!.activePanel.addListener(_onActivePanel);
+    _ui!.activePane.addListener(_onActivePanel);
     _onActivePanel();
     _searchField.addListener(() => setState(() => _search = _searchField.text));
     HardwareKeyboard.instance.addHandler(_onKey);
@@ -296,7 +296,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   void dispose() {
     _escapeRelease?.call();
     _boundTools?.removeListener(_onToolChanged);
-    _ui?.activePanel.removeListener(_onActivePanel);
+    _ui?.activePane.removeListener(_onActivePanel);
     HardwareKeyboard.instance.removeHandler(_onKey);
     _rename?.dispose();
     _releaseKeys();
@@ -383,7 +383,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       return false;
     }
     final ui = _ui;
-    if (ui == null || ui.activePanel.value != Panel.audioTimeline) return false;
+    if (ui == null || ui.activePanel != Panel.audioTimeline) return false;
     if (ui.keymap.actionFor(BridgeKeyContext.timeline, event) !=
         'layer.rename') {
       return false;
@@ -436,7 +436,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   /// before is held and put back untouched, so the layer Timeline needs no
   /// change at all and gets its own keys back the moment it is clicked in.
   void _onActivePanel() {
-    if (_ui?.activePanel.value == Panel.audioTimeline) {
+    if (_ui?.activePanel == Panel.audioTimeline) {
       _claimKeys();
     } else {
       _releaseKeys();

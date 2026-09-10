@@ -95,9 +95,20 @@ cannot live in a workspace (AE silently drops such locks). Lumit splits state ex
 |---|---|
 | Frame tree, panel groups, tab order | Which comps are open, and the active comp |
 | Panel sizes, floating window geometry | Viewer-to-item locks (§2.6) |
-| Which panel types are open | Per-comp Viewer state: preview resolution, magnification, channel view, transparency grid, guide/ruler visibility |
+| Which panel types are open | Per-comp Viewer state: preview resolution, guide/ruler visibility, grid and safe areas |
+| Which views each Viewer panel holds, and their layout (§2) | Which item each view shows (§2), and its own magnification, pan, channel view, transparency grid, exposure, tone map, region of interest, 3D view and wireframe |
 | Timeline column visibility and widths | Per-comp Timeline state: twirl-down expansion, work area, playhead position, zoom range |
 | Toolbar layout | Guides themselves, markers, region of interest |
+
+**A view is where you are looking, and views exist so they can be looked at differently.**
+Magnification, channel view and the exposure moved from the composition to the *view* when
+the Viewer grew several of them (docs/impl/multi-viewer.md §1.3): a per-comp magnification
+makes a two-up compare impossible, and a per-comp exposure makes a before-and-after grade
+impossible. Preview resolution and the guides went the other way for the same reason: how
+coarsely a heavy shot previews, and where its guides are, are facts about the shot rather
+than about the pane it is in. A project written before the split has its looks keyed by
+composition, and the first view bound to each takes that composition's, so no project opens
+looking different from how it was left.
 
 Opening a project MUST restore the project-side state above regardless of which workspace is
 active. A project opened on another machine therefore looks like the same *edit* even though
@@ -484,7 +495,8 @@ Every control on either strip keeps the behaviour its item below defines. The it
    window on the composite rather than a crop of a finished frame, so it saves the composite,
    the display encode and the publish — but not the effect stack, which runs per layer at the
    layer's own size. Frames rendered through a region take their own names, so scrubbing
-   inside one still uses the cache. Per comp, in the session beside the preview resolution.
+   inside one still uses the cache. **Per view**, in the project's session block: arming one
+   in the left view of a two-up must not crop the right (§1.5).
 8. **Colour management indicator**: the current display transform (e.g. working space →
    display). Read-only badge; clicking opens colour settings. Always visible so "what am I
    looking at" is never ambiguous.
@@ -549,8 +561,8 @@ Every control on either strip keeps the behaviour its item below defines. The it
     it, as before. A picture panned entirely off the panel has nothing to photograph and
     Take MUST stand down rather than store an empty picture.
 
-Items 12 and 13 both persist **per comp** with the project, and while either is engaged
-the Viewer MUST say the picture is not the export — item 8's badge is where that lives,
+Items 12 and 13 both persist **per view** with the project (§1.5), and while either is
+engaged the Viewer MUST say the picture is not the export — item 8's badge is where that lives,
 stated calmly rather than warned about (15-DESIGN).
 
 The bar MUST remain one row; overflow collapses from the right into a chevron menu.
@@ -1075,9 +1087,17 @@ truer. A frame served from the cache reports nothing at all — there was nothin
 
 ### 2.6 Viewer locks
 
-Each Viewer MAY be locked to a specific item (padlock on its tab). A locked Viewer MUST NOT
-switch items when the user opens another comp — this is how "comp here, precomp there"
-two-Viewer workflows survive. Locks are project state (§1.5).
+Each **view** MAY be locked to a specific item (a padlock in the view's own chrome; a
+Viewer panel showing one view wears it on that panel). A locked view MUST NOT switch items
+when the user opens another comp — this is how "comp here, precomp there" survives. Locks
+are project state (§1.5), and a lock on an item that is later deleted stays put: the view
+shows the empty state and the lock is the user's to clear.
+
+**Where an opened item lands**, in this order: the active view if it is unlocked; otherwise
+the most recently active unlocked view, in any Viewer panel; otherwise a new view, in the
+active Viewer panel if its layout has room and in a new one if it does not. The last rule is
+what makes locks usable — with every view locked, opening something MUST still show it
+rather than doing nothing. The view an item lands in becomes active.
 
 ---
 
@@ -1142,7 +1162,9 @@ The library of assets: footage items, audio items, comps, folders.
   **Shipped (owner request, 2026-07-28):** selection lands on the pointer's *down* stroke.
   A second click on the lone selected row **opens** it (§4.2); it no longer renames —
   `Enter` on the selection does, as it does in every panel. Double-clicking
-  empty panel space imports. The footage-Viewer double-click above is deferred until
+  empty panel space imports, and **only** empty space: the gesture sits behind the tree
+  rather than over it, so two clicks that land on rows are the rows' and never the
+  picker's. The footage-Viewer double-click above is **shipped (2026-09-10)** now that
   footage mode exists; comps front via the Timeline's comp tabs.
 - Drag an item into a comp's Timeline or Viewer to create a layer; drag onto the
   **New comp** button to create a comp matching the footage (dimensions, fps, duration).
@@ -1347,10 +1369,14 @@ already the whole selection — **opens** what it lands on, and what opening mea
 item's own answer:
 
 - a **composition** fronts in the Timeline, which is what a double-click means everywhere;
-- **footage** raises the **New composition** dialogue on the selection, already the media's
-  own size, rate and length (the longest item wins when several are selected), with every
-  selected item landing in the finished comp as a layer — footage has no window of its own,
-  and a comp to put the clip in is what the gesture is asking for;
+- **footage** opens a **footage view** in the Viewer: the item on its own, at its own size,
+  with its own place in the file under it (§2.1, docs/impl/multi-viewer.md §3.6). It lands
+  in a view by the resolution order every opened item follows, so a locked view is not
+  stolen, and the panels that follow the active view stay on the composition they had.
+  The **New composition** dialogue on the selection — already the media's own size, rate
+  and length, the longest item winning when several are picked, every selected item
+  landing in the finished comp as a layer — is the row menu's **New composition**, which
+  is where that command went when footage got a window of its own;
 - a **folder** shows or hides what is in it. A caret on the row says which it is, and a
   search still looks inside a shut folder.
 
@@ -3306,6 +3332,14 @@ app-wide, so a list, a field or a canvas is free to use them for moving within i
 | Viewer | `Ctrl+J` / `Ctrl+Shift+J` / `Ctrl+Alt+J` | Preview resolution full / half / quarter |
 | Viewer | `Ctrl+R` | Toggle rulers |
 | Viewer | `Ctrl+'` | Toggle transparency grid |
+| Viewer | `Ctrl+Alt+V` | Open another Viewer |
+| Viewer | `Ctrl+Shift+.` / `Ctrl+Shift+,` | Front the next / previous view |
+| Viewer | `Ctrl+Alt+L` | Lock or unlock this view |
+| Viewer | `Alt+1` / `Alt+2` / `Alt+4` | View layout: one / two / four views |
+| Viewer | `Alt+3` | Turn the two-view layout (across or down) |
+| Viewer | `Ctrl+Alt+F` | Fill the window with this view (cinema) |
+| Viewer | `Ctrl+Alt+C` | Compare two views |
+| Viewer | `Ctrl+Alt+P` | Always preview this view |
 | Panels | `Ctrl+F6` / `Ctrl+Shift+F6` | Cycle panel focus forward / back |
 | Panels | `Ctrl+F` | Focus the panel's search field (Project, Effects & Presets) |
 

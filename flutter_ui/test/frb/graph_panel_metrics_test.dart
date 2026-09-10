@@ -337,7 +337,7 @@ void main() {
 
       await tester.tapAt(const Offset(600, 400));
       await tester.pump();
-      p.uiState.activePanel.value = Panel.graph;
+      p.uiState.activePane.value = Panel.graph.pane();
       expect(p.uiState.consoleClaim!(), isTrue,
           reason: 'the graph claims Ctrl+Space while it is the focused panel');
       await tester.pump();

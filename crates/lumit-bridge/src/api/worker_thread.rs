@@ -52,16 +52,35 @@ pub struct WorkerState {
     /// into the renderer's cache, so decode runs alongside compositing rather
     /// than before it.
     prefetcher: crate::prefetch::Prefetcher,
-    /// Where the user is looking — the comp, frame and scale last shown — the
-    /// idle cache-fill's anchor (docs/06 §5.5).
-    last_shown: Option<(CompositionReference, u64, f32)>,
-    /// How the Viewer is looking at the picture — exposure, tone map,
+    /// Which Viewer view the worker is serving (docs/impl/multi-viewer.md
+    /// §2.1). Latched by every request that says what a view is showing, and
+    /// read by the publish paths, the look and the shared-texture pool, so a
+    /// drag preview does not have to name a view the request before it named.
+    ///
+    /// An atomic because the two profiler sinks are closures installed on the
+    /// renderer once and fed from *inside* a render, long before control gets
+    /// back to anywhere that could read this thread's own state — the same
+    /// reason they take a clone of the reply stream.
+    view_id: std::sync::Arc<std::sync::atomic::AtomicU32>,
+    /// Where the user is looking — the view, comp, frame and scale last shown
+    /// — the idle cache-fill's anchor (docs/06 §5.5).
+    last_shown: Option<(u32, CompositionReference, u64, f32)>,
+    /// How each Viewer view is looking at the picture — exposure, tone map,
     /// transparency, region, OCIO view. Session state the renderer holds, kept
     /// here as well so it can be put back on a renderer built to replace one
     /// whose device was lost. Without the copy, coming back from a
     /// device reset would quietly *reset the view too*: full exposure, the
     /// built-in transform, the region of interest gone.
-    look: ViewerLook,
+    ///
+    /// Per view rather than one, because two views exist so they can be looked
+    /// at differently. The renderer still holds exactly one, which is what
+    /// [`Self::applied_look`] is for.
+    looks: std::collections::HashMap<u32, ViewerLook>,
+    /// The look the renderer is actually set to, and whose it is. The four
+    /// setters are skipped when the view about to render is already the one
+    /// the renderer is looking through, so a two-up of one comp does not pay
+    /// two look switches a frame for nothing.
+    applied_look: (u32, ViewerLook),
     /// Where the Viewer is cutting a layer's effect stack short — the "at
     /// effect" chip, off when `None`.
     ///
@@ -150,6 +169,19 @@ pub struct WorkerState {
     pending_measure: Option<(Uuid, u64, lumit_render::Quality)>,
 }
 
+impl WorkerState {
+    /// Which Viewer view the worker is serving.
+    fn view_id(&self) -> u32 {
+        self.view_id.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Serve `view` from here until something says otherwise.
+    fn set_view_id(&self, view: u32) {
+        self.view_id
+            .store(view, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
 /// One outstanding ask to the disk tier: where the frame sits (for the upload
 /// that follows) and when it was asked (for the bounded grace).
 #[frb(ignore)]
@@ -173,10 +205,14 @@ fn frame_name(
     frame: u64,
     quality: lumit_render::Quality,
 ) -> Option<u128> {
+    // The name folds in the look the renderer is set to
+    // (`named_under_view`), and each view looks its own way, so the memo is
+    // keyed by view as well (docs/impl/multi-viewer.md §2.3).
+    let view = state.view_id();
     let WorkerState {
         renderer, names, ..
     } = state;
-    names.get_or_compute(revision, comp, frame, quality.tag(), || {
+    names.get_or_compute(revision, view, comp, frame, quality.tag(), || {
         renderer.frame_key_presynced(document, comp, frame, quality)
     })
 }
@@ -203,13 +239,34 @@ struct LayerSample {
 /// look survives a renderer being replaced under a device loss, and cannot
 /// drift between the message that applies it and the rebuild that restores it.
 #[frb(ignore)]
-#[derive(Clone, Default)]
+#[derive(Clone, Default, PartialEq)]
 struct ViewerLook {
     stops: f64,
     tone_map: bool,
     transparent_background: bool,
     region: Option<[f32; 4]>,
     colour_view: Option<(String, String)>,
+}
+
+/// Make the renderer look the way `view` looks, if it does not already.
+///
+/// **The renderer holds exactly one look and there are several views**
+/// (docs/impl/multi-viewer.md §2.3), so the view about to render sets its own
+/// look first. Skipped when the renderer is already looking that way, which is
+/// every frame of an ordinary one-view session and every frame of a two-up
+/// whose views agree.
+///
+/// The frame's *name* already folds the look in
+/// (`HeadlessRenderer::named_under_view`), so two views looking at one comp
+/// differently bank separate frames and neither can be served the other's.
+#[frb(ignore)]
+fn look_at(state: &mut WorkerState, view: u32) {
+    let want = state.looks.get(&view).cloned().unwrap_or_default();
+    if state.applied_look.0 == view && state.applied_look.1 == want {
+        return;
+    }
+    apply_viewer_look(&mut state.renderer, &want);
+    state.applied_look = (view, want);
 }
 
 /// Put a look on a renderer. The only place these four setters are called.
@@ -734,7 +791,7 @@ fn publish_cache_bar(state: &mut WorkerState, stream: &mut WorkerResponseStream)
     };
     let rebuild = renamed || strip.len() != frames as usize;
     let anchor = match &state.last_shown {
-        Some((comp, frame, _)) if comp.id == comp_id => *frame % frames,
+        Some((_, comp, frame, _)) if comp.id == comp_id => *frame % frames,
         _ => 0,
     };
     {
@@ -1364,9 +1421,10 @@ fn republish_after_bake(state: &mut WorkerState, stream: &mut WorkerResponseStre
 /// closed under us.
 #[frb(ignore)]
 fn republish_last_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
-    let Some((comp_ref, frame, scale)) = state.last_shown.clone() else {
+    let Some((view, comp_ref, frame, scale)) = state.last_shown.clone() else {
         return;
     };
+    state.set_view_id(view);
     let Ok(project) = state.project.state() else {
         return;
     };
@@ -1411,7 +1469,7 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
         state.fill_exhausted = true;
         return;
     }
-    let Some((comp_ref, anchor, scale)) = state.last_shown.clone() else {
+    let Some((_, comp_ref, anchor, scale)) = state.last_shown.clone() else {
         state.fill_exhausted = true;
         return;
     };
@@ -1638,7 +1696,35 @@ pub enum WorkerRequest {
         /// beside it: it changes what every frame from here on is
         /// display-encoded through, and never the document.
         colour_view: Option<(String, String)>,
+        /// Whose look this is (docs/impl/multi-viewer.md §2.3).
+        view: u32,
     },
+    /// A Viewer view has closed. Its pooled shared textures go with it, and
+    /// so does its stored look: a view id is minted per view and never
+    /// reused, so nothing here can be wanted again.
+    CloseView(u32),
+    /// Draw a footage item or one layer's source on its own, for a footage
+    /// view or a layer view (docs/impl/multi-viewer.md §3.6). The picture is
+    /// made by compositing a scratch composition built around the item on a
+    /// clone of the document, so it goes down the ordinary frame transport and
+    /// nothing is committed.
+    RenderItem(RenderItemRequest),
+}
+
+/// One footage-view or layer-view picture.
+#[frb(ignore)]
+pub struct RenderItemRequest {
+    pub project: ProjectReference,
+    pub of: crate::scratch::ScratchOf,
+    /// Whether a layer view runs the layer's effect stack (After Effects calls
+    /// this the Render tick). A footage view never has one.
+    pub effects: bool,
+    pub frame: u64,
+    pub scale: f32,
+    pub size: (u32, u32),
+    pub rate: (u32, u32),
+    pub frames: u64,
+    pub view: u32,
 }
 
 /// Start playback of `comp` at `from`.
@@ -1656,6 +1742,10 @@ pub enum WorkerRequest {
 pub struct PlayRequest {
     pub comp: CompositionReference,
     pub from: u64,
+    /// Which Viewer view plays. Only this one's frames are published while the
+    /// transport runs; the others hold the picture they were last given
+    /// (docs/impl/multi-viewer.md §2.5).
+    pub view: u32,
     pub mode: BridgePlaybackMode,
     pub scale: f32,
     /// The document the mix is to be built from, snapshotted where play was
@@ -1692,6 +1782,8 @@ const PRE_ROLL_BUDGET: std::time::Duration = std::time::Duration::from_millis(15
 #[frb(ignore)]
 struct Playback {
     comp: CompositionReference,
+    /// The view that is playing.
+    view: u32,
     /// The frame to render next.
     next: u64,
     /// The last frame of the composition — playback ends after it.
@@ -2120,6 +2212,10 @@ fn resume_audio() {
 pub struct RenderCompRequest {
     pub comp: CompositionReference,
     pub frame: u64,
+    /// Which Viewer view asked. Latched onto [`WorkerState::view`], so the
+    /// drag previews and the idle work that follow serve the same view without
+    /// each growing a parameter (docs/impl/multi-viewer.md §2.1).
+    pub view: u32,
     /// Where to cut this layer's effect stack short, or `None` for the picture
     /// as the document has it. Latched onto [`WorkerState::prefix`],
     /// so it describes the Viewer from here until the next render says
@@ -2169,6 +2265,9 @@ pub struct SamplePixelsRequest {
     pub comp: CompositionReference,
     pub frame: u64,
     pub scale: f32,
+    /// Which Viewer view the pointer is in, so the read is taken through that
+    /// view's own way of looking.
+    pub view: u32,
     /// Where to read, as a fraction of the picture: `(0, 0)` its top-left,
     /// `(1, 1)` its bottom-right. **Not a pixel** — see [`sample_pixels`] for
     /// why the caller cannot name one.
@@ -2302,6 +2401,7 @@ pub fn run_worker(project: ProjectReference, stream: WorkerResponseStream) {
 fn build_viewer_renderer(
     project: &ProjectReference,
     stream: &WorkerResponseStream,
+    view: &std::sync::Arc<std::sync::atomic::AtomicU32>,
 ) -> Option<HeadlessRenderer> {
     // **One renderer is built at a time, and none at all for a project that
     // has already gone**. Building one means a GPU device and every
@@ -2358,6 +2458,7 @@ fn build_viewer_renderer(
     // Which frames actually use them is decided per request (`watch_frames` /
     // `measure_frames`): a scrub describes itself, a playing frame does not.
     let progress_stream = stream.clone();
+    let progress_view = std::sync::Arc::clone(view);
     renderer.set_progress_sink(Some(std::sync::Arc::new(
         move |p: lumit_render::FrameProgress| {
             _ = progress_stream.add(WorkerResponse::RenderProgress(
@@ -2369,17 +2470,22 @@ fn build_viewer_renderer(
                     // would then leave a bar standing for ever. The worker ends
                     // every bar it started, below.
                     done: false,
+                    view: progress_view.load(std::sync::atomic::Ordering::Relaxed),
                 },
             ));
         },
     )));
     let profile_stream = stream.clone();
+    let profile_view = std::sync::Arc::clone(view);
     renderer.set_profile_sink(Some(std::sync::Arc::new(
         move |p: lumit_render::FrameProfile| {
             // One line per switching on, never per frame — see
             // `profiling::announce_first`.
             crate::profiling::announce_first(p.frame, p.layers.len(), p.total_ms);
-            _ = profile_stream.add(WorkerResponse::FrameProfile(profile_of(&p)));
+            _ = profile_stream.add(WorkerResponse::FrameProfile(profile_of(
+                &p,
+                profile_view.load(std::sync::atomic::Ordering::Relaxed),
+            )));
         },
     )));
     Some(renderer)
@@ -2422,7 +2528,7 @@ fn recover_lost_device(state: &mut WorkerState, stream: &mut WorkerResponseStrea
 /// "the app is fine but the preview never updates again".
 #[frb(ignore)]
 fn rebuild_renderer(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
-    let Some(mut renderer) = build_viewer_renderer(&state.project, stream) else {
+    let Some(mut renderer) = build_viewer_renderer(&state.project, stream, &state.view_id) else {
         // No second device to be had, or the project has closed under us.
         // Nothing is replaced, so the worker keeps the renderer it has and the
         // editor stays usable, exactly as it does when the first build fails on
@@ -2431,7 +2537,7 @@ fn rebuild_renderer(state: &mut WorkerState, stream: &mut WorkerResponseStream) 
     };
     // A renderer replaced is not a renderer reset: the way the user was
     // looking at the picture is session state, not something the device owned.
-    apply_viewer_look(&mut renderer, &state.look);
+    apply_viewer_look(&mut renderer, &state.applied_look.1);
     state.renderer = renderer;
     // The card's cache went with the card. Nothing needs clearing — a new
     // renderer's stores are empty — but the budget must be applied again (it
@@ -2469,7 +2575,11 @@ fn worker_loop(
     let mut stream = stream;
     raise_timer_resolution();
 
-    let Some(renderer) = build_viewer_renderer(&project, &stream) else {
+    // Made before the renderer, because the two profiler sinks it installs
+    // read it from inside a render.
+    let view_id = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
+
+    let Some(renderer) = build_viewer_renderer(&project, &stream, &view_id) else {
         return;
     };
 
@@ -2480,10 +2590,12 @@ fn worker_loop(
         playback: None,
         prefetcher: crate::prefetch::Prefetcher::default(),
         last_shown: None,
-        // The frontend sends the real look as soon as the Viewer is up; until
-        // then this is the renderer's own default, which is what it already
-        // held.
-        look: ViewerLook::default(),
+        // The first view a frontend asks for. It sends the real look as soon
+        // as its Viewer is up; until then this is the renderer's own default,
+        // which is what it already held.
+        view_id,
+        looks: std::collections::HashMap::new(),
+        applied_look: (0, ViewerLook::default()),
         prefix: None,
         view: None,
         disk: lumit_render::diskio::spawn(),
@@ -2752,13 +2864,13 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             }
             // Playback moves the playhead: keep the idle fill's anchor with
             // it, so a stop resumes filling from where the user actually is.
-            state.last_shown = Some((playback.comp.clone(), frame, playback.scale));
+            state.last_shown = Some((playback.view, playback.comp.clone(), frame, playback.scale));
             state.fill_exhausted = false;
             if matches!(playback.mode, BridgePlaybackMode::EveryFrame) {
                 chase_audio(playback, frame, since_present);
             }
             let present_started = std::time::Instant::now();
-            present_ring_frame(&mut state.renderer, frame, &prepared, stream);
+            present_ring_frame(&mut state.renderer, frame, &prepared, stream, playback.view);
             // What the hand-off cost, and the sparse pace line it feeds — the
             // number that says whether the present's full-queue wait is worth
             // rebuilding (docs/TODO.md, "measure first").
@@ -2823,14 +2935,22 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             // its clock instead.
             if matches!(playback.mode, BridgePlaybackMode::EveryFrame) {
                 let peek = playback.next;
-                let name =
-                    state
-                        .names
-                        .get_or_compute(revision, comp_id, peek, quality.tag(), || {
-                            state
-                                .renderer
-                                .frame_key_presynced(&document, comp_id, peek, quality)
-                        });
+                // The field, not `state.view_id()`: `playback` is a live borrow
+                // of a sibling field, and reading one field is disjoint from
+                // borrowing another.
+                let view = state.view_id.load(std::sync::atomic::Ordering::Relaxed);
+                let name = state.names.get_or_compute(
+                    revision,
+                    view,
+                    comp_id,
+                    peek,
+                    quality.tag(),
+                    || {
+                        state
+                            .renderer
+                            .frame_key_presynced(&document, comp_id, peek, quality)
+                    },
+                );
                 if let Some(key) = name {
                     if !state.renderer.has_frame_texture(key, bgra)
                         && !crate::framecache::contains(key)
@@ -2878,8 +2998,10 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                     // parked one is asked for now — a read off disk takes a
                     // turn or two of the loop, thus a frame asked for when it
                     // is shown always comes too late and is composited again.
+                    let view = state.view_id.load(std::sync::atomic::Ordering::Relaxed);
                     let name = state.names.get_or_compute(
                         revision,
+                        view,
                         comp_id,
                         future,
                         quality.tag(),
@@ -2999,12 +3121,13 @@ fn present_ring_frame(
     frame: u64,
     prepared: &lumit_render::PreparedFrame,
     stream: &mut WorkerResponseStream,
+    view: u32,
 ) {
     #[cfg(any(
         all(windows, feature = "shared-texture"),
         all(target_os = "macos", feature = "shared-texture-macos")
     ))]
-    match renderer.present_prepared(prepared) {
+    match renderer.present_prepared(prepared, view) {
         Ok(shared) => {
             _ = stream.add(WorkerResponse::RenderedSharedTexture(
                 BridgeSharedFrameInfo {
@@ -3013,6 +3136,7 @@ fn present_ring_frame(
                     width: shared.width,
                     height: shared.height,
                     tier: crate::realtime::tier(),
+                    view,
                 },
             ));
         }
@@ -3020,7 +3144,7 @@ fn present_ring_frame(
     }
 
     #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
-    match renderer.present_prepared_dmabuf(prepared) {
+    match renderer.present_prepared_dmabuf(prepared, view) {
         Ok(shared) => {
             _ = stream.add(WorkerResponse::RenderedDMABuf(BridgeSharedFrameInfoLinux {
                 fd: shared.fd,
@@ -3032,6 +3156,7 @@ fn present_ring_frame(
                 drm_fourcc: shared.drm_fourcc,
                 modifier: shared.modifier,
                 tier: crate::realtime::tier(),
+                view,
             }));
         }
         Err(err) => note!("Shared DMA-BUF present failed, dropping frame: {err}"),
@@ -3043,7 +3168,7 @@ fn present_ring_frame(
         all(target_os = "macos", feature = "shared-texture-macos")
     )))]
     {
-        let _ = (renderer, frame, prepared, stream);
+        let _ = (renderer, frame, prepared, stream, view);
         note!("No zero-copy transport in this build; dropping the frame");
     }
 }
@@ -3055,6 +3180,11 @@ fn present_ring_frame(
 /// nothing moved.
 #[frb(ignore)]
 fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), BridgeError> {
+    // One view plays and the others hold what they were last given
+    // (docs/impl/multi-viewer.md §2.5), so the run is named and looked at
+    // through the playing view from here.
+    state.set_view_id(req.view);
+    look_at(state, req.view);
     let (document, revision) = {
         let document = state.project.state()?;
         let document = document.read().map_err(|_| BridgeError::ReadFailed)?;
@@ -3095,14 +3225,16 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
     state.renderer.sync_colour(&document);
     state.renderer.presync_items(&document, comp_id);
     let ask_to = from.saturating_add(DISK_PRE_ASK).min(last);
+    let view = state.view_id();
     for frame in from..=ask_to {
-        let name = state
-            .names
-            .get_or_compute(revision, comp_id, frame, quality.tag(), || {
-                state
-                    .renderer
-                    .frame_key_presynced(&document, comp_id, frame, quality)
-            });
+        let name =
+            state
+                .names
+                .get_or_compute(revision, view, comp_id, frame, quality.tag(), || {
+                    state
+                        .renderer
+                        .frame_key_presynced(&document, comp_id, frame, quality)
+                });
         let Some(key) = name else { continue };
         if wants_disk_lead(
             state.renderer.has_frame_texture(key, bgra),
@@ -3131,6 +3263,7 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
 
     state.playback = Some(Playback {
         comp: req.comp,
+        view: req.view,
         pending_audio: Some(req.audio),
         next: from,
         last,
@@ -3182,7 +3315,7 @@ fn handle_requests(
         // froze on its first frame while the scopes kept updating. A trace and
         // a frame are different jobs; neither is the other's replacement.
         let (pictures, scope, sample, superseded) =
-            drain_to_newest(request, receiver, classify_request);
+            drain_to_newest(request, receiver, classify_request, state.view_id());
         // Deliberately not logged. Superseding is the normal, healthy case —
         // it is how a drag stays attached to the pointer — and a line per
         // completed render is console I/O on the worker thread for something
@@ -3214,23 +3347,33 @@ fn handle_requests(
                     set_view(state, view.map(|v| (comp, v.core())));
                     Ok(())
                 }
+                WorkerRequest::RenderItem(req) => render_item(req, state, stream),
+                WorkerRequest::CloseView(view) => {
+                    state.looks.remove(&view);
+                    state.renderer.drop_view_targets(view);
+                    Ok(())
+                }
                 WorkerRequest::SetViewerLook {
                     stops,
                     tone_map,
                     transparent_background,
                     region,
                     colour_view,
+                    view,
                 } => {
                     // Kept as well as applied, so a renderer rebuilt after a
                     // device loss is looked *through* the same way.
-                    state.look = ViewerLook {
-                        stops,
-                        tone_map,
-                        transparent_background,
-                        region,
-                        colour_view,
-                    };
-                    apply_viewer_look(&mut state.renderer, &state.look);
+                    state.looks.insert(
+                        view,
+                        ViewerLook {
+                            stops,
+                            tone_map,
+                            transparent_background,
+                            region,
+                            colour_view,
+                        },
+                    );
+                    look_at(state, view);
                     // The look is folded into every frame's name
                     // (`named_under_view`), so this message renames every
                     // frame without moving the document revision — the one
@@ -3280,10 +3423,15 @@ fn classify_request(r: &WorkerRequest) -> DrainClass {
         WorkerRequest::Play(_)
         | WorkerRequest::StopPlayback
         | WorkerRequest::SetCameraView { .. }
+        | WorkerRequest::CloseView(_)
         | WorkerRequest::SetViewerLook { .. } => DrainClass::PictureKeepAll,
-        WorkerRequest::RenderComp(_) | WorkerRequest::RenderCompWithPreview(_) => {
-            DrainClass::PictureNewestWins
-        }
+        WorkerRequest::RenderComp(req) => DrainClass::PictureNewestWins(req.view),
+        WorkerRequest::RenderItem(req) => DrainClass::PictureNewestWins(req.view),
+        // A staged drag preview names no view of its own: it inherits
+        // whichever view was latched, and a drag fronts the view it is in
+        // before it stages anything (docs/impl/multi-viewer.md §2.1). So the
+        // whole preview lane collapses together, as it always did.
+        WorkerRequest::RenderCompWithPreview(_) => DrainClass::PictureNewestWins(u32::MAX),
     }
 }
 
@@ -3293,7 +3441,12 @@ fn classify_request(r: &WorkerRequest) -> DrainClass {
 enum DrainClass {
     /// A stale one is worthless: only the newest survives (a scrub — the
     /// playhead position behind the newest will never be looked at).
-    PictureNewestWins,
+    ///
+    /// **Per view.** Collapsing every picture to one newest would starve every
+    /// Viewer view but whichever asked last, so the newest survives *for each
+    /// view* and the views keep their arrival order between them
+    /// (docs/impl/multi-viewer.md §2.4 rule 2).
+    PictureNewestWins(u32),
     /// Every one is served, in order (transport commands: Play and Stop; and
     /// the display view, which is a setting rather than a picture).
     PictureKeepAll,
@@ -3319,9 +3472,11 @@ fn drain_to_newest<T>(
     first: T,
     receiver: &Receiver<T>,
     classify: impl Fn(&T) -> DrainClass,
+    priority: u32,
 ) -> (Vec<T>, Option<T>, Option<T>, usize) {
     let mut kept: Vec<T> = Vec::new();
-    let mut newest_wins: Option<T> = None;
+    // One survivor per view, in the order the views first asked.
+    let mut newest_wins: Vec<(u32, T)> = Vec::new();
     let mut scope = None;
     let mut sample = None;
     let mut superseded = 0usize;
@@ -3339,17 +3494,29 @@ fn drain_to_newest<T>(
                 }
             }
             DrainClass::PictureKeepAll => kept.push(item),
-            DrainClass::PictureNewestWins => {
-                if newest_wins.replace(item).is_some() {
-                    superseded += 1;
+            DrainClass::PictureNewestWins(view) => {
+                match newest_wins.iter_mut().find(|(v, _)| *v == view) {
+                    Some(slot) => {
+                        slot.1 = item;
+                        superseded += 1;
+                    }
+                    None => newest_wins.push((view, item)),
                 }
             }
         }
         newest = receiver.try_recv().ok();
     }
+    // **The view being worked in goes first** (docs/impl/multi-viewer.md §2.4
+    // rule 3). Renders are serial on this thread, so a background view's frame
+    // ahead of the active one's is that whole render of added latency on the
+    // picture the pointer is in. Stable, so the other views keep the order
+    // they asked in. Only the pictures are re-ordered: the kept ones are
+    // transport commands, and a Stop that ran after the render it was meant to
+    // stop would leave playback going.
+    newest_wins.sort_by_key(|(view, _)| *view != priority);
     // A surviving newest-wins picture runs after the kept ones: the kept ones
     // were asked for earlier, and order is part of every-frame's contract.
-    kept.extend(newest_wins);
+    kept.extend(newest_wins.into_iter().map(|(_, item)| item));
     (kept, scope, sample, superseded)
 }
 
@@ -3357,7 +3524,7 @@ fn drain_to_newest<T>(
 /// strings because that is how every other reference does — the frontend
 /// matches them against the ids its read model already holds.
 #[frb(ignore)]
-fn profile_of(p: &lumit_render::FrameProfile) -> crate::api::state::BridgeFrameProfile {
+fn profile_of(p: &lumit_render::FrameProfile, view: u32) -> crate::api::state::BridgeFrameProfile {
     let stage = |s: lumit_render::RenderStage| f64::from(p.stage_ms[s.code() as usize]);
     crate::api::state::BridgeFrameProfile {
         frame: p.frame,
@@ -3383,6 +3550,7 @@ fn profile_of(p: &lumit_render::FrameProfile) -> crate::api::state::BridgeFrameP
                     .collect(),
             })
             .collect(),
+        view,
     }
 }
 
@@ -3418,6 +3586,7 @@ fn watched<R>(
             stage: lumit_render::RenderStage::Presenting.code(),
             fraction: 1.0,
             done: true,
+            view: state.view_id(),
         },
     ));
     out
@@ -3572,8 +3741,12 @@ fn render_comp(
         document.store.snapshot()
     };
 
+    // Whose picture this is, from here until a request says otherwise
+    // (docs/impl/multi-viewer.md §2.1), and looking the way that view looks.
+    state.set_view_id(req.view);
+    look_at(state, req.view);
     // The user is looking here now: anchor the idle fill on it, and wake it.
-    state.last_shown = Some((req.comp.clone(), req.frame, req.scale));
+    state.last_shown = Some((state.view_id(), req.comp.clone(), req.frame, req.scale));
     state.fill_exhausted = false;
     set_prefix(state, req.prefix);
     let document = viewed_through(state.prefix, state.view, document);
@@ -3588,6 +3761,76 @@ fn render_comp(
             req.mode,
             // A committed document: cacheable, and a held frame serves the scrub.
             true,
+        );
+    });
+    Ok(())
+}
+
+/// Draw one item on its own: the footage view and the layer view
+/// (docs/impl/multi-viewer.md §3.6).
+///
+/// **No second render path.** A scratch composition is built around the item
+/// on a clone of the document and composited by the ordinary walk, so the
+/// picture arrives down the same zero-copy transport at the same quality, and
+/// the frame names itself the way every other frame does. Nothing is
+/// committed: the composition never reaches the document, the journal, the
+/// undo stack or the Project panel.
+#[frb(ignore)]
+fn render_item(
+    req: RenderItemRequest,
+    state: &mut WorkerState,
+    stream: &mut WorkerResponseStream,
+) -> Result<(), BridgeError> {
+    let document = {
+        let document = req.project.state()?;
+        let document = document.read().map_err(|_| BridgeError::ReadFailed)?;
+        document.store.snapshot()
+    };
+    // A nonsense rate reads as 25, which is a rate rather than a division by
+    // zero: a view of a still needs one only to have a clock at all.
+    let Ok(rate) = lumit_core::time::FrameRate::new(req.rate.0, req.rate.1)
+        .or_else(|_| lumit_core::time::FrameRate::new(25, 1))
+    else {
+        return Ok(());
+    };
+    // The item's own length, as a time: frames over the rate, exactly.
+    let Ok(duration) = lumit_core::time::Rational::from_i128(
+        i128::from(req.frames.max(1)) * i128::from(req.rate.1.max(1)),
+        i128::from(req.rate.0.max(1)),
+    ) else {
+        return Ok(());
+    };
+    let duration = lumit_core::time::Duration(duration);
+    let Some(document) =
+        crate::scratch::document_with(&document, req.of, req.effects, req.size, rate, duration)
+    else {
+        // The item has gone, or the layer has. The view shows its empty state
+        // rather than a picture of something else.
+        return Ok(());
+    };
+    state.set_view_id(req.view);
+    look_at(state, req.view);
+    let comp = req.of.comp_id();
+    state.last_shown = Some((
+        req.view,
+        CompositionReference::new(req.project.id, comp),
+        req.frame,
+        req.scale,
+    ));
+    state.fill_exhausted = false;
+    watched(state, stream, req.frame, |state, stream| {
+        publish_frame(
+            state,
+            comp,
+            req.frame,
+            req.scale,
+            &document,
+            stream,
+            BridgePlaybackMode::Adaptive,
+            // A scratch composition is not the document, so its frames are not
+            // banked against one: cacheable would file a picture under a
+            // composition nothing else can ever ask for.
+            false,
         );
     });
     Ok(())
@@ -4086,6 +4329,7 @@ fn sample_pixels(
             x: patch.x,
             y: patch.y,
             frame: req.frame,
+            view: req.view,
             layer_alone,
         },
     ));
@@ -4299,7 +4543,10 @@ fn publish_zero_copy(
             return;
         }
     };
-    let shared = match state.renderer.present_prepared_dmabuf(&prepared) {
+    let shared = match state
+        .renderer
+        .present_prepared_dmabuf(&prepared, state.view_id())
+    {
         Ok(shared) => shared,
         Err(err) => {
             note!("Shared DMA-BUF present failed, dropping frame: {err}");
@@ -4319,6 +4566,7 @@ fn publish_zero_copy(
         // A still frame is made at Full, whatever playback last settled on,
         // so it must not report a tier it was not rendered at.
         tier: lumit_eval::schedule::FINEST_TIER,
+        view: state.view_id(),
     }));
 }
 
@@ -4367,7 +4615,7 @@ fn publish_zero_copy(
             return;
         }
     };
-    let shared = match state.renderer.present_prepared(&prepared) {
+    let shared = match state.renderer.present_prepared(&prepared, state.view_id()) {
         Ok(shared) => shared,
         Err(err) => {
             note!("Shared-texture present failed, dropping frame: {err}");
@@ -4385,6 +4633,7 @@ fn publish_zero_copy(
             // settled on, so it must not report a tier it was not rendered
             // at.
             tier: lumit_eval::schedule::FINEST_TIER,
+            view: state.view_id(),
         },
     ));
 }
@@ -4739,14 +4988,17 @@ mod tests {
         let bgra = super::zero_copy_wants_bgra();
 
         // A look worth losing, applied the way the Viewer applies it.
-        state.look = super::ViewerLook {
-            stops: 1.5,
-            tone_map: true,
-            transparent_background: true,
-            region: None,
-            colour_view: None,
-        };
-        super::apply_viewer_look(&mut state.renderer, &state.look);
+        state.looks.insert(
+            0,
+            super::ViewerLook {
+                stops: 1.5,
+                tone_map: true,
+                transparent_background: true,
+                region: None,
+                colour_view: None,
+            },
+        );
+        super::look_at(&mut state, 0);
         let named_under_the_look = state
             .renderer
             .frame_key(&document, comp, 0, quality)
@@ -4754,7 +5006,7 @@ mod tests {
 
         super::prepare_frame(&mut state, &document, comp, 0, quality, bgra, true)
             .expect("the frame before the loss");
-        state.last_shown = Some((CompositionReference::new(state.project.id, comp), 0, 1.0));
+        state.last_shown = Some((0, CompositionReference::new(state.project.id, comp), 0, 1.0));
 
         state.renderer.simulate_device_loss();
         assert!(
@@ -4884,7 +5136,7 @@ mod tests {
                     .expect("a solid renders at every scale a panel can be");
             let shared = state
                 .renderer
-                .present_prepared(&prepared)
+                .present_prepared(&prepared, 0)
                 .expect("and presents at every one of them");
             handles.push(shared.handle);
         }
@@ -4913,7 +5165,9 @@ mod tests {
             playback: None,
             prefetcher: crate::prefetch::Prefetcher::default(),
             last_shown: None,
-            look: super::ViewerLook::default(),
+            view_id: std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0)),
+            looks: std::collections::HashMap::new(),
+            applied_look: (0, super::ViewerLook::default()),
             prefix: None,
             view: None,
             disk: lumit_render::diskio::spawn(),
@@ -5127,7 +5381,7 @@ mod tests {
         let bgra = super::zero_copy_wants_bgra();
         super::prepare_frame(&mut state, &document, comp, 7, quality, bgra, true)
             .expect("the shown frame");
-        state.last_shown = Some((CompositionReference::new(state.project.id, comp), 7, 1.0));
+        state.last_shown = Some((0, CompositionReference::new(state.project.id, comp), 7, 1.0));
         state.fill_exhausted = false;
         // Idle turns until the fill has nothing left; each turn also collects
         // what the card handed back, as the worker loop does. With every
@@ -5316,6 +5570,7 @@ mod tests {
     fn playback(mode: BridgePlaybackMode, last: u64) -> Playback {
         Playback {
             comp: CompositionReference::new(Uuid::nil(), Uuid::nil()),
+            view: 0,
             next: 0,
             last,
             mode,
@@ -5539,7 +5794,9 @@ mod tests {
     /// for `WorkerRequest`, which needs a live project.
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     enum Req {
-        Adaptive(u32),
+        /// A picture, with the view that asked for it — several Viewer views
+        /// can be asking at once and only the newest of *each* survives.
+        Adaptive(u32, u32),
         Sample(u32),
         // Kept-in-order requests — standing in for the transport commands
         // (Play, Stop), the only keep-all class since scrubs became
@@ -5550,7 +5807,7 @@ mod tests {
 
     fn classify(r: &Req) -> DrainClass {
         match r {
-            Req::Adaptive(_) => DrainClass::PictureNewestWins,
+            Req::Adaptive(_, view) => DrainClass::PictureNewestWins(*view),
             Req::EveryFrame(_) => DrainClass::PictureKeepAll,
             Req::Scope(_) => DrainClass::Scope,
             Req::Sample(_) => DrainClass::Sample,
@@ -5572,15 +5829,16 @@ mod tests {
                 mode,
                 scale: 1.0,
                 prefix: None,
+                view: 0,
             })
         };
         assert!(matches!(
             super::classify_request(&scrub(5, BridgePlaybackMode::EveryFrame)),
-            DrainClass::PictureNewestWins
+            DrainClass::PictureNewestWins(0)
         ));
         assert!(matches!(
             super::classify_request(&scrub(5, BridgePlaybackMode::Adaptive)),
-            DrainClass::PictureNewestWins
+            DrainClass::PictureNewestWins(0)
         ));
         // The transport commands stay keep-all: superseding a Stop would leave
         // playback running with nothing left to stop it.
@@ -5588,6 +5846,61 @@ mod tests {
             super::classify_request(&super::WorkerRequest::StopPlayback),
             DrainClass::PictureKeepAll
         ));
+    }
+
+    /// **The multi-viewer regression** (docs/impl/multi-viewer.md §2.4 rule 2).
+    /// Collapsing every queued picture to one newest starves every Viewer view
+    /// but whichever asked last: two views both scrubbing meant one of them
+    /// never drew again. The newest survives *per view*.
+    #[test]
+    fn each_view_keeps_its_own_newest_picture() {
+        let (tx, rx) = channel();
+        // Two views, interleaved, each asking three times.
+        for frame in 1..=3 {
+            tx.send(Req::Adaptive(frame, 0)).unwrap();
+            tx.send(Req::Adaptive(frame + 10, 1)).unwrap();
+        }
+        drop(tx);
+
+        let (pictures, _, _, superseded) = drain_to_newest(Req::Adaptive(0, 0), &rx, classify, 0);
+        assert_eq!(
+            pictures,
+            vec![Req::Adaptive(3, 0), Req::Adaptive(13, 1)],
+            "each view keeps its newest, in the order the views first asked"
+        );
+        assert_eq!(superseded, 5);
+    }
+
+    /// **The view being worked in goes first** (§2.4 rule 3). Renders are
+    /// serial on the worker thread, so a background view's frame ahead of the
+    /// active one's is that whole render of added latency on the picture the
+    /// pointer is actually in.
+    #[test]
+    fn the_active_view_is_served_before_the_others() {
+        let (tx, rx) = channel();
+        // View 1 asked first; view 2 is the one being worked in.
+        tx.send(Req::Adaptive(20, 2)).unwrap();
+        drop(tx);
+
+        let (pictures, _, _, _) = drain_to_newest(Req::Adaptive(10, 1), &rx, classify, 2);
+        assert_eq!(pictures, vec![Req::Adaptive(20, 2), Req::Adaptive(10, 1)]);
+    }
+
+    /// Re-ordering for the active view must not move the transport commands:
+    /// a Stop that ran after the render it was meant to stop would leave
+    /// playback going.
+    #[test]
+    fn priority_never_reorders_the_transport() {
+        let (tx, rx) = channel();
+        tx.send(Req::Adaptive(5, 9)).unwrap();
+        drop(tx);
+
+        let (pictures, _, _, _) = drain_to_newest(Req::EveryFrame(1), &rx, classify, 9);
+        assert_eq!(
+            pictures,
+            vec![Req::EveryFrame(1), Req::Adaptive(5, 9)],
+            "the kept transport command still runs before any picture"
+        );
     }
 
     /// The bug this policy exists to fix: during playback the Viewer asks for a
@@ -5599,16 +5912,17 @@ mod tests {
     fn a_scope_trace_does_not_supersede_a_frame() {
         let (tx, rx) = channel();
         for frame in 1..=3 {
-            tx.send(Req::Adaptive(frame)).unwrap();
+            tx.send(Req::Adaptive(frame, 0)).unwrap();
         }
         // The trace arrives last, which is what used to win outright.
         tx.send(Req::Scope(9)).unwrap();
         drop(tx);
 
-        let (pictures, scope, _, superseded) = drain_to_newest(Req::Adaptive(0), &rx, classify);
+        let (pictures, scope, _, superseded) =
+            drain_to_newest(Req::Adaptive(0, 0), &rx, classify, 0);
         assert_eq!(
             pictures,
-            vec![Req::Adaptive(3)],
+            vec![Req::Adaptive(3, 0)],
             "the newest frame survives a trace queued behind it"
         );
         assert_eq!(scope, Some(Req::Scope(9)), "and the trace is served too");
@@ -5622,12 +5936,13 @@ mod tests {
     fn pictures_still_collapse_to_the_newest() {
         let (tx, rx) = channel();
         for frame in 1..=5 {
-            tx.send(Req::Adaptive(frame)).unwrap();
+            tx.send(Req::Adaptive(frame, 0)).unwrap();
         }
         drop(tx);
 
-        let (pictures, scope, _, superseded) = drain_to_newest(Req::Adaptive(0), &rx, classify);
-        assert_eq!(pictures, vec![Req::Adaptive(5)]);
+        let (pictures, scope, _, superseded) =
+            drain_to_newest(Req::Adaptive(0, 0), &rx, classify, 0);
+        assert_eq!(pictures, vec![Req::Adaptive(5, 0)]);
         assert_eq!(scope, None, "nothing asked for a trace");
         assert_eq!(superseded, 5);
     }
@@ -5640,7 +5955,7 @@ mod tests {
         tx.send(Req::Scope(3)).unwrap();
         drop(tx);
 
-        let (pictures, scope, _, superseded) = drain_to_newest(Req::Scope(1), &rx, classify);
+        let (pictures, scope, _, superseded) = drain_to_newest(Req::Scope(1), &rx, classify, 0);
         assert!(pictures.is_empty());
         assert_eq!(scope, Some(Req::Scope(3)));
         assert_eq!(superseded, 2);
@@ -5652,8 +5967,9 @@ mod tests {
         let (tx, rx) = channel::<Req>();
         drop(tx);
 
-        let (pictures, scope, _, superseded) = drain_to_newest(Req::Adaptive(7), &rx, classify);
-        assert_eq!(pictures, vec![Req::Adaptive(7)]);
+        let (pictures, scope, _, superseded) =
+            drain_to_newest(Req::Adaptive(7, 0), &rx, classify, 0);
+        assert_eq!(pictures, vec![Req::Adaptive(7, 0)]);
         assert_eq!(scope, None);
         assert_eq!(superseded, 0);
     }
@@ -5667,11 +5983,12 @@ mod tests {
             tx.send(Req::EveryFrame(frame)).unwrap();
         }
         // An adaptive scrub and a trace land in the middle of the backlog.
-        tx.send(Req::Adaptive(9)).unwrap();
+        tx.send(Req::Adaptive(9, 0)).unwrap();
         tx.send(Req::Scope(1)).unwrap();
         drop(tx);
 
-        let (pictures, scope, _, superseded) = drain_to_newest(Req::EveryFrame(1), &rx, classify);
+        let (pictures, scope, _, superseded) =
+            drain_to_newest(Req::EveryFrame(1), &rx, classify, 0);
         assert_eq!(
             pictures,
             vec![
@@ -5679,7 +5996,7 @@ mod tests {
                 Req::EveryFrame(2),
                 Req::EveryFrame(3),
                 Req::EveryFrame(4),
-                Req::Adaptive(9),
+                Req::Adaptive(9, 0),
             ],
             "every-frame requests all survive, in order, before the adaptive one"
         );
@@ -5700,8 +6017,12 @@ mod tests {
         drop(tx);
 
         let (pictures, scope, sample, superseded) =
-            drain_to_newest(Req::Adaptive(4), &rx, classify);
-        assert_eq!(pictures, vec![Req::Adaptive(4)], "the frame survives both");
+            drain_to_newest(Req::Adaptive(4, 0), &rx, classify, 0);
+        assert_eq!(
+            pictures,
+            vec![Req::Adaptive(4, 0)],
+            "the frame survives both"
+        );
         assert_eq!(
             scope,
             Some(Req::Scope(1)),

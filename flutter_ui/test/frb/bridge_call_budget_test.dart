@@ -1339,6 +1339,7 @@ void main() {
         x: 20,
         y: 15,
         frame: BigInt.zero,
+        view: 0,
         layerAlone: false,
       );
       await tester.pump();

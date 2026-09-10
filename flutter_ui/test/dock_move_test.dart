@@ -50,7 +50,7 @@ void checkInvariants(DockSplit root) {
 void main() {
   test('stack onto a solo pane makes a two-tab group, dragged active', () {
     final root = threeAcross();
-    movePanel(root, Panel.scopes, Panel.viewer, DropPosition.stack);
+    movePanel(root, Panel.scopes.pane(), Panel.viewer.pane(), DropPosition.stack);
 
     final tabs = root.children[0] as DockTabs;
     expect(
@@ -70,7 +70,7 @@ void main() {
       ],
       [0.5, 0.5],
     );
-    movePanel(root, Panel.viewer, Panel.project, DropPosition.stack);
+    movePanel(root, Panel.viewer.pane(), Panel.project.pane(), DropPosition.stack);
 
     final tabs = root.children.single as DockTabs;
     expect([for (final c in tabs.children) c.panel],
@@ -95,7 +95,7 @@ void main() {
       [0.75, 0.25],
     );
     // Timeline holds 0.4; splitting Scopes off its right halves it.
-    movePanel(root, Panel.scopes, Panel.timeline, DropPosition.right);
+    movePanel(root, Panel.scopes.pane(), Panel.timeline.pane(), DropPosition.right);
 
     // The vertical root collapses to a single horizontal child.
     expect(root.children.length, 1);
@@ -112,7 +112,7 @@ void main() {
   test('cross-axis split nests a new split of the other axis', () {
     final root = threeAcross();
     // Splitting Scopes above Viewer nests a vertical split where Viewer sat.
-    movePanel(root, Panel.scopes, Panel.viewer, DropPosition.above);
+    movePanel(root, Panel.scopes.pane(), Panel.viewer.pane(), DropPosition.above);
 
     final nested = root.children[0] as DockSplit;
     expect(nested.axis, DockAxis.vertical);
@@ -133,7 +133,7 @@ void main() {
     );
     // Move Hierarchy out to the right of Viewer; the group is left with just
     // Project and unwraps to a bare pane.
-    movePanel(root, Panel.hierarchy, Panel.viewer, DropPosition.right);
+    movePanel(root, Panel.hierarchy.pane(), Panel.viewer.pane(), DropPosition.right);
 
     expect(root.children[0], isA<DockPane>());
     expect((root.children[0] as DockPane).panel, Panel.project);
@@ -168,8 +168,8 @@ void main() {
   test('a self-drop is a no-op', () {
     final root = threeAcross();
     final before = root.toJson();
-    movePanel(root, Panel.viewer, Panel.viewer, DropPosition.stack);
-    movePanel(root, Panel.viewer, Panel.viewer, DropPosition.left);
+    movePanel(root, Panel.viewer.pane(), Panel.viewer.pane(), DropPosition.stack);
+    movePanel(root, Panel.viewer.pane(), Panel.viewer.pane(), DropPosition.left);
     expect(root.toJson(), before);
   });
 
@@ -177,8 +177,8 @@ void main() {
     final root = threeAcross();
     // Stack Timeline and Scopes onto Viewer; the horizontal root would hold a
     // single tab group — it must keep a one-child split.
-    movePanel(root, Panel.timeline, Panel.viewer, DropPosition.stack);
-    movePanel(root, Panel.scopes, Panel.viewer, DropPosition.stack);
+    movePanel(root, Panel.timeline.pane(), Panel.viewer.pane(), DropPosition.stack);
+    movePanel(root, Panel.scopes.pane(), Panel.viewer.pane(), DropPosition.stack);
 
     expect(root, isA<DockSplit>());
     expect(root.children.length, 1);
@@ -203,7 +203,7 @@ void main() {
     const positions = DropPosition.values;
 
     for (var i = 0; i < 50; i++) {
-      final panels = panelsIn(root);
+      final panels = panesIn(root);
       final dragged = panels[rng.nextInt(panels.length)];
       var target = panels[rng.nextInt(panels.length)];
       if (dragged == target) continue;

@@ -144,7 +144,8 @@ These three words are **not interchangeable**.
 | **Workspace** | A named, saveable arrangement of panels. Ships with presets (Edit, Effects, Colour, Audio, Retiming, Nodes); fully user-rearrangeable. |
 | **Graph panel** | The panel drawing a layer's effect stack as nodes and wires — a second view of the same document that can also wire drivers into parameters. Not the evaluation graph, which stays internal. |
 | **Node preview panel** | Its own panel: a locked, read-only second viewport showing one node's output without soloing. |
-| **Viewer** | The panel that displays a comp (or footage/layer) with its toolbar: preview resolution, magnification, channel view, transparency grid, guides, and wireframe toggles. |
+| **Viewer** | The panel that displays a comp (or footage/layer) with its toolbar: preview resolution, magnification, channel view, transparency grid, guides, and wireframe toggles. A workspace MAY hold several. |
+| **View** | One picture surface inside a Viewer panel. A Viewer holds one, two or four in a layout; each is bound to its own item, can be locked, and carries its own magnification, channel and exposure. Not the OCIO *view*, which always keeps its qualifier (colour view, display and view). |
 | **Timeline** | The panel showing a comp's layer stack against time, with expandable property lanes, keyframes, and cache bars. |
 | **Work area** | The comp-time span used for preview and default export range. |
 | **Playhead** | The current-time indicator. *CTI* is not a Lumit term. |

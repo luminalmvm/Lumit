@@ -93,6 +93,7 @@ mod profiling;
 mod proxy;
 mod realtime;
 mod render;
+mod scratch;
 
 pub mod api;
 

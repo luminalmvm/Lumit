@@ -457,6 +457,56 @@ impl FootageReference {
         Ok(None)
     }
 
+    /// Draw this footage item on its own, into Viewer view `view`
+    /// (docs/impl/multi-viewer.md §3.6) — the footage view.
+    ///
+    /// **The picture is the item, not a composition of it.** A scratch
+    /// composition sized to the item is built on a clone of the document and
+    /// composited by the ordinary walk, so the frame arrives down the same
+    /// zero-copy transport at the same quality. Nothing is committed: no op,
+    /// no undo step, and nothing in the Project panel.
+    ///
+    /// Quiet where there is nothing to draw — an item that has gone, or media
+    /// with no picture in it — because a view showing its empty state is the
+    /// honest answer and not a fault.
+    // The item's size, rate and length all cross, because a footage view is
+    // sized to the item and the frontend is the side that has probed it.
+    #[allow(clippy::too_many_arguments)]
+    #[frb(sync)]
+    pub fn render_view(
+        &self,
+        frame: u64,
+        scale: f32,
+        width: u32,
+        height: u32,
+        rate_num: u32,
+        rate_den: u32,
+        frames: u64,
+        view: u32,
+    ) -> Result<(), BridgeError> {
+        let project = crate::api::project::ProjectReference::new(self.project);
+        let state = project.state()?;
+        let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
+        let Some(sender) = &state.sender else {
+            return Err(BridgeError::InvalidWorkerState);
+        };
+        sender
+            .send(crate::api::worker_thread::WorkerRequest::RenderItem(
+                crate::api::worker_thread::RenderItemRequest {
+                    project: project.clone(),
+                    of: crate::scratch::ScratchOf::Footage(self.id),
+                    effects: false,
+                    frame,
+                    scale,
+                    size: (width, height),
+                    rate: (rate_num, rate_den),
+                    frames,
+                    view,
+                },
+            ))
+            .map_err(|_| BridgeError::InvalidWorkerState)
+    }
+
     #[cfg(feature = "media")]
     pub fn media_info(&self) -> Result<Option<BridgeMediaInfo>, BridgeError> {
         let proj = self.project()?;

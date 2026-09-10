@@ -26,9 +26,11 @@ import 'scopes_panel_frb.dart';
 import 'timeline_panel_frb.dart';
 import 'viewer_panel_frb.dart';
 
-Widget buildPanelBodyFrb(BuildContext context, Panel panel) => switch (panel) {
+Widget buildPanelBodyFrb(BuildContext context, PaneId pane) => switch (pane.panel) {
       Panel.project => const ProjectPanelFrb(),
-      Panel.viewer => const ViewerPanelFrb(),
+      // The one panel that can be in the arrangement more than once, so the
+      // pane is what tells it which views it holds.
+      Panel.viewer => ViewerPanelFrb(pane: pane),
       Panel.timeline => const TimelinePanelFrb(),
       Panel.effectControls => const EffectControlsPanelFrb(),
       Panel.effectsAndPresets => const EffectsPresetsPanelFrb(),

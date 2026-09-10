@@ -4965,6 +4965,73 @@ impl LayerReference {
     /// Not `#[frb(sync)]`: deciding whether the layer sounds opens the media
     /// with FFmpeg, exactly as [`Self::has_audio`] does, and the document lock
     /// is let go of before it.
+    /// Draw this layer's source on its own, into Viewer view `view`
+    /// (docs/impl/multi-viewer.md §3.6) — the layer view.
+    ///
+    /// **Before transform**, which is what a layer view is for: the source in
+    /// its own frame, with its masks and its anchor point on it, at the
+    /// composition's own rate and length. `effects` is After Effects' Render
+    /// tick: off shows what the source is, on shows what this layer makes of
+    /// it.
+    ///
+    /// The same shape as the footage view beside it: a scratch composition on
+    /// a clone of the document, down the ordinary transport, nothing
+    /// committed.
+    #[frb(sync)]
+    pub fn render_view(
+        &self,
+        frame: u64,
+        scale: f32,
+        width: u32,
+        height: u32,
+        effects: bool,
+        view: u32,
+    ) -> Result<(), BridgeError> {
+        let project = crate::api::project::ProjectReference::new(self.project_id);
+        let (rate, frames) = {
+            let state = project.state()?;
+            let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
+            let document = state.store.snapshot();
+            let comp = document
+                .comp(self.comp_id)
+                .ok_or(BridgeError::InvalidComp)?;
+            // The comp's length in frames, the way every other reader of it
+            // derives one: the stored seconds read at the comp's own rate.
+            let frames = (comp.duration.0.to_f64() * comp.frame_rate.fps()).round();
+            (
+                (comp.frame_rate.num(), comp.frame_rate.den()),
+                if frames.is_finite() && frames >= 1.0 {
+                    frames as u64
+                } else {
+                    1
+                },
+            )
+        };
+        let state = project.state()?;
+        let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
+        let Some(sender) = &state.sender else {
+            return Err(BridgeError::InvalidWorkerState);
+        };
+        sender
+            .send(crate::api::worker_thread::WorkerRequest::RenderItem(
+                crate::api::worker_thread::RenderItemRequest {
+                    project: project.clone(),
+                    of: crate::scratch::ScratchOf::Layer {
+                        comp: self.comp_id,
+                        layer: self.layer_id,
+                    },
+                    effects,
+                    frame,
+                    scale,
+                    size: (width, height),
+                    rate,
+                    frames,
+                    view,
+                },
+            ))
+            .map_err(|_| BridgeError::InvalidWorkerState)
+    }
+
     pub fn detach_audio(&self) -> Result<LayerReference, BridgeError> {
         let mut sound = self.item()?;
         if sound.audio_only {

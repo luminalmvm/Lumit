@@ -67,7 +67,7 @@ fn alternating_sizes_reuse_their_targets_instead_of_minting_handles() {
             (1920, 1080)
         };
         let handle = r
-            .present_probe_size(w, h)
+            .present_probe_size(0, w, h)
             .unwrap_or_else(|e| panic!("present {w}x{h} on step {i}: {e}"));
         assert_ne!(handle, 0);
         handles.push(handle);
@@ -97,7 +97,7 @@ fn the_target_pool_is_bounded() {
     };
     for i in 0..24u32 {
         let w = 400 + i * 17;
-        r.present_probe_size(w, 300)
+        r.present_probe_size(0, w, 300)
             .unwrap_or_else(|e| panic!("present {w}x300: {e}"));
     }
     assert!(
@@ -105,4 +105,69 @@ fn the_target_pool_is_bounded() {
         "the pool grew to {} targets",
         r.shared_target_count()
     );
+}
+
+/// **The multi-viewer regression.** Two views on comps of the same size must
+/// not share a target (docs/impl/multi-viewer.md §2.2).
+///
+/// Before the pool was keyed by view, a lookup was by width and height alone,
+/// so a second view on a 1920x1080 comp found the first view's texture and
+/// presented into it. Both Viewers then showed whichever comp had rendered
+/// last, flickering between two pictures a frame apart, and every line of code
+/// involved read as correct.
+#[test]
+fn two_views_at_one_size_do_not_share_a_target() {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
+        return; // no adapter
+    };
+    let left = r.present_probe_size(0, 1920, 1080).expect("left view");
+    let right = r.present_probe_size(1, 1920, 1080).expect("right view");
+    assert_ne!(
+        left, right,
+        "two views at one size were handed the same texture, so each \
+         overwrites the other's picture every frame"
+    );
+    // And each keeps its own across the alternation a two-up produces.
+    for _ in 0..8 {
+        assert_eq!(r.present_probe_size(0, 1920, 1080).expect("left"), left);
+        assert_eq!(r.present_probe_size(1, 1920, 1080).expect("right"), right);
+    }
+}
+
+/// Four views each drawing at their own size all keep their current target,
+/// however tight the byte ceiling is: a view evicted out of the size it is
+/// drawing at would mint a handle every frame, which is the churn the pool
+/// exists to stop.
+#[test]
+fn every_live_view_keeps_the_size_it_is_drawing_at() {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
+        return;
+    };
+    let mut current = Vec::new();
+    for view in 0..4u32 {
+        // Walk each view through several sizes first, so there are spares to
+        // evict, then settle it on one.
+        for step in 0..6u32 {
+            r.present_probe_size(view, 1000 + step * 40, 800)
+                .expect("spare size");
+        }
+        current.push(r.present_probe_size(view, 3840, 2160).expect("current"));
+    }
+    for (view, handle) in current.iter().enumerate() {
+        let again = r
+            .present_probe_size(view as u32, 3840, 2160)
+            .expect("current again");
+        assert_eq!(
+            again, *handle,
+            "view {view} lost the target it is drawing at"
+        );
+    }
+    let held = r.shared_targets();
+    for view in 0..4u32 {
+        assert!(
+            held.iter()
+                .any(|(v, w, h)| *v == view && *w == 3840 && *h == 2160),
+            "view {view} is not holding its current size: {held:?}"
+        );
+    }
 }

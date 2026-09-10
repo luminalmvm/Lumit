@@ -13,7 +13,9 @@
 //!
 //! The names are deterministic: for one committed document, one composition,
 //! one frame and one preview quality, the walk always produces the same hash.
-//! So the answer is remembered here, keyed by `(comp, frame, quality tag)`, and
+//! So the answer is remembered here, keyed by `(view, comp, frame, quality
+//! tag)` — the view because the Viewer's own way of looking is folded into a
+//! name too, and two views can be looking differently — and
 //! the whole memo is dropped the moment the document's revision moves — an edit
 //! renames an unknown set of frames, and recomputing is exactly what the memo
 //! must not guess about. A frame that cannot be named yet (footage still being
@@ -35,7 +37,7 @@ const MAX_NAMES: usize = 65_536;
 pub(crate) struct NameCache {
     /// The document revision the held names were computed against.
     revision: u64,
-    map: HashMap<(Uuid, u64, u32), u128>,
+    map: HashMap<(u32, Uuid, u64, u32), u128>,
 }
 
 impl NameCache {
@@ -63,6 +65,7 @@ impl NameCache {
     pub(crate) fn get_or_compute(
         &mut self,
         revision: u64,
+        view: u32,
         comp: Uuid,
         frame: u64,
         tag: u32,
@@ -72,14 +75,14 @@ impl NameCache {
             self.map.clear();
             self.revision = revision;
         }
-        if let Some(&name) = self.map.get(&(comp, frame, tag)) {
+        if let Some(&name) = self.map.get(&(view, comp, frame, tag)) {
             return Some(name);
         }
         let name = compute()?;
         if self.map.len() >= MAX_NAMES {
             self.map.clear();
         }
-        self.map.insert((comp, frame, tag), name);
+        self.map.insert((view, comp, frame, tag), name);
         Some(name)
     }
 }
@@ -98,7 +101,7 @@ mod tests {
         let comp = Uuid::now_v7();
         let computed = std::cell::Cell::new(0u32);
         let ask = |names: &mut NameCache, revision| {
-            names.get_or_compute(revision, comp, 7, 1000, || {
+            names.get_or_compute(revision, 0, comp, 7, 1000, || {
                 computed.set(computed.get() + 1);
                 Some(42)
             })
@@ -120,16 +123,16 @@ mod tests {
     fn keys_are_distinct_and_none_is_never_remembered() {
         let mut names = NameCache::default();
         let (a, b) = (Uuid::now_v7(), Uuid::now_v7());
-        assert_eq!(names.get_or_compute(1, a, 0, 1000, || Some(1)), Some(1));
-        assert_eq!(names.get_or_compute(1, a, 1, 1000, || Some(2)), Some(2));
-        assert_eq!(names.get_or_compute(1, a, 0, 1050, || Some(3)), Some(3));
-        assert_eq!(names.get_or_compute(1, b, 0, 1000, || Some(4)), Some(4));
-        assert_eq!(names.get_or_compute(1, a, 0, 1000, || Some(9)), Some(1));
+        assert_eq!(names.get_or_compute(1, 0, a, 0, 1000, || Some(1)), Some(1));
+        assert_eq!(names.get_or_compute(1, 0, a, 1, 1000, || Some(2)), Some(2));
+        assert_eq!(names.get_or_compute(1, 0, a, 0, 1050, || Some(3)), Some(3));
+        assert_eq!(names.get_or_compute(1, 0, b, 0, 1000, || Some(4)), Some(4));
+        assert_eq!(names.get_or_compute(1, 0, a, 0, 1000, || Some(9)), Some(1));
 
         // Not nameable yet: passed through, tried again next ask.
         let mut tries = 0;
         for _ in 0..2 {
-            let got = names.get_or_compute(1, b, 9, 1000, || {
+            let got = names.get_or_compute(1, 0, b, 9, 1000, || {
                 tries += 1;
                 None
             });
@@ -137,8 +140,8 @@ mod tests {
         }
         assert_eq!(tries, 2, "an unnameable frame is never memoised");
         // And once the probe lands, the name is served and then remembered.
-        assert_eq!(names.get_or_compute(1, b, 9, 1000, || Some(5)), Some(5));
-        assert_eq!(names.get_or_compute(1, b, 9, 1000, || None), Some(5));
+        assert_eq!(names.get_or_compute(1, 0, b, 9, 1000, || Some(5)), Some(5));
+        assert_eq!(names.get_or_compute(1, 0, b, 9, 1000, || None), Some(5));
     }
 
     /// A look change renames every frame at the same revision (the look is
@@ -149,13 +152,39 @@ mod tests {
     fn a_cleared_memo_recomputes_at_the_same_revision() {
         let mut names = NameCache::default();
         let comp = Uuid::now_v7();
-        assert_eq!(names.get_or_compute(1, comp, 0, 1000, || Some(1)), Some(1));
+        assert_eq!(
+            names.get_or_compute(1, 0, comp, 0, 1000, || Some(1)),
+            Some(1)
+        );
         names.clear();
         assert_eq!(
-            names.get_or_compute(1, comp, 0, 1000, || Some(2)),
+            names.get_or_compute(1, 0, comp, 0, 1000, || Some(2)),
             Some(2),
             "after a clear, the same key is computed afresh"
         );
+    }
+
+    /// **Two views can be looking at one composition differently**, and a
+    /// look is folded into a frame's name — so the memo is keyed by view too
+    /// (docs/impl/multi-viewer.md §2.3). Without this, the second view was
+    /// served the first view's name and the cache handed it a picture made
+    /// under someone else's exposure.
+    #[test]
+    fn each_view_names_its_own_frames() {
+        let mut names = NameCache::default();
+        let comp = Uuid::now_v7();
+        assert_eq!(
+            names.get_or_compute(1, 0, comp, 4, 1000, || Some(1)),
+            Some(1)
+        );
+        assert_eq!(
+            names.get_or_compute(1, 1, comp, 4, 1000, || Some(2)),
+            Some(2),
+            "the second view must compute its own name, not be served the first's"
+        );
+        // And each is remembered separately.
+        assert_eq!(names.get_or_compute(1, 0, comp, 4, 1000, || None), Some(1));
+        assert_eq!(names.get_or_compute(1, 1, comp, 4, 1000, || None), Some(2));
     }
 
     /// The cap empties rather than growing without bound — crude, correct, and
@@ -165,12 +194,12 @@ mod tests {
         let mut names = NameCache::default();
         let comp = Uuid::now_v7();
         for frame in 0..(MAX_NAMES as u64 + 10) {
-            names.get_or_compute(1, comp, frame, 1000, || Some(u128::from(frame)));
+            names.get_or_compute(1, 0, comp, frame, 1000, || Some(u128::from(frame)));
         }
         assert!(names.map.len() <= MAX_NAMES);
         // Still answers correctly after the clear-out.
         assert_eq!(
-            names.get_or_compute(1, comp, 3, 1000, || Some(77)),
+            names.get_or_compute(1, 0, comp, 3, 1000, || Some(77)),
             Some(77),
             "a cleared name is simply recomputed"
         );

@@ -627,7 +627,7 @@ void main() {
     testWidgets('Ctrl+J and its siblings set the preview resolution',
         (tester) async {
       final p = await mount(tester);
-      p.uiState.activePanel.value = Panel.viewer;
+      p.uiState.activePane.value = Panel.viewer.pane();
       await tester.pump();
 
       Future<void> chord(List<LogicalKeyboardKey> modifiers,
@@ -656,7 +656,7 @@ void main() {
     /// because "fit" is a rule only the panel can resolve.
     testWidgets('Ctrl+= asks the Viewer for a magnification', (tester) async {
       final p = await mount(tester);
-      p.uiState.activePanel.value = Panel.viewer;
+      p.uiState.activePane.value = Panel.viewer.pane();
       await tester.pump();
 
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
@@ -676,7 +676,7 @@ void main() {
       final p = await mount(tester);
       final order = panelsIn(p.uiState.split);
       expect(order.length, greaterThan(2), reason: 'a ring needs somewhere to go');
-      expect(p.uiState.activePanel.value, isNull);
+      expect(p.uiState.activePanel, isNull);
 
       Future<void> cycle({bool back = false}) async {
         await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
@@ -688,15 +688,15 @@ void main() {
       }
 
       await cycle();
-      expect(p.uiState.activePanel.value, order.first,
+      expect(p.uiState.activePanel, order.first,
           reason: 'with nothing focused, a cycle begins at the beginning');
       await cycle();
-      expect(p.uiState.activePanel.value, order[1]);
+      expect(p.uiState.activePanel, order[1]);
       await cycle(back: true);
-      expect(p.uiState.activePanel.value, order.first);
+      expect(p.uiState.activePanel, order.first);
       // Past the beginning it wraps rather than stopping.
       await cycle(back: true);
-      expect(p.uiState.activePanel.value, order.last);
+      expect(p.uiState.activePanel, order.last);
     });
 
     /// `Ctrl+F` is only meaningful where there is a field to put the cursor
@@ -713,12 +713,12 @@ void main() {
       }
 
       // A panel with no search box leaves the chord alone.
-      p.uiState.activePanel.value = Panel.timeline;
+      p.uiState.activePane.value = Panel.timeline.pane();
       await tester.pump();
       await pressCtrlF();
       expect(p.uiState.panelSearchRequest.value, 0);
 
-      p.uiState.activePanel.value = Panel.project;
+      p.uiState.activePane.value = Panel.project.pane();
       await tester.pump();
       await pressCtrlF();
       expect(p.uiState.panelSearchRequest.value, 1);
@@ -917,7 +917,7 @@ void main() {
         final a = comp.addSolidLayer();
         final b = comp.addSolidLayer();
         p.uiState.setSelection([a, b]);
-        p.uiState.activePanel.value = Panel.timeline;
+        p.uiState.activePane.value = Panel.timeline.pane();
         p.uiState.model.refresh();
         await tester.pump();
 

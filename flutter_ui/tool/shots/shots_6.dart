@@ -174,7 +174,7 @@ Future<void> main() async {
   // nothing: it is opened the way Window ▸ Hierarchy opens it, which stacks it
   // into the first tab group already fronted.
   setPanelVisible(ui.workspace.dock, Panel.hierarchy, true);
-  ui.activePanel.value = Panel.hierarchy;
+  ui.activePane.value = Panel.hierarchy.pane();
   ui.workspace.touch();
   await pause(2);
 

@@ -47,8 +47,11 @@ import 'viewer_track.dart';
 import 'viewer_type.dart';
 import 'viewer_zoom.dart';
 
-/// Which channel the picture shows.
-enum ViewerChannel { rgb, red, green, blue, alpha }
+// The channel a view is showing is per-view state and lives with the rest of
+// it; re-exported here because every panel that draws a picture imports this.
+export '../state/viewer_view.dart' show ViewerChannel;
+import '../state/viewer_view.dart' show ViewerChannel;
+
 
 /// What is painted around the picture.
 ///
@@ -65,6 +68,10 @@ Color viewerSurroundFor(LumitTheme t, {bool themed = false}) =>
 class ViewerStage extends StatelessWidget {
   final CompositionReference comp;
   final LumitUiState uiState;
+
+  /// The engine's id for the view this stage draws.
+  final int viewId;
+
   final Rect fitted;
   final bool grid;
 
@@ -106,6 +113,7 @@ class ViewerStage extends StatelessWidget {
   const ViewerStage({
     super.key,
     required this.comp,
+    required this.viewId,
     required this.uiState,
     required this.fitted,
     required this.grid,
@@ -394,6 +402,7 @@ class ViewerStage extends StatelessWidget {
                 child: _Picture(
                   uiState: uiState,
                   channel: channel,
+                  viewId: viewId,
                   shownScale:
                       compSize.width == 0 ? 1 : fitted.width / compSize.width,
                 ),
@@ -901,17 +910,22 @@ class _Picture extends StatelessWidget {
   /// magnification, and half of what decides the filter.
   final double shownScale;
 
+  /// Which view's picture this is. Several views can be on screen at once,
+  /// each with its own texture (docs/impl/multi-viewer.md §3.3).
+  final int viewId;
+
   const _Picture({
     required this.uiState,
     required this.channel,
     required this.shownScale,
+    required this.viewId,
   });
 
   @override
   Widget build(BuildContext context) {
     final dpr = MediaQuery.devicePixelRatioOf(context);
     return ValueListenableBuilder<int?>(
-      valueListenable: uiState.viewerFrameid,
+      valueListenable: uiState.textureOf(viewId),
       builder: (context, textureId, _) => ValueListenableBuilder<int>(
         valueListenable: uiState.previewTier,
         builder: (context, tier, _) {

@@ -47,7 +47,7 @@ void main() {
 
       p.uiState.setSelection([comp.getLayers().single]);
       expect(group.activePane.panel, Panel.effectControls);
-      expect(p.uiState.activePanel.value, isNull,
+      expect(p.uiState.activePanel, isNull,
           reason: 'the tab is fronted; the keyboard is not moved with it');
     });
 

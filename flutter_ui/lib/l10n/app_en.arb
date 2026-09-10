@@ -4179,6 +4179,50 @@
   "@keyShowOrHideTheGrid": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyOpenAnotherViewer": "Open another Viewer",
+  "@keyOpenAnotherViewer": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyFrontTheNextView": "Front the next view",
+  "@keyFrontTheNextView": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyFrontThePreviousView": "Front the previous view",
+  "@keyFrontThePreviousView": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyLockOrUnlockThisView": "Lock or unlock this view",
+  "@keyLockOrUnlockThisView": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyOneView": "One view",
+  "@keyOneView": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyTwoViews": "Two views",
+  "@keyTwoViews": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyFourViews": "Four views",
+  "@keyFourViews": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyTurnTheTwoViewLayout": "Turn the two-view layout",
+  "@keyTurnTheTwoViewLayout": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyFillTheWindowWithThisView": "Fill the window with this view",
+  "@keyFillTheWindowWithThisView": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyCompareTwoViews": "Compare two views",
+  "@keyCompareTwoViews": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyAlwaysPreviewThisView": "Always preview this view",
+  "@keyAlwaysPreviewThisView": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
   "keyShowOrHideTheLayer": "Show or hide the layer",
   "@keyShowOrHideTheLayer": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -4856,6 +4900,62 @@
   "menuShowGrid": "Show grid",
   "@menuShowGrid": {
     "description": "Menu item."
+  },
+  "menuViewLayout": "View layout",
+  "@menuViewLayout": {
+    "description": "A submenu of the View menu: how many views the Viewer panel shows."
+  },
+  "menuOneView": "One view",
+  "@menuOneView": {
+    "description": "A row of the View menu. One picture in the Viewer panel."
+  },
+  "menuTwoViewsAcross": "Two views across",
+  "@menuTwoViewsAcross": {
+    "description": "A row of the View menu. Two pictures side by side."
+  },
+  "menuTwoViewsDown": "Two views down",
+  "@menuTwoViewsDown": {
+    "description": "A row of the View menu. Two pictures one above the other."
+  },
+  "menuFourViews": "Four views",
+  "@menuFourViews": {
+    "description": "A row of the View menu. Four pictures in a square."
+  },
+  "menuShareViewOptions": "Share view options across views",
+  "@menuShareViewOptions": {
+    "description": "A row of the View menu. With it on, every view is looked at the way the active one is: same magnification, channel and exposure."
+  },
+  "menuLockView": "Lock this view",
+  "@menuLockView": {
+    "description": "A row of the View menu. A locked view does not change what it is showing when something else is opened."
+  },
+  "menuAlwaysPreviewThisView": "Always preview this view",
+  "@menuAlwaysPreviewThisView": {
+    "description": "A row of the View menu. Which view the transport plays, whichever one is being worked in."
+  },
+  "menuCompare": "Compare",
+  "@menuCompare": {
+    "description": "A submenu of the View menu: putting two views together to look at them against each other."
+  },
+  "menuCompareOff": "Off",
+  "@menuCompareOff": {
+    "description": "A row of the View menu. No compare: the views sit in their own panes."
+  },
+  "menuCompareWipe": "Wipe",
+  "@menuCompareWipe": {
+    "description": "A row of the View menu. One picture cut at a draggable line, both halves in register."
+  },
+  "menuCompareSplit": "Split screen",
+  "@menuCompareSplit": {
+    "description": "A row of the View menu. The two pictures side by side, each in its half."
+  },
+  "menuCinema": "Fill the window with this view",
+  "@menuCinema": {
+    "description": "A row of the View menu. The view alone, filling the window; Escape brings the panels back."
+  },
+  "menuNewViewer": "New Viewer",
+  "@menuNewViewer": {
+    "description": "A row of the Window menu: open another Viewer panel, beside the one being worked in."
   },
   "menuShowRuler": "Show ruler",
   "@menuShowRuler": {

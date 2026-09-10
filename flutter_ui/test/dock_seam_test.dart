@@ -41,12 +41,13 @@ Widget _harness(DockSplit root, LumitTheme theme) => Directionality(
               OverlayEntry(
                 builder: (context) => DockWidget(
                   root: root,
-                  buildPanel: (context, panel) => Container(
-                    key: ValueKey<String>('pane-${panel.name}'),
-                    color: panel == Panel.graph ? _paneA : _paneB,
+                  buildPanel: (context, pane) => Container(
+                    key: ValueKey<String>('pane-${pane.panel.name}'),
+                    color: pane.panel == Panel.graph ? _paneA : _paneB,
                   ),
                   onLayoutChanged: () {},
-                  activePanel: ValueNotifier<Panel?>(null),
+                  activePanel: ValueNotifier<PaneId?>(null),
+                  maximised: ValueNotifier<PaneId?>(null),
                 ),
               ),
             ],

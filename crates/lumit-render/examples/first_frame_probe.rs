@@ -96,7 +96,7 @@ fn main() {
     #[cfg(all(windows, feature = "shared-texture"))]
     {
         let t = Instant::now();
-        r.present_prepared(&first).expect("present");
+        r.present_prepared(&first, 0).expect("present");
         println!("{:44} {:8.1} ms", "empty comp, FIRST present", ms(t));
     }
     drop(first);
@@ -107,7 +107,7 @@ fn main() {
             .render_prepared(&doc, comp, f, q, true, false)
             .expect("render");
         #[cfg(all(windows, feature = "shared-texture"))]
-        r.present_prepared(&p).expect("present");
+        r.present_prepared(&p, 0).expect("present");
         drop(p);
         println!("{:44} {:8.1} ms", format!("empty comp, frame {f}"), ms(t));
     }

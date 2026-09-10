@@ -77,6 +77,14 @@ enum ViewerView {
       };
 }
 
+/// Which channel a view shows (docs/07 §2.2 item 3): the three colours on
+/// their own, or the alpha as the greyscale matte it is.
+///
+/// Per view rather than per composition, like the magnification beside it: two
+/// views exist so they can be looked at differently, and reading the alpha in
+/// one while the other shows the picture is exactly what a second view is for.
+enum ViewerChannel { rgb, red, green, blue, alpha }
+
 /// A named magnification the Viewer can be asked to take.
 ///
 /// Not a number: "fit" is a *rule* (the whole picture in the panel) that has to

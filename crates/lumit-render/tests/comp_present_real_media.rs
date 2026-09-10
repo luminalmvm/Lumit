@@ -125,7 +125,7 @@ fn a_comp_of_real_media_renders_and_presents_across_a_size_change() {
                 .render_prepared(doc, comp, frame, Quality::default(), true, true)
                 .unwrap_or_else(|e| panic!("{label}: render frame {frame}: {e}"));
             let info = r
-                .present_prepared(&prepared)
+                .present_prepared(&prepared, 0)
                 .unwrap_or_else(|e| panic!("{label}: present frame {frame}: {e}"));
             assert_ne!(
                 info.handle, 0,

@@ -88,6 +88,7 @@ void main() {
         layers: [
           BridgeLayerTiming(layer: p.layerId, ms: 8.5, effects: const []),
         ],
+        view: 0,
       ));
       await tester.pump();
 
@@ -116,6 +117,7 @@ void main() {
         layers: [
           BridgeLayerTiming(layer: p.layerId, ms: 2.5, effects: const []),
         ],
+        view: 0,
       ));
       await tester.pump();
 
@@ -211,6 +213,7 @@ void main() {
             effects: [BridgeEffectTiming(effect: p.effectId, ms: 4.5)],
           ),
         ],
+        view: 0,
       ));
       await tester.pump();
 

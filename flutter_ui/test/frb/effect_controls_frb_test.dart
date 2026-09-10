@@ -1247,7 +1247,7 @@ void main() {
       p.uiState.pasteClaim = () => true;
 
       await mount(tester, p);
-      p.uiState.activePanel.value = Panel.effectControls;
+      p.uiState.activePane.value = Panel.effectControls.pane();
 
       final second = p.layer.getEffects()[1];
       await tester.tap(heading(effectLabelOf(second.name())));
@@ -1297,7 +1297,7 @@ void main() {
       final p = withLayer();
       p.layer.addEffect(name: 'blur');
       await mount(tester, p);
-      p.uiState.activePanel.value = Panel.effectControls;
+      p.uiState.activePane.value = Panel.effectControls.pane();
 
       final source = p.layer.getEffects().single;
       p.uiState
@@ -1333,7 +1333,7 @@ void main() {
       };
 
       await mount(tester, p);
-      p.uiState.activePanel.value = Panel.effectControls;
+      p.uiState.activePane.value = Panel.effectControls.pane();
 
       expect(copySelectionFrb(p.uiState), isTrue,
           reason: 'the shell is still the one that answers');
@@ -1350,7 +1350,7 @@ void main() {
       final p = withLayer();
       p.layer.addEffect(name: 'blur');
       await mount(tester, p);
-      p.uiState.activePanel.value = Panel.effectControls;
+      p.uiState.activePane.value = Panel.effectControls.pane();
 
       final stack = p.layer.getEffects();
       await tester.tap(heading(effectLabelOf(stack.single.name())));
@@ -2670,7 +2670,7 @@ void main() {
       }
       await mount(tester, p, transform: false);
       final stack = p.layer.getEffects();
-      p.uiState.activePanel.value = Panel.effectControls;
+      p.uiState.activePane.value = Panel.effectControls.pane();
 
       expect(p.uiState.deleteClaim, isNotNull,
           reason: 'the panel claims Delete while it is mounted');

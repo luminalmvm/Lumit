@@ -28,6 +28,8 @@ import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/state/viewer_view.dart';
 import 'package:lumit_flutter/state/app_state.dart';
 import 'package:lumit_flutter/state/ui_state.dart';
+import 'package:lumit_flutter/state/viewer_views.dart';
+import 'package:lumit_flutter/widgets/escape_ladder.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
 import 'package:lumit_flutter/widgets/ui_scale.dart';
 import 'package:provider/provider.dart';
@@ -187,6 +189,9 @@ class LumitAppView extends StatefulWidget {
 }
 
 class _LumitAppViewState extends State<LumitAppView> {
+  /// Lets go of this view's Escape claim (the maximised pane).
+  VoidCallback? _escapeRelease;
+
   @override
   void initState() {
     super.initState();
@@ -197,6 +202,15 @@ class _LumitAppViewState extends State<LumitAppView> {
     // funeral). A hardware-keyboard handler fires wherever focus is; the
     // focused-text-field guard inside _onKey keeps typing safe.
     HardwareKeyboard.instance.addHandler(_handleKey);
+    // A pane filling the window is a full-window surface, so Escape puts the
+    // arrangement back — above the selection rung, and below a dialogue over
+    // the top of it (docs/07 §14.1).
+    _escapeRelease = EscapeLadder.register(EscapeRung.dialog, () {
+      final ui = context.read<LumitUiState>();
+      if (ui.maximisedPane.value == null) return false;
+      ui.maximisedPane.value = null;
+      return true;
+    });
     // The pointer is tracked the same way — globally, not through the widget
     // tree. The Ctrl+Space console opens its ring at the mouse, and a
     // key event carries no position; a widget `Listener` missed everywhere no
@@ -230,6 +244,7 @@ class _LumitAppViewState extends State<LumitAppView> {
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_handleKey);
     GestureBinding.instance.pointerRouter.removeGlobalRoute(_trackPointer);
+    _escapeRelease?.call();
     _clipboardWatch?.dispose();
     super.dispose();
   }
@@ -301,10 +316,11 @@ class _LumitAppViewState extends State<LumitAppView> {
           Expanded(
             child: DockWidget(
               root: uiState.split,
-              buildPanel: (context, panel) => buildPanelBodyFrb(context, panel),
+              buildPanel: buildPanelBodyFrb,
               // Persisted, so an arrangement survives a restart.
               onLayoutChanged: uiState.saveLayout,
-              activePanel: uiState.activePanel,
+              activePanel: uiState.activePane,
+              maximised: uiState.maximisedPane,
             ),
           ),
           // The strip under the dock (docs/07 §1): the running export's
@@ -367,7 +383,7 @@ class _LumitAppViewState extends State<LumitAppView> {
     // panel is active — the engine falls back to Global itself, so one call
     // answers both. (This handler runs wherever focus is; the active panel is
     // what the dock last fronted, which is what a user would call "where I am".)
-    var action = ui.keymap.actionFor(_contextOf(ui.activePanel.value), event);
+    var action = ui.keymap.actionFor(_contextOf(ui.activePanel), event);
     if (action == null) {
       // The Tools context is a context no panel *is* (docs/07 §15 scopes it to
       // the toolbar, not to a pane), so it is asked for separately and only
@@ -520,6 +536,43 @@ class _LumitAppViewState extends State<LumitAppView> {
       // *over* the picture is the View menu's Show grid and has no chord.
       case 'viewer.grid.toggle':
         ui.setViewerGrid(!ui.viewerGrid);
+      // Several views (docs/impl/multi-viewer.md §5). Each of these acts on
+      // the Viewer pane the keyboard is pointed at, or the first one in the
+      // arrangement when the focus is somewhere else.
+      case 'viewer.new':
+        ui.addViewerPanel();
+      case 'viewer.view.next':
+        ui.views.cycle(1);
+        ui.frontView(ui.views.activeId ?? '');
+      case 'viewer.view.prev':
+        ui.views.cycle(-1);
+        ui.frontView(ui.views.activeId ?? '');
+      case 'viewer.lock.toggle':
+        final view = ui.views.active;
+        if (view == null) {
+          handled = false;
+        } else {
+          ui.setViewLocked(view.id, !view.locked);
+        }
+      case 'viewer.layout.one':
+        handled = ui.setViewerLayout(ViewLayout.one);
+      case 'viewer.layout.two':
+        handled = ui.setViewerLayout(ViewLayout.twoAcross);
+      case 'viewer.layout.four':
+        handled = ui.setViewerLayout(ViewLayout.four);
+      case 'viewer.layout.orientation':
+        handled = ui.turnViewerLayout();
+      case 'viewer.cinema':
+        ui.toggleCinema();
+      case 'viewer.compare':
+        handled = ui.toggleCompare();
+      case 'viewer.preview.always':
+        ui.toggleAlwaysPreview();
+      // The panel under the pointer fills the window and comes back
+      // (docs/07 §1.1's backtick). The keymap has always carried this; this is
+      // where it finally does something.
+      case 'panel.maximise':
+        ui.toggleMaximisedPane();
       // Moving between panels without the mouse (docs/07 §15, "Panels").
       case 'panel.focus.next':
         handled = ui.cyclePanelFocus(1);

@@ -110,6 +110,24 @@ impl ProjectReference {
     /// one GPU device per project it has ever made. The frb test suite was the
     /// proof: a test process makes a project per test, and without a close the
     /// Linux CI runner ran out of memory under the pile of live renderers.
+    /// A Viewer view has closed (docs/impl/multi-viewer.md §2.1).
+    ///
+    /// The pooled shared textures it was drawing into go with it, and so does
+    /// its stored look. A view id is minted per view and never reused, so
+    /// nothing dropped here can be wanted again. Harmless for a view that
+    /// never drew anything, and harmless with no worker running.
+    #[frb(sync)]
+    pub fn close_viewer_view(&self, view: u32) -> Result<(), BridgeError> {
+        let state = self.state()?;
+        let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
+        let Some(sender) = &state.sender else {
+            return Ok(());
+        };
+        // A closed worker is not a fault: the view is going away either way.
+        _ = sender.send(crate::api::worker_thread::WorkerRequest::CloseView(view));
+        Ok(())
+    }
+
     #[frb(sync)]
     pub fn close(&self) -> Result<(), BridgeError> {
         // One registry at a time, never nested — the lock order rule in

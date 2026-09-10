@@ -77,7 +77,7 @@ class _DragCounterState extends State<_DragCounter> {
 Widget _harness({
   required DockSplit root,
   required PanelBuilder buildPanel,
-  required ValueNotifier<Panel?> active,
+  required ValueNotifier<PaneId?> active,
 }) {
   return Directionality(
     textDirection: TextDirection.ltr,
@@ -93,6 +93,7 @@ Widget _harness({
               buildPanel: buildPanel,
               onLayoutChanged: () {},
               activePanel: active,
+              maximised: ValueNotifier<PaneId?>(null),
             ),
           ),
         ],
@@ -106,7 +107,7 @@ void main() {
       (tester) async {
     final controller = ScrollController(keepScrollOffset: false);
     addTearDown(controller.dispose);
-    final active = ValueNotifier<Panel?>(Panel.project);
+    final active = ValueNotifier<PaneId?>(Panel.project.pane());
     addTearDown(active.dispose);
 
     await tester.pumpWidget(_harness(
@@ -115,7 +116,7 @@ void main() {
         [DockPane(Panel.project), DockPane(Panel.viewer)],
         [0.5, 0.5],
       ),
-      buildPanel: (context, panel) => panel == Panel.project
+      buildPanel: (context, pane) => pane.panel == Panel.project
           ? _ScrollBody(controller)
           : const Text('pane B'),
       active: active,
@@ -134,7 +135,7 @@ void main() {
     await tester.tap(find.text('pane B'));
     await tester.pump();
 
-    expect(active.value, Panel.viewer);
+    expect(active.value, Panel.viewer.pane());
     expect(
         identical(tester.state(find.byType(_ScrollBody)), stateBefore), isTrue,
         reason: 'pane A kept the same State object across the flip');
@@ -147,7 +148,7 @@ void main() {
       (tester) async {
     var drags = 0;
     final active =
-        ValueNotifier<Panel?>(Panel.viewer); // pane A starts inactive
+        ValueNotifier<PaneId?>(Panel.viewer.pane()); // pane A starts inactive
     addTearDown(active.dispose);
 
     await tester.pumpWidget(_harness(
@@ -156,13 +157,13 @@ void main() {
         [DockPane(Panel.project), DockPane(Panel.viewer)],
         [0.5, 0.5],
       ),
-      buildPanel: (context, panel) => panel == Panel.project
+      buildPanel: (context, pane) => pane.panel == Panel.project
           ? _DragCounter(() => drags++)
           : const Text('pane B'),
       active: active,
     ));
     await tester.pump();
-    expect(active.value, Panel.viewer, reason: 'pane A is inactive to start');
+    expect(active.value, Panel.viewer.pane(), reason: 'pane A is inactive to start');
 
     // One unbroken gesture: press (which activates pane A), move, release.
     final gesture =
@@ -175,7 +176,7 @@ void main() {
     await gesture.up();
     await tester.pump();
 
-    expect(active.value, Panel.project, reason: 'the press activated pane A');
+    expect(active.value, Panel.project.pane(), reason: 'the press activated pane A');
     expect(drags, greaterThan(0),
         reason: 'the drag took effect on the first gesture');
   });
@@ -187,7 +188,7 @@ void main() {
       'a hidden tab is never built until shown, nor rebuilt while hidden',
       (tester) async {
     final builds = <Panel, int>{};
-    final active = ValueNotifier<Panel?>(null);
+    final active = ValueNotifier<PaneId?>(null);
     addTearDown(active.dispose);
 
     await tester.pumpWidget(_harness(
@@ -199,9 +200,9 @@ void main() {
         ],
         [1.0],
       ),
-      buildPanel: (context, panel) {
-        builds[panel] = (builds[panel] ?? 0) + 1;
-        return Text('body of ${panel.title}');
+      buildPanel: (context, pane) {
+        builds[pane.panel] = (builds[pane.panel] ?? 0) + 1;
+        return Text('body of ${pane.panel.title}');
       },
       active: active,
     ));
@@ -212,7 +213,7 @@ void main() {
         reason: 'a tab never shown builds nothing at all');
 
     // A dock-level rebuild for an unrelated reason must not reach it either.
-    active.value = Panel.project;
+    active.value = Panel.project.pane();
     await tester.pump();
     expect(builds[Panel.hierarchy], isNull,
         reason: 'dock rebuilds never cascade into hidden tabs');
@@ -234,7 +235,7 @@ void main() {
       (tester) async {
     final controller = ScrollController(keepScrollOffset: false);
     addTearDown(controller.dispose);
-    final active = ValueNotifier<Panel?>(null);
+    final active = ValueNotifier<PaneId?>(null);
     addTearDown(active.dispose);
 
     await tester.pumpWidget(_harness(
@@ -246,7 +247,7 @@ void main() {
         ],
         [1.0],
       ),
-      buildPanel: (context, panel) => panel == Panel.project
+      buildPanel: (context, pane) => pane.panel == Panel.project
           ? _ScrollBody(controller)
           : const Text('body of Hierarchy'),
       active: active,
@@ -277,7 +278,7 @@ void main() {
   /// panel is a tab pill, and Window → Workspace.
   testWidgets('a bare pane paints nothing over its top-right corner',
       (tester) async {
-    final active = ValueNotifier<Panel?>(Panel.viewer);
+    final active = ValueNotifier<PaneId?>(Panel.viewer.pane());
     addTearDown(active.dispose);
 
     await tester.pumpWidget(_harness(
@@ -286,7 +287,7 @@ void main() {
         [DockPane(Panel.viewer)],
         [1.0],
       ),
-      buildPanel: (context, panel) => GestureDetector(
+      buildPanel: (context, pane) => GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => taps++,
         child: const SizedBox.expand(child: Text('pane body')),

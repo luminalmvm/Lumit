@@ -221,7 +221,7 @@ Future<void> main() async {
   // left alone, because a trace is a real render that arrives on the worker
   // stream a moment later.
   activatePanelTab(ui.workspace.dock, Panel.scopes);
-  ui.activePanel.value = Panel.scopes;
+  ui.activePane.value = Panel.scopes.pane();
   ui.workspace.touch();
   await pause(2);
   // A nudge of the playhead: the panel asks for a trace when the frame moves,
@@ -237,7 +237,7 @@ Future<void> main() async {
   // heading is far enough down a full list to be off the bottom of the panel —
   // the built-in categories are folded away to bring it up.
   activatePanelTab(ui.workspace.dock, Panel.effectsAndPresets);
-  ui.activePanel.value = Panel.effectsAndPresets;
+  ui.activePane.value = Panel.effectsAndPresets.pane();
   ui.workspace.touch();
   await pause(1.5);
 

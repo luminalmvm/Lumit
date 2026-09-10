@@ -128,6 +128,10 @@ class BridgeFrameProfile {
   /// The composition's top-level layers, bottom-most first.
   final List<BridgeLayerTiming> layers;
 
+  /// Which Viewer view the measured frame was made for, so a readout
+  /// attributes the cost to the picture it belongs to.
+  final int view;
+
   const BridgeFrameProfile({
     required this.frame,
     required this.totalMs,
@@ -137,6 +141,7 @@ class BridgeFrameProfile {
     required this.compositeMs,
     required this.presentMs,
     required this.layers,
+    required this.view,
   });
 
   @override
@@ -148,7 +153,8 @@ class BridgeFrameProfile {
       buildMs.hashCode ^
       compositeMs.hashCode ^
       presentMs.hashCode ^
-      layers.hashCode;
+      layers.hashCode ^
+      view.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -162,7 +168,8 @@ class BridgeFrameProfile {
           buildMs == other.buildMs &&
           compositeMs == other.compositeMs &&
           presentMs == other.presentMs &&
-          layers == other.layers;
+          layers == other.layers &&
+          view == other.view;
 }
 
 /// One layer's measured cost for the frame just made.
@@ -267,16 +274,25 @@ class BridgeRenderProgress {
   /// engine, so a frame that failed still ends its own bar.
   final bool done;
 
+  /// Which Viewer view is waiting on this frame, so its own bar fills and
+  /// nobody else's does.
+  final int view;
+
   const BridgeRenderProgress({
     required this.frame,
     required this.stage,
     required this.fraction,
     required this.done,
+    required this.view,
   });
 
   @override
   int get hashCode =>
-      frame.hashCode ^ stage.hashCode ^ fraction.hashCode ^ done.hashCode;
+      frame.hashCode ^
+      stage.hashCode ^
+      fraction.hashCode ^
+      done.hashCode ^
+      view.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -286,7 +302,8 @@ class BridgeRenderProgress {
           frame == other.frame &&
           stage == other.stage &&
           fraction == other.fraction &&
-          done == other.done;
+          done == other.done &&
+          view == other.view;
 }
 
 /// A small still picture as plain pixels — the thumbnail payload
@@ -365,6 +382,9 @@ class BridgeSampledPixels {
   /// moved on can be recognised as stale rather than drawn.
   final BigInt frame;
 
+  /// Which Viewer view the read was taken in.
+  final int view;
+
   /// True when the window is of one layer rendered alone rather than of the
   /// composite — a depth pass being read for a focal point, say.
   final bool layerAlone;
@@ -377,6 +397,7 @@ class BridgeSampledPixels {
     required this.x,
     required this.y,
     required this.frame,
+    required this.view,
     required this.layerAlone,
   });
 
@@ -389,6 +410,7 @@ class BridgeSampledPixels {
       x.hashCode ^
       y.hashCode ^
       frame.hashCode ^
+      view.hashCode ^
       layerAlone.hashCode;
 
   @override
@@ -403,6 +425,7 @@ class BridgeSampledPixels {
           x == other.x &&
           y == other.y &&
           frame == other.frame &&
+          view == other.view &&
           layerAlone == other.layerAlone;
 }
 
@@ -465,12 +488,19 @@ class BridgeSharedFrameInfo {
   /// brings it.
   final int tier;
 
+  /// Which Viewer view this frame was made for (docs/impl/multi-viewer.md
+  /// §2.1). Several views can be on screen at once, each with its own
+  /// texture, so a frame that did not say who it was for could only be shown
+  /// by the one that asked last.
+  final int view;
+
   const BridgeSharedFrameInfo({
     required this.handle,
     required this.frame,
     required this.width,
     required this.height,
     required this.tier,
+    required this.view,
   });
 
   @override
@@ -479,7 +509,8 @@ class BridgeSharedFrameInfo {
       frame.hashCode ^
       width.hashCode ^
       height.hashCode ^
-      tier.hashCode;
+      tier.hashCode ^
+      view.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -490,7 +521,8 @@ class BridgeSharedFrameInfo {
           frame == other.frame &&
           width == other.width &&
           height == other.height &&
-          tier == other.tier;
+          tier == other.tier &&
+          view == other.view;
 }
 
 class BridgeSharedFrameInfoLinux {
@@ -521,6 +553,12 @@ class BridgeSharedFrameInfoLinux {
   /// brings it.
   final int tier;
 
+  /// Which Viewer view this frame was made for (docs/impl/multi-viewer.md
+  /// §2.1). Several views can be on screen at once, each with its own
+  /// texture, so a frame that did not say who it was for could only be shown
+  /// by the one that asked last.
+  final int view;
+
   const BridgeSharedFrameInfoLinux({
     required this.fd,
     required this.frame,
@@ -531,6 +569,7 @@ class BridgeSharedFrameInfoLinux {
     required this.drmFourcc,
     required this.modifier,
     required this.tier,
+    required this.view,
   });
 
   @override
@@ -543,7 +582,8 @@ class BridgeSharedFrameInfoLinux {
       offset.hashCode ^
       drmFourcc.hashCode ^
       modifier.hashCode ^
-      tier.hashCode;
+      tier.hashCode ^
+      view.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -558,7 +598,8 @@ class BridgeSharedFrameInfoLinux {
           offset == other.offset &&
           drmFourcc == other.drmFourcc &&
           modifier == other.modifier &&
-          tier == other.tier;
+          tier == other.tier &&
+          view == other.view;
 }
 
 /// Which part of opening a project is under way.

@@ -26,7 +26,7 @@ import 'package:lumit_flutter/panels/timeline_extras_frb.dart'
     show clipFillAlpha, clipFillSelectedAlpha, workAreaFrames, workAreaWith;
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart'
     show TimelinePanelFrb;
-import 'package:lumit_flutter/state/dock.dart' show Panel;
+import 'package:lumit_flutter/state/dock.dart' show Panel, PanelPane;
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
@@ -374,7 +374,7 @@ void main() {
 
   testWidgets('Enter renames the picked track', (tester) async {
     final p = await mount(tester);
-    p.ui.activePanel.value = Panel.audioTimeline;
+    p.ui.activePane.value = Panel.audioTimeline.pane();
     await tester.tap(find.byKey(ValueKey<String>('atl-name-${p.music}')));
     await tester.pump();
 
@@ -1222,7 +1222,7 @@ void main() {
 
     // The layer Timeline mounted last and took the slot; the Audio timeline
     // takes it while it is the focused panel and gives it straight back.
-    p.ui.activePanel.value = Panel.timeline;
+    p.ui.activePane.value = Panel.timeline.pane();
     await tester.pump();
     expect(p.ui.deleteClaim?.call() ?? false, isFalse,
         reason:
@@ -1230,7 +1230,7 @@ void main() {
     expect(p.top.getClips(), hasLength(1),
         reason: 'a blurred panel must not answer for the focused one');
 
-    p.ui.activePanel.value = Panel.audioTimeline;
+    p.ui.activePane.value = Panel.audioTimeline.pane();
     await tester.pump();
     expect(p.ui.deleteClaim?.call() ?? false, isTrue);
     await settleFrb(tester, minRounds: 2);

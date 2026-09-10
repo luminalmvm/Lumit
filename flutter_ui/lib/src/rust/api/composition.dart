@@ -955,9 +955,10 @@ class CompositionReference {
   void play(
           {required BigInt from,
           required double scale,
-          required BridgePlaybackMode mode}) =>
+          required BridgePlaybackMode mode,
+          required int view}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferencePlay(
-          that: this, from: from, scale: scale, mode: mode);
+          that: this, from: from, scale: scale, mode: mode, view: view);
 
   /// The preview tier adaptive playback has settled on: 1 Full, 2 Half,
   /// 3 Third, 4 Quarter. Shown beside the mode so "why is it soft?" has an
@@ -1089,13 +1090,22 @@ class CompositionReference {
   /// render it was always going to cost — and the worker latches it, so the
   /// drags, the playback and the idle fill that follow show the same picture
   /// without each growing a parameter.
+  /// `view` names which Viewer view asked (docs/impl/multi-viewer.md §2.1).
+  /// The worker latches it, so the drag previews and the idle work that
+  /// follow serve the same view without each growing a parameter.
   void renderFrame(
           {required BigInt frame,
           required double scale,
           required BridgePlaybackMode mode,
-          BridgePrefixPoint? prefix}) =>
+          BridgePrefixPoint? prefix,
+          required int view}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceRenderFrame(
-          that: this, frame: frame, scale: scale, mode: mode, prefix: prefix);
+          that: this,
+          frame: frame,
+          scale: scale,
+          mode: mode,
+          prefix: prefix,
+          view: view);
 
   /// Ask for `frame` with one clip's retime replaced — the live envelope
   /// drag, which never touches the document.
@@ -1324,7 +1334,8 @@ class CompositionReference {
           required double v,
           required int window,
           required double scale,
-          LayerReference? layer}) =>
+          LayerReference? layer,
+          required int view}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceSamplePixels(
               that: this,
@@ -1333,7 +1344,8 @@ class CompositionReference {
               v: v,
               window: window,
               scale: scale,
-              layer: layer);
+              layer: layer,
+              view: view);
 
   /// Set this composition's background colour — one op, one undo step. A
   /// document edit that reaches the export, unlike the Viewer's preview-only
@@ -1487,7 +1499,8 @@ class CompositionReference {
           required bool toneMap,
           required bool transparentBackground,
           Float32List? region,
-          List<String>? colourView}) =>
+          List<String>? colourView,
+          required int view}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceSetViewerLook(
               that: this,
@@ -1495,7 +1508,8 @@ class CompositionReference {
               toneMap: toneMap,
               transparentBackground: transparentBackground,
               region: region,
-              colourView: colourView);
+              colourView: colourView,
+              view: view);
 
   /// Set the work area, or clear it with `None`.
   void setWorkArea({BridgeSpan? span}) =>

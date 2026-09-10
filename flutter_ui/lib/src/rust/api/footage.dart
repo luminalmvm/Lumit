@@ -288,6 +288,38 @@ class FootageReference {
   void relink({required String path}) => BridgeLib.instance.api
       .crateApiFootageFootageReferenceRelink(that: this, path: path);
 
+  /// Draw this footage item on its own, into Viewer view `view`
+  /// (docs/impl/multi-viewer.md §3.6) — the footage view.
+  ///
+  /// **The picture is the item, not a composition of it.** A scratch
+  /// composition sized to the item is built on a clone of the document and
+  /// composited by the ordinary walk, so the frame arrives down the same
+  /// zero-copy transport at the same quality. Nothing is committed: no op,
+  /// no undo step, and nothing in the Project panel.
+  ///
+  /// Quiet where there is nothing to draw — an item that has gone, or media
+  /// with no picture in it — because a view showing its empty state is the
+  /// honest answer and not a fault.
+  void renderView(
+          {required BigInt frame,
+          required double scale,
+          required int width,
+          required int height,
+          required int rateNum,
+          required int rateDen,
+          required BigInt frames,
+          required int view}) =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceRenderView(
+          that: this,
+          frame: frame,
+          scale: scale,
+          width: width,
+          height: height,
+          rateNum: rateNum,
+          rateDen: rateDen,
+          frames: frames,
+          view: view);
+
   /// Say what colour space this footage arrives in, or clear it back to the
   /// built-in defaults. One gesture, one op, one undo step.
   void setColourSpace({String? space}) => BridgeLib.instance.api
