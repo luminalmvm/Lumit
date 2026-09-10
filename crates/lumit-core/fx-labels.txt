@@ -180,6 +180,7 @@ Dots
 Down
 Draft
 Drag
+Drift
 Drivers
 Drop shadow
 Duration
@@ -381,6 +382,7 @@ Life
 Life jitter
 Lifespan
 Lift
+Light colour
 Light direction
 Light tint
 Light wrap
@@ -440,6 +442,7 @@ Mirror edges
 Mix
 Mode
 Monochrome
+Mood lighting
 More options
 Mosaic
 Motion blur
@@ -618,6 +621,7 @@ Segments
 Sepia
 Set channels
 Set matte
+Shade colour
 Shadow amount
 Shadow colour
 Shadow highlight

@@ -11021,6 +11021,7 @@ fn every_parameter_declares_a_unit() {
             ("median", "radius"),
             ("emboss", "relief"),
             ("texturize", "relief"),
+            ("mood_lighting", "scale"),
             ("linear_wipe", "centre_x"),
             ("linear_wipe", "centre_y"),
             ("linear_wipe", "feather"),
@@ -12024,6 +12025,7 @@ fn every_effect_carries_a_matte_row() {
                 | "median"
                 | "emboss"
                 | "texturize"
+                | "mood_lighting"
                 | "echo"
                 | "motion_blur"
                 | "accumulation_mb"

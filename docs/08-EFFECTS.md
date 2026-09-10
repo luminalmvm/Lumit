@@ -6311,6 +6311,77 @@ space is what refuses.
 `lumit_colour::Artefact::eval`, held against the kernel in `lumit-render`'s
 `ocio_parity` test at the display pass's bound.
 
+### 3.98 Mood lighting — pools of coloured light laid over the picture
+
+Maps AE's **Mood Lighting** animation presets ([11-AE-IMPORT.md](11-AE-IMPORT.md)), which
+are the most-asked-for thing in that folder and the reason a preset built out of four
+effects is worth being one. A **Stylise** effect: it changes how a frame looks, not what
+colour a pixel is.
+
+Somebody has put lamps just out of shot. Where a pool of light lands the picture is
+warmer and brighter; between the pools it falls away cooler and darker; and the frame
+comes back with more contrast than it went in with. The pools are §3.37's field, so they
+are seeded and repeatable, and Drift moves *through* them rather than redrawing them.
+
+**Parameters**, in panel order:
+
+| Parameter | Kind | Default | Notes |
+|---|---|---|---|
+| Intensity | per cent, 0..200, hard min 0 | 100 | how far the light pulls either side of neutral; 0 leaves Contrast working alone |
+| Light colour | colour, open above 1 | warm | the colour of the light inside a pool |
+| Shade colour | colour, open above 1 | cool | the colour between the pools |
+| Scale | px@comp, 1..4000, hard min 1 | 900 | the size of one pool |
+| Drift | dial, degrees | 0 | one full turn moves the pools on by one of their own widths |
+| Contrast | per cent, 0..200, hard min 0 | 115 | §3.14's control, about mid-grey |
+| Seed | seed | per instance | which arrangement of pools |
+| Mix | per cent | 100 | |
+
+**Algorithm sketch.** Each pixel reads the field at its own centre and is lit by it:
+
+```
+n    = fractal(seed, 3 octaves, gain ½, lacunarity 2, Perlin, basic, p ÷ scale, drift ÷ 360)
+f    = clamp(n + ½, 0, 1)                    # the field, spread to fill 0..1
+tint = shade + (light − shade)·f             # this pixel's light, rgb
+lit  = u·(1 + (tint − ½)·2·intensity)        # u is unpremultiplied colour
+out  = (lit − ½)·k + ½                       # k is §3.14's factor, 1 + t|t|
+```
+
+Five decisions worth stating, because none of them is arithmetic:
+
+1. **The light multiplies; it does not blend.** A multiply is what light *is*, it is
+   exact in a scene-linear working space, and it clips nothing (§2.1). Screen and soft
+   light both assume a 0..1 signal and would flatten an HDR highlight the moment the
+   lamp reached it, which is the one thing a lighting effect must not do.
+2. **Mid grey is the neutral colour.** A tint of ½ is a factor of one, so the two colour
+   rows say which way each end of the field pulls and Intensity says how hard. Set both
+   to mid grey and the light disappears however high Intensity goes, which is what makes
+   the pair readable.
+3. **The field's shape is fixed.** Three octaves of signed Perlin, halving in amplitude
+   and doubling in frequency: that is what *amorphous* is, and a Complexity row here
+   would be a second Fractal noise panel with worse defaults. Anyone who wants the field
+   itself has §3.37 and a blend mode.
+4. **Contrast is §3.14's control and §3.14's curve**, read from that effect rather than
+   respelled. One slider called Contrast should mean one thing everywhere in the
+   catalogue, and the quadratic response near neutral is the reason §3.14's is usable.
+5. **Drift is a dial, not the clock.** The pools move because a keyframe moves them.
+   Nothing in the catalogue reads the playhead on its own, and an effect that drifted by
+   itself would be one that could not be held still on a frame.
+
+`moderate` cost (three octaves of 3-D noise a pixel, then a pointwise grade), `Exact` ROI,
+`seeded`, unpremultiplied (§2.2). Alpha is this effect's to leave alone. The **matte**
+(§2.6) scales Intensity toward 0 and Contrast toward neutral before either runs, so a grey
+matte gives a dimmer lamp and a gentler grade rather than a fade between two pictures.
+Both controls have a neutral, so a black matte really is the frame as it arrived, which
+§3.67's flat sheet is not. Mix 0 is the bit-exact identity.
+
+**Determinism** (§2.4) rides on §3.37's: the field is `lumit_core::fx::noise` and its one
+WGSL twin, and the §1.6 oracle holds the two to fp16 ULPs across both halves of the effect
+separately and together.
+
+**Not in v1:** the preset's two siblings. **Digital** wants the field quantised into
+blocks and **streaks** wants it scaled anisotropically, which is one more row each through
+the same loop; they land when a real project asks rather than to fill out a menu.
+
 ## 4. Tier 2 — AE parity direction (post-v1)
 
 One-line scope each; specs written when scheduled ([16-ROADMAP.md](16-ROADMAP.md)). Order

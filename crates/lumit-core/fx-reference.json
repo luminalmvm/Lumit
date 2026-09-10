@@ -16529,6 +16529,170 @@
       "matte_role": "own"
     },
     {
+      "slug": "mood-lighting",
+      "match_name": "mood_lighting",
+      "label": "Mood lighting",
+      "version": 1,
+      "category": "Stylise",
+      "category_slug": "stylise",
+      "params": [
+        {
+          "id": "intensity",
+          "label": "Intensity",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "light",
+          "label": "Light colour",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.98,
+            0.72,
+            0.42,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "shade",
+          "label": "Shade colour",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.1,
+            0.16,
+            0.34,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "scale",
+          "label": "Scale",
+          "kind": "float",
+          "unit": "px",
+          "default": 900.0,
+          "slider_min": 1.0,
+          "slider_max": 4000.0,
+          "hard_min": 1.0
+        },
+        {
+          "id": "drift",
+          "label": "Drift",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 45.0
+        },
+        {
+          "id": "contrast",
+          "label": "Contrast",
+          "kind": "float",
+          "unit": "percent",
+          "default": 115.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Intensity and Contrast per pixel: white lights and grades in full, grey more gently, black leaves the picture alone"
+      },
+      "matte_role": "own"
+    },
+    {
       "slug": "linear-wipe",
       "match_name": "linear_wipe",
       "label": "Linear wipe",
