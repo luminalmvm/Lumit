@@ -60,6 +60,10 @@ pub struct Bring {
     pub state: Option<Vec<u8>>,
     /// The values the project holds, by the plugin's own parameter id.
     pub params: Vec<(u32, f64)>,
+    /// The rate this bake runs at, in hertz. Carried rather than assumed: a
+    /// plugin activated at 48 kHz and handed a 96 kHz export tunes every
+    /// filter an octave wrong.
+    pub rate: u32,
     /// Whether this is an export.
     pub offline: bool,
 }

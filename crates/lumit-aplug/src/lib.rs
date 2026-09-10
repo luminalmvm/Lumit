@@ -98,9 +98,7 @@ pub use ipc::broker::{
     BrokerConfig, BrokerError, DisableList, STRIKES_BEFORE_DISABLED,
 };
 pub use module::{Module, ModuleEntry, ModuleError};
-pub use process::{
-    Block, Denormals, ParamEvent, BLOCK_FRAMES, CHANNELS, INTERLEAVED_LEN, SAMPLE_RATE,
-};
+pub use process::{Block, Denormals, ParamEvent, BLOCK_FRAMES, CHANNELS, INTERLEAVED_LEN};
 pub use quirks::{Quirks, QuirksTable, BLOCK_PERIOD};
 pub use schema::{match_name, row_id, schema_of, value_routes, ValueRoute, MATCH_PREFIX};
 pub use vst3::{Vst3Instance, Vst3Module};

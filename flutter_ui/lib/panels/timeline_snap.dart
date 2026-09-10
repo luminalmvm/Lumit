@@ -119,6 +119,48 @@ SnapResult snapFrame({
   return (frame: frame.roundToDouble(), caught: null);
 }
 
+/// How far a drag has travelled in whole frames, with the magnet applied, and
+/// what it caught.
+///
+/// [sources] are the frames the grab actually moves: a trim moves one end, a
+/// move moves both, and then the **nearer capture** is the one that takes the
+/// drag. [rawFrames] is the pointer's own travel, and the caller must hand it
+/// over afresh on every move rather than feeding back the snapped answer -
+/// otherwise an end caught on a target could not be pulled off it again.
+///
+/// The dragged thing's own ends belong out of [targets]: a target standing
+/// where a source already is is a magnet at zero travel, which pins the drag
+/// where it started.
+({int delta, SnapTarget? caught}) snappedDelta({
+  required double rawFrames,
+  required double perFrame,
+  required List<double> sources,
+  required Iterable<SnapTarget> targets,
+  required bool magnet,
+}) {
+  if (!magnet || perFrame <= 0) {
+    return (delta: rawFrames.round(), caught: null);
+  }
+  var best = rawFrames.round();
+  var bestPx = double.infinity;
+  SnapTarget? caught;
+  for (final source in sources) {
+    final on = snapFrame(
+      frame: source + rawFrames,
+      targets: targets,
+      perFrame: perFrame,
+      magnet: true,
+    ).caught;
+    if (on == null) continue;
+    final px = ((on.frame - (source + rawFrames)) * perFrame).abs();
+    if (px >= bestPx) continue;
+    bestPx = px;
+    caught = on;
+    best = (on.frame - source).round();
+  }
+  return (delta: best, caught: caught);
+}
+
 /// Whether a drag in flight should ignore snapping this instant.
 ///
 /// `Ctrl` held suspends it (docs/07 §4.5) — the escape hatch for the one time
@@ -178,12 +220,12 @@ List<SnapTarget> snapTargetsOf({
     for (final m in info.markers) {
       out.add(SnapTarget(m.frame.toDouble(), SnapKind.marker));
     }
-    // A Sequence layer's cuts. A clip's placement is measured from the layer's
-    // own start, so it is offset by the in point to reach comp frames; the last
-    // clip's end is the layer's out point, already in the list.
+    // A Sequence layer's cuts. A clip's start frame is already the comp frame
+    // its box is drawn at, so it is taken as it stands: the row's start offset
+    // is in it, and an in point is not the same thing. The last clip's end is
+    // the layer's out point, already in the list.
     for (final clip in info.clips) {
-      final start = rationalSeconds(clip.placeStart) * fps;
-      out.add(SnapTarget(info.inFrame + start, SnapKind.editPoint));
+      out.add(SnapTarget(clip.startFrame.toDouble(), SnapKind.editPoint));
     }
   }
   // One target per frame, however many lanes are keyed on it. A baked import

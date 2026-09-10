@@ -36,14 +36,21 @@
 //! time the next processed block does. The fade is **linear**, not equal power:
 //! see [`splice`] for why the note's word is the wrong law here.
 //!
-//! # Latency
+//! # Latency and tail
 //!
 //! A plugin that looks ahead answers back late. Because a chain is rendered
 //! whole rather than pulled a block at a time, compensating is free: the run is
 //! given the chain's summed latency in extra silent frames at the end so the
-//! delayed tail actually comes out, and the caller places the processed sound
+//! delayed sound actually comes out, and the caller places the processed sound
 //! that many frames **earlier** so the wet lands where the dry did. A
 //! lookahead limiter then just works.
+//!
+//! A **tail** is the other direction: what an effect keeps making after its
+//! input stops, a reverb's decay or an echo's repeats
+//! ([`AudioProcessor::tail`]). The run is given those frames of silence too,
+//! and the caller places whatever length came back, so the decay simply runs
+//! on past the clip's out point and sums with what follows, as a crossfade
+//! does. Both sum across a chain.
 
 use std::sync::Arc;
 
@@ -100,6 +107,19 @@ pub trait AudioProcessor: Send + Sync {
         0
     }
 
+    /// Frames this effect keeps making **after** its input stops: a reverb's
+    /// decay, an echo's repeats. Nought for everything that goes quiet with
+    /// its input, which is most things.
+    ///
+    /// The run is given these frames of silence at its end so the tail
+    /// actually comes out, and the caller places a run of whatever length came
+    /// back, so a clip's reverb rings on past its out point and simply sums
+    /// with whatever follows, as a crossfade does. Latency's opposite number:
+    /// one moves the sound earlier, this one lets it finish.
+    fn tail(&self) -> u32 {
+        0
+    }
+
     /// The sentence the most recent refused block carried, where the host kept
     /// one — what the calm badge shows underneath its reason (AP5,
     /// docs/12 §2.3). `None` for a processor that has never refused a block,
@@ -123,8 +143,9 @@ pub struct ChainLink {
 
 /// What one run of a chain produced.
 pub struct ChainOutput {
-    /// Interleaved stereo, `frames + latency` frames long: the input's own
-    /// length plus the tail the compensation asked for.
+    /// Interleaved stereo, `frames + latency + tail` frames long: the input's
+    /// own length, plus what the compensation asked for, plus what the chain
+    /// keeps making after the input stops.
     pub samples: Vec<f32>,
     /// How many blocks came back dry — nought is the ordinary answer, and
     /// anything else is what badges the layer.
@@ -136,6 +157,10 @@ pub struct ChainOutput {
     /// The chain's summed latency in frames. The caller places the processed
     /// sound this many frames earlier.
     pub latency: u32,
+    /// The chain's summed tail in frames, already included in `samples`. Told
+    /// separately because a caller that wants to know how far past its out
+    /// point a clip now rings has nowhere else to read it.
+    pub tail: u32,
 }
 
 /// Run `input` (interleaved stereo) through `chain`, in order.
@@ -150,19 +175,33 @@ pub fn run_chain(chain: &[ChainLink], input: &[f32]) -> ChainOutput {
         .iter()
         .map(|link| link.processor.latency())
         .fold(0u32, u32::saturating_add);
+    // Tails sum as latencies do: an echo into a reverb rings for both.
+    let tail: u32 = chain
+        .iter()
+        .map(|link| link.processor.tail())
+        .fold(0u32, u32::saturating_add);
     if chain.is_empty() || frames == 0 {
         return ChainOutput {
             samples: input.to_vec(),
             dry_blocks: 0,
             dry_by_link: vec![0; chain.len()],
             latency: 0,
+            tail: 0,
         };
     }
 
-    // The tail the compensation needs, then whole blocks: a plugin cannot be
-    // asked for half a block, and the last one of a layer is simply silent
-    // past the end.
-    let wanted = frames + latency as usize;
+    // Denormals off for the whole loop, restored on the way out. A reverb
+    // decaying into silence makes thousands of them and each can cost a
+    // hundred times what an ordinary number does; the plugin host already
+    // guards its own calls, and this is the same guard over the built-ins so
+    // preview and export flush identically.
+    let _denormals = Denormals::on();
+
+    // The run past the input: what the compensation needs, plus what the chain
+    // keeps making once the input stops. Then whole blocks, because a
+    // processor cannot be asked for half a block and the last one is simply
+    // silent past the end.
+    let wanted = frames + latency as usize + tail as usize;
     let blocks = wanted.div_ceil(AUDIO_BLOCK_FRAMES);
     let padded = blocks * AUDIO_BLOCK_SAMPLES;
 
@@ -203,6 +242,7 @@ pub fn run_chain(chain: &[ChainLink], input: &[f32]) -> ChainOutput {
         dry_blocks,
         dry_by_link,
         latency,
+        tail,
     }
 }
 
@@ -261,11 +301,81 @@ fn splice(out: &mut [f32], dry: &[f32], wet: &[bool]) {
     }
 }
 
+// -------------------------------------------------------------- denormals --
+
+/// Flush-to-zero and denormals-are-zero, for as long as this value lives.
+///
+/// A denormal is a number so close to zero the processor stops being fast
+/// about it, and a reverb tail decaying into silence makes thousands of them:
+/// the classic mystery CPU spike. Both plugin standards assume the host has set
+/// these bits, so [`run_chain`] sets them once around its block loop and every
+/// effect in the chain, built-in or hosted, runs under the same arithmetic.
+/// The previous setting is restored on drop, so a thread that borrowed the
+/// processing role gives it back exactly as it found it.
+///
+/// Here rather than in the plugin host because the built-ins need it too and
+/// nothing in the engine may depend on `lumit-aplug`; the host re-exports this
+/// one.
+pub struct Denormals {
+    /// The MXCSR word as it was, or `None` where this architecture has no such
+    /// word to save. Only `Drop` reads it, and only on x86, so on Apple silicon
+    /// it is a field nobody reads rather than a field nobody sets - which is
+    /// what `-D warnings` sees.
+    #[cfg_attr(
+        not(any(target_arch = "x86", target_arch = "x86_64")),
+        allow(dead_code)
+    )]
+    previous: Option<u32>,
+}
+
+impl Denormals {
+    /// Switch them off.
+    #[must_use]
+    #[allow(unsafe_code)]
+    pub fn on() -> Self {
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        let previous = {
+            /// MXCSR bit 15.
+            const FLUSH_TO_ZERO: u32 = 0x8000;
+            /// MXCSR bit 6.
+            const DENORMALS_ARE_ZERO: u32 = 0x0040;
+            let mut csr: u32 = 0;
+            // SAFETY: `stmxcsr` writes four bytes to the address given, and
+            // `csr` is a live `u32`. The instruction is SSE, which is baseline
+            // on every target this crate builds for.
+            unsafe { std::arch::asm!("stmxcsr [{}]", in(reg) &mut csr, options(nostack)) };
+            let raised = csr | FLUSH_TO_ZERO | DENORMALS_ARE_ZERO;
+            // SAFETY: `ldmxcsr` reads four bytes from the address given.
+            unsafe { std::arch::asm!("ldmxcsr [{}]", in(reg) &raised, options(nostack)) };
+            Some(csr)
+        };
+        // ponytail: aarch64 keeps the same flag in FPCR's FZ bit; nothing in
+        // this project builds for it yet, so the guard is honestly a no-op
+        // there rather than a wrong write.
+        #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+        let previous = None;
+
+        Self { previous }
+    }
+}
+
+impl Drop for Denormals {
+    #[allow(unsafe_code)]
+    fn drop(&mut self) {
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        if let Some(csr) = self.previous {
+            // SAFETY: as `Denormals::on`.
+            unsafe { std::arch::asm!("ldmxcsr [{}]", in(reg) &csr, options(nostack)) };
+        }
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Mutex;
 
     /// A processor that multiplies by whatever its one row holds, and can be
     /// told to fail on one block.
@@ -465,6 +575,66 @@ mod tests {
             out.samples.len(),
             (frames + 144) * AUDIO_CHANNELS,
             "the run is long enough for the delayed tail to come out"
+        );
+    }
+
+    /// **A tail runs the sound on past its input.** The echo below is silent
+    /// while the input plays and only speaks a block later, which is exactly
+    /// what a decay does: with no tail declared the run would end before the
+    /// repeat and the repeat would never be heard.
+    #[test]
+    fn a_tail_runs_the_chain_on_past_the_input() {
+        /// One block of delay, and it says so: everything handed in comes back
+        /// out one block later, and nothing at all comes out of the first.
+        struct Echo {
+            held: Mutex<Vec<f32>>,
+        }
+        impl AudioProcessor for Echo {
+            fn process(
+                &self,
+                input: &[f32],
+                output: &mut [f32],
+                _values: &[(ParamId, f64)],
+                _steady: i64,
+            ) -> bool {
+                let Ok(mut held) = self.held.lock() else {
+                    return false;
+                };
+                if held.is_empty() {
+                    held.resize(input.len(), 0.0);
+                }
+                output.copy_from_slice(&held);
+                held.copy_from_slice(input);
+                true
+            }
+
+            fn tail(&self) -> u32 {
+                AUDIO_BLOCK_FRAMES as u32
+            }
+        }
+
+        let frames = AUDIO_BLOCK_FRAMES;
+        let input = vec![0.5f32; frames * AUDIO_CHANNELS];
+        let out = run_chain(
+            &[ChainLink {
+                processor: Arc::new(Echo {
+                    held: Mutex::new(Vec::new()),
+                }),
+                values: Vec::new(),
+            }],
+            &input,
+        );
+        assert_eq!(out.tail, AUDIO_BLOCK_FRAMES as u32);
+        assert_eq!(
+            out.samples.len(),
+            (frames + AUDIO_BLOCK_FRAMES) * AUDIO_CHANNELS,
+            "the run is one block longer than the input"
+        );
+        // The first block is the delay itself, the second the echo of it.
+        assert!((out.samples[0]).abs() < 1e-6, "nothing has arrived yet");
+        assert!(
+            (out.samples[AUDIO_BLOCK_SAMPLES] - 0.5).abs() < 1e-6,
+            "the echo lands in the block the tail bought"
         );
     }
 

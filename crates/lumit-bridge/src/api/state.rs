@@ -530,6 +530,9 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         | Op::SetCompMotionBlur { comp, .. }
         | Op::SetCompBackground { comp, .. }
         | Op::SetMasterVolume { comp, .. }
+        // The layer Timeline's Sound mix row stands or falls on the mark, so
+        // the whole outline rebuilds and no one layer changed.
+        | Op::SetSoundMix { comp, .. }
         | Op::SetWorkArea { comp, .. }
         | Op::SetCompMarkers { comp, .. }
         // The beat band redraws from it, and it travels with the markers.

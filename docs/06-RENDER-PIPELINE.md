@@ -131,16 +131,21 @@ z-sorted and rendered through the active camera; a 2D layer breaks the run).
 A Sequence layer resolves in two stages, and layer-level treatment always follows clip
 resolution:
 
-1. **Clip resolution.** Comp time → layer time → the single active clip (clips never overlap;
-   a gap between clips is transparent). Layer time → clip time → the clip's Retime → source
+1. **Clip resolution.** Comp time → layer time → the single active clip (clips on a layer
+   that draws a picture never overlap, so exactly one is under the playhead; an audio-only
+   layer's may overlap and never come this way at all - a gap between clips is
+   transparent). Layer time → clip time → the clip's Retime → source
    time. The clip's source is fetched and its frame-interpolation policy applied. The result is
    the Sequence layer's raw output for that frame: one image, as if the layer were footage.
 2. **Layer treatment.** Masks, the effect stack, transform, motion blur, blend mode, and matte
    then apply to that output exactly as §1.2 steps 3–7. Effects on a Sequence layer therefore
    span edit points seamlessly — a glow does not pop at a cut.
 
-Per-clip state is limited to source, trim, Retime, and frame-interpolation policy. Anything
-needing per-clip effects is expressed by precomposing the clip's source.
+Per-clip state the picture reads is limited to source, trim, Retime, and
+frame-interpolation policy. Anything needing per-clip picture effects is expressed by
+precomposing the clip's source. A clip also carries a fade at each end and an effect stack
+of its own, and both are heard rather than seen: nothing on this path reads them
+([09-AUDIO.md](09-AUDIO.md) §4).
 
 ### 1.4 Precomp layers, nesting, and collapse
 

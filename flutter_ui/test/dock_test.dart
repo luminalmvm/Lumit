@@ -49,13 +49,14 @@ void main() {
   /// named one by one on purpose: a fifth wanting the same exemption must be
   /// added here rather than this loosening to "some panels are missing".
   ///
-  /// Seven panels are deliberately not in the default arrangement, and all
+  /// Eight panels are deliberately not in the default arrangement, and all
   /// for the same reason (docs/07 §1.6): a panel nobody asked for should not
   /// appear in an arrangement they already know. **Easing** belongs to
-  /// Retiming; the **Graph** and **Node** panels to Nodes; the **Mixer** and
-  /// **Audio** panels to the Audio workspace (the AudioWorkspace board); and
-  /// **Hierarchy** and **Debug** belong to no shipped arrangement at all. All
-  /// seven are one tick away in the Window menu.
+  /// Retiming; the **Graph** and **Node** panels to Nodes; the **Mixer**,
+  /// **Audio** and **Audio timeline** panels to the Audio workspace (the
+  /// AudioWorkspace board); and **Hierarchy** and **Debug** belong to no
+  /// shipped arrangement at all. All eight are one tick away in the Window
+  /// menu.
   test(
       'no panel appears twice in the default workspace, and only the '
       'specialist panels are absent', () {
@@ -71,6 +72,7 @@ void main() {
             Panel.hierarchy,
             Panel.mixer,
             Panel.audio,
+            Panel.audioTimeline,
             Panel.debug,
           ]));
   });

@@ -370,6 +370,21 @@ holding a `SmoothZoom` and reading its value, with no design left in it.
     `trim_to_source_end`.
 - **The audio mix is rebuilt from scratch** whenever the comp's audio signature
     changes, rather than patched.
+- **The Sound mix row's waveform is strided.** `MixPlan::peaks` reads the loaded plan
+    frame by frame and strides past 256 frames a bucket, so a one-frame transient can
+    drop out of a comp-wide view. A peak pyramid built on the prepare worker is the
+    upgrade if the row is ever cut against rather than read.
+- **A hosted plugin's stepped parameter never reaches it.** `kind_of` in
+    `crates/lumit-aplug/src/schema.rs` gives a stepped plugin parameter of nought to one a
+    `ParamKind::Bool` row, and `bake_values` in `crates/lumit-render/src/export.rs` keeps
+    the `EffectValue::Float` rows only, so a plugin's bypass or its mode switch is drawn,
+    stored in the .lum and never sent. Either the row becomes an Int, as a built-in's mode
+    row is, or the bake carries Bool as well.
+- **A Precomp layer's effect rack is silent to the mixer.** `audio_chain_of` opens a rack
+    on Footage and Sequence layers only, so a rack on a nested comp's layer processes
+    nothing; Convert to precomp copies a track's rack on to each clip layer for that
+    reason. A bus chain, the nested comp summed and run through the Precomp layer's rack,
+    is the upgrade, and it needs a bus stage in `MixPlan` first.
 
 **Retime follow-up after the property-path move.** **The eased ramp shapes are
 gone from clips** — `Clip::with_ramp` takes two speeds and runs straight between
@@ -1454,7 +1469,9 @@ list, not a re-statement of the roadmap.
     v2 colour management and its UI.
 - **Audio** ([07-UI-SPEC.md](07-UI-SPEC.md) §10, [09-AUDIO.md](09-AUDIO.md)): the
     Audio panel, the Mixer, the meters and the beat-tuning controls all landed with
-    the AudioWorkspace programme. Still owed: persistent
+    the AudioWorkspace programme, and the **Audio timeline** panel (07 §4.8,
+    [impl/audio-timeline.md](impl/audio-timeline.md)) landed after it: clips on a row,
+    stored fade shapes, overlaps that crossfade, and an effect rack per clip. Still owed: persistent
     waveform peak files (the multi-zoom summary is built on demand and cached for
     the session — never written to the project sidecar, so it is rebuilt
     next time the project opens); the §3.4 scrub-audition grain and its Timeline

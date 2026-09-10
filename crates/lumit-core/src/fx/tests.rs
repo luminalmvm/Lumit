@@ -5169,6 +5169,7 @@ fn marker_rig(
     let secs = |n, d| CompTime(Rational::new(n, d).unwrap());
     let comp = Composition {
         master_volume_db: 0.0,
+        sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
         id: uuid::Uuid::now_v7(),
@@ -9121,6 +9122,7 @@ fn lens_flare_light_layers_resolve_with_their_extent() {
 
     let mut comp = Composition {
         master_volume_db: 0.0,
+        sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
         id: uuid::Uuid::now_v7(),
@@ -12123,14 +12125,22 @@ fn every_effect_carries_a_matte_row() {
     for def in BUILTIN_DEFS.builtins() {
         let s = def.schema();
         // The Controls family opts out entirely, the Drivers family with it,
-        // and so do the two tracking effects — handles for a background
-        // analysis rather than image operations. They are the
-        // answer to the question `MatteRole::None` was written for: an effect
-        // that touches no pixel cannot be driven by a picture, so a Matte row on
-        // one would be a control that could never do anything. Every *image*
-        // effect below still has to carry one.
-        if matches!(s.category, FxCategory::Controls | FxCategory::Drivers)
-            || matches!(s.match_name, "camera_track" | "planar_track")
+        // the **Audio** family with them, and so do the two tracking effects,
+        // which are handles for a background analysis rather than image
+        // operations. They
+        // are the answer to the question `MatteRole::None` was written for: an
+        // effect that touches no pixel cannot be driven by a picture, so a
+        // Matte row on one would be a control that could never do anything.
+        // Every *image* effect below still has to carry one.
+        //
+        // Audio is the family, not a list of names, because every effect in it
+        // processes sound and draws nothing. There is no such thing as an
+        // audio effect that wants a matte, and one added tomorrow needs no
+        // entry here (docs/impl/audio-effects.md §2).
+        if matches!(
+            s.category,
+            FxCategory::Controls | FxCategory::Drivers | FxCategory::Audio
+        ) || matches!(s.match_name, "camera_track" | "planar_track")
         {
             assert_eq!(
                 s.matte,
@@ -12403,6 +12413,11 @@ fn every_effect_carries_a_matte_row() {
 /// the panel can draw it on the Mix row. The Lens flare declares its own
 /// `blend` and keeps it; an effect with no Mix (the Controls, the Camera
 /// track, Posterize time) touches no pixel and gets none.
+///
+/// An **audio** effect's wet/dry row is called `wet`, never `mix`, and this is
+/// why: a row named `mix` here would be handed a Blend menu of Screen and
+/// Multiply, which are things to do to a picture (docs/impl/audio-effects.md
+/// §2). Wet is also the word every mixing desk uses.
 #[test]
 fn every_mix_row_carries_a_blend() {
     use crate::model::BlendMode;
@@ -12942,6 +12957,30 @@ fn a_fresh_mask_path_row_is_the_first_mask_entry() {
         }),
         Some(EffectValue::MaskPath(None))
     );
+}
+
+/// A **clip reference** takes the layer reference's road: unset when fresh,
+/// no wire may land on it, and it comes back off disk as it went on
+/// (docs/impl/audio-nodes.md §3).
+#[test]
+fn a_clip_reference_starts_unset_and_survives_a_round_trip() {
+    assert_eq!(
+        default_param_value(&ParamKind::Clip),
+        Some(EffectValue::Clip(None))
+    );
+    assert!(
+        ParamKind::Clip.port_type().is_none(),
+        "which clip is meant is a choice, so nothing wires into it"
+    );
+
+    for value in [
+        EffectValue::Clip(None),
+        EffectValue::Clip(Some(Uuid::now_v7())),
+    ] {
+        let text = serde_json::to_string(&value).expect("a clip reference serialises");
+        let back: EffectValue = serde_json::from_str(&text).expect("and reads back");
+        assert_eq!(back, value, "a clip reference round-trips through serde");
+    }
 }
 
 /// **A chain is trimmed by distance along it, not by where it is** (docs/08
@@ -13596,7 +13635,8 @@ fn a_closed_range_resolves_exactly_as_the_float_it_is() {
             row.kind,
             ParamKind::Slider {
                 default: 50.0,
-                range: (0.0, 100.0)
+                range: (0.0, 100.0),
+                log: false
             },
             "{name} — a wipe's Completion is closed"
         );

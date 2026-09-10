@@ -53,7 +53,7 @@ fn a_style_is_added_ordered_refused_twice_and_edited_through_the_shared_lookup()
             BridgeEffectValue::Float(BridgeScalar::Static(41.0)),
         )
         .expect("staged");
-    layer.set_effects(staged).expect("committed");
+    layer.set_effects(staged, None).expect("committed");
 
     let info = layer.get_info().expect("info");
     assert_eq!(info.styles.len(), 2, "the list is still the list");

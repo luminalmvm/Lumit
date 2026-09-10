@@ -123,6 +123,9 @@ pub enum BridgeError {
     NotSequence,
     /// Only a Footage layer converts to a Sequence layer.
     NotFootage,
+    /// The layer carries a Retime, and a retimed clip is silent (docs/09 §7),
+    /// so cutting it into clips would take its sound away.
+    RetimedLayer,
     /// The adjustment switch was asked of a layer with no picture to
     /// set aside — a Camera, a Light, a Null or an Audio layer. Every layer
     /// that shows something in the Viewer takes it; the cell is not drawn on
@@ -251,6 +254,10 @@ impl fmt::Display for BridgeError {
             BridgeError::NotFootage => {
                 write!(f, "Only footage layers convert to sequenced")
             }
+            BridgeError::RetimedLayer => write!(
+                f,
+                "A retimed layer cannot be cut into clips - a retimed clip is silent"
+            ),
             BridgeError::NotConvertible => {
                 write!(
                     f,

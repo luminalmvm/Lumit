@@ -239,7 +239,7 @@ fn a_described_vst3_plugin_lands_as_ordinary_properties() {
     // The range is the **plain** one, not nought to one: a person keyframes the
     // number they read, and the normalising happens at the boundary.
     assert!(
-        matches!(row.kind, ParamKind::Slider { default, range } if default == 1.0 && range == (0.0, 4.0)),
+        matches!(row.kind, ParamKind::Slider { default, range, .. } if default == 1.0 && range == (0.0, 4.0)),
         "a closed VST3 range is a slider in plain units: {:?}",
         row.kind
     );
@@ -295,6 +295,7 @@ fn the_vst3_order_of_actions_is_the_one_written_down() {
         plugin_id: reporter,
         state: Some(join_state(&[1, 2, 3, 4], &[9, 9])),
         params: vec![(PARAM_KNOB, 0.75)],
+        rate: 48_000,
         offline: false,
     };
     let host = LocalHost::open(&module, &setup).expect("the reporter opens");
@@ -467,6 +468,7 @@ fn properties_win_over_a_stale_vst3_state() {
         plugin_id: gain,
         state: Some(join_state(&4.0f64.to_le_bytes(), &[])),
         params: vec![(PARAM_GAIN, 2.0)],
+        rate: 48_000,
         offline: false,
     };
     let host = LocalHost::open(&module, &setup).expect("the gain plugin opens");

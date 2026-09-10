@@ -71,8 +71,8 @@ pub mod cpu;
 mod tests;
 
 pub use audio_chain::{
-    run_chain, AudioProcessor, ChainLink, ChainOutput, AUDIO_BLOCK_FRAMES, AUDIO_BLOCK_SAMPLES,
-    AUDIO_CHANNELS, AUDIO_SPLICE_FRAMES,
+    run_chain, AudioProcessor, ChainLink, ChainOutput, Denormals, AUDIO_BLOCK_FRAMES,
+    AUDIO_BLOCK_SAMPLES, AUDIO_CHANNELS, AUDIO_SPLICE_FRAMES,
 };
 pub use builtins::*;
 pub use catalogue::*;

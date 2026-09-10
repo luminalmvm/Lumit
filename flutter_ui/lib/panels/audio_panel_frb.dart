@@ -985,6 +985,10 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
     );
   }
 
+  /// Audio level's Source row, the entry that reads one named layer. A number
+  /// because a Choice row crosses the bridge as its index.
+  static const int _sourceLayer = 1;
+
   /// Stage the template: three drivers, three wires, one `setGraph` — so the
   /// whole gesture is one undo step and the Graph panel shows exactly what
   /// was built. An occupied target socket is re-routed rather than doubled,
@@ -1008,6 +1012,11 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
     }
     if (listenTo != null) {
       level.setValue(id: 'audio', value: BridgeEffectValue.layer(listenTo));
+      // Naming a layer is half of it: the Source row is what says which of the
+      // node's three readings it takes (docs/impl/audio-nodes.md §3), and it
+      // starts on the whole composition.
+      level.setValue(
+          id: 'source', value: const BridgeEffectValue.choice(_sourceLayer));
     }
     // A practical loudness window: RMS of finished music rarely clears 0.3,
     // so the chain reaches its far end on real material rather than only on

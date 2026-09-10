@@ -282,6 +282,75 @@ void main() {
           reason: 'and the rms core is still solid over it');
     });
 
+    /// The square-root scale (docs/impl/audio-timeline.md §5, plan 20): the
+    /// Audio timeline draws its waves on it, so a mix that sits well below
+    /// full scale reads instead of lying along the middle of its box.
+    test('a half-scale bucket reaches further on a square-root scale', () {
+      double reachOf({required bool sqrtScale}) {
+        final painter = WaveformPainter(
+          peaks: peaks(
+            start: 0,
+            end: 1,
+            bands: 1,
+            values: [
+              for (var i = 0; i < 16; i++) ...[-0.5, 0.5, 0.0]
+            ],
+          ),
+          originSeconds: 0,
+          secondsPerPixel: 1 / 16,
+          left: 0,
+          right: 16,
+          colours: colours,
+          style: WaveformStyle(
+              multiwave: false, fromBottom: true, sqrtScale: sqrtScale),
+        );
+        final lines = strokes(painter, const Size(16, 32));
+        expect(lines, isNotEmpty);
+        // The row less its inset either side is what a column standing on the
+        // floor has to reach through.
+        return lines.map((l) => (l.a.dy - l.b.dy).abs()).reduce(math.max) / 30;
+      }
+
+      expect(reachOf(sqrtScale: false), closeTo(0.5, 0.01),
+          reason: 'straight through, half scale is half the box');
+      expect(reachOf(sqrtScale: true), closeTo(0.707, 0.01),
+          reason: 'the square root of a half, which is what lifts a quiet '
+              'take into the part of the box the eye reads');
+    });
+
+    /// The curve is the same either side of silence, so a centred wave is
+    /// still a wave and not a shape leaning one way.
+    test('a square-root wave still swings both ways', () {
+      final painter = WaveformPainter(
+        peaks: peaks(
+          start: 0,
+          end: 1,
+          bands: 1,
+          values: [
+            for (var i = 0; i < 16; i++) ...[-0.25, 0.25, 0.0]
+          ],
+        ),
+        originSeconds: 0,
+        secondsPerPixel: 1 / 16,
+        left: 0,
+        right: 16,
+        colours: colours,
+        style: const WaveformStyle(multiwave: false, sqrtScale: true),
+      );
+      final lines = strokes(painter, const Size(16, 32));
+      expect(lines, isNotEmpty);
+      for (final line in lines) {
+        // Half of the fifteen a centred wave has either way, because the
+        // square root of a quarter is a half.
+        expect(math.min(line.a.dy, line.b.dy), closeTo(16 - 7.5, 0.01));
+        expect(math.max(line.a.dy, line.b.dy), closeTo(16 + 7.5, 0.01));
+      }
+      expect(const WaveformStyle() == const WaveformStyle(sqrtScale: true),
+          isFalse,
+          reason: 'the scale is part of the style, or a lane that switched to '
+              'it would not repaint');
+    });
+
     test('a wave stops where its bar does', () {
       final painter = WaveformPainter(
         peaks: peaks(start: 0, end: 1, bands: 1, values: loud(32)),

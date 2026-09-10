@@ -125,15 +125,15 @@ void main() {
       }
     });
 
-    /// **Audio level's source row is a dropdown that starts on the comp**.
-    /// Unset means the composition's own mix, so the empty entry reads
-    /// *This comp* rather than None — and the list offers **every** layer, not
-    /// only the ones that draw a picture. That second half is the repair: music
-    /// arrives as an audio-only clip, which has no picture, so the one picker in
-    /// the catalogue that exists to point at sound was the one picker that left
-    /// it out. A Null stands in for it here — no picture either, and no fixture
-    /// to decode.
-    testWidgets('an Audio level names the comp until a layer is picked',
+    /// **Audio level's Source row is a dropdown that starts on the comp**, and
+    /// the Audio row under it names no layer until one is picked
+    /// (docs/impl/audio-nodes.md §3). The layer list offers **every** layer,
+    /// not only the ones that draw a picture: music arrives as an audio-only
+    /// clip, which has no picture, so the one picker in the catalogue that
+    /// exists to point at sound was the one picker that left it out. A Null
+    /// stands in for it here, having no picture either and no fixture to
+    /// decode.
+    testWidgets('an Audio level starts on the comp with no layer named',
         (tester) async {
       final p = withBlur();
       final comp = p.uiState.selectedComp!;
@@ -149,7 +149,10 @@ void main() {
       await mount(tester, p, const NodePanelFrb());
 
       expect(find.text(l10n.fxAudioThisComp), findsOneWidget,
-          reason: 'the closed picker says what an unset row means');
+          reason: 'the Source row starts on the composition\'s own mix');
+      expect(find.byKey(ValueKey<String>('node-row-$id-source')), findsOneWidget,
+          reason: 'and it is a row of its own, not the layer picker\'s empty '
+              'entry');
 
       await tester.tap(find.byKey(ValueKey<String>('fx-layer-$id-audio')));
       await tester.pumpAndSettle();

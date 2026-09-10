@@ -67,6 +67,7 @@ use syn::{
         file,
         colour_name,
         layer,
+        clip,
         mask_path,
         curve,
         action
@@ -499,6 +500,7 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
         "file",
         "colour_name",
         "layer",
+        "clip",
         "mask_path",
         "curve",
         "action",
@@ -511,8 +513,8 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
             syn::Error::new(
                 field.span(),
                 "every field is a parameter and needs one of #[slider] #[bounded] #[counter] \
-                 #[dial] #[toggle] #[choice] #[colour] #[seed] #[file] #[layer] #[mask_path] \
-                 #[curve] #[action]",
+                 #[dial] #[toggle] #[choice] #[colour] #[seed] #[file] #[layer] #[clip] \
+                 #[mask_path] #[curve] #[action]",
             )
         })?;
 
@@ -600,11 +602,16 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
             let default = get("default").unwrap_or_else(|| quote! { 0.0 });
             let min = get("min").unwrap_or_else(|| quote! { 0.0 });
             let max = get("max").unwrap_or_else(|| quote! { 1.0 });
+            // `log = true` for a frequency row, where every useful setting is
+            // in the bottom decade and a linear thumb spends most of its
+            // travel above them (docs/impl/audio-effects.md §2).
+            let log = get("log").unwrap_or_else(|| quote! { false });
             (
                 quote! {
                     ::lumit_core::fx::ParamKind::Slider {
                         default: #default,
                         range: (#min, #max),
+                        log: #log,
                     }
                 },
                 quote! { p.float(#idc, (#default) as f32) },
@@ -724,6 +731,11 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
                 quote! { p.layer_bound(#idc) },
             )
         }
+        // One clip on the layer a sibling `#[layer]` row names
+        // (docs/impl/audio-nodes.md §3). No arguments, and nothing to read:
+        // the host that reads the sound resolves the clip, as it resolves the
+        // layer, so the field is the unit type an OCIO name's is.
+        "clip" => (quote! { ::lumit_core::fx::ParamKind::Clip }, quote! { () }),
         // One of this layer's masks, handed to the effect as geometry.
         // `self_default` mirrors `#[layer]`'s and defaults the other way round:
         // an unset row means the layer's **first mask**, because an effect that

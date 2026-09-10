@@ -78,6 +78,12 @@ pub struct AudioJob {
     /// inside. Several jobs therefore share a strip, which is exactly what
     /// summing them onto one meter means.
     pub layer: uuid::Uuid,
+    /// **Which clip of that layer** the sound came through, where it came
+    /// through one: the clip `sequence_jobs` made this job from, and `None`
+    /// for every whole-layer job. Only a filtered reading looks at it
+    /// (docs/impl/audio-nodes.md §2); the mixer sums the jobs it is handed
+    /// whatever clips they came from.
+    pub clip: Option<uuid::Uuid>,
     pub path: PathBuf,
     pub in_s: f64,
     pub out_s: f64,
@@ -104,6 +110,11 @@ pub struct AudioJob {
     /// effects at all, which is what keeps every mix without a plugin
     /// byte-identical to the one before this field existed.
     pub chain: Option<Arc<AudioChain>>,
+    /// The **clip's own** insert chain, where the clip carries a stack of its
+    /// own and has not bypassed it (docs/impl/audio-timeline.md §4). It runs
+    /// before [`Self::chain`]: the clip's rack, then the row's, which is the
+    /// order the two racks read on screen. `None` for every whole-layer job.
+    pub clip_chain: Option<Arc<AudioChain>>,
 }
 
 /// A wire onto a layer's Volume (the Audio workspace board's *Duck under*):
@@ -232,6 +243,11 @@ impl PartialEq for AudioChain {
 /// latency, in frames — the caller places the sound that many frames **earlier**
 /// so the wet lands where the dry did.
 ///
+/// The span that comes back may be **longer** than the one that went in: a
+/// chain with a tail (a reverb's decay, an echo's repeats) runs on past its
+/// input, and the caller places the whole of what it is given, so the decay
+/// simply sums with whatever follows.
+///
 /// ponytail: the whole span is processed here, at plan-build time, rather than
 /// a block at a time into a lookahead ring on a chain worker
 /// (docs/impl/audio-plugins.md §3). The ring exists to keep the realtime
@@ -267,7 +283,9 @@ pub fn chain_bake(
         let first = bake_values(chain, instance, def, start_frame, 1, rate)
             .pop()
             .unwrap_or_default();
-        if let Some(processor) = def.open_audio(instance.plugin_state_bytes(), &first, offline) {
+        if let Some(processor) =
+            def.open_audio(instance.plugin_state_bytes(), &first, rate, offline)
+        {
             opened.push((instance, def, processor));
         }
     }
@@ -278,7 +296,14 @@ pub fn chain_bake(
         .iter()
         .map(|(_, _, processor)| processor.latency() as usize)
         .sum::<usize>();
-    let blocks = (frames + latency).div_ceil(AUDIO_BLOCK_FRAMES);
+    // The tail belongs in the block count too: `run_chain` runs the extra
+    // frames, and a row automated past the input's end still wants a value for
+    // every one of them.
+    let tail = opened
+        .iter()
+        .map(|(_, _, processor)| processor.tail() as usize)
+        .sum::<usize>();
+    let blocks = (frames + latency + tail).div_ceil(AUDIO_BLOCK_FRAMES);
     let ids: Vec<Uuid> = opened.iter().map(|(instance, _, _)| instance.id).collect();
     let links: Vec<lumit_core::fx::ChainLink> = opened
         .into_iter()
@@ -302,6 +327,46 @@ pub fn chain_bake(
         crate::gpufx::ofx::note(*id, sentence);
     }
     Some((out.samples, out.latency))
+}
+
+/// Run a job's **two** chains over its placed span: the clip's own rack
+/// first, then the row's on what came out of it
+/// (docs/impl/audio-timeline.md §4).
+///
+/// The one function both mixers call, for the same reason [`chain_bake`] is:
+/// the order of the racks and the sum of their latencies are facts about the
+/// code rather than something the preview and the export each decide. `None`
+/// when neither chain opens anything as audio, which leaves the decoded buffer
+/// exactly as it was.
+///
+/// The row's chain is read at `start_frame` less the clip chain's latency,
+/// because that is where the sound it is handed now begins; the returned
+/// latency is the two summed, and the caller places the run that many frames
+/// earlier.
+#[must_use]
+pub fn job_bake(
+    job: &AudioJob,
+    samples: &[f32],
+    start_frame: i64,
+    rate: u32,
+    offline: bool,
+) -> Option<(Vec<f32>, u32)> {
+    let clip = job
+        .clip_chain
+        .as_ref()
+        .and_then(|chain| chain_bake(chain, samples, start_frame, rate, offline));
+    let (dry, head): (&[f32], u32) = match &clip {
+        Some((wet, latency)) => (wet, *latency),
+        None => (samples, 0),
+    };
+    let layer = job
+        .chain
+        .as_ref()
+        .and_then(|chain| chain_bake(chain, dry, start_frame - i64::from(head), rate, offline));
+    match layer {
+        Some((wet, latency)) => Some((wet, latency.saturating_add(head))),
+        None => clip,
+    }
 }
 
 /// What one effect instance's rows hold at each block start.
@@ -410,35 +475,56 @@ pub struct ClipFade {
     /// Comp time the clip starts, and how long it takes to come up.
     pub start_s: f64,
     pub head_s: f64,
+    pub head_shape: lumit_core::sequence::FadeShape,
     /// Comp time the clip ends, and how long it takes to go away.
     pub end_s: f64,
     pub tail_s: f64,
+    pub tail_shape: lumit_core::sequence::FadeShape,
+    /// The clip's own level in dB (docs/impl/audio-timeline.md §2), carried
+    /// here because it is applied exactly where the ramps are.
+    pub gain_db: f64,
 }
 
 impl ClipFade {
     /// The ramp's gain at comp time `t` — 1.0 anywhere the clip is at full
     /// level.
     ///
-    /// **Equal power** (a quarter-sine, not a straight line), which is what
-    /// makes a crossfade hold its level across the join: two opposed sine
-    /// ramps have squares that sum to one, so uncorrelated material — two
-    /// different shots, the usual case — neither dips nor swells in the
-    /// middle. A straight line would dip by 3 dB there, which is the classic
-    /// hole in the middle of a dissolve.
+    /// Each end reads its own stored shape ([`lumit_core::sequence::FadeShape`],
+    /// docs/impl/audio-timeline.md §3), the tail reading the curve backwards
+    /// because that is what a fade out is. The default shape is **equal
+    /// power** (a quarter-sine, not a straight line), which is what makes a
+    /// crossfade hold its level across the join: two opposed sine ramps have
+    /// squares that sum to one, so uncorrelated material - two different
+    /// shots, the usual case - neither dips nor swells in the middle. A
+    /// straight line would dip by 3 dB there, which is the classic hole in the
+    /// middle of a dissolve.
+    ///
+    /// The head and the tail still multiply, so a clip shorter than its two
+    /// fades is heard as their product.
+    ///
+    /// The clip's own gain comes in **after** the ramps, so the ramps rise to
+    /// the gain rather than to unity: that is what the line drawn across the
+    /// box means, and it is why the gain is here and not another link in the
+    /// chain. It carries the fader's own knee, so a clip pulled to the foot of
+    /// the box is exactly silent.
     #[must_use]
     pub fn gain_at(&self, t: f64) -> f32 {
-        let ramp = |x: f64| (x.clamp(0.0, 1.0) * std::f64::consts::FRAC_PI_2).sin();
         let mut g = 1.0f64;
         if self.head_s > 0.0 {
-            g *= ramp((t - self.start_s) / self.head_s);
+            g *= self.head_shape.gain((t - self.start_s) / self.head_s);
         }
         if self.tail_s > 0.0 {
-            g *= ramp((self.end_s - t) / self.tail_s);
+            g *= self.tail_shape.gain((self.end_s - t) / self.tail_s);
         }
+        g *= f64::from(lumit_audio::mix::db_to_gain(self.gain_db));
         g as f32
     }
 
     /// Whether either ramp actually does anything.
+    ///
+    /// The gain is deliberately not in here: it is a constant, and
+    /// [`volume_bake`] reads a constant off `gain_at(0.0)` without needing an
+    /// envelope for it.
     #[must_use]
     pub fn is_active(&self) -> bool {
         self.head_s > 0.0 || self.tail_s > 0.0
@@ -2230,16 +2316,14 @@ fn mix_decoded(
                 rate,
             )?;
             let dry: &[f32] = &buf.samples[src_start * 2..(src_start + len) * 2];
-            // The export runs the chain **offline** (docs/impl/audio-plugins.md
+            // The export runs the chains **offline** (docs/impl/audio-plugins.md
             // §3): no deadline, and the plugin may take its slower path.
-            match job
-                .chain
-                .as_ref()
-                .and_then(|chain| chain_bake(chain, dry, start_frame, rate, true))
-            {
+            match job_bake(job, dry, start_frame, rate, true) {
                 // Latency compensation: the processed run is the placed span
                 // plus the chain's own delay, put down that many frames earlier
-                // so the wet sound lands where the dry did.
+                // so the wet sound lands where the dry did. Its length is the
+                // run's own, not the span's, which is what lets a tail ring on
+                // past the out point.
                 Some((samples, latency)) => Some(Placed {
                     start_frame: start_frame - i64::from(latency),
                     len: samples.len() / 2,
@@ -2800,6 +2884,7 @@ mod tests {
         let comp_id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
             master_volume_db: 0.0,
+            sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
             id: comp_id,
@@ -2993,6 +3078,7 @@ mod tests {
         let job = |volume: Property, offset_s: f64| AudioJob {
             item: uuid::Uuid::nil(),
             layer: uuid::Uuid::nil(),
+            clip: None,
             path: PathBuf::new(),
             in_s: 0.0,
             out_s: 10.0,
@@ -3003,6 +3089,7 @@ mod tests {
             fade: None,
             driven: None,
             chain: None,
+            clip_chain: None,
         };
         let (g, env) = volume_bake(&job(Property::fixed(-6.0), 0.0), 0, 48_000, 48_000);
         assert!(env.is_none(), "static volume needs no envelope");
@@ -3115,12 +3202,14 @@ mod tests {
             head_s: 0.0,
             end_s: 2.0,
             tail_s: 1.0,
+            ..Default::default()
         };
         let into = ClipFade {
             start_s: 1.0,
             head_s: 1.0,
             end_s: 3.0,
             tail_s: 0.0,
+            ..Default::default()
         };
         assert!(out.is_active() && into.is_active());
         assert!((out.gain_at(0.5) - 1.0).abs() < 1e-6, "before the join");
@@ -3141,6 +3230,53 @@ mod tests {
         // A clip with no neighbour has no ramp and costs nothing.
         assert!(!ClipFade::default().is_active());
         assert_eq!(ClipFade::default().gain_at(5.0), 1.0);
+    }
+
+    /// **A clip's own gain sits under its fade** (docs/impl/audio-timeline.md
+    /// §2, plan 18): the ramp rises to the gain line, not past it to unity,
+    /// which is what the line drawn across the box promises. The knee is the
+    /// fader's own, so a clip dragged to the foot of the box is silence and
+    /// not a whisper.
+    #[test]
+    fn a_clips_gain_multiplies_under_its_fade() {
+        // Half amplitude, to the precision dB is written in.
+        const HALF_DB: f64 = -6.020_599_913_279_624;
+
+        let flat = ClipFade {
+            start_s: 0.0,
+            head_s: 0.0,
+            end_s: 2.0,
+            tail_s: 0.0,
+            gain_db: HALF_DB,
+            ..Default::default()
+        };
+        assert!(
+            (flat.gain_at(1.0) - 0.5).abs() < 1e-6,
+            "a clip with no ramp is simply at its gain"
+        );
+
+        // A straight one-second ramp in, so the arithmetic is readable: half
+        // way up the ramp is half of half.
+        let ramped = ClipFade {
+            head_s: 1.0,
+            head_shape: lumit_core::sequence::FadeShape::Linear,
+            ..flat
+        };
+        assert_eq!(ramped.gain_at(0.0), 0.0, "still silent at the head");
+        assert!(
+            (ramped.gain_at(0.5) - 0.25).abs() < 1e-6,
+            "half way up a straight ramp to a half"
+        );
+        assert!(
+            (ramped.gain_at(1.0) - 0.5).abs() < 1e-6,
+            "and the ramp tops out at the gain line, not at unity"
+        );
+
+        let silent = ClipFade {
+            gain_db: -100.0,
+            ..flat
+        };
+        assert_eq!(silent.gain_at(1.0), 0.0, "at the knee, exactly nothing");
     }
 
     /// **Preview and export hear the same mix**, with a pan sweep and
@@ -3179,6 +3315,7 @@ mod tests {
         let job = AudioJob {
             item: uuid::Uuid::nil(),
             layer: uuid::Uuid::nil(),
+            clip: None,
             path: PathBuf::new(),
             in_s: 0.0,
             out_s: 1.0,
@@ -3196,9 +3333,11 @@ mod tests {
                 head_s: 0.25,
                 end_s: 1.0,
                 tail_s: 0.0,
+                ..Default::default()
             }),
             driven: None,
             chain: None,
+            clip_chain: None,
         };
 
         let (gain, envelope) = volume_bake(&job, 0, frames, rate);
@@ -3996,6 +4135,7 @@ mod tests {
         let outer_id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
             master_volume_db: 0.0,
+            sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
             id: outer_id,
@@ -4125,6 +4265,7 @@ mod tests {
         let outer_id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
             master_volume_db: 0.0,
+            sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
             id: outer_id,
@@ -4253,6 +4394,7 @@ mod tests {
         let comp_id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
             master_volume_db: 0.0,
+            sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
             id: comp_id,
@@ -5034,5 +5176,254 @@ mod tests {
                 "both filters write one file per frame"
             );
         }
+    }
+
+    /// One built-in audio effect on a rack of its own, with `over` written
+    /// into its rows.
+    ///
+    /// A chain with no wires in it, so the document and the two ids are never
+    /// read: `bake_values` only builds an expression context for a parameter a
+    /// wire feeds.
+    fn audio_rack(match_name: &str, over: &[(&str, f64)]) -> Arc<AudioChain> {
+        rack_of(vec![audio_effect(match_name, over)])
+    }
+
+    /// One built-in audio effect, with `over` written into its rows.
+    fn audio_effect(match_name: &str, over: &[(&str, f64)]) -> lumit_core::model::EffectInstance {
+        use lumit_core::anim::Property;
+        use lumit_core::model::EffectValue;
+
+        let mut instance = lumit_core::fx::instantiate(match_name).expect("a catalogue entry");
+        for param in &mut instance.params {
+            if let Some((_, value)) = over.iter().find(|(id, _)| *id == param.id) {
+                param.value = EffectValue::Float(Property::fixed(*value));
+            }
+        }
+        instance
+    }
+
+    /// A rack of them.
+    fn rack_of(effects: Vec<lumit_core::model::EffectInstance>) -> Arc<AudioChain> {
+        Arc::new(AudioChain {
+            doc: Arc::new(Document::new()),
+            comp: Uuid::nil(),
+            layer: Uuid::nil(),
+            effects,
+            graph: lumit_core::graph::LayerGraph::default(),
+            offset_s: 0.0,
+            base_s: 0.0,
+        })
+    }
+
+    /// A job carrying the two racks and nothing else. Both are `None` for a
+    /// layer whose switches are off, which is what
+    /// `a_clip_has_its_own_chain_and_each_fx_switch_drops_one` in
+    /// `crate::headless` pins the switches to.
+    fn racked_job(clip: Option<Arc<AudioChain>>, row: Option<Arc<AudioChain>>) -> AudioJob {
+        AudioJob {
+            item: Uuid::nil(),
+            layer: Uuid::nil(),
+            clip: None,
+            path: PathBuf::new(),
+            in_s: 0.0,
+            out_s: 1.0,
+            offset_s: 0.0,
+            volume: lumit_core::anim::Property::zero(),
+            pan: lumit_core::anim::Property::zero(),
+            carriers: Vec::new(),
+            fade: None,
+            driven: None,
+            chain: row,
+            clip_chain: clip,
+        }
+    }
+
+    /// The loudest sample in a run, either channel.
+    fn loudest(samples: &[f32]) -> f32 {
+        samples.iter().fold(0.0f32, |top, s| top.max(s.abs()))
+    }
+
+    /// **The clip's rack runs ahead of the row's, and a rack that is gone is
+    /// simply not run** (docs/impl/audio-effects.md §6 plan 4,
+    /// docs/impl/audio-timeline.md §4).
+    ///
+    /// A gain of +6 dB on the clip and a limiter on the row. The gain drives
+    /// the sound over the ceiling and the limiter, hearing it afterwards,
+    /// holds it there; the other order would let the +6 straight out. So the
+    /// peak alone says which way round the two racks ran.
+    ///
+    /// Each rack arrives as `None` when its switch is off: the clip's `fx`
+    /// and the layer's `switches.fx`, both pinned where the jobs are built.
+    /// This is the other half of that, because a chain that is gone changes
+    /// the sound back.
+    #[test]
+    fn a_clips_rack_runs_ahead_of_the_rows_and_a_missing_rack_is_not_run() {
+        let rate = 48_000u32;
+        let frames = rate as usize / 4;
+        // A quarter second at half scale, which is a whisker under the −6 dB
+        // ceiling the limiter is set to below.
+        let input: Vec<f32> = (0..frames)
+            .flat_map(|n| {
+                let phase = std::f64::consts::TAU * 220.0 * n as f64 / f64::from(rate);
+                [phase.sin() as f32 * 0.5; 2]
+            })
+            .collect();
+        let ceiling = 10f32.powf(-6.0 / 20.0);
+        let gain = || Some(audio_rack("audio_gain", &[("gain", 6.0)]));
+        let limiter = || Some(audio_rack("audio_limiter", &[("ceiling", -6.0)]));
+
+        let (both, _) = job_bake(&racked_job(gain(), limiter()), &input, 0, rate, true)
+            .expect("two racks, two effects");
+        assert!(
+            loudest(&both) < ceiling * 1.05,
+            "the limiter heard the +6 dB: peak {}",
+            loudest(&both)
+        );
+
+        // The clip's rack alone: the +6 dB comes out untouched, which is what
+        // the other order would have produced above.
+        let (clip_only, _) =
+            job_bake(&racked_job(gain(), None), &input, 0, rate, true).expect("the clip's rack");
+        assert!(
+            loudest(&clip_only) > ceiling * 1.8,
+            "nothing held the gain back: peak {}",
+            loudest(&clip_only)
+        );
+
+        // The row's rack alone: the sound was already under the ceiling, so
+        // the limiter leaves it where it was.
+        let (row_only, _) =
+            job_bake(&racked_job(None, limiter()), &input, 0, rate, true).expect("the row's rack");
+        assert!(loudest(&row_only) < ceiling * 1.05);
+
+        // And neither rack is the mix untouched, byte for byte.
+        assert!(
+            job_bake(&racked_job(None, None), &input, 0, rate, true).is_none(),
+            "no rack, no bake"
+        );
+    }
+
+    /// **A click through the distortion lands at the same comp time as
+    /// without it** (plan 2).
+    ///
+    /// The oversampler's half-band pair is linear phase, so the whole click
+    /// arrives late by one fixed number of frames. The bake reports it and the
+    /// mixer places the run that many frames earlier, which puts the click
+    /// back where it was.
+    #[test]
+    fn a_click_through_the_distortion_lands_at_the_same_comp_time() {
+        let rate = 48_000u32;
+        let frames = 4_096usize;
+        let at = 1_000usize;
+        let mut input = vec![0.0f32; frames * 2];
+        input[at * 2] = 0.2;
+        input[at * 2 + 1] = 0.2;
+
+        let job = racked_job(
+            None,
+            Some(audio_rack("audio_distortion", &[("drive", 0.0)])),
+        );
+        let (wet, latency) = job_bake(&job, &input, 0, rate, true).expect("the distortion opens");
+        assert!(latency > 0, "the half-band pair's delay is reported");
+        let peak = (0..wet.len() / 2)
+            .max_by(|a, b| wet[a * 2].abs().total_cmp(&wet[b * 2].abs()))
+            .expect("a frame to be loudest");
+        assert_eq!(
+            peak as i64 - i64::from(latency),
+            at as i64,
+            "placed {latency} frames earlier the click is back where it started"
+        );
+    }
+
+    /// **An echo's repeat runs past the clip's out point** (plan 2).
+    ///
+    /// A tenth of a second of sound through a quarter-second delay: the first
+    /// repeat is due after the input has stopped, so the run has to come back
+    /// longer than it went in or the echo is cut off at the join.
+    #[test]
+    fn an_echos_repeat_runs_past_the_clips_out_point() {
+        let rate = 48_000u32;
+        let frames = 4_800usize;
+        let mut input = vec![0.0f32; frames * 2];
+        input[0] = 0.9;
+        input[1] = 0.9;
+
+        let job = racked_job(
+            None,
+            Some(audio_rack(
+                "audio_delay",
+                &[("time", 250.0), ("wet", 100.0), ("feedback", 50.0)],
+            )),
+        );
+        let (wet, latency) = job_bake(&job, &input, 0, rate, true).expect("the delay opens");
+        assert_eq!(latency, 0, "a delay answers in the moment");
+        assert!(
+            wet.len() / 2 > frames,
+            "the run is longer than its input: {} frames against {frames}",
+            wet.len() / 2
+        );
+        // The first repeat, a quarter of a second along and so well past the
+        // input's own end.
+        let near = |at: usize| {
+            let last = wet.len() / 2;
+            (at.saturating_sub(96)..(at + 96).min(last)).fold(0.0f32, |top, n| top.max(wet[n * 2]))
+        };
+        assert!(
+            near(rate as usize / 4) > 0.05,
+            "the repeat sounds past the out point: {}",
+            near(rate as usize / 4)
+        );
+    }
+
+    /// **Four minutes of stereo through five effects** (docs/impl/
+    /// audio-effects.md §6 plan 6): the whole bake the mixer runs again
+    /// whenever a knob on a rack moves, timed rather than asserted. The
+    /// number this prints is what the note records.
+    ///
+    /// Ignored: it makes and processes four minutes of sound, which is far
+    /// more than a gate should cost on every run. To take a fresh reading:
+    /// `cargo test -p lumit-render --lib -- --ignored --nocapture
+    /// four_minutes_of_stereo`.
+    #[test]
+    #[ignore = "a timing, not a gate"]
+    fn four_minutes_of_stereo_through_five_effects() {
+        let rate = 48_000u32;
+        let frames = 4 * 60 * rate as usize;
+        // Sound rather than silence, so the dynamics have something to follow
+        // and the denormal guard is doing its job.
+        let input: Vec<f32> = (0..frames)
+            .flat_map(|n| {
+                let t = n as f64 / f64::from(rate);
+                let sample = ((std::f64::consts::TAU * 220.0 * t).sin()
+                    * (0.4 + 0.3 * (std::f64::consts::TAU * 0.7 * t).sin()))
+                    as f32;
+                [sample, sample * 0.8]
+            })
+            .collect();
+
+        // A rack a hand would actually build, and one of each family:
+        // shape it, hold it down, thicken it, dirty it, cap it.
+        let rack = rack_of(vec![
+            audio_effect("audio_eq", &[]),
+            audio_effect("audio_compressor", &[("threshold", -18.0)]),
+            audio_effect("audio_chorus", &[]),
+            audio_effect("audio_distortion", &[("drive", 6.0)]),
+            audio_effect("audio_limiter", &[]),
+        ]);
+        let job = racked_job(None, Some(rack));
+
+        let started = std::time::Instant::now();
+        let (wet, latency) = job_bake(&job, &input, 0, rate, true).expect("five effects open");
+        let seconds = started.elapsed().as_secs_f64();
+        println!(
+            "four minutes of stereo through five effects: {seconds:.2} s \
+             ({} frames out, {latency} of latency)",
+            wet.len() / 2
+        );
+        assert_eq!(
+            wet.len() / 2,
+            frames + latency as usize,
+            "no tail on this rack"
+        );
     }
 }

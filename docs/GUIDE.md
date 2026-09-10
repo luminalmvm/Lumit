@@ -342,7 +342,7 @@ Where things live in `flutter_ui/lib`:
 |---|---|
 | `main.dart` | Entry point |
 | `shell/` | The app shell: menu bar, tool bar, dock, status line, dialogues, settings window, command palette, splash, startup failure |
-| `panels/` | One file per panel or panel piece: Viewer, Timeline, Graph editor, effect controls, project, scopes, audio |
+| `panels/` | One file per panel or panel piece: Viewer, Timeline, Audio timeline, Graph editor, effect controls, project, scopes, audio |
 | `state/` | App state and Dart-side caches: `app_state.dart` (`LumitState`), `ui_state.dart`, `comp_model.dart` (what the panels read), `comp_time.dart`, `settings.dart`, `faults.dart` |
 | `widgets/` | Shared controls: colour picker, curve editor, marquee, time readout, `controls/` |
 | `builder/` | `ProjectItemBuilder`: a widget that rebuilds when one project item changes |
@@ -390,6 +390,10 @@ One job per crate.
 | `lumit-aplug-testplug` | Minimal CLAP and VST3 plugins for the host's tests: one library exporting both entry points, laid out either way |
 | `lumit-bench` | The headless performance harness the CI gates run, plus the `ofx-bench` binary. Nothing in the application depends on it |
 | `lumit-bridge` | The seam: a `cdylib` (and a `staticlib` for the macOS link) whose `api` module is the whole surface Flutter calls. Package name `lumit_bridge` |
+
+Lumit's own effects live in `crates/lumit-core/src/fx/effects/`, and the ones that
+process sound rather than pixels in `crates/lumit-core/src/fx/effects/audio/`, filed
+under the Audio category beside the hosted plugins.
 
 Nova is `lumit-eval` and `lumit-gpu` together: the render pipeline.
 

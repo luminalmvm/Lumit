@@ -77,7 +77,12 @@ List<BridgeLayerEntry> razorTargets(
   final halves = <LayerReference>[];
   for (final entry in targets) {
     try {
-      if (entry.info.kind == BridgeLayerKind.sequence) {
+      // The clip list, not the kind: an audio row is a Sequence layer that
+      // answers Audio, because audio_only is looked at before the kind is
+      // (docs/impl/audio-timeline.md §8). An empty Sequence layer has no clip
+      // to cut but is still a clip row, so both tests stand.
+      if (entry.info.clips.isNotEmpty ||
+          entry.info.kind == BridgeLayerKind.sequence) {
         entry.layer.cutClipAt(frame: frame);
       } else {
         halves.add(entry.layer.splitAt(frame: frame));

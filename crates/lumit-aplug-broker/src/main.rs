@@ -197,6 +197,7 @@ impl Session {
             plugin_id: bring.plugin_id,
             state: bring.state,
             params: bring.params,
+            rate: bring.rate,
             offline: bring.offline,
         };
         match LocalHost::open(&module, &setup) {

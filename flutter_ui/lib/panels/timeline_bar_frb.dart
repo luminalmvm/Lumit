@@ -470,49 +470,27 @@ class _BarState extends State<Bar> {
   /// afresh on every move, never from the snapped answer — otherwise a caught
   /// end could not be pulled off its target again.
   int _snappedDelta(int inFrame, int outFrame) {
-    // A *travel*, not a place: the axis's end padding must not be taken off it.
-    final raw = widget.axis.framesOfPx(_deltaPx);
-    final perFrame = widget.axis.perFrame;
-    final magnet = widget.magnet &&
-        !snapSuspended(
-            controlPressed: HardwareKeyboard.instance.isControlPressed);
-    if (!magnet || perFrame <= 0) {
-      _caught = null;
-      return raw.round();
-    }
-    // Whichever ends this grab moves. A trim moves one; a move moves both, and
-    // then the *nearer* capture is the one that takes the drag.
-    final sources = switch (_grab ?? BarGrab.move) {
-      BarGrab.move => [inFrame.toDouble(), outFrame.toDouble()],
-      BarGrab.trimIn => [inFrame.toDouble()],
-      BarGrab.trimOut => [outFrame.toDouble()],
-    };
-    // The bar's own ends are dropped from its targets: a target sitting where
-    // a source already is is a magnet at zero travel, which pins the bar where
-    // it started. Every kind at once, because what makes it useless is the
-    // frame, not what is standing on it.
-    final targets = widget.snapTargets
-        .where((s) => s.frame != inFrame && s.frame != outFrame);
-    var best = raw.round();
-    var bestPx = double.infinity;
-    SnapTarget? caught;
-    for (final source in sources) {
-      final snapped = snapFrame(
-        frame: source + raw,
-        targets: targets,
-        perFrame: perFrame,
-        magnet: true,
-      );
-      final on = snapped.caught;
-      if (on == null) continue;
-      final px = ((on.frame - (source + raw)) * perFrame).abs();
-      if (px >= bestPx) continue;
-      bestPx = px;
-      caught = on;
-      best = (on.frame - source).round();
-    }
-    _caught = caught;
-    return best;
+    final result = snappedDelta(
+      // A *travel*, not a place: the axis's end padding must not be taken off
+      // it.
+      rawFrames: widget.axis.framesOfPx(_deltaPx),
+      perFrame: widget.axis.perFrame,
+      // Whichever ends this grab moves.
+      sources: switch (_grab ?? BarGrab.move) {
+        BarGrab.move => [inFrame.toDouble(), outFrame.toDouble()],
+        BarGrab.trimIn => [inFrame.toDouble()],
+        BarGrab.trimOut => [outFrame.toDouble()],
+      },
+      // The bar's own ends are dropped, every kind at once: what makes a target
+      // useless is the frame, not what is standing on it.
+      targets: widget.snapTargets
+          .where((s) => s.frame != inFrame && s.frame != outFrame),
+      magnet: widget.magnet &&
+          !snapSuspended(
+              controlPressed: HardwareKeyboard.instance.isControlPressed),
+    );
+    _caught = result.caught;
+    return result.delta;
   }
 
   @override

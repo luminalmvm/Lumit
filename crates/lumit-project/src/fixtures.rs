@@ -189,6 +189,7 @@ pub fn stress_document(p: &StressParams) -> Document {
         }
         items.push(ProjectItem::Composition(Composition {
             master_volume_db: 0.0,
+            sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
             id: uid(2, ci),

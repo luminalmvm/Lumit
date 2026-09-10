@@ -91,6 +91,14 @@ impl lumit_eval::SourceStamper for Stamper<'_> {
         crate::track::camera_pose(doc, comp, t)
     }
 
+    /// What the comp's mix sounds like, for a driver reading *This comp*
+    /// (docs/impl/audio-nodes.md §3). The fingerprint is taken off the same
+    /// job list [`crate::audio_tap::DocumentAudio`] sums, so the term in the
+    /// name and the sound the driver reads cannot come apart.
+    fn mix_fingerprint(&self, doc: &std::sync::Arc<Document>, comp: &Composition) -> Option<u64> {
+        Some(crate::audio_tap::mix_fingerprint(doc, comp))
+    }
+
     fn stamp(&self, item: Uuid, lt: f64, native: bool) -> Option<(String, u64)> {
         // The same proxy resolution point the decode planner goes through
         // (`crate::source::effective_media`), and for the reason the key
@@ -308,6 +316,7 @@ mod tests {
             }));
         let comp = Composition {
             master_volume_db: 0.0,
+            sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
             id: Uuid::now_v7(),

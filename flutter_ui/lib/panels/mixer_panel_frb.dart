@@ -29,7 +29,6 @@ import '../icons/icons.dart';
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
-import '../state/audio_effects.dart';
 import '../state/comp_time.dart';
 import '../state/ui_state.dart';
 import '../theme/theme.dart';
@@ -264,7 +263,7 @@ class _MixerStripState extends State<_MixerStrip> {
               // rack is worked. Enabled entries only, because a fully bypassed
               // chain is not in the sound.
               if (info.effects
-                      .where((e) => e.enabled && isAudioEffectName(e.name))
+                      .where((e) => e.enabled && e.audio)
                       .length
                   case final chain when chain > 0) ...[
                 LumitTooltip(

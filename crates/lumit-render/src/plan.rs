@@ -995,6 +995,7 @@ mod tests {
         };
         let comp = |layers: Vec<Layer>| Composition {
             master_volume_db: 0.0,
+            sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
             id: Uuid::now_v7(),
@@ -1164,6 +1165,7 @@ mod tests {
         };
         let comp = |layers: Vec<Layer>| Composition {
             master_volume_db: 0.0,
+            sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
             id: Uuid::now_v7(),
@@ -1328,6 +1330,7 @@ mod tests {
             }
             let comp = Composition {
                 master_volume_db: 0.0,
+                sound_mix: false,
                 groups: Vec::new(),
                 beat_grid: None,
                 id: Uuid::now_v7(),
@@ -1412,6 +1415,7 @@ mod tests {
         };
         let comp = |layers: Vec<Layer>| Composition {
             master_volume_db: 0.0,
+            sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
             id: Uuid::now_v7(),
@@ -1583,6 +1587,7 @@ mod tests {
         let comp_id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
             master_volume_db: 0.0,
+            sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
             id: comp_id,
@@ -1717,6 +1722,7 @@ mod tests {
         // source frame, so every moment lands between two frames.
         let mut comp = Composition {
             master_volume_db: 0.0,
+            sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
             id: Uuid::now_v7(),

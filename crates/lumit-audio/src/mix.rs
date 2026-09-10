@@ -254,6 +254,11 @@ pub struct PlacedClip {
 /// something with no mixer to draw.
 pub const NO_METER: u8 = u8::MAX;
 
+/// How many frames of a bucket [`MixPlan::peaks`] reads at most before it
+/// starts striding: enough that a column's level is honest, few enough that
+/// four thousand columns over a long comp stay a short walk.
+pub const PEAK_SAMPLES_PER_BUCKET: usize = 256;
+
 /// A comp's audio as a *plan* rather than a baked buffer: the placed clips
 /// and the strip length. The realtime callback sums the covering clips per
 /// frame ([`MixPlan::frame_at`]) — a handful of multiply-adds — so editing
@@ -283,6 +288,57 @@ impl Default for MixPlan {
 }
 
 impl MixPlan {
+    /// The mix summarised over `[start_s, end_s)` in `buckets` buckets, as the
+    /// waveform lanes take a source's peaks: `min`, `max`, `rms` per bucket,
+    /// each in −1..1, laid out as `3 * bucket`. What the Timeline's Sound mix
+    /// row draws - the whole comp through every fader and the limiter, which
+    /// is the sound that leaves the machine.
+    ///
+    /// Read off the plan frame by frame rather than off a summary built at
+    /// import: the mix changes with every fader move, and there is no file to
+    /// summarise. A bucket longer than [`PEAK_SAMPLES_PER_BUCKET`] frames is
+    /// read on a stride, so a comp-wide view costs a bounded walk whatever
+    /// the comp's length.
+    // ponytail: a strided bucket can miss a one-frame transient at a wide
+    // zoom; a pyramid built on the prepare worker is the upgrade if the
+    // row ever needs to be cut against rather than read.
+    #[must_use]
+    pub fn peaks(&self, rate: u32, start_s: f64, end_s: f64, buckets: usize) -> Vec<f32> {
+        let mut out = vec![0.0f32; buckets * 3];
+        if buckets == 0 || rate == 0 || end_s <= start_s {
+            return out;
+        }
+        let rate_f = f64::from(rate);
+        let step_s = (end_s - start_s) / buckets as f64;
+        for b in 0..buckets {
+            let from = ((start_s + step_s * b as f64) * rate_f).floor().max(0.0) as usize;
+            let to = ((start_s + step_s * (b + 1) as f64) * rate_f)
+                .ceil()
+                .max(0.0) as usize;
+            let to = to.min(self.total_frames);
+            if to <= from {
+                continue;
+            }
+            let stride = ((to - from) / PEAK_SAMPLES_PER_BUCKET).max(1);
+            let (mut lo, mut hi, mut sq, mut n) = (0.0f32, 0.0f32, 0.0f64, 0u32);
+            let mut i = from;
+            while i < to {
+                let (l, r) = self.frame_at(i);
+                lo = lo.min(l.min(r));
+                hi = hi.max(l.max(r));
+                sq += f64::from(l * l + r * r) * 0.5;
+                n += 1;
+                i += stride;
+            }
+            if n > 0 {
+                out[b * 3] = lo;
+                out[b * 3 + 1] = hi;
+                out[b * 3 + 2] = (sq / f64::from(n)).sqrt() as f32;
+            }
+        }
+        out
+    }
+
     /// The `(left, right)` of output frame `i`: every covering clip summed,
     /// through the master fader, clamped to ±[`MASTER_CEILING`] like the baked
     /// mix. Allocation-free and lock-free — callback-safe. O(clips) per frame,
@@ -626,6 +682,61 @@ mod tests {
                 "frame {i}: plan and baked mixes disagree"
             );
         }
+    }
+
+    /// The Sound mix row's peaks are the mix itself, bucketed: a half-scale
+    /// tone over the first half of a plan reads 0.5 in the first bucket and
+    /// silence in the second, and a bucket long enough to be strided still
+    /// finds the level it holds.
+    #[test]
+    fn plan_peaks_bucket_the_mixed_output() {
+        use std::sync::Arc;
+        let rate = 100;
+        let mut samples = vec![0.5f32; 100];
+        samples.extend(std::iter::repeat_n(0.0f32, 100));
+        let plan = MixPlan {
+            clips: vec![PlacedClip {
+                buffer: Arc::new(lumit_media::AudioBuffer { rate, samples }),
+                start_frame: 0,
+                src_start: 0,
+                len: 100,
+                gain: [1.0, 1.0],
+                envelope: None,
+                meter: 0,
+            }],
+            total_frames: 100,
+            master_gain: 1.0,
+        };
+        let peaks = plan.peaks(rate, 0.0, 1.0, 2);
+        assert_eq!(peaks.len(), 6);
+        assert!(
+            (peaks[1] - 0.5).abs() < 1e-6,
+            "the first bucket's max is the tone"
+        );
+        assert!((peaks[2] - 0.5).abs() < 1e-6, "and so is its rms");
+        assert_eq!(&peaks[3..], &[0.0, 0.0, 0.0], "the second bucket is silent");
+
+        // One bucket over the whole second: 100 frames is under the stride
+        // threshold; a plan thirty thousand frames long is not, and the tone
+        // still reads through the stride.
+        let wide = MixPlan {
+            total_frames: 30_000,
+            clips: vec![PlacedClip {
+                len: 30_000,
+                buffer: Arc::new(lumit_media::AudioBuffer {
+                    rate,
+                    samples: vec![0.5f32; 60_000],
+                }),
+                ..plan.clips[0].clone()
+            }],
+            master_gain: 1.0,
+        };
+        let peaks = wide.peaks(rate, 0.0, 300.0, 1);
+        assert!((peaks[1] - 0.5).abs() < 1e-6);
+
+        // Nothing to bucket comes back as silence, never a panic.
+        assert!(plan.peaks(rate, 1.0, 0.5, 4).iter().all(|v| *v == 0.0));
+        assert!(plan.peaks(rate, 0.0, 1.0, 0).is_empty());
     }
 
     #[test]

@@ -527,6 +527,18 @@ pub enum Op {
         comp: Uuid,
         db: f64,
     },
+    /// Set or clear a composition's **mix mark**
+    /// (docs/impl/audio-timeline.md §2): the Audio timeline sets it the first
+    /// time it shows the comp, and converting the mix to a precomp clears it.
+    /// The layer Timeline stands its Sound mix row on the mark and folds the
+    /// Audio layers under it.
+    ///
+    /// A comp setting like the master fader, so it names no layer to lock, and
+    /// a plain flag, so it is exactly invertible.
+    SetSoundMix {
+        comp: Uuid,
+        on: bool,
+    },
     /// Set — or clear, with `None` — a composition's **confirmed beat grid**
     /// (docs/09 §5): the tempo and phase the Timeline's beat band
     /// numbers bars from. Committed by beat detection beside the markers it
@@ -789,6 +801,7 @@ impl Op {
             Op::SetLayerVolume { .. } => "Edit volume",
             Op::SetLayerPan { .. } => "Edit pan",
             Op::SetMasterVolume { .. } => "Move master fader",
+            Op::SetSoundMix { .. } => "Sound mix",
             Op::SetBeatGrid { .. } => "Set beat grid",
             Op::SetRetimeProperty { .. } => "Edit Retime",
             Op::SetLayerInterpolation { .. } => "Set interpolation",
@@ -1893,6 +1906,14 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             Ok(Op::SetMasterVolume {
                 comp: *comp,
                 db: previous,
+            })
+        }
+        Op::SetSoundMix { comp, on } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let previous = std::mem::replace(&mut c.sound_mix, *on);
+            Ok(Op::SetSoundMix {
+                comp: *comp,
+                on: previous,
             })
         }
         Op::SetBeatGrid { comp, grid } => {

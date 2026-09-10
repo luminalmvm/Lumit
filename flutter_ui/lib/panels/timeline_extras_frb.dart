@@ -51,11 +51,16 @@ class CompTabsFrb extends StatelessWidget {
   /// command palette start an export, and this button must start *that* one.
   final VoidCallback onExport;
 
+  /// The kicker ahead of the tabs. The Timeline's own name unless the panel
+  /// wearing this strip says otherwise, as the Audio timeline does.
+  final String? title;
+
   const CompTabsFrb({
     super.key,
     required this.state,
     required this.uiState,
     required this.onExport,
+    this.title,
   });
 
   @override
@@ -94,7 +99,8 @@ class CompTabsFrb extends StatelessWidget {
           // the container these tabs belong to rather than one of them.
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Text(l10n.panelTimeline.toUpperCase(), style: t.kickerOn),
+            child: Text((title ?? l10n.panelTimeline).toUpperCase(),
+                style: t.kickerOn),
           ),
           Expanded(child: _strip(context, t, comps, selected)),
           // The single filled action this surface is allowed (§3.1, §12A.1):

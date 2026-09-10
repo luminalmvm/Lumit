@@ -199,18 +199,40 @@ pub trait AudioTap: Sync {
     /// a layer with no audio, or a reference that names nothing.
     fn samples(&self, layer: uuid::Uuid, from: f64, to: f64, out: &mut Vec<f32>) -> Option<f64>;
 
-    /// Mono samples of the **whole composition's mix** — everything the mixer
-    /// sums, at the layers' own volumes — over a window `half` seconds either
-    /// side of the frame being drawn, appended to `out`, and the rate.
+    /// Mono samples of the comp's mix restricted to `layer` and, within it, to
+    /// `clip`, each `None` meaning everything, over `half` seconds either side
+    /// of the frame being drawn. Post-fader, **pre-rack**: the layers' audio
+    /// insert chains are not run, so this is the dry sound at the layer's own
+    /// fader. A driver is asked once a picture frame, and a plugin cannot
+    /// answer a window of a track thousands of times in a render.
+    ///
+    /// One reading with three filters rather than three readings
+    /// (docs/impl/audio-nodes.md §2): the comp's mix, one layer of it and one
+    /// clip of that layer are the same windowed mixdown over a different set of
+    /// the mixer's own jobs, so they cannot come apart from each other or from
+    /// the sound a listener hears.
     ///
     /// The window is centred by the host rather than named by the caller
     /// because the comp's clock is the *host's*: a driver knows only its own
     /// layer's time, and a layer that starts late would read the mix at the
     /// wrong moment of the track. `None` — the default, and a comp whose
     /// layers make no sound — is the same silence a dangling reference gives.
-    fn mix(&self, half: f64, out: &mut Vec<f32>) -> Option<f64> {
-        let _ = (half, out);
+    fn strip(
+        &self,
+        layer: Option<uuid::Uuid>,
+        clip: Option<uuid::Uuid>,
+        half: f64,
+        out: &mut Vec<f32>,
+    ) -> Option<f64> {
+        let _ = (layer, clip, half, out);
         None
+    }
+
+    /// The **whole composition's mix**: [`Self::strip`] with neither filter
+    /// set. Kept as its own name because that is what a driver left on *This
+    /// comp* asks for, and because it read this way before the filters existed.
+    fn mix(&self, half: f64, out: &mut Vec<f32>) -> Option<f64> {
+        self.strip(None, None, half, out)
     }
 }
 
@@ -416,10 +438,16 @@ pub trait EffectDef: Sync + Send + 'static {
     /// (docs/12 §1's inert placeholder, in the mix rather than in the picture).
     ///
     /// `state` is the opaque blob the `.lum` kept for this instance, `values`
-    /// what its rows hold at the chain's first block, and `offline` says this
-    /// is an export — no deadline, and the plugin may take its slower, better
-    /// path. The order those are applied in is the host's business and is
-    /// pinned there; **properties win over a stale state blob** either way.
+    /// what its rows hold at the chain's first block, `rate` the hertz this
+    /// bake runs at, and `offline` says this is an export, with no deadline,
+    /// so the plugin may take its slower, better path. The order those are
+    /// applied in is the host's business and is pinned there; **properties win
+    /// over a stale state blob** either way.
+    ///
+    /// The rate is handed over rather than assumed because the preview's
+    /// 48 kHz is not the export's: a filter opened at the wrong rate is tuned
+    /// at the wrong frequency, and every coefficient in a built-in effect is
+    /// computed from this number.
     ///
     /// Never called from a rebuild path: opening a plugin spawns or talks to
     /// another process.
@@ -427,6 +455,7 @@ pub trait EffectDef: Sync + Send + 'static {
         &self,
         _state: Option<Vec<u8>>,
         _values: &[(ParamId, f64)],
+        _rate: u32,
         _offline: bool,
     ) -> Option<std::sync::Arc<dyn super::audio_chain::AudioProcessor>> {
         None

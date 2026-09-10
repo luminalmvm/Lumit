@@ -362,7 +362,7 @@ fn a_row_is_named_by_the_plugins_own_parameter_id() {
     // 0…4 is the whole of what the parameter is, which is a Slider and not a
     // Float with a typing box beyond its ends.
     assert!(
-        matches!(row.kind, ParamKind::Slider { default, range } if default == 1.0 && range == (0.0, 4.0)),
+        matches!(row.kind, ParamKind::Slider { default, range, .. } if default == 1.0 && range == (0.0, 4.0)),
         "a closed CLAP range is a slider: {:?}",
         row.kind
     );
@@ -394,6 +394,7 @@ fn the_order_of_actions_is_the_one_written_down() {
         plugin_id: plugin_id(Kind::Reporter),
         state: Some(vec![1, 2, 3, 4]),
         params: vec![(PARAM_KNOB, 0.75)],
+        rate: 48_000,
         offline: false,
     };
     let host = LocalHost::open(&module, &setup).expect("the reporter opens");
@@ -520,6 +521,7 @@ fn properties_win_over_a_stale_state() {
         plugin_id: plugin_id(Kind::Gain),
         state: Some(4.0f64.to_le_bytes().to_vec()),
         params: vec![(PARAM_GAIN, 2.0)],
+        rate: 48_000,
         offline: false,
     };
     let host = LocalHost::open(&module, &setup).expect("the gain plugin opens");

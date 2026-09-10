@@ -3099,6 +3099,7 @@ fn a_plugin_is_told_its_frame_and_handed_its_neighbours() {
     // A comp at sixty frames a second, resolved half a second in: frame 30.
     let comp = Composition {
         master_volume_db: 0.0,
+        sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
         id: uuid::Uuid::now_v7(),

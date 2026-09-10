@@ -34,6 +34,10 @@
       "label": "Utility"
     },
     {
+      "slug": "audio",
+      "label": "Audio"
+    },
+    {
       "slug": "controls",
       "label": "Controls"
     },
@@ -17927,6 +17931,1429 @@
       "matte_role": "strength"
     },
     {
+      "slug": "gain",
+      "match_name": "audio_gain",
+      "label": "Gain",
+      "version": 1,
+      "category": "Audio",
+      "category_slug": "audio",
+      "params": [
+        {
+          "id": "gain",
+          "label": "Gain",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 24.0,
+          "hard_min": -100.0,
+          "hard_max": 24.0
+        },
+        {
+          "id": "left_trim",
+          "label": "Left trim",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -24.0,
+          "slider_max": 24.0,
+          "hard_min": -24.0,
+          "hard_max": 24.0
+        },
+        {
+          "id": "right_trim",
+          "label": "Right trim",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -24.0,
+          "slider_max": 24.0,
+          "hard_min": -24.0,
+          "hard_max": 24.0
+        },
+        {
+          "id": "invert",
+          "label": "Invert",
+          "kind": "int",
+          "unit": "raw",
+          "default": 0,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "stereo-width",
+      "match_name": "audio_stereo_width",
+      "label": "Stereo width",
+      "version": 1,
+      "category": "Audio",
+      "category_slug": "audio",
+      "params": [
+        {
+          "id": "width",
+          "label": "Width",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0,
+          "hard_max": 200.0
+        },
+        {
+          "id": "balance",
+          "label": "Balance",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0,
+          "hard_min": -100.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "mono_below",
+          "label": "Mono below",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 500.0,
+          "hard_min": 0.0,
+          "hard_max": 500.0
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "parametric-eq",
+      "match_name": "audio_eq",
+      "label": "Parametric EQ",
+      "version": 1,
+      "category": "Audio",
+      "category_slug": "audio",
+      "params": [
+        {
+          "id": "band1_on",
+          "label": "Band 1 on",
+          "kind": "int",
+          "unit": "raw",
+          "default": 0,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
+          "id": "band1_type",
+          "label": "Band 1 type",
+          "kind": "int",
+          "unit": "raw",
+          "default": 3,
+          "slider_min": 0.0,
+          "slider_max": 5.0,
+          "hard_min": 0.0,
+          "hard_max": 5.0
+        },
+        {
+          "id": "band1_freq",
+          "label": "Band 1 frequency",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 80.0,
+          "slider_min": 20.0,
+          "slider_max": 20000.0,
+          "hard_min": 20.0,
+          "hard_max": 20000.0
+        },
+        {
+          "id": "band1_gain",
+          "label": "Band 1 gain",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -24.0,
+          "slider_max": 24.0,
+          "hard_min": -24.0,
+          "hard_max": 24.0
+        },
+        {
+          "id": "band1_q",
+          "label": "Band 1 Q",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.7071067811865476,
+          "slider_min": 0.1,
+          "slider_max": 10.0,
+          "hard_min": 0.1,
+          "hard_max": 10.0
+        },
+        {
+          "id": "band2_on",
+          "label": "Band 2 on",
+          "kind": "int",
+          "unit": "raw",
+          "default": 1,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
+          "id": "band2_type",
+          "label": "Band 2 type",
+          "kind": "int",
+          "unit": "raw",
+          "default": 0,
+          "slider_min": 0.0,
+          "slider_max": 5.0,
+          "hard_min": 0.0,
+          "hard_max": 5.0
+        },
+        {
+          "id": "band2_freq",
+          "label": "Band 2 frequency",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 250.0,
+          "slider_min": 20.0,
+          "slider_max": 20000.0,
+          "hard_min": 20.0,
+          "hard_max": 20000.0
+        },
+        {
+          "id": "band2_gain",
+          "label": "Band 2 gain",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -24.0,
+          "slider_max": 24.0,
+          "hard_min": -24.0,
+          "hard_max": 24.0
+        },
+        {
+          "id": "band2_q",
+          "label": "Band 2 Q",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.1,
+          "slider_max": 10.0,
+          "hard_min": 0.1,
+          "hard_max": 10.0
+        },
+        {
+          "id": "band3_on",
+          "label": "Band 3 on",
+          "kind": "int",
+          "unit": "raw",
+          "default": 1,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
+          "id": "band3_type",
+          "label": "Band 3 type",
+          "kind": "int",
+          "unit": "raw",
+          "default": 0,
+          "slider_min": 0.0,
+          "slider_max": 5.0,
+          "hard_min": 0.0,
+          "hard_max": 5.0
+        },
+        {
+          "id": "band3_freq",
+          "label": "Band 3 frequency",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 1000.0,
+          "slider_min": 20.0,
+          "slider_max": 20000.0,
+          "hard_min": 20.0,
+          "hard_max": 20000.0
+        },
+        {
+          "id": "band3_gain",
+          "label": "Band 3 gain",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -24.0,
+          "slider_max": 24.0,
+          "hard_min": -24.0,
+          "hard_max": 24.0
+        },
+        {
+          "id": "band3_q",
+          "label": "Band 3 Q",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.1,
+          "slider_max": 10.0,
+          "hard_min": 0.1,
+          "hard_max": 10.0
+        },
+        {
+          "id": "band4_on",
+          "label": "Band 4 on",
+          "kind": "int",
+          "unit": "raw",
+          "default": 1,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
+          "id": "band4_type",
+          "label": "Band 4 type",
+          "kind": "int",
+          "unit": "raw",
+          "default": 0,
+          "slider_min": 0.0,
+          "slider_max": 5.0,
+          "hard_min": 0.0,
+          "hard_max": 5.0
+        },
+        {
+          "id": "band4_freq",
+          "label": "Band 4 frequency",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 4000.0,
+          "slider_min": 20.0,
+          "slider_max": 20000.0,
+          "hard_min": 20.0,
+          "hard_max": 20000.0
+        },
+        {
+          "id": "band4_gain",
+          "label": "Band 4 gain",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -24.0,
+          "slider_max": 24.0,
+          "hard_min": -24.0,
+          "hard_max": 24.0
+        },
+        {
+          "id": "band4_q",
+          "label": "Band 4 Q",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.1,
+          "slider_max": 10.0,
+          "hard_min": 0.1,
+          "hard_max": 10.0
+        },
+        {
+          "id": "band5_on",
+          "label": "Band 5 on",
+          "kind": "int",
+          "unit": "raw",
+          "default": 0,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
+          "id": "band5_type",
+          "label": "Band 5 type",
+          "kind": "int",
+          "unit": "raw",
+          "default": 4,
+          "slider_min": 0.0,
+          "slider_max": 5.0,
+          "hard_min": 0.0,
+          "hard_max": 5.0
+        },
+        {
+          "id": "band5_freq",
+          "label": "Band 5 frequency",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 12000.0,
+          "slider_min": 20.0,
+          "slider_max": 20000.0,
+          "hard_min": 20.0,
+          "hard_max": 20000.0
+        },
+        {
+          "id": "band5_gain",
+          "label": "Band 5 gain",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -24.0,
+          "slider_max": 24.0,
+          "hard_min": -24.0,
+          "hard_max": 24.0
+        },
+        {
+          "id": "band5_q",
+          "label": "Band 5 Q",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.7071067811865476,
+          "slider_min": 0.1,
+          "slider_max": 10.0,
+          "hard_min": 0.1,
+          "hard_max": 10.0
+        },
+        {
+          "id": "output",
+          "label": "Output",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -24.0,
+          "slider_max": 24.0,
+          "hard_min": -24.0,
+          "hard_max": 24.0
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "graphic-eq",
+      "match_name": "audio_graphic_eq",
+      "label": "Graphic EQ",
+      "version": 1,
+      "category": "Audio",
+      "category_slug": "audio",
+      "params": [
+        {
+          "id": "gain_31",
+          "label": "31 Hz",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -12.0,
+          "slider_max": 12.0,
+          "hard_min": -12.0,
+          "hard_max": 12.0
+        },
+        {
+          "id": "gain_63",
+          "label": "63 Hz",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -12.0,
+          "slider_max": 12.0,
+          "hard_min": -12.0,
+          "hard_max": 12.0
+        },
+        {
+          "id": "gain_125",
+          "label": "125 Hz",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -12.0,
+          "slider_max": 12.0,
+          "hard_min": -12.0,
+          "hard_max": 12.0
+        },
+        {
+          "id": "gain_250",
+          "label": "250 Hz",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -12.0,
+          "slider_max": 12.0,
+          "hard_min": -12.0,
+          "hard_max": 12.0
+        },
+        {
+          "id": "gain_500",
+          "label": "500 Hz",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -12.0,
+          "slider_max": 12.0,
+          "hard_min": -12.0,
+          "hard_max": 12.0
+        },
+        {
+          "id": "gain_1k",
+          "label": "1 kHz",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -12.0,
+          "slider_max": 12.0,
+          "hard_min": -12.0,
+          "hard_max": 12.0
+        },
+        {
+          "id": "gain_2k",
+          "label": "2 kHz",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -12.0,
+          "slider_max": 12.0,
+          "hard_min": -12.0,
+          "hard_max": 12.0
+        },
+        {
+          "id": "gain_4k",
+          "label": "4 kHz",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -12.0,
+          "slider_max": 12.0,
+          "hard_min": -12.0,
+          "hard_max": 12.0
+        },
+        {
+          "id": "gain_8k",
+          "label": "8 kHz",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -12.0,
+          "slider_max": 12.0,
+          "hard_min": -12.0,
+          "hard_max": 12.0
+        },
+        {
+          "id": "gain_16k",
+          "label": "16 kHz",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -12.0,
+          "slider_max": 12.0,
+          "hard_min": -12.0,
+          "hard_max": 12.0
+        },
+        {
+          "id": "output",
+          "label": "Output",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -24.0,
+          "slider_max": 24.0,
+          "hard_min": -24.0,
+          "hard_max": 24.0
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "compressor",
+      "match_name": "audio_compressor",
+      "label": "Compressor",
+      "version": 1,
+      "category": "Audio",
+      "category_slug": "audio",
+      "params": [
+        {
+          "id": "threshold",
+          "label": "Threshold",
+          "kind": "slider",
+          "unit": "raw",
+          "default": -18.0,
+          "slider_min": -60.0,
+          "slider_max": 0.0,
+          "hard_min": -60.0,
+          "hard_max": 0.0
+        },
+        {
+          "id": "ratio",
+          "label": "Ratio",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 4.0,
+          "slider_min": 1.0,
+          "slider_max": 20.0,
+          "hard_min": 1.0,
+          "hard_max": 20.0
+        },
+        {
+          "id": "knee",
+          "label": "Knee",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 6.0,
+          "slider_min": 0.0,
+          "slider_max": 24.0,
+          "hard_min": 0.0,
+          "hard_max": 24.0
+        },
+        {
+          "id": "attack",
+          "label": "Attack",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 10.0,
+          "slider_min": 0.1,
+          "slider_max": 100.0,
+          "hard_min": 0.1,
+          "hard_max": 100.0
+        },
+        {
+          "id": "release",
+          "label": "Release",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 100.0,
+          "slider_min": 5.0,
+          "slider_max": 1000.0,
+          "hard_min": 5.0,
+          "hard_max": 1000.0
+        },
+        {
+          "id": "makeup",
+          "label": "Makeup",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 24.0,
+          "hard_min": 0.0,
+          "hard_max": 24.0
+        },
+        {
+          "id": "detector",
+          "label": "Detector",
+          "kind": "int",
+          "unit": "raw",
+          "default": 0,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
+          "id": "lookahead",
+          "label": "Lookahead",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 20.0,
+          "hard_min": 0.0,
+          "hard_max": 20.0
+        },
+        {
+          "id": "wet",
+          "label": "Wet",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "limiter",
+      "match_name": "audio_limiter",
+      "label": "Limiter",
+      "version": 1,
+      "category": "Audio",
+      "category_slug": "audio",
+      "params": [
+        {
+          "id": "ceiling",
+          "label": "Ceiling",
+          "kind": "slider",
+          "unit": "raw",
+          "default": -0.3,
+          "slider_min": -24.0,
+          "slider_max": 0.0,
+          "hard_min": -24.0,
+          "hard_max": 0.0
+        },
+        {
+          "id": "input",
+          "label": "Input",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -12.0,
+          "slider_max": 24.0,
+          "hard_min": -12.0,
+          "hard_max": 24.0
+        },
+        {
+          "id": "lookahead",
+          "label": "Lookahead",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 5.0,
+          "slider_min": 0.0,
+          "slider_max": 20.0,
+          "hard_min": 0.0,
+          "hard_max": 20.0
+        },
+        {
+          "id": "release",
+          "label": "Release",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 100.0,
+          "slider_min": 1.0,
+          "slider_max": 1000.0,
+          "hard_min": 1.0,
+          "hard_max": 1000.0
+        },
+        {
+          "id": "true_peak",
+          "label": "True peak",
+          "kind": "int",
+          "unit": "raw",
+          "default": 0,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "gate",
+      "match_name": "audio_gate",
+      "label": "Gate",
+      "version": 1,
+      "category": "Audio",
+      "category_slug": "audio",
+      "params": [
+        {
+          "id": "threshold",
+          "label": "Threshold",
+          "kind": "slider",
+          "unit": "raw",
+          "default": -40.0,
+          "slider_min": -60.0,
+          "slider_max": 0.0,
+          "hard_min": -60.0,
+          "hard_max": 0.0
+        },
+        {
+          "id": "ratio",
+          "label": "Ratio",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 20.0,
+          "slider_min": 1.0,
+          "slider_max": 20.0,
+          "hard_min": 1.0,
+          "hard_max": 20.0
+        },
+        {
+          "id": "hysteresis",
+          "label": "Hysteresis",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 3.0,
+          "slider_min": 0.0,
+          "slider_max": 24.0,
+          "hard_min": 0.0,
+          "hard_max": 24.0
+        },
+        {
+          "id": "attack",
+          "label": "Attack",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.1,
+          "slider_max": 100.0,
+          "hard_min": 0.1,
+          "hard_max": 100.0
+        },
+        {
+          "id": "hold",
+          "label": "Hold",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 10.0,
+          "slider_min": 0.0,
+          "slider_max": 500.0,
+          "hard_min": 0.0,
+          "hard_max": 500.0
+        },
+        {
+          "id": "release",
+          "label": "Release",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 100.0,
+          "slider_min": 5.0,
+          "slider_max": 1000.0,
+          "hard_min": 5.0,
+          "hard_max": 1000.0
+        },
+        {
+          "id": "range",
+          "label": "Range",
+          "kind": "slider",
+          "unit": "raw",
+          "default": -60.0,
+          "slider_min": -100.0,
+          "slider_max": 0.0,
+          "hard_min": -100.0,
+          "hard_max": 0.0
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "distortion",
+      "match_name": "audio_distortion",
+      "label": "Distortion",
+      "version": 1,
+      "category": "Audio",
+      "category_slug": "audio",
+      "params": [
+        {
+          "id": "drive",
+          "label": "Drive",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 12.0,
+          "slider_min": 0.0,
+          "slider_max": 48.0,
+          "hard_min": 0.0,
+          "hard_max": 48.0
+        },
+        {
+          "id": "shape",
+          "label": "Shape",
+          "kind": "int",
+          "unit": "raw",
+          "default": 0,
+          "slider_min": 0.0,
+          "slider_max": 4.0,
+          "hard_min": 0.0,
+          "hard_max": 4.0
+        },
+        {
+          "id": "tone",
+          "label": "Tone",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -12.0,
+          "slider_max": 12.0,
+          "hard_min": -12.0,
+          "hard_max": 12.0
+        },
+        {
+          "id": "output",
+          "label": "Output",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -24.0,
+          "slider_max": 24.0,
+          "hard_min": -24.0,
+          "hard_max": 24.0
+        },
+        {
+          "id": "wet",
+          "label": "Wet",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "delay",
+      "match_name": "audio_delay",
+      "label": "Delay",
+      "version": 1,
+      "category": "Audio",
+      "category_slug": "audio",
+      "params": [
+        {
+          "id": "time",
+          "label": "Time",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 250.0,
+          "slider_min": 1.0,
+          "slider_max": 2000.0,
+          "hard_min": 1.0,
+          "hard_max": 2000.0
+        },
+        {
+          "id": "note",
+          "label": "Note",
+          "kind": "int",
+          "unit": "raw",
+          "default": 2,
+          "slider_min": 0.0,
+          "slider_max": 6.0,
+          "hard_min": 0.0,
+          "hard_max": 6.0
+        },
+        {
+          "id": "sync",
+          "label": "Sync",
+          "kind": "int",
+          "unit": "raw",
+          "default": 0,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
+          "id": "feedback",
+          "label": "Feedback",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 35.0,
+          "slider_min": 0.0,
+          "slider_max": 95.0,
+          "hard_min": 0.0,
+          "hard_max": 95.0
+        },
+        {
+          "id": "damping",
+          "label": "Damping",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 6000.0,
+          "slider_min": 200.0,
+          "slider_max": 20000.0,
+          "hard_min": 200.0,
+          "hard_max": 20000.0
+        },
+        {
+          "id": "ping_pong",
+          "label": "Ping-pong",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "wet",
+          "label": "Wet",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 35.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "reverb",
+      "match_name": "audio_reverb",
+      "label": "Reverb",
+      "version": 1,
+      "category": "Audio",
+      "category_slug": "audio",
+      "params": [
+        {
+          "id": "room_size",
+          "label": "Room size",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "damping",
+          "label": "Damping",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "width",
+          "label": "Width",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "pre_delay",
+          "label": "Pre-delay",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 20.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0,
+          "hard_max": 200.0
+        },
+        {
+          "id": "high_cut",
+          "label": "High cut",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 12000.0,
+          "slider_min": 500.0,
+          "slider_max": 20000.0,
+          "hard_min": 500.0,
+          "hard_max": 20000.0
+        },
+        {
+          "id": "dry",
+          "label": "Dry",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "wet",
+          "label": "Wet",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 30.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "chorus",
+      "match_name": "audio_chorus",
+      "label": "Chorus",
+      "version": 1,
+      "category": "Audio",
+      "category_slug": "audio",
+      "params": [
+        {
+          "id": "mode",
+          "label": "Mode",
+          "kind": "int",
+          "unit": "raw",
+          "default": 0,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
+          "id": "rate",
+          "label": "Rate",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.5,
+          "slider_min": 0.01,
+          "slider_max": 10.0,
+          "hard_min": 0.01,
+          "hard_max": 10.0
+        },
+        {
+          "id": "depth",
+          "label": "Depth",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "delay",
+          "label": "Delay",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 25.0,
+          "slider_min": 0.1,
+          "slider_max": 40.0,
+          "hard_min": 0.1,
+          "hard_max": 40.0
+        },
+        {
+          "id": "feedback",
+          "label": "Feedback",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": -95.0,
+          "slider_max": 95.0,
+          "hard_min": -95.0,
+          "hard_max": 95.0
+        },
+        {
+          "id": "voices",
+          "label": "Voices",
+          "kind": "int",
+          "unit": "raw",
+          "default": 2,
+          "slider_min": 1.0,
+          "slider_max": 4.0,
+          "hard_min": 1.0,
+          "hard_max": 4.0
+        },
+        {
+          "id": "spread",
+          "label": "Spread",
+          "kind": "slider",
+          "unit": "degrees",
+          "default": 90.0,
+          "slider_min": 0.0,
+          "slider_max": 180.0,
+          "hard_min": 0.0,
+          "hard_max": 180.0
+        },
+        {
+          "id": "wet",
+          "label": "Wet",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "phaser",
+      "match_name": "audio_phaser",
+      "label": "Phaser",
+      "version": 1,
+      "category": "Audio",
+      "category_slug": "audio",
+      "params": [
+        {
+          "id": "stages",
+          "label": "Stages",
+          "kind": "int",
+          "unit": "raw",
+          "default": 4,
+          "slider_min": 1.0,
+          "slider_max": 12.0,
+          "hard_min": 1.0,
+          "hard_max": 12.0
+        },
+        {
+          "id": "rate",
+          "label": "Rate",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.5,
+          "slider_min": 0.01,
+          "slider_max": 10.0,
+          "hard_min": 0.01,
+          "hard_max": 10.0
+        },
+        {
+          "id": "depth",
+          "label": "Depth",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 70.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "centre",
+          "label": "Centre",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 700.0,
+          "slider_min": 50.0,
+          "slider_max": 8000.0,
+          "hard_min": 50.0,
+          "hard_max": 8000.0
+        },
+        {
+          "id": "feedback",
+          "label": "Feedback",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 50.0,
+          "slider_min": -95.0,
+          "slider_max": 95.0,
+          "hard_min": -95.0,
+          "hard_max": 95.0
+        },
+        {
+          "id": "stereo_phase",
+          "label": "Stereo phase",
+          "kind": "slider",
+          "unit": "degrees",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 180.0,
+          "hard_min": 0.0,
+          "hard_max": 180.0
+        },
+        {
+          "id": "wet",
+          "label": "Wet",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "tremolo",
+      "match_name": "audio_tremolo",
+      "label": "Tremolo",
+      "version": 1,
+      "category": "Audio",
+      "category_slug": "audio",
+      "params": [
+        {
+          "id": "rate",
+          "label": "Rate",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 5.0,
+          "slider_min": 0.01,
+          "slider_max": 20.0,
+          "hard_min": 0.01,
+          "hard_max": 20.0
+        },
+        {
+          "id": "depth",
+          "label": "Depth",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "shape",
+          "label": "Shape",
+          "kind": "int",
+          "unit": "raw",
+          "default": 0,
+          "slider_min": 0.0,
+          "slider_max": 2.0,
+          "hard_min": 0.0,
+          "hard_max": 2.0
+        },
+        {
+          "id": "stereo_phase",
+          "label": "Stereo phase",
+          "kind": "slider",
+          "unit": "degrees",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 180.0,
+          "hard_min": 0.0,
+          "hard_max": 180.0
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "vibrato",
+      "match_name": "audio_vibrato",
+      "label": "Vibrato",
+      "version": 1,
+      "category": "Audio",
+      "category_slug": "audio",
+      "params": [
+        {
+          "id": "rate",
+          "label": "Rate",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 5.0,
+          "slider_min": 0.1,
+          "slider_max": 20.0,
+          "hard_min": 0.1,
+          "hard_max": 20.0
+        },
+        {
+          "id": "depth",
+          "label": "Depth",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 20.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "shape",
+          "label": "Shape",
+          "kind": "int",
+          "unit": "raw",
+          "default": 0,
+          "slider_min": 0.0,
+          "slider_max": 2.0,
+          "hard_min": 0.0,
+          "hard_max": 2.0
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "wah",
+      "match_name": "audio_wah",
+      "label": "Wah",
+      "version": 1,
+      "category": "Audio",
+      "category_slug": "audio",
+      "params": [
+        {
+          "id": "mode",
+          "label": "Mode",
+          "kind": "int",
+          "unit": "raw",
+          "default": 0,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
+          "id": "rate",
+          "label": "Rate",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 1.5,
+          "slider_min": 0.01,
+          "slider_max": 10.0,
+          "hard_min": 0.01,
+          "hard_max": 10.0
+        },
+        {
+          "id": "depth",
+          "label": "Depth",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 70.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "frequency",
+          "label": "Frequency",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 500.0,
+          "slider_min": 100.0,
+          "slider_max": 3000.0,
+          "hard_min": 100.0,
+          "hard_max": 3000.0
+        },
+        {
+          "id": "resonance",
+          "label": "Resonance",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 6.0,
+          "slider_min": 0.5,
+          "slider_max": 20.0,
+          "hard_min": 0.5,
+          "hard_max": 20.0
+        },
+        {
+          "id": "sensitivity",
+          "label": "Sensitivity",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "wet",
+          "label": "Wet",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
       "slug": "slider-control",
       "match_name": "slider_control",
       "label": "Slider control",
@@ -18077,16 +19504,35 @@
       "slug": "audio-level",
       "match_name": "audio_level",
       "label": "Audio level",
-      "version": 1,
+      "version": 2,
       "category": "Drivers",
       "category_slug": "drivers",
       "params": [
+        {
+          "id": "source",
+          "label": "Source",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "This comp",
+            "Layer",
+            "Clip"
+          ],
+          "dividers_after": []
+        },
         {
           "id": "audio",
           "label": "Audio",
           "kind": "layer",
           "unit": "raw",
           "self_default": false
+        },
+        {
+          "id": "clip",
+          "label": "Clip",
+          "kind": "clip",
+          "unit": "raw"
         },
         {
           "id": "window",
@@ -18101,6 +19547,20 @@
         }
       ],
       "groups": [],
+      "enabled_when": [
+        {
+          "param": "clip",
+          "on": "source",
+          "cond": "choice_is",
+          "value": 2
+        },
+        {
+          "param": "audio",
+          "on": "source",
+          "cond": "choice_is_not",
+          "value": 0
+        }
+      ],
       "matte_role": "none"
     },
     {

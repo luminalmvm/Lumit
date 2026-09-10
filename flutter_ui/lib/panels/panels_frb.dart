@@ -13,6 +13,7 @@ import 'package:lumit_flutter/panels/debug_panel.dart';
 
 import '../state/dock.dart';
 import 'audio_panel_frb.dart';
+import 'audio_timeline_panel_frb.dart';
 import 'easing_panel_frb.dart';
 import 'effect_controls_panel_frb.dart';
 import 'effects_presets_panel_frb.dart';
@@ -38,5 +39,6 @@ Widget buildPanelBodyFrb(BuildContext context, Panel panel) => switch (panel) {
       Panel.node => const NodePanelFrb(),
       Panel.mixer => const MixerPanelFrb(),
       Panel.audio => const AudioPanelFrb(),
+      Panel.audioTimeline => const AudioTimelinePanelFrb(),
       Panel.debug => const DebugPanel(),
     };
