@@ -320,8 +320,10 @@ impl FootageReference {
         Ok(())
     }
 
-    /// A small decoded picture of this footage's first frame, for the Project
-    /// panel row. `None` when the file cannot be resolved or decoded — a missing
+    /// A small decoded picture of one frame of this footage, for the Project
+    /// panel row and the preview card's hover scrub. `frame` counts from the
+    /// start of the file, so `0` is the poster frame every row asks for.
+    /// `None` when the file cannot be resolved or decoded — a missing
     /// or unsupported item shows its type glyph instead.
     ///
     /// Deliberately **not** `#[frb(sync)]`: a cold video decode is FFmpeg work
@@ -329,8 +331,9 @@ impl FootageReference {
     /// frb puts an async call on its own worker pool and Dart simply awaits it —
     /// which is the whole of what v0 needed a hand-rolled isolate, a wire
     /// protocol, a `TransferableTypedData` hand-off and a generation map to
-    /// achieve. Memoised per (item, size) in the project's media cache, so a
-    /// rebuild costs nothing.
+    /// achieve. Memoised per (item, size, frame) in the project's media cache,
+    /// so a rebuild costs nothing and a scrub back over ground already covered
+    /// answers from RAM.
     ///
     /// The pixels are small enough that frb's per-byte `Vec<u8>` encoding does not
     /// matter here: at the panel's 56 px longer edge this is a few kilobytes, not
@@ -340,13 +343,21 @@ impl FootageReference {
     /// a build with no decoder answers `None` rather than the method being
     /// absent and the Dart side failing to compile against it.
     #[cfg(not(feature = "media"))]
-    pub fn thumbnail(&self, max_edge: u32) -> Result<Option<BridgeRenderedFrame>, BridgeError> {
-        let _ = max_edge;
+    pub fn thumbnail(
+        &self,
+        max_edge: u32,
+        frame: i64,
+    ) -> Result<Option<BridgeRenderedFrame>, BridgeError> {
+        let _ = (max_edge, frame);
         Ok(None)
     }
 
     #[cfg(feature = "media")]
-    pub fn thumbnail(&self, max_edge: u32) -> Result<Option<BridgeRenderedFrame>, BridgeError> {
+    pub fn thumbnail(
+        &self,
+        max_edge: u32,
+        frame: i64,
+    ) -> Result<Option<BridgeRenderedFrame>, BridgeError> {
         let project = self.project()?;
 
         // **The path and any cached picture under the guard, then let it go.**
@@ -366,18 +377,18 @@ impl FootageReference {
             let Some(src) = Self::resolve_source(&proj, footage) else {
                 return Ok(None);
             };
-            let cached = crate::media::thumb_cached(&proj.media, self.id, max_edge, 0);
+            let cached = crate::media::thumb_cached(&proj.media, self.id, max_edge, frame);
             (src, cached)
         };
 
         let thumb = match cached {
             Some(hit) => hit,
             None => {
-                let Some(decoded) = crate::media::thumb_decode(&src, max_edge, 0) else {
+                let Some(decoded) = crate::media::thumb_decode(&src, max_edge, frame) else {
                     return Ok(None);
                 };
                 if let Ok(mut proj) = project.write() {
-                    crate::media::thumb_store(&mut proj.media, self.id, max_edge, 0, &decoded);
+                    crate::media::thumb_store(&mut proj.media, self.id, max_edge, frame, &decoded);
                 }
                 decoded
             }
@@ -385,13 +396,53 @@ impl FootageReference {
 
         let (width, height, rgba) = thumb;
         Ok(Some(BridgeRenderedFrame {
-            // A thumbnail is of the media's own first frame, not of a
-            // composition — there is no playhead behind it to report.
-            frame: 0,
+            // The moment this picture is of, in the file's own frames. Not a
+            // composition's playhead: there is no comp behind a thumbnail.
+            frame: frame.max(0).unsigned_abs(),
             width,
             height,
             rgba,
         }))
+    }
+
+    /// Play this file's own sound from the top — the Project panel's preview
+    /// (docs/07 §3.1). `false` when the file cannot be found on this machine,
+    /// so the panel can hush the button rather than offer a play that is silent.
+    ///
+    /// There is no composition behind it and no layer made: the file is decoded
+    /// and heard as it is. Stopping is [`crate::api::audio::audio_stop`] and
+    /// where it has got to is [`crate::api::audio::audio_clock`] — one pair of
+    /// speakers, so one transport, and playing a comp silences a preview.
+    ///
+    /// Whether this file *has* any sound is [`Self::media_info`]'s
+    /// `audio_codec`, which the panel already holds; asking again here would be
+    /// a second probe for an answer that is on the screen.
+    ///
+    /// A build with no decoder can open nothing, so it says so and the button
+    /// never appears.
+    #[cfg(not(feature = "media"))]
+    #[frb(sync)]
+    pub fn preview_audio(&self) -> Result<bool, BridgeError> {
+        Ok(false)
+    }
+
+    #[cfg(feature = "media")]
+    #[frb(sync)]
+    pub fn preview_audio(&self) -> Result<bool, BridgeError> {
+        let project = self.project()?;
+        let proj = project.read().map_err(|_| BridgeError::ReadFailed)?;
+        let doc = proj.store.snapshot();
+        let Some(lumit_core::model::ProjectItem::Footage(footage)) = doc.item(self.id) else {
+            return Err(BridgeError::InvalidItem);
+        };
+        let Some(src) = Self::resolve_source(&proj, footage) else {
+            return Ok(false);
+        };
+        // The lock goes before the decode does: `preview` spawns and returns,
+        // so nothing slow happens under the project guard (docs/14 §1).
+        drop(proj);
+        crate::audio::preview(self.id, src.path);
+        Ok(true)
     }
 
     /// This footage's declared size, rate and length, or `None` when the file

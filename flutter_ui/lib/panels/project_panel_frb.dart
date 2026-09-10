@@ -48,6 +48,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/src/rust/api/audio.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/state/dock.dart';
@@ -244,6 +245,8 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     _searchFocus.dispose();
     _hScroll.dispose();
     _dropThumbs();
+    _dropScrub();
+    _stopSound();
     super.dispose();
   }
 
@@ -370,6 +373,27 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// picture to give). Cleared — and every image disposed — with the epoch.
   final Map<String, ui.Image?> _thumbs = {};
 
+  /// The frames the pointer has landed on while scrubbing the card's poster
+  /// frame, by frame number — and which item they are of.
+  ///
+  /// Only ever one item's worth: the pointer is over one square, and holding
+  /// every clip's whole scrub for the session would be a folder of files' worth
+  /// of decoded pictures in RAM for nothing. Emptied — and every image disposed
+  /// — the moment the scrub moves to another item.
+  String? _scrubId;
+  final Map<int, ui.Image?> _scrubFrames = {};
+
+  /// Which frame of it is being shown, or null for the poster frame.
+  int? _scrubAt;
+
+  /// The sound file the preview card started playing, if any.
+  ///
+  /// ponytail: what the panel *asked for*, not what the speakers are doing. A
+  /// file that runs out on its own leaves the button showing a stop until the
+  /// selection moves. Give the card the audio clock if that ever reads wrong,
+  /// which means a ticker in a panel that has done without one.
+  String? _soundId;
+
   /// The selected footage, in the order the panel lists it. Anything selected
   /// that is not footage — a folder, a comp — is simply not part of a drag.
   List<FootageReference> get _selectedFootage => [
@@ -380,6 +404,8 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
 
   /// Apply a click to the selection.
   void _select(String id, SelectMode mode) {
+    // The card is about to describe something else, so its sound stops with it.
+    if (_soundId != null && _soundId != id) _stopSound();
     setState(() {
       switch (mode) {
         case SelectMode.replace:
@@ -570,7 +596,8 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       // picture width the panel used to infer it from. A silent
       // still has no sound and a picture that does not run; the old guess
       // called it audio.
-      final audio = _mediaInfo[id] != null && _mediaInfo[id]!.videoCodec == null;
+      final audio =
+          _mediaInfo[id] != null && _mediaInfo[id]!.videoCodec == null;
       // Missing-only is matched on the row's own name alone (docs/07 §3.3).
       // The swatch filter narrows *with* whatever else is running, and on the
       // colour the row is actually **wearing** — its own tag where it has one,
@@ -742,14 +769,106 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   Widget _previewCard(LumitTheme t) {
     final id = _anchorId;
     final item = id != null && _selectedIds.contains(id) ? _itemById[id] : null;
+    final info = id == null ? null : _mediaInfo[id];
+    // The scrubbed frame if the pointer is holding one, the poster frame
+    // otherwise. Both come out of RAM, so the card never waits.
+    final scrubbed = id != null && id == _scrubId && _scrubAt != null
+        ? _scrubFrames[_scrubAt]
+        : null;
+    // A file with sound and no picture: the square carries a play button
+    // instead of a picture, which is the one thing there is to do with it.
+    final sound = item is ItemReference_Footage &&
+        !(_missing[id] ?? false) &&
+        info != null &&
+        info.videoCodec == null &&
+        info.audioCodec != null;
     return projectPreviewCard(
       t,
       item: item,
       name: item == null ? '' : (_names[id!] ??= _nameOf(item)),
       missing: item is ItemReference_Footage && (_missing[id] ?? false),
-      thumb: id == null ? null : _thumbs[id],
-      info: id == null ? null : _mediaInfo[id],
+      thumb: scrubbed ?? (id == null ? null : _thumbs[id]),
+      info: info,
+      onScrub:
+          item is ItemReference_Footage ? (frame) => _scrub(item, frame) : null,
+      onPlaySound: sound ? () => _toggleSound(item) : null,
+      soundPlaying: sound && _soundId == id,
     );
+  }
+
+  /// The pointer moved across the card's poster frame: show `frame` of the
+  /// file, or the poster frame again when it is null.
+  ///
+  /// Nothing is decoded in a build — the frame is asked for here, off the
+  /// gesture, and the picture lands in [_scrubFrames] for the next one. A
+  /// moment already decoded costs one map read, so going back over the same
+  /// ground never touches the bridge at all.
+  void _scrub(ItemReference_Footage item, int? frame) {
+    final id = projectItemId(item);
+    if (id != _scrubId) {
+      _dropScrub();
+      _scrubId = id;
+    }
+    if (frame == _scrubAt) return;
+    // Booked, not a `setState` per step: a hover across the square is two
+    // dozen of these, and each one rebuilds the whole panel underneath.
+    _scrubAt = frame;
+    _bookRebuild();
+    if (frame == null || _scrubFrames.containsKey(frame)) return;
+    // Claim the slot first, so a pointer passing back over mid-decode does not
+    // decode twice.
+    _scrubFrames[frame] = null;
+    final epoch = _epoch;
+    item.field0.thumbnail(maxEdge: _thumbMaxEdge, frame: frame).then((decoded) {
+      if (!mounted || epoch != _epoch || _scrubId != id) return;
+      if (decoded == null || decoded.width == 0 || decoded.height == 0) return;
+      ui.decodeImageFromPixels(
+        decoded.rgba,
+        decoded.width,
+        decoded.height,
+        ui.PixelFormat.rgba8888,
+        (image) {
+          if (!mounted || epoch != _epoch || _scrubId != id) {
+            image.dispose();
+            return;
+          }
+          _scrubFrames[frame] = image;
+          _bookRebuild();
+        },
+      );
+    });
+  }
+
+  void _dropScrub() {
+    for (final image in _scrubFrames.values) {
+      image?.dispose();
+    }
+    _scrubFrames.clear();
+    _scrubId = null;
+    _scrubAt = null;
+  }
+
+  /// Hear a sound file, or silence it. One pair of speakers, so starting a
+  /// preview is the same transport a composition plays through: a comp taking
+  /// it silences this, and the button is not offered for anything with a
+  /// picture, which has the scrub instead.
+  void _toggleSound(ItemReference_Footage item) {
+    final id = projectItemId(item);
+    if (_soundId == id) {
+      audioStop();
+      setState(() => _soundId = null);
+      return;
+    }
+    setState(() => _soundId = item.field0.previewAudio() ? id : null);
+  }
+
+  /// Stop a preview that is running, whatever moved on — another selection,
+  /// an edit, or the panel going away. A sound left playing over a file
+  /// nothing is pointing at any more is a fault, not a feature.
+  void _stopSound() {
+    if (_soundId == null) return;
+    audioStop();
+    _soundId = null;
   }
 
   /// Whether anything under this folder matches the needle, so a folder that
@@ -1031,6 +1150,8 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       _proxies.clear();
       _useProxies = null;
       _dropThumbs();
+      _dropScrub();
+      _stopSound();
     });
   }
 
@@ -1048,7 +1169,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     // Claim the slot first, so a rebuild mid-decode does not decode twice.
     _thumbs[id] = null;
     final epoch = _epoch;
-    footage.thumbnail(maxEdge: _thumbMaxEdge).then((frame) {
+    footage.thumbnail(maxEdge: _thumbMaxEdge, frame: 0).then((frame) {
       if (!mounted || epoch != _epoch) return;
       if (frame == null || frame.width == 0 || frame.height == 0) return;
       ui.decodeImageFromPixels(

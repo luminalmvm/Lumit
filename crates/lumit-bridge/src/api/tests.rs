@@ -11253,7 +11253,10 @@ fn a_cached_thumbnail_is_answered_while_a_reader_holds_the_project() {
     let footage = project
         .import_footage(clip.to_string_lossy().into_owned())
         .expect("imported");
-    let first = footage.thumbnail(32).expect("decoded").expect("a picture");
+    let first = footage
+        .thumbnail(32, 0)
+        .expect("decoded")
+        .expect("a picture");
 
     let state = project.state().expect("state");
     let reader = state.read().expect("a reader gets in");
@@ -11263,7 +11266,7 @@ fn a_cached_thumbnail_is_answered_while_a_reader_holds_the_project() {
     let (tell, answer) = std::sync::mpsc::channel();
     let held = std::thread::spawn({
         let (p, id) = (footage.project_id(), footage.id());
-        move || tell.send(FootageReference::new(p, id).thumbnail(32))
+        move || tell.send(FootageReference::new(p, id).thumbnail(32, 0))
     });
     let again = answer
         .recv_timeout(std::time::Duration::from_secs(10))
@@ -11277,6 +11280,62 @@ fn a_cached_thumbnail_is_answered_while_a_reader_holds_the_project() {
         (first.width, first.height),
         (again.width, again.height),
         "the same picture, from the cache"
+    );
+
+    project.close().expect("closed");
+}
+
+/// Hover-scrub: the frame asked for is the frame that comes back.
+///
+/// The fixture is `testsrc`, whose picture changes every frame, so two moments
+/// far apart cannot decode to the same pixels. Without the frame argument
+/// every column of the preview card would draw the poster frame, which is the
+/// bug this guards — the scrub would look like nothing happening.
+///
+/// Needs an ffmpeg on PATH for the fixture; skips itself without one.
+#[test]
+#[cfg(feature = "media")]
+fn a_scrubbed_thumbnail_is_of_the_frame_asked_for() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let Some(clip) = lumit_media::index::tests_support::fixture(dir.path()) else {
+        return; // no ffmpeg on this machine
+    };
+
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let footage = project
+        .import_footage(clip.to_string_lossy().into_owned())
+        .expect("imported");
+
+    let poster = footage
+        .thumbnail(32, 0)
+        .expect("decoded")
+        .expect("a picture");
+    let later = footage
+        .thumbnail(32, 90)
+        .expect("decoded")
+        .expect("a picture");
+
+    assert_eq!(poster.frame, 0);
+    assert_eq!(later.frame, 90);
+    assert_eq!(
+        (poster.width, poster.height),
+        (later.width, later.height),
+        "the same size whichever moment it is of"
+    );
+    assert_ne!(
+        poster.rgba, later.rgba,
+        "frame 90 of a moving picture is not frame 0"
+    );
+
+    // And the poster frame is still there afterwards: a scrub must not cost
+    // the Project rows and Timeline clips their own picture.
+    let again = footage
+        .thumbnail(32, 0)
+        .expect("decoded")
+        .expect("a picture");
+    assert_eq!(
+        poster.rgba, again.rgba,
+        "the poster frame came back the same"
     );
 
     project.close().expect("closed");

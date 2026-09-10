@@ -17,8 +17,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/project_panel_frb.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart' show BridgeRational;
 import 'package:lumit_flutter/src/rust/api/footage.dart'
-    show FootageReference, LumitMediaStatus;
+    show BridgeMediaInfo, FootageReference, LumitMediaStatus;
 import 'package:lumit_flutter/src/rust/api/project_item.dart'
     show ItemReference, ItemReference_Composition, ItemReference_Footage;
 import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeLayerKind;
@@ -27,6 +28,7 @@ import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/state/drag_payloads.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:lumit_flutter/theme/theme.dart';
+import 'package:lumit_flutter/widgets/controls.dart' show LumitTooltip;
 
 import 'frb_test_support.dart';
 
@@ -1523,7 +1525,8 @@ void main() {
     /// hue-quartered square at its right that opens the eight-colour picker,
     /// and the picked chip tags the item — the mouse path that used to live
     /// only behind the right-click menu.
-    testWidgets("the row's hue square tags the item, and the folder hands it down",
+    testWidgets(
+        "the row's hue square tags the item, and the folder hands it down",
         (tester) async {
       final p = freshProject();
       final project = p.state.project!;
@@ -1541,8 +1544,8 @@ void main() {
       // The folder's square tags the folder. The row above the square claims
       // double-clicks, so the tap only resolves once that window has passed —
       // the same wait the twirl test sits out.
-      await tester.tap(find
-          .byKey(ValueKey<String>('project-label-swatch-${folder.internalid}')));
+      await tester.tap(find.byKey(
+          ValueKey<String>('project-label-swatch-${folder.internalid}')));
       await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('project-label-chip-4')));
@@ -1557,8 +1560,8 @@ void main() {
       await pickFilterColour(tester, null);
 
       // A row's own square overrides what it inherits.
-      await tester.tap(find
-          .byKey(ValueKey<String>('project-label-swatch-${inside.internalid}')));
+      await tester.tap(find.byKey(
+          ValueKey<String>('project-label-swatch-${inside.internalid}')));
       await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('project-label-chip-2')));
@@ -1740,6 +1743,147 @@ void main() {
           tester.widget<Text>(find.byKey(const ValueKey('project-info-codec')));
       expect(codec.data, isNot('footage'),
           reason: 'the codec line replaced the kind-of-item fallback');
+    });
+
+    /// **Hover-scrub** (docs/07 §3.1): the poster frame answers to the
+    /// pointer's position across it.
+    ///
+    /// The arithmetic on its own, because a widget test cannot hover a real
+    /// video — building one needs an ffmpeg CLI, which these must not depend
+    /// on. That the frame asked for is the frame decoded is the engine's own
+    /// test (`a_scrubbed_thumbnail_is_of_the_frame_asked_for`).
+    test('a hover across the poster frame maps to a frame of the file', () {
+      // Four seconds at 25, so a hundred frames numbered 0 to 99.
+      const clip = BridgeMediaInfo(
+        width: 1920,
+        height: 1080,
+        fpsNum: 25,
+        fpsDen: 1,
+        duration: BridgeRational(num: 4, den: 1),
+        videoCodec: 'h264',
+        audioCodec: 'aac',
+        channels: 2,
+        sampleRate: 48000,
+        isStill: false,
+      );
+
+      expect(projectScrubFrame(clip, 0), 0,
+          reason: 'the left edge is the frame the poster frame already shows');
+      expect(projectScrubFrame(clip, 95.9), 99,
+          reason: 'the right edge is the last frame, not one past it');
+      final middle = projectScrubFrame(clip, 48)!;
+      expect(middle, greaterThan(40));
+      expect(middle, lessThan(60));
+
+      // Quantised, so a slow drag does not ask for a frame per pixel.
+      final asked = <int>{};
+      for (var dx = 0.0; dx < 96; dx += 1) {
+        asked.add(projectScrubFrame(clip, dx)!);
+      }
+      expect(asked.length, projectScrubSteps);
+
+      // And the three items that have no frames to offer.
+      const still = BridgeMediaInfo(
+        width: 2,
+        height: 2,
+        fpsNum: 0,
+        fpsDen: 1,
+        duration: BridgeRational(num: 0, den: 1),
+        videoCodec: 'bmp',
+        channels: 0,
+        sampleRate: 0,
+        isStill: true,
+      );
+      const sound = BridgeMediaInfo(
+        width: 0,
+        height: 0,
+        fpsNum: 0,
+        fpsDen: 1,
+        duration: BridgeRational(num: 1, den: 10),
+        audioCodec: 'pcm_u8',
+        channels: 1,
+        sampleRate: 8000,
+        isStill: false,
+      );
+      expect(projectScrubFrame(still, 48), isNull);
+      expect(projectScrubFrame(sound, 48), isNull);
+      expect(projectScrubFrame(null, 48), isNull);
+    });
+
+    /// **A sound file gets a play button where a picture would be** — the
+    /// owner's answer to the footage-previews request (2026-09-07).
+    testWidgets('a sound file is played from the preview card', (tester) async {
+      final p = freshProject();
+      p.state.project!.importFootage(path: _probeableMediaFile('take.wav'));
+      tester.view.physicalSize = const Size(480, 760);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(hostPanel(
+        child: const ProjectPanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(480, 760),
+      ));
+      await settleFrb(tester, minRounds: 8);
+
+      final button = find.byKey(const ValueKey('project-preview-sound'));
+      expect(button, findsNothing, reason: 'nothing is picked yet');
+
+      await tester.tap(rowText('take.wav'));
+      await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+      await settleFrb(tester, minRounds: 8);
+
+      expect(button, findsOneWidget,
+          reason: 'a file with sound and no picture offers the play button');
+      // And nothing to scrub: there are no frames behind it.
+      expect(find.byKey(const ValueKey('project-preview-scrub')), findsNothing);
+
+      // What the button says it will do, which is also what it says the
+      // preview is doing.
+      String says() => tester
+          .widget<LumitTooltip>(
+              find.ancestor(of: button, matching: find.byType(LumitTooltip)))
+          .message;
+
+      final idle = says();
+      await tester.tap(button);
+      await settleFrb(tester, minRounds: 4);
+      expect(says(), isNot(idle),
+          reason: 'the button turned round: it stops the preview now');
+
+      // Pressing again silences it and the button goes back to offering a play.
+      await tester.tap(button);
+      await settleFrb(tester, minRounds: 4);
+      expect(says(), idle);
+    });
+
+    /// A still has no frames, so the card offers neither of the two: no scrub
+    /// across it, and no play button on a file with no sound in it.
+    testWidgets('a still offers neither a scrub nor a play button',
+        (tester) async {
+      final p = freshProject();
+      p.state.project!.importFootage(path: _probeableImageFile('still.bmp'));
+      tester.view.physicalSize = const Size(480, 760);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(hostPanel(
+        child: const ProjectPanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(480, 760),
+      ));
+      await settleFrb(tester, minRounds: 8);
+
+      await tester.tap(rowText('still.bmp'));
+      await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+      await settleFrb(tester, minRounds: 8);
+
+      expect(find.byKey(const ValueKey('project-preview-sound')), findsNothing,
+          reason: 'a BMP has no sound to play');
+      expect(find.byKey(const ValueKey('project-preview-scrub')), findsNothing,
+          reason: 'one frame is not something to scrub across');
+      expect(find.byType(RawImage), findsOneWidget,
+          reason: 'the poster frame is there all the same');
     });
 
     /// **Proxies on the row menu.** Four commands and one badge, all

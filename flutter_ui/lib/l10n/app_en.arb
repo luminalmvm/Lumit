@@ -5135,6 +5135,14 @@
   "@projectItemMissing": {
     "description": "Warning beside a footage item whose file cannot be found on disk. Lower case on purpose — it sits in a line of facts."
   },
+  "projectPreviewPlay": "Play this file",
+  "@projectPreviewPlay": {
+    "description": "Tooltip on the button that stands in the Project panel preview card where a picture would be, for a sound file. Pressing it plays the file from the start."
+  },
+  "projectPreviewStop": "Stop",
+  "@projectPreviewStop": {
+    "description": "Tooltip on the same button while the sound file is playing. Pressing it silences the preview."
+  },
   "projectSettings": "Project settings",
   "@projectSettings": {
     "description": "Title of the window holding settings that travel with the project file."
