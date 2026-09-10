@@ -4,7 +4,7 @@
 
 use crate::GpuContext;
 
-use super::{work_texture, FxEngine};
+use super::{work_texture, ChromaticAberrationOp, FxEngine, SpectralSplitOp};
 
 /// One resolved blur, in raster pixels (the caller converts from the
 /// spec's %-of-diagonal units).
@@ -229,6 +229,24 @@ struct SpriteFlareParams {
     _pad: [f32; 2],
 }
 
+/// The glow's halo fringe (docs/08 §3.3): the ordinary radial split, run on the
+/// halo before the recombine. Both tiers are the kernels the Chromatic
+/// aberration effect already dispatches, held here as they stand rather than
+/// restated, so the fringe on a bloom and the fringe on a picture cannot drift
+/// apart.
+#[derive(Debug, Clone, Copy, PartialEq)]
+// The spectral variant carries a kilobyte of tap basis, which is a uniform
+// block bound for the GPU either way. Boxing it to even the variants up would
+// put a heap allocation on the dispatch path to save a stack copy no frame
+// notices.
+#[allow(clippy::large_enum_variant)]
+pub enum GlowFringe {
+    /// Three tinted radial taps.
+    Classic(ChromaticAberrationOp),
+    /// Wavelength's tier: a gradient of taps between the three colours.
+    Spectral(SpectralSplitOp),
+}
+
 /// One resolved glow (docs/08 §3.3, v1 core): bright-pass with a soft knee,
 /// the shared gaussian on the leftover light, additive recombine. The
 /// radius is already in raster pixels; intensity 0 is the neutral point
@@ -237,6 +255,15 @@ struct SpriteFlareParams {
 pub struct GlowOp {
     /// The halo gaussian's half-width, raster pixels.
     pub radius_px: f32,
+    /// How many gaussians the halo is summed from (Exponential): 1 is the
+    /// single gaussian this effect shipped with, to the byte. Octave `i` is
+    /// blurred at `radius ÷ 2ⁱ`.
+    pub octaves: u32,
+    /// The exponent the octave weights follow: octave `i` weighs
+    /// `2^(falloff·i)` before the stack is normalised. Ignored at one octave.
+    pub falloff: f32,
+    /// The fringe left on the finished halo, or None for no pass at all.
+    pub fringe: Option<GlowFringe>,
     /// Linear-light bright threshold, ≥ 0 (unbounded above).
     pub threshold: f32,
     /// Soft-knee width around the threshold, 0..1.
@@ -628,6 +655,20 @@ impl FxEngine {
     /// `intensity · tint · halo` back onto the untouched input in linear,
     /// alpha saturating at 1. Intensity 0 short-circuits inside the combine
     /// kernel to the bit-exact identity.
+    ///
+    /// **Exponential** (`octaves > 1`) stacks tighter gaussians under that one,
+    /// each half the width of the one above and weighted `2^(falloff·i)`, so the
+    /// halo falls away from a bright core the way light does instead of
+    /// spreading evenly. It needs no kernel of its own: the blur's own Mix
+    /// lerps each octave into the running mean as it lands, which is
+    /// `cpu::glow_shaped`'s weighted average written the other way up. Two more
+    /// passes an octave, and only when the toggle is on.
+    ///
+    /// **Chromatic aberration** is the ordinary radial fringe run on the
+    /// finished halo, before the recombine, so the bloom breaks into colour and
+    /// the picture under it does not. Either tier of it, since it is the
+    /// Chromatic aberration effect's own two kernels being called. No fringe
+    /// runs nothing.
     pub fn glow(
         &self,
         ctx: &GpuContext,
@@ -669,32 +710,70 @@ impl FxEngine {
             h,
             bytemuck::bytes_of(&params),
         );
-        let sigma = (op.radius_px * 0.5).max(1e-3);
-        for (pass_src, pass_dst, dir) in [(&bright, &tmp, [1.0, 0.0]), (&tmp, &blurred, [0.0, 1.0])]
-        {
-            self.dispatch(
-                ctx,
-                &self.blur,
-                pass_src,
-                pass_src,
-                pass_dst,
-                w,
-                h,
-                bytemuck::bytes_of(&BlurParams {
-                    dir,
-                    radius: op.radius_px,
-                    sigma,
-                    edge: 1, // Repeat, always (see the CPU reference)
-                    mix_amt: 1.0,
-                    matte_on: 0.0,
-                    _pad0: 0.0,
-                }),
-            );
+        // One octave of halo: the shared separable gaussian over the bright
+        // pass, its vertical half lerping the result onto `over` at weight `t`.
+        // The first octave passes t = 1 and `over == tmp`, which is the dispatch
+        // pair this effect has always made, byte for byte. The rest fold
+        // themselves into the running mean as they land, so the stack needs no
+        // kernel of its own.
+        let octave = |radius: f32, over: &wgpu::Texture, into: &wgpu::Texture, t: f32| {
+            let sigma = (radius * 0.5).max(1e-3);
+            let pass = |dir: [f32; 2],
+                        pass_src: &wgpu::Texture,
+                        pass_orig: &wgpu::Texture,
+                        dst: &wgpu::Texture,
+                        mix_amt: f32| {
+                self.dispatch(
+                    ctx,
+                    &self.blur,
+                    pass_src,
+                    pass_orig,
+                    dst,
+                    w,
+                    h,
+                    bytemuck::bytes_of(&BlurParams {
+                        dir,
+                        radius,
+                        sigma,
+                        edge: 1, // Repeat, always (see the CPU reference)
+                        mix_amt,
+                        matte_on: 0.0,
+                        _pad0: 0.0,
+                    }),
+                );
+            };
+            pass([1.0, 0.0], &bright, &bright, &tmp, 1.0);
+            pass([0.0, 1.0], &tmp, over, into, t);
+        };
+        octave(op.radius_px, &tmp, &blurred, 1.0);
+        let mut halo = blurred;
+        if op.octaves > 1 {
+            // The weight ratio between one octave and the next, applied as a
+            // running product rather than `2^(falloff·i)`. The CPU reference
+            // walks it the same way, so the two agree on every octave's weight
+            // to the last bit rather than to an epsilon.
+            let ratio = 2.0f32.powf(op.falloff);
+            let mut alt = work_texture(ctx, w, h, "fx-glow-octave");
+            let (mut radius, mut wi, mut weight) = (op.radius_px, 1.0f32, 1.0f32);
+            for _ in 1..op.octaves {
+                radius *= 0.5;
+                wi *= ratio;
+                let t = wi / (weight + wi);
+                weight += wi;
+                octave(radius, &halo, &alt, t);
+                std::mem::swap(&mut halo, &mut alt);
+            }
         }
+        // The fringe rides on the halo alone, before the recombine.
+        let halo = match &op.fringe {
+            Some(GlowFringe::Classic(f)) => self.chromatic_aberration(ctx, &halo, w, h, None, f),
+            Some(GlowFringe::Spectral(f)) => self.spectral_split(ctx, &halo, w, h, None, f),
+            None => halo,
+        };
         self.dispatch(
             ctx,
             &self.glow_combine,
-            &blurred,
+            &halo,
             src,
             &out,
             w,

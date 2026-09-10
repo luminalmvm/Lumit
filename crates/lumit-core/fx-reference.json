@@ -3859,6 +3859,95 @@
           "hard_min": 0.0
         },
         {
+          "id": "exponential",
+          "label": "Exponential",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "falloff",
+          "label": "Falloff",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.5,
+          "slider_max": 4.0,
+          "hard_min": 0.5,
+          "hard_max": 4.0
+        },
+        {
+          "id": "chromatic",
+          "label": "Amount",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "chromatic_wavelength",
+          "label": "Wavelength",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "chromatic_samples",
+          "label": "Samples",
+          "kind": "float",
+          "unit": "raw",
+          "default": 16.0,
+          "slider_min": 3.0,
+          "slider_max": 64.0,
+          "hard_min": 3.0,
+          "hard_max": 64.0
+        },
+        {
+          "id": "chromatic_colour_1",
+          "label": "Colour 1",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            1.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 1.0
+        },
+        {
+          "id": "chromatic_colour_2",
+          "label": "Colour 2",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.0,
+            1.0,
+            0.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 1.0
+        },
+        {
+          "id": "chromatic_colour_3",
+          "label": "Colour 3",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.0,
+            0.0,
+            1.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 1.0
+        },
+        {
           "id": "intensity",
           "label": "Intensity",
           "kind": "float",
@@ -3959,7 +4048,20 @@
           "dividers_after": []
         }
       ],
-      "groups": [],
+      "groups": [
+        {
+          "label": "Chromatic aberration",
+          "params": [
+            "chromatic",
+            "chromatic_wavelength",
+            "chromatic_samples",
+            "chromatic_colour_1",
+            "chromatic_colour_2",
+            "chromatic_colour_3"
+          ],
+          "collapsed": true
+        }
+      ],
       "matte": {
         "param": "matte",
         "meaning": "gates which pixels may seed the halo, before the bright pass: light only escapes from where the matte is bright, but it still spills outward across dark matte — which fading the finished glow cannot do"

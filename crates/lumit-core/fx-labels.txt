@@ -228,12 +228,14 @@ Evolution
 Evolution options
 Exclusion
 Expansion
+Exponential
 Exposure
 Extract channels
 F-stop
 Fade
 Fade in
 Fade out
+Falloff
 Far blur
 Feather
 Feature density
