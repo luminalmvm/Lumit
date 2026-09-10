@@ -464,6 +464,33 @@ class _LumitAppViewState extends State<LumitAppView> {
         } else {
           state.toggleRetime(layer);
         }
+      // Layer ▸ New from the keyboard: the same engine call the menu row
+      // makes, on the fronted composition.
+      case 'layer.new.solid' ||
+            'layer.new.text' ||
+            'layer.new.camera' ||
+            'layer.new.light.point' ||
+            'layer.new.adjustment' ||
+            'layer.new.null':
+        if (comp == null) {
+          handled = false;
+        } else {
+          switch (action) {
+            case 'layer.new.solid':
+              comp.addSolidLayer();
+            case 'layer.new.text':
+              comp.addTextLayer();
+            case 'layer.new.camera':
+              comp.addCameraLayer();
+            case 'layer.new.light.point':
+              comp.addLightLayer(kind: 0);
+            case 'layer.new.adjustment':
+              comp.addAdjustmentLayer();
+            case 'layer.new.null':
+              comp.addNullLayer();
+          }
+          state.notifyDocumentChanged();
+        }
       // The Viewer's own magnification and preview resolution (docs/07 §2.2,
       // §15). Both are asked for rather than done here: the magnification
       // belongs to the Viewer panel, and the resolution is a number every

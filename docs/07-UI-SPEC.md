@@ -3159,6 +3159,7 @@ app-wide, so a list, a field or a canvas is free to use them for moving within i
 | Timeline | `Ctrl+D` | Duplicate selection |
 | Timeline | `Ctrl+Shift+C` | Precompose |
 | Global | `Ctrl+Alt+T` | Give the selected layer a Retime, or take it away (this one chord only — AE's own, and one Windows cannot steal; the Composition menu offers the same command) |
+| Global | `Ctrl+Y` / `Ctrl+Alt+Shift+T` / `Ctrl+Alt+Shift+C` / `Ctrl+Alt+Shift+L` / `Ctrl+Alt+Y` / `Ctrl+Alt+Shift+Y` | New Solid / Text / Camera / Point light / Adjustment / Null layer in the fronted composition, AE's own chords. Layer ▸ New shows each beside its row; Spot light, Area light and Sequence ship without one |
 | Timeline | `=` / `-` | Zoom time in / out (`Ctrl+wheel` at pointer) |
 | Timeline | `\` | Toggle full-comp zoom / previous zoom |
 | Timeline | `Enter` | Rename selected layer |

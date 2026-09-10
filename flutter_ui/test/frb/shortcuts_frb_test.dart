@@ -309,6 +309,31 @@ void main() {
       expect(layer.getRetimeProperty(), isNull);
     });
 
+    /// Layer ▸ New from the keyboard, on After Effects' chords: Ctrl+Y makes
+    /// a Solid and Ctrl+Alt+Y an Adjustment layer, in the fronted comp.
+    testWidgets('Ctrl+Y and Ctrl+Alt+Y add a Solid and an Adjustment layer',
+        (tester) async {
+      final p = await mount(tester);
+      final comp = p.uiState.selectedComp!;
+      expect(comp.getLayers(), isEmpty);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyY);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+      expect(comp.getLayers().single.getKind(), BridgeLayerKind.solid);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyY);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+      // A new layer goes on top of the stack, so the Adjustment reads first.
+      expect(comp.getLayers().map((l) => l.getKind()),
+          [BridgeLayerKind.adjustment, BridgeLayerKind.solid]);
+    });
+
     /// Otherwise every letter typed into a layer name would also be a command.
     ///
     /// Driven through the Timeline's own search field, which lives inside the

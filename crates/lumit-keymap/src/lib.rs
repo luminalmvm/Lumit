@@ -142,6 +142,12 @@ impl ActionId {
             "layer.group" => "Group the selected layers",
             "layer.ungroup" => "Ungroup",
             "layer.retime.enable" => "Give the layer a Retime",
+            "layer.new.solid" => "New Solid layer",
+            "layer.new.text" => "New Text layer",
+            "layer.new.camera" => "New Camera layer",
+            "layer.new.light.point" => "New Point light layer",
+            "layer.new.adjustment" => "New Adjustment layer",
+            "layer.new.null" => "New Null layer",
             "timeline.zoom.in" => "Zoom in",
             "timeline.zoom.out" => "Zoom out",
             "timeline.zoom.fit" => "Zoom to fit",
@@ -692,6 +698,15 @@ pub fn default_keymap() -> Keymap {
         // switch anyway. One chord, like every other action; anyone who wants
         // a second can bind it.
         row(Global, "Mod+Alt+T", "layer.retime.enable"),
+        // Layer ▸ New. After Effects' own chords, so the rows read the way
+        // anyone arriving from there expects. Spot and Area lights and the
+        // Sequence layer have no chord there and ship without one here.
+        row(Global, "Mod+Y", "layer.new.solid"),
+        row(Global, "Mod+Alt+Shift+T", "layer.new.text"),
+        row(Global, "Mod+Alt+Shift+C", "layer.new.camera"),
+        row(Global, "Mod+Alt+Shift+L", "layer.new.light.point"),
+        row(Global, "Mod+Alt+Y", "layer.new.adjustment"),
+        row(Global, "Mod+Alt+Shift+Y", "layer.new.null"),
         // --- Tools ---
         row(Tools, "V", "tool.select"),
         row(Tools, "H", "tool.hand"),
@@ -1274,6 +1289,34 @@ mod tests {
                 "{chord_text} should still run {action}"
             );
         }
+    }
+
+    /// Layer ▸ New rows carry a chord each, so the menu shows one beside
+    /// the label, and the six take nothing another row already has.
+    #[test]
+    fn new_layer_rows_ship_with_after_effects_chords() {
+        let km = default_keymap();
+        for (chord_text, action) in [
+            ("Mod+Y", "layer.new.solid"),
+            ("Mod+Alt+Shift+T", "layer.new.text"),
+            ("Mod+Alt+Shift+C", "layer.new.camera"),
+            ("Mod+Alt+Shift+L", "layer.new.light.point"),
+            ("Mod+Alt+Y", "layer.new.adjustment"),
+            ("Mod+Alt+Shift+Y", "layer.new.null"),
+        ] {
+            assert_eq!(
+                km.lookup(KeyContext::Global, &chord(chord_text)),
+                Some(&action.into()),
+                "{chord_text} should run {action}"
+            );
+        }
+        assert!(km.conflicts().is_empty());
+        assert!(
+            !km.shadows()
+                .iter()
+                .any(|s| s.shadowed.0.starts_with("layer.new.")),
+            "no panel takes a new-layer chord away"
+        );
     }
 
     #[test]

@@ -485,6 +485,39 @@ void main() {
       }
     });
 
+    /// The rows that have a chord say so in the blank beside the name, the
+    /// way Enable Retime always has.
+    testWidgets('Layer ▸ New shows each row its own chord', (tester) async {
+      await mount(tester);
+      await tester.tap(find.byKey(const ValueKey<String>('menu-Layer')));
+      await tester.pump();
+      await tester.tap(find.text('New'));
+      await tester.pump();
+
+      for (final (item, chord) in [
+        ('Solid', 'Ctrl+Y'),
+        ('Adjustment', 'Ctrl+Alt+Y'),
+        ('Null', 'Ctrl+Alt+Shift+Y'),
+      ]) {
+        expect(
+          find.descendant(
+            of: find.byKey(ValueKey<String>('menu-row-$item')),
+            matching: find.text(chord),
+          ),
+          findsOneWidget,
+          reason: '$item reads $chord',
+        );
+      }
+      // Spot light has no chord, so its row shows the name alone.
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey<String>('menu-row-Spot light')),
+          matching: find.textContaining('Ctrl'),
+        ),
+        findsNothing,
+      );
+    });
+
     // Text to shapes and Text to points: the copy lands beside the
     // original, which is still there and still a Type layer.
     testWidgets('Layer ▸ Create turns a text layer into shapes and into points',

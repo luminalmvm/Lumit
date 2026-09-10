@@ -906,20 +906,26 @@ List<MenuSection> lumitMenus(
       title: l10n.menuLayer,
       items: () => [
         MenuEntry.submenu(l10n.menuNew, [
-          MenuEntry(l10n.menuSolid, onComp((c) => c.addSolidLayer())),
-          MenuEntry(l10n.menuText, onComp((c) => c.addTextLayer())),
-          MenuEntry(l10n.menuCamera, onComp((c) => c.addCameraLayer())),
+          MenuEntry(l10n.menuSolid, onComp((c) => c.addSolidLayer()),
+              action: 'layer.new.solid'),
+          MenuEntry(l10n.menuText, onComp((c) => c.addTextLayer()),
+              action: 'layer.new.text'),
+          MenuEntry(l10n.menuCamera, onComp((c) => c.addCameraLayer()),
+              action: 'layer.new.camera'),
           // The three light kinds are their own rows rather than one row and
           // a dropdown: which kind you want is known before you make it, and
           // an area light is a different thing to reach for than a point.
           MenuEntry(
-              l10n.menuPointLight, onComp((c) => c.addLightLayer(kind: 0))),
+              l10n.menuPointLight, onComp((c) => c.addLightLayer(kind: 0)),
+              action: 'layer.new.light.point'),
           MenuEntry(
               l10n.menuSpotLight, onComp((c) => c.addLightLayer(kind: 1))),
           MenuEntry(
               l10n.menuAreaLight, onComp((c) => c.addLightLayer(kind: 2))),
-          MenuEntry(l10n.menuAdjustment, onComp((c) => c.addAdjustmentLayer())),
-          MenuEntry(l10n.menuNull, onComp((c) => c.addNullLayer())),
+          MenuEntry(l10n.menuAdjustment, onComp((c) => c.addAdjustmentLayer()),
+              action: 'layer.new.adjustment'),
+          MenuEntry(l10n.menuNull, onComp((c) => c.addNullLayer()),
+              action: 'layer.new.null'),
           MenuEntry(l10n.menuSequence, onComp((c) => c.addSequenceLayer())),
         ]),
         // What the layer *is*, as opposed to what it is doing: its name, and a

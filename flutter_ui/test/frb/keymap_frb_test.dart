@@ -111,8 +111,18 @@ void main() {
         (tester) async {
       await openKeymapPage(tester);
       await reveal(tester, find.text('Give the layer a Retime'));
-      expect(find.textContaining('Ctrl+Alt+T'), findsOneWidget);
-      expect(find.textContaining('Alt+Shift+T'), findsNothing);
+      // Read in the Retime row rather than across the page: New Text carries
+      // Ctrl+Alt+Shift+T, which is a different chord that reads alike.
+      final cell =
+          find.byKey(const ValueKey('keymap-chord-global-layer.retime.enable'));
+      expect(
+          find.descendant(
+              of: cell, matching: find.textContaining('Ctrl+Alt+T')),
+          findsOneWidget);
+      expect(
+          find.descendant(
+              of: cell, matching: find.textContaining('Alt+Shift+T')),
+          findsNothing);
       expect(
         keymapLookup(context: BridgeKeyContext.global, chord: 'Alt+Shift+T'),
         isNull,
