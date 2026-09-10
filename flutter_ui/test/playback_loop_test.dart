@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/state/playback_loop.dart';
 
 void main() {
+  clockFrameTests();
   test('a narrowed comp loops the work area', () {
     expect(
       playbackLoop(workStart: 40, workEnd: 90, playhead: 40, lastFrame: 300),
@@ -59,6 +60,44 @@ void main() {
     expect(
       playbackLoop(workStart: null, workEnd: null, playhead: 0, lastFrame: 0),
       isNull,
+    );
+  });
+}
+
+void clockFrameTests() {
+  test('the adaptive clock counts on from the last picture at the comp rate',
+      () {
+    // The regression: adaptive playback only moved the playhead when a picture
+    // arrived, so on a comp too heavy for its rate it jumped three or four
+    // frames at a time and stood still between.
+    expect(
+      clockFrame(anchorFrame: 10, sinceAnchorMicros: 0, fps: 25, end: 100),
+      10,
+    );
+    expect(
+      clockFrame(anchorFrame: 10, sinceAnchorMicros: 100000, fps: 25, end: 100),
+      12,
+    );
+    // Part-way through a frame period rounds down: the frame has not arrived.
+    expect(
+      clockFrame(anchorFrame: 10, sinceAnchorMicros: 39000, fps: 25, end: 100),
+      10,
+    );
+  });
+
+  test('the adaptive clock holds at the end of the span', () {
+    // The engine decides the loop from the picture it shows at the end, so the
+    // clock waits there rather than running past it.
+    expect(
+      clockFrame(
+          anchorFrame: 98, sinceAnchorMicros: 1000000, fps: 25, end: 100),
+      100,
+    );
+    // Anchored past the end (parked in the tail), it stays where it is.
+    expect(
+      clockFrame(
+          anchorFrame: 105, sinceAnchorMicros: 1000000, fps: 25, end: 100),
+      105,
     );
   });
 }

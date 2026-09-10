@@ -19,7 +19,8 @@
 // and it draws whichever frame last arrived. It runs no clock and schedules
 // nothing: the engine chooses frames, paces them against the audio, and stops
 // itself at the end, and every frame it publishes says which frame it is — so
-// the playhead follows the picture rather than predicting it. This panel
+// the playhead follows the picture rather than predicting it, except that
+// adaptive playback counts it on between pictures at the comp's rate. This panel
 // used to hold a `Ticker` polling the audio clock, an every-frame pump two deep,
 // an in-flight counter and a staleness flag, which is a scheduler sitting on the
 // far side of an FFI boundary from everything it had to schedule against.

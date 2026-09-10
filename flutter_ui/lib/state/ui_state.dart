@@ -12,6 +12,7 @@ import 'dart:io' show Platform;
 import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/services.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:lumit_flutter/panels/easing_curve.dart' show EasingCurve;
@@ -480,13 +481,28 @@ class LumitUiState extends ChangeNotifier {
     // it cannot change while the transport is running, and
     // [_arrived] fires at the comp's rate.
     final set = comp.getWorkArea();
+    final last = comp.durationFrames() - 1;
     _loop = playbackLoop(
       workStart: set == null ? null : comp.frameAtTime(time: set.inPoint),
       workEnd: set == null ? null : comp.frameAtTime(time: set.outPoint),
       playhead: playheadFrame.value,
-      lastFrame: comp.durationFrames() - 1,
+      lastFrame: last,
     );
     _playedFrom = playheadFrame.value;
+    // Adaptive keeps time by skipping frames, so between pictures the
+    // playhead is counted on at the comp's rate ([clockFrame]). Anchored by
+    // the first picture, not by the press: the engine banks a pre-roll before
+    // its own clock starts, and a playhead running through that would stand
+    // frames ahead of the first picture shown.
+    if (workspace.performance.playback == PlaybackMode.adaptive) {
+      _clockAnchor = null;
+      _clockFps = comp.fps();
+      _clockEnd = _loop?.end ?? last;
+      _clockWatch
+        ..reset()
+        ..start();
+      _clock.start();
+    }
     // Whatever the scrub before this was waiting for, it is not what the user
     // is watching now: playback draws no progress bar (docs/07 §2.5), and one
     // left standing from the frame that started the run would be the only bar
@@ -510,6 +526,32 @@ class LumitUiState extends ChangeNotifier {
   /// parked past the span's end, which makes the run a preview of the tail
   /// rather than a pass round the span ([playbackLoop]).
   ({int start, int end})? _loop;
+
+  /// The clock that moves the playhead between pictures during adaptive
+  /// playback. Every-frame shows every frame, so there the pictures are the
+  /// clock and this never runs. Read on the Flutter side because the engine's
+  /// worker is busy rendering exactly when the pictures come slowly, and could
+  /// not say where its clock stands until the render is done.
+  late final Ticker _clock = Ticker(_tickClock);
+  final Stopwatch _clockWatch = Stopwatch();
+
+  /// The last picture shown and the watch reading it was shown at, or null
+  /// before the first picture of a run.
+  ({int frame, int micros})? _clockAnchor;
+  double _clockFps = 0;
+  int _clockEnd = 0;
+
+  void _tickClock(Duration _) {
+    final anchor = _clockAnchor;
+    if (anchor == null) return;
+    final frame = clockFrame(
+      anchorFrame: anchor.frame,
+      sinceAnchorMicros: _clockWatch.elapsedMicroseconds - anchor.micros,
+      fps: _clockFps,
+      end: _clockEnd,
+    );
+    if (frame > playheadFrame.value) playheadFrame.value = frame;
+  }
 
   void _playFrom(CompositionReference comp, int frame) => comp.play(
         from: BigInt.from(frame),
@@ -541,6 +583,8 @@ class LumitUiState extends ChangeNotifier {
   /// and by playback running off the end on its own, because "where am I when
   /// it stops" should not depend on *why* it stopped.
   void _returnPlayhead({bool restore = true}) {
+    _clock.stop();
+    _clockWatch.stop();
     final from = _playedFrom;
     _playedFrom = null;
     if (!restore || from == null) return;
@@ -580,12 +624,18 @@ class LumitUiState extends ChangeNotifier {
 
   /// A frame arrived. While playing, the picture leads and the playhead follows
   /// it — that is what makes the transport show the frame actually on screen
-  /// rather than the one the engine was asked for. Paused, the playhead is the
-  /// user's and is left alone.
+  /// rather than the one the engine was asked for. Adaptive playback counts
+  /// the playhead on between pictures ([_clock]), and each picture re-anchors
+  /// the count. Paused, the playhead is the user's and is left alone.
   void _arrived(int frame) {
     frameArrived.value++;
     if (!playing.value) return;
-    if (playheadFrame.value != frame) playheadFrame.value = frame;
+    _clockAnchor = (frame: frame, micros: _clockWatch.elapsedMicroseconds);
+    // The adaptive clock may already stand a frame past this picture, and
+    // pulling the playhead back would make it twitch at every present.
+    if (frame > playheadFrame.value || !_clock.isActive) {
+      playheadFrame.value = frame;
+    }
     // Round the work area: the frame at its end is shown, then playback starts
     // again from its start. Restarted through `play` rather than by moving the
     // playhead, because the sound and the scheduler's clock both take their
@@ -594,6 +644,7 @@ class LumitUiState extends ChangeNotifier {
     final comp = selectedComp;
     if (loop != null && comp != null && frame >= loop.end) {
       playheadFrame.value = loop.start;
+      _clockAnchor = null;
       _playFrom(comp, loop.start);
     }
   }
@@ -1495,6 +1546,7 @@ class LumitUiState extends ChangeNotifier {
     _app.removeListener(_adoptProjectSession);
     _app.removeListener(refreshColourSummary);
     _lifecycle.dispose();
+    _clock.dispose();
     sub?.cancel();
     _changes?.cancel();
     tools.dispose();
