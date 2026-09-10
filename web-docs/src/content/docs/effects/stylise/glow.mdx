@@ -26,9 +26,9 @@ Parts of the image brighter than the threshold emit a glow.
 | **Threshold** | Slider | 0 to 4; higher | 0.8 | - |
 | **Softness** | Slider | 0 to 1 | 0.5 | - |
 | **Radius** | Slider | 0 to 200; higher | 24 | Pixels at composition size |
-| **Exponential** | Checkbox | On or off | Off | - |
-| **Falloff** | Slider | 0.5 to 4 | 1 | - |
+| **Falloff** | Slider | 0 to 8; higher | 0 | - |
 | **Amount** | Slider | 0 to 100 | 0 | Per cent |
+| **Angle** | Slider | -180 to 180; down to -3600 and up to 3600 | 0 | Degrees |
 | **Wavelength** | Checkbox | On or off | Off | - |
 | **Samples** | Slider | 3 to 64 | 16 | - |
 | **Colour 1** | Colour | Each channel 0 to 1, scene-linear | 1, 0, 0, 1 | - |
@@ -44,7 +44,7 @@ Parts of the image brighter than the threshold emit a glow.
 
 In the Effect Controls panel:
 
-- **Chromatic aberration** groups **Amount**, **Wavelength**, **Samples**, **Colour 1**, **Colour 2**, **Colour 3**, and starts closed.
+- **Chromatic aberration** groups **Amount**, **Angle**, **Wavelength**, **Samples**, **Colour 1**, **Colour 2**, **Colour 3**, and starts closed.
 - **Matte** gates which pixels may seed the halo, before the bright pass: light only escapes from where the matte is bright, but it still spills outward across dark matte — which fading the finished glow cannot do. **Invert** reads that matte inverted.
 
 {/* END GENERATED */}
@@ -54,13 +54,13 @@ In the Effect Controls panel:
 - **Threshold**: how bright a pixel must be before it blooms.
 - **Softness**: how abruptly a pixel starts to bloom as it crosses the threshold.
 - **Radius**: how far the bloom spreads.
-- **Exponential**: builds the bloom from five widths at once instead of one, gathered into
-  a bright core.
-- **Falloff**: how much of the light the core holds.
-- **Amount**: how far the bloom's colours are pulled apart, toward the corners of the frame.
+- **Falloff**: how hard the bloom gathers into a bright core. At 0 it spreads evenly.
+- **Amount**: how far the bloom's colours are pulled apart.
+- **Angle**: the direction they are pulled apart in.
 - **Wavelength** spreads the bloom's colours as one gradient instead of three taps.
 - **Samples** is how many taps fill the gradient while Wavelength is on.
-- **Colour 1**, **Colour 2** and **Colour 3** tint the inward, centred and outward taps.
+- **Colour 1**, **Colour 2** and **Colour 3** tint the three taps, the first one way along
+  Angle and the third the other.
 - **Intensity**: how intense the bloom is.
 - **Tint**: the colour of the bloom. Neutral keeps each highlight's own colour.
 - **Mix**: how much of the result replaces the original.

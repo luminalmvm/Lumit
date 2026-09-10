@@ -132,8 +132,9 @@ pub fn glow(
         &GlowHalo {
             radius_px,
             octaves: 1,
-            falloff: 1.0,
+            falloff: 0.0,
             chromatic_px: 0.0,
+            fringe_angle_deg: 0.0,
             fringe_tints: HALO_FRINGE_TINTS,
             fringe_wavelength: false,
             fringe_samples: 0,
@@ -159,14 +160,18 @@ pub struct GlowHalo {
     /// `radius ÷ 2ⁱ`, so 1 is the single gaussian and 5 reaches a sixteenth of
     /// the radius.
     pub octaves: u32,
-    /// The exponent the octave weights follow: octave `i` weighs `2^(falloff·i)`
-    /// before the stack is normalised, so the tightest gaussian carries the most
-    /// light and the halo falls away from a bright core instead of spreading
-    /// evenly. Ignored at one octave.
+    /// How much of the weight each octave takes from the wider one above it:
+    /// octave `i` weighs `falloff^i` before the stack is normalised, so the
+    /// tightest gaussian carries the most light and the halo falls away from a
+    /// bright core instead of spreading evenly. Zero leaves the widest octave
+    /// holding everything, which is the single gaussian. Ignored at one octave.
     pub falloff: f32,
-    /// Peak radial fringe on the finished halo, raster pixels, reached at the
-    /// corner distance from the frame centre. Zero reads no taps at all.
+    /// How far the finished halo's channels are displaced, raster pixels. The
+    /// same everywhere in the frame, so the colour lands on the bloom's edges.
+    /// Zero reads no taps at all.
     pub chromatic_px: f32,
+    /// Degrees: the direction of that displacement.
+    pub fringe_angle_deg: f32,
     /// The fringe taps' colours. Already normalised per channel for the classic
     /// tier and left as authored for Wavelength, which is the packing step's
     /// job, not this one's.
@@ -178,10 +183,16 @@ pub struct GlowHalo {
     pub fringe_samples: i32,
 }
 
-/// Red outward, green on its own pixel, blue inward: the three normalised tint
-/// columns [`chromatic_aberration`] wants for the classic split (docs/08 §3.15),
-/// and what the fringe reads when nobody has touched its colours.
+/// Red one way, green on its own pixel, blue the other: the three normalised
+/// tint columns [`rgb_split`] wants for the classic split (docs/08 §3.6), and
+/// what the fringe reads when nobody has touched its colours.
 pub const HALO_FRINGE_TINTS: [[f32; 3]; 3] = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+
+/// The fringe's per-tap displacement scales: the outer two taps move a full
+/// Amount each way and the middle one stays put, which is [`rgb_split`]'s
+/// classic split. Not a control here, because a glow's fringe is one distance
+/// and one direction.
+pub const HALO_FRINGE_SCALE: [f32; 3] = [1.0, 0.0, 1.0];
 
 /// [`glow`] with the halo shaped rather than left as one gaussian (docs/08
 /// §3.3). The §1.6 oracle for **Exponential** and **Chromatic aberration**.
@@ -191,8 +202,8 @@ pub const HALO_FRINGE_TINTS: [[f32; 3]; 3] = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], 
 /// A single gaussian spreads a highlight evenly, which is the flat grey mush a
 /// wide bloom turns into. Real light falls away from a bright core: most of it
 /// stays near the source and a little of it reaches a long way. Summing
-/// gaussians at `radius ÷ 2ⁱ`, each weighted `2^(falloff·i)` so the tightest
-/// weighs most, draws that shape with the blur that is already here. The stack
+/// gaussians at `radius ÷ 2ⁱ`, each weighted `falloff^i` so the tightest weighs
+/// most, draws that shape with the blur that is already here. The stack
 /// is a running weighted mean, `light = light·(1 − t) + octave·t` with
 /// `t = wᵢ ÷ Σw`. That is one lerp an octave, and the same arithmetic the WGSL
 /// twin gets for nothing out of the blur kernel's own Mix.
@@ -203,12 +214,11 @@ pub const HALO_FRINGE_TINTS: [[f32; 3]; 3] = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], 
 ///
 /// # The fringe
 ///
-/// The finished halo goes through the radial fringe before it is added back, so
-/// the bloom breaks into colour toward the frame's corners while the picture
-/// under it stays where it was. Zero is skipped outright. Wavelength picks the
-/// tier, exactly as it does on the Chromatic aberration effect itself:
-/// [`chromatic_aberration`]'s three tinted taps, or [`spectral_split`]'s
-/// gradient of them.
+/// The finished halo is displaced per channel before it is added back, one
+/// distance in one direction, so the colour shows up along the bloom's own edges
+/// while the picture under it stays where it was. Zero is skipped outright.
+/// Wavelength picks the tier, exactly as it does on RGB split itself:
+/// [`rgb_split`]'s three tinted taps, or [`spectral_split`]'s gradient of them.
 ///
 /// The matte gate, the bright pass and the recombine are [`glow`]'s own, word
 /// for word.
@@ -248,9 +258,9 @@ pub fn glow_shaped(
     let mut light = seed.clone();
     blur_gaussian(&mut light, w, h, halo.radius_px, 1, 1.0);
     // The weight ratio between one octave and the next, walked as a running
-    // product rather than `2^(falloff·i)`. The WGSL twin walks it the same way,
-    // so the two agree on every octave's weight to the last bit.
-    let ratio = 2.0f32.powf(halo.falloff);
+    // product rather than `falloff^i`. The WGSL twin walks it the same way, so
+    // the two agree on every octave's weight to the last bit.
+    let ratio = halo.falloff;
     let (mut radius, mut wi, mut weight) = (halo.radius_px, 1.0f32, 1.0f32);
     for _ in 1..halo.octaves {
         radius *= 0.5;
@@ -265,21 +275,28 @@ pub fn glow_shaped(
     }
     if halo.chromatic_px > 0.0 {
         if halo.fringe_wavelength {
-            // Radial, so there is no angle to give it: the offset always grows
-            // from the frame centre.
             spectral_split(
                 &mut light,
                 w,
                 h,
                 halo.chromatic_px,
-                0.0,
-                true,
+                halo.fringe_angle_deg,
+                false,
                 halo.fringe_samples,
                 halo.fringe_tints,
                 1.0,
             );
         } else {
-            chromatic_aberration(&mut light, w, h, halo.chromatic_px, halo.fringe_tints, 1.0);
+            rgb_split(
+                &mut light,
+                w,
+                h,
+                halo.chromatic_px,
+                halo.fringe_angle_deg,
+                HALO_FRINGE_SCALE,
+                halo.fringe_tints,
+                1.0,
+            );
         }
     }
     for i in (0..rgba.len()).step_by(4) {

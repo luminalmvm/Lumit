@@ -3859,22 +3859,14 @@
           "hard_min": 0.0
         },
         {
-          "id": "exponential",
-          "label": "Exponential",
-          "kind": "bool",
-          "unit": "raw",
-          "default": false
-        },
-        {
           "id": "falloff",
           "label": "Falloff",
           "kind": "float",
           "unit": "raw",
-          "default": 1.0,
-          "slider_min": 0.5,
-          "slider_max": 4.0,
-          "hard_min": 0.5,
-          "hard_max": 4.0
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 8.0,
+          "hard_min": 0.0
         },
         {
           "id": "chromatic",
@@ -3886,6 +3878,17 @@
           "slider_max": 100.0,
           "hard_min": 0.0,
           "hard_max": 100.0
+        },
+        {
+          "id": "chromatic_angle",
+          "label": "Angle",
+          "kind": "float",
+          "unit": "degrees",
+          "default": 0.0,
+          "slider_min": -180.0,
+          "slider_max": 180.0,
+          "hard_min": -3600.0,
+          "hard_max": 3600.0
         },
         {
           "id": "chromatic_wavelength",
@@ -4053,6 +4056,7 @@
           "label": "Chromatic aberration",
           "params": [
             "chromatic",
+            "chromatic_angle",
             "chromatic_wavelength",
             "chromatic_samples",
             "chromatic_colour_1",

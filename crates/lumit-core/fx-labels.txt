@@ -228,7 +228,6 @@ Evolution
 Evolution options
 Exclusion
 Expansion
-Exponential
 Exposure
 Extract channels
 F-stop

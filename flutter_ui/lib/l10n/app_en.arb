@@ -2354,10 +2354,6 @@
   "@fxExposure": {
     "description": "Effect controls — the name of an effect."
   },
-  "fxExponential": "Exponential",
-  "@fxExponential": {
-    "description": "Effect controls — a control on Glow."
-  },
   "fxExtractChannels": "Extract channels",
   "@fxExtractChannels": {
     "description": "Effect name in the Add effect menu — reads the layer's picture out of channels its file holds but its colour does not, such as a depth pass in an OpenEXR."

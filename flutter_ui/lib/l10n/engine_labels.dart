@@ -435,7 +435,6 @@ Map<String, String> get _table => {
       "Evolution": l10n.fxEvolution,
       "Evolution options": l10n.fxEvolutionOptions,
       "Exclusion": l10n.fxExclusion,
-      "Exponential": l10n.fxExponential,
       "Exposure": l10n.fxExposure,
       "Extract channels": l10n.fxExtractChannels,
       "F-stop": l10n.fxFStop,

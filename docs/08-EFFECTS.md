@@ -813,19 +813,19 @@ band or clip prematurely.
 1. Threshold pass: `max(0, colour − threshold)` with a soft knee (smoothstep over
    `knee` width), in linear light, premultiplied input taken directly.
 2. One separable gaussian on the light that is left, at Radius.
-3. **Exponential** replaces that one gaussian with a stack of five, each half the width of
-   the one above it, weighted `2^(falloff·i)` so the tightest carries the most light. The
-   weights are normalised, so the stack holds the light the single gaussian held and
-   **Falloff** decides where that light sits rather than how much of it there is. One
-   gaussian spreads a highlight evenly, which is the flat grey a wide bloom turns into;
-   real light falls away from a bright core, and a weighted octave stack is the cheapest
-   honest way to draw that shape.
-4. Optional **chromatic aberration**: the finished halo through the radial fringe of §3.15,
-   at a fraction of Radius, before the recombine. The bloom breaks into colour toward the
-   corners; the picture under it is never resampled. Both of that effect's tiers, and its
-   three colour pickers with them: the classic three tinted taps, or **Wavelength**'s
-   gradient of `samples` taps between the same three colours. They are its own kernels
-   being called, not a second copy of them.
+3. **Falloff** above zero replaces that one gaussian with a stack of five, each half the
+   width of the one above it, weighted `falloff^i` so the tightest carries the most light.
+   The weights are normalised, so the stack holds the light the single gaussian held and
+   Falloff decides where that light sits rather than how much of it there is. One gaussian
+   spreads a highlight evenly, which is the flat grey a wide bloom turns into; real light
+   falls away from a bright core, and a weighted octave stack is the cheapest honest way to
+   draw that shape.
+4. Optional **chromatic aberration**: the finished halo through the directional fringe of
+   §3.6, at a fraction of Radius and along **Angle**, before the recombine. The bloom breaks
+   into colour along its own edges; the picture under it is never resampled. Both of RGB
+   split's tiers, and its three colour pickers with them: the classic three tinted taps, or
+   **Wavelength**'s gradient of `samples` taps between the same three colours. They are its
+   own kernels being called, not a second copy of them.
 5. Recombine: `input + intensity · bloom` (Add), or Screen for an SDR-safe variant.
 
 **Parameters.**
@@ -835,9 +835,9 @@ band or clip prematurely.
 | Threshold | 0–4 (linear value), hard min 0, unbounded above | 0.8 |
 | Softness (id `knee`) | 0–1 | 0.5 |
 | Radius | px@comp, hard min 0, unbounded above | 24 px |
-| Exponential | toggle | off |
-| Falloff | 0.5–4.0, read only under Exponential | 1.0 |
+| Falloff | 0–8, open above; 0 is the single gaussian | 0 |
 | Chromatic aberration ▸ Amount | 0–100% of Radius | 0 |
+| Chromatic aberration ▸ Angle | degrees | 0° |
 | Chromatic aberration ▸ Wavelength | toggle | off |
 | Chromatic aberration ▸ Samples | 3–64, read only under Wavelength | 16 |
 | Chromatic aberration ▸ Colour 1 / 2 / 3 | colour | red / green / blue |
@@ -847,7 +847,7 @@ band or clip prematurely.
 
 Cost class `moderate`; ROI `full-frame` (Radius is unbounded px@comp, so a %-diag padding
 cannot bound it statically, mirroring Chromatic aberration's own px@comp choice).
-Exponential costs two more gaussian passes per octave, and only while it is on: the octaves
+A Falloff above zero costs two more gaussian passes per octave, and only then: the octaves
 are tighter than the one they sit under, so the whole stack is about twice the single
 gaussian rather than five times it. A progressive mip chain is what would make large radii
 near-constant cost, and it is still the plan; until it lands, a 200 px radius is 200 px of
@@ -876,17 +876,25 @@ glow spreads over transparency like light; output alpha saturates at 1. The inte
 uses Repeat edges (fixed), so the halo holds its strength along frame borders. Intensity 0 is
 the neutral point — a bit-exact passthrough, pinned by test.
 
-**Exponential, Falloff and Chromatic aberration ship on that spine** rather than waiting for
-the mip chain, because the halo's shape is what makes a bloom read as light and the chain is
-an optimisation of how it is drawn, not of what it draws. Exponential is a **toggle, off by
-default**, and off is the single gaussian to the byte: the shape of every bloom in every
-saved project is not something to change behind the person who set it. Falloff is read only
-while it is on. Chromatic aberration is spent on the halo alone, so the picture under the
-bloom keeps its own pixels, and it carries §3.15's whole control set (Amount, Wavelength,
-Samples and the three colours) in one collapsed group, because a fringe on a bloom and a
-fringe on a picture are the same thing pointed at different pixels. The progressive mip
-chain and the Screen recombine are still to come, and every shipped parameter is stable
-when they land.
+**Falloff and Chromatic aberration ship on that spine** rather than waiting for the mip
+chain, because the halo's shape is what makes a bloom read as light and the chain is an
+optimisation of how it is drawn, not of what it draws.
+
+Falloff is **one slider and no switch**, because zero already means off: the widest octave
+keeps all of the weight and the tighter ones take none, which is the single gaussian to the
+byte, so the shape of every bloom in every saved project stays where its author left it. The
+slider is the weight ratio between one octave and the next, so 1 weighs them all alike, 2 is
+the bloom that reads as light, and the top of the range gathers it into a hard core.
+
+Chromatic aberration is spent on the halo alone, so the picture under the bloom keeps its
+own pixels, and it carries §3.6's whole control set (Amount, Angle, Wavelength, Samples and
+the three colours) in one collapsed group, because a fringe on a bloom and a fringe on a
+picture are the same thing pointed at different pixels. The displacement is **one distance
+in one direction**, not a radial one: a fringe that grew from the middle of the frame did
+nothing at all to a bloom sitting in the middle of the frame, which is where the subject
+usually is. The radial form is one flag on the same kernels if it is ever wanted as a mode.
+The progressive mip chain and the Screen recombine are still to come, and every shipped
+parameter is stable when they land.
 
 ### 3.4 Shake — parameterised camera shake (S_Shake-class)
 

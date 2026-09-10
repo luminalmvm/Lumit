@@ -4,7 +4,7 @@
 
 use crate::GpuContext;
 
-use super::{work_texture, ChromaticAberrationOp, FxEngine, SpectralSplitOp};
+use super::{work_texture, FxEngine, RgbSplitOp, SpectralSplitOp};
 
 /// One resolved blur, in raster pixels (the caller converts from the
 /// spec's %-of-diagonal units).
@@ -229,11 +229,10 @@ struct SpriteFlareParams {
     _pad: [f32; 2],
 }
 
-/// The glow's halo fringe (docs/08 §3.3): the ordinary radial split, run on the
-/// halo before the recombine. Both tiers are the kernels the Chromatic
-/// aberration effect already dispatches, held here as they stand rather than
-/// restated, so the fringe on a bloom and the fringe on a picture cannot drift
-/// apart.
+/// The glow's halo fringe (docs/08 §3.3): the ordinary directional split, run
+/// on the halo before the recombine. Both tiers are the kernels RGB split
+/// already dispatches, held here as they stand rather than restated, so the
+/// fringe on a bloom and the fringe on a picture cannot drift apart.
 #[derive(Debug, Clone, Copy, PartialEq)]
 // The spectral variant carries a kilobyte of tap basis, which is a uniform
 // block bound for the GPU either way. Boxing it to even the variants up would
@@ -241,8 +240,8 @@ struct SpriteFlareParams {
 // notices.
 #[allow(clippy::large_enum_variant)]
 pub enum GlowFringe {
-    /// Three tinted radial taps.
-    Classic(ChromaticAberrationOp),
+    /// Three tinted taps along one direction.
+    Classic(RgbSplitOp),
     /// Wavelength's tier: a gradient of taps between the three colours.
     Spectral(SpectralSplitOp),
 }
@@ -259,8 +258,8 @@ pub struct GlowOp {
     /// single gaussian this effect shipped with, to the byte. Octave `i` is
     /// blurred at `radius ÷ 2ⁱ`.
     pub octaves: u32,
-    /// The exponent the octave weights follow: octave `i` weighs
-    /// `2^(falloff·i)` before the stack is normalised. Ignored at one octave.
+    /// The weight each octave takes from the wider one above it: octave `i`
+    /// weighs `falloff^i` before the stack is normalised. Ignored at one octave.
     pub falloff: f32,
     /// The fringe left on the finished halo, or None for no pass at all.
     pub fringe: Option<GlowFringe>,
@@ -664,11 +663,10 @@ impl FxEngine {
     /// `cpu::glow_shaped`'s weighted average written the other way up. Two more
     /// passes an octave, and only when the toggle is on.
     ///
-    /// **Chromatic aberration** is the ordinary radial fringe run on the
+    /// **Chromatic aberration** is the ordinary directional fringe run on the
     /// finished halo, before the recombine, so the bloom breaks into colour and
-    /// the picture under it does not. Either tier of it, since it is the
-    /// Chromatic aberration effect's own two kernels being called. No fringe
-    /// runs nothing.
+    /// the picture under it does not. Either tier of it, since it is RGB
+    /// split's own two kernels being called. No fringe runs nothing.
     pub fn glow(
         &self,
         ctx: &GpuContext,
@@ -749,10 +747,10 @@ impl FxEngine {
         let mut halo = blurred;
         if op.octaves > 1 {
             // The weight ratio between one octave and the next, applied as a
-            // running product rather than `2^(falloff·i)`. The CPU reference
-            // walks it the same way, so the two agree on every octave's weight
-            // to the last bit rather than to an epsilon.
-            let ratio = 2.0f32.powf(op.falloff);
+            // running product rather than `falloff^i`. The CPU reference walks
+            // it the same way, so the two agree on every octave's weight to the
+            // last bit rather than to an epsilon.
+            let ratio = op.falloff;
             let mut alt = work_texture(ctx, w, h, "fx-glow-octave");
             let (mut radius, mut wi, mut weight) = (op.radius_px, 1.0f32, 1.0f32);
             for _ in 1..op.octaves {
@@ -766,7 +764,7 @@ impl FxEngine {
         }
         // The fringe rides on the halo alone, before the recombine.
         let halo = match &op.fringe {
-            Some(GlowFringe::Classic(f)) => self.chromatic_aberration(ctx, &halo, w, h, None, f),
+            Some(GlowFringe::Classic(f)) => self.rgb_split(ctx, &halo, w, h, None, f),
             Some(GlowFringe::Spectral(f)) => self.spectral_split(ctx, &halo, w, h, None, f),
             None => halo,
         };

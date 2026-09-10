@@ -16,6 +16,7 @@ pub const GLOW_GROUPS: &[ParamGroup] = &[ParamGroup {
     label: "Chromatic aberration",
     params: &[
         "chromatic",
+        "chromatic_angle",
         "chromatic_wavelength",
         "chromatic_samples",
         "chromatic_colour_1",
@@ -89,25 +90,17 @@ pub struct Glow {
     )]
     pub radius: f32,
 
-    /// Sum the halo from [`OCTAVES`] gaussians instead of one, each half the
-    /// width of the one above it and weighted by Falloff. Off (and absent on
-    /// older projects) is the single gaussian, to the byte. The halo's shape is
-    /// the picture, so it changes when it is asked to and not before.
-    #[toggle(default = false)]
-    pub exponential: bool,
-
-    /// How steeply the octave stack falls away from the core: octave `i` weighs
-    /// `2^(falloff·i)`, so a high value gathers the light into a bright core with
-    /// a faint reach and a low one spreads it back out toward the plain
-    /// gaussian. Ignored while Exponential is off.
-    #[slider(
-        min = 0.5,
-        max = 4.0,
-        default = 1.0,
-        hard_min = 0.5,
-        hard_max = 4.0,
-        unit = Raw
-    )]
+    /// How much brighter each octave of the halo is than the wider one above
+    /// it, and so how hard the bloom gathers into a core: octave `i` weighs
+    /// `falloff^i` before the stack is normalised.
+    ///
+    /// **Zero is the single gaussian, to the byte.** The widest octave keeps
+    /// all of the weight and the tighter ones take none, so the stack is never
+    /// even dispatched and a glow changes shape only when it is asked to. One
+    /// weighs every octave alike, two is the bloom that reads as light, and
+    /// higher gathers it tighter still. Open above the slider, because a very
+    /// hard core is a look.
+    #[slider(min = 0.0, max = 8.0, default = 0.0, hard_min = 0.0, unit = Raw)]
     pub falloff: f32,
 
     /// Per cent of Radius: how far the finished halo's channels are pulled apart
@@ -125,6 +118,21 @@ pub struct Glow {
         unit = Percent
     )]
     pub chromatic: f32,
+
+    /// Degrees: the direction the fringe is displaced in, the first colour one
+    /// way and the third the other. The offset is the same everywhere in the
+    /// frame, so the colour lands on the bloom's own edges rather than growing
+    /// with distance from the middle of the picture.
+    #[slider(
+        label = "Angle",
+        min = -180.0,
+        max = 180.0,
+        default = 0.0,
+        hard_min = -3600.0,
+        hard_max = 3600.0,
+        unit = Degrees
+    )]
+    pub chromatic_angle: f32,
 
     /// The fringe's quality tier, the same fork Chromatic aberration and RGB
     /// split carry: off (and absent on older projects) is the three tinted
@@ -146,9 +154,8 @@ pub struct Glow {
     )]
     pub chromatic_samples: f32,
 
-    /// The three taps' colours, at fractions −1 / 0 / +1 out from the frame
-    /// centre. Defaults red, green and blue give the classic split, red pulled
-    /// outward and blue inward. Classic normalises them per channel, so only the
+    /// The three taps' colours, at fractions −1 / 0 / +1 along Angle. Defaults red, green and blue give the classic split, red pushed
+    /// along Angle and blue against it. Classic normalises them per channel, so only the
     /// misaligned part takes the colour. Wavelength reads them as authored and
     /// runs the gradient between them.
     #[colour(label = "Colour 1", default = [1.0, 0.0, 0.0, 1.0])]
@@ -183,11 +190,11 @@ pub struct Glow {
     pub mix: f32,
 }
 
-/// How many gaussians Exponential stacks the halo from. Five reaches a
-/// sixteenth of the Radius, which is a bright core on any halo wide enough to
-/// want one, and it is a constant rather than a control because the octave
-/// count is the shape's making and not a dial anyone should have to read about.
-/// Fixed, so a half-resolution preview stacks what the full render will.
+/// How many gaussians a shaped halo is stacked from. Five reaches a sixteenth
+/// of the Radius, which is a bright core on any halo wide enough to want one,
+/// and it is a constant rather than a control because the octave count is the
+/// shape's making and not a dial anyone should have to read about. Fixed, so a
+/// half-resolution preview stacks what the full render will.
 pub const OCTAVES: u32 = 5;
 
 impl Glow {
@@ -201,6 +208,7 @@ impl Glow {
     /// cannot drift apart.
     pub fn packed(self) -> (cpu::GlowHalo, f32, f32, f32, [f32; 4], f32) {
         let radius_px = self.radius.max(0.0);
+        let falloff = self.falloff.max(0.0);
         let rgb = |c: [f32; 4]| [c[0], c[1], c[2]];
         let tints = [
             rgb(self.chromatic_colour_1),
@@ -210,8 +218,10 @@ impl Glow {
         (
             cpu::GlowHalo {
                 radius_px,
-                octaves: if self.exponential { OCTAVES } else { 1 },
-                falloff: self.falloff.clamp(0.5, 4.0),
+                // Zero weighs every tighter octave at nothing, so the stack is
+                // the widest gaussian alone: skip it and take that gaussian.
+                octaves: if falloff > 0.0 { OCTAVES } else { 1 },
+                falloff,
                 chromatic_px: radius_px * (self.chromatic / 100.0).clamp(0.0, 1.0),
                 // Classic normalises per channel, so only the misaligned
                 // fringes take the colours. Wavelength reads them as authored,
@@ -222,6 +232,7 @@ impl Glow {
                 } else {
                     normalise_tint_columns(tints)
                 },
+                fringe_angle_deg: self.chromatic_angle,
                 fringe_wavelength: self.chromatic_wavelength,
                 // Rounded in f64, as every other spectral pack rounds it.
                 fringe_samples: f64::from(self.chromatic_samples).round() as i32,
