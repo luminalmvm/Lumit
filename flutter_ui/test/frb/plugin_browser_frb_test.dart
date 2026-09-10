@@ -78,6 +78,26 @@ List<BridgeEffectInfo> aCatalogueWithPlugins() => [
       ),
     ];
 
+/// The Audio group as a real build has it (docs/impl/audio-effects.md §5):
+/// one of Lumit's own effects, which brings the engine's Audio heading with
+/// it, and an installed plugin behind it, which brings none.
+List<BridgeEffectInfo> anAudioCatalogue() => [
+      entry(
+        name: 'audio_gain',
+        label: 'Gain',
+        category: 'audio',
+        categoryLabel: 'Audio',
+        namespace: 'builtin',
+      ),
+      entry(
+        name: 'clap:com.example.eq',
+        label: 'Example EQ',
+        category: 'audio',
+        categoryLabel: '',
+        namespace: 'audio',
+      ),
+    ];
+
 void main() {
   setUpAll(initEngineForTests);
 
@@ -218,6 +238,32 @@ void main() {
           reason: 'the disable toggle is per plugin, in the same menu');
       closeLumitPopups();
       await tester.pump();
+    });
+
+    /// **A built-in and a plugin share one Audio heading**
+    /// (docs/impl/audio-effects.md §6 plan 5). The engine heads the family
+    /// and the plugins have no heading of their own, so a plugin read after a
+    /// built-in must not rename the group it joined.
+    testWidgets('a built-in audio effect and a plugin share the Audio heading',
+        (tester) async {
+      final p = freshProject();
+      await tester.pumpWidget(hostPanel(
+        child: EffectsPresetsPanelFrb(
+          presetsLister: () => const [],
+          effectsLister: anAudioCatalogue,
+        ),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await tester.pump();
+
+      expect(find.text('Audio'), findsOneWidget,
+          reason: "the engine's own heading, not the plugins' word for it");
+      expect(find.text('Audio plugins'), findsNothing);
+      expect(find.byKey(const ValueKey('fx-item-audio_gain')), findsOneWidget);
+      expect(find.byKey(const ValueKey('fx-item-clap:com.example.eq')),
+          findsOneWidget,
+          reason: 'and the plugin files under it rather than beside it');
     });
   }, skip: !engineAvailable);
 

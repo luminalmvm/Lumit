@@ -108,7 +108,8 @@ fn the_annotation_reader_derives_every_kind() {
         row(p, "blend_point").kind,
         ParamKind::Slider {
             default: 0.5,
-            range: (0.0, 1.0)
+            range: (0.0, 1.0),
+            log: false
         }
     );
     assert_eq!(

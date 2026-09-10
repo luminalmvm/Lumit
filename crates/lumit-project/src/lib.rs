@@ -2933,6 +2933,7 @@ mod tests {
         };
         let comp = Composition {
             master_volume_db: 0.0,
+            sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
             id: Uuid::now_v7(),
@@ -3100,6 +3101,7 @@ mod tests {
         let mut doc = doc_with_item();
         let mut comp = lumit_core::model::Composition {
             master_volume_db: 0.0,
+            sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
             id: Uuid::now_v7(),
@@ -3431,6 +3433,7 @@ mod tests {
         let mut doc = doc_with_item();
         let mut comp = lumit_core::model::Composition {
             master_volume_db: 0.0,
+            sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
             id: Uuid::now_v7(),

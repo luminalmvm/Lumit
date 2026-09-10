@@ -239,7 +239,7 @@ fn param(schema: &'static super::schema::ParamSchema) -> Param {
         // bounds, because that is what closed means: the manual's
         // table then says the same thing for a Slider as for a Float whose
         // two ranges happen to coincide, and only the kind differs.
-        ParamKind::Slider { default, range } => {
+        ParamKind::Slider { default, range, .. } => {
             p.kind = "slider";
             p.default = num(default);
             p.slider_min = Some(range.0);
@@ -312,6 +312,9 @@ fn param(schema: &'static super::schema::ParamSchema) -> Param {
             p.kind = "layer";
             p.self_default = Some(self_default);
         }
+        // A clip reference declares nothing beyond its kind: no default, no
+        // range, and the list it offers is the chosen layer's clips.
+        ParamKind::Clip => p.kind = "clip",
         ParamKind::MaskPath { self_default } => {
             p.kind = "mask_path";
             p.self_default = Some(self_default);

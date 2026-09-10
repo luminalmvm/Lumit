@@ -155,9 +155,29 @@ pub const NAMESPACE_AUDIO: &str = "audio";
 
 /// Whether a catalogue name is an audio plugin's — the match name's own prefix,
 /// which is the one place provenance is carried.
+///
+/// Provenance only. What tells sound from picture is [`is_audio_effect`]: a
+/// built-in audio effect has no prefix and is still sound.
 #[frb(ignore)]
 fn is_audio_match_name(match_name: &str) -> bool {
     lumit_core::fx::audio_plugin_id(match_name).is_some()
+}
+
+/// Whether an entry in the catalogue is **sound**: a built-in filed under
+/// [`FxCategory::Audio`](lumit_core::fx::FxCategory::Audio), or a hosted audio
+/// plugin.
+///
+/// The family, not the name. A plugin still answers by its prefix because a
+/// hosted definition declares whatever category its own menu path suggests and
+/// none of Lumit's families is a claim about somebody else's effect; a
+/// built-in answers by the family it declared, which is the whole reason
+/// `FxCategory::Audio` exists.
+#[frb(ignore)]
+fn is_audio_effect(match_name: &str) -> bool {
+    is_audio_match_name(match_name)
+        || lumit_core::fx::BUILTIN_DEFS
+            .get(match_name)
+            .is_some_and(|def| def.schema().category == lumit_core::fx::FxCategory::Audio)
 }
 
 /// The category key a plugin's own menu path becomes.
@@ -764,6 +784,13 @@ pub enum BridgeParamKind {
         role: BridgeColourNameRole,
     },
     Layer,
+    /// One clip on the layer a sibling [`BridgeParamKind::Layer`] row names
+    /// (docs/impl/audio-nodes.md §3). The panel draws that layer's clips by
+    /// name and start, with None as the unset entry; the clips come from the
+    /// read model the panel already holds, so the row costs no call of its
+    /// own. A row whose layer row names nothing has nothing to offer, and
+    /// says so.
+    Clip,
     /// One of the **owning layer's masks**, whose geometry the effect walks
     /// (docs/08 §1.2). The panel draws the layer's masks by name, with
     /// "First mask" as the unset entry; the mask names come from the read model
@@ -785,6 +812,11 @@ pub enum BridgeParamKind {
         default: f64,
         min: f64,
         max: f64,
+        /// Whether the thumb moves through the range logarithmically: travel
+        /// `t` in 0..1 sits at `min × (max/min)^t`, which is what a frequency
+        /// row wants (docs/impl/audio-effects.md §2). The value crossing is
+        /// unchanged, because the curve is the *control*, not the number.
+        log: bool,
     },
     /// A **button**, drawn as one and pressed through
     /// [`crate::api::layer::LayerReference::fire_effect_action`]. It carries no
@@ -856,10 +888,15 @@ pub(crate) fn bridge_param(param: &lumit_core::fx::ParamSchema) -> BridgeParamIn
         // The *value* still crosses as a Float scalar, so the row keeps
         // every float path — keyframes, the graph editor, the
         // expression seed — exactly as an Int row does.
-        ParamKind::Slider { default, range } => BridgeParamKind::Slider {
+        ParamKind::Slider {
+            default,
+            range,
+            log,
+        } => BridgeParamKind::Slider {
             default,
             min: range.0,
             max: range.1,
+            log,
         },
         ParamKind::Int {
             default,
@@ -909,6 +946,9 @@ pub(crate) fn bridge_param(param: &lumit_core::fx::ParamSchema) -> BridgeParamIn
         // the panel draws the same picker either way, and
         // the value it edits already carries the layer id.
         ParamKind::Layer { .. } => BridgeParamKind::Layer,
+        // Nothing to send: the list a clip row offers is the chosen layer's
+        // clips, which the read model already carries.
+        ParamKind::Clip => BridgeParamKind::Clip,
         // `self_default` is an engine-side resolution detail here too:
         // the panel always offers "First mask" as its unset
         // entry, and what an unset row comes to is the render's answer,
@@ -1427,6 +1467,10 @@ pub enum BridgeEffectValue {
     Seed(u32),
     File(BridgeFileParam),
     Layer(Option<Uuid>),
+    /// Which clip on the referenced layer a node listens to, or `None` for
+    /// unset. A bare id, as a `Layer` is: the panel resolves it against the
+    /// clips it already holds for that layer.
+    Clip(Option<Uuid>),
     /// Which of the owning layer's masks an effect walks: the mask id,
     /// or `None` for "First mask". The *geometry* never crosses — the render
     /// flattens it engine-side, beside the op.
@@ -1468,6 +1512,7 @@ impl BridgeEffectValue {
                 index: BridgeScalar::read_at(&file.index, offset),
             }),
             EffectValue::Layer(layer) => BridgeEffectValue::Layer(*layer),
+            EffectValue::Clip(clip) => BridgeEffectValue::Clip(*clip),
             EffectValue::MaskPath(mask) => BridgeEffectValue::MaskPath(*mask),
             EffectValue::Curve(points) => {
                 BridgeEffectValue::Curve(points.iter().map(|xy| xy.to_vec()).collect())
@@ -1543,6 +1588,10 @@ impl BridgeEffectValue {
             }
             (BridgeEffectValue::Layer(layer), EffectValue::Layer(target)) => {
                 *target = layer;
+                Ok(())
+            }
+            (BridgeEffectValue::Clip(clip), EffectValue::Clip(target)) => {
+                *target = clip;
                 Ok(())
             }
             (BridgeEffectValue::MaskPath(mask), EffectValue::MaskPath(target)) => {
@@ -1675,6 +1724,14 @@ pub struct BridgeEffectInstanceInfo {
     /// schema key, not a display string.
     pub custom_name: Option<String>,
     pub enabled: bool,
+    /// Whether this instance is **sound** rather than picture: a built-in in
+    /// the Audio category, or a hosted audio plugin.
+    ///
+    /// Answered here so a panel holding an instance never has to read its match
+    /// name to find out. The name's `clap:`/`vst3:` prefix says where a plugin
+    /// came from, which is not the same question, and it has nothing to say
+    /// about an effect Lumit wrote itself.
+    pub audio: bool,
     pub values: Vec<BridgeParamValue>,
     /// The stems of the vector pairs this instance has chained, sorted.
     /// Empty is "every pair unlinked", which is what every older project means.
@@ -2099,6 +2156,7 @@ pub(crate) fn read_instance_info(
         name: effect.effect.match_name.clone(),
         custom_name: effect.custom_name.clone(),
         enabled: effect.enabled,
+        audio: is_audio_effect(&effect.effect.match_name),
         values: effect
             .params
             .iter()
@@ -2559,5 +2617,36 @@ mod tests {
             lumit_core::fx::lens_flare::MAX_COATING_ELEMENTS - reachable as usize,
             "the rows past the deepest bundled lens are the ones that never draw"
         );
+    }
+
+    /// **A clip reference crosses, and comes back the same clip.**
+    ///
+    /// It is a reference like a layer's, so it rides the reference road: the
+    /// id crosses bare, unset is a first-class value rather than an error,
+    /// and a write onto a row of another kind is refused, because what a
+    /// parameter *is* belongs to the schema and not to the panel.
+    #[test]
+    fn a_clip_value_crosses_the_bridge_and_writes_back() {
+        for named in [None, Some(Uuid::now_v7())] {
+            let value = EffectValue::Clip(named);
+            let crossed = BridgeEffectValue::read_at(&value, Rational::ZERO);
+            assert_eq!(crossed, BridgeEffectValue::Clip(named));
+
+            let mut target = EffectValue::Clip(None);
+            crossed
+                .write_at(&mut target, Rational::ZERO, (None, None))
+                .expect("a clip value writes to a clip parameter");
+            assert_eq!(target, value);
+        }
+
+        let mut layer = EffectValue::Layer(None);
+        assert!(matches!(
+            BridgeEffectValue::Clip(Some(Uuid::now_v7())).write_at(
+                &mut layer,
+                Rational::ZERO,
+                (None, None)
+            ),
+            Err(BridgeError::ParamKindMismatch)
+        ));
     }
 }

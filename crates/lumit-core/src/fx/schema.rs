@@ -229,6 +229,15 @@ pub enum ParamKind {
         /// The closed range: the slider's travel, and the hard bounds, which
         /// are the same two numbers.
         range: (f64, f64),
+        /// Whether the thumb moves through the range **logarithmically**:
+        /// travel `t` in 0..1 sits at `min × (max/min)^t`, so a 20 Hz to
+        /// 20 kHz frequency row spends half its travel below 1 kHz, where
+        /// every useful setting is (docs/impl/audio-effects.md §2).
+        ///
+        /// `false` for everything else, and only honest above zero: a range
+        /// starting at nought has no ratio to raise, so the row draws it
+        /// linearly whatever this says.
+        log: bool,
     },
     /// A whole-number parameter (a blade count, a ghost cap). The VALUE side
     /// is still an `EffectValue::Float` — it animates and serialises exactly
@@ -333,6 +342,22 @@ pub enum ParamKind {
         /// no-op default — a depth pass is never the picture itself.
         self_default: bool,
     },
+    /// A reference to one **clip on a Sequence layer**
+    /// (docs/impl/audio-nodes.md §3): which piece of sound a node listens
+    /// to, chosen from the clips of the layer its sibling
+    /// [`ParamKind::Layer`] row names, so a row cannot name a clip on
+    /// another layer.
+    ///
+    /// The value carries an [`EffectValue::Clip`](crate::model::
+    /// EffectValue::Clip), an optional clip id, and it degrades to unset
+    /// when the clip is gone exactly as a layer reference does. Static, and
+    /// nothing may wire into it: which clip is meant is a choice, not a
+    /// number.
+    ///
+    /// There is no field to declare. A layer reference carries
+    /// `self_default` because an effect can point at its own layer; no
+    /// effect sits on a clip, so unset is the only start there is.
+    Clip,
     /// A reference to one of **this layer's masks**, handed to the effect as
     /// *geometry* — where the curve goes — rather than as the coverage the
     /// mask produces.
@@ -444,7 +469,8 @@ impl ParamKind {
     /// wire can drive.
     ///
     /// Number accepts number and colour accepts colour; nothing else is
-    /// drivable in v1. A switch, a dropdown, a seed, a file, a layer, a mask,
+    /// drivable in v1. A switch, a dropdown, a seed, a file, a layer, a clip,
+    /// a mask,
     /// a curve and a button all answer `None` — deliberately, because a wire
     /// into one of them would be a wire whose meaning nobody has decided.
     #[must_use]
@@ -460,6 +486,7 @@ impl ParamKind {
             | ParamKind::Seed
             | ParamKind::File { .. }
             | ParamKind::Layer { .. }
+            | ParamKind::Clip
             | ParamKind::MaskPath { .. }
             | ParamKind::Curve { .. }
             | ParamKind::ColourName { .. }
@@ -641,6 +668,18 @@ pub enum FxCategory {
     /// wipe, Venetian blinds and Card wipe join when they land.
     Transition,
     Utility,
+    /// The effects that process **sound** and draw nothing: Gain, EQ,
+    /// Compressor, Reverb (docs/impl/audio-effects.md §2). A built-in here
+    /// files under the same Audio heading a hosted plugin does, so the one
+    /// menu offers both; what tells them apart is the namespace, not the
+    /// family.
+    ///
+    /// The family is the question "is this sound?", asked once. Before it, a
+    /// reader had to test the match name's `clap:`/`vst3:` prefix, which is a
+    /// fact about where a plugin came from and says nothing about an effect
+    /// Lumit wrote itself. Every effect here declares no matte and
+    /// `is_image_op() -> false`.
+    Audio,
     /// The effects that hold a **value** rather than change a picture:
     /// Slider control, Angle control, Checkbox control, Colour control, Point
     /// control. Each is one row an expression reads and the timeline keyframes,
@@ -673,6 +712,7 @@ impl FxCategory {
             FxCategory::Temporal => "Temporal",
             FxCategory::Transition => "Transition",
             FxCategory::Utility => "Utility",
+            FxCategory::Audio => "Audio",
             FxCategory::Controls => "Controls",
             FxCategory::Drivers => "Drivers",
         }
@@ -696,7 +736,7 @@ impl FxCategory {
     }
 
     /// Every category, in menu order.
-    pub const ALL: [FxCategory; 10] = [
+    pub const ALL: [FxCategory; 11] = [
         FxCategory::BlurSharpen,
         FxCategory::Colour,
         FxCategory::Distortion,
@@ -705,6 +745,9 @@ impl FxCategory {
         FxCategory::Temporal,
         FxCategory::Transition,
         FxCategory::Utility,
+        // After the picture's own families, because a menu opened to add a
+        // blur is opened to add a blur, and the sound is a different errand.
+        FxCategory::Audio,
         // Last, as it is in the Add-effect menu: the menu groups by first
         // appearance in the catalogue, and the Controls family is appended at
         // the end of it.

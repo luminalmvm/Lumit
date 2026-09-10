@@ -47,8 +47,12 @@ and a blend mode.
 
 **Clip** — an entry inside a Sequence layer only: a reference to one source (footage item or
 comp) plus a source in/out trim, a Retime, and per-clip render policies (frame interpolation
-mode). Clips on the same Sequence layer never overlap; a cut between two clips is an **edit
-point**. Ordinary layers do not contain clips.
+mode), and, where the layer is heard rather than seen, a fade at each end and an effect
+stack of its own. **Whether two clips may overlap is decided per layer**: on a Sequence
+layer that draws a picture they never do, because one frame shows one clip; on an
+audio-only Sequence layer they may, and the overlap is the crossfade
+([03-DATA-MODEL.md](03-DATA-MODEL.md) §5.3). A cut between two clips is an **edit point**.
+Ordinary layers do not contain clips.
 
 **Anchor point** (a.k.a. the layer's **origin**) — the point, in the layer's own pixel
 coordinates, that the transform pivots about: scale and rotation happen around it, and
@@ -162,7 +166,7 @@ These three words are **not interchangeable**.
 
 | Banned term | Use instead | Why |
 |---|---|---|
-| **Track** / **line** | Layer, or Sequence layer | "Track" imports NLE semantics that don't match layer stacking; ambiguity here is exactly what this glossary exists to prevent. |
+| **Track** / **line** | Layer, or Sequence layer | "Track" imports NLE semantics that don't match layer stacking; ambiguity here is exactly what this glossary exists to prevent. One scoped exception, below: the Audio timeline panel's own strings. |
 | **Velocity** | Speed (the quantity) | Reversed as the UI *label* for the Retime graph's derivative lens only; "speed" stays the word for the quantity everywhere else. |
 | **Time remap(ping)** | Retime (value graph) | AE legacy name for one view of Retime. Acceptable in AE-import docs when describing AE itself. |
 | **Bin** | Folder | Premiere-ism. |
@@ -180,3 +184,12 @@ The **track** restriction is about the same noun. **To track** — following
 something through a shot — is the trade's own verb and stays: *camera tracking*,
 *object tracking*, the **Camera track** effect and the *2D track* it exports, and
 a **track** in that sense is one followed feature, never a row of the timeline.
+
+The noun has **one scoped exception**: inside the **Audio timeline** panel
+([07-UI-SPEC.md](07-UI-SPEC.md) §4.8) a row is called a **track** in what the user
+reads, because a mixing desk has tracks and calling them layers there would be the
+drift this section exists to stop. The exception reaches that panel's own strings and
+the source files that draw it, where an identifier or a comment may say track because
+the row on screen is one. Every op, every bridge name, every file outside that panel
+and every document sentence still says layer, and what that panel calls a track is a
+Sequence layer with `audio_only` set. No other panel takes the word.

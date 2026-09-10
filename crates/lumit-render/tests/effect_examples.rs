@@ -730,6 +730,7 @@ fn example_doc(
     let comp_id = id("Example");
     doc.items.push(ProjectItem::Composition(Composition {
         master_volume_db: 0.0,
+        sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
         id: comp_id,

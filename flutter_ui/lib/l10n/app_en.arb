@@ -236,6 +236,14 @@
   "@columnModes": {
     "description": "Timeline column heading, over the per-layer render modes (flow, effects, motion blur, 3D). Also the label of that column's show/hide toggle in the Timeline's bottom bar."
   },
+  "columnLane": "Lane",
+  "@columnLane": {
+    "description": "Column header in the Audio timeline panel over the chip that picks what each track's lane draws (Wave or Spectral). One word, sentence case; the panel draws it in capitals."
+  },
+  "columnTrack": "Track",
+  "@columnTrack": {
+    "description": "Column header in the Audio timeline panel over the track names. The Audio timeline is the one place a row is called a track. One word, sentence case; the panel draws it in capitals."
+  },
   "columnNumber": "#",
   "@columnNumber": {
     "description": "Timeline column heading over the layer numbers. The number sign, or whatever stands for 'number' in this language — one or two characters, it sits in an 18px column."
@@ -498,6 +506,10 @@
   "fxInside": "Inside",
   "@fxInside": {
     "description": "Option of a Stroke layer style's Position: the stroke's thickness sits inside the layer's edge."
+  },
+  "fxLayer": "Layer",
+  "@fxLayer": {
+    "description": "Effect controls: the Audio level driver's source dropdown entry that measures one named layer of the mix."
   },
   "fxLayerKnocksOutShadow": "Layer knocks out shadow",
   "@fxLayerKnocksOutShadow": {
@@ -973,7 +985,7 @@
   },
   "fxTime": "Time",
   "@fxTime": {
-    "description": "Effect controls — a control on Beam and Radio waves: how far the effect has got, keyframed rather than read from the clock."
+    "description": "Effect controls — a control on Beam and Radio waves: how far the effect has got, keyframed rather than read from the clock. Also how far behind the sound Delay's first repeat lands."
   },
   "fxTopToBottom": "Top to bottom",
   "@fxTopToBottom": {
@@ -2011,6 +2023,10 @@
   "@fxChromaticAberration": {
     "description": "Effect controls — the name of an effect."
   },
+  "fxClip": "Clip",
+  "@fxClip": {
+    "description": "Effect controls: the Audio level driver's clip row, and the source dropdown entry that measures one clip of a Sequence layer."
+  },
   "fxClipBlack": "Clip black",
   "@fxClipBlack": {
     "description": "Effect controls — a control on Matte key."
@@ -2231,6 +2247,10 @@
   "@fxAudioThisComp": {
     "description": "Effect controls — the first entry of the Audio level driver's source dropdown, meaning the composition's own mix rather than one named layer."
   },
+  "fxClipNoLayer": "Choose a layer first",
+  "@fxClipNoLayer": {
+    "description": "Effect controls: the clip picker on an Audio level node, shown while the Audio row above it names no layer, so there are no clips to offer."
+  },
   "fxConsoleAll": "All",
   "@fxConsoleAll": {
     "description": "The FX console popover’s category strip: the first entry, which shows every result rather than one category’s."
@@ -2285,7 +2305,7 @@
   },
   "fxDepth": "Depth",
   "@fxDepth": {
-    "description": "Effect controls — a control on Particulate: how far the emitter reaches through the layer's own plane, so particles are born at a spread of depths rather than all on it."
+    "description": "Effect controls — a control on Particulate: how far the emitter reaches through the layer's own plane, so particles are born at a spread of depths rather than all on it. Also how far the cycle travels on Chorus, Phaser, Tremolo, Vibrato and Wah."
   },
   "fxDepthChannel": "Depth channel",
   "@fxDepthChannel": {
@@ -2357,7 +2377,7 @@
   },
   "fxDistortion": "Distortion",
   "@fxDistortion": {
-    "description": "Add-effect menu category heading."
+    "description": "Add-effect menu category heading. Also the name of the audio effect that bends the sound out of shape."
   },
   "fxDivide": "Divide",
   "@fxDivide": {
@@ -2549,11 +2569,11 @@
   },
   "fxFrequency": "Frequency",
   "@fxFrequency": {
-    "description": "Effect controls — a control on Shake."
+    "description": "Effect controls — a control on Shake. Also where the band rests on Wah."
   },
   "fxGain": "Gain",
   "@fxGain": {
-    "description": "Effect controls — a control on Colour balance."
+    "description": "Effect controls — a control on Colour balance. Also the level in dB the Gain effect moves the sound by."
   },
   "fxGamma": "Gamma",
   "@fxGamma": {
@@ -2673,7 +2693,7 @@
   },
   "fxInput": "Input",
   "@fxInput": {
-    "description": "Graph panel — the name of the socket a box takes its picture in by."
+    "description": "Graph panel — the name of the socket a box takes its picture in by. Also the trim in dB on the way into Limiter."
   },
   "fxIntensity": "Intensity",
   "@fxIntensity": {
@@ -2685,7 +2705,7 @@
   },
   "fxInvert": "Invert",
   "@fxInvert": {
-    "description": "Effect controls — the name of an effect."
+    "description": "Effect controls — the name of an effect. Also the switch on Gain that flips the sound's polarity."
   },
   "fxInvertEdges": "Invert edges",
   "@fxInvertEdges": {
@@ -2901,7 +2921,7 @@
   },
   "fxMode": "Mode",
   "@fxMode": {
-    "description": "Effect controls — a control on Flash."
+    "description": "Effect controls — a control on Flash. Also whether Chorus flanges, and whether Wah follows the playing."
   },
   "fxMotionBlur": "Motion blur",
   "@fxMotionBlur": {
@@ -2974,6 +2994,10 @@
   "fxParticulate": "Particulate",
   "@fxParticulate": {
     "description": "Effect controls — the name of the particle effect, in the Add-effect menu and at the top of its controls."
+  },
+  "fxPeak": "Peak",
+  "@fxPeak": {
+    "description": "Effect controls: an output of the Audio level driver, the loudest single sample in the window it reads."
   },
   "fxPerAxisWobble": "Per-axis wobble",
   "@fxPerAxisWobble": {
@@ -3281,7 +3305,7 @@
   },
   "fxShape": "Shape",
   "@fxShape": {
-    "description": "Effect controls — a control on Flash."
+    "description": "Effect controls — a control on Flash. Also which curve Distortion bends the sound with, and which cycle Tremolo and Vibrato run."
   },
   "fxSharpen": "Sharpen",
   "@fxSharpen": {
@@ -3413,7 +3437,7 @@
   },
   "fxOutput": "Output",
   "@fxOutput": {
-    "description": "Graph panel — the name of the socket a box hands its picture on by."
+    "description": "Graph panel — the name of the socket a box hands its picture on by. Also the trim in dB on the way out of the parametric EQ, the graphic EQ and Distortion."
   },
   "fxOutputBlack": "Output black",
   "@fxOutputBlack": {
@@ -3449,7 +3473,7 @@
   },
   "fxSpread": "Spread",
   "@fxSpread": {
-    "description": "Effect controls — a control on Particulate: how wide the cone is that particles are launched into."
+    "description": "Effect controls — a control on Particulate: how wide the cone is that particles are launched into. Also how far apart Chorus's voices sit in their cycle."
   },
   "fxSpreadZ": "Spread z",
   "@fxSpreadZ": {
@@ -3549,7 +3573,7 @@
   },
   "fxThreshold": "Threshold",
   "@fxThreshold": {
-    "description": "Effect controls — a control on Unsharp mask, and the name of an effect that cuts every pixel to black or white."
+    "description": "Effect controls — a control on Unsharp mask, and the name of an effect that cuts every pixel to black or white. Also the level in dB where Compressor starts working and where Gate opens."
   },
   "fxThresholdSoftness": "Threshold softness",
   "@fxThresholdSoftness": {
@@ -3689,7 +3713,7 @@
   },
   "fxWidth": "Width",
   "@fxWidth": {
-    "description": "Effect controls — a control on Light wrap. How far, in pixels, the background's light reaches inside the foreground's edge."
+    "description": "Effect controls — a control on Light wrap. How far, in pixels, the background's light reaches inside the foreground's edge. Also how wide the stereo image is on Stereo width and on Reverb."
   },
   "fxWindX": "Wind x",
   "@fxWindX": {
@@ -4926,6 +4950,10 @@
       }
     }
   },
+  "missingClip": "Missing clip",
+  "@missingClip": {
+    "description": "Effect controls: shown where a clip picker names a clip that has since been deleted."
+  },
   "missingLayer": "Missing layer",
   "@missingLayer": {
     "description": "Shown where a picker names a layer that has since been deleted."
@@ -5450,6 +5478,10 @@
   "searchShortcuts": "Search shortcuts",
   "@searchShortcuts": {
     "description": "Placeholder in the keymap table's search box."
+  },
+  "searchTracks": "Search tracks",
+  "@searchTracks": {
+    "description": "Placeholder in the Audio timeline panel's search box, which narrows the list to the tracks whose names carry what is typed. The Audio timeline is the one place a row is called a track."
   },
   "selectACompositionFirst": "Select a composition in the Project panel.",
   "@selectACompositionFirst": {
@@ -6502,6 +6534,14 @@
   "tipHideShy": "Hide shy",
   "@tipHideShy": {
     "description": "Tooltip on the shy filter when it is off. One or two words."
+  },
+  "tipSoundMixFold": "Hide layers",
+  "@tipSoundMixFold": {
+    "description": "Tooltip on the Sound mix row's twirl while the audio layers are shown in the stack: pressing it hides them behind the row again. Short."
+  },
+  "tipSoundMixUnfold": "Show layers",
+  "@tipSoundMixUnfold": {
+    "description": "Tooltip on the Sound mix row's twirl while the audio layers are folded behind it: pressing it shows them in the stack. Short."
   },
   "tipHoldKeyframes": "Hold keyframes",
   "@tipHoldKeyframes": {
@@ -8450,7 +8490,7 @@
   },
   "fxCentre": "Centre",
   "@fxCentre": {
-    "description": "Effect controls — a Placement option on Texturize: one copy of the texture in the middle, the rest of the frame untextured."
+    "description": "Effect controls — a Placement option on Texturize: one copy of the texture in the middle, the rest of the frame untextured. Also the middle of the sweep on Phaser."
   },
   "fxEmboss": "Emboss",
   "@fxEmboss": {
@@ -8662,7 +8702,7 @@
   },
   "fxRate": "Rate",
   "@fxRate": {
-    "description": "Effect controls — how many turns a second the Colour cycle driver makes."
+    "description": "Effect controls — how many turns a second the Colour cycle driver makes. Also the cycles a second on Chorus, Phaser, Tremolo, Vibrato and Wah."
   },
   "fxRemainder": "Remainder",
   "@fxRemainder": {
@@ -10328,6 +10368,31 @@
   "panelAudio": "Audio",
   "@panelAudio": {
     "description": "The name of the panel holding the output level meters, the beat-detection controls and the selected layer's sound controls. A panel name, so a noun."
+  },
+  "panelAudioTimeline": "Audio timeline",
+  "@panelAudioTimeline": {
+    "description": "The name of the panel holding one track per audible layer against time, with the waveform or spectrogram on each track's lane. A panel name, so a noun."
+  },
+  "timelineSoundMix": "Sound mix",
+  "@timelineSoundMix": {
+    "description": "The name of the row pinned at the foot of the Timeline that stands for the composition's whole mix: every audio layer through its fader, the master fader and the limiter. Once a composition has been mixed its audio layers fold away behind this row. Also the name given to the nested composition that Convert to precomp makes, and the name of the undo step that marks a composition mixed. Sentence case, two words."
+  },
+  "timelineSoundMixFolded": "{count, plural, =1{1 layer} other{{count} layers}}",
+  "@timelineSoundMixFolded": {
+    "description": "Small caption on the Sound mix row saying how many audio layers are folded away behind it. {count} is that number.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "soundMixOpenWorkspace": "Open Audio workspace",
+  "@soundMixOpenWorkspace": {
+    "description": "First entry in the right-click menu on the Timeline's Sound mix row: it switches to the Audio workspace, where the mix is made. A double click on the row does the same. Sentence case."
+  },
+  "soundMixConvertToPrecomp": "Convert to precomp",
+  "@soundMixConvertToPrecomp": {
+    "description": "Second entry in the right-click menu on the Timeline's Sound mix row: it packs the composition's audio layers into one nested composition and leaves a precomp layer in their place, which takes the row away for good. Sentence case."
   },
   "mixerMaster": "Master",
   "@mixerMaster": {
@@ -12135,5 +12200,373 @@
         "type": "String"
       }
     }
+  },
+  "clipFadeIn": "Fade in",
+  "@clipFadeIn": {
+    "description": "Audio timeline, clip menu: the submenu of shapes for the fade at the clip's start."
+  },
+  "clipFadeOut": "Fade out",
+  "@clipFadeOut": {
+    "description": "Audio timeline, clip menu: the submenu of shapes for the fade at the clip's end."
+  },
+  "clipSplitAtPlayhead": "Split at playhead",
+  "@clipSplitAtPlayhead": {
+    "description": "Audio timeline, clip menu: cut the clip in two where the playhead stands."
+  },
+  "clipFadeLinear": "Linear",
+  "@clipFadeLinear": {
+    "description": "Audio timeline, fade shape: the level rises in a straight line."
+  },
+  "clipFadeFast": "Fast",
+  "@clipFadeFast": {
+    "description": "Audio timeline, fade shape: the level rises quickly at first, then levels off."
+  },
+  "clipFadeSlow": "Slow",
+  "@clipFadeSlow": {
+    "description": "Audio timeline, fade shape: the level rises slowly at first, then climbs."
+  },
+  "clipFadeSmooth": "Smooth",
+  "@clipFadeSmooth": {
+    "description": "Audio timeline, fade shape: the level eases in and out of both ends."
+  },
+  "clipFadeSharp": "Sharp",
+  "@clipFadeSharp": {
+    "description": "Audio timeline, fade shape: the level moves fastest at the ends and slowest in the middle."
+  },
+  "clipFadeCustom": "Custom…",
+  "@clipFadeCustom": {
+    "description": "Audio timeline, fade menu: opens the editor where the fade's curve is drawn by hand."
+  },
+  "clipFadeShapeTitle": "Fade shape",
+  "@clipFadeShapeTitle": {
+    "description": "Audio timeline, the header of the box where a fade's curve is drawn by hand."
+  },
+  "clipFadeKeepLevel": "Keep level",
+  "@clipFadeKeepLevel": {
+    "description": "Audio timeline, fade editor: with this on, a drag on one curve of a crossfade puts the matching curve on the other side, so the join stays as loud as the clips either side of it."
+  },
+  "fx31Hz": "31 Hz",
+  "@fx31Hz": {
+    "description": "Effect controls: the Graphic EQ fader for the band centred on 31 Hz."
+  },
+  "fx63Hz": "63 Hz",
+  "@fx63Hz": {
+    "description": "Effect controls: the Graphic EQ fader for the band centred on 63 Hz."
+  },
+  "fx125Hz": "125 Hz",
+  "@fx125Hz": {
+    "description": "Effect controls: the Graphic EQ fader for the band centred on 125 Hz."
+  },
+  "fx250Hz": "250 Hz",
+  "@fx250Hz": {
+    "description": "Effect controls: the Graphic EQ fader for the band centred on 250 Hz."
+  },
+  "fx500Hz": "500 Hz",
+  "@fx500Hz": {
+    "description": "Effect controls: the Graphic EQ fader for the band centred on 500 Hz."
+  },
+  "fx1kHz": "1 kHz",
+  "@fx1kHz": {
+    "description": "Effect controls: the Graphic EQ fader for the band centred on 1 kHz."
+  },
+  "fx2kHz": "2 kHz",
+  "@fx2kHz": {
+    "description": "Effect controls: the Graphic EQ fader for the band centred on 2 kHz."
+  },
+  "fx4kHz": "4 kHz",
+  "@fx4kHz": {
+    "description": "Effect controls: the Graphic EQ fader for the band centred on 4 kHz."
+  },
+  "fx8kHz": "8 kHz",
+  "@fx8kHz": {
+    "description": "Effect controls: the Graphic EQ fader for the band centred on 8 kHz."
+  },
+  "fx16kHz": "16 kHz",
+  "@fx16kHz": {
+    "description": "Effect controls: the Graphic EQ fader for the band centred on 16 kHz."
+  },
+  "fxAttack": "Attack",
+  "@fxAttack": {
+    "description": "Effect controls: a control on the Compressor and the Gate. How quickly the gain answers a sound that has grown louder."
+  },
+  "fxBalance": "Balance",
+  "@fxBalance": {
+    "description": "Effect controls: a control on Stereo width. Moves the sound towards one side."
+  },
+  "fxBand1On": "Band 1 on",
+  "@fxBand1On": {
+    "description": "Effect controls: the Parametric EQ switch that puts band 1 in the signal path."
+  },
+  "fxBand1Type": "Band 1 type",
+  "@fxBand1Type": {
+    "description": "Effect controls: the shape of the Parametric EQ's band 1, a bell or a shelf or a cut."
+  },
+  "fxBand1Frequency": "Band 1 frequency",
+  "@fxBand1Frequency": {
+    "description": "Effect controls: where the Parametric EQ's band 1 sits, in hertz."
+  },
+  "fxBand1Gain": "Band 1 gain",
+  "@fxBand1Gain": {
+    "description": "Effect controls: how far the Parametric EQ's band 1 lifts or drops its frequencies, in decibels."
+  },
+  "fxBand1Q": "Band 1 Q",
+  "@fxBand1Q": {
+    "description": "Effect controls: how narrow the Parametric EQ's band 1 is. Q is the usual name for it on a mixing desk."
+  },
+  "fxBand2On": "Band 2 on",
+  "@fxBand2On": {
+    "description": "Effect controls: the Parametric EQ switch that puts band 2 in the signal path."
+  },
+  "fxBand2Type": "Band 2 type",
+  "@fxBand2Type": {
+    "description": "Effect controls: the shape of the Parametric EQ's band 2, a bell or a shelf or a cut."
+  },
+  "fxBand2Frequency": "Band 2 frequency",
+  "@fxBand2Frequency": {
+    "description": "Effect controls: where the Parametric EQ's band 2 sits, in hertz."
+  },
+  "fxBand2Gain": "Band 2 gain",
+  "@fxBand2Gain": {
+    "description": "Effect controls: how far the Parametric EQ's band 2 lifts or drops its frequencies, in decibels."
+  },
+  "fxBand2Q": "Band 2 Q",
+  "@fxBand2Q": {
+    "description": "Effect controls: how narrow the Parametric EQ's band 2 is. Q is the usual name for it on a mixing desk."
+  },
+  "fxBand3On": "Band 3 on",
+  "@fxBand3On": {
+    "description": "Effect controls: the Parametric EQ switch that puts band 3 in the signal path."
+  },
+  "fxBand3Type": "Band 3 type",
+  "@fxBand3Type": {
+    "description": "Effect controls: the shape of the Parametric EQ's band 3, a bell or a shelf or a cut."
+  },
+  "fxBand3Frequency": "Band 3 frequency",
+  "@fxBand3Frequency": {
+    "description": "Effect controls: where the Parametric EQ's band 3 sits, in hertz."
+  },
+  "fxBand3Gain": "Band 3 gain",
+  "@fxBand3Gain": {
+    "description": "Effect controls: how far the Parametric EQ's band 3 lifts or drops its frequencies, in decibels."
+  },
+  "fxBand3Q": "Band 3 Q",
+  "@fxBand3Q": {
+    "description": "Effect controls: how narrow the Parametric EQ's band 3 is. Q is the usual name for it on a mixing desk."
+  },
+  "fxBand4On": "Band 4 on",
+  "@fxBand4On": {
+    "description": "Effect controls: the Parametric EQ switch that puts band 4 in the signal path."
+  },
+  "fxBand4Type": "Band 4 type",
+  "@fxBand4Type": {
+    "description": "Effect controls: the shape of the Parametric EQ's band 4, a bell or a shelf or a cut."
+  },
+  "fxBand4Frequency": "Band 4 frequency",
+  "@fxBand4Frequency": {
+    "description": "Effect controls: where the Parametric EQ's band 4 sits, in hertz."
+  },
+  "fxBand4Gain": "Band 4 gain",
+  "@fxBand4Gain": {
+    "description": "Effect controls: how far the Parametric EQ's band 4 lifts or drops its frequencies, in decibels."
+  },
+  "fxBand4Q": "Band 4 Q",
+  "@fxBand4Q": {
+    "description": "Effect controls: how narrow the Parametric EQ's band 4 is. Q is the usual name for it on a mixing desk."
+  },
+  "fxBand5On": "Band 5 on",
+  "@fxBand5On": {
+    "description": "Effect controls: the Parametric EQ switch that puts band 5 in the signal path."
+  },
+  "fxBand5Type": "Band 5 type",
+  "@fxBand5Type": {
+    "description": "Effect controls: the shape of the Parametric EQ's band 5, a bell or a shelf or a cut."
+  },
+  "fxBand5Frequency": "Band 5 frequency",
+  "@fxBand5Frequency": {
+    "description": "Effect controls: where the Parametric EQ's band 5 sits, in hertz."
+  },
+  "fxBand5Gain": "Band 5 gain",
+  "@fxBand5Gain": {
+    "description": "Effect controls: how far the Parametric EQ's band 5 lifts or drops its frequencies, in decibels."
+  },
+  "fxBand5Q": "Band 5 Q",
+  "@fxBand5Q": {
+    "description": "Effect controls: how narrow the Parametric EQ's band 5 is. Q is the usual name for it on a mixing desk."
+  },
+  "fxCeiling": "Ceiling",
+  "@fxCeiling": {
+    "description": "Effect controls: a control on the Limiter. The level nothing is allowed past."
+  },
+  "fxChorus": "Chorus",
+  "@fxChorus": {
+    "description": "Effect controls: the name of an audio effect, which thickens a sound with detuned copies of it."
+  },
+  "fxCompressor": "Compressor",
+  "@fxCompressor": {
+    "description": "Effect controls: the name of an audio effect, which turns down whatever is louder than a threshold."
+  },
+  "fxDamping": "Damping",
+  "@fxDamping": {
+    "description": "Effect controls: a control on the Delay and the Reverb. How much of the top end each repeat loses."
+  },
+  "fxDelay": "Delay",
+  "@fxDelay": {
+    "description": "Effect controls: the name of an audio effect that repeats a sound, and the row on Chorus saying how far back its copy is read."
+  },
+  "fxDetector": "Detector",
+  "@fxDetector": {
+    "description": "Effect controls: a control on the Compressor. Whether it watches the peaks or the average level."
+  },
+  "fxDrive": "Drive",
+  "@fxDrive": {
+    "description": "Effect controls: a control on Distortion. How hard the sound is pushed into the shape."
+  },
+  "fxDry": "Dry",
+  "@fxDry": {
+    "description": "Effect controls: a control on the Reverb. How much of the untreated sound is kept."
+  },
+  "fxFeedback": "Feedback",
+  "@fxFeedback": {
+    "description": "Effect controls: a control on the Delay, the Chorus and the Phaser. How much of the output is sent round again."
+  },
+  "fxGate": "Gate",
+  "@fxGate": {
+    "description": "Effect controls: the name of an audio effect, which shuts on anything quieter than a threshold."
+  },
+  "fxGraphicEq": "Graphic EQ",
+  "@fxGraphicEq": {
+    "description": "Effect controls: the name of an audio effect, ten fixed bands with a fader each."
+  },
+  "fxHighCut": "High cut",
+  "@fxHighCut": {
+    "description": "Effect controls: a control on the Reverb. Takes the top end off the tail."
+  },
+  "fxHold": "Hold",
+  "@fxHold": {
+    "description": "Effect controls: a control on the Gate. How long it stays open once the sound has dropped."
+  },
+  "fxHysteresis": "Hysteresis",
+  "@fxHysteresis": {
+    "description": "Effect controls: a control on the Gate. How far below the threshold the sound must fall before it shuts, so a level sitting on the line does not chatter."
+  },
+  "fxKnee": "Knee",
+  "@fxKnee": {
+    "description": "Effect controls: a control on the Compressor. How gradually it takes hold around the threshold."
+  },
+  "fxLeftTrim": "Left trim",
+  "@fxLeftTrim": {
+    "description": "Effect controls: a control on Gain. The left channel's own level, on top of the Gain row."
+  },
+  "fxLimiter": "Limiter",
+  "@fxLimiter": {
+    "description": "Effect controls: the name of an audio effect, which never lets a peak past its ceiling."
+  },
+  "fxLookahead": "Lookahead",
+  "@fxLookahead": {
+    "description": "Effect controls: a control on the Compressor and the Limiter. How far ahead it reads, so it is never late for a peak."
+  },
+  "fxMakeup": "Makeup",
+  "@fxMakeup": {
+    "description": "Effect controls: a control on the Compressor. Level added back after the gain reduction."
+  },
+  "fxMonoBelow": "Mono below",
+  "@fxMonoBelow": {
+    "description": "Effect controls: a control on Stereo width. Everything under this frequency is put in the middle."
+  },
+  "fxNote": "Note",
+  "@fxNote": {
+    "description": "Effect controls: a control on the Delay. The beat division a synced repeat lands on."
+  },
+  "fxParametricEq": "Parametric EQ",
+  "@fxParametricEq": {
+    "description": "Effect controls: the name of an audio effect, five bands whose frequency, gain and width are all set by hand."
+  },
+  "fxPhaser": "Phaser",
+  "@fxPhaser": {
+    "description": "Effect controls: the name of an audio effect, which sweeps notches through the sound."
+  },
+  "fxPingPong": "Ping-pong",
+  "@fxPingPong": {
+    "description": "Effect controls: a control on the Delay. Sends each repeat to the other side."
+  },
+  "fxPreDelay": "Pre-delay",
+  "@fxPreDelay": {
+    "description": "Effect controls: a control on the Reverb. How long the room waits before it answers."
+  },
+  "fxRange": "Range",
+  "@fxRange": {
+    "description": "Effect controls: a control on the Gate. How far down a shut gate takes the sound."
+  },
+  "fxRatio": "Ratio",
+  "@fxRatio": {
+    "description": "Effect controls: a control on the Compressor and the Gate. How much of what is past the threshold is taken off."
+  },
+  "fxRelease": "Release",
+  "@fxRelease": {
+    "description": "Effect controls: a control on the Compressor, the Limiter and the Gate. How quickly the gain comes back once the sound has dropped."
+  },
+  "fxResonance": "Resonance",
+  "@fxResonance": {
+    "description": "Effect controls: a control on the Wah. How sharp the swept peak is."
+  },
+  "fxReverb": "Reverb",
+  "@fxReverb": {
+    "description": "Effect controls: the name of an audio effect, which puts the sound in a room."
+  },
+  "fxRightTrim": "Right trim",
+  "@fxRightTrim": {
+    "description": "Effect controls: a control on Gain. The right channel's own level, on top of the Gain row."
+  },
+  "fxRoomSize": "Room size",
+  "@fxRoomSize": {
+    "description": "Effect controls: a control on the Reverb. How big the room it makes is."
+  },
+  "fxSensitivity": "Sensitivity",
+  "@fxSensitivity": {
+    "description": "Effect controls: a control on the Wah. How far the playing itself moves the sweep."
+  },
+  "fxStages": "Stages",
+  "@fxStages": {
+    "description": "Effect controls: a control on the Phaser. How many notches it sweeps."
+  },
+  "fxStereoPhase": "Stereo phase",
+  "@fxStereoPhase": {
+    "description": "Effect controls: a control on the Tremolo and the Phaser. How far behind the left the right side's sweep runs."
+  },
+  "fxStereoWidth": "Stereo width",
+  "@fxStereoWidth": {
+    "description": "Effect controls: the name of an audio effect, which spreads a sound or draws it in."
+  },
+  "fxSync": "Sync",
+  "@fxSync": {
+    "description": "Effect controls: a control on the Delay. Puts the repeats on the beat grid rather than on a time in milliseconds."
+  },
+  "fxTone": "Tone",
+  "@fxTone": {
+    "description": "Effect controls: a control on Distortion. Tilts the balance between the bottom and the top end."
+  },
+  "fxTremolo": "Tremolo",
+  "@fxTremolo": {
+    "description": "Effect controls: the name of an audio effect, which rocks the level up and down."
+  },
+  "fxTruePeak": "True peak",
+  "@fxTruePeak": {
+    "description": "Effect controls: a switch on the Limiter. Measures between the samples as well as on them, which is what a converter will hear."
+  },
+  "fxVibrato": "Vibrato",
+  "@fxVibrato": {
+    "description": "Effect controls: the name of an audio effect, which rocks the pitch up and down."
+  },
+  "fxVoices": "Voices",
+  "@fxVoices": {
+    "description": "Effect controls: a control on the Chorus. How many copies it makes."
+  },
+  "fxWah": "Wah",
+  "@fxWah": {
+    "description": "Effect controls: the name of an audio effect, a peak swept through the sound."
+  },
+  "fxWet": "Wet",
+  "@fxWet": {
+    "description": "Effect controls: how much of the treated sound is heard, on every audio effect that keeps some of the untreated sound beside it."
   }
 }

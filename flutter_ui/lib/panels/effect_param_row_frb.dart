@@ -16,6 +16,7 @@
 // Getting this wrong is what stopped effect parameters being draggable at all:
 // the first preview tick killed the handles and the rest of the gesture threw.
 
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
@@ -52,6 +53,36 @@ import 'keyframe_controls_frb.dart';
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:lumit_flutter/widgets/autofill.dart';
 import 'package:syntax_highlight/syntax_highlight.dart';
+
+/// Where a **logarithmic** slider's thumb sits, and what it is worth there.
+///
+/// Travel `t` runs 0 to 1 across the track and the value at it is
+/// `min × (max/min)^t`, so each equal step of the thumb is an equal *ratio* of
+/// the value: a 20 Hz to 20 kHz row spends half its travel below 632 Hz,
+/// which is where every setting anybody wants lives
+/// (docs/impl/audio-effects.md §2).
+///
+/// A range that touches or crosses zero has no ratio to raise, so both fall
+/// back to the linear reading rather than answering with a NaN.
+bool logSliderUsable(double min, double max) => min > 0 && max > min;
+
+/// The value a thumb `t` of the way along stands for.
+double logSliderValue(double t, double min, double max) {
+  final travel = t.clamp(0.0, 1.0).toDouble();
+  return logSliderUsable(min, max)
+      ? min * math.pow(max / min, travel).toDouble()
+      : min + (max - min) * travel;
+}
+
+/// How far along the track `value` sits. The inverse of [logSliderValue].
+double logSliderTravel(double value, double min, double max) {
+  if (!logSliderUsable(min, max)) {
+    if (max <= min) return 0;
+    return ((value - min) / (max - min)).clamp(0.0, 1.0).toDouble();
+  }
+  final at = value.clamp(min, max).toDouble();
+  return (math.log(at / min) / math.log(max / min)).clamp(0.0, 1.0).toDouble();
+}
 
 /// How wide one value cell is.
 const double effectCellWidth = 78;
@@ -592,7 +623,7 @@ class EffectParamRowFrb extends StatelessWidget {
         }
         return Text('—', style: t.small);
 
-      case BridgeParamKind_Slider(:final min, :final max):
+      case BridgeParamKind_Slider(:final min, :final max, :final log):
         if (value case BridgeEffectValue_Float(:final field0)) {
           return _sliderControl(
             context,
@@ -600,6 +631,7 @@ class EffectParamRowFrb extends StatelessWidget {
             frame: frame,
             min: min,
             max: max,
+            log: log,
             keyName: '$id-${param.id}',
           );
         }
@@ -715,6 +747,12 @@ class EffectParamRowFrb extends StatelessWidget {
       case BridgeParamKind_Layer():
         if (value case BridgeEffectValue_Layer(:final field0)) {
           return _layerPicker(context, id, field0);
+        }
+        return Text('—', style: t.small);
+
+      case BridgeParamKind_Clip():
+        if (value case BridgeEffectValue_Clip(:final field0)) {
+          return _clipPicker(context, id, field0);
         }
         return Text('—', style: t.small);
 
@@ -1048,6 +1086,7 @@ class EffectParamRowFrb extends StatelessWidget {
     required double min,
     required double max,
     required String keyName,
+    bool log = false,
   }) {
     // A driven parameter is a line of code, not a number to drag — the same
     // answer the Float row gives.
@@ -1103,9 +1142,14 @@ class EffectParamRowFrb extends StatelessWidget {
         const SizedBox(width: 6),
         HouseSlider(
           key: ValueKey<String>('fx-slider-$keyName'),
-          value: shown.clamp(min, max).toDouble(),
-          min: min,
-          max: max,
+          // A logarithmic row drags over its **travel**, 0 to 1, and the value
+          // is read off the curve; the number field beside it is untouched,
+          // because a frequency is still a frequency.
+          value: log
+              ? logSliderTravel(shown, min, max)
+              : shown.clamp(min, max).toDouble(),
+          min: log ? 0.0 : min,
+          max: log ? 1.0 : max,
           // The number is already beside it, and a second copy of it would
           // cost the value column room it has not got.
           showValue: false,
@@ -1115,9 +1159,11 @@ class EffectParamRowFrb extends StatelessWidget {
           commitOnRelease: true,
           onChangeLive: animated
               ? null
-              : (v) => _setLive(BridgeEffectValue.float(
-                  BridgeScalar.static_(v.clamp(min, max).toDouble()))),
-          onChanged: write,
+              : (v) => _setLive(BridgeEffectValue.float(BridgeScalar.static_(
+                  log
+                      ? logSliderValue(v, min, max)
+                      : v.clamp(min, max).toDouble()))),
+          onChanged: (v) => write(log ? logSliderValue(v, min, max) : v),
         ),
       ],
     );
@@ -1303,12 +1349,13 @@ class EffectParamRowFrb extends StatelessWidget {
   /// reference is a labelled no-op engine-side, never a fault, so None is a
   /// first-class choice rather than an error state.
   ///
-  /// **On a sound row the empty entry means something**. A parameter
-  /// named `audio` is measuring sound, not sampling a picture, and unset is
-  /// the composition's own mix — so it reads *This comp* rather than None, and
-  /// the list offers every layer instead of only the ones that draw. A music
-  /// clip is audio-only: the picture filter left it out of the one picker in
-  /// the catalogue that exists to point at it.
+  /// **A sound row offers every layer**. A parameter named `audio` is
+  /// measuring sound, not sampling a picture, so the list is not filtered to
+  /// the layers that draw: a music clip is audio-only, and the picture filter
+  /// left it out of the one picker in the catalogue that exists to point at
+  /// it. What an unset row *means* is the Source row's business now
+  /// (docs/impl/audio-nodes.md §3), so the empty entry reads None here as it
+  /// does everywhere else.
   ///
   /// **Lazy, and it has to be**: the options are built when the menu
   /// opens, so they can name every layer and ask which of them has a picture
@@ -1317,7 +1364,7 @@ class EffectParamRowFrb extends StatelessWidget {
   Widget _layerPicker(BuildContext context, UuidValue id, UuidValue? current) {
     final chosen = current?.toString();
     final sound = param.id == 'audio';
-    final empty = sound ? l10n.fxAudioThisComp : l10n.none;
+    final empty = l10n.none;
     // The layer the effect is on says so, so "everything below" is readable
     // on an adjustment layer rather than an unexplained self-reference.
     String named(String name, UuidValue layerId) =>
@@ -1363,6 +1410,65 @@ class EffectParamRowFrb extends StatelessWidget {
               ),
         ],
         onChanged: (picked) => _set(BridgeEffectValue.layer(picked)),
+      ),
+    );
+  }
+
+
+  /// The clips of the layer this effect's own Layer row names, by name and
+  /// start (docs/impl/audio-nodes.md §3).
+  ///
+  /// A clip belongs to a layer, so the list is that layer's and no other's:
+  /// a row cannot reach across and name a clip somewhere else. The clips come
+  /// out of the read model the panel already holds, exactly as the mask
+  /// picker's masks do, so the row costs no bridge call on a rebuild.
+  ///
+  /// **No layer, no clips.** While the Layer row above is unset the picker
+  /// says so rather than offering an empty list, because an empty list reads
+  /// as a layer that has no clips on it.
+  Widget _clipPicker(BuildContext context, UuidValue id, UuidValue? current) {
+    // The Layer row this one hangs under: the effect's own layer reference,
+    // which on Audio level is its Audio row. A matte is skipped, being a
+    // reference about the picture rather than about the sound.
+    UuidValue? chosenLayer;
+    for (final sibling in siblings.entries) {
+      if (sibling.key == 'matte') continue;
+      if (sibling.value case BridgeEffectValue_Layer(:final field0)
+          when field0 != null) {
+        chosenLayer = field0;
+        break;
+      }
+    }
+    final clips = chosenLayer == null
+        ? const <BridgeClip>[]
+        : (ownerLayers
+                .where((l) => l.layer.internallayerId == chosenLayer)
+                .map((l) => l.info.clips)
+                .firstOrNull ??
+            const <BridgeClip>[]);
+    // What it plays and where it starts, so two takes of one file on the same
+    // layer are still two entries. The frame is data rather than a phrase, as
+    // the layer picker's own numbering is.
+    String named(BridgeClip c) => '${c.sourceName} · ${c.startFrame}';
+    return SizedBox(
+      width: effectCellWidth + 40,
+      child: BareLazyDropdown<UuidValue?>(
+        key: ValueKey<String>('fx-clip-$id-${param.id}'),
+        label: chosenLayer == null
+            ? l10n.fxClipNoLayer
+            : current == null
+                ? l10n.none
+                : (clips.where((c) => c.id == current).map(named).firstOrNull ??
+                    l10n.missingClip),
+        options: () => [
+          if (chosenLayer == null)
+            (null, l10n.fxClipNoLayer)
+          else ...[
+            (null, l10n.none),
+            for (final c in clips) (c.id, named(c)),
+          ],
+        ],
+        onChanged: (picked) => _set(BridgeEffectValue.clip(picked)),
       ),
     );
   }
@@ -2064,6 +2170,9 @@ BridgeEffectValue? defaultEffectValue(BridgeParamKind kind) => switch (kind) {
       // Unset: the working space, or nothing - the engine's own default.
       BridgeParamKind_ColourName() => const BridgeEffectValue.text(''),
       BridgeParamKind_Layer() => const BridgeEffectValue.layer(),
+      // Unset, as a layer reference is: the node reads the whole layer
+      // until a clip is picked.
+      BridgeParamKind_Clip() => const BridgeEffectValue.clip(),
       // Unset is "First mask", not "no mask" — what it comes to is
       // the engine's answer, not a value written here.
       BridgeParamKind_MaskPath() => const BridgeEffectValue.maskPath(),
@@ -2122,6 +2231,12 @@ class EffectStackEditor {
   /// lookup does. Null for every ordinary editor.
   List<BridgeEffectInstance> Function()? groupStack;
 
+  /// Where a **clip's** stack is read from (docs/impl/audio-timeline.md §4),
+  /// set by the Audio timeline while it is showing a clip's rows - the same
+  /// place in the search as [groupStack], and never set at the same time,
+  /// because a row belongs to one container. Null for every ordinary editor.
+  List<BridgeEffectInstance> Function()? clipStack;
+
   /// The parameters this gesture has staged, by effect and parameter id.
   ///
   /// **A map rather than one edit, because a gesture can move two parameters
@@ -2155,14 +2270,14 @@ class EffectStackEditor {
     final ids = {for (final instance in effects) instance.id()};
     var stack = effects;
     if (!_staged.keys.every((key) => ids.contains(key.$1))) {
-      // Styles next, then — for an editor showing a group header's rows —
-      // the header's own list: the same order the engine's shared
+      // Styles next, then - for an editor showing a group header's or a clip's
+      // rows - that container's own list: the same order the engine's shared
       // lookup searches, so the commit lands on the list the id lives in.
       final styles = layer.getStyles();
       final styleIds = {for (final s in styles) s.id()};
       stack = _staged.keys.every((key) => styleIds.contains(key.$1))
           ? styles
-          : (groupStack?.call() ?? styles);
+          : ((groupStack ?? clipStack)?.call() ?? styles);
     }
     for (final instance in stack) {
       final id = instance.id();
@@ -2194,7 +2309,10 @@ class EffectStackEditor {
     // ponytail: no live group preview; ceiling = a header drag repaints on
     // release only. Upgrade: a group overlay on render_frame_with_preview.
     // Trigger: the owner asking why the drag does not show.
-    if (groupStack != null) return;
+    //
+    // A clip's rows stand down for the same reason and one more: a clip's
+    // stack is audio, and a picture render has nothing to show of it.
+    if (groupStack != null || clipStack != null) return;
     // The stack is read *inside* the closure: a held tick must send the newest
     // staged value, not the one that was current when it was held.
     _throttle.request(() => comp.renderFrameWithPreview(

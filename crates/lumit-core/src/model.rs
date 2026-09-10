@@ -314,6 +314,21 @@ pub struct Composition {
     /// layer's Volume does.
     #[serde(default)]
     pub master_volume_db: f64,
+    /// **The mix mark** (docs/impl/audio-timeline.md §2): set by the first
+    /// edit made in the Audio timeline, and never by looking at the comp.
+    ///
+    /// The layer Timeline reads it to know whether to stand its Sound mix row
+    /// and fold the Audio layers away under it; a comp that has never been
+    /// mixed shows neither, so nothing appears until the sound has actually
+    /// been worked on. Converting the mix to a precomp clears it, and there is
+    /// no road back from a precomp to a mix.
+    ///
+    /// Project data rather than panel state, for the reason the beat grid is:
+    /// reopening the project has to show the same rows it was left with.
+    // Skipped while false so a project saved before the field existed re-saves
+    // byte-identical (the round-trip test pins it).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub sound_mix: bool,
     /// The **confirmed beat grid** (docs/09 §5): the tempo and phase
     /// the last beat detection ran its grid at, kept so the Timeline's beat
     /// band can number bars without re-running the analysis. `None` until a
@@ -1041,6 +1056,12 @@ pub enum EffectValue {
     /// layer degrades to unset (a labelled no-op), never an error. Static in
     /// v1 — a layer reference does not keyframe.
     Layer(Option<Uuid>),
+    /// A reference to one **clip on a Sequence layer**
+    /// (docs/impl/audio-nodes.md §3): which piece of sound a node listens
+    /// to. `None` when unset; a `Some` id that no longer names a clip
+    /// degrades to unset, the same labelled no-op [`EffectValue::Layer`]
+    /// takes. Static in v1, as every other reference is.
+    Clip(Option<Uuid>),
     /// A reference to one of the **owning layer's masks**, whose *geometry* an
     /// effect walks (docs/08 §1.2): the mask id, or `None` for the
     /// "First mask" entry, which resolves to whichever mask is first at render
@@ -1332,6 +1353,18 @@ impl EffectInstance {
         }
     }
 
+    /// A clip-reference parameter's target id, or `None` when the parameter is
+    /// absent, not a Clip, or unset (docs/impl/audio-nodes.md §3). The clip
+    /// belongs to the layer a sibling reference names, and an id that no
+    /// longer names one of that layer's clips degrades to unset exactly as
+    /// [`Self::layer_ref`]'s does.
+    pub fn clip_ref(&self, id: &str) -> Option<Uuid> {
+        match self.param(id)? {
+            EffectValue::Clip(c) => *c,
+            _ => None,
+        }
+    }
+
     /// A mask-path parameter's named mask id, or `None` when the parameter is
     /// absent, not a mask path, or on the "First mask" entry. `None`
     /// is not "no mask": which mask it comes to is
@@ -1362,14 +1395,20 @@ impl EffectInstance {
     }
 }
 
-fn default_true() -> bool {
+pub(crate) fn default_true() -> bool {
     true
 }
 
 /// `skip_serializing_if` for a field whose default is `true`: an untouched
 /// project writes no line for it, so older files round-trip unchanged.
-fn is_true(b: &bool) -> bool {
+pub(crate) fn is_true(b: &bool) -> bool {
     *b
+}
+
+/// `skip_serializing_if` for a number whose default is zero, the twin of
+/// [`is_true`]: a clip nobody has touched the gain on writes no line for it.
+pub(crate) fn is_zero(v: &f64) -> bool {
+    *v == 0.0
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -3840,6 +3879,7 @@ mod tests {
     fn comp_with_cameras() -> Composition {
         let mut comp = Composition {
             master_volume_db: 0.0,
+            sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
             id: Uuid::now_v7(),
@@ -4283,6 +4323,7 @@ mod tests {
     fn bare_comp(name: &str) -> Composition {
         Composition {
             master_volume_db: 0.0,
+            sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
             id: Uuid::now_v7(),

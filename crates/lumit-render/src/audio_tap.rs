@@ -9,11 +9,13 @@
 //! **tap** for "the sound of that layer between these two moments". This module
 //! is the tap, and it answers from the layer's own footage file.
 //!
-//! **Two questions, one tap.** "That layer's sound" is answered from the
-//! layer's own footage file. "This comp's sound" is answered from the mixer's
-//! own job list — every audible layer at its own volume, precomps and solo
-//! included — summed by the mixer's own arithmetic, so the number a driver
-//! reads and the sound a listener hears cannot come apart.
+//! **One reading, three filters.** "That layer's sound" is answered from the
+//! layer's own footage file, raw. "This comp's sound" is answered from the
+//! mixer's own job list, every audible layer at its own volume with precomps
+//! and solo included, summed by the mixer's own arithmetic, so the number a
+//! driver reads and the sound a listener hears cannot come apart. One row of
+//! that mix, and one clip of that row, are the same sum over the jobs filed
+//! under them (docs/impl/audio-nodes.md §2).
 //!
 //! **One tap, both renders.** The preview and the export build their draw lists
 //! through the same [`crate::build::build_comp_draws_at`], which makes one of
@@ -224,7 +226,17 @@ impl lumit_core::fx::AudioTap for DocumentAudio<'_> {
         Some(rate)
     }
 
-    /// The composition's own mix over a window centred on the frame.
+    /// The composition's own mix over a window centred on the frame, or the
+    /// part of it that one layer, or one clip of one layer, contributes.
+    ///
+    /// **The filters are on the mixer's job list, not on a second reading**
+    /// (docs/impl/audio-nodes.md §2). `layer` keeps the jobs filed under that
+    /// mixer strip and `clip` the ones a Sequence row made from that clip; with
+    /// neither of them set it is the whole mix, which is what
+    /// [`lumit_core::fx::AudioTap::mix`] asks for. A job from a nested comp is
+    /// filed under the outer Precomp layer, as it is for the Mixer's own
+    /// strips, so a row that has become a row precomp still answers by the
+    /// layer standing where it stood.
     ///
     /// **The seam is the mixer's, not a second opinion.** What layers sound,
     /// where they land, how loud they are and which of them a solo silences is
@@ -250,7 +262,13 @@ impl lumit_core::fx::AudioTap for DocumentAudio<'_> {
     /// glow that follows the music follows the *dry* music. Bake each chain
     /// once at control rate and read the tap off that, if a plugin ever changes
     /// a level enough for the picture to notice.
-    fn mix(&self, half: f64, out: &mut Vec<f32>) -> Option<f64> {
+    fn strip(
+        &self,
+        layer: Option<Uuid>,
+        clip: Option<Uuid>,
+        half: f64,
+        out: &mut Vec<f32>,
+    ) -> Option<f64> {
         if half <= 0.0 || half.is_nan() || !self.t_comp.is_finite() {
             return None;
         }
@@ -274,6 +292,9 @@ impl lumit_core::fx::AudioTap for DocumentAudio<'_> {
         });
         let decoded: Vec<(Arc<lumit_media::AudioBuffer>, &crate::export::AudioJob)> = jobs
             .iter()
+            .filter(|job| {
+                layer.is_none_or(|id| job.layer == id) && clip.is_none_or(|id| job.clip == Some(id))
+            })
             .filter_map(|job| Some((decoded(&job.path)?, job)))
             .collect();
         let placed: Vec<lumit_audio::mix::PlacedAudio<'_>> = decoded
@@ -321,6 +342,65 @@ impl lumit_core::fx::AudioTap for DocumentAudio<'_> {
     }
 }
 
+/// A fingerprint of what `comp`'s mix sounds like, for the frame key
+/// (docs/impl/audio-nodes.md §3).
+///
+/// A frame drawn through a driver reading *This comp* depends on the mix, and
+/// the mix is not in the picture's name: a Volume is a mixer control, so
+/// [`lumit_eval`] hashes no part of it and pulling a fader would hand back the
+/// frame drawn before the pull. This is the missing term: the same job list
+/// [`DocumentAudio::strip`] reads, folded down to eight bytes.
+///
+/// **What the reading uses, and nothing else**: each job's file, strip, clip
+/// and placement, the gains [`crate::export::volume_bake`] bakes (Volume, Pan,
+/// the carriers, a clip's fade and a *Duck under* wire) and the master fader.
+/// The layers' insert chains are left out because the reading does not run
+/// them (see [`DocumentAudio::strip`]), so a plugin knob that cannot change
+/// the number must not retire a frame.
+///
+/// ponytail: this builds the comp's job list a second time, next door to the
+/// tap's own. It runs once per frame key and only for a comp that actually
+/// reads its mix; memoise it on the walk if a project full of them ever shows
+/// up in a key-building profile.
+#[must_use]
+pub fn mix_fingerprint(doc: &Arc<Document>, comp: &Composition) -> u64 {
+    let jobs = crate::headless::AudioJobsBuilder::new().audio_jobs(doc, comp);
+    let mut h = blake3::Hasher::new();
+    h.update(&comp.master_volume_db.to_bits().to_le_bytes());
+    for job in &jobs {
+        h.update(job.path.to_string_lossy().as_bytes());
+        h.update(job.layer.as_bytes());
+        if let Some(clip) = job.clip {
+            h.update(clip.as_bytes());
+        }
+        for v in [job.in_s, job.out_s, job.offset_s] {
+            h.update(&v.to_bits().to_le_bytes());
+        }
+        // Debug text rather than a field-by-field walk, as the bridge's
+        // `jobs_signature` folds a graph and a fade: a job carries a handful of
+        // each, and this is a hash rather than a document.
+        h.update(
+            format!(
+                "{:?}",
+                (
+                    &job.volume,
+                    &job.pan,
+                    &job.fade,
+                    job.carriers
+                        .iter()
+                        .map(|c| (&c.volume, &c.pan, c.offset_s))
+                        .collect::<Vec<_>>(),
+                    job.driven.as_ref().map(|d| format!("{:?}", d.graph)),
+                )
+            )
+            .as_bytes(),
+        );
+    }
+    let mut first = [0u8; 8];
+    first.copy_from_slice(&h.finalize().as_bytes()[..8]);
+    u64::from_le_bytes(first)
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
@@ -330,6 +410,15 @@ mod tests {
     /// A document with one footage layer pointing at `path`: the document, its
     /// composition's id, and the layer's id.
     fn doc_with_audio_layer(path: &Path) -> (Arc<Document>, Uuid, Uuid) {
+        let (doc, comp, layers) = doc_with_audio_layers(path, 1);
+        let layer = layers[0];
+        (Arc::new(doc), comp, layer)
+    }
+
+    /// The same document with `rows` layers on it, all playing `path`, and the
+    /// document left unwrapped so a test can set a Volume on a row before it
+    /// reads the mix.
+    fn doc_with_audio_layers(path: &Path, rows: usize) -> (Document, Uuid, Vec<Uuid>) {
         use lumit_core::model::{FootageItem, Layer, LinearColour, MediaRef, Switches};
         use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
 
@@ -348,9 +437,9 @@ mod tests {
             extra: serde_json::Map::new(),
             colour_space: None,
         }));
-        let layer = Layer {
+        let layer = |n: usize| Layer {
             id: Uuid::now_v7(),
-            name: "Tone".into(),
+            name: format!("Tone {n}"),
             kind: LayerKind::Footage { item },
             in_point: CompTime(Rational::new(0, 1).unwrap()),
             out_point: CompTime(Rational::new(1, 1).unwrap()),
@@ -377,10 +466,12 @@ mod tests {
             switches: Switches::default(),
             extra: serde_json::Map::new(),
         };
-        let layer_id = layer.id;
+        let layers: Vec<Layer> = (0..rows).map(layer).collect();
+        let layer_ids = layers.iter().map(|l| l.id).collect();
         let comp_id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
             master_volume_db: 0.0,
+            sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
             id: comp_id,
@@ -391,12 +482,26 @@ mod tests {
             duration: Duration(Rational::new(5, 1).unwrap()),
             background: LinearColour::BLACK,
             work_area: None,
-            layers: vec![layer],
+            layers,
             markers: Vec::new(),
             motion_blur: Default::default(),
             extra: serde_json::Map::new(),
         }));
-        (Arc::new(doc), comp_id, layer_id)
+        (doc, comp_id, layer_ids)
+    }
+
+    /// The tone fixture, or `None` on a machine with no FFmpeg CLI to make it.
+    fn tone(dir: &Path) -> Option<PathBuf> {
+        let path = lumit_media::index::tests_support::tone(dir);
+        if path.is_none() {
+            eprintln!("no ffmpeg CLI: the tone row is skipped");
+        }
+        path
+    }
+
+    /// The loudest sample in a run.
+    fn loudest(samples: &[f32]) -> f32 {
+        samples.iter().fold(0.0f32, |top, s| top.max(s.abs()))
     }
 
     /// Two tracks under a budget with room for one: the one just read stays,
@@ -468,8 +573,7 @@ mod tests {
     #[test]
     fn the_same_window_reads_the_same_samples_twice() {
         let dir = tempfile::tempdir().expect("temp dir");
-        let Some(path) = lumit_media::index::tests_support::tone(dir.path()) else {
-            eprintln!("no ffmpeg CLI: the tone row is skipped");
+        let Some(path) = tone(dir.path()) else {
             return;
         };
         let (doc, comp_id, layer) = doc_with_audio_layer(&path);
@@ -500,5 +604,177 @@ mod tests {
             (0.02 * f64::from(TAP_RATE)).ceil() as usize,
             "the window is clamped to the track, not refused"
         );
+    }
+
+    /// **One reading, three filters** (docs/impl/audio-nodes.md §2, plan 1).
+    ///
+    /// `strip` with neither filter set is the mix `mix` gives; filtered to a
+    /// row it is that row alone **at the row's own Volume**, which is the whole
+    /// difference between this and the raw `samples` read; and the rows sum
+    /// back to the mix, because a filter is a filter and not a second
+    /// arithmetic.
+    #[test]
+    fn strip_reads_the_whole_mix_and_one_row_of_it_post_fader() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let Some(path) = tone(dir.path()) else {
+            return;
+        };
+        let (mut doc, comp_id, rows) = doc_with_audio_layers(&path, 2);
+        // The second row half as loud, so "post-fader" is a number and not a
+        // claim: half is exactly −6.02 dB.
+        let half = 20.0 * 0.5f64.log10();
+        doc.comp_mut(comp_id).expect("comp").layers[1].volume_db =
+            lumit_core::anim::Property::fixed(half);
+        let doc = Arc::new(doc);
+        let comp = doc.comp(comp_id).expect("comp");
+        let tap = DocumentAudio::new(&doc, comp, 0.5);
+
+        let read = |layer, clip| {
+            let mut out = Vec::new();
+            let rate = tap.strip(layer, clip, 0.05, &mut out);
+            (rate, out)
+        };
+        let (rate, whole) = read(None, None);
+        assert_eq!(rate, Some(f64::from(TAP_RATE)));
+        assert!(loudest(&whole) > 0.01, "the two tones are heard");
+
+        let mut mixed = Vec::new();
+        assert_eq!(tap.mix(0.05, &mut mixed), rate);
+        assert_eq!(mixed, whole, "mix is strip with neither filter set");
+
+        let (loud_rate, loud) = read(Some(rows[0]), None);
+        let (_, quiet) = read(Some(rows[1]), None);
+        assert_eq!(loud_rate, rate);
+        assert_eq!(loud.len(), whole.len(), "one row, the same window");
+        assert!(loudest(&loud) > 0.01, "a row on its own is not silence");
+        assert!(
+            (loudest(&quiet) - loudest(&loud) * 0.5).abs() < 0.01,
+            "the fader is heard: {} against {}",
+            loudest(&quiet),
+            loudest(&loud)
+        );
+        for (n, ((a, b), m)) in loud.iter().zip(&quiet).zip(&whole).enumerate() {
+            assert!(
+                (a + b - m).abs() < 1e-5,
+                "sample {n}: the rows must sum to the mix, {a} + {b} against {m}"
+            );
+        }
+
+        // A row nobody has is silence, not a fault: the documented degrade.
+        let (missing, out) = read(Some(Uuid::now_v7()), None);
+        assert_eq!(missing, None);
+        assert!(out.is_empty());
+    }
+
+    /// **A clip is the same reading filtered again** (plan 1): the clips of a
+    /// row sum back to the row, a clip that is not playing in the window is
+    /// silence, and the one asked for carries its own fade.
+    #[test]
+    fn strip_reads_one_clip_of_a_row_with_its_fade() {
+        use lumit_core::sequence::{Clip, ClipSource, Fade};
+        use lumit_core::time::{CompTime, Rational};
+
+        let dir = tempfile::tempdir().expect("temp dir");
+        let Some(path) = tone(dir.path()) else {
+            return;
+        };
+        let (mut doc, comp_id, rows) = doc_with_audio_layers(&path, 1);
+        let comp = doc.comp_mut(comp_id).expect("comp");
+        let LayerKind::Footage { item } = comp.layers[0].kind else {
+            panic!("the fixture is a footage row");
+        };
+        let second = Rational::new(1, 1).expect("a second");
+        let clip = |at: i64| {
+            Clip::new(
+                ClipSource::Footage(item),
+                Rational::ZERO,
+                second,
+                Rational::new(at, 1).expect("a whole second"),
+                second,
+            )
+        };
+        // Two clips butt-cut at a second, the first rising out of silence over
+        // its own first half second.
+        let mut head = clip(0);
+        head.fade_in = Fade {
+            seconds: Rational::new(1, 2).expect("half a second"),
+            ..Fade::default()
+        };
+        let (head_id, tail_id) = (head.id, Uuid::now_v7());
+        let mut tail = clip(1);
+        tail.id = tail_id;
+        comp.layers[0].kind = LayerKind::Sequence {
+            clips: vec![head, tail],
+        };
+        comp.layers[0].out_point = CompTime(Rational::new(2, 1).expect("two seconds"));
+        let doc = Arc::new(doc);
+        let comp = doc.comp(comp_id).expect("comp");
+
+        // Over the join, both clips play and the two sum to the row.
+        let tap = DocumentAudio::new(&doc, comp, 1.0);
+        let read = |tap: &DocumentAudio<'_>, clip| {
+            let mut out = Vec::new();
+            let rate = tap.strip(Some(rows[0]), clip, 0.25, &mut out);
+            (rate, out)
+        };
+        let (rate, row) = read(&tap, None);
+        assert_eq!(rate, Some(f64::from(TAP_RATE)));
+        let (_, first) = read(&tap, Some(head_id));
+        let (_, last) = read(&tap, Some(tail_id));
+        assert!(loudest(&first) > 0.01 && loudest(&last) > 0.01, "both play");
+        for (n, ((a, b), m)) in first.iter().zip(&last).zip(&row).enumerate() {
+            assert!(
+                (a + b - m).abs() < 1e-5,
+                "sample {n}: the clips must sum to the row, {a} + {b} against {m}"
+            );
+        }
+
+        // Inside the head clip's fade, and before the tail starts: the ramp is
+        // heard, and the clip that is not playing is silence rather than a
+        // fault.
+        let early = DocumentAudio::new(&doc, comp, 0.25);
+        let (_, ramp) = read(&early, Some(head_id));
+        let (quiet_rate, quiet) = read(&early, Some(tail_id));
+        assert_eq!(quiet_rate, None, "a clip outside the window is silence");
+        assert!(quiet.is_empty());
+        let mid = ramp.len() / 2;
+        assert!(
+            loudest(&ramp[..mid]) < loudest(&ramp[mid..]) * 0.75,
+            "the clip's own fade is in what the reading gives: {} against {}",
+            loudest(&ramp[..mid]),
+            loudest(&ramp[mid..])
+        );
+    }
+
+    /// **The mix is in the frame's name** (docs/impl/audio-nodes.md §3, plan
+    /// 5). A fader the picture follows changes the fingerprint the key folds;
+    /// a name, which no listener hears, leaves it exactly where it was.
+    #[test]
+    fn the_mix_fingerprint_moves_with_a_fader_and_not_with_a_name() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let Some(path) = tone(dir.path()) else {
+            return;
+        };
+        let (mut doc, comp_id, _) = doc_with_audio_layers(&path, 2);
+        let sig = |doc: &Document| {
+            let doc = Arc::new(doc.clone());
+            let comp = doc.comp(comp_id).expect("comp").clone();
+            mix_fingerprint(&doc, &comp)
+        };
+
+        let before = sig(&doc);
+        doc.comp_mut(comp_id).expect("comp").layers[0].name = "Renamed".into();
+        assert_eq!(sig(&doc), before, "a name is not a sound");
+
+        doc.comp_mut(comp_id).expect("comp").layers[0].volume_db =
+            lumit_core::anim::Property::fixed(-6.0);
+        let pulled = sig(&doc);
+        assert_ne!(
+            pulled, before,
+            "a fader moves the mix, so it must move the frame's name"
+        );
+
+        doc.comp_mut(comp_id).expect("comp").master_volume_db = -3.0;
+        assert_ne!(sig(&doc), pulled, "and so does the master");
     }
 }

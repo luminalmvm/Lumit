@@ -217,6 +217,7 @@ struct Composition {
     work_area: Option<(CompTime, CompTime)>,  // None = full comp
     markers: Vec<Marker>,
     layers: Vec<Layer>,                 // index 0 = top of the stack
+    sound_mix: bool,                    // set once the comp has been shown in the Audio timeline; the Sound mix row stands on it
 }
 // Future: `pixel_aspect` (v1 is square-pixel only), and working depth. Bit depth
 // is a project-wide switch rather than a per-comp `CompDepth`, and v1 renders
@@ -368,12 +369,30 @@ struct Clip {
     place_duration: Rational,      //   stored as start + duration)
     retime: Retime,                // exact rational boundaries — see 04-RETIMING.md
     interpolation: Interpolation,  // Nearest | Blend | Flow  (render policy, not part of the map)
+    fade_in: Fade,                 // Fade { seconds: Rational, shape: FadeShape }; zero seconds is no fade
+    fade_out: Fade,                //   FadeShape = Linear | Fast | Slow | Smooth | Sharp | Custom{x1,y1,x2,y2}
+    effects: Vec<EffectInstance>,  // the clip's own stack, the shape a layer's and a group header's have
+    fx: bool,                      // that stack's bypass, the clip's twin of the layer's fx switch
+    gain_db: f64,                  // the clip's own gain, a number not a Property; applied with the fades
 }
-// Future: a per-clip `label` (LabelColour).
 ```
 
+The last four are written only when they are set, so a project saved before they existed
+saves again byte for byte. They are heard, not seen: the picture path reads none of them,
+and the mixer runs the clip's stack ahead of the layer's and applies the fades to the
+clip's own gain ([09-AUDIO.md](09-AUDIO.md) §4, [impl/audio-timeline.md](impl/audio-timeline.md)).
+A clip has no colour of its own; it wears its layer's label.
+
 Invariants (binding):
-- Clips on one Sequence layer MUST NOT overlap. Gaps are allowed and render transparent.
+- **Whether clips overlap is decided per layer.** On a Sequence layer that draws a
+  picture they MUST NOT: one frame shows one clip, so an overlap has no meaning there and
+  every editor resolves it by overwriting. On an **audio-only** Sequence layer two clips
+  MAY overlap, and the overlap **is** the crossfade: each clip's stored fade shape is read
+  across it and the stored seconds are not. Gaps are allowed on either and render
+  transparent.
+- A cut divides the fades and the stack: the left piece keeps `fade_in`, the right keeps
+  `fade_out`, both keep `fx`, and each takes a clone of `effects` with fresh instance ids.
+  No fade is added at the cut.
 - An **edit point** is the shared boundary of two adjacent clips. Retime edits MUST NOT move
   `place` of any clip (the beat-sync covenant).
 - Cutting a clip produces two clips whose retimes are exact partitions of the original

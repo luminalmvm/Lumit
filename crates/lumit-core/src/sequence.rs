@@ -5,8 +5,11 @@
 //! In plain terms: a Sequence layer is one timeline row holding a run of
 //! **clips** laid end to end. Each clip points at a source (a footage item or
 //! a comp), carries its own trim and its own [`Retime`] ramp, and sits at an
-//! exact place on the row. Clips never overlap; a gap between them shows
-//! through as transparent. To draw the layer at a given moment you ask "which
+//! exact place on the row. On a layer that draws a picture clips never
+//! overlap, because one frame shows one clip; on an audio-only layer they
+//! may, and the overlap is a crossfade (docs/03-DATA-MODEL.md §5.3). A gap
+//! between them shows through as transparent. To draw the layer at a given
+//! moment you ask "which
 //! clip is under the playhead, and which moment of its source does that map
 //! to?" — that resolution is all this module does. Turning that source moment
 //! into pixels, and the layer's own masks/effects/transform, happen above.
@@ -15,7 +18,8 @@
 //! it into `LayerKind` and the render paths is the next step and lives
 //! elsewhere; cutting (§8) and the graph lenses (§9) build on top.
 
-use crate::anim::{Animation, Keyframe, Property, SideInterp};
+use crate::anim::{Animation, CubicSpan, Keyframe, Property, SideInterp};
+use crate::model::{default_true, is_true, is_zero, EffectInstance};
 use crate::retime::Interpolation;
 use crate::time::Rational;
 use serde::{Deserialize, Serialize};
@@ -27,6 +31,125 @@ use uuid::Uuid;
 pub enum ClipSource {
     Footage(Uuid),
     Comp(Uuid),
+}
+
+/// How far a Custom handle may reach past the box in y, in box heights, and
+/// the narrowest reach it may have in x. The Easing panel's own two bounds:
+/// y is a value and overshoot is the point of it, x is time and holding both
+/// handles inside the span is what keeps the curve x-monotone.
+const HANDLE_REACH: f64 = 0.5;
+const MIN_REACH: f64 = 1e-3;
+
+/// The curve a fade follows, written as the gain of a fade **in**: `u` runs
+/// from 0 at silence to 1 at full level, and a fade out reads the same curve
+/// backwards (docs/impl/audio-timeline.md §3). So a shape is one curve, named
+/// once, and the end of the clip it sits on decides which way it is read.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FadeShape {
+    Linear,
+    /// A quarter sine. Fast in against Fast out over one overlap keeps the two
+    /// gains' squares summing to one, which is the crossfade that holds its
+    /// level, so it is what a fresh overlap gets and the default here.
+    #[default]
+    Fast,
+    Slow,
+    Smooth,
+    /// Smooth turned inside out: steep at both ends, flat through the middle.
+    Sharp,
+    /// A cubic bezier from (0, 0) to (1, 1) with two handles, read at x = u -
+    /// the Easing panel's own four numbers, held to the same bounds.
+    Custom {
+        x1: f64,
+        y1: f64,
+        x2: f64,
+        y2: f64,
+    },
+}
+
+impl FadeShape {
+    /// A Custom shape with its handles already inside the legal box.
+    #[must_use]
+    pub fn custom(x1: f64, y1: f64, x2: f64, y2: f64) -> Self {
+        let (x1, y1, x2, y2) = clamp_handles(x1, y1, x2, y2);
+        FadeShape::Custom { x1, y1, x2, y2 }
+    }
+
+    /// The gain of a fade **in** at `u`. A fade out is this read backwards,
+    /// `gain(1 - u)`.
+    #[must_use]
+    pub fn gain(self, u: f64) -> f64 {
+        // Every bound in here is a constant, so `clamp` has no reversed pair
+        // to panic on (docs/14 §4).
+        let u = u.clamp(0.0, 1.0);
+        match self {
+            FadeShape::Linear => u,
+            FadeShape::Fast => (u * std::f64::consts::FRAC_PI_2).sin(),
+            FadeShape::Slow => 1.0 - (u * std::f64::consts::FRAC_PI_2).cos(),
+            FadeShape::Smooth => u * u * (3.0 - 2.0 * u),
+            // The exact inverse of Smooth rather than a steeper curve chosen
+            // by eye: Smooth is u²(3 − 2u), and this is the u it came from.
+            FadeShape::Sharp => 0.5 - ((1.0 - 2.0 * u).clamp(-1.0, 1.0).asin() / 3.0).sin(),
+            // Solved for x, not walked in the bezier's own parameter: the
+            // curve is read at a moment, and `CubicSpan` is where that solve
+            // already lives (docs/impl/keyframe-eval.md §2).
+            FadeShape::Custom { x1, y1, x2, y2 } => {
+                let (x1, y1, x2, y2) = clamp_handles(x1, y1, x2, y2);
+                CubicSpan::from_points([0.0, x1, x2, 1.0], [0.0, y1, y2, 1.0]).value_at(u)
+            }
+        }
+    }
+}
+
+/// Both handles of a Custom shape inside a legal, reachable box.
+fn clamp_handles(x1: f64, y1: f64, x2: f64, y2: f64) -> (f64, f64, f64, f64) {
+    let y = |v: f64| v.clamp(-HANDLE_REACH, 1.0 + HANDLE_REACH);
+    (
+        x1.clamp(MIN_REACH, 1.0),
+        y(y1),
+        x2.clamp(0.0, 1.0 - MIN_REACH),
+        y(y2),
+    )
+}
+
+/// The gain that keeps a pair's power constant: `sqrt(1 - g²)`, which is what
+/// *Keep level* puts on the other side of a crossfade. The complement of a
+/// Fast fade in is a Fast fade out, so an untouched overlap already holds its
+/// level.
+#[must_use]
+pub fn power_complement(gain: f64) -> f64 {
+    (1.0 - gain * gain).max(0.0).sqrt()
+}
+
+/// One end of a clip's fade: how long it takes, and the curve it takes
+/// (docs/impl/audio-timeline.md §3). Zero seconds is no fade.
+///
+/// Inside an **overlap** the seconds are not read - the overlap is the length
+/// of both fades across it - but the shape still is, so a crossfade takes its
+/// two curves from the two clips that make it.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Fade {
+    pub seconds: Rational,
+    pub shape: FadeShape,
+}
+
+impl Default for Fade {
+    fn default() -> Self {
+        Self {
+            seconds: Rational::ZERO,
+            shape: FadeShape::default(),
+        }
+    }
+}
+
+impl Fade {
+    /// Nothing stored: no length and the shape a fresh overlap takes. What a
+    /// clip written before fades existed reads as, and what is left out of the
+    /// file when it is written again.
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
 }
 
 /// One clip on a Sequence layer (docs/03-DATA-MODEL.md §5.3). Times are exact
@@ -61,6 +184,28 @@ pub struct Clip {
     /// How fractional source moments become pixels (render policy).
     #[serde(default)]
     pub interpolation: Interpolation,
+    /// The fade at each end (docs/impl/audio-timeline.md §3). Both are left
+    /// out of the file while nothing is set on them, so a project written
+    /// before fades existed writes again byte for byte as it was.
+    #[serde(default, skip_serializing_if = "Fade::is_default")]
+    pub fade_in: Fade,
+    #[serde(default, skip_serializing_if = "Fade::is_default")]
+    pub fade_out: Fade,
+    /// The clip's own effect stack, the same shape a layer's and a group
+    /// header's has: on an audio row it is the rack on the clip, running
+    /// ahead of the row's own (docs/impl/audio-timeline.md §4).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effects: Vec<EffectInstance>,
+    /// The whole stack's bypass, the clip's twin of the layer's fx switch.
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub fx: bool,
+    /// The clip's own gain in dB, the line drawn across its box
+    /// (docs/impl/audio-timeline.md §2). A number and not a [`Property`]: the
+    /// line is set, not automated, and automation is the row's own Volume.
+    /// It is applied where the fades are, as one more multiplier on the
+    /// clip's placed gain, so it rides ahead of nothing and after nothing.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub gain_db: f64,
     /// Unknown fields from newer Lumit versions (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
@@ -85,6 +230,11 @@ impl Clip {
             place_duration,
             retime: None,
             interpolation: Interpolation::default(),
+            fade_in: Fade::default(),
+            fade_out: Fade::default(),
+            effects: Vec::new(),
+            fx: true,
+            gain_db: 0.0,
             extra: serde_json::Map::new(),
         }
     }
@@ -407,6 +557,10 @@ impl Clip {
     /// there before — sampled at every frame across the span, the halves and
     /// the original agree to the last bit.
     ///
+    /// **The fields divide the way the sound does**: the left piece keeps the
+    /// fade in and the right the fade out, both keep the fx bypass and the
+    /// gain, and each takes its own copy of the effect stack.
+    ///
     /// None when `at` is not strictly inside the clip — an end is not a cut —
     /// or when the map is expression-driven, which cannot be split without
     /// rewriting it ([`Self::map_split`]).
@@ -426,6 +580,13 @@ impl Clip {
             place_duration: tau_clip,
             retime: left_retime,
             interpolation: self.interpolation.clone(),
+            // The outside ends keep their fades and no fade is put at the cut:
+            // the two halves abut sample-exactly and play as the one sound did.
+            fade_in: self.fade_in,
+            fade_out: Fade::default(),
+            effects: respawn(&self.effects),
+            fx: self.fx,
+            gain_db: self.gain_db,
             extra: self.extra.clone(),
         };
         let right = Clip {
@@ -437,6 +598,11 @@ impl Clip {
             place_duration: right_duration,
             retime: right_retime,
             interpolation: self.interpolation.clone(),
+            fade_in: Fade::default(),
+            fade_out: self.fade_out,
+            effects: respawn(&self.effects),
+            fx: self.fx,
+            gain_db: self.gain_db,
             extra: self.extra.clone(),
         };
         Some((left, right))
@@ -841,6 +1007,19 @@ impl SequenceShape {
     }
 }
 
+/// A copy of a clip's stack with fresh instance ids, for the piece of a split
+/// that is a new clip. An effect is found by its id alone, so two pieces
+/// sharing one would answer for each other.
+fn respawn(effects: &[EffectInstance]) -> Vec<EffectInstance> {
+    effects
+        .iter()
+        .map(|e| EffectInstance {
+            id: Uuid::now_v7(),
+            ..e.clone()
+        })
+        .collect()
+}
+
 /// The last source position a map reaches.
 fn map_last_value(map: &Property) -> Option<Rational> {
     let Animation::Keyframed(keys) = &map.animation else {
@@ -890,11 +1069,16 @@ pub fn overwrite_with(clips: &[Clip], dropped: Uuid) -> Vec<Clip> {
         // Straddling: one clip either side, and the later piece needs an
         // identity of its own — it is a new clip, not the one that was there.
         if c.place_start < start && c.place_end() > end {
-            if let Some(left) = c.trim_end(start) {
+            if let Some(mut left) = c.trim_end(start) {
+                // The split divides the fades the way a razor does: the
+                // outside ends keep theirs, and nothing is put at the new edge.
+                left.fade_out = Fade::default();
                 out.push(left);
             }
             if let Some(mut right) = c.trim_start(end) {
                 right.id = Uuid::now_v7();
+                right.fade_in = Fade::default();
+                right.effects = respawn(&right.effects);
                 out.push(right);
             }
             continue;
@@ -927,8 +1111,13 @@ pub fn clips_span(clips: &[Clip]) -> Option<(Rational, Rational)> {
 }
 
 /// The clip active at layer-local time `lt`, or None if `lt` is in a gap
-/// (transparent) or past the end. Clips must not overlap, so at most one
-/// matches; the first match wins defensively.
+/// (transparent) or past the end.
+///
+/// This is the picture's question, and on a layer that draws a picture clips
+/// must not overlap, so at most one matches; the first match wins
+/// defensively. An audio-only layer's clips may overlap, and there the mixer
+/// asks a different question - every clip that sounds at `lt`, not the one
+/// under the playhead - so it walks the list itself and never comes here.
 pub fn active_clip(clips: &[Clip], lt: f64) -> Option<&Clip> {
     clips.iter().find(|c| c.contains(lt))
 }
@@ -970,8 +1159,10 @@ pub fn is_source_ordered(clips: &[Clip]) -> bool {
 }
 
 /// Do any two clips overlap on the layer timeline? (docs/03-DATA-MODEL.md
-/// §5.3 invariant: clips MUST NOT overlap — this is the check editors run
-/// after a move before committing.)
+/// §5.3: clips on a layer that draws a picture MUST NOT overlap - this is the
+/// check those editors run after a move before committing. An audio-only
+/// layer's clips may overlap, so an overlap there is a crossfade rather than
+/// a fault, and the answer is a fact about the list rather than a verdict.)
 pub fn has_overlap(clips: &[Clip]) -> bool {
     let mut spans: Vec<(f64, f64)> = clips
         .iter()
@@ -1571,5 +1762,243 @@ mod tests {
         let json = serde_json::to_string(&c).unwrap();
         let back: Clip = serde_json::from_str(&json).unwrap();
         assert_eq!(c, back);
+    }
+
+    // ------------------------------------------------- fades and shapes --
+
+    /// One effect instance for a clip's own rack. Any effect will do: nothing
+    /// here opens it, and the rules under test are about identity.
+    fn instance() -> EffectInstance {
+        crate::fx::instantiate("blur").expect("a blur exists")
+    }
+
+    /// The five preset shapes are all fades: silent at the start, full at the
+    /// end, and never dipping on the way (plan 1).
+    #[test]
+    fn every_preset_shape_runs_from_silence_to_full_without_dipping() {
+        for shape in [
+            FadeShape::Linear,
+            FadeShape::Fast,
+            FadeShape::Slow,
+            FadeShape::Smooth,
+            FadeShape::Sharp,
+        ] {
+            assert!(shape.gain(0.0).abs() < 1e-9, "{shape:?} starts at silence");
+            assert!(
+                (shape.gain(1.0) - 1.0).abs() < 1e-9,
+                "{shape:?} reaches full"
+            );
+            let mut last = -1.0;
+            for n in 0..=100 {
+                let g = shape.gain(f64::from(n) / 100.0);
+                assert!(g >= last - 1e-9, "{shape:?} dips at {n}: {g} after {last}");
+                last = g;
+            }
+            // Off either end the answer is the end it is nearest, never a
+            // number from off the curve.
+            assert!(shape.gain(-5.0).abs() < 1e-9);
+            assert!((shape.gain(5.0) - 1.0).abs() < 1e-9);
+        }
+        // Sharp is Smooth read the other way round, exactly.
+        for n in 0..=20 {
+            let u = f64::from(n) / 20.0;
+            let there_and_back = FadeShape::Smooth.gain(FadeShape::Sharp.gain(u));
+            assert!(
+                (there_and_back - u).abs() < 1e-9,
+                "Sharp is not the inverse of Smooth at {u}"
+            );
+        }
+    }
+
+    /// A Custom shape is its bezier read at x = u, and its handles are held
+    /// inside the box whatever the file says (plan 1).
+    #[test]
+    fn a_custom_shape_is_read_at_x_and_keeps_its_handles_in_the_box() {
+        // The handles of a straight line give back the straight line.
+        let straight = FadeShape::custom(1.0 / 3.0, 1.0 / 3.0, 2.0 / 3.0, 2.0 / 3.0);
+        for n in 0..=10 {
+            let u = f64::from(n) / 10.0;
+            assert!(
+                (straight.gain(u) - FadeShape::Linear.gain(u)).abs() < 1e-6,
+                "a straight bezier is Linear at {u}"
+            );
+        }
+        // A handle dragged far outside is pulled back rather than making a
+        // curve that runs backwards in time.
+        assert_eq!(
+            FadeShape::custom(-9.0, -9.0, 9.0, 9.0),
+            FadeShape::Custom {
+                x1: MIN_REACH,
+                y1: -HANDLE_REACH,
+                x2: 1.0 - MIN_REACH,
+                y2: 1.0 + HANDLE_REACH,
+            }
+        );
+        // A shape stored unclamped is still read clamped: the file is not a
+        // way in past the bound.
+        let wild = FadeShape::Custom {
+            x1: -9.0,
+            y1: -9.0,
+            x2: 9.0,
+            y2: 9.0,
+        };
+        let tamed = FadeShape::custom(-9.0, -9.0, 9.0, 9.0);
+        for n in 0..=10 {
+            let u = f64::from(n) / 10.0;
+            assert!((wild.gain(u) - tamed.gain(u)).abs() < 1e-12);
+        }
+        assert!(wild.gain(0.0).abs() < 1e-6 && (wild.gain(1.0) - 1.0).abs() < 1e-6);
+    }
+
+    /// What each default pair holds across a join: Fast against Fast keeps the
+    /// power, Linear against Linear keeps the amplitude (plan 1).
+    #[test]
+    fn fast_against_fast_holds_the_power_and_linear_the_amplitude() {
+        for n in 0..=20 {
+            let u = f64::from(n) / 20.0;
+            // The incoming clip reads g(u), the outgoing one g(1 − u).
+            let (a, b) = (FadeShape::Fast.gain(u), FadeShape::Fast.gain(1.0 - u));
+            assert!((a * a + b * b - 1.0).abs() < 1e-9, "u={u}: not equal power");
+            let (a, b) = (FadeShape::Linear.gain(u), FadeShape::Linear.gain(1.0 - u));
+            assert!((a + b - 1.0).abs() < 1e-9, "u={u}: not equal amplitude");
+        }
+    }
+
+    /// *Keep level*: the power complement of a curve sums its squares with it
+    /// to one everywhere, and the complement of Fast is Fast (plan 1).
+    #[test]
+    fn the_power_complement_holds_the_level_and_answers_fast_for_fast() {
+        let custom = FadeShape::custom(0.1, 0.7, 0.4, 0.9);
+        for n in 0..=20 {
+            let u = f64::from(n) / 20.0;
+            let g = custom.gain(u);
+            let other = power_complement(g);
+            assert!((g * g + other * other - 1.0).abs() < 1e-9, "u={u}");
+            assert!(
+                (power_complement(FadeShape::Fast.gain(u)) - FadeShape::Fast.gain(1.0 - u)).abs()
+                    < 1e-9,
+                "u={u}: the complement of Fast is not Fast"
+            );
+        }
+        // A gain past full has no complement to give, and answers zero rather
+        // than the square root of a negative number.
+        assert_eq!(power_complement(2.0), 0.0);
+    }
+
+    /// The razor divides the new fields the way docs/impl/audio-timeline.md §2
+    /// says: the outside ends keep their fades, both halves keep the bypass,
+    /// and neither half's effects answer for the other's (plan 6).
+    #[test]
+    fn a_cut_divides_the_fades_and_freshens_the_effects() {
+        let mut c = clip(Uuid::now_v7(), 0, 4);
+        c.fade_in = Fade {
+            seconds: rat(1, 2),
+            shape: FadeShape::Slow,
+        };
+        c.fade_out = Fade {
+            seconds: rat(1, 1),
+            shape: FadeShape::Sharp,
+        };
+        c.fx = false;
+        c.gain_db = -6.0;
+        c.effects = vec![instance()];
+        let (left, right) = c.cut(rat(2, 1)).expect("a cut inside the clip");
+
+        assert_eq!(left.fade_in, c.fade_in, "the left keeps the fade in");
+        assert_eq!(left.fade_out, Fade::default(), "and no fade at the cut");
+        assert_eq!(right.fade_in, Fade::default());
+        assert_eq!(right.fade_out, c.fade_out, "the right keeps the fade out");
+        assert!(!left.fx && !right.fx, "both halves keep the bypass");
+        assert_eq!(
+            (left.gain_db, right.gain_db),
+            (-6.0, -6.0),
+            "and the gain, which is one level for the whole sound"
+        );
+        assert_eq!(left.effects.len(), 1);
+        assert_eq!(right.effects.len(), 1);
+        assert_ne!(
+            left.effects[0].id, right.effects[0].id,
+            "two halves sharing an instance id would answer for each other"
+        );
+        assert_ne!(left.effects[0].id, c.effects[0].id);
+        assert_eq!(
+            left.effects[0].effect, c.effects[0].effect,
+            "the effect itself is the same effect"
+        );
+
+        // A trim keeps every field: only a cut divides them.
+        let trimmed = c.trim_end(rat(3, 1)).expect("a trim inside the clip");
+        assert_eq!(trimmed.fade_in, c.fade_in);
+        assert_eq!(trimmed.fade_out, c.fade_out);
+        assert_eq!(trimmed.effects[0].id, c.effects[0].id);
+    }
+
+    /// The straddle split in an overwrite divides them the same way, and the
+    /// piece that is a new clip takes new instance ids with its new identity
+    /// (plan 6).
+    #[test]
+    fn a_straddle_split_divides_the_fields_like_a_cut() {
+        let mut under = clip(Uuid::now_v7(), 0, 6);
+        under.fade_in = Fade {
+            seconds: rat(1, 4),
+            shape: FadeShape::Smooth,
+        };
+        under.fade_out = Fade {
+            seconds: rat(1, 4),
+            shape: FadeShape::Linear,
+        };
+        under.effects = vec![instance()];
+        let dropped = clip(Uuid::now_v7(), 2, 2);
+        let id = dropped.id;
+        let out = overwrite_with(&[under.clone(), dropped], id);
+
+        assert_eq!(out.len(), 3, "one piece either side of the dropped clip");
+        let (left, right) = (&out[0], &out[2]);
+        assert_eq!(left.fade_in, under.fade_in);
+        assert_eq!(left.fade_out, Fade::default());
+        assert_eq!(right.fade_in, Fade::default());
+        assert_eq!(right.fade_out, under.fade_out);
+        assert_eq!(
+            left.effects[0].id, under.effects[0].id,
+            "the left piece is still that clip"
+        );
+        assert_ne!(
+            right.effects[0].id, under.effects[0].id,
+            "the right piece is a new one"
+        );
+    }
+
+    /// **A project written before the fades writes again byte for byte**
+    /// (plan 6): nothing is added to the file until something is set, and a
+    /// clip that does carry the fields comes back as it went in.
+    #[test]
+    fn the_new_fields_are_absent_until_set_and_round_trip_when_they_are() {
+        let bare = clip(Uuid::now_v7(), 1, 4);
+        let before = serde_json::to_string(&bare).unwrap();
+        for key in ["fade_in", "fade_out", "effects", "fx", "gain_db"] {
+            assert!(!before.contains(key), "an untouched clip writes no {key}");
+        }
+        let reopened: Clip = serde_json::from_str(&before).unwrap();
+        assert_eq!(reopened, bare, "and reads back as the clip it was");
+        assert_eq!(
+            serde_json::to_string(&reopened).unwrap(),
+            before,
+            "so it writes again unchanged"
+        );
+
+        let mut set = bare.clone();
+        set.fade_in = Fade {
+            seconds: rat(3, 4),
+            shape: FadeShape::custom(0.2, 0.8, 0.6, 0.4),
+        };
+        set.fade_out = Fade {
+            seconds: rat(1, 2),
+            shape: FadeShape::Slow,
+        };
+        set.effects = vec![instance()];
+        set.fx = false;
+        set.gain_db = -6.0;
+        let text = serde_json::to_string(&set).unwrap();
+        assert_eq!(serde_json::from_str::<Clip>(&text).unwrap(), set);
     }
 }

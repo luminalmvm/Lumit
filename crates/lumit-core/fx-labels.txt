@@ -1,6 +1,16 @@
 # Every user-facing label the effects schema can send.
 # Generated - do not edit. To refresh after a schema change:
 #   cargo test -p lumit-core regenerate_fx_label_fixture -- --ignored
+1 kHz
+125 Hz
+16 kHz
+2 kHz
+250 Hz
+31 Hz
+4 kHz
+500 Hz
+63 Hz
+8 kHz
 A
 Accumulation motion blur
 Add
@@ -30,11 +40,38 @@ Arch
 As the lens file
 Aspect ratio
 Asymmetric
+Attack
 Audio
 Audio level
 B
 Background
 Backwards
+Balance
+Band 1 Q
+Band 1 frequency
+Band 1 gain
+Band 1 on
+Band 1 type
+Band 2 Q
+Band 2 frequency
+Band 2 gain
+Band 2 on
+Band 2 type
+Band 3 Q
+Band 3 frequency
+Band 3 gain
+Band 3 on
+Band 3 type
+Band 4 Q
+Band 4 frequency
+Band 4 gain
+Band 4 on
+Band 4 type
+Band 5 Q
+Band 5 frequency
+Band 5 gain
+Band 5 on
+Band 5 type
 Basic
 Beam
 Behind
@@ -74,6 +111,7 @@ Bypass
 Camera track
 Cancel
 Card wipe
+Ceiling
 Centre
 Centre X
 Centre Y
@@ -85,9 +123,11 @@ Checkbox control
 Chisel hard
 Chisel soft
 Choke
+Chorus
 Chromatic aberration
 Circle
 Clamp
+Clip
 Clip black
 Clip rollback
 Clip white
@@ -116,6 +156,7 @@ Combine with existing alpha
 Completion
 Complexity
 Composite on original
+Compressor
 Conductivity state
 Confidence
 Connect points
@@ -140,6 +181,7 @@ Cyan
 Cyans
 Cycle
 Cycle evolution
+Damping
 Darken
 Darker colour
 Datamosh
@@ -148,6 +190,7 @@ Deep blue
 Deep emerald
 Deep red
 Deep yellow
+Delay
 Density
 Depth
 Depth channel
@@ -159,6 +202,7 @@ Despot black
 Despot white
 Detail
 Detect edge threshold
+Detector
 Diagonal
 Difference
 Direction
@@ -181,8 +225,10 @@ Down
 Draft
 Drag
 Drift
+Drive
 Drivers
 Drop shadow
+Dry
 Duration
 Echo
 Echoes
@@ -239,6 +285,7 @@ Falloff
 Far blur
 Feather
 Feature density
+Feedback
 Field of view
 File
 Fill
@@ -275,6 +322,7 @@ Full off
 Full on
 Gain
 Gamma
+Gate
 Gaussian
 Gaussian blur
 Generate
@@ -292,6 +340,7 @@ Glow size
 Gradient
 Gradient overlay
 Gradient type
+Graphic EQ
 Gravity
 Green
 Green blur
@@ -306,6 +355,7 @@ Hard mix
 Hardness
 Height
 High
+High cut
 Highlight amount
 Highlight colour
 Highlight exposure
@@ -313,6 +363,7 @@ Highlight opacity
 Highlight threshold
 Highlight tonal width
 Highlights
+Hold
 Horizontal
 Horizontal amount
 Horizontal axis
@@ -324,6 +375,7 @@ How to treat
 Hue
 Hue and saturation
 Hue shift
+Hysteresis
 Image
 In front
 In high
@@ -360,7 +412,9 @@ Jitter y
 Jitter z
 Key out safe
 Key out unsafe
+Knee
 LUT
+Layer
 Layer knocks out shadow
 Layer out
 Layer points
@@ -371,6 +425,7 @@ Left edge
 Left to right
 Left top tangent x
 Left top tangent y
+Left trim
 Length
 Lens
 Lens distort
@@ -394,6 +449,7 @@ Lighter colour
 Lightness
 Lightning
 Lights
+Limiter
 Line
 Line period
 Linear
@@ -402,6 +458,7 @@ Linear light
 Linear wipe
 Load from file…
 Look
+Lookahead
 Low
 Lower left x
 Lower left y
@@ -412,6 +469,7 @@ Luminance only
 Luminosity
 Magenta
 Magentas
+Makeup
 Manual
 Manual light
 Map black to
@@ -445,6 +503,7 @@ Mirror
 Mirror edges
 Mix
 Mode
+Mono below
 Monochrome
 Mood lighting
 More options
@@ -460,6 +519,7 @@ Noise
 Noise type
 None
 Normal
+Note
 OCIO colour space transform
 OCIO configuration
 OCIO display transform
@@ -498,17 +558,21 @@ Outside mask
 Overlay
 PAL
 Paint style
+Parametric EQ
 Particle
 Particulate
 Path overlap
+Peak
 Per-axis wobble
 Perlin
 Phase
 Phase offset
+Phaser
 Photo filter
 Pillow emboss
 Pin layer
 Pin light
+Ping-pong
 Pinning
 Pixel sort
 Placement
@@ -534,6 +598,7 @@ Position z
 Posterize
 Posterize time
 Power
+Pre-delay
 Preserve luminance
 Preserve luminosity
 Producer x
@@ -551,7 +616,9 @@ Ramp
 Random
 Random span offsets
 Randomness
+Range
 Rate
+Ratio
 Rec. 709
 Rectangle
 Rectangle outline
@@ -564,6 +631,7 @@ Reduce brightness
 Reduce saturation
 Refine radius
 Region size
+Release
 Relief
 Reload channels
 Remainder
@@ -576,8 +644,10 @@ Repeat edge pixels
 Replace colour
 Replace method
 Reset interval
+Resonance
 Result
 Reveal original
+Reverb
 Reverse
 Right bottom tangent x
 Right bottom tangent y
@@ -585,10 +655,12 @@ Right edge
 Right to left
 Right top tangent x
 Right top tangent y
+Right trim
 Rim brightness
 Ripple
 Rise
 Roll speed
+Room size
 Rotation
 Rotation amount
 Rotation frequency
@@ -624,6 +696,7 @@ Second input
 Seed
 Segment length
 Segments
+Sensitivity
 Sepia
 Set channels
 Set matte
@@ -688,6 +761,7 @@ Sprite flare
 Sprite layer
 Square
 Squeeze
+Stages
 Standard
 Star
 Star depth
@@ -700,6 +774,8 @@ Start x
 Start y
 Static
 Status
+Stereo phase
+Stereo width
 Stops
 Streak
 Streak angle
@@ -720,6 +796,7 @@ Sub settings
 Subtract
 Surface
 Symmetric
+Sync
 Taper
 Technique
 Temperature
@@ -727,6 +804,7 @@ Temporal
 Texture
 Texture contrast
 Texturize
+This comp
 Threshold
 Threshold softness
 Tile
@@ -737,6 +815,7 @@ Tile width
 Time
 Tint
 Tint colour
+Tone
 Top and bottom
 Top edge
 Top left tangent x
@@ -749,9 +828,11 @@ Transform
 Transition
 Transition width
 Transparent
+Tremolo
 Triangle
 Trigger
 Tritone
+True peak
 Turbulence amount
 Turbulence scale
 Turbulence speed
@@ -790,11 +871,14 @@ Vertical blocks
 Vertical channel
 Vertical distortion
 Vibrancy
+Vibrato
 View
 Vignette
 Violet
 Vivid light
+Voices
 Volume
+Wah
 Warming filter (81)
 Warming filter (85)
 Warming filter (LBA)
@@ -805,6 +889,7 @@ Wave type
 Wave warp
 Wave width
 Wavelength
+Wet
 Width
 Wiggle
 Wiggle type

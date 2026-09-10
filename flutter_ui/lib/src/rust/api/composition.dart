@@ -624,6 +624,34 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceAnimatedMaskPathsAt(
               that: this, frame: frame);
 
+  /// This comp's **mix** summarised over `[start_seconds, end_seconds)` of
+  /// comp time, in `buckets` buckets - what the Timeline's Sound mix row
+  /// draws: every layer through its fader, the master and the limiter, the
+  /// sound that actually leaves the machine.
+  ///
+  /// Answered off the mix the engine is holding, so it is exact for the
+  /// comp being played and costs no second mixer. Each ask reads what is
+  /// loaded and then asks for a prepare, which the signature turns into
+  /// nothing when the comp sounds as it did: reading first is the whole
+  /// trick, because a prepare marks the worker busy before it has anything
+  /// to show and the row would never see an answer otherwise. Where the mix
+  /// is not loaded at all - nothing prepared yet, another comp in the
+  /// engine, no device - the answer is **empty** and the row asks again
+  /// shortly. One band, like a plain wave: the stack's filters want the
+  /// samples, and a mix keeps none.
+  ///
+  /// Not `#[frb(sync)]`: a wide window walks a fair stretch of the plan.
+  Future<BridgeAudioPeaks> audioMixPeaks(
+          {required double startSeconds,
+          required double endSeconds,
+          required int buckets}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceAudioMixPeaks(
+              that: this,
+              startSeconds: startSeconds,
+              endSeconds: endSeconds,
+              buckets: buckets);
+
   /// Start playing this comp's audio from `start` seconds.
   void audioPlay({required double start}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceAudioPlay(
@@ -991,6 +1019,48 @@ class CompositionReference {
           adjustDuration: adjustDuration,
           group: group);
 
+  /// **Convert the mix to a precomp**: pack every Audio layer of this comp
+  /// into a two-level nest, leave one Precomp layer where the topmost of
+  /// them stood, and clear the mix mark (docs/impl/audio-timeline.md §2).
+  ///
+  /// Each audio row becomes a **comp of its own** holding one audio-only
+  /// Sequence layer per clip, and a **mix comp** holds one Precomp layer per
+  /// row. That row layer carries the row's name, label, span, start
+  /// offset, volume, pan, switches and markers, so the Audio panel's fades,
+  /// which are Volume keys, are heard at the same moments; a row comp's
+  /// clock is the row's own layer clock and every carrier added is unity,
+  /// so the sound is the sound it was.
+  ///
+  /// A clip goes in whole, its place kept, **after its crossfade is baked
+  /// into its stored fade seconds**: the mixer finds a join only by scanning
+  /// a layer's own clip list, and each clip stands alone on its layer from
+  /// here on. A plain Audio layer is split as the one clip
+  /// [`LayerReference::convert_to_sequenced`] would make; a retimed one
+  /// moves whole, because a retimed clip is silent (docs/09 §7).
+  ///
+  /// The row's rack is **copied on to each clip layer** with fresh
+  /// instance ids: the mixer opens a rack on Footage and Sequence layers
+  /// only, so a rack left on the Precomp layer would be silent. A bus chain
+  /// there is the upgrade, and docs/TODO.md holds it.
+  ///
+  /// The layer left in the parent is **audio-only**, because that is what it
+  /// is, and it wears solo where any packed row wore it: a solo silenced
+  /// the parent's other sound before the pack and has to go on silencing it
+  /// after. Audio-only is also what keeps it out of the picture's own solo
+  /// count, which a soloed layer that draws nothing would else blank.
+  ///
+  /// One undo group around the two commits, because one Ctrl-Z has to put
+  /// the layers *and* the Sound mix row back: the pack and the clearing are
+  /// halves of the same act, and either alone leaves a comp that reads wrong.
+  /// The set is every layer that reads as `BridgeLayerKind::Audio`, which is
+  /// exactly what the Timeline's fold takes, so what is packed is what the
+  /// user sees folded under the row. The new comps start unmixed, and there
+  /// is no road back from a precomp to a mix.
+  LayerReference precomposeSoundMix({required String name}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferencePrecomposeSoundMix(
+              that: this, name: name);
+
   /// Add this composition to the export queue, and start the queue when
   /// `start` is set.
   ///
@@ -1356,6 +1426,13 @@ class CompositionReference {
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceSetSettings(
           that: this, settings: settings);
 
+  /// Set or clear the mix mark, as one undoable step. The Audio timeline
+  /// writes it on the first edit made in the panel, and skips a comp that
+  /// is already marked, so looking at a mix writes nothing.
+  void setSoundMix({required bool mixed}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceSetSoundMix(
+          that: this, mixed: mixed);
+
   /// Set one switch on **every given layer**, as one undo step —
   /// what a switch cell clicked on a multi-selection commits. Every
   /// layer takes the same `on`, the clicked row's new state, so a column of
@@ -1459,6 +1536,15 @@ class CompositionReference {
           {required List<UuidValue> layerIds, required PlatformInt64 delta}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceSlideLayers(
           that: this, layerIds: layerIds, delta: delta);
+
+  /// Whether this comp has been **mixed** (docs/impl/audio-timeline.md §2):
+  /// false until the first edit is made in the Audio timeline, and false
+  /// again once the mix is converted to a precomp. The layer Timeline stands
+  /// its Sound mix row on this and folds the Audio layers under it.
+  bool soundMix() =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceSoundMix(
+        that: this,
+      );
 
   /// Start writing this composition to `path`.
   ///

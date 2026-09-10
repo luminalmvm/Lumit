@@ -1334,11 +1334,18 @@ Map<String, List<BridgeEffectInfo>> _effectGroups() =>
 
 Map<String, List<BridgeEffectInfo>>? _effectGroupsCache;
 
-/// Whether this layer is a Sequence layer.
+/// Whether this layer is a row of clips: a Sequence layer, or an audio row,
+/// which answers Audio because audio_only is looked at before the kind is
+/// (docs/impl/audio-timeline.md §8).
+///
+/// The clip list, for that reason: on the kind alone an audio row read as
+/// unconverted, so the Layer menu offered it the conversion it had already
+/// made and the press did nothing at all.
 bool _sequenced(LayerReference? layer) {
   if (layer == null) return false;
   try {
-    return layer.getKind() == BridgeLayerKind.sequence;
+    return layer.getKind() == BridgeLayerKind.sequence ||
+        layer.getClips().isNotEmpty;
   } catch (_) {
     return false;
   }
@@ -1360,7 +1367,12 @@ bool _convertible(LayerReference? layer) {
   if (layer == null) return false;
   try {
     final kind = layer.getKind();
-    return kind == BridgeLayerKind.footage || kind == BridgeLayerKind.sequence;
+    // An audio row is a Sequence layer that answers Audio, because audio_only
+    // is looked at before the kind is - so the clip list is what says a row has
+    // clips to put back (docs/impl/audio-timeline.md §8).
+    return kind == BridgeLayerKind.footage ||
+        kind == BridgeLayerKind.sequence ||
+        layer.getClips().isNotEmpty;
   } catch (_) {
     return false;
   }
@@ -1399,12 +1411,14 @@ int? newLayerRow(LumitUiState ui, CompositionReference comp) {
   }
 }
 
-/// Whether this layer can carry a Retime at all. A Sequence layer cannot: its
-/// clips each have one of their own.
+/// Whether this layer can carry a Retime at all. A row of clips cannot: its
+/// clips each have one of their own, and an audio row is such a one even
+/// though it answers Audio (docs/impl/audio-timeline.md §8).
 bool _retimeable(LayerReference? layer) {
   if (layer == null) return false;
   try {
-    return layer.getKind() != BridgeLayerKind.sequence;
+    return layer.getKind() != BridgeLayerKind.sequence &&
+        layer.getClips().isEmpty;
   } catch (_) {
     return false;
   }

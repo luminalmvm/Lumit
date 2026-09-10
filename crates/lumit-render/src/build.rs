@@ -3089,6 +3089,7 @@ mod parent_placement_tests {
     fn comp(layers: Vec<Layer>) -> Composition {
         Composition {
             master_volume_db: 0.0,
+            sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
             id: uuid::Uuid::now_v7(),
@@ -3387,6 +3388,7 @@ mod render_below_at_tests {
         }
         let comp = Composition {
             master_volume_db: 0.0,
+            sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
             id: Uuid::now_v7(),
@@ -3473,6 +3475,7 @@ mod render_below_at_tests {
 
         let comp_with = |layers: Vec<Layer>| Composition {
             master_volume_db: 0.0,
+            sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
             id: Uuid::now_v7(),
@@ -3569,6 +3572,7 @@ mod render_below_at_tests {
         };
         let comp = Composition {
             master_volume_db: 0.0,
+            sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
             id: Uuid::now_v7(),
@@ -3685,6 +3689,7 @@ mod render_below_at_tests {
         };
         let comp = Composition {
             master_volume_db: 0.0,
+            sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
             id: Uuid::now_v7(),
@@ -3825,6 +3830,7 @@ mod render_below_at_tests {
         text.transform.position_x = ramp(0.0, 100.0); // x = 100·t
         Composition {
             master_volume_db: 0.0,
+            sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
             id: Uuid::now_v7(),
@@ -3899,6 +3905,7 @@ mod render_below_at_tests {
         text.effects = vec![blur];
         let comp = Composition {
             master_volume_db: 0.0,
+            sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
             id: Uuid::now_v7(),
@@ -3980,6 +3987,7 @@ mod render_below_at_tests {
         text.effects = vec![blur, post];
         let comp = Composition {
             master_volume_db: 0.0,
+            sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
             id: Uuid::now_v7(),
@@ -4158,6 +4166,7 @@ mod render_below_at_tests {
     fn comp_with(fps: u32, layers: Vec<Layer>) -> Composition {
         Composition {
             master_volume_db: 0.0,
+            sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
             id: Uuid::now_v7(),

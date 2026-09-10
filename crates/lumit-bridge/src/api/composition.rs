@@ -667,6 +667,381 @@ impl CompositionReference {
         Ok(())
     }
 
+    /// Whether this comp has been **mixed** (docs/impl/audio-timeline.md §2):
+    /// false until the first edit is made in the Audio timeline, and false
+    /// again once the mix is converted to a precomp. The layer Timeline stands
+    /// its Sound mix row on this and folds the Audio layers under it.
+    #[frb(sync)]
+    pub fn sound_mix(&self) -> Result<bool, BridgeError> {
+        Ok(self.composition()?.sound_mix)
+    }
+
+    /// Set or clear the mix mark, as one undoable step. The Audio timeline
+    /// writes it on the first edit made in the panel, and skips a comp that
+    /// is already marked, so looking at a mix writes nothing.
+    #[frb(sync)]
+    pub fn set_sound_mix(&self, mixed: bool) -> Result<(), BridgeError> {
+        self.commit(lumit_core::Op::SetSoundMix {
+            comp: self.id,
+            on: mixed,
+        })
+    }
+
+    /// **Convert the mix to a precomp**: pack every Audio layer of this comp
+    /// into a two-level nest, leave one Precomp layer where the topmost of
+    /// them stood, and clear the mix mark (docs/impl/audio-timeline.md §2).
+    ///
+    /// Each audio row becomes a **comp of its own** holding one audio-only
+    /// Sequence layer per clip, and a **mix comp** holds one Precomp layer per
+    /// row. That row layer carries the row's name, label, span, start
+    /// offset, volume, pan, switches and markers, so the Audio panel's fades,
+    /// which are Volume keys, are heard at the same moments; a row comp's
+    /// clock is the row's own layer clock and every carrier added is unity,
+    /// so the sound is the sound it was.
+    ///
+    /// A clip goes in whole, its place kept, **after its crossfade is baked
+    /// into its stored fade seconds**: the mixer finds a join only by scanning
+    /// a layer's own clip list, and each clip stands alone on its layer from
+    /// here on. A plain Audio layer is split as the one clip
+    /// [`LayerReference::convert_to_sequenced`] would make; a retimed one
+    /// moves whole, because a retimed clip is silent (docs/09 §7).
+    ///
+    /// The row's rack is **copied on to each clip layer** with fresh
+    /// instance ids: the mixer opens a rack on Footage and Sequence layers
+    /// only, so a rack left on the Precomp layer would be silent. A bus chain
+    /// there is the upgrade, and docs/TODO.md holds it.
+    ///
+    /// The layer left in the parent is **audio-only**, because that is what it
+    /// is, and it wears solo where any packed row wore it: a solo silenced
+    /// the parent's other sound before the pack and has to go on silencing it
+    /// after. Audio-only is also what keeps it out of the picture's own solo
+    /// count, which a soloed layer that draws nothing would else blank.
+    ///
+    /// One undo group around the two commits, because one Ctrl-Z has to put
+    /// the layers *and* the Sound mix row back: the pack and the clearing are
+    /// halves of the same act, and either alone leaves a comp that reads wrong.
+    /// The set is every layer that reads as `BridgeLayerKind::Audio`, which is
+    /// exactly what the Timeline's fold takes, so what is packed is what the
+    /// user sees folded under the row. The new comps start unmixed, and there
+    /// is no road back from a precomp to a mix.
+    #[frb(sync)]
+    pub fn precompose_sound_mix(&self, name: String) -> Result<LayerReference, BridgeError> {
+        use crate::api::layer::{bridge_kind, BridgeLayerKind};
+        use lumit_core::anim::Property;
+        use lumit_core::model::{
+            Composition, EffectInstance, Layer, LayerKind, MotionBlur, ProjectItem,
+        };
+        use lumit_core::ops::AutoFolderKind;
+        use lumit_core::sequence::{Clip, ClipSource};
+        use lumit_core::time::{CompTime, Rational};
+        use lumit_core::Op;
+
+        /// A row's clips with every crossfade baked into the stored fade
+        /// seconds, earliest first, so each goes on ramping once it stands
+        /// alone on a layer of its own. The mixer's own predicate, in exact
+        /// layer time: the neighbour whose near end lies inside this clip and
+        /// whose far end lies outside it. Never longer than the clip, which is
+        /// the clamp the mixer makes when it reads a stored fade back. Clips
+        /// are stored in no order, and the mixer reads a row left to right, so
+        /// the layers have to come out in that order to be heard in it.
+        fn baked(clips: &[Clip]) -> Vec<Clip> {
+            let held = |by: Rational, span: Rational| {
+                if by.is_negative() {
+                    Rational::ZERO
+                } else if by > span {
+                    span
+                } else {
+                    by
+                }
+            };
+            let spans: Vec<(Rational, Rational)> = clips
+                .iter()
+                .map(|c| (c.place_start, c.place_end()))
+                .collect();
+            let mut out = clips.to_vec();
+            for (i, clip) in out.iter_mut().enumerate() {
+                let (start, end) = spans[i];
+                let span = clip.place_duration;
+                for (m, &(other_start, other_end)) in spans.iter().enumerate() {
+                    if m != i && other_start < start && other_end > start && other_end < end {
+                        let by = other_end.checked_sub(start).unwrap_or(Rational::ZERO);
+                        clip.fade_in.seconds = held(by, span);
+                        break;
+                    }
+                }
+                for (m, &(other_start, other_end)) in spans.iter().enumerate() {
+                    if m != i && other_end > end && other_start < end && other_start > start {
+                        let by = end.checked_sub(other_start).unwrap_or(Rational::ZERO);
+                        clip.fade_out.seconds = held(by, span);
+                        break;
+                    }
+                }
+            }
+            out.sort_by(|a, b| {
+                a.place_start
+                    .partial_cmp(&b.place_start)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            out
+        }
+
+        /// The one clip a plain Audio layer becomes: `convert_to_sequenced`'s
+        /// arithmetic, written out here because that call commits a batch of
+        /// its own and this pack is one batch.
+        fn audio_layer_clip(row: &Layer, item: Uuid) -> Clip {
+            let span = (row.out_point.0.to_f64() - row.in_point.0.to_f64()).max(0.04);
+            let duration =
+                Rational::from_f64_on_grid(span, Rational::FLICK_DEN).unwrap_or(row.out_point.0);
+            let local = row
+                .in_point
+                .0
+                .checked_sub(row.start_offset.0)
+                .unwrap_or(Rational::ZERO);
+            let local = if local.is_negative() {
+                Rational::ZERO
+            } else {
+                local
+            };
+            let source_out = local.checked_add(duration).unwrap_or(duration);
+            let mut clip = Clip::new(
+                ClipSource::Footage(item),
+                local,
+                source_out,
+                local,
+                duration,
+            );
+            clip.interpolation = row.interpolation.clone();
+            clip
+        }
+
+        let name = name.trim().to_string();
+        if name.is_empty() {
+            return Err(BridgeError::EmptyName);
+        }
+        let comp = self.composition()?;
+        let doc = self.document()?;
+        let rows: Vec<Layer> = comp
+            .layers
+            .iter()
+            .filter(|l| bridge_kind(l) == BridgeLayerKind::Audio)
+            .cloned()
+            .collect();
+        if rows.is_empty() {
+            return Err(BridgeError::InvalidLayer);
+        }
+        // Every audio row sits at or below this index, so the slot is still a
+        // valid one once the batch's removals have run.
+        let index = comp
+            .layers
+            .iter()
+            .position(|l| rows.iter().any(|r| r.id == l.id))
+            .unwrap_or(0);
+
+        let centred = || {
+            crate::edits::centred_transform(
+                f64::from(comp.width),
+                f64::from(comp.height),
+                comp.width,
+                comp.height,
+            )
+        };
+        // Every comp made here is the parent's shape and clock, so nothing has
+        // to be mapped on the way in or on the way back out.
+        let new_comp =
+            |name: String, layers: Vec<Layer>, markers: Vec<lumit_core::markers::Marker>| {
+                Composition {
+                    master_volume_db: 0.0,
+                    sound_mix: false,
+                    groups: Vec::new(),
+                    beat_grid: None,
+                    id: Uuid::now_v7(),
+                    name,
+                    width: comp.width,
+                    height: comp.height,
+                    frame_rate: comp.frame_rate,
+                    duration: comp.duration,
+                    background: comp.background,
+                    work_area: None,
+                    layers,
+                    markers,
+                    motion_blur: MotionBlur::default(),
+                    extra: serde_json::Map::new(),
+                }
+            };
+
+        let mut made: Vec<Composition> = Vec::new();
+        let mut mix_layers: Vec<Layer> = Vec::new();
+        for row in &rows {
+            let split = match &row.kind {
+                LayerKind::Sequence { clips } => Some(baked(clips)),
+                LayerKind::Footage { item } if row.retime.is_none() => {
+                    Some(vec![audio_layer_clip(row, *item)])
+                }
+                // Nothing to split: a retimed Audio layer, or a kind the panel
+                // never gave clips to. It moves whole instead.
+                _ => None,
+            };
+            let inner: Vec<Layer> = match split {
+                Some(clips) => clips
+                    .into_iter()
+                    .filter(|c| c.place_duration > Rational::ZERO)
+                    .map(|clip| {
+                        let source = match clip.source {
+                            ClipSource::Footage(id) | ClipSource::Comp(id) => id,
+                        };
+                        let (start, end) = (clip.place_start, clip.place_end());
+                        let mut l = crate::edits::base_layer(
+                            doc.item(source)
+                                .map_or_else(|| row.name.clone(), |i| i.name().to_string()),
+                            LayerKind::Sequence { clips: vec![clip] },
+                            end,
+                            centred(),
+                        );
+                        l.in_point = CompTime(start);
+                        l.audio_only = true;
+                        l.label = row.label;
+                        l.switches.fx = row.switches.fx;
+                        // The rack rides on the clips: the mixer opens one on a
+                        // Footage or a Sequence layer and never on a Precomp,
+                        // and an id is what finds an instance, so no two
+                        // copies may share one.
+                        l.effects = row
+                            .effects
+                            .iter()
+                            .map(|e| EffectInstance {
+                                id: Uuid::now_v7(),
+                                ..e.clone()
+                            })
+                            .collect();
+                        l
+                    })
+                    .collect(),
+                None => {
+                    let mut whole = row.clone();
+                    // The row layer carries the clock, the gain
+                    // and the cues, so what moved in must not carry them a
+                    // second time.
+                    let inner_time =
+                        |t: CompTime| CompTime(t.0.checked_sub(row.start_offset.0).unwrap_or(t.0));
+                    whole.in_point = inner_time(row.in_point);
+                    whole.out_point = inner_time(row.out_point);
+                    whole.start_offset = CompTime(Rational::ZERO);
+                    whole.volume_db = Property::zero();
+                    whole.pan = Property::zero();
+                    whole.markers = Vec::new();
+                    vec![whole]
+                }
+            };
+
+            let row_comp = new_comp(row.name.clone(), inner, Vec::new());
+            let mut row_layer = crate::edits::base_layer(
+                row.name.clone(),
+                LayerKind::Precomp { comp: row_comp.id },
+                row.out_point.0,
+                centred(),
+            );
+            row_layer.audio_only = true;
+            row_layer.in_point = row.in_point;
+            row_layer.out_point = row.out_point;
+            row_layer.start_offset = row.start_offset;
+            row_layer.volume_db = row.volume_db.clone();
+            row_layer.pan = row.pan.clone();
+            row_layer.switches = row.switches;
+            row_layer.label = row.label;
+            row_layer.markers = row.markers.clone();
+            row_layer.parent = row.parent;
+            row_layer.matte = row.matte;
+            made.push(row_comp);
+            mix_layers.push(row_layer);
+        }
+
+        // The comp's markers go in with the rows, as a precompose's do: a
+        // packed section that loses its cues has lost the map to itself.
+        let mix = new_comp(
+            name.clone(),
+            mix_layers,
+            comp.markers
+                .iter()
+                .map(|m| lumit_core::markers::Marker {
+                    id: Uuid::now_v7(),
+                    ..m.clone()
+                })
+                .collect(),
+        );
+        let mix_id = mix.id;
+        made.push(mix);
+
+        // Comps auto-file into the Compositions folder however they are made.
+        // One `SetFolderChildren` for the lot, because the op carries the whole
+        // list and each is read off the document as it stood before the batch.
+        let (folder, mut ops) =
+            crate::edits::ensure_auto_folder_ops(&doc, AutoFolderKind::Compositions);
+        let queued = ops
+            .iter()
+            .filter(|o| matches!(o, Op::AddItem { .. }))
+            .count();
+        let mut children = doc
+            .folder(folder)
+            .map(|f| f.children.clone())
+            .unwrap_or_default();
+        for (n, built) in made.into_iter().enumerate() {
+            children.push(built.id);
+            ops.push(Op::AddItem {
+                index: doc.items.len() + queued + n,
+                item: Box::new(ProjectItem::Composition(built)),
+            });
+        }
+        ops.push(Op::SetFolderChildren { folder, children });
+        for row in &rows {
+            ops.push(Op::RemoveLayer {
+                comp: self.id,
+                layer: row.id,
+            });
+        }
+
+        let mut layer = crate::edits::base_layer(
+            name,
+            LayerKind::Precomp { comp: mix_id },
+            comp.duration.0,
+            centred(),
+        );
+        // The mix holds sound and nothing else, so the layer that stands for
+        // it draws nothing and reads as the Audio row it is. It wears solo
+        // where a packed row wore it, so sound the solo was silencing in the
+        // parent goes on being silenced; an audio-only layer is left out of
+        // the picture's own solo count, so nothing on screen goes blank for it.
+        layer.audio_only = true;
+        layer.switches.solo = rows.iter().any(|r| r.switches.solo);
+        let layer_id = layer.id;
+        ops.push(Op::AddLayer {
+            comp: self.id,
+            index,
+            layer: Box::new(layer),
+        });
+
+        let group = |begin: bool| -> Result<(), BridgeError> {
+            let proj = self.project()?;
+            let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+            if begin {
+                proj.store.begin_undo_group();
+            } else {
+                proj.store.end_undo_group();
+            }
+            Ok(())
+        };
+
+        group(true)?;
+        let packed = self.commit(Op::Batch { ops }).and_then(|()| {
+            self.commit(Op::SetSoundMix {
+                comp: self.id,
+                on: false,
+            })?;
+            Ok(LayerReference::new(self.project, self.id, layer_id))
+        });
+        group(false)?;
+        packed
+    }
+
     /// Add a Solid layer backed by a fresh SolidDef filed in the Solids
     /// auto-folder — one batch, one undo step, matching the egui frontend. The
     /// solid is comp-sized and white, named "White solid N".
@@ -919,6 +1294,7 @@ impl CompositionReference {
 
         let inner = Composition {
             master_volume_db: 0.0,
+            sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
             id: Uuid::now_v7(),

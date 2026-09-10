@@ -13,7 +13,7 @@ import 'package:uuid/uuid.dart';
 import 'roto.dart';
 part 'effect.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `animation_at`, `badge_of`, `bridge_param`, `bridge_shader_ty`, `bridge_unit`, `catalogue`, `clamp_animation`, `derived_params_of`, `document_for`, `fill_derived`, `hard_bounds`, `hidden_rows_of`, `is_audio_match_name`, `param`, `plugin_category_key`, `presets_in`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `sample_at`, `scan_audio_plugins`, `seconds_of`, `shader_error`, `validated`, `write_at`, `write_at`, `write`
+// These functions are ignored because they are not marked as `pub`: `animation_at`, `badge_of`, `bridge_param`, `bridge_shader_ty`, `bridge_unit`, `catalogue`, `clamp_animation`, `derived_params_of`, `document_for`, `fill_derived`, `hard_bounds`, `hidden_rows_of`, `is_audio_effect`, `is_audio_match_name`, `param`, `plugin_category_key`, `presets_in`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `sample_at`, `scan_audio_plugins`, `seconds_of`, `shader_error`, `validated`, `write_at`, `write_at`, `write`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `get_effects`, `new`
 
@@ -611,6 +611,15 @@ class BridgeEffectInstanceInfo {
   /// schema key, not a display string.
   final String? customName;
   final bool enabled;
+
+  /// Whether this instance is **sound** rather than picture: a built-in in
+  /// the Audio category, or a hosted audio plugin.
+  ///
+  /// Answered here so a panel holding an instance never has to read its match
+  /// name to find out. The name's `clap:`/`vst3:` prefix says where a plugin
+  /// came from, which is not the same question, and it has nothing to say
+  /// about an effect Lumit wrote itself.
+  final bool audio;
   final List<BridgeParamValue> values;
 
   /// The stems of the vector pairs this instance has chained, sorted.
@@ -661,6 +670,7 @@ class BridgeEffectInstanceInfo {
     required this.name,
     this.customName,
     required this.enabled,
+    required this.audio,
     required this.values,
     required this.linkedPairs,
     this.badgeReason,
@@ -675,6 +685,7 @@ class BridgeEffectInstanceInfo {
       name.hashCode ^
       customName.hashCode ^
       enabled.hashCode ^
+      audio.hashCode ^
       values.hashCode ^
       linkedPairs.hashCode ^
       badgeReason.hashCode ^
@@ -691,6 +702,7 @@ class BridgeEffectInstanceInfo {
           name == other.name &&
           customName == other.customName &&
           enabled == other.enabled &&
+          audio == other.audio &&
           values == other.values &&
           linkedPairs == other.linkedPairs &&
           badgeReason == other.badgeReason &&
@@ -727,6 +739,13 @@ sealed class BridgeEffectValue with _$BridgeEffectValue {
   const factory BridgeEffectValue.layer([
     UuidValue? field0,
   ]) = BridgeEffectValue_Layer;
+
+  /// Which clip on the referenced layer a node listens to, or `None` for
+  /// unset. A bare id, as a `Layer` is: the panel resolves it against the
+  /// clips it already holds for that layer.
+  const factory BridgeEffectValue.clip([
+    UuidValue? field0,
+  ]) = BridgeEffectValue_Clip;
 
   /// Which of the owning layer's masks an effect walks: the mask id,
   /// or `None` for "First mask". The *geometry* never crosses — the render
@@ -1028,6 +1047,14 @@ sealed class BridgeParamKind with _$BridgeParamKind {
   }) = BridgeParamKind_ColourName;
   const factory BridgeParamKind.layer() = BridgeParamKind_Layer;
 
+  /// One clip on the layer a sibling [`BridgeParamKind::Layer`] row names
+  /// (docs/impl/audio-nodes.md §3). The panel draws that layer's clips by
+  /// name and start, with None as the unset entry; the clips come from the
+  /// read model the panel already holds, so the row costs no call of its
+  /// own. A row whose layer row names nothing has nothing to offer, and
+  /// says so.
+  const factory BridgeParamKind.clip() = BridgeParamKind_Clip;
+
   /// One of the **owning layer's masks**, whose geometry the effect walks
   /// (docs/08 §1.2). The panel draws the layer's masks by name, with
   /// "First mask" as the unset entry; the mask names come from the read model
@@ -1051,6 +1078,12 @@ sealed class BridgeParamKind with _$BridgeParamKind {
     required double default_,
     required double min,
     required double max,
+
+    /// Whether the thumb moves through the range logarithmically: travel
+    /// `t` in 0..1 sits at `min × (max/min)^t`, which is what a frequency
+    /// row wants (docs/impl/audio-effects.md §2). The value crossing is
+    /// unchanged, because the curve is the *control*, not the number.
+    required bool log,
   }) = BridgeParamKind_Slider;
 
   /// A **button**, drawn as one and pressed through

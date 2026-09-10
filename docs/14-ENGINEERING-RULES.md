@@ -177,10 +177,13 @@ machine".
   warnings are errors in CI (`clippy --workspace -- -D warnings`). `clippy::pedantic` with
   curated allows is the intended end state, not yet switched on.
 - **Unsafe policy:** `unsafe` is permitted only in `lumit-gpu`, `lumit-media`,
-  `lumit-expr` FFI edges, and the plugin hosts — each block wrapped in a safe API within
-  its crate, carrying a `// SAFETY:` comment stating the invariant and who upholds it, and
-  covered by a test (miri where the code is miri-able). `#![deny(unsafe_code)]` in every
-  other crate.
+  `lumit-expr` FFI edges, the plugin hosts, and `lumit-core`'s denormal guard
+  (`fx::audio_chain::Denormals`: the two MXCSR instructions the audio chain sets around its
+  block loop, so a built-in and a hosted plugin run under the same arithmetic, covered by
+  `denormals_flush_to_zero_inside_the_guard_and_are_restored_after` in `lumit-aplug`). Each
+  block is wrapped in a safe API within its crate, carries a `// SAFETY:` comment stating
+  the invariant and who upholds it, and is covered by a test (miri where the code is
+  miri-able). `#![deny(unsafe_code)]` in every other crate.
 - **FFI rules** (ffmpeg, OFX, CUDA, QuickJS): all pointers checked before deref; all C
   return codes converted to typed errors at the boundary; C-owned memory wrapped in RAII
   types with documented ownership; callbacks into Rust catch unwinds

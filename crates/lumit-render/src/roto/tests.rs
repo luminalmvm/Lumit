@@ -656,6 +656,7 @@ fn a_correction_renames_exactly_the_frames_it_spoiled() {
         layer.effects = vec![brush];
         let comp = Composition {
             master_volume_db: 0.0,
+            sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
             id: uuid::Uuid::from_u128(6),

@@ -51,7 +51,7 @@ use thiserror::Error;
 use crate::describe::{ParamDescription, PortInfo, Ports};
 use crate::module::{text, Module, ModuleError};
 use crate::process::{
-    input_events, output_events, to_clap, Block, Denormals, BLOCK_FRAMES, CHANNELS, SAMPLE_RATE,
+    input_events, output_events, to_clap, Block, Denormals, BLOCK_FRAMES, CHANNELS,
 };
 use crate::ParamEvent;
 
@@ -81,7 +81,7 @@ pub enum HostError {
     #[error("the plugin implements no {0} extension")]
     NoExtension(&'static str),
     /// `activate` answered false.
-    #[error("the plugin refused to activate at {SAMPLE_RATE} Hz in blocks of {BLOCK_FRAMES}")]
+    #[error("the plugin refused to activate in blocks of {BLOCK_FRAMES}")]
     ActivateRefused,
     /// `start_processing` answered false.
     #[error("the plugin refused to start processing")]
@@ -557,15 +557,17 @@ impl Instance {
         Ok(())
     }
 
-    /// Prepare the plugin for 512-frame blocks at 48 kHz.
+    /// Prepare the plugin for 512-frame blocks at `rate` hertz.
     ///
     /// The minimum and maximum are the same number on purpose: Lumit's block
-    /// size never varies, which is what makes two exports identical (§3).
+    /// size never varies, which is what makes two exports identical (§3). The
+    /// rate is the export's own, not a constant: a plugin activated at 48 kHz
+    /// and fed a 96 kHz export tunes every filter an octave wrong.
     ///
     /// # Errors
     ///
     /// [`HostError::ActivateRefused`].
-    pub fn activate(&mut self) -> Result<(), HostError> {
+    pub fn activate(&mut self, rate: f64) -> Result<(), HostError> {
         if self.activated {
             return Ok(());
         }
@@ -574,7 +576,7 @@ impl Instance {
             return Err(HostError::ActivateRefused);
         };
         // SAFETY: the plugin's own function, after a successful `init`.
-        if !unsafe { activate(self.plugin, SAMPLE_RATE, frames, frames) } {
+        if !unsafe { activate(self.plugin, rate, frames, frames) } {
             return Err(HostError::ActivateRefused);
         }
         self.activated = true;

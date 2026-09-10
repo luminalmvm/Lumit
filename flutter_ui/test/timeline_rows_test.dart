@@ -252,6 +252,7 @@ void main() {
         id: fxId,
         name: 'lumit.glow',
         enabled: true,
+        audio: false,
         values: const [],
         linkedPairs: const [],
         derivedParams: const [],

@@ -77,7 +77,7 @@ use vst3::{uid, Class, ComPtr, ComWrapper};
 use crate::describe::{ParamDescription, PortInfo, Ports};
 use crate::instance::HostError;
 use crate::module::{ModuleEntry, ModuleError};
-use crate::process::{Block, ParamEvent, BLOCK_FRAMES, CHANNELS, SAMPLE_RATE};
+use crate::process::{Block, ParamEvent, BLOCK_FRAMES, CHANNELS};
 
 /// The class category a plugin that makes sound declares. VST3 spells the
 /// category as prose in a fixed-width field; a module also holds controller
@@ -753,7 +753,8 @@ impl Vst3Instance {
         Ok(())
     }
 
-    /// Prepare the plugin for 512-frame blocks at 48 kHz, on a stereo pair.
+    /// Prepare the plugin for 512-frame blocks at `rate` hertz, on a stereo
+    /// pair.
     ///
     /// The buses are negotiated here rather than at describe because
     /// `setBusArrangements` is an inactive-state call that changes what the
@@ -764,7 +765,7 @@ impl Vst3Instance {
     ///
     /// [`HostError::BusRefused`] when the plugin will not take a stereo pair,
     /// and [`HostError::ActivateRefused`].
-    pub fn activate(&mut self) -> Result<(), HostError> {
+    pub fn activate(&mut self, rate: f64) -> Result<(), HostError> {
         if self.activated {
             return Ok(());
         }
@@ -812,7 +813,7 @@ impl Vst3Instance {
             },
             symbolicSampleSize: SymbolicSampleSizes_::kSample32 as i32,
             maxSamplesPerBlock: i32::try_from(BLOCK_FRAMES).unwrap_or(i32::MAX),
-            sampleRate: SAMPLE_RATE,
+            sampleRate: rate,
         };
         // SAFETY: the plugin's own function, with a live setup, while inactive.
         if unsafe { self.processor.setupProcessing(&mut setup) } != kResultOk {

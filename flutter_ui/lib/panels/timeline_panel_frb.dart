@@ -28,6 +28,7 @@
 // the bar and the bottom bar. This file re-exports the lot, so every name that
 // was reachable through it before the split still is.
 
+import 'dart:async';
 import 'dart:collection';
 import 'dart:math';
 
@@ -80,6 +81,7 @@ import 'key_ease_fields.dart' show KeyEaseClaim;
 import 'timeline_extras_frb.dart';
 import 'timeline_navigator.dart';
 import 'sequence_view_frb.dart';
+import 'sound_mix_row_frb.dart';
 import 'spectral_lane_frb.dart';
 import 'timeline_razor.dart';
 import 'layer_fold_frb.dart';
@@ -239,6 +241,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// is what keeps a rebuild free of bridge calls.
   BigInt? _boundsRevision;
 
+  /// The comp those bounds were taken on. The master fader and the mix mark
+  /// read beside them are the comp's own, and fronting another comp moves no
+  /// document revision, so the guard holds both - as the work area does.
+  CompositionReference? _boundsComp;
+
   /// Whether a layer's name is written along its bar — Settings ▸ Interface ▸
   /// Panels, off by default. Read here, once per build of the panel,
   /// and handed down to the bars.
@@ -371,13 +378,68 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         setState(() => _peaks[id] = peaks);
       });
     }
+    _refreshMixPeaks(ui, viewStart, viewEnd);
+  }
+
+  /// The Sound mix row's peaks over the lanes' window - the comp's own mix,
+  /// which changes with every edit, so the document revision is part of the
+  /// key where a layer's peaks key on the window alone.
+  ///
+  /// An empty answer is the engine still preparing the mix (or a machine
+  /// with nothing to play it through): the row asks again after a moment, a
+  /// handful of times, then leaves it until the window or the document moves.
+  void _refreshMixPeaks(LumitUiState ui, double viewStart, double viewEnd) {
+    if (!_mixRowShown) {
+      _mixPeaks = null;
+      _mixPeakKey = null;
+      return;
+    }
+    final comp = ui.selectedComp;
+    if (comp == null) return;
+    final request = WaveformRequest.forView(
+        startSeconds: viewStart, endSeconds: viewEnd, pixels: _laneViewport);
+    if (request == null) return;
+    final key = '${request.key}|${ui.model.heldRevision}';
+    if (_mixPeakKey == key) return;
+    if (_mixAskKey != key) {
+      _mixAsks = 0;
+      _mixAskKey = key;
+    }
+    _mixPeakKey = key;
+    comp
+        .audioMixPeaks(
+      startSeconds: request.startSeconds,
+      endSeconds: request.endSeconds,
+      buckets: request.buckets,
+    )
+        .then((peaks) {
+      if (!mounted || _mixPeakKey != key) return;
+      if (peaks.buckets == 0) {
+        if (_mixAsks >= 8) return;
+        _mixAsks += 1;
+        _mixRetry?.cancel();
+        _mixRetry = Timer(const Duration(milliseconds: 400), () {
+          _mixRetry = null;
+          if (!mounted || _mixPeakKey != key) return;
+          _mixPeakKey = null;
+          _refreshPeaks(_lastLayers);
+        });
+        return;
+      }
+      setState(() => _mixPeaks = peaks);
+    });
   }
 
   /// The lanes scrolled: the visible window moved, so the waveforms may want a
   /// finer summary of somewhere else. Nothing is rebuilt here — the fetch calls
   /// `setState` only when an answer actually arrives.
   void _onLaneScroll() {
-    if (_peakKeys.isEmpty && _peaks.isEmpty && _spectraKeys.isEmpty) return;
+    if (_peakKeys.isEmpty &&
+        _peaks.isEmpty &&
+        _spectraKeys.isEmpty &&
+        !_mixRowShown) {
+      return;
+    }
     _refreshPeaks(_lastLayers);
   }
 
@@ -422,8 +484,20 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     }
 
     final revision = model.revision;
-    if (revision != null && revision == _boundsRevision) return;
+    final comp = _ui?.selectedComp;
+    if (revision != null &&
+        revision == _boundsRevision &&
+        comp == _boundsComp) {
+      return;
+    }
     _boundsRevision = revision;
+    _boundsComp = comp;
+    // The master fader and the mix mark, for the Sound mix row - one read
+    // each per revision, on the same bargain as everything below.
+    try {
+      _masterDb = comp?.masterVolumeDb() ?? 0;
+      _soundMix = comp?.soundMix() ?? false;
+    } catch (_) {}
     _barBounds = {
       for (final entry in layers)
         entry.layer.internallayerId.toString():
@@ -788,6 +862,48 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// The shy filter (docs/07 §4.2): while on, layers whose shy switch is set
   /// disappear from the list — not from the picture; shy never renders.
   bool _hideShy = false;
+
+  /// Whether the Sound mix row's twirl is down, so a mixed comp's Audio
+  /// layers stand in the stack for a look. Shut to begin with and forgotten
+  /// by the next mount: what folds them is the comp's own mark, and this is
+  /// only a peek behind it.
+  bool _mixPeek = false;
+
+  /// Whether the comp has been mixed (docs/09 §1) - read once per revision
+  /// beside the master fader. The Audio timeline writes it the first time it
+  /// shows a comp; the row and the fold follow it and nothing else.
+  bool _soundMix = false;
+
+  /// Whether the last build drew the Sound mix row, so a scroll's peaks
+  /// refresh knows to ask for the mix's window too.
+  bool _mixRowShown = false;
+
+  /// The comp mix's peaks over the lanes' window, what they were fetched for,
+  /// and how many times an empty answer has been asked again - the Sound
+  /// mix row's own copy of the layer lanes' bargain. An empty answer means
+  /// the engine is still preparing the mix, so the row asks again shortly;
+  /// a machine with no sound device answers empty forever, so it stops
+  /// asking after a few tries until the window or the document moves.
+  BridgeAudioPeaks? _mixPeaks;
+  String? _mixPeakKey;
+  int _mixAsks = 0;
+
+  /// Which key that count belongs to. The ask-again drops [_mixPeakKey] to
+  /// come back through the fetch, so the count is held here instead: against
+  /// the key alone it would clear itself on every retry and never bite.
+  String? _mixAskKey;
+
+  /// The pending ask-again, so it can be put down when the panel goes or a
+  /// newer window takes over.
+  Timer? _mixRetry;
+
+  /// The master fader in dB, read once per document revision beside the
+  /// bounds, so the Sound mix row's well costs no bridge call in a build.
+  double _masterDb = 0;
+
+  /// The master fader's value while it is being scrubbed, so the number
+  /// follows the hand and the write still lands once, on release.
+  double? _masterDrag;
 
   /// The outline's column groups in their current order. Dragging a header
   /// group reorders them as a unit; session-lived, like the twirl state.
@@ -2070,6 +2186,51 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     );
   }
 
+  /// The Audio workspace, where a mix is made: what a double click on the
+  /// Sound mix row and the first row of its menu both do.
+  void _openAudioWorkspace(LumitUiState ui) =>
+      ui.workspace.applyWorkspacePreset(WorkspacePreset.audio);
+
+  /// The Sound mix row's right-click menu (docs/07 §4.2): the workspace the
+  /// mix is made in, and the one road out of the fold.
+  ///
+  /// Convert to precomp packs the Audio layers into a nested comp and clears
+  /// the comp's mark in the same undo step, so the Precomp layer it leaves
+  /// selected stands where they were and the row goes with them. A refusal
+  /// from the engine leaves everything as it was.
+  void _soundMixMenu(
+      LumitUiState ui, CompositionReference comp, Offset position) {
+    showMenuAt<void>(
+      context: context,
+      position: position,
+      rows: (close) => [
+        MenuRow(
+          key: const ValueKey('tl-sound-mix-open'),
+          onPressed: () {
+            close(null);
+            _openAudioWorkspace(ui);
+          },
+          child: Text(l10n.soundMixOpenWorkspace),
+        ),
+        MenuRow(
+          key: const ValueKey('tl-sound-mix-precompose'),
+          onPressed: () {
+            close(null);
+            final LayerReference layer;
+            try {
+              layer = comp.precomposeSoundMix(name: l10n.timelineSoundMix);
+            } catch (_) {
+              return;
+            }
+            ui.setSelection([layer]);
+            ui.model.refresh();
+          },
+          child: Text(l10n.soundMixConvertToPrecomp),
+        ),
+      ],
+    );
+  }
+
   /// Open the Ease popover on the selection, anchored at [position].
   ///
   /// Reached from the block badge, which sits where the drawing puts the
@@ -2778,6 +2939,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
 
   @override
   void dispose() {
+    _mixRetry?.cancel();
     laneModes.removeListener(_onLaneMode);
     HardwareKeyboard.instance.removeHandler(_onKey);
     _ui?.workspace.presetApplied.removeListener(_onPresetApplied);
@@ -3153,14 +3315,33 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     final frames = ui.model.durationFrames;
     final (fpsNum, fpsDen) = ui.model.fpsExact;
     final needle = _search.trim().toLowerCase();
+    // Every layer, not the filtered list: a bar hidden by the search box still
+    // has ends, and they must be known the moment it comes back. Ahead of the
+    // view below, because the mix mark this reads is what decides the Sound
+    // mix row and what the fold takes.
+    _refreshBounds(ui.model, fpsNum, fpsDen);
     // Where the comp's groups land on its rows: the header each
     // carrier layer draws, and the members a shut fold takes off the list —
     // both from one walk, so the two halves cannot disagree about how many
     // rows there are.
     final folds = groupFolds(
         groups: ui.model.groups, folded: _foldedGroups, fxOpen: _openGroupFx);
+    // The Sound mix row stands once the comp has been mixed, and not before.
+    // Not in graph view, whose pane has no bottom to pin it to.
+    final mixRow = !_graph && _soundMix;
+    _mixRowShown = mixRow;
+    // The Audio layers fold under the Sound mix row unless its twirl is open
+    // (docs/09 §1); the Audio timeline panel is where they are worked on. The
+    // fold follows the row: where no row stands there is no twirl to bring
+    // them back, so graph view keeps them in the stack.
+    final view = timelineViewLayers(
+        layers: ui.model.layers,
+        audioTimeline: false,
+        mixOpen: !mixRow || _mixPeek,
+        hasAudio: _hasAudio,
+        hasPicture: _hasPicture);
     final layers = [
-      for (final e in ui.model.layers)
+      for (final e in view.shown)
         if ((needle.isEmpty || e.info.name.toLowerCase().contains(needle)) &&
             !(_hideShy && e.info.switches.shy) &&
             !folds.hidden.contains(e.layer.internallayerId.toString()))
@@ -3181,13 +3362,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                   ? matteToggleWidth
                   : 0),
     };
-    _refreshAudio(layers);
+    // Every layer, not the list: which view a layer is in is decided by
+    // the probes, so an unprobed layer would never reach the view that
+    // wants it.
+    _refreshAudio(ui.model.layers);
     _lastLayers = layers;
     _refreshPeaks(layers);
-    // Every layer, not the filtered list: a bar hidden by the search box still
-    // has ends, and they must be known the moment it comes back.
-    _refreshBounds(ui.model, fpsNum, fpsDen);
-
     // What each layer is, decided **once for the whole panel** and read by
     // everything below — the outline, the lanes, the drag maths and the row
     // seams alike. It used to be worked out four times over from the same
@@ -3419,6 +3599,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                             return _outlineHalf(context, ui, comp,
                                 rows: rows,
                                 layers: layers,
+                                mixRow: mixRow,
+                                folded: view.folded.length,
                                 blockHeights: blockHeights,
                                 groupOrder: groupOrder,
                                 groupWidths: widths,
@@ -3491,6 +3673,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                         : _laneHalf(context, ui, comp,
                                             axis: axis,
                                             rows: rows,
+                                            mixRow: mixRow,
                                             layers: layers,
                                             blockHeights: blockHeights,
                                             work: work,
@@ -3527,6 +3710,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     required List<double> blockHeights,
     required List<TimelineGroup> groupOrder,
     required Map<TimelineGroup, double> groupWidths,
+
+    /// Whether the Sound mix row stands at the foot of this half, and how
+    /// many Audio layers it has folded away.
+    required bool mixRow,
+    required int folded,
 
     /// Whether the compose group's width is carrying the matte mode toggles'
     /// room — the header and every row split the column by the same
@@ -3736,6 +3924,30 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
               selectedKeys: _graphKeySelection,
               fps: ui.model.fps,
               onChanged: ui.model.refresh,
+            ),
+          // The Sound mix row (docs/09 §1), pinned under the rows on both
+          // halves so the stack's arithmetic never learns it exists.
+          if (mixRow)
+            SoundMixOutlineRow(
+              comp: comp,
+              folded: folded,
+              open: _mixPeek,
+              onToggleOpen: () => setState(() => _mixPeek = !_mixPeek),
+              masterDb: _masterDrag ?? _masterDb,
+              onMasterDb: (db) {
+                comp.setMasterVolumeDb(db: db);
+                ui.model.refresh();
+                // Heard on the next callback, as the Mixer's fader is.
+                comp.audioPrepare();
+                setState(() {
+                  _masterDb = db;
+                  _masterDrag = null;
+                });
+              },
+              onMasterDbLive: (db) => setState(() => _masterDrag = db),
+              onMasterDbCancel: () => setState(() => _masterDrag = null),
+              onOpen: () => _openAudioWorkspace(ui),
+              onMenu: (at) => _soundMixMenu(ui, comp, at),
             ),
           // The outline's own end of the bottom bar: the key commands and the
           // column-group toggles, where the lane side carries the zoom and the
@@ -3982,6 +4194,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     required List<LayerRow> rows,
     required List<BridgeLayerEntry> layers,
     required List<double> blockHeights,
+    required bool mixRow,
     required ({int start, int end, bool whole}) work,
     required int frames,
     required int fpsNum,
@@ -4078,6 +4291,17 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
             ],
           ),
         ),
+        // The Sound mix row's lane, level with the outline's row for it.
+        if (mixRow)
+          SoundMixLane(
+            peaks: _mixPeaks,
+            hScroll: _hLane,
+            secondsPerPixel:
+                axis.width <= 0 ? 0 : frames / ui.model.fps / axis.width,
+            style: _waveformStyle,
+            onOpen: () => _openAudioWorkspace(ui),
+            onMenu: (at) => _soundMixMenu(ui, comp, at),
+          ),
         LaneBottomBar(
           zoom: _zoomMotion.target,
           hScroll: _hLane,

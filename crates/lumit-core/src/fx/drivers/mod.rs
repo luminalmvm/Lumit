@@ -894,6 +894,18 @@ mod tests {
         panic!("no parameter {id}");
     }
 
+    /// A reference row (a layer, a clip) set to whatever it is being pointed
+    /// at, which is not a number and so cannot go through `set`.
+    fn set_ref(inst: &mut EffectInstance, id: &str, v: EffectValue) {
+        for p in &mut inst.params {
+            if p.id == id {
+                p.value = v;
+                return;
+            }
+        }
+        panic!("no parameter {id}");
+    }
+
     fn ctx() -> Arc<ExpressionContext> {
         Arc::new(ExpressionContext::detached())
     }
@@ -1034,16 +1046,26 @@ mod tests {
                 }
                 Some(rate)
             }
+
+            /// A fixture with one sound in it and no mixer: every filter the
+            /// Source row can ask for is the same tone, so the window is the
+            /// only thing that answers here.
+            fn strip(
+                &self,
+                _layer: Option<Uuid>,
+                _clip: Option<Uuid>,
+                half: f64,
+                out: &mut Vec<f32>,
+            ) -> Option<f64> {
+                self.samples(Uuid::nil(), -half, half, out)
+            }
         }
 
         let measure = |tap: &dyn AudioTap, port: &str| -> f32 {
             let mut node = inst("audio_level");
             let music = Uuid::now_v7();
-            for p in &mut node.params {
-                if p.id == "audio" {
-                    p.value = EffectValue::Layer(Some(music));
-                }
-            }
+            set_ref(&mut node, "audio", EffectValue::Layer(Some(music)));
+            set_choice(&mut node, "source", audio_level::SOURCE_LAYER);
             set(&mut node, "window", 0.1);
             let target = inst("blur");
             let graph = LayerGraph {
@@ -1085,10 +1107,227 @@ mod tests {
             "4 kHz must be attenuated far below 100 Hz"
         );
 
+        // Peak is the loudest single sample, so a sine reads its own
+        // amplitude there whatever its pitch - the half the RMS smooths away.
+        for tone in [&low_tone, &high_tone] {
+            assert!(
+                (measure(tone, "peak") - 0.5).abs() < 0.01,
+                "a sine of amplitude 0.5 peaks at 0.5, not {}",
+                measure(tone, "peak")
+            );
+        }
+
+        // And High is the other end of the same split: the 4 kHz tone lives in
+        // it, the 100 Hz one is all but gone.
+        assert!(
+            measure(&high_tone, "high") > measure(&low_tone, "high") * 4.0,
+            "4 kHz must survive the top band far better than 100 Hz: {} against {}",
+            measure(&high_tone, "high"),
+            measure(&low_tone, "high")
+        );
+
         // No tap at all is silence, not a fault.
         let mut node = inst("audio_level");
         set(&mut node, "window", 0.1);
-        assert_eq!(output_of(&node, "amplitude", 1.0), 0.0);
+        for port in ["amplitude", "low", "peak", "high"] {
+            assert_eq!(output_of(&node, port, 1.0), 0.0);
+        }
+    }
+
+    /// A tap whose every reading is a different constant, so the number the
+    /// driver pushes says which reading it asked for. A window of the constant
+    /// `v` has RMS `v` and peak `v`, which is what makes the assertions exact.
+    struct Strips {
+        layer: Uuid,
+        head: Uuid,
+        tail: Uuid,
+    }
+
+    /// What each of the tap's readings sounds like.
+    const MIX: f32 = 0.1;
+    const ROW: f32 = 0.2;
+    const HEAD: f32 = 0.3;
+    const TAIL: f32 = 0.4;
+    const RAW: f32 = 0.5;
+
+    impl Strips {
+        fn dc(v: f32, half: f64, out: &mut Vec<f32>) -> Option<f64> {
+            let rate = 48_000.0;
+            out.resize((2.0 * half * rate).round().max(1.0) as usize, v);
+            Some(rate)
+        }
+    }
+
+    impl AudioTap for Strips {
+        /// The pre-fader read, which is the one an instance older than the
+        /// Source row keeps.
+        fn samples(&self, layer: Uuid, from: f64, to: f64, out: &mut Vec<f32>) -> Option<f64> {
+            if layer != self.layer {
+                return None;
+            }
+            Self::dc(RAW, (to - from) / 2.0, out)
+        }
+
+        fn strip(
+            &self,
+            layer: Option<Uuid>,
+            clip: Option<Uuid>,
+            half: f64,
+            out: &mut Vec<f32>,
+        ) -> Option<f64> {
+            let v = match (layer, clip) {
+                (None, _) => MIX,
+                (Some(l), None) if l == self.layer => ROW,
+                (Some(l), Some(c)) if l == self.layer && c == self.head => HEAD,
+                (Some(l), Some(c)) if l == self.layer && c == self.tail => TAIL,
+                // A layer or a clip nobody has: the documented silence.
+                _ => return None,
+            };
+            Self::dc(v, half, out)
+        }
+    }
+
+    /// One driver's amplitude against a tap that can tell its readings apart.
+    fn heard(node: &EffectInstance, tap: &Strips) -> f32 {
+        let target = inst("blur");
+        let graph = LayerGraph {
+            edges: vec![edge(
+                node,
+                "amplitude",
+                NodeRef::Effect(target.id),
+                "radius",
+            )],
+            nodes: vec![node.clone()],
+            ..LayerGraph::default()
+        };
+        resolve_drivers(&graph, 1.0, ctx(), Some(tap))
+            .param(NodeRef::Effect(target.id), ParamId::new("radius"))
+            .expect("wired")
+            .as_f32()
+    }
+
+    /// **The Source row is what the node listens to** (docs/impl/audio-nodes.md
+    /// §3, plan 3): the comp's mix, one layer of it, or one clip of that
+    /// layer - and on a row of two clips it follows the one it names. A clip
+    /// somebody deleted, or a row naming nothing, is the same silence a
+    /// dangling reference has always given.
+    #[test]
+    fn audio_level_reads_what_the_source_row_names() {
+        let tap = Strips {
+            layer: Uuid::now_v7(),
+            head: Uuid::now_v7(),
+            tail: Uuid::now_v7(),
+        };
+        let mut node = inst("audio_level");
+        set(&mut node, "window", 0.1);
+        set_ref(&mut node, "audio", EffectValue::Layer(Some(tap.layer)));
+
+        set_choice(&mut node, "source", audio_level::SOURCE_THIS_COMP);
+        assert!(
+            (heard(&node, &tap) - MIX).abs() < 1e-4,
+            "This comp reads the whole mix, named layer or not"
+        );
+
+        set_choice(&mut node, "source", audio_level::SOURCE_LAYER);
+        assert!(
+            (heard(&node, &tap) - ROW).abs() < 1e-4,
+            "Layer reads that layer's own share of the mix"
+        );
+
+        set_choice(&mut node, "source", audio_level::SOURCE_CLIP);
+        for (clip, want) in [(tap.head, HEAD), (tap.tail, TAIL)] {
+            set_ref(&mut node, "clip", EffectValue::Clip(Some(clip)));
+            assert!(
+                (heard(&node, &tap) - want).abs() < 1e-4,
+                "two clips on one row are two readings"
+            );
+        }
+
+        // The clip somebody deleted, and the row that never named one.
+        for gone in [Some(Uuid::now_v7()), None] {
+            set_ref(&mut node, "clip", EffectValue::Clip(gone));
+            assert_eq!(
+                heard(&node, &tap),
+                0.0,
+                "a clip that is not there is silence"
+            );
+        }
+
+        // And so is Layer with no layer: the row said which sound it wanted.
+        set_choice(&mut node, "source", audio_level::SOURCE_LAYER);
+        set_ref(&mut node, "audio", EffectValue::Layer(None));
+        assert_eq!(heard(&node, &tap), 0.0);
+    }
+
+    /// **An instance older than the Source row keeps the reading it had**
+    /// (docs/impl/audio-nodes.md §3): a named layer is still read raw, off the
+    /// file and pre-fader, because a parameter somebody drove must not change
+    /// value because the schema grew a control. The backfill writes the row to
+    /// say which of the two readings it was doing and leaves the version alone,
+    /// and the version is what the driver reads.
+    #[test]
+    fn an_audio_level_saved_before_the_source_row_still_reads_raw() {
+        let tap = Strips {
+            layer: Uuid::now_v7(),
+            head: Uuid::now_v7(),
+            tail: Uuid::now_v7(),
+        };
+        // A saved instance: no Source row, no Clip row, version 1.
+        let saved = |layer: Option<Uuid>| {
+            let mut old = inst("audio_level");
+            set(&mut old, "window", 0.1);
+            set_ref(&mut old, "audio", EffectValue::Layer(layer));
+            old.params.retain(|p| p.id != "source" && p.id != "clip");
+            old.effect.version = 1;
+            old
+        };
+
+        let mut list = vec![saved(Some(tap.layer)), saved(None)];
+        crate::fx::backfill_builtin_params(&mut list);
+        assert_eq!(
+            list[0].param("source"),
+            Some(&EffectValue::Choice(audio_level::SOURCE_LAYER)),
+            "a saved instance that named a layer says so"
+        );
+        assert_eq!(
+            list[1].param("source"),
+            Some(&EffectValue::Choice(audio_level::SOURCE_THIS_COMP)),
+            "and an unset one was reading the comp's mix"
+        );
+        assert!(
+            list.iter().all(|e| e.effect.version == 1),
+            "the version is the marker, so the backfill leaves it alone"
+        );
+
+        assert!(
+            (heard(&list[0], &tap) - RAW).abs() < 1e-4,
+            "the raw reading it was driven by, not the layer's share of the mix"
+        );
+        assert!(
+            (heard(&list[1], &tap) - MIX).abs() < 1e-4,
+            "an unset row read the mix before the row existed and reads it still"
+        );
+
+        // The same instance written today reads through the Source row.
+        let mut fresh = list[0].clone();
+        fresh.effect.version = 2;
+        assert!((heard(&fresh, &tap) - ROW).abs() < 1e-4);
+
+        // And the pin holds only the reading nobody chose: the two pickers the
+        // panel draws on a saved instance are live, or they would be a lie
+        // about what is in charge.
+        let mut moved = list[0].clone();
+        set_choice(&mut moved, "source", audio_level::SOURCE_THIS_COMP);
+        assert!(
+            (heard(&moved, &tap) - MIX).abs() < 1e-4,
+            "This comp on a saved instance reads the comp's mix"
+        );
+        set_choice(&mut moved, "source", audio_level::SOURCE_CLIP);
+        set_ref(&mut moved, "clip", EffectValue::Clip(Some(tap.head)));
+        assert!(
+            (heard(&moved, &tap) - HEAD).abs() < 1e-4,
+            "and Clip reads the clip it names"
+        );
     }
 
     /// Colour cycle turns through the wheel and comes back, and Rate nought
@@ -1636,6 +1875,7 @@ mod tests {
         let layer_id = layer.id;
         let comp = Composition {
             master_volume_db: 0.0,
+            sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
             id: Uuid::now_v7(),
@@ -2535,6 +2775,7 @@ mod tests {
         let reader_id = reader.id;
         let comp = Composition {
             master_volume_db: 0.0,
+            sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
             id: Uuid::now_v7(),

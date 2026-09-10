@@ -104,6 +104,7 @@ fn placed(name: &str, def: Uuid, x: f64, y: f64) -> Layer {
 fn comp_of(name: &str, layers: Vec<Layer>, groups: Vec<LayerGroup>) -> Composition {
     Composition {
         master_volume_db: 0.0,
+        sound_mix: false,
         groups,
         beat_grid: None,
         id: Uuid::now_v7(),

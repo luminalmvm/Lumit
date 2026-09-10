@@ -64,6 +64,7 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
     TResult Function(BridgeEffectValue_Seed value)? seed,
     TResult Function(BridgeEffectValue_File value)? file,
     TResult Function(BridgeEffectValue_Layer value)? layer,
+    TResult Function(BridgeEffectValue_Clip value)? clip,
     TResult Function(BridgeEffectValue_MaskPath value)? maskPath,
     TResult Function(BridgeEffectValue_Curve value)? curve,
     TResult Function(BridgeEffectValue_Text value)? text,
@@ -87,6 +88,8 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
         return file(_that);
       case BridgeEffectValue_Layer() when layer != null:
         return layer(_that);
+      case BridgeEffectValue_Clip() when clip != null:
+        return clip(_that);
       case BridgeEffectValue_MaskPath() when maskPath != null:
         return maskPath(_that);
       case BridgeEffectValue_Curve() when curve != null:
@@ -121,6 +124,7 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
     required TResult Function(BridgeEffectValue_Seed value) seed,
     required TResult Function(BridgeEffectValue_File value) file,
     required TResult Function(BridgeEffectValue_Layer value) layer,
+    required TResult Function(BridgeEffectValue_Clip value) clip,
     required TResult Function(BridgeEffectValue_MaskPath value) maskPath,
     required TResult Function(BridgeEffectValue_Curve value) curve,
     required TResult Function(BridgeEffectValue_Text value) text,
@@ -143,6 +147,8 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
         return file(_that);
       case BridgeEffectValue_Layer():
         return layer(_that);
+      case BridgeEffectValue_Clip():
+        return clip(_that);
       case BridgeEffectValue_MaskPath():
         return maskPath(_that);
       case BridgeEffectValue_Curve():
@@ -174,6 +180,7 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
     TResult? Function(BridgeEffectValue_Seed value)? seed,
     TResult? Function(BridgeEffectValue_File value)? file,
     TResult? Function(BridgeEffectValue_Layer value)? layer,
+    TResult? Function(BridgeEffectValue_Clip value)? clip,
     TResult? Function(BridgeEffectValue_MaskPath value)? maskPath,
     TResult? Function(BridgeEffectValue_Curve value)? curve,
     TResult? Function(BridgeEffectValue_Text value)? text,
@@ -196,6 +203,8 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
         return file(_that);
       case BridgeEffectValue_Layer() when layer != null:
         return layer(_that);
+      case BridgeEffectValue_Clip() when clip != null:
+        return clip(_that);
       case BridgeEffectValue_MaskPath() when maskPath != null:
         return maskPath(_that);
       case BridgeEffectValue_Curve() when curve != null:
@@ -229,6 +238,7 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
     TResult Function(int field0)? seed,
     TResult Function(BridgeFileParam field0)? file,
     TResult Function(UuidValue? field0)? layer,
+    TResult Function(UuidValue? field0)? clip,
     TResult Function(UuidValue? field0)? maskPath,
     TResult Function(List<Float32List> field0)? curve,
     TResult Function(String field0)? text,
@@ -252,6 +262,8 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
         return file(_that.field0);
       case BridgeEffectValue_Layer() when layer != null:
         return layer(_that.field0);
+      case BridgeEffectValue_Clip() when clip != null:
+        return clip(_that.field0);
       case BridgeEffectValue_MaskPath() when maskPath != null:
         return maskPath(_that.field0);
       case BridgeEffectValue_Curve() when curve != null:
@@ -286,6 +298,7 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
     required TResult Function(int field0) seed,
     required TResult Function(BridgeFileParam field0) file,
     required TResult Function(UuidValue? field0) layer,
+    required TResult Function(UuidValue? field0) clip,
     required TResult Function(UuidValue? field0) maskPath,
     required TResult Function(List<Float32List> field0) curve,
     required TResult Function(String field0) text,
@@ -308,6 +321,8 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
         return file(_that.field0);
       case BridgeEffectValue_Layer():
         return layer(_that.field0);
+      case BridgeEffectValue_Clip():
+        return clip(_that.field0);
       case BridgeEffectValue_MaskPath():
         return maskPath(_that.field0);
       case BridgeEffectValue_Curve():
@@ -339,6 +354,7 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
     TResult? Function(int field0)? seed,
     TResult? Function(BridgeFileParam field0)? file,
     TResult? Function(UuidValue? field0)? layer,
+    TResult? Function(UuidValue? field0)? clip,
     TResult? Function(UuidValue? field0)? maskPath,
     TResult? Function(List<Float32List> field0)? curve,
     TResult? Function(String field0)? text,
@@ -361,6 +377,8 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
         return file(_that.field0);
       case BridgeEffectValue_Layer() when layer != null:
         return layer(_that.field0);
+      case BridgeEffectValue_Clip() when clip != null:
+        return clip(_that.field0);
       case BridgeEffectValue_MaskPath() when maskPath != null:
         return maskPath(_that.field0);
       case BridgeEffectValue_Curve() when curve != null:
@@ -905,6 +923,72 @@ class _$BridgeEffectValue_LayerCopyWithImpl<$Res>
     Object? field0 = freezed,
   }) {
     return _then(BridgeEffectValue_Layer(
+      freezed == field0
+          ? _self.field0
+          : field0 // ignore: cast_nullable_to_non_nullable
+              as UuidValue?,
+    ));
+  }
+}
+
+/// @nodoc
+
+class BridgeEffectValue_Clip extends BridgeEffectValue {
+  const BridgeEffectValue_Clip([this.field0]) : super._();
+
+  @override
+  final UuidValue? field0;
+
+  /// Create a copy of BridgeEffectValue
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @pragma('vm:prefer-inline')
+  $BridgeEffectValue_ClipCopyWith<BridgeEffectValue_Clip> get copyWith =>
+      _$BridgeEffectValue_ClipCopyWithImpl<BridgeEffectValue_Clip>(
+          this, _$identity);
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeEffectValue_Clip &&
+            (identical(other.field0, field0) || other.field0 == field0));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, field0);
+
+  @override
+  String toString() {
+    return 'BridgeEffectValue.clip(field0: $field0)';
+  }
+}
+
+/// @nodoc
+abstract mixin class $BridgeEffectValue_ClipCopyWith<$Res>
+    implements $BridgeEffectValueCopyWith<$Res> {
+  factory $BridgeEffectValue_ClipCopyWith(BridgeEffectValue_Clip value,
+          $Res Function(BridgeEffectValue_Clip) _then) =
+      _$BridgeEffectValue_ClipCopyWithImpl;
+  @useResult
+  $Res call({UuidValue? field0});
+}
+
+/// @nodoc
+class _$BridgeEffectValue_ClipCopyWithImpl<$Res>
+    implements $BridgeEffectValue_ClipCopyWith<$Res> {
+  _$BridgeEffectValue_ClipCopyWithImpl(this._self, this._then);
+
+  final BridgeEffectValue_Clip _self;
+  final $Res Function(BridgeEffectValue_Clip) _then;
+
+  /// Create a copy of BridgeEffectValue
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  $Res call({
+    Object? field0 = freezed,
+  }) {
+    return _then(BridgeEffectValue_Clip(
       freezed == field0
           ? _self.field0
           : field0 // ignore: cast_nullable_to_non_nullable
@@ -1617,6 +1701,7 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     TResult Function(BridgeParamKind_File value)? file,
     TResult Function(BridgeParamKind_ColourName value)? colourName,
     TResult Function(BridgeParamKind_Layer value)? layer,
+    TResult Function(BridgeParamKind_Clip value)? clip,
     TResult Function(BridgeParamKind_MaskPath value)? maskPath,
     TResult Function(BridgeParamKind_Curve value)? curve,
     TResult Function(BridgeParamKind_Slider value)? slider,
@@ -1645,6 +1730,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return colourName(_that);
       case BridgeParamKind_Layer() when layer != null:
         return layer(_that);
+      case BridgeParamKind_Clip() when clip != null:
+        return clip(_that);
       case BridgeParamKind_MaskPath() when maskPath != null:
         return maskPath(_that);
       case BridgeParamKind_Curve() when curve != null:
@@ -1683,6 +1770,7 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     required TResult Function(BridgeParamKind_File value) file,
     required TResult Function(BridgeParamKind_ColourName value) colourName,
     required TResult Function(BridgeParamKind_Layer value) layer,
+    required TResult Function(BridgeParamKind_Clip value) clip,
     required TResult Function(BridgeParamKind_MaskPath value) maskPath,
     required TResult Function(BridgeParamKind_Curve value) curve,
     required TResult Function(BridgeParamKind_Slider value) slider,
@@ -1710,6 +1798,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return colourName(_that);
       case BridgeParamKind_Layer():
         return layer(_that);
+      case BridgeParamKind_Clip():
+        return clip(_that);
       case BridgeParamKind_MaskPath():
         return maskPath(_that);
       case BridgeParamKind_Curve():
@@ -1745,6 +1835,7 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     TResult? Function(BridgeParamKind_File value)? file,
     TResult? Function(BridgeParamKind_ColourName value)? colourName,
     TResult? Function(BridgeParamKind_Layer value)? layer,
+    TResult? Function(BridgeParamKind_Clip value)? clip,
     TResult? Function(BridgeParamKind_MaskPath value)? maskPath,
     TResult? Function(BridgeParamKind_Curve value)? curve,
     TResult? Function(BridgeParamKind_Slider value)? slider,
@@ -1772,6 +1863,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return colourName(_that);
       case BridgeParamKind_Layer() when layer != null:
         return layer(_that);
+      case BridgeParamKind_Clip() when clip != null:
+        return clip(_that);
       case BridgeParamKind_MaskPath() when maskPath != null:
         return maskPath(_that);
       case BridgeParamKind_Curve() when curve != null:
@@ -1819,9 +1912,10 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     TResult Function(List<String> filter, String filterName)? file,
     TResult Function(BridgeColourNameRole role)? colourName,
     TResult Function()? layer,
+    TResult Function()? clip,
     TResult Function()? maskPath,
     TResult Function()? curve,
-    TResult Function(double default_, double min, double max)? slider,
+    TResult Function(double default_, double min, double max, bool log)? slider,
     TResult Function()? action,
     required TResult orElse(),
   }) {
@@ -1849,12 +1943,14 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return colourName(_that.role);
       case BridgeParamKind_Layer() when layer != null:
         return layer();
+      case BridgeParamKind_Clip() when clip != null:
+        return clip();
       case BridgeParamKind_MaskPath() when maskPath != null:
         return maskPath();
       case BridgeParamKind_Curve() when curve != null:
         return curve();
       case BridgeParamKind_Slider() when slider != null:
-        return slider(_that.default_, _that.min, _that.max);
+        return slider(_that.default_, _that.min, _that.max, _that.log);
       case BridgeParamKind_Action() when action != null:
         return action();
       case _:
@@ -1898,9 +1994,11 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     required TResult Function(List<String> filter, String filterName) file,
     required TResult Function(BridgeColourNameRole role) colourName,
     required TResult Function() layer,
+    required TResult Function() clip,
     required TResult Function() maskPath,
     required TResult Function() curve,
-    required TResult Function(double default_, double min, double max) slider,
+    required TResult Function(double default_, double min, double max, bool log)
+        slider,
     required TResult Function() action,
   }) {
     final _that = this;
@@ -1927,12 +2025,14 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return colourName(_that.role);
       case BridgeParamKind_Layer():
         return layer();
+      case BridgeParamKind_Clip():
+        return clip();
       case BridgeParamKind_MaskPath():
         return maskPath();
       case BridgeParamKind_Curve():
         return curve();
       case BridgeParamKind_Slider():
-        return slider(_that.default_, _that.min, _that.max);
+        return slider(_that.default_, _that.min, _that.max, _that.log);
       case BridgeParamKind_Action():
         return action();
     }
@@ -1972,9 +2072,11 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     TResult? Function(List<String> filter, String filterName)? file,
     TResult? Function(BridgeColourNameRole role)? colourName,
     TResult? Function()? layer,
+    TResult? Function()? clip,
     TResult? Function()? maskPath,
     TResult? Function()? curve,
-    TResult? Function(double default_, double min, double max)? slider,
+    TResult? Function(double default_, double min, double max, bool log)?
+        slider,
     TResult? Function()? action,
   }) {
     final _that = this;
@@ -2001,12 +2103,14 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return colourName(_that.role);
       case BridgeParamKind_Layer() when layer != null:
         return layer();
+      case BridgeParamKind_Clip() when clip != null:
+        return clip();
       case BridgeParamKind_MaskPath() when maskPath != null:
         return maskPath();
       case BridgeParamKind_Curve() when curve != null:
         return curve();
       case BridgeParamKind_Slider() when slider != null:
-        return slider(_that.default_, _that.min, _that.max);
+        return slider(_that.default_, _that.min, _that.max, _that.log);
       case BridgeParamKind_Action() when action != null:
         return action();
       case _:
@@ -2759,6 +2863,26 @@ class BridgeParamKind_Layer extends BridgeParamKind {
 
 /// @nodoc
 
+class BridgeParamKind_Clip extends BridgeParamKind {
+  const BridgeParamKind_Clip() : super._();
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType && other is BridgeParamKind_Clip);
+  }
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() {
+    return 'BridgeParamKind.clip()';
+  }
+}
+
+/// @nodoc
+
 class BridgeParamKind_MaskPath extends BridgeParamKind {
   const BridgeParamKind_MaskPath() : super._();
 
@@ -2801,12 +2925,21 @@ class BridgeParamKind_Curve extends BridgeParamKind {
 
 class BridgeParamKind_Slider extends BridgeParamKind {
   const BridgeParamKind_Slider(
-      {required this.default_, required this.min, required this.max})
+      {required this.default_,
+      required this.min,
+      required this.max,
+      required this.log})
       : super._();
 
   final double default_;
   final double min;
   final double max;
+
+  /// Whether the thumb moves through the range logarithmically: travel
+  /// `t` in 0..1 sits at `min × (max/min)^t`, which is what a frequency
+  /// row wants (docs/impl/audio-effects.md §2). The value crossing is
+  /// unchanged, because the curve is the *control*, not the number.
+  final bool log;
 
   /// Create a copy of BridgeParamKind
   /// with the given fields replaced by the non-null parameter values.
@@ -2824,15 +2957,16 @@ class BridgeParamKind_Slider extends BridgeParamKind {
             (identical(other.default_, default_) ||
                 other.default_ == default_) &&
             (identical(other.min, min) || other.min == min) &&
-            (identical(other.max, max) || other.max == max));
+            (identical(other.max, max) || other.max == max) &&
+            (identical(other.log, log) || other.log == log));
   }
 
   @override
-  int get hashCode => Object.hash(runtimeType, default_, min, max);
+  int get hashCode => Object.hash(runtimeType, default_, min, max, log);
 
   @override
   String toString() {
-    return 'BridgeParamKind.slider(default_: $default_, min: $min, max: $max)';
+    return 'BridgeParamKind.slider(default_: $default_, min: $min, max: $max, log: $log)';
   }
 }
 
@@ -2843,7 +2977,7 @@ abstract mixin class $BridgeParamKind_SliderCopyWith<$Res>
           $Res Function(BridgeParamKind_Slider) _then) =
       _$BridgeParamKind_SliderCopyWithImpl;
   @useResult
-  $Res call({double default_, double min, double max});
+  $Res call({double default_, double min, double max, bool log});
 }
 
 /// @nodoc
@@ -2861,6 +2995,7 @@ class _$BridgeParamKind_SliderCopyWithImpl<$Res>
     Object? default_ = null,
     Object? min = null,
     Object? max = null,
+    Object? log = null,
   }) {
     return _then(BridgeParamKind_Slider(
       default_: null == default_
@@ -2875,6 +3010,10 @@ class _$BridgeParamKind_SliderCopyWithImpl<$Res>
           ? _self.max
           : max // ignore: cast_nullable_to_non_nullable
               as double,
+      log: null == log
+          ? _self.log
+          : log // ignore: cast_nullable_to_non_nullable
+              as bool,
     ));
   }
 }

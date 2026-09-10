@@ -319,7 +319,9 @@ class _LumitAppViewState extends State<LumitAppView> {
   BridgeKeyContext _contextOf(Panel? panel) => switch (panel) {
         Panel.project => BridgeKeyContext.project,
         Panel.viewer => BridgeKeyContext.viewer,
-        Panel.timeline => BridgeKeyContext.timeline,
+        // Both tables answer to the Timeline's keys: the razor, the split and
+        // the transport come from there, and the Audio timeline is a timeline.
+        Panel.timeline || Panel.audioTimeline => BridgeKeyContext.timeline,
         Panel.effectControls => BridgeKeyContext.effects,
         _ => BridgeKeyContext.global,
       };

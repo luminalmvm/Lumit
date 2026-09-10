@@ -471,6 +471,11 @@ browser with §2.6's provenance-and-switch-off menu, the layer's rack under an A
 heading in Effect controls as ordinary cards, the §2.3 calm badge fed by the mix bake,
 and a small chain chip on the Mixer strip.
 
+Lumit's **own** audio effects file under the same **Audio** category the hosted plugins
+land in, so the browser and the add-effect menu offer both under one heading and every
+reader asks the category rather than a plugin's name prefix
+([impl/audio-effects.md](impl/audio-effects.md)).
+
 [impl/audio-plugins.md](impl/audio-plugins.md) is the binding note: APIs, isolation,
 mix seam, contracts, traps, test plans, and the work packages AP1–AP5.
 

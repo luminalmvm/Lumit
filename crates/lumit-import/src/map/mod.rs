@@ -413,6 +413,7 @@ fn empty_comp(id: Uuid, name: &str, ae_id: i64) -> Composition {
     let tb = TimeBase::fallback();
     Composition {
         master_volume_db: 0.0,
+        sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
         id,
@@ -534,6 +535,7 @@ fn composition(
 
     Composition {
         master_volume_db: 0.0,
+        sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
         id,

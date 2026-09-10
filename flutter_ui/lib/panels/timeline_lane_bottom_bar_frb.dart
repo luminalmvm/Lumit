@@ -54,8 +54,12 @@ class LaneBottomBar extends StatelessWidget {
   /// The drag's ends, so the panel can anchor once per gesture.
   final VoidCallback? onZoomDragStart;
   final VoidCallback? onZoomDragEnd;
-  final bool magnet;
-  final VoidCallback onToggleMagnet;
+  /// Whether the snap magnet is drawn, and its state. Null draws no magnet at
+  /// all: the Audio timeline's bar is the zoom slider and the scrollbar, and
+  /// its own gestures suspend the snap with Ctrl rather than with a button
+  /// (docs/impl/audio-timeline.md §5).
+  final bool? magnet;
+  final VoidCallback? onToggleMagnet;
 
   const LaneBottomBar({
     super.key,
@@ -66,8 +70,8 @@ class LaneBottomBar extends StatelessWidget {
     required this.onZoomLive,
     this.onZoomDragStart,
     this.onZoomDragEnd,
-    required this.magnet,
-    required this.onToggleMagnet,
+    this.magnet,
+    this.onToggleMagnet,
   });
 
   /// The zoom slider between its two landscapes, and the magnet — the run this
@@ -171,8 +175,9 @@ class LaneBottomBar extends StatelessWidget {
                   const SizedBox(width: 4),
                   _zoomEnd(t, inward: true),
                   const SizedBox(width: 6),
+                  if (magnet case final on?)
                   LumitTooltip(
-                    message: magnet ? l10n.tipSnapOn : l10n.tipSnapOff,
+                    message: on ? l10n.tipSnapOn : l10n.tipSnapOff,
                     child: HouseButton(
                       key: const ValueKey('tl-magnet'),
                       small: true,
@@ -182,12 +187,12 @@ class LaneBottomBar extends StatelessWidget {
                       // toggle in this chrome reads: the glyph at foreground
                       // strength on the button's own face, off is frameless
                       // and muted.
-                      frameless: !magnet,
+                      frameless: !on,
                       padding: const EdgeInsets.symmetric(horizontal: 4),
                       onPressed: onToggleMagnet,
                       child: lumitIcon(LumitIcon.magnet,
                           size: iconSize,
-                          color: magnet ? t.textPrimary : t.textMuted),
+                          color: on ? t.textPrimary : t.textMuted),
                     ),
                   ),
                   const SizedBox(width: 12),

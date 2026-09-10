@@ -67,7 +67,7 @@ jobs:
         shell: pwsh
         run: |
           $url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/$env:FFMPEG_ASSET.zip"
-          Invoke-WebRequest -Uri $url -OutFile "$env:RUNNER_TEMP\ffmpeg.zip"
+          Invoke-WebRequest -MaximumRetryCount 5 -RetryIntervalSec 10 -Uri $url -OutFile "$env:RUNNER_TEMP\ffmpeg.zip"
           # The archive must match the hash pinned beside its name above.
           $hash = (Get-FileHash "$env:RUNNER_TEMP\ffmpeg.zip" -Algorithm SHA256).Hash
           if ($hash -ne $env:FFMPEG_SHA256) { throw "FFmpeg archive hash $hash is not the pinned $env:FFMPEG_SHA256" }
@@ -130,7 +130,7 @@ jobs:
       - name: Install FFmpeg 8.1 (BtbN shared build)
         run: |
           url="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/${FFMPEG_ASSET}.tar.xz"
-          curl -fsSL "$url" -o "$RUNNER_TEMP/ffmpeg.tar.xz"
+          curl -fsSL --retry 5 --retry-all-errors "$url" -o "$RUNNER_TEMP/ffmpeg.tar.xz"
           # Checked against the hash pinned beside the asset name above.
           echo "$FFMPEG_SHA256  $RUNNER_TEMP/ffmpeg.tar.xz" | sha256sum -c -
           mkdir -p "$RUNNER_TEMP/ffmpeg"

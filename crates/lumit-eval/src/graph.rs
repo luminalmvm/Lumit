@@ -286,6 +286,7 @@ mod tests {
     fn comp_with(layers: Vec<lumit_core::model::Layer>) -> Composition {
         Composition {
             master_volume_db: 0.0,
+            sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
             id: Uuid::now_v7(),

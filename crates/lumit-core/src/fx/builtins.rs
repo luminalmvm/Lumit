@@ -319,6 +319,9 @@ pub fn default_param_value(kind: &ParamKind) -> Option<EffectValue> {
         // sanctioned exception the File parameter takes to the "no no-op
         // default" rule.
         ParamKind::Layer { .. } => EffectValue::Layer(None),
+        // A fresh clip reference is unset for the layer reference's reason:
+        // until a clip is picked the node reads the whole layer.
+        ParamKind::Clip => EffectValue::Clip(None),
         // A fresh mask-path row is unset, which is the "First mask" entry,
         // resolved at render time, not written here: an effect is
         // usually added before the mask is drawn, so there is no id to write,
@@ -351,6 +354,7 @@ pub fn backfill_builtin_params(effects: &mut [EffectInstance]) {
             continue;
         };
         migrate_lens_flare_background(e);
+        migrate_audio_level_source(e);
         for p in s.params {
             let Some(value) = default_param_value(&p.kind) else {
                 continue; // a button has nothing to backfill
@@ -532,6 +536,38 @@ fn migrate_lens_flare_background(e: &mut EffectInstance) {
             crate::fx::lens_flare::BLEND_NORMAL
         } else {
             crate::fx::lens_flare::BLEND_ADD
+        }),
+        extra: serde_json::Map::new(),
+    });
+}
+
+/// Say, on a saved Audio level, which of the two readings it was doing before
+/// the Source row existed (docs/impl/audio-nodes.md §3).
+///
+/// The row named a layer or it did not: unset was the composition's mix, and a
+/// named layer was that layer's own file read raw, pre-fader. So the Source row
+/// is written to match, and the instance is **left at version 1**, which is what
+/// the driver reads to go on giving a named layer the raw reading. A parameter
+/// somebody drove must not change value because the schema grew a control, and
+/// the raw read is not a mode anybody can pick: it is only ever the reading an
+/// older project already had.
+///
+/// Runs before the backfill appends `source`, so an instance that named a layer
+/// never briefly reads as This comp.
+fn migrate_audio_level_source(e: &mut EffectInstance) {
+    if e.effect.match_name != "audio_level" || e.effect.version >= 2 {
+        return;
+    }
+    if e.params.iter().any(|p| p.id == "source") {
+        return;
+    }
+    let named = matches!(e.param("audio"), Some(EffectValue::Layer(Some(_))));
+    e.params.push(EffectParam {
+        id: "source".to_owned(),
+        value: EffectValue::Choice(if named {
+            crate::fx::drivers::audio_level::SOURCE_LAYER
+        } else {
+            crate::fx::drivers::audio_level::SOURCE_THIS_COMP
         }),
         extra: serde_json::Map::new(),
     });

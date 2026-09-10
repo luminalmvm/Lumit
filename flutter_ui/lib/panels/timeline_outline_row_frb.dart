@@ -38,6 +38,35 @@ List<String>? _blendModes;
 /// and Sharp's square corners have nothing to say about a bullet.
 const double _labelDotSize = 6;
 
+/// The inline rename a row turns into while it is being named: `Enter`
+/// commits, Escape throws the edit away, and a click anywhere else commits too
+/// (the field loses the row).
+///
+/// One field for two tables. A layer's row here and a track's row in the Audio
+/// timeline are named the same way, and a second copy of this would be a
+/// second set of answers about what Escape means.
+class RowRenameField extends StatelessWidget {
+  final TextEditingController controller;
+  final VoidCallback onCommit;
+  final VoidCallback onCancel;
+
+  const RowRenameField({
+    super.key,
+    required this.controller,
+    required this.onCommit,
+    required this.onCancel,
+  });
+
+  @override
+  Widget build(BuildContext context) => HouseTextField(
+        controller: controller,
+        autofocus: true,
+        onSubmitted: (_) => onCommit(),
+        onTapOutside: onCommit,
+        onCancelled: onCancel,
+      );
+}
+
 class OutlineRow extends StatefulWidget {
   final CompositionReference comp;
   final BridgeLayerEntry entry;
@@ -142,8 +171,25 @@ class _OutlineRowState extends State<OutlineRow> {
     final drag = widget.layerDrag.value;
     widget.layerDrag.value = null;
     if (drag == null || drag.from == drag.to) return;
-    widget.layers[drag.from].layer.reorder(newIndex: BigInt.from(drag.to));
+    widget.layers[drag.from].layer
+        .reorder(newIndex: BigInt.from(_stackIndex(drag.to)));
     widget.onChanged();
+  }
+
+  /// Where the row at [at] on screen stands in the whole comp - what the
+  /// engine counts. The rows on screen may be a filtered list: the shy
+  /// filter, the search box, the Sound mix fold. Handed a
+  /// slot in that list, a reorder landed a layer somewhere else in the stack
+  /// whenever anything was hidden; taking the place of the layer that is
+  /// *in* the slot is what the drop means whichever rows are showing.
+  int _stackIndex(int at) {
+    if (at < 0 || at >= widget.layers.length) return at;
+    final id = widget.layers[at].layer.internallayerId;
+    final all = Provider.of<LumitUiState>(context, listen: false)
+        .model
+        .heldLayers;
+    final i = all.indexWhere((e) => e.layer.internallayerId == id);
+    return i < 0 ? at : i;
   }
 
   LayerReference get layer => widget.entry.layer;
@@ -689,15 +735,11 @@ class _OutlineRowState extends State<OutlineRow> {
   Widget _name(LumitTheme t, String id, BridgeLayerInfo info) {
     final editor = _rename;
     if (editor != null) {
-      return HouseTextField(
+      return RowRenameField(
         key: ValueKey<String>('tl-rename-$id'),
         controller: editor,
-        autofocus: true,
-        onSubmitted: (_) => _commitRename(),
-        // Clicking anywhere else finishes the edit and keeps what was typed.
-        // It used to leave the field open and lose the change.
-        onTapOutside: _commitRename,
-        onCancelled: _cancelRename,
+        onCommit: _commitRename,
+        onCancel: _cancelRename,
       );
     }
     return GestureDetector(
@@ -1036,7 +1078,8 @@ class _OutlineRowState extends State<OutlineRow> {
           final to = i + delta;
           if (to < 0 || to >= widget.layers.length) continue;
           try {
-            widget.layers[i].layer.reorder(newIndex: BigInt.from(to));
+            widget.layers[i].layer
+                .reorder(newIndex: BigInt.from(_stackIndex(to)));
           } catch (_) {}
         }
       case 'delete':

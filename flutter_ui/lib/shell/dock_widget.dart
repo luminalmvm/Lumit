@@ -61,6 +61,12 @@ double panelMinWidth(Panel panel) => switch (panel) {
       // The Beats section's widest row: a label, the BPM well, Tap and the
       // phase chips.
       Panel.audio => 260,
+      // The Audio timeline's own outline row, measured cell by cell: 8 of pad,
+      // three switch cells at 22, the gap, a 16 twirl, the 18 number, the
+      // label dot and their four 8-px gaps, a name worth reading, the Spectral
+      // chip and the 10 trailing inset. That comes to 278, and the board draws
+      // the column at 300.
+      Panel.audioTimeline => 300,
       Panel.debug => 180,
     };
 
