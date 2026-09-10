@@ -88,6 +88,7 @@ void main() {
         'viewer-grid',
         'viewer-guides-menu',
         'viewer-channel',
+        'viewer-view',
         'viewer-exposure-reset',
         'viewer-exposure',
         'viewer-snapshot',
