@@ -694,6 +694,10 @@ List<MenuSection> lumitMenus(
     };
   }
 
+  /// Where a new layer goes, read at the moment the row is pressed so it
+  /// follows the selection rather than whatever it was when the menu opened.
+  int? row(CompositionReference c) => newLayerRow(ui, c);
+
   /// The same, for a command that acts on the selected *layer* — greyed out
   /// with nothing selected rather than offered and inert.
   VoidCallback? onLayer(void Function(LayerReference) run) {
@@ -905,28 +909,35 @@ List<MenuSection> lumitMenus(
     (
       title: l10n.menuLayer,
       items: () => [
+        // A new layer lands directly above the selected one, the way After
+        // Effects does it, and at the top of the stack when nothing is
+        // selected ([newLayerRow]).
         MenuEntry.submenu(l10n.menuNew, [
-          MenuEntry(l10n.menuSolid, onComp((c) => c.addSolidLayer()),
+          MenuEntry(
+              l10n.menuSolid, onComp((c) => c.addSolidLayer(row: row(c))),
               action: 'layer.new.solid'),
-          MenuEntry(l10n.menuText, onComp((c) => c.addTextLayer()),
+          MenuEntry(l10n.menuText, onComp((c) => c.addTextLayer(row: row(c))),
               action: 'layer.new.text'),
-          MenuEntry(l10n.menuCamera, onComp((c) => c.addCameraLayer()),
+          MenuEntry(
+              l10n.menuCamera, onComp((c) => c.addCameraLayer(row: row(c))),
               action: 'layer.new.camera'),
           // The three light kinds are their own rows rather than one row and
           // a dropdown: which kind you want is known before you make it, and
           // an area light is a different thing to reach for than a point.
-          MenuEntry(
-              l10n.menuPointLight, onComp((c) => c.addLightLayer(kind: 0)),
+          MenuEntry(l10n.menuPointLight,
+              onComp((c) => c.addLightLayer(kind: 0, row: row(c))),
               action: 'layer.new.light.point'),
-          MenuEntry(
-              l10n.menuSpotLight, onComp((c) => c.addLightLayer(kind: 1))),
-          MenuEntry(
-              l10n.menuAreaLight, onComp((c) => c.addLightLayer(kind: 2))),
-          MenuEntry(l10n.menuAdjustment, onComp((c) => c.addAdjustmentLayer()),
+          MenuEntry(l10n.menuSpotLight,
+              onComp((c) => c.addLightLayer(kind: 1, row: row(c)))),
+          MenuEntry(l10n.menuAreaLight,
+              onComp((c) => c.addLightLayer(kind: 2, row: row(c)))),
+          MenuEntry(l10n.menuAdjustment,
+              onComp((c) => c.addAdjustmentLayer(row: row(c))),
               action: 'layer.new.adjustment'),
-          MenuEntry(l10n.menuNull, onComp((c) => c.addNullLayer()),
+          MenuEntry(l10n.menuNull, onComp((c) => c.addNullLayer(row: row(c))),
               action: 'layer.new.null'),
-          MenuEntry(l10n.menuSequence, onComp((c) => c.addSequenceLayer())),
+          MenuEntry(l10n.menuSequence,
+              onComp((c) => c.addSequenceLayer(row: row(c)))),
         ]),
         // What the layer *is*, as opposed to what it is doing: its name, and a
         // Solid's own size and colour (the shared dialogue pattern).
@@ -1365,6 +1376,26 @@ bool _detachable(LayerReference? layer) {
     return layer.getKind() != BridgeLayerKind.audio;
   } catch (_) {
     return false;
+  }
+}
+
+/// The row a new layer should land on: the selected layer's, so it arrives
+/// directly above it, or null for the top of the stack.
+///
+/// With more than one layer selected it is the topmost of them, which is where
+/// After Effects puts one and the only answer that does not bury the new layer
+/// inside a selection. Asked of the engine rather than of the Timeline's read
+/// model, so a filtered outline cannot make it name the wrong row.
+int? newLayerRow(LumitUiState ui, CompositionReference comp) {
+  final selected = ui.selectedLayerIds;
+  if (selected.isEmpty) return null;
+  try {
+    final row = comp
+        .getLayers()
+        .indexWhere((l) => selected.contains(l.internallayerId));
+    return row < 0 ? null : row;
+  } catch (_) {
+    return null;
   }
 }
 

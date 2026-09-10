@@ -55,32 +55,39 @@ List<BridgeLayerEntry> razorTargets(
   return [clicked];
 }
 
-/// Cut every layer in [targets] at [frame], and say whether anything happened.
+/// Cut every layer in [targets] at [frame]: whether anything happened, and the
+/// second half of every layer that split.
 ///
 /// A Sequence layer gains an edit point; anything else splits in two. Each is a
 /// single op, so each is a single undo step (docs/07 §4.7) — a Shift-cut across
 /// five layers is five steps, which is honest: it is five edits.
+///
+/// The halves come back because the cut leaves them **selected**: after a
+/// razor you carry on with the piece after the cut, not the piece before it.
+/// A Sequence layer keeps its own row and adds nothing to the list.
 ///
 /// A refusal is silence, not an error. An eased speed ramp is no longer one of
 /// them — the engine splits the map's curve and both halves play what the whole
 /// clip played — so what is left to refuse is a click on an edit point
 /// that is already there, and a razor that threw a dialogue at the user for
 /// clicking slightly wrong would be worse than one that does nothing.
-bool razorCut(List<BridgeLayerEntry> targets, int frame) {
+({bool cut, List<LayerReference> halves}) razorCut(
+    List<BridgeLayerEntry> targets, int frame) {
   var cut = false;
+  final halves = <LayerReference>[];
   for (final entry in targets) {
     try {
       if (entry.info.kind == BridgeLayerKind.sequence) {
         entry.layer.cutClipAt(frame: frame);
       } else {
-        entry.layer.splitAt(frame: frame);
+        halves.add(entry.layer.splitAt(frame: frame));
       }
       cut = true;
     } catch (_) {
       // Nothing cuttable there. The next layer still gets its turn.
     }
   }
-  return cut;
+  return (cut: cut, halves: halves);
 }
 
 /// The blade pointer and the cut line, over whatever [child] draws.

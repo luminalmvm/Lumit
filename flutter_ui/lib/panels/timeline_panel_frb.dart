@@ -1310,7 +1310,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       clicked: clicked,
       allLayers: HardwareKeyboard.instance.isShiftPressed,
     );
-    if (razorCut(targets, frame)) onChanged();
+    final made = razorCut(targets, frame);
+    if (!made.cut) return;
+    // The half after the cut is the one you go on working with, so the cut
+    // hands the selection to it.
+    if (made.halves.isNotEmpty) ui.setSelection(made.halves);
+    onChanged();
   }
 
   /// `Ctrl+Shift+D`: cut every selected layer at the playhead (docs/07 §4.4).
@@ -1330,7 +1335,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         if (selected.contains(entry.layer.internallayerId)) entry,
     ];
     if (targets.isEmpty) return false;
-    if (razorCut(targets, frame)) ui.model.refresh();
+    final made = razorCut(targets, frame);
+    if (made.cut) {
+      if (made.halves.isNotEmpty) ui.setSelection(made.halves);
+      ui.model.refresh();
+    }
     return true;
   }
 
@@ -3281,39 +3290,26 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                   ui, layers, blockHeights, details.offset, t.density);
               switch (details.data) {
                 case FootageDragData(:final footage):
-                  // Bottom-up, so a multi-item drop stacks in the order the
-                  // panel listed them: each lands at the top of the stack.
+                  // Each file lands on the row it was dropped on, so one file
+                  // is one op and one press of Ctrl-Z puts it back. Bottom-up,
+                  // so a multi-item drop stacks in the order the panel listed
+                  // them: every one goes in at the same row and pushes the one
+                  // before it down.
+                  // ponytail: a ten-file drop is still ten steps, one per
+                  // file, because each add is its own committed op. That is
+                  // the ceiling left here, and the fix is an op that carries a
+                  // whole drop.
                   for (final f in footage.reversed) {
                     comp.addFootageLayer(
-                        footage: f, asSequence: _videoAsSequence(context));
-                  }
-                  ui.model.refresh();
-                  // They went on at the top; walk them down to the drop, the
-                  // bottom-most first so each one's slot is free when it moves.
-                  // ponytail: every call here is its own committed op, so the
-                  // ceiling is two undo steps per file — the add, then the
-                  // walk down to the drop. A ten-file drop takes twenty
-                  // presses of Ctrl-Z to put back, and the middle of that
-                  // sequence shows the layers at the top of the stack, which
-                  // is a position the user never asked for. The trigger is any
-                  // multi-select drop of more than two or three files followed
-                  // by an undo — reachable the first time somebody drags a
-                  // folder's worth of footage in. The fix is engine-side: an
-                  // add-at-index op, so one drop is one step.
-                  final fresh = [
-                    for (var i = 0; i < footage.length; i++)
-                      ui.model.layers[i].layer,
-                  ];
-                  for (var i = fresh.length - 1; i >= 0; i--) {
-                    fresh[i].reorder(newIndex: BigInt.from(at + i));
+                        footage: f,
+                        asSequence: _videoAsSequence(context),
+                        row: at);
                   }
                 case CompDragData(comp: final dropped):
                   // A comp cannot nest into itself; the engine refuses and
                   // the drop simply does nothing.
                   try {
-                    comp.addPrecompLayer(comp: dropped).reorder(
-                          newIndex: BigInt.from(at),
-                        );
+                    comp.addPrecompLayer(comp: dropped, row: at);
                   } catch (_) {}
               }
               ui.model.refresh();

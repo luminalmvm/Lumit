@@ -262,18 +262,19 @@ abstract class BridgeLibApi extends BaseApi {
   BridgeVramCacheStats crateApiCacheClearVramCache();
 
   LayerReference crateApiCompositionCompositionReferenceAddAdjustmentLayer(
-      {required CompositionReference that});
+      {required CompositionReference that, int? row});
 
   Future<void> crateApiCompositionCompositionReferenceAddAudioLayer(
       {required CompositionReference that, required FootageReference footage});
 
   LayerReference crateApiCompositionCompositionReferenceAddCameraLayer(
-      {required CompositionReference that});
+      {required CompositionReference that, int? row});
 
   void crateApiCompositionCompositionReferenceAddFootageLayer(
       {required CompositionReference that,
       required FootageReference footage,
-      required bool asSequence});
+      required bool asSequence,
+      int? row});
 
   void crateApiCompositionCompositionReferenceAddGroupEffect(
       {required CompositionReference that,
@@ -281,16 +282,18 @@ abstract class BridgeLibApi extends BaseApi {
       required String name});
 
   LayerReference crateApiCompositionCompositionReferenceAddLightLayer(
-      {required CompositionReference that, required int kind});
+      {required CompositionReference that, required int kind, int? row});
 
   LayerReference crateApiCompositionCompositionReferenceAddNullLayer(
-      {required CompositionReference that});
+      {required CompositionReference that, int? row});
 
   LayerReference crateApiCompositionCompositionReferenceAddPrecompLayer(
-      {required CompositionReference that, required CompositionReference comp});
+      {required CompositionReference that,
+      required CompositionReference comp,
+      int? row});
 
   LayerReference crateApiCompositionCompositionReferenceAddSequenceLayer(
-      {required CompositionReference that});
+      {required CompositionReference that, int? row});
 
   LayerReference crateApiCompositionCompositionReferenceAddShapeLayer(
       {required CompositionReference that,
@@ -298,10 +301,10 @@ abstract class BridgeLibApi extends BaseApi {
       required List<BridgeShapeItem> contents});
 
   LayerReference crateApiCompositionCompositionReferenceAddSolidLayer(
-      {required CompositionReference that});
+      {required CompositionReference that, int? row});
 
   LayerReference crateApiCompositionCompositionReferenceAddTextLayer(
-      {required CompositionReference that});
+      {required CompositionReference that, int? row});
 
   LayerReference crateApiCompositionCompositionReferenceAddTextLayerAt(
       {required CompositionReference that,
@@ -1187,7 +1190,7 @@ abstract class BridgeLibApi extends BaseApi {
       required UuidValue clip,
       required PlatformInt64 toFrame});
 
-  void crateApiLayerLayerReferenceSplitAt(
+  LayerReference crateApiLayerLayerReferenceSplitAt(
       {required LayerReference that, required PlatformInt64 frame});
 
   void crateApiLayerLayerReferenceStretch(
@@ -2896,11 +2899,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
 
   @override
   LayerReference crateApiCompositionCompositionReferenceAddAdjustmentLayer(
-      {required CompositionReference that}) {
+      {required CompositionReference that, int? row}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_composition_reference(that, serializer);
+        sse_encode_opt_box_autoadd_u_32(row, serializer);
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 55)!;
       },
       codec: SseCodec(
@@ -2910,7 +2914,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       ),
       constMeta:
           kCrateApiCompositionCompositionReferenceAddAdjustmentLayerConstMeta,
-      argValues: [that],
+      argValues: [that, row],
       apiImpl: this,
     ));
   }
@@ -2919,7 +2923,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       get kCrateApiCompositionCompositionReferenceAddAdjustmentLayerConstMeta =>
           const TaskConstMeta(
             debugName: "composition_reference_add_adjustment_layer",
-            argNames: ["that"],
+            argNames: ["that", "row"],
           );
 
   @override
@@ -2953,11 +2957,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
 
   @override
   LayerReference crateApiCompositionCompositionReferenceAddCameraLayer(
-      {required CompositionReference that}) {
+      {required CompositionReference that, int? row}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_composition_reference(that, serializer);
+        sse_encode_opt_box_autoadd_u_32(row, serializer);
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 57)!;
       },
       codec: SseCodec(
@@ -2967,7 +2972,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       ),
       constMeta:
           kCrateApiCompositionCompositionReferenceAddCameraLayerConstMeta,
-      argValues: [that],
+      argValues: [that, row],
       apiImpl: this,
     ));
   }
@@ -2976,20 +2981,22 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       get kCrateApiCompositionCompositionReferenceAddCameraLayerConstMeta =>
           const TaskConstMeta(
             debugName: "composition_reference_add_camera_layer",
-            argNames: ["that"],
+            argNames: ["that", "row"],
           );
 
   @override
   void crateApiCompositionCompositionReferenceAddFootageLayer(
       {required CompositionReference that,
       required FootageReference footage,
-      required bool asSequence}) {
+      required bool asSequence,
+      int? row}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_composition_reference(that, serializer);
         sse_encode_box_autoadd_footage_reference(footage, serializer);
         sse_encode_bool(asSequence, serializer);
+        sse_encode_opt_box_autoadd_u_32(row, serializer);
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 58)!;
       },
       codec: SseCodec(
@@ -2999,7 +3006,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       ),
       constMeta:
           kCrateApiCompositionCompositionReferenceAddFootageLayerConstMeta,
-      argValues: [that, footage, asSequence],
+      argValues: [that, footage, asSequence, row],
       apiImpl: this,
     ));
   }
@@ -3008,7 +3015,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       get kCrateApiCompositionCompositionReferenceAddFootageLayerConstMeta =>
           const TaskConstMeta(
             debugName: "composition_reference_add_footage_layer",
-            argNames: ["that", "footage", "asSequence"],
+            argNames: ["that", "footage", "asSequence", "row"],
           );
 
   @override
@@ -3045,12 +3052,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
 
   @override
   LayerReference crateApiCompositionCompositionReferenceAddLightLayer(
-      {required CompositionReference that, required int kind}) {
+      {required CompositionReference that, required int kind, int? row}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_composition_reference(that, serializer);
         sse_encode_u_32(kind, serializer);
+        sse_encode_opt_box_autoadd_u_32(row, serializer);
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 60)!;
       },
       codec: SseCodec(
@@ -3059,7 +3067,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
             sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeError,
       ),
       constMeta: kCrateApiCompositionCompositionReferenceAddLightLayerConstMeta,
-      argValues: [that, kind],
+      argValues: [that, kind, row],
       apiImpl: this,
     ));
   }
@@ -3068,16 +3076,17 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       get kCrateApiCompositionCompositionReferenceAddLightLayerConstMeta =>
           const TaskConstMeta(
             debugName: "composition_reference_add_light_layer",
-            argNames: ["that", "kind"],
+            argNames: ["that", "kind", "row"],
           );
 
   @override
   LayerReference crateApiCompositionCompositionReferenceAddNullLayer(
-      {required CompositionReference that}) {
+      {required CompositionReference that, int? row}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_composition_reference(that, serializer);
+        sse_encode_opt_box_autoadd_u_32(row, serializer);
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 61)!;
       },
       codec: SseCodec(
@@ -3086,7 +3095,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
             sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeError,
       ),
       constMeta: kCrateApiCompositionCompositionReferenceAddNullLayerConstMeta,
-      argValues: [that],
+      argValues: [that, row],
       apiImpl: this,
     ));
   }
@@ -3095,18 +3104,20 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       get kCrateApiCompositionCompositionReferenceAddNullLayerConstMeta =>
           const TaskConstMeta(
             debugName: "composition_reference_add_null_layer",
-            argNames: ["that"],
+            argNames: ["that", "row"],
           );
 
   @override
   LayerReference crateApiCompositionCompositionReferenceAddPrecompLayer(
       {required CompositionReference that,
-      required CompositionReference comp}) {
+      required CompositionReference comp,
+      int? row}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_composition_reference(that, serializer);
         sse_encode_box_autoadd_composition_reference(comp, serializer);
+        sse_encode_opt_box_autoadd_u_32(row, serializer);
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 62)!;
       },
       codec: SseCodec(
@@ -3116,7 +3127,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       ),
       constMeta:
           kCrateApiCompositionCompositionReferenceAddPrecompLayerConstMeta,
-      argValues: [that, comp],
+      argValues: [that, comp, row],
       apiImpl: this,
     ));
   }
@@ -3125,16 +3136,17 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       get kCrateApiCompositionCompositionReferenceAddPrecompLayerConstMeta =>
           const TaskConstMeta(
             debugName: "composition_reference_add_precomp_layer",
-            argNames: ["that", "comp"],
+            argNames: ["that", "comp", "row"],
           );
 
   @override
   LayerReference crateApiCompositionCompositionReferenceAddSequenceLayer(
-      {required CompositionReference that}) {
+      {required CompositionReference that, int? row}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_composition_reference(that, serializer);
+        sse_encode_opt_box_autoadd_u_32(row, serializer);
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 63)!;
       },
       codec: SseCodec(
@@ -3144,7 +3156,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       ),
       constMeta:
           kCrateApiCompositionCompositionReferenceAddSequenceLayerConstMeta,
-      argValues: [that],
+      argValues: [that, row],
       apiImpl: this,
     ));
   }
@@ -3153,7 +3165,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       get kCrateApiCompositionCompositionReferenceAddSequenceLayerConstMeta =>
           const TaskConstMeta(
             debugName: "composition_reference_add_sequence_layer",
-            argNames: ["that"],
+            argNames: ["that", "row"],
           );
 
   @override
@@ -3189,11 +3201,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
 
   @override
   LayerReference crateApiCompositionCompositionReferenceAddSolidLayer(
-      {required CompositionReference that}) {
+      {required CompositionReference that, int? row}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_composition_reference(that, serializer);
+        sse_encode_opt_box_autoadd_u_32(row, serializer);
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 65)!;
       },
       codec: SseCodec(
@@ -3202,7 +3215,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
             sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeError,
       ),
       constMeta: kCrateApiCompositionCompositionReferenceAddSolidLayerConstMeta,
-      argValues: [that],
+      argValues: [that, row],
       apiImpl: this,
     ));
   }
@@ -3211,16 +3224,17 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       get kCrateApiCompositionCompositionReferenceAddSolidLayerConstMeta =>
           const TaskConstMeta(
             debugName: "composition_reference_add_solid_layer",
-            argNames: ["that"],
+            argNames: ["that", "row"],
           );
 
   @override
   LayerReference crateApiCompositionCompositionReferenceAddTextLayer(
-      {required CompositionReference that}) {
+      {required CompositionReference that, int? row}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_composition_reference(that, serializer);
+        sse_encode_opt_box_autoadd_u_32(row, serializer);
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 66)!;
       },
       codec: SseCodec(
@@ -3229,7 +3243,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
             sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeError,
       ),
       constMeta: kCrateApiCompositionCompositionReferenceAddTextLayerConstMeta,
-      argValues: [that],
+      argValues: [that, row],
       apiImpl: this,
     ));
   }
@@ -3238,7 +3252,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       get kCrateApiCompositionCompositionReferenceAddTextLayerConstMeta =>
           const TaskConstMeta(
             debugName: "composition_reference_add_text_layer",
-            argNames: ["that"],
+            argNames: ["that", "row"],
           );
 
   @override
@@ -10021,7 +10035,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       );
 
   @override
-  void crateApiLayerLayerReferenceSplitAt(
+  LayerReference crateApiLayerLayerReferenceSplitAt(
       {required LayerReference that, required PlatformInt64 frame}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
@@ -10031,7 +10045,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 307)!;
       },
       codec: SseCodec(
-        decodeSuccessData: sse_decode_unit,
+        decodeSuccessData: sse_decode_layer_reference,
         decodeErrorData:
             sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeError,
       ),
@@ -12994,6 +13008,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   SolidReference dco_decode_box_autoadd_solid_reference(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_solid_reference(raw);
+  }
+
+  @protected
+  int dco_decode_box_autoadd_u_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
   }
 
   @protected
@@ -16123,6 +16143,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  int? dco_decode_opt_box_autoadd_u_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_u_32(raw);
+  }
+
+  @protected
   BigInt? dco_decode_opt_box_autoadd_u_64(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_u_64(raw);
@@ -16744,6 +16770,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_solid_reference(deserializer));
+  }
+
+  @protected
+  int sse_decode_box_autoadd_u_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_u_32(deserializer));
   }
 
   @protected
@@ -20570,6 +20602,17 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_u_32(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   BigInt? sse_decode_opt_box_autoadd_u_64(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -21224,6 +21267,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       SolidReference self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_solid_reference(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_u_32(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self, serializer);
   }
 
   @protected
@@ -24209,6 +24258,16 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_box_autoadd_project_reference(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_u_32(self, serializer);
     }
   }
 

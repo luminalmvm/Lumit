@@ -3631,12 +3631,14 @@ impl LayerReference {
     /// One `Batch`, so it is one undo step — docs/07 §4.7 requires that of every
     /// destructive-feeling action, and a razor that took two would be two.
     ///
-    /// The copy goes directly above the original, where a duplicate goes.
+    /// The copy goes directly above the original, where a duplicate goes, and
+    /// is handed back so the caller can select it: the tail is the half you go
+    /// on working with after a cut.
     /// `frame` must land strictly inside the layer's span: cutting at either end
     /// would make a layer of no length, so it is a calm error rather than a
     /// zero-length layer nobody asked for.
     #[frb(sync)]
-    pub fn split_at(&self, frame: i64) -> Result<(), BridgeError> {
+    pub fn split_at(&self, frame: i64) -> Result<LayerReference, BridgeError> {
         let comp = self.composition()?;
         let layer = self.item()?;
         let t = comp
@@ -3683,6 +3685,7 @@ impl LayerReference {
 
         let mut tail = head.clone();
         tail.id = Uuid::now_v7();
+        let tail_id = tail.id;
         for effect in &mut tail.effects {
             effect.id = Uuid::now_v7();
         }
@@ -3711,7 +3714,8 @@ impl LayerReference {
             index,
             layer: Box::new(tail),
         });
-        self.commit(lumit_core::Op::Batch { ops })
+        self.commit(lumit_core::Op::Batch { ops })?;
+        Ok(LayerReference::new(self.project_id, self.comp_id, tail_id))
     }
 
     /// Delete the clip under `frame`, leaving a gap.

@@ -329,9 +329,24 @@ void main() {
       await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
       await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
       await tester.pump();
-      // A new layer goes on top of the stack, so the Adjustment reads first.
+      // With nothing selected a new layer goes on top of the stack, so the
+      // Adjustment reads first.
       expect(comp.getLayers().map((l) => l.getKind()),
           [BridgeLayerKind.adjustment, BridgeLayerKind.solid]);
+
+      // With a layer selected the next one lands directly above it, exactly as
+      // the menu row does.
+      p.uiState.setSelection([comp.getLayers().last]);
+      await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyY);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+      expect(comp.getLayers().map((l) => l.getKind()), [
+        BridgeLayerKind.adjustment,
+        BridgeLayerKind.solid,
+        BridgeLayerKind.solid,
+      ], reason: 'above the selected layer, not at the top');
     });
 
     /// Otherwise every letter typed into a layer name would also be a command.

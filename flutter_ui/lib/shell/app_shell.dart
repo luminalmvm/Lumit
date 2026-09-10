@@ -475,19 +475,21 @@ class _LumitAppViewState extends State<LumitAppView> {
         if (comp == null) {
           handled = false;
         } else {
+          // Directly above the selected layer, exactly as the menu row does.
+          final row = newLayerRow(ui, comp);
           switch (action) {
             case 'layer.new.solid':
-              comp.addSolidLayer();
+              comp.addSolidLayer(row: row);
             case 'layer.new.text':
-              comp.addTextLayer();
+              comp.addTextLayer(row: row);
             case 'layer.new.camera':
-              comp.addCameraLayer();
+              comp.addCameraLayer(row: row);
             case 'layer.new.light.point':
-              comp.addLightLayer(kind: 0);
+              comp.addLightLayer(kind: 0, row: row);
             case 'layer.new.adjustment':
-              comp.addAdjustmentLayer();
+              comp.addAdjustmentLayer(row: row);
             case 'layer.new.null':
-              comp.addNullLayer();
+              comp.addNullLayer(row: row);
           }
           state.notifyDocumentChanged();
         }

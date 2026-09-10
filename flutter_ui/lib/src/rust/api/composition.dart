@@ -19,7 +19,7 @@ import 'project_item.dart';
 import 'solid.dart';
 import 'state.dart';
 
-// These functions are ignored because they are not marked as `pub`: `add_at_top`, `bridge_marker`, `colour_view_pair`, `commit_slide`, `commit`, `composition`, `core_marker`, `core_markers`, `dispatch`, `document`, `footage_span_and_size`, `has_picture`, `layer_switch_op`, `place_footage`, `project`, `read_groups`, `runs_as_video`, `to_engine`
+// These functions are ignored because they are not marked as `pub`: `add_at`, `bridge_marker`, `colour_view_pair`, `commit_slide`, `commit`, `composition`, `core_marker`, `core_markers`, `dispatch`, `document`, `footage_span_and_size`, `has_picture`, `insert_row`, `layer_switch_op`, `place_footage`, `project`, `read_groups`, `runs_as_video`, `to_engine`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `id`, `new`, `project_id`
 
@@ -446,10 +446,9 @@ class CompositionReference {
 
   /// Add an Adjustment layer: a comp-sized effect container with no source of
   /// its own, centred so scale and rotation pivot about the middle.
-  LayerReference addAdjustmentLayer() => BridgeLib.instance.api
-          .crateApiCompositionCompositionReferenceAddAdjustmentLayer(
-        that: this,
-      );
+  LayerReference addAdjustmentLayer({int? row}) => BridgeLib.instance.api
+      .crateApiCompositionCompositionReferenceAddAdjustmentLayer(
+          that: this, row: row);
 
   /// Add **the sound of** this footage item as its own layer: an
   /// Audio layer.
@@ -469,10 +468,9 @@ class CompositionReference {
 
   /// Add a Camera layer at the comp centre. The default zoom is the After
   /// Effects 50 mm model, `comp width × 50/36`.
-  LayerReference addCameraLayer() => BridgeLib.instance.api
-          .crateApiCompositionCompositionReferenceAddCameraLayer(
-        that: this,
-      );
+  LayerReference addCameraLayer({int? row}) => BridgeLib.instance.api
+      .crateApiCompositionCompositionReferenceAddCameraLayer(
+          that: this, row: row);
 
   /// Place `footage` into this composition as a new top layer.
   ///
@@ -500,10 +498,12 @@ class CompositionReference {
   /// double-click, a menu — comes through here and cannot disagree with the
   /// others about what a video import becomes.
   void addFootageLayer(
-          {required FootageReference footage, required bool asSequence}) =>
+          {required FootageReference footage,
+          required bool asSequence,
+          int? row}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceAddFootageLayer(
-              that: this, footage: footage, asSequence: asSequence);
+              that: this, footage: footage, asSequence: asSequence, row: row);
 
   /// Append the built-in effect named `name` to a group header's stack — the
   /// group arm of `LayerReference::add_effect`, and the same road every
@@ -526,17 +526,17 @@ class CompositionReference {
   /// light starts at a tenth of the comp's width and height, which is a
   /// softbox rather than a pinprick: a light with no size would draw exactly
   /// as a point one and leave nothing to discover.
-  LayerReference addLightLayer({required int kind}) => BridgeLib.instance.api
-      .crateApiCompositionCompositionReferenceAddLightLayer(
-          that: this, kind: kind);
+  LayerReference addLightLayer({required int kind, int? row}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceAddLightLayer(
+              that: this, kind: kind, row: row);
 
   /// Add a Null layer: an invisible layer with no source of its own, carrying
   /// only a transform, for parenting rigs. It has no size, so only its
   /// position is centred and the anchor stays at the origin.
-  LayerReference addNullLayer() => BridgeLib.instance.api
-          .crateApiCompositionCompositionReferenceAddNullLayer(
-        that: this,
-      );
+  LayerReference addNullLayer({int? row}) => BridgeLib.instance.api
+      .crateApiCompositionCompositionReferenceAddNullLayer(
+          that: this, row: row);
 
   /// Place another composition into this one as a Precomp layer.
   ///
@@ -545,16 +545,16 @@ class CompositionReference {
   /// whole tree on every insertion; the render guards defensively against one
   /// and the Hierarchy panel bounds its own recursion. The one-step case is
   /// checked because it is the one a user reaches by accident.
-  LayerReference addPrecompLayer({required CompositionReference comp}) =>
+  LayerReference addPrecompLayer(
+          {required CompositionReference comp, int? row}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceAddPrecompLayer(
-              that: this, comp: comp);
+              that: this, comp: comp, row: row);
 
   /// Add an empty Sequence layer — a clip row spanning the comp.
-  LayerReference addSequenceLayer() => BridgeLib.instance.api
-          .crateApiCompositionCompositionReferenceAddSequenceLayer(
-        that: this,
-      );
+  LayerReference addSequenceLayer({int? row}) => BridgeLib.instance.api
+      .crateApiCompositionCompositionReferenceAddSequenceLayer(
+          that: this, row: row);
 
   /// Add a Shape layer holding `contents`, at the top of the stack.
   ///
@@ -572,16 +572,14 @@ class CompositionReference {
   /// Add a Solid layer backed by a fresh SolidDef filed in the Solids
   /// auto-folder — one batch, one undo step, matching the egui frontend. The
   /// solid is comp-sized and white, named "White solid N".
-  LayerReference addSolidLayer() => BridgeLib.instance.api
-          .crateApiCompositionCompositionReferenceAddSolidLayer(
-        that: this,
-      );
+  LayerReference addSolidLayer({int? row}) => BridgeLib.instance.api
+      .crateApiCompositionCompositionReferenceAddSolidLayer(
+          that: this, row: row);
 
   /// Add a Text layer with the "Text" starter document, centred.
-  LayerReference addTextLayer() => BridgeLib.instance.api
-          .crateApiCompositionCompositionReferenceAddTextLayer(
-        that: this,
-      );
+  LayerReference addTextLayer({int? row}) => BridgeLib.instance.api
+      .crateApiCompositionCompositionReferenceAddTextLayer(
+          that: this, row: row);
 
   /// Add a text layer **where the Type tool clicked**, already holding the
   /// document it should hold, as one op.

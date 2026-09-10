@@ -4866,7 +4866,7 @@ mod tests {
                 .expect("comp added");
         }
         CompositionReference::new(project.id, comp_id)
-            .add_solid_layer()
+            .add_solid_layer(None)
             .expect("a solid layer");
         (project, comp_id)
     }

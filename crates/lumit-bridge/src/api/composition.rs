@@ -401,6 +401,17 @@ pub(crate) fn colour_view_pair(list: Option<Vec<String>>) -> Option<(String, Str
     }
 }
 
+/// Which slot a new layer goes into, given the row the caller asked for and how
+/// many layers there are.
+///
+/// `None` is the top, which is where a layer goes when nothing says otherwise.
+/// A row past the end asks for the bottom rather than failing, so a drop below
+/// the last layer lands under it instead of being refused.
+#[frb(ignore)]
+pub(crate) fn insert_row(row: Option<u32>, layers: usize) -> usize {
+    row.map_or(0, |r| (r as usize).min(layers))
+}
+
 impl CompositionReference {
     #[frb(ignore)]
     pub fn new(project: Uuid, id: Uuid) -> CompositionReference {
@@ -660,7 +671,7 @@ impl CompositionReference {
     /// auto-folder — one batch, one undo step, matching the egui frontend. The
     /// solid is comp-sized and white, named "White solid N".
     #[frb(sync)]
-    pub fn add_solid_layer(&self) -> Result<LayerReference, BridgeError> {
+    pub fn add_solid_layer(&self, row: Option<u32>) -> Result<LayerReference, BridgeError> {
         let comp = self.composition()?;
         let doc = self.document()?;
         let (def, name, mut ops) = crate::edits::white_solid_ops(&doc, comp.width, comp.height);
@@ -680,7 +691,7 @@ impl CompositionReference {
         let id = layer.id;
         ops.push(lumit_core::Op::AddLayer {
             comp: self.id,
-            index: 0,
+            index: insert_row(row, comp.layers.len()),
             layer: Box::new(layer),
         });
 
@@ -699,6 +710,7 @@ impl CompositionReference {
     pub fn add_precomp_layer(
         &self,
         comp: &CompositionReference,
+        row: Option<u32>,
     ) -> Result<LayerReference, BridgeError> {
         if comp.id == self.id {
             return Err(BridgeError::InvalidComp);
@@ -730,7 +742,7 @@ impl CompositionReference {
                 ..m.clone()
             })
             .collect();
-        self.add_at_top(layer)
+        self.add_at(layer, row)
     }
 
     /// Pack `layer_ids` into a new composition and put that comp back in their
@@ -1034,7 +1046,7 @@ impl CompositionReference {
 
     /// Add a Text layer with the "Text" starter document, centred.
     #[frb(sync)]
-    pub fn add_text_layer(&self) -> Result<LayerReference, BridgeError> {
+    pub fn add_text_layer(&self, row: Option<u32>) -> Result<LayerReference, BridgeError> {
         use lumit_core::anim::Property;
         use lumit_core::model::{LinearColour, TextDocument, TransformGroup};
 
@@ -1068,7 +1080,7 @@ impl CompositionReference {
                 ..TransformGroup::default()
             },
         );
-        self.add_at_top(layer)
+        self.add_at(layer, row)
     }
 
     /// Add a Shape layer holding `contents`, at the top of the stack.
@@ -1113,7 +1125,7 @@ impl CompositionReference {
                 ..TransformGroup::default()
             },
         );
-        self.add_at_top(layer)
+        self.add_at(layer, None)
     }
 
     /// Add a text layer **where the Type tool clicked**, already holding the
@@ -1161,13 +1173,13 @@ impl CompositionReference {
                 ..TransformGroup::default()
             },
         );
-        self.add_at_top(layer)
+        self.add_at(layer, None)
     }
 
     /// Add a Camera layer at the comp centre. The default zoom is the After
     /// Effects 50 mm model, `comp width × 50/36`.
     #[frb(sync)]
-    pub fn add_camera_layer(&self) -> Result<LayerReference, BridgeError> {
+    pub fn add_camera_layer(&self, row: Option<u32>) -> Result<LayerReference, BridgeError> {
         use lumit_core::anim::Property;
         use lumit_core::model::TransformGroup;
 
@@ -1186,7 +1198,7 @@ impl CompositionReference {
                 ..TransformGroup::default()
             },
         );
-        self.add_at_top(layer)
+        self.add_at(layer, row)
     }
 
     /// Add a Light layer at the comp centre.
@@ -1197,7 +1209,11 @@ impl CompositionReference {
     /// softbox rather than a pinprick: a light with no size would draw exactly
     /// as a point one and leave nothing to discover.
     #[frb(sync)]
-    pub fn add_light_layer(&self, kind: u32) -> Result<LayerReference, BridgeError> {
+    pub fn add_light_layer(
+        &self,
+        kind: u32,
+        row: Option<u32>,
+    ) -> Result<LayerReference, BridgeError> {
         use lumit_core::anim::Property;
         use lumit_core::model::{LightDef, LightKind, TransformGroup};
 
@@ -1231,13 +1247,13 @@ impl CompositionReference {
                 ..TransformGroup::default()
             },
         );
-        self.add_at_top(layer)
+        self.add_at(layer, row)
     }
 
     /// Add an Adjustment layer: a comp-sized effect container with no source of
     /// its own, centred so scale and rotation pivot about the middle.
     #[frb(sync)]
-    pub fn add_adjustment_layer(&self) -> Result<LayerReference, BridgeError> {
+    pub fn add_adjustment_layer(&self, row: Option<u32>) -> Result<LayerReference, BridgeError> {
         let comp = self.composition()?;
         let layer = crate::edits::base_layer(
             "Adjustment".into(),
@@ -1250,14 +1266,14 @@ impl CompositionReference {
                 comp.height,
             ),
         );
-        self.add_at_top(layer)
+        self.add_at(layer, row)
     }
 
     /// Add a Null layer: an invisible layer with no source of its own, carrying
     /// only a transform, for parenting rigs. It has no size, so only its
     /// position is centred and the anchor stays at the origin.
     #[frb(sync)]
-    pub fn add_null_layer(&self) -> Result<LayerReference, BridgeError> {
+    pub fn add_null_layer(&self, row: Option<u32>) -> Result<LayerReference, BridgeError> {
         use lumit_core::anim::Property;
         use lumit_core::model::TransformGroup;
 
@@ -1272,12 +1288,12 @@ impl CompositionReference {
                 ..TransformGroup::default()
             },
         );
-        self.add_at_top(layer)
+        self.add_at(layer, row)
     }
 
     /// Add an empty Sequence layer — a clip row spanning the comp.
     #[frb(sync)]
-    pub fn add_sequence_layer(&self) -> Result<LayerReference, BridgeError> {
+    pub fn add_sequence_layer(&self, row: Option<u32>) -> Result<LayerReference, BridgeError> {
         let comp = self.composition()?;
         let layer = crate::edits::base_layer(
             "Sequence".into(),
@@ -1290,7 +1306,7 @@ impl CompositionReference {
                 comp.height,
             ),
         );
-        self.add_at_top(layer)
+        self.add_at(layer, row)
     }
 
     /// The comp's work area — the span the Viewer previews and the export
@@ -1471,21 +1487,24 @@ impl CompositionReference {
             layer.start_offset = start_offset;
         }
 
-        self.add_at_top(layer)
+        // A paste lands at the top, as it always has.
+        self.add_at(layer, None)
     }
 
-    /// Insert `layer` at the top of the stack, soloed if the comp is showing
-    /// only soloed layers ([`crate::edits::solo_on_arrival`]).
+    /// Insert `layer` on `row`, soloed if the comp is showing only soloed
+    /// layers ([`crate::edits::solo_on_arrival`]).
     #[frb(ignore)]
-    fn add_at_top(
+    fn add_at(
         &self,
         mut layer: lumit_core::model::Layer,
+        row: Option<u32>,
     ) -> Result<LayerReference, BridgeError> {
-        crate::edits::solo_on_arrival(&mut layer, self.composition()?.layers.iter());
+        let comp = self.composition()?;
+        crate::edits::solo_on_arrival(&mut layer, comp.layers.iter());
         let id = layer.id;
         self.commit(lumit_core::Op::AddLayer {
             comp: self.id,
-            index: 0,
+            index: insert_row(row, comp.layers.len()),
             layer: Box::new(layer),
         })?;
         Ok(LayerReference::new(self.project, self.id, id))
@@ -1551,8 +1570,9 @@ impl CompositionReference {
         &self,
         footage: &FootageReference,
         as_sequence: bool,
+        row: Option<u32>,
     ) -> Result<(), BridgeError> {
-        self.place_footage(footage, as_sequence, false)
+        self.place_footage(footage, as_sequence, false, row)
     }
 
     /// Add **the sound of** this footage item as its own layer: an
@@ -1567,7 +1587,7 @@ impl CompositionReference {
     ///
     /// One `AddLayer` op, so it is one undo step like every other placement.
     pub fn add_audio_layer(&self, footage: &FootageReference) -> Result<(), BridgeError> {
-        self.place_footage(footage, false, true)
+        self.place_footage(footage, false, true, None)
     }
 
     #[frb(ignore)]
@@ -1576,6 +1596,7 @@ impl CompositionReference {
         footage: &FootageReference,
         as_sequence: bool,
         audio_only: bool,
+        row: Option<u32>,
     ) -> Result<(), BridgeError> {
         let proj = self.project()?;
         let comp = self.composition()?;
@@ -1626,7 +1647,7 @@ impl CompositionReference {
         proj.store
             .commit(lumit_core::Op::AddLayer {
                 comp: self.id,
-                index: 0,
+                index: insert_row(row, comp.layers.len()),
                 layer: Box::new(layer),
             })
             .map_err(BridgeError::OpError)?;
@@ -3117,7 +3138,7 @@ mod group_tests {
         // Each `add_null_layer` goes in at the top, so the stack reads newest
         // first; reversing gives the four in the order the outline shows them.
         let mut layers: Vec<LayerReference> = (0..4)
-            .map(|_| comp.add_null_layer().expect("a null layer"))
+            .map(|_| comp.add_null_layer(None).expect("a null layer"))
             .collect();
         layers.reverse();
         (project, comp, layers)
@@ -3132,6 +3153,59 @@ mod group_tests {
             model.layers[i].info.in_frame,
             model.layers[i].info.out_frame,
         )
+    }
+
+    /// A new layer lands on the row it was asked for, so the menu can put one
+    /// directly above the layer you had selected instead of at the top.
+    #[test]
+    fn a_new_layer_lands_on_the_row_it_was_given() {
+        let (_project, comp, layers) = comp_with_four();
+        let all = ids(&layers);
+
+        // Row 2 is the third layer down: the new one takes that place and the
+        // rest move down under it.
+        let landed = comp.add_null_layer(Some(2)).expect("a null layer");
+        let stack: Vec<Uuid> = comp
+            .get_layers()
+            .expect("the stack")
+            .iter()
+            .map(|l| l.layer_id)
+            .collect();
+        assert_eq!(stack[2], landed.layer_id);
+        assert_eq!(stack, [all[0], all[1], landed.layer_id, all[2], all[3]]);
+
+        // No row still means the top, and a row past the end means the bottom
+        // rather than an error, which is what a drop under the last layer is.
+        let top = comp.add_null_layer(None).expect("a null layer");
+        let bottom = comp.add_null_layer(Some(99)).expect("a null layer");
+        let stack: Vec<Uuid> = comp
+            .get_layers()
+            .expect("the stack")
+            .iter()
+            .map(|l| l.layer_id)
+            .collect();
+        assert_eq!(stack.first(), Some(&top.layer_id));
+        assert_eq!(stack.last(), Some(&bottom.layer_id));
+    }
+
+    /// One drop is one undo step: the layer arrives where it was let go, so
+    /// there is no move to put back afterwards.
+    #[test]
+    fn a_layer_added_on_a_row_takes_one_undo() {
+        let (project, comp, layers) = comp_with_four();
+        let before = ids(&layers);
+
+        comp.add_null_layer(Some(3)).expect("a null layer");
+        assert_eq!(comp.get_layers().expect("the stack").len(), 5);
+
+        project.undo().expect("one step back");
+        let stack: Vec<Uuid> = comp
+            .get_layers()
+            .expect("the stack")
+            .iter()
+            .map(|l| l.layer_id)
+            .collect();
+        assert_eq!(stack, before, "one press put the whole drop back");
     }
 
     #[test]
