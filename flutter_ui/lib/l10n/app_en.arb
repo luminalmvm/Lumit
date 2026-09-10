@@ -7441,6 +7441,11 @@
     "description": "The unit rider beside an effect parameter's value when the number is a length of time in seconds. Abbreviated because it sits in a narrow column beside the number.",
     "type": "text"
   },
+  "unitSymbolDb": "dB",
+  "@unitSymbolDb": {
+    "description": "The unit rider beside a Volume value in the graph editor, decibels. Abbreviated because it sits in a narrow column beside the number.",
+    "type": "text"
+  },
   "unsavedChanges": "Unsaved changes",
   "@unsavedChanges": {
     "description": "Bottom strip: the project has edits that are not written to disk."

@@ -86,6 +86,8 @@ void commitChannelEdits(Map<GraphChannel, BridgeScalar> edits) {
       // One Retime per layer, so there is nothing to batch: the write is
       // already one op and therefore one undo step.
       channel.entry.layer.setRetimeProperty(value: next);
+    } else if (channel.volume) {
+      channel.entry.layer.setVolumeDb(value: next);
     } else if (channel.effect != null && channel.param != null) {
       final slot = effects[layerId] ??= (channel.entry.layer, {});
       (slot.$2[channel.effect!.id.toString()] ??= {})[channel.param!.id] = next;
