@@ -130,11 +130,18 @@ class _SpectralLaneState extends State<SpectralLane> {
     // bass to treble, blended across the bins — so the spectrogram and the
     // stack speak the same colour language and a theme owns both.
     final stops = [ramp.low, ramp.mid, ramp.high];
-    final colours = List<Color>.generate(bins, (b) {
+    // The three bytes each bin paints in, worked out per bin rather than per
+    // pixel: the loop under this runs columns times bins, up to a hundred and
+    // sixty thousand times a lane, and a colour's channels are floats.
+    final band = Uint8List(bins * 3);
+    for (var b = 0; b < bins; b++) {
       final at = bins <= 1 ? 0.0 : b / (bins - 1) * (stops.length - 1);
       final i = at.floor().clamp(0, stops.length - 2);
-      return Color.lerp(stops[i], stops[i + 1], at - i)!;
-    });
+      final colour = Color.lerp(stops[i], stops[i + 1], at - i)!;
+      band[b * 3] = (colour.r * 255).round();
+      band[b * 3 + 1] = (colour.g * 255).round();
+      band[b * 3 + 2] = (colour.b * 255).round();
+    }
     final rgba = Uint8List(cols * bins * 4);
     for (var c = 0; c < cols; c++) {
       for (var b = 0; b < bins; b++) {
@@ -143,10 +150,9 @@ class _SpectralLaneState extends State<SpectralLane> {
         // Low band at the bottom of the picture.
         final y = bins - 1 - b;
         final at = (y * cols + c) * 4;
-        final colour = colours[b];
-        rgba[at] = (colour.r * 255).round();
-        rgba[at + 1] = (colour.g * 255).round();
-        rgba[at + 2] = (colour.b * 255).round();
+        rgba[at] = band[b * 3];
+        rgba[at + 1] = band[b * 3 + 1];
+        rgba[at + 2] = band[b * 3 + 2];
         rgba[at + 3] = v;
       }
     }

@@ -698,6 +698,33 @@ not something a test can simply request. It waits on the report (the column's he
 filling in), not on the frame: the Linux runner's DMA-BUF present fails on software
 Vulkan, so the picture never reaches Dart there while the profile does.
 
+### 4.6 A lane's wave is one draw call a band
+
+The Audio workspace opens a waveform lane on every sounding layer, and a lane is as
+wide as the bar it sits in. `WaveformPainter` drew a line at a time, so a lane cost a
+draw call per pixel column per band: ten stacked lanes came to sixty thousand calls a
+frame, on the thread that records them and again on the one that replays them. A
+band's columns go into one `Float32List` and down in one `drawRawPoints` now, so ten
+lanes cost thirty calls. Recording those ten lanes in the test VM: **46.6 ms a frame
+before, 8.0 ms after**. `waveform_test.dart` holds the call count rather than the
+milliseconds, which is the part a headless test can state.
+
+The painter also stops at the edges of the **summary** it was handed rather than at
+the edges of the bar. A summary covers the visible stretch and half a view either
+side, while a bar at a close zoom is dozens of screenfuls, and the columns outside the
+window were walked in order to draw nothing. That is worth ~3% of the figures above at
+ten times zoom, and proportionally more the further in the zoom goes.
+
+And an arriving summary no longer rebuilds the table. The fetch answers off the build,
+and the panel answered each arrival with a `setState` of its own, so opening ten lanes
+or scrolling them cost a panel-wide rebuild per lane per window: the very thing §4.4
+rules out for selection. The lanes listen to `AudioLaneSummaries` for their peaks and
+their spectrograms instead, so an answer repaints the open lanes and touches nothing
+else in the table.
+
+**Not measured on the machine.** §7's manual rule asks for a probe run in the owner's
+conditions whenever a Timeline paint path changes, and this change has not had one.
+
 ## 5. What does not change
 
 - **The two-trees refusal stands** (docs/TODO, "The Timeline's two halves are still

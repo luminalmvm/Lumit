@@ -59,6 +59,8 @@
 // outline or the lane stack moves.
 
 import 'dart:math' as math;
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -150,6 +152,30 @@ int _roundUpToPowerOfTwo(int n) {
     p *= 2;
   }
   return p;
+}
+
+/// What every open lane has been given to draw, and the word the lanes wait
+/// on.
+///
+/// A summary is fetched off the build and arrives whenever it arrives. The
+/// panel used to answer each arrival with a `setState` of its own, so opening
+/// ten lanes, or scrolling them, rebuilt the whole Timeline once per lane per
+/// window — the panel-wide rebuild docs/impl/ui-performance.md §4.4 rules out.
+/// The lanes listen here instead: an answer repaints the open waveform lanes
+/// and touches nothing else in the table.
+///
+/// The maps are written in place and the word is said once at the end of a
+/// pass, because a pass over the layers usually settles several of them.
+class AudioLaneSummaries extends ChangeNotifier {
+  /// Each layer's peaks, by layer id — the stretch of its source the lanes are
+  /// showing, summarised to one bucket per pixel column.
+  final Map<String, BridgeAudioPeaks> peaks = {};
+
+  /// Each spectral-mode lane's spectrogram window, the same bargain for the
+  /// other picture. A layer holds one or the other, never both.
+  final Map<String, BridgeSpectrogram> spectra = {};
+
+  void changed() => notifyListeners();
 }
 
 /// How a waveform is drawn — the two choices Settings offers, together,
@@ -268,8 +294,19 @@ class WaveformPainter extends CustomPainter {
     final held = peaks;
     if (held == null || held.buckets == 0 || held.values.isEmpty) return;
     if (!(held.endSeconds > held.startSeconds)) return;
-    final from = math.max(0.0, left);
-    final to = math.min(size.width, right);
+    // No zoom is no mapping from a column to a moment, so there is no wave to
+    // draw — the spectral lane refuses the same reading.
+    if (!(secondsPerPixel > 0)) return;
+    // Nothing outside the fetched window is drawn, so nothing outside it is
+    // walked either. The summary covers the visible stretch and half a view
+    // each side; the bar it sits in can be dozens of screenfuls wide once the
+    // zoom is in, and walking all of that to fill one screenful is most of the
+    // work a close-in lane was doing.
+    final from = math.max(
+        math.max(0.0, left), (held.startSeconds - originSeconds) / secondsPerPixel);
+    final to = math.min(
+        math.min(size.width, right),
+        (held.endSeconds - originSeconds) / secondsPerPixel);
     if (!(to > from)) return;
 
     final bands = _bandOrder;
@@ -298,6 +335,15 @@ class WaveformPainter extends CustomPainter {
     final buckets = held.buckets;
     final span = held.endSeconds - held.startSeconds;
     final curved = style.sqrtScale;
+    // Every column of a band goes into one list and is drawn in one call.
+    // A line at a time is a draw call per column per band, and a lane is a
+    // couple of thousand columns wide: ten stacked lanes came to sixty
+    // thousand calls a frame, which is what made the Audio workspace crawl.
+    // The picture is the same one, said in a way the rasteriser can take in a
+    // single bite.
+    final room = (to.ceil() - from.floor() + 1) * 4;
+    final bodyLines = Float32List(room);
+    final coreLines = stacked ? null : Float32List(room);
 
     for (var drawn = 0; drawn < bands.length; drawn++) {
       final band = bands[drawn].band;
@@ -314,6 +360,8 @@ class WaveformPainter extends CustomPainter {
       final core = Paint()
         ..color = colour
         ..strokeWidth = 1;
+      var bodyAt = 0;
+      var coreAt = 0;
 
       for (var x = from.floorToDouble(); x < to; x += 1) {
         final seconds = originSeconds + (x + 0.5) * secondsPerPixel;
@@ -326,32 +374,37 @@ class WaveformPainter extends CustomPainter {
         final hi = _level(held.values[base + 1].clamp(-1.0, 1.0), curved);
         final rms = _level(held.values[base + 2].clamp(0.0, 1.0), curved);
         if (lo == 0 && hi == 0 && rms == 0) continue;
+        bodyLines[bodyAt++] = x + 0.5;
         if (style.fromBottom) {
           // Rectified: the column reaches up by how far the signal swung
           // either way, whichever was further.
           final amp = math.max(hi.abs(), lo.abs());
-          canvas.drawLine(
-            Offset(x + 0.5, floor),
-            Offset(x + 0.5, floor - amp * reach),
-            body,
-          );
+          bodyLines[bodyAt++] = floor;
+          bodyLines[bodyAt++] = x + 0.5;
+          bodyLines[bodyAt++] = floor - amp * reach;
         } else {
-          canvas.drawLine(
-            Offset(x + 0.5, floor - hi * reach),
-            Offset(x + 0.5, floor - lo * reach),
-            body,
-          );
+          bodyLines[bodyAt++] = floor - hi * reach;
+          bodyLines[bodyAt++] = x + 0.5;
+          bodyLines[bodyAt++] = floor - lo * reach;
         }
         // The energy inside the envelope: what tells a sustained note from a
         // spike that happens to reach the same height. The stack says that
         // with its own brightness, so only the single wave draws it.
-        if (!stacked && rms > 0) {
-          canvas.drawLine(
-            Offset(x + 0.5, floor - rms * reach),
-            Offset(x + 0.5, style.fromBottom ? floor : floor + rms * reach),
-            core,
-          );
+        if (coreLines != null && rms > 0) {
+          coreLines[coreAt++] = x + 0.5;
+          coreLines[coreAt++] = floor - rms * reach;
+          coreLines[coreAt++] = x + 0.5;
+          coreLines[coreAt++] =
+              style.fromBottom ? floor : floor + rms * reach;
         }
+      }
+      if (bodyAt > 0) {
+        canvas.drawRawPoints(ui.PointMode.lines,
+            Float32List.view(bodyLines.buffer, 0, bodyAt), body);
+      }
+      if (coreLines != null && coreAt > 0) {
+        canvas.drawRawPoints(ui.PointMode.lines,
+            Float32List.view(coreLines.buffer, 0, coreAt), core);
       }
     }
   }
