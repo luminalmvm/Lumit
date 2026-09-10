@@ -146,9 +146,13 @@ keep their taller bands, which is the point of those two.
 - **Audio** (the approved AudioWorkspace board): the **Mixer** panel fronting the left
   column over Project and Effect controls; the **Audio** panel taking the right column
   with Effects & presets tabbed behind; the Viewer reduced between them; the Timeline
-  taller than Edit with audio waveforms expanded by default. This is the v1 audio
-  surface — the future Composer workspace is specified in [09-AUDIO.md](09-AUDIO.md) and
-  deliberately not here.
+  taller than Edit with audio waveforms expanded by default. In the bottom band the
+  **Audio timeline** panel (§4.8) stands where the layer Timeline stands in every other
+  preset: rows of clips, with fades, crossfades and a rack per clip. A comp shown there is
+  mixed from then on: back in the picture edit its Audio layers stand behind the **Sound
+  mix** row.
+  This is the v1 audio surface - the future Composer workspace is specified in
+  [09-AUDIO.md](09-AUDIO.md) and deliberately not here.
 - **Retiming**: the arrangement for shaping how things move. The **Easing** panel
   takes the right-hand column outright — a bare pane, not tabbed, because the point of the
   panel over the popup is that it stays on screen while the selection changes underneath
@@ -1240,7 +1244,7 @@ the band's own row at the ruler's floor — the **cache bar**; then layer lanes.
 
 - **Markers ribbon**: comp markers (point or span) with labels; double-click the ruler's own
   ground creates one and opens its label editor (built, TI-9);
-  drag to move; markers snap. **Beat markers** (generated via the Audio panel, §12) render
+  drag to move; markers snap. **Beat markers** (generated via the Audio panel, §10) render
   in the same ribbon, visually distinct, and behave as first-class snap targets. Layer
   markers render on the layer's own row.
 - **Work area**: `B` and `N` set start/end at the playhead; drag the ends; double-click the
@@ -1445,7 +1449,27 @@ from Lumit's own icon set** wherever the set has the mark — visible/hidden,
 audio/muted, solo, lock/unlocked, and the twirl; the rest keep their Iconoir glyph until
 the set grows one. **Shy** is a real switch on the layer: it
 hides the row from this list while the toolbar's shy filter is on, and never changes what
-renders. **Guide** is the opposite pair: the layer draws in the Viewer as it always
+renders.
+
+**This outline has no sound filter.** Mixing is the **Audio timeline** panel's (§4.8),
+which lists what can be heard and dims a row that is a picture as well; this Timeline lists
+every layer in stack order whatever the workspace, and shy is its only filter. What it
+keeps is the **Sound mix** row, which stands once the comp has been mixed - edited in the
+Audio timeline, whose first edit marks the comp (`sound_mix`, 03 §4) - and not before: a row pinned at
+the foot of both halves of the table, two lanes tall, drawing the comp's mix - every layer
+through its fader, the master and the limiter, read off the plan the engine is playing -
+with the master fader's dB well beside it, a count of the Audio layers, and a twirl. A
+mixed comp keeps its Audio layers out of the stack, behind the row; the twirl brings them
+back for a look and the next mount forgets. A comp that has never been to the Audio
+timeline shows no row and keeps its Audio layers in the stack. A double click on the row
+applies the Audio workspace; a right click offers **Open Audio workspace** and **Convert to
+precomp**, which builds one nested comp per Audio layer with one layer per clip inside a
+mix comp named *Sound mix*, leaves the mix's Precomp layer selected in the stack and takes
+the row away, in one undo step. There is no
+way back from a precomp to a mix. The row is not a layer and never enters
+the stack's arithmetic: a drag, a drop, a razor and a reorder cannot land on it. Which
+rows are on screen is never what a reorder counts by - a drop takes the place of the
+layer in the slot, whichever rows a filter has hidden. **Guide** is the opposite pair: the layer draws in the Viewer as it always
 did and no file Lumit writes contains it, at any depth and whatever the solos say.
 **Shipped:** its cell is the sixth in the switches group, beside shy, drawn on
 every layer kind — any layer can be reference-only — with the set's own Guide
@@ -1687,7 +1711,10 @@ A Sequence layer's row renders its clips back-to-back (glossary §2):
 - Each clip block shows its source name, a **speed readout** (single percentage for constant
   speed, `100→20%` style for ramps), and thumbnail strips when row height allows.
 - **Edit points** between clips are draggable (roll). Dragging a clip body slides it and its
-  neighbours' edit points never overlap; clips never overlap by definition.
+  neighbours' edit points never overlap; clips on a layer that draws a picture never overlap
+  either, because one frame shows one clip, so a drop on a neighbour overwrites it. Only an
+  audio-only layer's clips may overlap, and that is a crossfade, edited in the Audio
+  timeline (§4.8).
 - **Overrun hatching**: when a clip's Retime requests source beyond the media (glossary §4),
   the affected span renders with a hatched overlay and the boundary frame holds. Overrun
   MUST never move edit points. Context menu offers *Trim to source end* explicitly.
@@ -1978,6 +2005,78 @@ two, and `Shift+=`.
 - There is **no ripple mode anywhere**: nothing moves unless the user moves it.
 - Multi-selection supports all of the above; relative offsets are preserved.
 - Every destructive-feeling action (razor, delete, retime reset) is a single undo step.
+
+### 4.8 The Audio timeline panel
+
+A second timeline, for sound only. It takes the Timeline's place in the Audio preset
+(§1.6) and the Window menu offers it anywhere. The binding *how* is
+[impl/audio-timeline.md](impl/audio-timeline.md); what follows is what it MUST do.
+
+**Its rows are called tracks in what the user reads** (glossary §9's one scoped
+exception). A row is a Sequence layer with `audio_only` set, or a plain Audio layer,
+which is a row of one clip; this section says row, because that is what one is.
+
+- The panel MUST list, in stack order, every layer that can make a sound: an Audio layer,
+  a Sequence layer that draws nothing, footage that carries sound, and a Precomp or
+  Sequence layer with sound in it. A row that is a **picture** as well MUST be drawn
+  dimmed and take no pointer, wearing one button, **Detach audio**, in place of its
+  lane-mode chip; detaching puts its sound on a row of its own and the picture row leaves
+  the list. A muted row stays listed: mute is a mixing decision.
+- A row starts two lane rows tall, grows by the rows its twirls open, and MAY be dragged
+  taller at its outline edge, up to eight, as this panel's own state. Its
+  outline cell carries mute, solo, an **fx** switch, the twirl, the number, the name, and
+  at the right edge a chip cycling **Wave** and **Spectral**. The switches MUST be the
+  Timeline's own switch cells, so pressing one is the same edit and the same undo step.
+  The lane mode is this panel's own state per row and MUST NOT move a lane in the
+  Timeline. A press on the row selects the layer and Enter renames it in place, with the
+  Timeline's rename field. The outline MUST draw the lane half's row hairlines, and above
+  its column header MUST stand the Timeline's chrome strip: timecode, frame count and the
+  search box filtering rows by name, without LAYERS and GRAPH.
+- The twirl MUST open onto the row's **Volume** row, keyed at the path the Timeline keys
+  it, then an **Effects** heading carrying an add-effect glyph for the row's own rack,
+  with the rack's parameter rows under it. There is no Audio
+  heading and no Waveform row: the wave is on the lane, under the Volume rubber band,
+  which writes the same `volume_db` every other control writes.
+- **A clip** is a box on its row in the row's label colour, with a header strip carrying
+  the colour box, the source's name, an **fx** toggle, an **add effect** button filtered
+  to audio effects, and a twirl; across it lies a **gain line** at the clip's own gain,
+  dragged up and down, under which the fades' ramps rise; below the strip it draws its
+  own wave or spectrogram, on a square-root scale of its level, in
+  its placed time, so a slid clip carries its picture with it. A clip has no colour of its
+  own. A click selects it, Escape and a click on empty ground clear it, `Delete` deletes
+  it, and the razor cuts it where the pointer is.
+- **Gestures on a clip** MUST snap through the Timeline's own snap module with `Ctrl`
+  suspending it, MUST abandon on Escape, and MUST commit once on release: the body slides
+  the clip, a drag into another row moves it there, a drop below the last row gives it a
+  row of its own, either edge trims, and either **top corner** drags a fade in from that
+  end. Dragging a corner back to the edge removes the fade. Inside an overlap the corner
+  drags the clip's edge instead, because there the overlap **is** the fade. A head trim
+  MUST snap at the source's start and a tail trim at its end, and the edges of every clip
+  on a row MUST be hit before any clip's body, so a crossfade's earlier clip keeps its
+  tail to trim. While a drag is on, every part of the box MUST move with it.
+- **An overlap is a crossfade**, and the only place in Lumit where two clips may share
+  time (§4.4, 03 §5.3). A drop or a drag onto a neighbour here MUST keep both, overlapped,
+  where the same edit on a picture row overwrites. The two clips' stored shapes are what
+  the crossfade takes from each; the default pair holds its level.
+- **Fades** MUST offer the five named shapes (Linear, Fast, Slow, Smooth, Sharp) on a
+  right click, and **Custom**, which opens a two-curve box: the outgoing clip's curve
+  falling, the incoming clip's rising, a draggable pair of handles on each, and a **Keep
+  level** tick, on by default, that puts the power complement of a dragged curve on the
+  other so the join stays as loud as it was. A lone fade shows one curve and no tick.
+- **A clip's twirl** MUST grow the row's block by rows drawn under it: a heading with the
+  clip's name, a heading per effect on the clip and its parameter rows under each open
+  one, each with its keyframe lane. Several clips MAY stand open at once. A clip's
+  keyframes are in **clip time** and ride with the clip when it is slid.
+- **Footage dropped** on a row becomes a clip there, overlapping what it lands on; dropped
+  on empty ground it becomes a new Audio layer. Footage with a picture still becomes a
+  picture layer, and so shows dimmed until its audio is detached.
+- The panel MUST keep its own zoom, scroll, twirls and lane modes, MUST read the
+  composition off the held model rather than the engine on every build, and MUST claim
+  `Delete`, copy, paste and the easing apply slot **only while it holds the keys**, so it
+  and the Timeline can stand on screen together.
+- **What it does not do**: no stack lane mode, no per-clip colour, no automated clip
+  gain, no ripple, no per-clip mute or solo, and no Sound mix row. The master is the
+  Mixer's.
 
 ---
 

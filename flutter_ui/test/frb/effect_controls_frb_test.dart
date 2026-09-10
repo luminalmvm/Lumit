@@ -19,7 +19,13 @@ import 'package:lumit_flutter/state/clipboard.dart';
 import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
 import 'package:lumit_flutter/panels/fx_section.dart';
 import 'package:lumit_flutter/panels/effect_param_row_frb.dart'
-    show effectLabelOf, EffectParamRowFrb, EffectPointRowFrb;
+    show
+        effectLabelOf,
+        logSliderTravel,
+        logSliderUsable,
+        logSliderValue,
+        EffectParamRowFrb,
+        EffectPointRowFrb;
 import 'package:lumit_flutter/state/dropper.dart' show DropperSample;
 import 'package:lumit_flutter/icons/lumit_icon.dart';
 import 'package:lumit_flutter/theme/theme.dart';
@@ -1796,6 +1802,119 @@ void main() {
       );
     });
 
+    /// A sequenced row cut in two, a second sequenced row beside it, and an
+    /// effect to hang a clip picker off. The clips are what the picker lists;
+    /// the second row is there to be left out of it.
+    ({
+      LumitState state,
+      LumitUiState uiState,
+      LayerReference layer,
+      UuidValue effect,
+    }) withClips() {
+      final p = withLayer();
+      final comp = p.uiState.selectedComp!;
+      p.layer.convertToSequenced();
+      p.layer.cutClipAt(frame: 40);
+      final other = p.state.project!.importFootage(path: 'C:/clips/other.mov');
+      comp.addFootageLayer(footage: other, asSequence: true);
+      p.uiState.model.refresh();
+      // Somewhere to write to: an ordinary instance, whose values the row's
+      // writes land in.
+      p.layer.addEffect(name: 'blur');
+      return (
+        state: p.state,
+        uiState: p.uiState,
+        layer: p.layer,
+        effect: p.layer.getEffects().single.id(),
+      );
+    }
+
+    /// The clip row under test, with `siblings` standing in for the rest of
+    /// the effect: on Audio level that is the Audio row above it.
+    Widget clipRow(
+      ({
+        LumitState state,
+        LumitUiState uiState,
+        LayerReference layer,
+        UuidValue effect,
+      }) p,
+      Map<String, BridgeEffectValue> siblings,
+      void Function(BridgeEffectValue) onWrite,
+    ) =>
+        hostPanel(
+          state: p.state,
+          uiState: p.uiState,
+          child: EffectParamRowFrb(
+            effectId: p.effect,
+            param: const BridgeParamInfo(
+              id: 'clip',
+              label: 'Clip',
+              kind: BridgeParamKind.clip(),
+              unit: BridgeUnit.raw,
+            ),
+            value: const BridgeEffectValue.clip(),
+            comp: p.uiState.selectedComp!,
+            playheadFrame: 0,
+            onSeek: (_) {},
+            onWrite: (_, __, v) => onWrite(v),
+            onLive: (_, __, ___) {},
+            ownerLayerId: p.layer.internallayerId,
+            ownerLayers: p.uiState.model.layers,
+            siblings: siblings,
+          ),
+        );
+
+    /// **A clip picker offers the clips of the layer its own Layer row names,
+    /// and nobody else's** (docs/impl/audio-nodes.md §3, plan 4).
+    ///
+    /// A clip belongs to a layer, so a row cannot reach across and name a clip
+    /// on another one. Two cuts of the same file are two entries, because an
+    /// entry is what it plays *and* where it starts.
+    testWidgets('a clip row lists only the named layer\'s clips',
+        (tester) async {
+      final p = withClips();
+      BridgeEffectValue? written;
+      await tester.pumpWidget(clipRow(
+        p,
+        {'audio': BridgeEffectValue.layer(p.layer.internallayerId)},
+        (v) => written = v,
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(ValueKey<String>('fx-clip-${p.effect}-clip')));
+      await tester.pumpAndSettle();
+      expect(find.text('shot.mov · 0'), findsOneWidget);
+      expect(find.text('shot.mov · 40'), findsOneWidget);
+      expect(find.textContaining('other.mov'), findsNothing,
+          reason: 'a clip on another layer is not this row\'s to name');
+
+      await tester.tap(find.text('shot.mov · 40').last);
+      await tester.pumpAndSettle();
+      final clips = p.layer.getClips()
+        ..sort((a, b) => a.startFrame.compareTo(b.startFrame));
+      expect(
+        written,
+        isA<BridgeEffectValue_Clip>()
+            .having((v) => v.field0, 'clip', clips[1].id),
+        reason: 'picking a clip writes that clip, as a Clip value',
+      );
+    });
+
+    /// **No layer, no clips.** A clip picker whose Layer row names nothing has
+    /// nothing to offer, and says why rather than opening on an empty list,
+    /// which would read as a layer with no clips on it.
+    testWidgets('a clip row with no layer named says so', (tester) async {
+      final p = withClips();
+      await tester.pumpWidget(clipRow(p, const {}, (_) {}));
+      await tester.pumpAndSettle();
+      expect(find.text('Choose a layer first'), findsOneWidget);
+
+      await tester.tap(find.byKey(ValueKey<String>('fx-clip-${p.effect}-clip')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('shot.mov'), findsNothing,
+          reason: 'without a layer there are no clips to name');
+    });
+
     // -----------------------------------------------------------------------
     // A pick is a typed value, not a reset.
     // -----------------------------------------------------------------------
@@ -2739,4 +2858,37 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
     // Without the built library there is nothing to test against; the harness
     // throws with the command to run.
   }, skip: !engineAvailable);
+
+  // The logarithmic slider's own arithmetic, which needs no engine: a
+  // frequency row spends half its travel in the bottom decade or the control
+  // is useless (docs/impl/audio-effects.md §2).
+  group('Logarithmic slider travel', () {
+    test('the ends are the ends and the middle is the geometric mean', () {
+      expect(logSliderValue(0, 20, 20000), closeTo(20, 1e-9));
+      expect(logSliderValue(1, 20, 20000), closeTo(20000, 1e-6));
+      // sqrt(20 x 20000) = 632.45..., which is what half the travel buys.
+      expect(logSliderValue(0.5, 20, 20000), closeTo(632.4555, 1e-3));
+    });
+
+    test('travel and value are inverses of one another', () {
+      for (final hz in [20.0, 100.0, 1000.0, 4400.0, 20000.0]) {
+        final t = logSliderTravel(hz, 20, 20000);
+        expect(logSliderValue(t, 20, 20000), closeTo(hz, 1e-6),
+            reason: 'the thumb comes back to \$hz');
+      }
+    });
+
+    test('a range through zero falls back to linear rather than a NaN', () {
+      expect(logSliderUsable(0, 100), isFalse);
+      expect(logSliderValue(0.5, 0, 100), closeTo(50, 1e-9));
+      expect(logSliderTravel(50, 0, 100), closeTo(0.5, 1e-9));
+      expect(logSliderValue(0.25, -1, 1), closeTo(-0.5, 1e-9));
+    });
+
+    test('anything off the ends is held at them', () {
+      expect(logSliderTravel(1, 20, 20000), 0);
+      expect(logSliderTravel(1e9, 20, 20000), 1);
+      expect(logSliderValue(2, 20, 20000), closeTo(20000, 1e-6));
+    });
+  });
 }

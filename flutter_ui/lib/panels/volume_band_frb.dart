@@ -39,6 +39,23 @@ const double volumeBandTopDb = 12;
 /// −100 knee reads "−inf" anyway; pixels spent below it say nothing.
 const double volumeBandFloorDb = -60;
 
+/// The y a band [height] pixels tall draws [db] at, [topDb] a pixel in from the
+/// top and the floor a pixel off the bottom.
+///
+/// Top-level, and taking its top, because a clip's gain line on the Audio
+/// timeline is this same scale read from 0 dB down: the two draw one shape and
+/// so are one mapping (docs/impl/audio-timeline.md §5).
+double volumeBandY(double db, double height, {double topDb = volumeBandTopDb}) {
+  final span = topDb - volumeBandFloorDb;
+  final unit = ((topDb - db) / span).clamp(0.0, 1.0);
+  return 1 + unit * (height - 2);
+}
+
+/// The dB such a band reads at [y], which is [volumeBandY] the other way round.
+double volumeBandDbOfY(double y, double height,
+        {double topDb = volumeBandTopDb}) =>
+    topDb - (y - 1) / (height - 2) * (topDb - volumeBandFloorDb);
+
 /// The layer's Volume as a band over its waveform lane.
 class VolumeBand extends StatefulWidget {
   final BridgeLayerEntry entry;
@@ -95,18 +112,9 @@ class VolumeBandState extends State<VolumeBand> {
         _ => 0,
       };
 
-  /// dB → the lane row's y, [volumeBandTopDb] a pixel in from the top and
-  /// the floor a pixel off the bottom.
-  double _y(double db) {
-    final span = volumeBandTopDb - volumeBandFloorDb;
-    final unit = ((volumeBandTopDb - db) / span).clamp(0.0, 1.0);
-    return 1 + unit * (widget.rowHeight - 2);
-  }
+  double _y(double db) => volumeBandY(db, widget.rowHeight);
 
-  double _dbOfY(double y) {
-    final span = volumeBandTopDb - volumeBandFloorDb;
-    return volumeBandTopDb - (y - 1) / (widget.rowHeight - 2) * span;
-  }
+  double _dbOfY(double y) => volumeBandDbOfY(y, widget.rowHeight);
 
   /// A key's x, on the comp clock its times cross in, carried along
   /// by a bar move in flight.

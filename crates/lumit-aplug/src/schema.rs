@@ -231,6 +231,9 @@ fn kind_of(param: &ParamDescription) -> ParamKind {
     ParamKind::Slider {
         default,
         range: (min, max),
+        // Neither standard says a parameter is logarithmic, so a plugin's row
+        // is drawn as the plugin describes it: linear travel over its range.
+        log: false,
     }
 }
 

@@ -495,6 +495,7 @@ fn add_comp(project: &ProjectReference, name: &str) -> CompositionReference {
 
     let comp = lumit_core::model::Composition {
         master_volume_db: 0.0,
+        sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
         id: Uuid::now_v7(),
@@ -1219,7 +1220,7 @@ fn every_effect_value_kind_round_trips_through_the_document() {
             .set_value(id.clone(), value)
             .unwrap_or_else(|e| panic!("every kind writes: {id} answered {e}"));
     }
-    layer.set_effects(staged).expect("committed");
+    layer.set_effects(staged, None).expect("committed");
 
     assert_eq!(stack_of(&layer), vec![original]);
 }
@@ -1249,7 +1250,7 @@ fn a_shader_graph_commits_detaches_one_way_and_undoes_whole() {
     // One staged write, one commit, one undo step.
     let mut staged = layer.get_effects().expect("stack");
     staged[0].set_shader_graph(graph).expect("a graph document");
-    layer.set_effects(staged).expect("committed");
+    layer.set_effects(staged, None).expect("committed");
 
     let held = stack_of(&layer);
     let block = held[0].extra.get("shader").expect("the block");
@@ -1267,7 +1268,7 @@ fn a_shader_graph_commits_detaches_one_way_and_undoes_whole() {
     assert!(staged[0].shader_graph().is_some());
     staged[0].detach_shader_graph();
     assert!(staged[0].shader_graph().is_none());
-    layer.set_effects(staged).expect("committed");
+    layer.set_effects(staged, None).expect("committed");
     let held = stack_of(&layer);
     let block = held[0].extra.get("shader").expect("the block");
     assert!(
@@ -1364,7 +1365,7 @@ fn an_old_instance_reaches_a_parameter_its_schema_grew_later() {
             BridgeEffectValue::Float(BridgeScalar::Static(30.0)),
         )
         .expect("a grown parameter must be writable");
-    layer.set_effects(staged).expect("committed");
+    layer.set_effects(staged, None).expect("committed");
 
     let after = stack_of(&layer);
     let stored = after[0]
@@ -1799,7 +1800,7 @@ fn committing_a_staged_stack_that_no_longer_matches_the_document_is_refused() {
         .expect("removed behind the panel's back");
 
     assert!(matches!(
-        layer.set_effects(staged),
+        layer.set_effects(staged, None),
         Err(BridgeError::StaleEffectStack)
     ));
     assert_eq!(
@@ -2109,7 +2110,8 @@ fn a_closed_range_and_a_curve_each_cross_as_their_own_kind() {
                 default,
                 min,
                 max,
-            } if default == 50.0 && min == 0.0 && max == 100.0
+                log,
+            } if default == 50.0 && min == 0.0 && max == 100.0 && !log
         ),
         "a closed range crosses as a Slider carrying that range, got {:?}",
         completion.kind
@@ -2937,7 +2939,7 @@ fn an_effect_on_a_null_layer_keeps_its_animated_value() {
     staged[0]
         .set_value("radius".into(), BridgeEffectValue::Float(keys))
         .expect("a Null's parameter takes a value like any other");
-    null.set_effects(staged).expect("committed");
+    null.set_effects(staged, None).expect("committed");
 
     // Read it back and sample it: halfway along the ramp is five, on a layer
     // that will never draw a pixel.
@@ -2988,7 +2990,7 @@ fn a_copied_layer_pastes_whole_and_lands_at_the_playhead() {
             BridgeEffectValue::Float(BridgeScalar::Keyframed(vec![key(0, 0.0), key(2, 40.0)])),
         )
         .expect("animated");
-    source.set_effects(staged).expect("committed");
+    source.set_effects(staged, None).expect("committed");
 
     let text = source.copy_layer().expect("copied");
 
@@ -3097,7 +3099,7 @@ fn a_pasted_effect_starts_its_animation_at_the_playhead() {
             BridgeEffectValue::Float(BridgeScalar::Keyframed(vec![key(4, 0.0), key(5, 40.0)])),
         )
         .expect("animated");
-    source.set_effects(staged).expect("committed");
+    source.set_effects(staged, None).expect("committed");
 
     let text = source.copy_effects(Vec::new()).expect("copied");
     let target = comp.add_solid_layer(None).expect("somewhere to paste");
@@ -4074,6 +4076,460 @@ fn precompose_refuses_nothing_and_survives_a_stray_reference() {
     .expect("precomposed");
     assert_eq!(comp.get_layers().expect("layers").len(), 1);
     assert_eq!(other.get_layers().expect("layers").len(), 1);
+}
+
+/// Converting the mix to a precomp, the two-level pack
+/// (docs/impl/audio-timeline.md §2, plan 13): a comp per audio row holding one
+/// layer per clip, a mix comp holding one Precomp layer per row, one Precomp
+/// layer where the topmost row stood, the mark off, and one undo for the lot.
+#[test]
+fn precompose_sound_mix_nests_a_comp_per_row_and_clears_the_mark() {
+    use crate::api::layer::{BridgeFadeShape, BridgeLayerKind, BridgeSpan};
+    use lumit_core::model::{Layer, LayerKind};
+
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let comp = project.new_composition("Scene".into(), None).expect("comp");
+    let footage = project
+        .import_footage("C:/clips/music.wav".into())
+        .expect("imported");
+    let solid = comp.add_solid_layer(None).expect("solid");
+
+    // A bare Audio layer, trimmed a second in and slid half a second back,
+    // faded up with the Audio panel's own command, which is Volume keys.
+    comp.add_audio_layer(&footage).expect("a bare Audio layer");
+    let plain = comp.get_layers().expect("layers").remove(0);
+    plain.rename("Voice".into()).expect("named");
+    let span = plain.get_span().expect("span");
+    plain
+        .set_span(BridgeSpan {
+            in_point: BridgeRational { num: 1, den: 1 },
+            out_point: span.out_point,
+            start_offset: BridgeRational { num: 1, den: 2 },
+        })
+        .expect("trimmed and slid");
+    plain
+        .fade_in(0.5, BridgeFadeShape::Ease)
+        .expect("faded up from silence");
+
+    // A row of two clips that overlap, so the join is a crossfade nothing
+    // but the row's own clip list can see, and a rack of its own.
+    comp.add_audio_layer(&footage).expect("one to make a row");
+    let row = comp.get_layers().expect("layers").remove(0);
+    row.convert_to_sequenced().expect("a row of clips");
+    let row = comp.get_layers().expect("layers").remove(0);
+    row.rename("Music".into()).expect("named");
+    let first = row.get_clips().expect("clips").remove(0);
+    row.add_clip(&footage, (first.start_frame + first.end_frame) / 2, true)
+        .expect("a second clip, landing on the first");
+    // And the first slid past the second, so the row is stored out of time
+    // order and the layers have to be put back into it.
+    row.slide_clip(first.id, first.end_frame, true)
+        .expect("slid past the second");
+    row.add_effect("blur".into()).expect("a rack on the row");
+
+    // What the two rows held before the pack, off the document itself.
+    let snapshot = || {
+        let state = project.state().expect("state");
+        let state = state.read().expect("read");
+        state.store.snapshot()
+    };
+    let doc = snapshot();
+    let scene = doc.comp(comp.id).expect("the scene");
+    let row_before = scene.layers[0].clone();
+    let plain_before = scene.layers[1].clone();
+    let LayerKind::Sequence {
+        clips: clips_before,
+    } = row_before.kind.clone()
+    else {
+        panic!("the row is a list of clips");
+    };
+    assert_eq!(clips_before.len(), 2);
+    assert!(
+        clips_before[0].place_start > clips_before[1].place_start,
+        "the clips are stored in the order they were made, not in time order"
+    );
+    assert!(
+        matches!(
+            plain_before.volume_db.animation,
+            lumit_core::anim::Animation::Keyframed(_)
+        ),
+        "the panel's fade left Volume keys to carry across"
+    );
+
+    assert!(!comp.sound_mix().expect("mark"), "a comp opens unmixed");
+    comp.set_sound_mix(true).expect("marked");
+    let packed = comp.precompose_sound_mix("Mix".into()).expect("packed");
+
+    // The solid stays, and the Precomp stands at the index the topmost row
+    // had rather than jumping to the front.
+    let after = comp.get_layers().expect("layers");
+    assert_eq!(after.len(), 2);
+    assert_eq!(after[0].layer_id, packed.layer_id);
+    assert_eq!(after[1].layer_id, solid.layer_id);
+    assert_eq!(
+        packed.get_kind().expect("kind"),
+        BridgeLayerKind::Audio,
+        "the mix holds sound and nothing else, so its layer is an Audio row"
+    );
+    assert!(!comp.sound_mix().expect("mark"), "and the mark comes off");
+
+    let doc = snapshot();
+    let scene = doc.comp(comp.id).expect("the scene");
+    let nested = |layer: &Layer| match layer.kind {
+        LayerKind::Precomp { comp } => comp,
+        _ => panic!("a Precomp layer"),
+    };
+    let one_clip = |layer: &Layer| match &layer.kind {
+        LayerKind::Sequence { clips } if clips.len() == 1 => clips[0].clone(),
+        _ => panic!("one clip on a layer of its own"),
+    };
+
+    // The mix comp: one Precomp layer per row, in the order the rows stood
+    // in, each carrying its row's name, clock, gain, label and switches.
+    let mix = doc.comp(nested(&scene.layers[0])).expect("the mix comp");
+    assert_eq!(mix.layers.len(), 2);
+    assert_eq!(mix.layers[0].name, "Music");
+    assert_eq!(mix.layers[1].name, "Voice");
+    assert_eq!(mix.layers[1].in_point, plain_before.in_point);
+    assert_eq!(mix.layers[1].out_point, plain_before.out_point);
+    assert_eq!(mix.layers[1].start_offset, plain_before.start_offset);
+    assert_eq!(
+        mix.layers[1].volume_db, plain_before.volume_db,
+        "the fade rides on the row's own Precomp layer, keys and clock alike"
+    );
+    assert_eq!(mix.layers[0].switches, row_before.switches);
+    assert_eq!(mix.layers[0].label, row_before.label);
+
+    // The row comp: one layer per clip, earliest first, each placed where
+    // the clip was placed and each carrying a copy of the row's rack.
+    let music = doc.comp(nested(&mix.layers[0])).expect("the row comp");
+    assert_eq!(music.layers.len(), 2);
+    let early = one_clip(&music.layers[0]);
+    let late = one_clip(&music.layers[1]);
+    assert!(
+        early.place_start < late.place_start,
+        "earliest first, because that is the order the mixer reads a row in"
+    );
+    assert_eq!(early.place_start, clips_before[1].place_start);
+    assert_eq!(late.place_start, clips_before[0].place_start);
+    assert_eq!(music.layers[0].in_point.0, early.place_start);
+    assert_eq!(music.layers[0].out_point.0, early.place_end());
+    assert_eq!(music.layers[0].start_offset.0, lumit_core::Rational::ZERO);
+
+    // The crossfade is baked, because a clip alone on a row has no neighbour
+    // left to read the join off.
+    let overlap = early
+        .place_end()
+        .checked_sub(late.place_start)
+        .expect("the two clips overlap");
+    assert!(overlap > lumit_core::Rational::ZERO);
+    assert_eq!(late.fade_in.seconds, overlap);
+    assert_eq!(early.fade_out.seconds, overlap);
+
+    assert_eq!(row_before.effects.len(), 1);
+    for layer in &music.layers {
+        assert_eq!(layer.effects.len(), 1, "the rack is on the clips");
+        assert_eq!(layer.effects[0].effect, row_before.effects[0].effect);
+        assert_ne!(
+            layer.effects[0].id, row_before.effects[0].id,
+            "an instance is found by its id alone, so no two may share one"
+        );
+    }
+    assert_ne!(music.layers[0].effects[0].id, music.layers[1].effects[0].id);
+
+    // A bare Audio layer is one clip, and it goes in the same way.
+    let voice = doc
+        .comp(nested(&mix.layers[1]))
+        .expect("the bare layer's comp");
+    assert_eq!(voice.layers.len(), 1);
+    let only = one_clip(&voice.layers[0]);
+    assert_eq!(only.place_start, only.source_in, "placed where it is read");
+
+    for made in [mix, music, voice] {
+        assert!(!made.sound_mix, "there is no road back from a precomp");
+    }
+
+    // One undo group, so one step puts the layers and the row back.
+    project.undo().expect("undo");
+    let back = comp.get_layers().expect("layers");
+    assert_eq!(back.len(), 3);
+    assert_eq!(back[0].layer_id, row.layer_id);
+    assert_eq!(back[1].layer_id, plain.layer_id);
+    assert_eq!(back[2].layer_id, solid.layer_id);
+    assert!(comp.sound_mix().expect("mark"), "the row is back too");
+
+    // A pack with no name to file is refused, and so is a comp with nothing to
+    // pack, rather than either being given an empty comp.
+    assert!(matches!(
+        comp.precompose_sound_mix("  ".into()),
+        Err(BridgeError::EmptyName)
+    ));
+    let quiet = project.new_composition("Quiet".into(), None).expect("comp");
+    quiet.add_solid_layer(None).expect("solid");
+    assert!(matches!(
+        quiet.precompose_sound_mix("Mix".into()),
+        Err(BridgeError::InvalidLayer)
+    ));
+}
+
+/// **The pack must not change what the comp sounds like**
+/// (docs/impl/audio-timeline.md plan 13). The parent's mix is rendered frame by
+/// frame through the plan builder playback and the export both use, before the
+/// conversion and after it, and the two are the same samples: the baked
+/// crossfade, each clip's place and the Volume keys now riding on a Precomp
+/// layer all have to land where they landed.
+///
+/// **Needs the decoder**: there is nothing to mix without one.
+#[cfg(feature = "media")]
+#[test]
+fn the_packed_mix_plays_the_same_samples() {
+    use crate::api::layer::{BridgeFadeShape, BridgeSpan};
+    use std::collections::HashMap;
+    use std::sync::Arc;
+
+    const RATE: u32 = 8_000;
+
+    let dir = tempfile::tempdir().expect("temp dir");
+    let song = dir.path().join("song.wav");
+    std::fs::write(&song, click_wav()).expect("wrote the fixture");
+
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let comp = project.new_composition("Scene".into(), None).expect("comp");
+    let footage = project
+        .import_footage(song.to_string_lossy().into_owned())
+        .expect("imported");
+    comp.add_audio_layer(&footage).expect("a bare Audio layer");
+    let plain = comp.get_layers().expect("layers").remove(0);
+    if !plain.has_audio().expect("asked") {
+        // No decoder in this build, or none that reads the fixture: there is
+        // no sound in the document to pack, so there is no claim to test.
+        return;
+    }
+    let span = plain.get_span().expect("span");
+    plain
+        .set_span(BridgeSpan {
+            in_point: BridgeRational { num: 1, den: 1 },
+            out_point: span.out_point,
+            start_offset: BridgeRational { num: 1, den: 2 },
+        })
+        .expect("trimmed and slid");
+    plain
+        .fade_in(0.5, BridgeFadeShape::Ease)
+        .expect("faded up from silence");
+
+    comp.add_audio_layer(&footage).expect("one to make a row");
+    let row = comp.get_layers().expect("layers").remove(0);
+    row.convert_to_sequenced().expect("a row of clips");
+    let row = comp.get_layers().expect("layers").remove(0);
+    let first = row.get_clips().expect("clips").remove(0);
+    row.add_clip(&footage, (first.start_frame + first.end_frame) / 2, true)
+        .expect("a second clip, landing on the first");
+
+    let duration_s = {
+        let state = project.state().expect("state");
+        let state = state.read().expect("read");
+        let doc = state.store.snapshot();
+        doc.comp(comp.id).expect("the comp").duration.0.to_f64()
+    };
+    // Every frame of the comp's mix, through the plan the callback plays.
+    let mixed = || {
+        let jobs = audible_jobs(&project, &comp);
+        assert!(!jobs.is_empty(), "the comp has sound in it");
+        let mut decoded = HashMap::new();
+        for job in &jobs {
+            if let std::collections::hash_map::Entry::Vacant(slot) = decoded.entry(job.item) {
+                slot.insert(Arc::new(
+                    lumit_media::audio::decode_all(&job.path, RATE).expect("decoded"),
+                ));
+            }
+        }
+        let (plan, _strips) = crate::audio::build_plan(&jobs, &decoded, RATE, duration_s, 0.0);
+        (0..plan.total_frames)
+            .map(|i| plan.frame_at(i))
+            .collect::<Vec<_>>()
+    };
+
+    let before = mixed();
+    assert!(
+        before.iter().any(|&(l, r)| l != 0.0 || r != 0.0),
+        "the fixture is heard, so the comparison means something"
+    );
+
+    comp.set_sound_mix(true).expect("marked");
+    comp.precompose_sound_mix("Mix".into()).expect("packed");
+
+    assert!(
+        mixed() == before,
+        "the pack moved the sound about, it did not change it"
+    );
+}
+
+/// **A row that has become a row precomp still answers by the layer standing
+/// where it stood** (docs/impl/audio-nodes.md §2, plan 2). A driver pointed at
+/// an audio row reads it through the tap's filtered mix, and the pack turns
+/// that row into a Precomp layer inside a mix comp: the sound now arrives from
+/// two comps down, filed under the layer at the top, and the samples have to be
+/// the samples it gave before the pack.
+///
+/// **Needs the decoder**: there is nothing to read without one.
+#[cfg(feature = "media")]
+#[test]
+fn a_packed_audio_row_answers_strip_by_its_precomp_layer() {
+    use lumit_core::fx::AudioTap;
+
+    let dir = tempfile::tempdir().expect("temp dir");
+    let song = dir.path().join("song.wav");
+    std::fs::write(&song, click_wav()).expect("wrote the fixture");
+
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let comp = project.new_composition("Scene".into(), None).expect("comp");
+    let footage = project
+        .import_footage(song.to_string_lossy().into_owned())
+        .expect("imported");
+    comp.add_audio_layer(&footage).expect("a row");
+    let row = comp.get_layers().expect("layers").remove(0);
+    if !row.has_audio().expect("asked") {
+        // No decoder in this build, or none that reads the fixture: there is
+        // no sound to pack, so there is no claim to test.
+        return;
+    }
+
+    // What one row of the mix sounds like, through the tap a driver reads.
+    let heard = |layer: Uuid| {
+        let doc = {
+            let state = project.state().expect("state");
+            let state = state.read().expect("read");
+            state.store.snapshot()
+        };
+        let composition = doc.comp(comp.id).expect("the comp").clone();
+        let tap = lumit_render::audio_tap::DocumentAudio::new(&doc, &composition, 0.5);
+        let mut out = Vec::new();
+        let rate = tap.strip(Some(layer), None, 0.25, &mut out);
+        (rate, out)
+    };
+
+    let (rate, before) = heard(row.layer_id);
+    assert!(
+        rate.is_some(),
+        "the row is heard, so the comparison means something"
+    );
+    assert!(
+        before.iter().any(|s| s.abs() > 0.0),
+        "and it is sound, not silence"
+    );
+
+    comp.set_sound_mix(true).expect("marked");
+    let packed = comp.precompose_sound_mix("Mix".into()).expect("packed");
+
+    let (packed_rate, after) = heard(packed.layer_id);
+    assert_eq!(packed_rate, rate);
+    assert_eq!(
+        after, before,
+        "the pack moved the sound about, it did not change what the row reads"
+    );
+}
+
+/// **A solo has to survive the pack** (docs/impl/audio-timeline.md §2). While a
+/// row is soloed the mixer silences every other sound in the comp, so the
+/// layer left where the rows stood wears the solo they wore; without it the
+/// sound the solo was holding back comes back on. The layer is audio-only,
+/// which is what it is, and what keeps a soloed layer that draws nothing out of
+/// the picture's own solo count.
+///
+/// **Needs the decoder**: there is nothing to mix without one.
+#[cfg(feature = "media")]
+#[test]
+fn the_packed_mix_layer_is_audio_only_and_wears_the_solo() {
+    use crate::api::layer::{BridgeLayerKind, BridgeLayerSwitch};
+    use std::collections::HashMap;
+    use std::sync::Arc;
+
+    const RATE: u32 = 8_000;
+
+    let dir = tempfile::tempdir().expect("temp dir");
+    let song = dir.path().join("song.wav");
+    std::fs::write(&song, click_wav()).expect("wrote the fixture");
+
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let comp = project.new_composition("Scene".into(), None).expect("comp");
+    let footage = project
+        .import_footage(song.to_string_lossy().into_owned())
+        .expect("imported");
+
+    // Sound the pack leaves where it is: a Precomp layer is not an audio row,
+    // so this one stays in the parent and is heard, or not, by the solo's rule.
+    let bed = project.new_composition("Bed".into(), None).expect("comp");
+    bed.add_audio_layer(&footage).expect("sound in the bed");
+    comp.add_precomp_layer(&bed, None)
+        .expect("a layer that stays");
+
+    comp.add_audio_layer(&footage).expect("a row");
+    let row = comp.get_layers().expect("layers").remove(0);
+    if !row.has_audio().expect("asked") {
+        // No decoder in this build, or none that reads the fixture: nothing to
+        // silence and nothing to compare.
+        return;
+    }
+    row.set_switch(BridgeLayerSwitch::Solo, true)
+        .expect("soloed");
+
+    let duration_s = {
+        let state = project.state().expect("state");
+        let state = state.read().expect("read");
+        let doc = state.store.snapshot();
+        doc.comp(comp.id).expect("the comp").duration.0.to_f64()
+    };
+    // Every frame of the parent's mix, through the plan the callback plays.
+    let mixed = || {
+        let jobs = audible_jobs(&project, &comp);
+        assert_eq!(
+            jobs.len(),
+            1,
+            "the solo is what leaves one source of sound audible"
+        );
+        let mut decoded = HashMap::new();
+        for job in &jobs {
+            if let std::collections::hash_map::Entry::Vacant(slot) = decoded.entry(job.item) {
+                slot.insert(Arc::new(
+                    lumit_media::audio::decode_all(&job.path, RATE).expect("decoded"),
+                ));
+            }
+        }
+        let (plan, _strips) = crate::audio::build_plan(&jobs, &decoded, RATE, duration_s, 0.0);
+        (0..plan.total_frames)
+            .map(|i| plan.frame_at(i))
+            .collect::<Vec<_>>()
+    };
+
+    let before = mixed();
+    assert!(
+        before.iter().any(|&(l, r)| l != 0.0 || r != 0.0),
+        "the soloed row is heard, so the comparison means something"
+    );
+
+    comp.set_sound_mix(true).expect("marked");
+    let packed = comp.precompose_sound_mix("Mix".into()).expect("packed");
+
+    assert_eq!(
+        packed.get_kind().expect("kind"),
+        BridgeLayerKind::Audio,
+        "audio-only, so it draws nothing and no picture answers its solo"
+    );
+    assert!(
+        packed.get_switches().expect("switches").solo,
+        "a soloed row packed away leaves its solo on the layer replacing it"
+    );
+    assert!(
+        mixed() == before,
+        "the bed came back with the solo gone, so the pack changed the mix"
+    );
+
+    // Nothing soloed, nothing to carry: a layer born soloed would silence the
+    // comp around it instead.
+    let quiet = project.new_composition("Quiet".into(), None).expect("comp");
+    quiet.add_audio_layer(&footage).expect("a row");
+    let packed = quiet.precompose_sound_mix("Mix".into()).expect("packed");
+    assert!(!packed.get_switches().expect("switches").solo);
 }
 
 /// Leaving the attributes behind: the layer moves into the new comp stripped
@@ -5988,6 +6444,27 @@ fn sequenced_layer() -> (ProjectReference, CompositionReference, LayerReference)
     (project, comp, layer)
 }
 
+/// An **audio row**: an audio-only Sequence layer holding one clip, which is
+/// what the Audio timeline draws as a track (docs/impl/audio-timeline.md §2).
+/// The footage item comes back too, so a test can drop a second clip on it.
+fn audio_row() -> (
+    ProjectReference,
+    CompositionReference,
+    LayerReference,
+    FootageReference,
+) {
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let comp = project.new_composition("Scene".into(), None).expect("comp");
+    let footage = project
+        .import_footage("C:/clips/music.wav".into())
+        .expect("imported");
+    comp.add_audio_layer(&footage).expect("placed");
+    let layer = comp.get_layers().expect("layers").remove(0);
+    layer.convert_to_sequenced().expect("a row of clips");
+    let layer = comp.get_layers().expect("layers").remove(0);
+    (project, comp, layer, footage)
+}
+
 /// Re-speeding a clip keeps its place and pins its first frame — the two
 /// promises the whole editing surface rests on.
 #[test]
@@ -6057,7 +6534,7 @@ fn sliding_a_clip_moves_it_without_changing_it() {
     let length = before.end_frame - before.start_frame;
 
     layer
-        .slide_clip(before.id, before.start_frame + 5)
+        .slide_clip(before.id, before.start_frame + 5, false)
         .expect("slid");
     let after = layer.get_clips().expect("clips").remove(0);
     assert_eq!(after.start_frame, before.start_frame + 5);
@@ -6065,11 +6542,12 @@ fn sliding_a_clip_moves_it_without_changing_it() {
     assert_eq!(after.retimed, before.retimed, "and the same map");
 }
 
-/// Converting a **retimed** layer into a Sequence layer keeps its retiming,
-/// and converting back returns it — a round trip must leave the layer playing
-/// what it played.
+/// A **retimed** layer refuses to become clips: a retimed clip is silent
+/// (docs/09 §7), so converting one would take the layer's sound away
+/// (docs/impl/audio-timeline.md §2). Nothing is committed.
 #[test]
-fn converting_a_retimed_layer_both_ways_keeps_its_map() {
+fn a_retimed_layer_refuses_to_become_clips() {
+    use crate::api::layer::BridgeLayerKind;
     let project = LumitBridgeState::new_project(None).expect("a new project");
     let comp = project.new_composition("Scene".into(), None).expect("comp");
     let footage = project
@@ -6080,23 +6558,502 @@ fn converting_a_retimed_layer_both_ways_keeps_its_map() {
     let layer = comp.get_layers().expect("layers").remove(0);
 
     layer.toggle_retime_property().expect("retimed");
-    let before = layer.get_retime_property().expect("read").expect("a map");
+    assert!(matches!(
+        layer.convert_to_sequenced(),
+        Err(BridgeError::RetimedLayer)
+    ));
+    assert_eq!(
+        layer.get_kind().expect("kind"),
+        BridgeLayerKind::Footage,
+        "still the layer it was"
+    );
+
+    // The way back is untouched: a clip's own map still comes home.
+    let (_p, plain_comp, sequenced) = sequenced_layer();
+    let clip = sequenced.get_clips().expect("clips").remove(0);
+    sequenced
+        .set_clip_speed(clip.id, 200.0, 200.0)
+        .expect("ramped");
+    sequenced.convert_from_sequenced().expect("back");
+    let back = plain_comp.get_layers().expect("layers").remove(0);
+    assert!(back.get_retime_property().expect("read").is_some());
+}
+
+/// Converting keeps the sound: a layer trimmed at the front and slid about
+/// converts to a clip covering the same comp frames and reading the same
+/// moment of the same file, so the mixer builds the job it built before
+/// (docs/impl/audio-timeline.md §2).
+#[test]
+fn conversion_places_the_clip_at_the_layers_in_point() {
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let comp = project.new_composition("Scene".into(), None).expect("comp");
+    let footage = project
+        .import_footage("C:/clips/music.wav".into())
+        .expect("imported");
+    comp.add_audio_layer(&footage).expect("placed");
+    let layer = comp.get_layers().expect("layers").remove(0);
+
+    // A non-zero in point and a non-zero start offset, the state a trimmed
+    // and slid row is in.
+    let span = layer.get_span().expect("span");
+    let second = crate::api::effect::BridgeRational { num: 1, den: 1 };
+    layer
+        .set_span(crate::api::layer::BridgeSpan {
+            in_point: second,
+            out_point: span.out_point,
+            start_offset: crate::api::effect::BridgeRational { num: 1, den: 2 },
+        })
+        .expect("trimmed and slid");
+    let before = layer.get_info().expect("info");
 
     layer.convert_to_sequenced().expect("sequenced");
     let sequenced = comp.get_layers().expect("layers").remove(0);
-    let clip = sequenced.get_clips().expect("clips").remove(0);
+    let after = sequenced.get_info().expect("info");
+    assert_eq!(
+        (after.in_frame, after.out_frame),
+        (before.in_frame, before.out_frame),
+        "the row covers the frames it covered"
+    );
+    let clip = after.clips.first().expect("one clip");
+    assert_eq!(clip.start_frame, before.in_frame);
+    assert_eq!(clip.end_frame, before.out_frame);
+
+    // And it reads the source where the Footage layer read it: half a second
+    // in, the distance from the row's own zero to its in point.
+    let state = project.state().expect("state");
+    let state = state.read().expect("read");
+    let doc = state.store.snapshot();
+    let Some(lumit_core::model::ProjectItem::Composition(scene)) = doc.item(comp.id) else {
+        panic!("the comp");
+    };
+    let core = scene
+        .layers
+        .iter()
+        .find(|l| l.id == sequenced.id())
+        .expect("the row");
+    let lumit_core::model::LayerKind::Sequence { clips } = &core.kind else {
+        panic!("a sequence row");
+    };
+    let clip = clips.first().expect("one clip");
+    assert_eq!(
+        clip.source_in,
+        lumit_core::Rational::new(1, 2).expect("½ s")
+    );
+    assert_eq!(clip.place_start, clip.source_in, "placed where it is read");
+}
+
+/// The same row the test above builds, converted: an audio row whose clips do
+/// **not** start at the composition's zero, because the row was trimmed a
+/// second in and slid half a second back. Every frame the panel hands an edit
+/// is a comp frame, so this is the row that catches an edit that forgot the
+/// row's own start offset.
+fn offset_audio_row() -> (ProjectReference, CompositionReference, LayerReference) {
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let comp = project.new_composition("Scene".into(), None).expect("comp");
+    let footage = project
+        .import_footage("C:/clips/music.wav".into())
+        .expect("imported");
+    comp.add_audio_layer(&footage).expect("placed");
+    let layer = comp.get_layers().expect("layers").remove(0);
+    let span = layer.get_span().expect("span");
+    layer
+        .set_span(crate::api::layer::BridgeSpan {
+            in_point: crate::api::effect::BridgeRational { num: 1, den: 1 },
+            out_point: span.out_point,
+            start_offset: crate::api::effect::BridgeRational { num: 1, den: 2 },
+        })
+        .expect("trimmed and slid");
+    layer.convert_to_sequenced().expect("a row of clips");
+    let layer = comp.get_layers().expect("layers").remove(0);
+    (project, comp, layer)
+}
+
+/// A slide on an offset row travels the frames it was asked for, no more: the
+/// frame it is given is a comp frame and so is the clip's own start.
+#[test]
+fn sliding_a_clip_on_an_offset_row_travels_the_frames_asked() {
+    let (_project, _comp, layer) = offset_audio_row();
+    let before = layer.get_clips().expect("clips").remove(0);
+    let length = before.end_frame - before.start_frame;
+
+    layer
+        .slide_clip(before.id, before.start_frame + 5, false)
+        .expect("slid");
+    let after = layer.get_clips().expect("clips").remove(0);
+    assert_eq!(after.start_frame, before.start_frame + 5);
+    assert_eq!(after.end_frame - after.start_frame, length, "same length");
+}
+
+/// A trim on an offset row moves the edge that was dragged and leaves the
+/// other one where it was.
+#[test]
+fn trimming_a_clip_on_an_offset_row_moves_only_the_edge_dragged() {
+    let (_project, _comp, layer) = offset_audio_row();
+    let before = layer.get_clips().expect("clips").remove(0);
+    layer
+        .trim_clip(before.id, before.start_frame, before.end_frame - 10)
+        .expect("the end pulled in");
+    let after = layer.get_clips().expect("clips").remove(0);
+    assert_eq!(after.start_frame, before.start_frame, "the start held");
+    assert_eq!(after.end_frame, before.end_frame - 10);
+
+    let (_project, _comp, layer) = offset_audio_row();
+    let before = layer.get_clips().expect("clips").remove(0);
+    layer
+        .trim_clip(before.id, before.start_frame + 10, before.end_frame)
+        .expect("the start pulled in");
+    let after = layer.get_clips().expect("clips").remove(0);
+    assert_eq!(after.start_frame, before.start_frame + 10);
+    assert_eq!(after.end_frame, before.end_frame, "the end held");
+}
+
+/// The split lines the bar draws are comp frames, the same ones the clip
+/// boxes are drawn at, so the snap points made from them land on the cuts.
+#[test]
+fn an_offset_rows_split_lines_are_comp_frames() {
+    let (_project, _comp, layer) = offset_audio_row();
+    let info = layer.get_info().expect("info");
+    let starts: Vec<i64> = info.clips.iter().map(|c| c.start_frame).collect();
+    assert_eq!(info.clip_frames, starts, "a line per box, on the box");
+    assert_eq!(
+        info.clip_frames.first().copied(),
+        Some(info.in_frame),
+        "and the first cut is the start of the row"
+    );
+}
+
+/// A footage item put down on a row: `overlap` keeps the neighbour, so the
+/// two clips cross-fade; without it the drop overwrites, which is the picture
+/// row's rule (docs/impl/audio-timeline.md §2).
+#[test]
+fn a_dropped_clip_overlaps_or_overwrites() {
+    let (_project, _comp, layer, footage) = audio_row();
+    let first = layer.get_clips().expect("clips").remove(0);
+    let half = (first.start_frame + first.end_frame) / 2;
+
+    layer.add_clip(&footage, half, true).expect("dropped");
+    let kept = layer.get_clips().expect("clips");
+    assert_eq!(kept.len(), 2, "the neighbour is still there");
+    let landed = kept
+        .iter()
+        .find(|c| c.id != first.id)
+        .expect("the new clip");
+    assert_eq!(landed.start_frame, half);
+    let held = kept.iter().find(|c| c.id == first.id).expect("the first");
+    assert_eq!(held.end_frame, first.end_frame, "and it kept its tail");
+
+    // The same drop without overlap eats what it lands on.
+    let (_p2, _c2, plain, footage2) = audio_row();
+    let one = plain.get_clips().expect("clips").remove(0);
+    let half = (one.start_frame + one.end_frame) / 2;
+    plain.add_clip(&footage2, half, false).expect("dropped");
+    let after = plain.get_clips().expect("clips");
+    let trimmed = after.iter().find(|c| c.id == one.id).expect("the first");
+    assert_eq!(trimmed.end_frame, half, "trimmed back to the join");
+}
+
+/// A slide that runs into the neighbour keeps it when asked to, and one undo
+/// puts the row back.
+#[test]
+fn sliding_over_a_neighbour_keeps_it_when_asked() {
+    let (project, _comp, layer, footage) = audio_row();
+    let first = layer.get_clips().expect("clips").remove(0);
+    let length = first.end_frame - first.start_frame;
+    layer
+        .add_clip(&footage, first.end_frame, false)
+        .expect("a second clip");
+    let second = layer
+        .get_clips()
+        .expect("clips")
+        .into_iter()
+        .find(|c| c.id != first.id)
+        .expect("the second");
+
+    layer
+        .slide_clip(second.id, second.start_frame - length / 2, true)
+        .expect("slid over");
+    let after = layer.get_clips().expect("clips");
+    assert_eq!(after.len(), 2, "both clips survive an overlap");
+
+    project.undo().expect("undo");
+    let back = layer
+        .get_clips()
+        .expect("clips")
+        .into_iter()
+        .find(|c| c.id == second.id)
+        .expect("still there");
+    assert_eq!(back.start_frame, second.start_frame, "one step back");
+}
+
+/// A clip moved onto another row is one undo step across two of them, and a
+/// move with no target makes a row of its own directly below.
+#[test]
+fn a_clip_moves_between_rows_in_one_step() {
+    use crate::api::layer::BridgeLayerKind;
+    let (project, comp, layer, footage) = audio_row();
+    let other = comp.add_sequence_layer(None).expect("a second row");
+    let clip = layer.get_clips().expect("clips").remove(0);
+
+    layer
+        .move_clip(clip.id, Some(other), clip.start_frame + 10, false)
+        .expect("moved");
     assert!(
-        clip.retimed,
-        "the clip carries the layer's map: it spans the whole layer, so the          two are the same clock"
+        layer.get_clips().expect("clips").is_empty(),
+        "off the row it came from"
+    );
+    let landed = other.get_clips().expect("clips");
+    assert_eq!(landed.len(), 1);
+    assert_eq!(landed[0].start_frame, clip.start_frame + 10);
+
+    project.undo().expect("undo");
+    assert_eq!(
+        layer.get_clips().expect("clips").len(),
+        1,
+        "one step puts it back on both rows at once"
+    );
+    assert!(other.get_clips().expect("clips").is_empty());
+
+    // No target: a new audio-only Sequence layer directly below the source.
+    let before = comp.get_layers().expect("layers").len();
+    layer
+        .move_clip(clip.id, None, clip.start_frame, false)
+        .expect("moved to a new row");
+    let layers = comp.get_layers().expect("layers");
+    assert_eq!(layers.len(), before + 1);
+    let made = layers
+        .iter()
+        .find(|l| !l.equals(&layer) && l.get_clips().is_ok_and(|c| c.len() == 1))
+        .expect("the new row");
+    assert_eq!(
+        made.get_kind().expect("kind"),
+        BridgeLayerKind::Audio,
+        "an audio-only row"
+    );
+    let _ = footage;
+}
+
+/// A clip's own effect stack is reached by every effect command the layer's
+/// stack already has, through the one instance lookup
+/// (docs/impl/audio-timeline.md §2).
+#[test]
+fn a_clips_effects_round_trip_through_the_instance_lookup() {
+    let (_project, _comp, layer, _footage) = audio_row();
+    let clip = layer.get_clips().expect("clips").remove(0);
+
+    layer
+        .add_clip_effect(clip.id, "blur".into())
+        .expect("added");
+    let stack = layer.get_clip_effects(clip.id).expect("the clip's stack");
+    assert_eq!(stack.len(), 1);
+    assert!(
+        layer.get_effects().expect("the layer's stack").is_empty(),
+        "and nothing landed on the layer's own"
     );
 
-    sequenced.convert_from_sequenced().expect("back");
-    let back = comp.get_layers().expect("layers").remove(0);
+    // Bypass and remove both find it by id alone.
+    layer
+        .set_effect_enabled(&stack[0], false)
+        .expect("bypassed");
+    let drawn = layer.get_clips().expect("clips").remove(0);
+    assert_eq!(drawn.effects.len(), 1, "it rides in on the read model");
+    assert!(!drawn.effects[0].enabled);
+
+    layer.remove_effect(&stack[0]).expect("removed");
+    assert!(layer.get_clip_effects(clip.id).expect("stack").is_empty());
+
+    // A staged commit of the now-empty clip stack needs the clip named: an
+    // empty list carries no id to route by, and without it the write would be
+    // held against the layer's own stack instead.
+    layer.add_effect("glow".into()).expect("on the layer");
+    layer
+        .set_effects(Vec::new(), Some(clip.id))
+        .expect("the clip's empty stack commits to the clip");
     assert_eq!(
-        back.get_retime_property().expect("read"),
-        Some(before),
-        "and the round trip left it exactly as it was"
+        layer.get_effects().expect("stack").len(),
+        1,
+        "and the layer's stack is untouched"
     );
+    assert!(matches!(
+        layer.set_effects(Vec::new(), None),
+        Err(BridgeError::StaleEffectStack)
+    ));
+}
+
+/// A clip's fades round-trip, one end at a time, and the fx switch with them.
+#[test]
+fn a_clips_fade_and_fx_switch_round_trip() {
+    use crate::api::layer::{BridgeClipFade, BridgeClipFadeShape};
+    let (_project, _comp, layer, _footage) = audio_row();
+    let clip = layer.get_clips().expect("clips").remove(0);
+    assert_eq!(clip.fade_in.seconds, 0.0, "a fresh clip has no fade");
+    assert!(clip.fx, "and its stack is live");
+
+    layer
+        .set_clip_fade(
+            clip.id,
+            Some(BridgeClipFade {
+                seconds: 0.25,
+                shape: BridgeClipFadeShape::Slow,
+            }),
+            None,
+        )
+        .expect("faded in");
+    let after = layer.get_clips().expect("clips").remove(0);
+    assert!((after.fade_in.seconds - 0.25).abs() < 1e-9);
+    assert_eq!(after.fade_in.shape, BridgeClipFadeShape::Slow);
+    assert_eq!(
+        after.fade_out.seconds, 0.0,
+        "the end that was not named is untouched"
+    );
+
+    layer
+        .set_clip_fade(
+            clip.id,
+            None,
+            Some(BridgeClipFade {
+                seconds: 0.5,
+                shape: BridgeClipFadeShape::Custom {
+                    x1: 0.1,
+                    y1: 0.7,
+                    x2: 0.4,
+                    y2: 0.9,
+                },
+            }),
+        )
+        .expect("faded out");
+    let after = layer.get_clips().expect("clips").remove(0);
+    assert!((after.fade_in.seconds - 0.25).abs() < 1e-9, "still there");
+    assert_eq!(
+        after.fade_out.shape,
+        BridgeClipFadeShape::Custom {
+            x1: 0.1,
+            y1: 0.7,
+            x2: 0.4,
+            y2: 0.9,
+        }
+    );
+
+    layer.set_clip_fx(clip.id, false).expect("bypassed");
+    assert!(!layer.get_clips().expect("clips")[0].fx);
+}
+
+/// Half amplitude, to the precision dB is written in - the level the gain
+/// tests below drag a clip to.
+const HALF_DB: f64 = -6.020_599_913_279_624;
+
+/// A clip's own gain round-trips and comes back on one undo, like every other
+/// clip edit (docs/impl/audio-timeline.md §2), and a level that is not a number
+/// is refused rather than written.
+#[test]
+fn a_clips_gain_round_trips_and_undoes() {
+    let (project, _comp, layer, _footage) = audio_row();
+    let clip = layer.get_clips().expect("clips").remove(0);
+    assert_eq!(clip.gain_db, 0.0, "a fresh clip is at unity");
+
+    layer.set_clip_gain(clip.id, HALF_DB).expect("pulled down");
+    assert_eq!(layer.get_clips().expect("clips")[0].gain_db, HALF_DB);
+
+    assert!(
+        matches!(
+            layer.set_clip_gain(clip.id, f64::NAN),
+            Err(BridgeError::InvalidTime)
+        ),
+        "a level that is not a number saves as null and the project will not reopen"
+    );
+    assert_eq!(
+        layer.get_clips().expect("clips")[0].gain_db,
+        HALF_DB,
+        "and the refusal left the level where it was"
+    );
+
+    project.undo().expect("undo");
+    assert_eq!(
+        layer.get_clips().expect("clips")[0].gain_db,
+        0.0,
+        "one step back to unity"
+    );
+}
+
+/// **The gain is heard, and it re-plans the mix** (plan 18). Half the level is
+/// half of every sample, through the same plan the callback plays; and the
+/// signature moves with it, because a gain drag moves no clip and without that
+/// the edit would meet the no-op gate and never be heard.
+///
+/// **Needs the decoder**: there is nothing to mix without one.
+#[cfg(feature = "media")]
+#[test]
+fn a_clips_gain_halves_the_mix_and_re_plans_it() {
+    use std::collections::HashMap;
+    use std::sync::Arc;
+
+    const RATE: u32 = 8_000;
+
+    let dir = tempfile::tempdir().expect("temp dir");
+    let song = dir.path().join("song.wav");
+    std::fs::write(&song, click_wav()).expect("wrote the fixture");
+
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let comp = project.new_composition("Scene".into(), None).expect("comp");
+    let footage = project
+        .import_footage(song.to_string_lossy().into_owned())
+        .expect("imported");
+    comp.add_audio_layer(&footage).expect("a track");
+    let layer = comp.get_layers().expect("layers").remove(0);
+    if !layer.has_audio().expect("asked") {
+        // No decoder in this build, or none that reads the fixture: there is
+        // no sound to pull down, so there is no claim to test.
+        return;
+    }
+    layer.convert_to_sequenced().expect("a row of clips");
+    let layer = comp.get_layers().expect("layers").remove(0);
+    let clip = layer.get_clips().expect("clips").remove(0);
+
+    let duration_s = {
+        let state = project.state().expect("state");
+        let state = state.read().expect("read");
+        let doc = state.store.snapshot();
+        doc.comp(comp.id).expect("the comp").duration.0.to_f64()
+    };
+    // Every frame of the comp's mix, and the signature the gate reads.
+    let mixed = || {
+        let jobs = audible_jobs(&project, &comp);
+        assert!(!jobs.is_empty(), "the comp has sound in it");
+        let mut decoded = HashMap::new();
+        for job in &jobs {
+            if let std::collections::hash_map::Entry::Vacant(slot) = decoded.entry(job.item) {
+                slot.insert(Arc::new(
+                    lumit_media::audio::decode_all(&job.path, RATE).expect("decoded"),
+                ));
+            }
+        }
+        let sig = crate::audio::jobs_signature(&jobs, duration_s, 0.0);
+        let (plan, _strips) = crate::audio::build_plan(&jobs, &decoded, RATE, duration_s, 0.0);
+        let frames = (0..plan.total_frames)
+            .map(|i| plan.frame_at(i))
+            .collect::<Vec<_>>();
+        (sig, frames)
+    };
+
+    let (unity_sig, unity) = mixed();
+    assert!(
+        unity.iter().any(|&(l, r)| l != 0.0 || r != 0.0),
+        "the fixture is heard, so the comparison means something"
+    );
+
+    layer.set_clip_gain(clip.id, HALF_DB).expect("pulled down");
+    let (half_sig, half) = mixed();
+
+    assert_ne!(
+        unity_sig, half_sig,
+        "a gain drag moves no clip, and still has to re-plan"
+    );
+    assert_eq!(half.len(), unity.len(), "the same length of mix");
+    for (n, (&(l, r), &(hl, hr))) in unity.iter().zip(half.iter()).enumerate() {
+        assert!(
+            (hl - l * 0.5).abs() < 1e-5 && (hr - r * 0.5).abs() < 1e-5,
+            "frame {n}: expected half of ({l}, {r}), got ({hl}, {hr})"
+        );
+    }
 }
 
 /// Cutting a **retimed** clip gives each half a key at the cut, so the two
@@ -6445,7 +7402,7 @@ fn a_clip_dragged_before_the_start_takes_the_layer_with_it() {
         .clone();
 
     layer
-        .slide_clip(first.id, first.start_frame - 10)
+        .slide_clip(first.id, first.start_frame - 10, false)
         .expect("slid before the start");
 
     let after = layer.get_clips().expect("clips");
@@ -9006,7 +9963,7 @@ fn vector_pairs_and_their_chains_cross_the_seam() {
         !staged[0].set_pair_linked("light".into(), true),
         "and linking it again does not, so no op is committed"
     );
-    layer.set_effects(staged).expect("committed");
+    layer.set_effects(staged, None).expect("committed");
 
     assert_eq!(
         layer.get_info().expect("info").effects[0].linked_pairs,
@@ -9997,6 +10954,80 @@ fn applying_a_driver_adds_a_graph_node_rather_than_a_stack_effect() {
     assert_eq!(layer.get_effects().expect("stack").len(), 1);
 }
 
+/// **The clip a node names is a reference like any other**
+/// (docs/impl/audio-nodes.md §3, plan 3). Audio level on *Clip* names one clip
+/// of the row its Audio row names; deleting that clip leaves the reference
+/// pointing at something the layer no longer has, which is the picker's own
+/// missing entry and, in the render, the same silence a dangling layer gives
+/// (`audio_level_reads_what_the_source_row_names` in lumit-core measures that
+/// half); and one undo brings the clip and the reading back together.
+#[test]
+fn deleting_the_clip_an_audio_level_names_leaves_it_naming_nothing() {
+    use crate::api::effect::BridgeEffectValue;
+    use lumit_core::fx::drivers::audio_level::SOURCE_CLIP;
+
+    let (project, comp, row, _footage) = audio_row();
+    // A row of two clips, so the reference is a choice and not the only clip
+    // there is.
+    let whole = row.get_info().expect("info");
+    row.cut_clip_at((whole.in_frame + whole.out_frame) / 2)
+        .expect("cut");
+    let clips = row.get_clips().expect("clips");
+    assert_eq!(clips.len(), 2);
+    let named = clips[0].id;
+
+    // The driver sits on a solid and listens across at the row's first clip.
+    let solid = comp.add_solid_layer(None).expect("a solid");
+    solid.add_effect("audio_level".into()).expect("a driver");
+    let mut staged = solid.get_graph_drivers().expect("drivers");
+    staged[0]
+        .set_value("source".into(), BridgeEffectValue::Choice(SOURCE_CLIP))
+        .expect("staged");
+    staged[0]
+        .set_value("audio".into(), BridgeEffectValue::Layer(Some(row.id())))
+        .expect("staged");
+    staged[0]
+        .set_value("clip".into(), BridgeEffectValue::Clip(Some(named)))
+        .expect("staged");
+    let wiring = solid.get_graph().expect("graph").wiring;
+    solid.set_graph(staged, wiring).expect("committed");
+
+    let reading = |solid: &LayerReference| {
+        solid.get_graph_drivers().expect("drivers")[0]
+            .get_value("clip".into())
+            .expect("the row is there")
+    };
+    assert_eq!(reading(&solid), BridgeEffectValue::Clip(Some(named)));
+
+    // The clip goes. The reference is untouched, since nothing rewrites a document
+    // behind an edit, but the layer no longer offers what it names, which is
+    // what the picker draws as missing and the tap answers as silence.
+    row.delete_clip(named).expect("deleted");
+    let left = row.get_info().expect("info").clips;
+    assert_eq!(left.len(), 1);
+    assert!(
+        !left.iter().any(|c| c.id == named),
+        "the clip the row named is gone from the list the picker reads"
+    );
+    assert_eq!(
+        reading(&solid),
+        BridgeEffectValue::Clip(Some(named)),
+        "the reference still says which clip it wanted"
+    );
+
+    // One undo, and the two agree again.
+    project.undo().expect("undone");
+    assert!(
+        row.get_info()
+            .expect("info")
+            .clips
+            .iter()
+            .any(|c| c.id == named),
+        "undo brings the clip back to the layer"
+    );
+    assert_eq!(reading(&solid), BridgeEffectValue::Clip(Some(named)));
+}
+
 /// **A catalogue entry carries its declared ports**, which is what lets the
 /// Graph panel wire a driver into the *same* commit that adds it, and filter
 /// the Tab search to the entries a dragged wire could land on. Before this, a
@@ -10021,6 +11052,8 @@ fn a_catalogue_entry_declares_its_ports_before_any_instance_exists() {
         vec![
             ("amplitude", BridgePortType::Number, false),
             ("low", BridgePortType::Number, false),
+            ("peak", BridgePortType::Number, false),
+            ("high", BridgePortType::Number, false),
         ],
         "the signature's own ports, in the order the node draws them"
     );
@@ -10032,8 +11065,16 @@ fn a_catalogue_entry_declares_its_ports_before_any_instance_exists() {
         "and the parameters a wire can land on"
     );
     assert!(
-        !level.inputs.iter().any(|p| p.id == "audio"),
-        "a layer reference is not a socket — it is answered by the derived source node"
+        !level
+            .inputs
+            .iter()
+            .any(|p| p.id == "audio" || p.id == "clip"),
+        "a layer reference is not a socket: it is answered by the derived source node, \
+         and a clip reference is a choice rather than a number"
+    );
+    assert!(
+        !level.inputs.iter().any(|p| p.id == "source"),
+        "and neither is the row that says which of the three it is reading"
     );
 
     let smooth = drivers
@@ -11007,7 +12048,7 @@ fn a_planar_tracked_layer() -> (
             crate::api::effect::BridgeEffectValue::Layer(Some(target.layer_id)),
         )
         .expect("the Pin layer row takes a layer");
-    shot.set_effects(staged).expect("committed");
+    shot.set_effects(staged, None).expect("committed");
 
     let frames: Vec<lumit_track::PlanarFrame> = (0..50)
         .map(|frame| {
@@ -11106,7 +12147,7 @@ fn a_corner_pin_is_refused_with_nothing_to_pin_or_nowhere_to_put_it() {
             crate::api::effect::BridgeEffectValue::Layer(None),
         )
         .expect("the row takes an empty layer");
-    shot.set_effects(staged).expect("committed");
+    shot.set_effects(staged, None).expect("committed");
     assert!(matches!(
         create_corner_pin(shot, effect),
         Err(BridgeError::InvalidLayer)
@@ -11168,7 +12209,7 @@ fn transform_keys_move_the_target_layer_and_obey_the_transform_row() {
             BridgeEffectValue::Choice(lumit_core::fx::effects::planar_track::FOLLOW_ONE_POINT),
         )
         .expect("the Follow row takes a choice");
-    shot.set_effects(staged).expect("committed");
+    shot.set_effects(staged, None).expect("committed");
 
     fire_effect_action(shot, effect, "transform_keys".into(), None)
         .expect("position alone still writes");
@@ -11737,11 +12778,16 @@ fn a_plugin_can_be_switched_off_and_the_answer_holds_immediately() {
     assert!(!lumit_ofx::discover::is_disabled("blur"));
 }
 
-/// Register one stand-in **audio** plugin definition under `name` — the shape
-/// the scan registers, minus the broker, so these tests need no plugin
-/// installed. Registration is by name and additive, so each test takes names
-/// of its own.
+/// Register one stand-in definition under `name`, in `category`. That is the
+/// shape the scan registers for an audio plugin, minus the broker, so these
+/// tests need no plugin installed, and the shape a built-in audio effect
+/// declares.
+/// Registration is by name and additive, so each test takes names of its own.
 fn register_audio_def(name: &'static str, label: &'static str) {
+    register_def_in(name, label, lumit_core::fx::FxCategory::Utility);
+}
+
+fn register_def_in(name: &'static str, label: &'static str, category: lumit_core::fx::FxCategory) {
     struct AudioDef(&'static lumit_core::fx::EffectSchema);
     impl lumit_core::fx::EffectDef for AudioDef {
         fn schema(&self) -> &'static lumit_core::fx::EffectSchema {
@@ -11756,7 +12802,7 @@ fn register_audio_def(name: &'static str, label: &'static str) {
             match_name: name,
             label,
             version: 1,
-            category: lumit_core::fx::FxCategory::Utility,
+            category,
             traits: lumit_core::fx::EffectTraits {
                 cost: lumit_core::fx::CostClass::Heavy,
                 roi: lumit_core::fx::Roi::FullFrame,
@@ -11771,6 +12817,7 @@ fn register_audio_def(name: &'static str, label: &'static str) {
                 kind: lumit_core::fx::ParamKind::Slider {
                     default: 1.0,
                     range: (0.0, 4.0),
+                    log: false,
                 },
                 unit: lumit_core::fx::Unit::Raw,
             }])),
@@ -11779,6 +12826,55 @@ fn register_audio_def(name: &'static str, label: &'static str) {
             matte: lumit_core::fx::MatteRole::None,
         }));
     lumit_core::fx::BUILTIN_DEFS.register(Box::leak(Box::new(AudioDef(schema))));
+}
+
+/// **A built-in audio effect files under the Audio category**: the same
+/// heading a hosted plugin lands on, with its own provenance intact, and every
+/// instance says outright that it is sound.
+///
+/// The name prefix used to be the whole answer to "is this sound?", which is a
+/// fact about where a plugin came from and has nothing to say about an effect
+/// Lumit wrote itself (docs/impl/audio-effects.md §2).
+#[test]
+fn a_built_in_audio_effect_files_under_the_audio_category() {
+    assert_eq!(
+        crate::edits::fx_category_key(lumit_core::fx::FxCategory::Audio),
+        "audio",
+        "one key for the family, and it is the plugins' own"
+    );
+    register_def_in(
+        "audio_test_gain",
+        "Test gain",
+        lumit_core::fx::FxCategory::Audio,
+    );
+
+    let listed = list_effects()
+        .into_iter()
+        .find(|e| e.name == "audio_test_gain")
+        .expect("a built-in audio effect is in the listing the browser reads");
+    assert_eq!(
+        listed.category, "audio",
+        "filed beside the plugins, under one Audio heading"
+    );
+    assert_eq!(
+        listed.category_label, "Audio",
+        "and it brings the heading's own word, which a plugin cannot"
+    );
+
+    // The instance answers the question directly, so no panel reads a name.
+    let (_project, layer) = project_with_layer();
+    layer
+        .add_effect("audio_test_gain".into())
+        .expect("an audio effect is an ordinary stack entry");
+    let stack = layer.get_effects().expect("stack");
+    assert!(stack[0].get_info().audio, "a built-in in Audio is sound");
+
+    layer.add_effect("blur".into()).expect("a picture effect");
+    let stack = layer.get_effects().expect("stack");
+    assert!(
+        !stack[1].get_info().audio,
+        "and a blur is not, whatever its name looks like"
+    );
 }
 
 /// **The browser's share of AP5, bridge side**: an audio plugin lists under
@@ -11827,7 +12923,7 @@ fn an_audio_plugin_lists_under_the_audio_group_and_switches_off() {
             BridgeEffectValue::Float(BridgeScalar::Static(2.5)),
         )
         .expect("a plugin row takes a write like any other");
-    layer.set_effects(stack).expect("committed");
+    layer.set_effects(stack, None).expect("committed");
     assert_eq!(
         layer.get_effects().expect("stack")[0]
             .get_value("p1".to_owned())
@@ -12107,7 +13203,7 @@ fn set_shader(layer: &LayerReference, source: &str, origin: Option<&str>) {
     let stack = layer.get_effects().expect("stack");
     let mut stack = stack;
     stack[0].set_shader_source(source.to_owned(), origin.map(str::to_owned));
-    layer.set_effects(stack).expect("committed");
+    layer.set_effects(stack, None).expect("committed");
 }
 
 fn only_effect(layer: &LayerReference) -> BridgeEffectInstance {

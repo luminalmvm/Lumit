@@ -51,7 +51,11 @@ bool _initialised = false;
 /// Skips the whole group with a clear instruction when the library is absent,
 /// rather than failing with an opaque FFI error — a contributor who has not built
 /// the Rust side should be told what to run.
-Future<void> initEngineForTests() async {
+///
+/// [handler] is for a budget test that counts what crosses the seam: every
+/// generated call goes through the handler, so a counting one installed here
+/// sees the lot. Left off, frb uses its own.
+Future<void> initEngineForTests({BaseHandler? handler}) async {
   if (_initialised) return;
   final library = File(_libraryPath);
   if (!library.existsSync()) {
@@ -61,7 +65,8 @@ Future<void> initEngineForTests() async {
       'Looked for: ${library.absolute.path}',
     );
   }
-  await BridgeLib.init(externalLibrary: ExternalLibrary.open(_libraryPath));
+  await BridgeLib.init(
+      externalLibrary: ExternalLibrary.open(_libraryPath), handler: handler);
   // A test must never reach the developer's own settings file. Any setter on
   // a Workspace calls `save()`, so without this redirect a run wrote defaults
   // straight over `%APPDATA%\lumit\flutter-workspace.json` — which is exactly

@@ -1151,6 +1151,7 @@ mod tests {
     fn test_comp() -> Composition {
         Composition {
             master_volume_db: 0.0,
+            sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
             id: Uuid::now_v7(),
@@ -2339,6 +2340,69 @@ mod tests {
                 animation: Animation::Static(1.0),
             })
             .is_err());
+    }
+
+    /// The mix mark (docs/impl/audio-timeline.md §2) is comp state on the
+    /// master fader's pattern: one op, exactly invertible both ways, refused
+    /// on a comp that is not there. And a comp that has never been mixed
+    /// writes no key at all, so an old project re-saves byte-identical.
+    #[test]
+    fn the_sound_mix_mark_round_trips_and_is_skipped_while_false() {
+        let store = DocumentStore::new(Document::new());
+        let comp = test_comp();
+        let comp_id = comp.id;
+        store
+            .commit(Op::AddItem {
+                index: 0,
+                item: Box::new(ProjectItem::Composition(comp.clone())),
+            })
+            .unwrap();
+
+        let mark = |s: &DocumentStore| s.snapshot().comp(comp_id).unwrap().sound_mix;
+        assert!(!mark(&store), "a comp opens unmixed");
+        store
+            .commit(Op::SetSoundMix {
+                comp: comp_id,
+                on: true,
+            })
+            .unwrap();
+        assert!(mark(&store));
+        store
+            .commit(Op::SetSoundMix {
+                comp: comp_id,
+                on: false,
+            })
+            .unwrap();
+        assert!(!mark(&store));
+
+        // Both inverses put back exactly what was there: false → true first,
+        // then true → false.
+        store.undo().unwrap();
+        assert!(mark(&store));
+        store.undo().unwrap();
+        assert!(!mark(&store));
+
+        assert_eq!(
+            store.commit(Op::SetSoundMix {
+                comp: Uuid::now_v7(),
+                on: true,
+            }),
+            Err(crate::ops::OpError::UnknownComp)
+        );
+
+        let text = serde_json::to_string(&comp).unwrap();
+        assert!(
+            !text.contains("sound_mix"),
+            "an unmixed comp writes no key at all"
+        );
+        let back: Composition = serde_json::from_str(&text).unwrap();
+        assert!(!back.sound_mix);
+
+        let mut mixed = comp;
+        mixed.sound_mix = true;
+        let text = serde_json::to_string(&mixed).unwrap();
+        let back: Composition = serde_json::from_str(&text).unwrap();
+        assert!(back.sound_mix, "the mark survives a save and load");
     }
 
     /// The asset-organisation ops behave: a batch is one undo step and

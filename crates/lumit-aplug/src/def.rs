@@ -64,19 +64,23 @@ pub struct InstanceSetup {
     pub state: Option<Vec<u8>>,
     /// The values the project holds, by the plugin's own stable parameter id.
     pub params: Vec<(u32, f64)>,
+    /// The rate the bake runs at, in hertz: the export's own, not the
+    /// preview's, so a 96 kHz export activates the plugin at 96 kHz.
+    pub rate: u32,
     /// Whether this is an export. Offline means no deadline and the plugin may
     /// take its slower, better path (§3).
     pub offline: bool,
 }
 
 impl InstanceSetup {
-    /// The same four things, in the shape the pipe carries.
+    /// The same five things, in the shape the pipe carries.
     #[must_use]
     pub fn to_bring(&self) -> Bring {
         Bring {
             plugin_id: self.plugin_id.clone(),
             state: self.state.clone(),
             params: self.params.clone(),
+            rate: self.rate,
             offline: self.offline,
         }
     }
@@ -174,7 +178,7 @@ impl LocalHost {
             instance.set_offline(true);
         }
 
-        instance.activate()?;
+        instance.activate(f64::from(setup.rate))?;
         instance.start_processing()?;
         let latency = instance.latency();
 
@@ -514,7 +518,12 @@ impl AudioEffectDef {
 
     /// The setup that opens this effect with the values given, by row.
     #[must_use]
-    pub fn setup(&self, state: Option<Vec<u8>>, values: &[(ParamId, f64)]) -> InstanceSetup {
+    pub fn setup(
+        &self,
+        state: Option<Vec<u8>>,
+        values: &[(ParamId, f64)],
+        rate: u32,
+    ) -> InstanceSetup {
         let mut params = self.defaults.clone();
         for (row, value) in values {
             if let Some(id) = self.plugin_param(*row) {
@@ -529,6 +538,7 @@ impl AudioEffectDef {
             plugin_id: self.plugin_id.clone(),
             state,
             params,
+            rate,
             offline: false,
         }
     }
@@ -559,6 +569,7 @@ impl EffectDef for AudioEffectDef {
         &self,
         state: Option<Vec<u8>>,
         values: &[(ParamId, f64)],
+        rate: u32,
         offline: bool,
     ) -> Option<Arc<dyn AudioProcessor>> {
         // A switched-off plugin is refused before any of its code runs (the
@@ -573,7 +584,7 @@ impl EffectDef for AudioEffectDef {
             return None;
         }
         let broker = crate::ipc::broker::module_broker(&self.module).ok()?;
-        let mut setup = self.setup(state, values);
+        let mut setup = self.setup(state, values, rate);
         setup.offline = offline;
         let host = BrokerHost::open(broker, &setup).ok()?;
         Some(Arc::new(HostedAudio::new(

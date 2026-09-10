@@ -76,6 +76,7 @@ fn doc_with_clip(path: &str, w: u32, h: u32, fps: (u32, u32)) -> (std::sync::Arc
     };
     doc.items.push(ProjectItem::Composition(Composition {
         master_volume_db: 0.0,
+        sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
         id: comp_id,

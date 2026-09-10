@@ -41,9 +41,6 @@ use serde::{Deserialize, Serialize};
 /// boundary is a fact about the layer, not about the playhead.
 pub const BLOCK_FRAMES: usize = 512;
 
-/// The session rate (docs/09 §2).
-pub const SAMPLE_RATE: f64 = 48_000.0;
-
 /// Channels. v1 hosts stereo effect plugins only (§4).
 pub const CHANNELS: usize = 2;
 
@@ -266,58 +263,8 @@ unsafe extern "C" fn sink_push(
 
 /// Flush-to-zero and denormals-are-zero, for as long as this value lives.
 ///
-/// Both plugin standards assume the host has set them; a reverb tail hitting
-/// denormals is the classic mystery CPU spike (§3). The previous setting is
-/// restored on drop, so a thread that borrowed the processing role gives it
-/// back exactly as it found it.
-pub struct Denormals {
-    /// The MXCSR word as it was, or `None` where this architecture has no such
-    /// word to save. Only `Drop` reads it, and only on x86, so on Apple silicon
-    /// it is a field nobody reads rather than a field nobody sets - which is
-    /// what `-D warnings` sees.
-    #[cfg_attr(
-        not(any(target_arch = "x86", target_arch = "x86_64")),
-        allow(dead_code)
-    )]
-    previous: Option<u32>,
-}
-
-impl Denormals {
-    /// Switch them off.
-    #[must_use]
-    pub fn on() -> Self {
-        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-        let previous = {
-            /// MXCSR bit 15.
-            const FLUSH_TO_ZERO: u32 = 0x8000;
-            /// MXCSR bit 6.
-            const DENORMALS_ARE_ZERO: u32 = 0x0040;
-            let mut csr: u32 = 0;
-            // SAFETY: `stmxcsr` writes four bytes to the address given, and
-            // `csr` is a live `u32`. The instruction is SSE, which is baseline
-            // on every target this crate builds for.
-            unsafe { std::arch::asm!("stmxcsr [{}]", in(reg) &mut csr, options(nostack)) };
-            let raised = csr | FLUSH_TO_ZERO | DENORMALS_ARE_ZERO;
-            // SAFETY: `ldmxcsr` reads four bytes from the address given.
-            unsafe { std::arch::asm!("ldmxcsr [{}]", in(reg) &raised, options(nostack)) };
-            Some(csr)
-        };
-        // ponytail: aarch64 keeps the same flag in FPCR's FZ bit; nothing in
-        // this project builds for it yet, so the guard is honestly a no-op
-        // there rather than a wrong write.
-        #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
-        let previous = None;
-
-        Self { previous }
-    }
-}
-
-impl Drop for Denormals {
-    fn drop(&mut self) {
-        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-        if let Some(csr) = self.previous {
-            // SAFETY: as `Denormals::on`.
-            unsafe { std::arch::asm!("ldmxcsr [{}]", in(reg) &csr, options(nostack)) };
-        }
-    }
-}
+/// Lives in `lumit-core` beside the chain that wraps its block loop, because
+/// the built-in audio effects need the same guard and nothing in the engine may
+/// depend on this crate (docs/impl/audio-effects.md §2). Re-exported here so
+/// the host's own call sites read as they always did.
+pub use lumit_core::fx::Denormals;

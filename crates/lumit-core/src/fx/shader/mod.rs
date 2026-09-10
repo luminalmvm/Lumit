@@ -927,6 +927,7 @@ fn derive_rows(
                         ParamKind::Slider {
                             default: d,
                             range: (lo, hi),
+                            log: false,
                         },
                         unit.unwrap_or(Unit::Raw),
                     )],

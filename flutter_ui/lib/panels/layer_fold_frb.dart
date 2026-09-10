@@ -51,11 +51,18 @@ final class FoldGroupRow extends LayerFoldRow {
   final String path;
   final String label;
   final bool open;
+
+  /// Whether the one effect this heading names is enabled - the bypass tick the
+  /// heading wears beside its twirl. Null on a heading that is a grouping
+  /// rather than an effect (Transform, Effects, a clip's name), which wears
+  /// none, and null on every heading whose panel does not offer the tick.
+  final bool? enabled;
   const FoldGroupRow({
     required this.path,
     required this.label,
     required this.open,
     required int depth,
+    this.enabled,
   }) : super(depth);
 }
 
@@ -100,8 +107,21 @@ final class FoldEffectParamRow extends LayerFoldRow {
   /// (`CompositionReference.getGroupEffects`) — the commit itself routes by
   /// the engine's shared instance lookup either way.
   final UuidValue? group;
+
+  /// The **clip** whose own stack this row belongs to
+  /// (docs/impl/audio-timeline.md §4), or null for a layer's or a group's row -
+  /// the group bit's pattern again, grown its fourth arm. A clip row draws,
+  /// keys and drags as any effect parameter does; what differs is the path
+  /// prefix ([clipFoldPrefix]), that a write reads the clip's own list
+  /// (`LayerReference.getClipEffects`), and that its keys are in clip time, so
+  /// the lane draws them a clip's start along.
+  final UuidValue? clip;
   const FoldEffectParamRow(this.info, this.param, this.value,
-      {required int depth, this.driven, this.style = false, this.group})
+      {required int depth,
+      this.driven,
+      this.style = false,
+      this.group,
+      this.clip})
       : super(depth);
 }
 
@@ -1235,13 +1255,21 @@ bool moveLaneKeys({
       entry.layer.setTransforms(props: props, values: values);
       return true;
 
-    case FoldEffectParamRow(:final info, :final param, :final style, :final group):
+    case FoldEffectParamRow(
+        :final info,
+        :final param,
+        :final style,
+        :final group,
+        clip: final clipId
+      ):
       // Whichever list holds it — a style's keys move exactly as an effect's
-      // do, and a group header's the same way. The row
+      // do, and a group header's and a clip's the same way. The row
       // already says which, so the list is taken rather than searched for;
       // the commit routes by the engine's shared instance lookup either way.
       final List<BridgeEffectInstance> stack;
-      if (group != null) {
+      if (clipId != null) {
+        stack = entry.layer.getClipEffects(clip: clipId);
+      } else if (group != null) {
         if (comp == null) return false;
         stack = comp.getGroupEffects(group: group);
       } else {
@@ -1392,8 +1420,12 @@ String foldRowPath(String layerId, LayerFoldRow row) => switch (row) {
       FoldGroupRow(:final path) => path,
       FoldTransformRow(:final group) => transformGroupPath(layerId, group),
       // A group header's row roots under the group's own prefix, whichever
-      // layer's block it is drawn inside — a group id can never be
-      // mistaken for a layer's, so `layerIdOfPath` answers no layer for it.
+      // layer's block it is drawn inside, and a clip's under the clip's own,
+      // inside the block of the row it is laid on - neither a group id nor a
+      // clip id can be mistaken for a layer's, so `layerIdOfPath` answers no
+      // layer for either.
+      FoldEffectParamRow(:final info, :final param, clip: final c?) =>
+        '${effectPath(clipFoldPrefix(c), info.id.toString())}/${param.id}',
       FoldEffectParamRow(:final info, :final param, group: final g?) =>
         '${effectPath(groupFoldPrefix(g), info.id.toString())}/${param.id}',
       FoldEffectParamRow(:final info, :final param, :final style) =>
@@ -1487,6 +1519,49 @@ List<LayerFoldRow> groupHeaderFoldRows({
       for (final param in cachedListParameters(fx.name)) {
         rows.add(FoldEffectParamRow(fx, param, values[param.id],
             depth: 2, group: group.id));
+      }
+    }
+  }
+  return rows;
+}
+
+/// The root a **clip's** fold paths sit under: a prefixed form of the clip's
+/// id, on [groupFoldPrefix]'s own terms, so nothing that expects a layer id can
+/// mistake one for it.
+String clipFoldPrefix(UuidValue clip) => 'c:$clip';
+
+/// The rows a clip's twirl shows (docs/impl/audio-timeline.md §5): a heading
+/// with the clip's name, then one heading per effect on the clip and the
+/// ordinary [FoldEffectParamRow]s under whichever of those are open.
+///
+/// [groupHeaderFoldRows]'s own shape, rooted under [clipFoldPrefix] and drawn
+/// inside the row's block. Nothing while the clip is shut, which is what
+/// makes the clip's own twirl the switch: several clips may stand open at once,
+/// so each answers for itself.
+List<LayerFoldRow> clipFoldRows({
+  required BridgeClip clip,
+  required Set<String> open,
+}) {
+  final cid = clipFoldPrefix(clip.id);
+  if (!open.contains(cid)) return const [];
+  final rows = <LayerFoldRow>[
+    FoldGroupRow(path: cid, label: clip.sourceName, open: true, depth: 1),
+  ];
+  for (final fx in clip.effects) {
+    final path = effectPath(cid, fx.id.toString());
+    final fxOpen = open.contains(path);
+    rows.add(FoldGroupRow(
+      path: path,
+      label: fx.customName ?? effectLabelOf(fx.name),
+      open: fxOpen,
+      depth: 2,
+      enabled: fx.enabled,
+    ));
+    if (fxOpen) {
+      final values = {for (final v in fx.values) v.id: v.value};
+      for (final param in cachedListParameters(fx.name)) {
+        rows.add(FoldEffectParamRow(fx, param, values[param.id],
+            depth: 3, clip: clip.id));
       }
     }
   }

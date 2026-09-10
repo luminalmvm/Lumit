@@ -35,6 +35,31 @@ use super::effects::{
     accumulation_mb::{AccumulationMb, AccumulationMbDef},
     add_grain::{AddGrain, AddGrainDef},
     angle_control::{AngleControl, AngleControlDef},
+    audio::{
+        dynamics::{
+            compressor::{AudioCompressor, AudioCompressorDef},
+            gate::{AudioGate, AudioGateDef},
+            limiter::{AudioLimiter, AudioLimiterDef},
+        },
+        filters::{
+            eq::{AudioEq, AudioEqDef},
+            graphic_eq::{AudioGraphicEq, AudioGraphicEqDef},
+        },
+        modulation::{
+            chorus::{AudioChorus, AudioChorusDef},
+            gain::{AudioGain, AudioGainDef},
+            phaser::{AudioPhaser, AudioPhaserDef},
+            stereo_width::{AudioStereoWidth, AudioStereoWidthDef},
+            tremolo::{AudioTremolo, AudioTremoloDef},
+            vibrato::{AudioVibrato, AudioVibratoDef},
+            wah::{AudioWah, AudioWahDef},
+        },
+        space::{
+            delay::{AudioDelay, AudioDelayDef},
+            distortion::{AudioDistortion, AudioDistortionDef},
+            reverb::{AudioReverb, AudioReverbDef},
+        },
+    },
     beam::{Beam, BeamDef},
     bezier_warp::{BezierWarp, BezierWarpDef},
     black_and_white::{BlackAndWhite, BlackAndWhiteDef},
@@ -312,6 +337,28 @@ crate::catalogue![
     // under the layer rather than about the effect, so it is the second of the
     // two whose controls are derived rather than declared.
     ExtractChannelsDef => ExtractChannels,
+    // The Audio family, in docs/impl/audio-effects.md §4's order: what a
+    // hand reaches for first, then the shaping, then the dynamics, then the
+    // room, then the movement. Every one of them processes sound and draws
+    // nothing, and each files under the same Audio heading a hosted plugin
+    // does, which is what FxCategory::Audio is for: the add-effect menus on a
+    // clip's header and a track's Effects heading are narrowed to this one
+    // family, and offer the built-ins and the installed plugins together.
+    AudioGainDef => AudioGain,
+    AudioStereoWidthDef => AudioStereoWidth,
+    AudioEqDef => AudioEq,
+    AudioGraphicEqDef => AudioGraphicEq,
+    AudioCompressorDef => AudioCompressor,
+    AudioLimiterDef => AudioLimiter,
+    AudioGateDef => AudioGate,
+    AudioDistortionDef => AudioDistortion,
+    AudioDelayDef => AudioDelay,
+    AudioReverbDef => AudioReverb,
+    AudioChorusDef => AudioChorus,
+    AudioPhaserDef => AudioPhaser,
+    AudioTremoloDef => AudioTremolo,
+    AudioVibratoDef => AudioVibrato,
+    AudioWahDef => AudioWah,
     // The Controls family, last in the catalogue and so last in the
     // Add-effect menu, which groups by first appearance here. The order
     // inside it is After Effects' own Expression Controls order, which is what

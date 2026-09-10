@@ -134,6 +134,10 @@ struct AudioState {
     /// order the mixer draws its strips. Replaced with the plan, so
     /// a poll can never name a strip the sound is not on.
     meter_strips: Vec<Uuid>,
+    /// The plan the engine is playing and the rate it was built at, kept so
+    /// the Timeline's Sound mix row can summarise the mix ([`mix_peaks`])
+    /// without a second mixer. Goes with `loaded_comp`.
+    loaded_plan: Option<(Arc<MixPlan>, u32)>,
 }
 
 impl AudioState {
@@ -152,6 +156,7 @@ impl AudioState {
             jobs: AudioJobsBuilder::new(),
             decoded: HashMap::new(),
             meter_strips: Vec::new(),
+            loaded_plan: None,
         }
     }
 }
@@ -198,32 +203,49 @@ pub(crate) fn jobs_signature(jobs: &[AudioJob], duration_s: f64, master_db: f64)
         if let Some(d) = &j.driven {
             format!("{:?}", d.graph).hash(&mut h);
         }
-        // The layer's insert chain, the same way and for the same reason:
-        // dropping a plugin on the row, dragging one of its knobs or
-        // bypassing it all change what the comp sounds like without touching a
-        // Volume keyframe, so the whole stack and its wiring fold in. Debug
-        // text, like the graph above — session-only, and a stack is a handful
-        // of entries.
-        if let Some(c) = &j.chain {
-            format!("{:?}", c.effects).hash(&mut h);
-            format!("{:?}", c.graph).hash(&mut h);
-            // Whether each of THIS chain's plugins is switched off folds in
-            // too (AP5): flicking the switch changes what the chain opens
-            // without touching the document, and the rebake this provokes is
-            // what actually silences the plugin rather than only badging it.
-            // This chain's plugins, not the whole list, so switching off a
-            // plugin no comp uses re-plans nothing.
-            if let Ok(disabled) = lumit_aplug::session_disabled().lock() {
-                for effect in &c.effects {
-                    let name = effect.effect.match_name.as_str();
-                    if let Some(id) = lumit_core::fx::audio_plugin_id(name) {
-                        disabled.contains(id).hash(&mut h);
-                    }
-                }
+        // A clip's fade: its two lengths and its two shapes. A shape edit
+        // moves no clip, so without this a fade the user has just drawn would
+        // meet the no-op gate and never be heard. Debug text, like the graph
+        // above.
+        format!("{:?}", j.fade).hash(&mut h);
+        // The clip's own rack and then the layer's. Whether each is there at
+        // all is hashed beside its contents, because an fx switch turned off
+        // is a chain that is simply gone.
+        for chain in [&j.clip_chain, &j.chain] {
+            chain.is_some().hash(&mut h);
+            if let Some(c) = chain {
+                hash_chain(&mut h, c);
             }
         }
     }
     h.finish()
+}
+
+/// Fold one insert chain into the signature: dropping a plugin on the row,
+/// dragging one of its knobs or bypassing it all change what the comp sounds
+/// like without touching a Volume keyframe, so the whole stack and its wiring
+/// go in. Debug text rather than a field-by-field walk, and a stack is a
+/// handful of entries.
+fn hash_chain(
+    h: &mut std::collections::hash_map::DefaultHasher,
+    chain: &lumit_render::export::AudioChain,
+) {
+    use std::hash::Hash;
+    format!("{:?}", chain.effects).hash(h);
+    format!("{:?}", chain.graph).hash(h);
+    // Whether each of THIS chain's plugins is switched off folds in too (AP5):
+    // flicking the switch changes what the chain opens without touching the
+    // document, and the rebake this provokes is what actually silences the
+    // plugin rather than only badging it. This chain's plugins, not the whole
+    // list, so switching off a plugin no comp uses re-plans nothing.
+    if let Ok(disabled) = lumit_aplug::session_disabled().lock() {
+        for effect in &chain.effects {
+            let name = effect.effect.match_name.as_str();
+            if let Some(id) = lumit_core::fx::audio_plugin_id(name) {
+                disabled.contains(id).hash(h);
+            }
+        }
+    }
 }
 
 /// Fold one Volume animation into the signature: static hashes as one f64,
@@ -276,25 +298,25 @@ pub(crate) fn build_plan(
                 buffer.samples.len() / 2,
                 rate,
             )?;
-            // The layer's insert chain, ahead of Volume and Pan. The
-            // processed span **replaces** the decoded buffer in the plan, so
-            // the realtime callback plays finished sound and never waits on a
-            // plugin's process; a layer whose stack opens nothing keeps the
-            // shared decoded `Arc` untouched. Realtime rather than offline
-            // here, which is the one thing this path and the export's say
-            // differently — the arithmetic in between is the same function.
-            let wet = job.chain.as_ref().and_then(|chain| {
-                lumit_render::export::chain_bake(
-                    chain,
-                    &buffer.samples[src_start * 2..(src_start + len) * 2],
-                    start_frame,
-                    rate,
-                    false,
-                )
-            });
+            // The clip's insert chain and then the layer's, ahead of Volume
+            // and Pan. The processed span **replaces** the decoded buffer in
+            // the plan, so the realtime callback plays finished sound and
+            // never waits on a plugin's process; a job whose stacks open
+            // nothing keeps the shared decoded `Arc` untouched. Realtime
+            // rather than offline here, which is the one thing this path and
+            // the export's say differently - the arithmetic in between is the
+            // same function.
+            let wet = lumit_render::export::job_bake(
+                job,
+                &buffer.samples[src_start * 2..(src_start + len) * 2],
+                start_frame,
+                rate,
+                false,
+            );
             let (buffer, start_frame, src_start, len) = match wet {
                 // Placed the chain's summed latency earlier, so the wet lands
-                // where the dry did.
+                // where the dry did, and as long as the run came back, so a
+                // tail rings on past the out point.
                 Some((samples, latency)) => {
                     let frames = samples.len() / 2;
                     (
@@ -526,6 +548,7 @@ fn prepare_once(comp: Uuid, doc: &Arc<lumit_core::Document>) {
             st.loaded_comp = None;
             st.loaded_sig = None;
             st.meter_strips.clear();
+            st.loaded_plan = None;
         }
         return;
     };
@@ -554,6 +577,7 @@ fn prepare_once(comp: Uuid, doc: &Arc<lumit_core::Document>) {
             st.loaded_comp = None;
             st.loaded_sig = None;
             st.meter_strips.clear();
+            st.loaded_plan = None;
         }
         return;
     }
@@ -613,11 +637,11 @@ fn prepare_once(comp: Uuid, doc: &Arc<lumit_core::Document>) {
         return;
     }
     if st.loaded_comp == Some(comp) {
-        let _ = tx.send(Cmd::Swap(plan));
+        let _ = tx.send(Cmd::Swap(Arc::clone(&plan)));
     } else {
         let start = st.pending_start.take();
         let _ = tx.send(Cmd::Load {
-            plan,
+            plan: Arc::clone(&plan),
             start,
             play: st.playing,
         });
@@ -625,6 +649,7 @@ fn prepare_once(comp: Uuid, doc: &Arc<lumit_core::Document>) {
     st.loaded_comp = Some(comp);
     st.loaded_sig = Some(sig);
     st.meter_strips = strips;
+    st.loaded_plan = Some((plan, rate));
     trim_decoded(&mut st, &jobs);
 }
 
@@ -676,6 +701,7 @@ pub(crate) fn play(comp: Uuid, start: f64, doc: Arc<lumit_core::Document>) {
         st.loaded_comp = None;
         st.loaded_sig = None;
         st.meter_strips.clear();
+        st.loaded_plan = None;
     }
     st.pending_start = Some(start.max(0.0));
     kick_prepare(&mut st, comp, doc);
@@ -756,6 +782,8 @@ pub(crate) fn preview(item: Uuid, path: std::path::PathBuf) {
             fade: None,
             driven: None,
             chain: None,
+            clip: None,
+            clip_chain: None,
         }];
         let mut decoded = HashMap::new();
         decoded.insert(item, buffer);
@@ -860,17 +888,48 @@ pub(crate) fn set_device(id: Option<String>) {
     st.loaded_comp = None;
     st.loaded_sig = None;
     st.meter_strips.clear();
+    st.loaded_plan = None;
     st.pending_start = None;
     // Untried rather than Unavailable even when the last attempt found nothing:
     // choosing a device is exactly the moment to look again.
     st.device = Device::Untried;
 }
 
+/// The loaded mix summarised over `[start_s, end_s)` - `min`, `max`, `rms`
+/// per bucket, the shape the waveform lanes draw - and how long the mix runs,
+/// or `None` when `comp` is not the mix the engine holds (nothing loaded, or
+/// another comp's). A prepare running alongside is not a refusal: the plan in
+/// hand is the mix as it was a moment ago, which is what the row wants over an
+/// empty lane, and the next ask has the new one. The plan's `Arc` is cloned
+/// under the lock and walked outside it, so a wide window never holds the
+/// audio bookkeeping up.
+pub(crate) fn mix_peaks(
+    comp: Uuid,
+    start_s: f64,
+    end_s: f64,
+    buckets: usize,
+) -> Option<(Vec<f32>, f64)> {
+    let (plan, rate) = {
+        let st = lock();
+        // Not `worker_busy`: a prepare marks the worker busy the moment it is
+        // kicked, and the row asks for one on every poll, so refusing while
+        // one runs is refusing always. The loaded plan is only ever replaced
+        // by a prepare that finished, so the worst this answers is the mix as
+        // it stood one poll ago.
+        if st.loaded_comp != Some(comp) {
+            return None;
+        }
+        st.loaded_plan.clone()?
+    };
+    let duration = plan.total_frames as f64 / f64::from(rate);
+    Some((plan.peaks(rate, start_s, end_s, buckets), duration))
+}
+
 /// The playback clock: `(seconds, is_playing, loaded)`.
 ///
-/// Allocation-free — the state lock plus two atomic reads — because it is polled
-/// every tick. With no device, or nothing loaded, it reads `(0.0, false, false)`
-/// and the caller keeps its own clock.
+/// Allocation-free - the state lock plus two atomic reads - because it is
+/// polled every tick. With no device, or nothing loaded, it reads
+/// `(0.0, false, false)` and the caller keeps its own clock.
 pub(crate) fn clock() -> (f64, bool, bool) {
     let st = lock();
     match &st.device {
@@ -889,11 +948,21 @@ mod tests {
     use lumit_core::anim::Property;
     use std::path::PathBuf;
 
+    /// Tests that write the one shared audio state take this first, so two of
+    /// them never see each other's half-set state.
+    fn state_tests() -> std::sync::MutexGuard<'static, ()> {
+        static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        SERIAL
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
     fn job(path: &str, in_s: f64, out_s: f64, offset_s: f64) -> AudioJob {
         let item = Uuid::now_v7();
         AudioJob {
             item,
             layer: item, // one job, one strip: the test's own layer identity
+            clip: None,
             path: PathBuf::from(path),
             in_s,
             out_s,
@@ -904,6 +973,7 @@ mod tests {
             fade: None,
             driven: None,
             chain: None,
+            clip_chain: None,
         }
     }
 
@@ -1067,6 +1137,59 @@ mod tests {
         assert!(strips.is_empty() || strips.last().is_some_and(|s| s.layer.is_none()));
     }
 
+    /// A comp nothing has prepared has no mix to summarise: the Sound mix
+    /// row draws an empty lane rather than another comp's sound.
+    #[test]
+    fn mix_peaks_answer_nothing_for_a_comp_that_is_not_loaded() {
+        assert!(mix_peaks(Uuid::now_v7(), 0.0, 1.0, 16).is_none());
+    }
+
+    /// **A loaded mix answers while the next prepare runs.** The row asks for
+    /// a prepare on every poll and a prepare marks the worker busy the moment
+    /// it is kicked, so refusing a busy worker refused every ask there was and
+    /// the lane stayed empty for ever. What is loaded is answered instead: at
+    /// worst the mix as it stood one poll ago.
+    #[test]
+    fn mix_peaks_answer_the_loaded_plan_while_a_prepare_runs() {
+        let _held = state_tests();
+        let rate = 48_000u32;
+        let tone = job("tone.wav", 0.0, 1.0, 0.0);
+        let mut decoded = HashMap::new();
+        decoded.insert(
+            tone.item,
+            Arc::new(lumit_media::AudioBuffer {
+                rate,
+                samples: vec![0.5; rate as usize * 2], // a second of steady tone
+            }),
+        );
+        let (plan, _strips) = build_plan(&[tone], &decoded, rate, 1.0, 0.0);
+        let comp = Uuid::now_v7();
+        {
+            let mut st = lock();
+            st.loaded_comp = Some(comp);
+            st.loaded_plan = Some((plan, rate));
+            st.worker_busy = true; // as it is a moment after every ask
+        }
+
+        let answer = mix_peaks(comp, 0.0, 1.0, 8);
+        {
+            // Put the shared state back before asserting, so a failure here
+            // does not leave a mix loaded for the next test.
+            let mut st = lock();
+            st.loaded_comp = None;
+            st.loaded_plan = None;
+            st.worker_busy = false;
+        }
+
+        let (values, duration) = answer.expect("the mix in hand is answered");
+        assert!((duration - 1.0).abs() < 1e-6, "a second of mix");
+        assert_eq!(values.len(), 8 * 3, "min, max and rms per bucket");
+        assert!(
+            values.chunks(3).all(|b| (b[1] - 0.5).abs() < 1e-3),
+            "every bucket carries the tone: {values:?}"
+        );
+    }
+
     /// The clock poll before any engine exists is the calm zero state — the
     /// exact reading a device-less CI machine holds forever.
     #[test]
@@ -1089,6 +1212,7 @@ mod tests {
     /// stored choice over on every boot.
     #[test]
     fn choosing_an_output_closes_the_stream_and_repeating_it_does_not() {
+        let _held = state_tests();
         let before = lock().device_gen;
         set_device(Some("Some device that is not here".to_owned()));
         {
@@ -1175,6 +1299,7 @@ mod tests {
             &self,
             _state: Option<Vec<u8>>,
             _values: &[(lumit_core::fx::ParamId, f64)],
+            _rate: u32,
             _offline: bool,
         ) -> Option<Arc<dyn lumit_core::fx::AudioProcessor>> {
             Some(Arc::new(TestInsert {
@@ -1208,6 +1333,7 @@ mod tests {
                     kind: lumit_core::fx::ParamKind::Slider {
                         default: 1.0,
                         range: (0.0, 4.0),
+                        log: false,
                     },
                     unit: lumit_core::fx::Unit::Raw,
                 }])),
@@ -1281,10 +1407,14 @@ mod tests {
         let bare = job("a.mp4", 0.0, 1.0, 0.0);
         let mut blurred = bare.clone();
         blurred.chain = Some(chain_of(vec![lumit_core::fx::instantiate("blur").unwrap()]));
+        // Both racks bypassed is the same answer: a clip whose own stack opens
+        // nothing costs the mix nothing either.
+        let mut both = blurred.clone();
+        both.clip_chain = Some(chain_of(vec![lumit_core::fx::instantiate("blur").unwrap()]));
 
         let mut decoded = HashMap::new();
         decoded.insert(bare.item, Arc::clone(&source));
-        for one in [bare, blurred] {
+        for one in [bare, blurred, both] {
             let (plan, _) = build_plan(&[one], &decoded, rate, 1.0, 0.0);
             assert!(
                 Arc::ptr_eq(&plan.clips[0].buffer, &source),
@@ -1611,6 +1741,261 @@ mod tests {
             on,
             jobs_signature(&with_chain, 10.0, 0.0),
             "switching back on restores the signature"
+        );
+    }
+
+    // ------------------------------------- the clip's rack and its fades --
+
+    /// A clip fade of `head`/`tail` seconds with the two shapes on it.
+    fn clip_fade(
+        start_s: f64,
+        head_s: f64,
+        head_shape: lumit_core::sequence::FadeShape,
+        end_s: f64,
+        tail_s: f64,
+        tail_shape: lumit_core::sequence::FadeShape,
+    ) -> lumit_render::export::ClipFade {
+        lumit_render::export::ClipFade {
+            start_s,
+            head_s,
+            head_shape,
+            end_s,
+            tail_s,
+            tail_shape,
+            gain_db: 0.0,
+        }
+    }
+
+    /// **The clip's rack runs before the row's** (the note's §4, plan 4).
+    ///
+    /// The stand-in plugin hard clips at ±0.5, so the two orders give
+    /// different numbers and "clip first, then row" is a claim the arithmetic
+    /// can settle: 0.2 through a half and then a four is 0.4, while a four and
+    /// then a half would have been clipped on the way and come out at 0.25.
+    #[test]
+    fn the_clips_rack_runs_before_the_rows() {
+        let rate = 48_000u32;
+        register_insert("clap:lumit.test.clipfirst", None, 0);
+        let source = tone(rate, 1.0, 0.2);
+        let mut one = job("a.mp4", 0.0, 1.0, 0.0);
+        one.clip_chain = Some(chain_of(vec![insert_instance(
+            "clap:lumit.test.clipfirst",
+            Property::fixed(0.5),
+        )]));
+        one.chain = Some(chain_of(vec![insert_instance(
+            "clap:lumit.test.clipfirst",
+            Property::fixed(4.0),
+        )]));
+
+        let baked = lumit_render::export::mixdown_prepared(&[(source, one)], rate, 1.0, 1.0);
+        assert!(
+            (baked[0] - 0.4).abs() < 1e-5,
+            "the clip's rack ran first: expected 0.4, got {}",
+            baked[0]
+        );
+    }
+
+    /// **Two chains, two latencies, one placement** (plan 4): the run is put
+    /// down by the sum of them, so a lookahead limiter on the clip and another
+    /// on the row both land where the dry sound did.
+    #[test]
+    fn the_two_chains_latencies_sum() {
+        let rate = 48_000u32;
+        register_insert("clap:lumit.test.clip.latent", None, 32);
+        register_insert("clap:lumit.test.row.latent", None, 64);
+        let source = tone(rate, 2.0, 0.2);
+        let mut one = job("a.mp4", 1.0, 2.0, 0.0);
+        one.clip_chain = Some(chain_of(vec![insert_instance(
+            "clap:lumit.test.clip.latent",
+            Property::fixed(1.0),
+        )]));
+        one.chain = Some(chain_of(vec![insert_instance(
+            "clap:lumit.test.row.latent",
+            Property::fixed(1.0),
+        )]));
+        let mut decoded = HashMap::new();
+        decoded.insert(one.item, source);
+        let (plan, _) = build_plan(&[one], &decoded, rate, 3.0, 0.0);
+
+        assert_eq!(
+            plan.clips[0].start_frame,
+            i64::from(rate) - 96,
+            "placed earlier by both chains' delay together"
+        );
+    }
+
+    /// **Preview is export through a shaped crossfade and a clip effect**
+    /// (plan 3): two clips over one join, each with its own stored shape and
+    /// one of them carrying a rack of its own, mix to the same samples in the
+    /// live plan and in the bake.
+    #[test]
+    fn a_shaped_crossfade_with_a_clip_effect_mixes_the_same_in_both_paths() {
+        use lumit_core::sequence::FadeShape;
+        let rate = 48_000u32;
+        register_insert("clap:lumit.test.crossfade", None, 0);
+        // Clip A runs 0..1 and goes out over its last half second; clip B runs
+        // 0.5..1.5 and comes in over its first, through its own plugin.
+        let a_source = tone(rate, 1.0, 0.4);
+        let b_source = tone(rate, 1.5, 0.8);
+        let mut a = job("a.mp4", 0.0, 1.0, 0.0);
+        a.fade = Some(clip_fade(
+            0.0,
+            0.0,
+            FadeShape::Fast,
+            1.0,
+            0.5,
+            FadeShape::Smooth,
+        ));
+        let mut b = job("b.mp4", 0.5, 1.5, 0.5);
+        b.fade = Some(clip_fade(
+            0.5,
+            0.5,
+            FadeShape::custom(0.2, 0.8, 0.6, 0.9),
+            1.5,
+            0.0,
+            FadeShape::Fast,
+        ));
+        b.clip_chain = Some(chain_of(vec![insert_instance(
+            "clap:lumit.test.crossfade",
+            Property::fixed(1.0),
+        )]));
+
+        let mut decoded = HashMap::new();
+        decoded.insert(a.item, Arc::clone(&a_source));
+        decoded.insert(b.item, Arc::clone(&b_source));
+        let (plan, _) = build_plan(&[a.clone(), b.clone()], &decoded, rate, 2.0, 0.0);
+        let baked =
+            lumit_render::export::mixdown_prepared(&[(a_source, a), (b_source, b)], rate, 2.0, 1.0);
+
+        for i in 0..(2 * rate as usize) {
+            let (l, r) = plan.frame_at(i);
+            assert!(
+                (l - baked[i * 2]).abs() < 1e-9 && (r - baked[i * 2 + 1]).abs() < 1e-9,
+                "frame {i}: the live plan and the export disagree"
+            );
+        }
+        // And both really happened: past the join B stands alone, held at the
+        // plugin's ±0.5, and half way across it neither clip is at full level.
+        let after = baked[(rate as usize * 6 / 5) * 2];
+        assert!(
+            (after - 0.5).abs() < 1e-5,
+            "the clip's own plugin ran: expected 0.5, got {after}"
+        );
+        let middle = baked[(rate as usize * 3 / 4) * 2];
+        assert!(middle > 0.0 && middle < 0.9, "a shaped join, got {middle}");
+    }
+
+    /// The signature catches every edit the Audio timeline can make that
+    /// changes the sound without moving a clip (plan 5): a fade's shape, a
+    /// clip's bypass, an effect added to a clip, and the row's own fx
+    /// switch.
+    #[test]
+    fn the_signature_tracks_the_fades_and_both_racks() {
+        use lumit_core::sequence::FadeShape;
+        let one = |fade, clip_chain, chain| {
+            let mut j = job("a.mp4", 0.0, 5.0, 0.0);
+            j.fade = fade;
+            j.clip_chain = clip_chain;
+            j.chain = chain;
+            vec![j]
+        };
+        let fast = Some(clip_fade(
+            0.0,
+            0.5,
+            FadeShape::Fast,
+            5.0,
+            0.0,
+            FadeShape::Fast,
+        ));
+        let sig = jobs_signature(&one(fast, None, None), 10.0, 0.0);
+
+        let slow = Some(clip_fade(
+            0.0,
+            0.5,
+            FadeShape::Slow,
+            5.0,
+            0.0,
+            FadeShape::Fast,
+        ));
+        assert_ne!(
+            sig,
+            jobs_signature(&one(slow, None, None), 10.0, 0.0),
+            "a shape edit that moves no clip still re-plans"
+        );
+        let longer = Some(clip_fade(
+            0.0,
+            0.75,
+            FadeShape::Fast,
+            5.0,
+            0.0,
+            FadeShape::Fast,
+        ));
+        assert_ne!(
+            sig,
+            jobs_signature(&one(longer, None, None), 10.0, 0.0),
+            "and so does a longer fade"
+        );
+
+        let racked = chain_of(vec![insert_instance(
+            "clap:lumit.test.signature",
+            Property::fixed(1.0),
+        )]);
+        let with_clip_fx = jobs_signature(&one(fast, Some(Arc::clone(&racked)), None), 10.0, 0.0);
+        assert_ne!(sig, with_clip_fx, "an effect added to a clip re-plans");
+        assert_ne!(
+            with_clip_fx,
+            jobs_signature(&one(fast, None, None), 10.0, 0.0),
+            "and the clip's bypass, which takes the chain away, re-plans back"
+        );
+
+        let with_row_fx = jobs_signature(&one(fast, None, Some(racked)), 10.0, 0.0);
+        assert_ne!(sig, with_row_fx, "the row's fx switch re-plans too");
+        assert_ne!(
+            with_clip_fx, with_row_fx,
+            "and the same stack on the two racks is not the same mix"
+        );
+    }
+
+    /// **A knob on a built-in re-plans the mix** (docs/impl/audio-effects.md
+    /// §6 plan 4).
+    ///
+    /// The rack goes into the signature whole, so dragging a Gain row changes
+    /// what the comp sounds like without touching a Volume keyframe, and the
+    /// no-op gate has to let the rebake through. The same rack twice still
+    /// agrees, or every idle rebuild would bake the sound again.
+    #[test]
+    fn a_parameter_edit_on_a_built_in_re_plans_the_mix() {
+        let quiet = lumit_core::fx::instantiate("audio_gain").expect("a catalogue entry");
+        let gain_at = |db: f64| {
+            let mut instance = quiet.clone();
+            for param in &mut instance.params {
+                if param.id == "gain" {
+                    param.value = lumit_core::model::EffectValue::Float(Property::fixed(db));
+                }
+            }
+            chain_of(vec![instance])
+        };
+        let one = |chain| {
+            let mut j = job("a.mp4", 0.0, 5.0, 0.0);
+            j.chain = chain;
+            vec![j]
+        };
+
+        let sig = jobs_signature(&one(Some(gain_at(0.0))), 10.0, 0.0);
+        assert_eq!(
+            sig,
+            jobs_signature(&one(Some(gain_at(0.0))), 10.0, 0.0),
+            "the same rack twice is the same mix"
+        );
+        assert_ne!(
+            sig,
+            jobs_signature(&one(Some(gain_at(6.0))), 10.0, 0.0),
+            "a Gain row moved re-plans"
+        );
+        assert_ne!(
+            sig,
+            jobs_signature(&one(None), 10.0, 0.0),
+            "and a bypassed rack re-plans back"
         );
     }
 }

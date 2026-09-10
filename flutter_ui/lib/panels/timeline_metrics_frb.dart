@@ -14,6 +14,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart';
 import '../l10n/strings.dart';
 import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
@@ -404,6 +405,97 @@ class LayerRow {
     }
   }
   return (headers: headers, hidden: hidden);
+}
+
+/// How faint a dimmed row is drawn ([LayerRow.dimmed]): read, not
+/// touched - the same fade a row wears while it is being dragged.
+const double dimmedRowOpacity = 0.4;
+
+/// [child] as a dimmed row draws it when [dimmed]: faded and deaf to the
+/// pointer, on both halves of the table, so the outline and the lanes cannot
+/// fade one side and not the other.
+Widget dimmedIf(bool dimmed, Widget child) => dimmed
+    ? IgnorePointer(child: Opacity(opacity: dimmedRowOpacity, child: child))
+    : child;
+
+/// Whether the **Audio timeline** lists [entry] as a row - the sound table,
+/// holding only what can be heard (docs/impl/audio-timeline.md §5).
+///
+/// A row is in when its source carries sound, with one exception: a row that
+/// also has a *picture* - footage with both, a Precomp, a Sequence - is
+/// listed only while it is audible. Such a row is drawn dimmed and cannot be
+/// worked on here ([audioTimelineDims]); *Detach audio* puts its sound on an
+/// Audio layer of its own and mutes it, and the muted picture row then leaves
+/// the list, the sound now standing on the row that replaced it. A muted Audio
+/// layer stays listed: mute is a mixing decision, and this is where mixing
+/// happens.
+///
+/// [hasAudio] and [hasPicture] are the panel's probes, which is why the
+/// question is answered here rather than off the entry alone.
+bool audioTimelineShows(BridgeLayerEntry entry,
+        {required bool hasAudio, required bool hasPicture}) =>
+    hasAudio && (!hasPicture || entry.info.switches.audible);
+
+/// Whether the Audio timeline draws [entry] dimmed: it is listed for its
+/// sound, but the picture it carries keeps it out of reach until the sound is
+/// detached onto a row of its own.
+bool audioTimelineDims(BridgeLayerEntry entry, {required bool hasPicture}) =>
+    hasPicture;
+
+/// Whether the **Sound mix** row folds [entry] away: an Audio layer - sound
+/// and nothing else - is what the fold takes, so a picture edit sees one row
+/// standing for the mix rather than every layer of it. A footage row with
+/// sound is a picture row too, and stays where it is.
+bool soundMixFolds(BridgeLayerEntry entry) =>
+    entry.info.kind == BridgeLayerKind.audio;
+
+/// The layers a timeline panel lists (docs/07 §4.8, docs/impl/audio-timeline.md
+/// §5).
+///
+/// For the **Audio timeline** ([audioTimeline]) the list is what
+/// [audioTimelineShows] admits, in stack order, and [dimmed] names the rows
+/// [audioTimelineDims] fades. For the layer Timeline the Audio layers are
+/// folded under the Sound mix row unless the fold is twirled open
+/// ([mixOpen]); [folded] is what the fold took, so the row can say how many
+/// and the panel can tell whether to draw it at all.
+///
+/// Pure, and decided once per build for both halves of a table, so an outline
+/// and its lanes cannot disagree about which rows they have.
+({
+  List<BridgeLayerEntry> shown,
+  Set<String> dimmed,
+  List<BridgeLayerEntry> folded,
+}) timelineViewLayers({
+  required List<BridgeLayerEntry> layers,
+  required bool audioTimeline,
+  required bool mixOpen,
+  required Map<String, bool> hasAudio,
+  required Map<String, bool> hasPicture,
+}) {
+  final shown = <BridgeLayerEntry>[];
+  final dimmed = <String>{};
+  final folded = <BridgeLayerEntry>[];
+  for (final entry in layers) {
+    final id = entry.layer.internallayerId.toString();
+    final sounds = hasAudio[id] ?? false;
+    // Until the probe answers, a layer is taken to have a picture - the
+    // same default [layerRows] draws the switches by.
+    final pictured = hasPicture[id] ?? true;
+    if (audioTimeline) {
+      if (!audioTimelineShows(entry, hasAudio: sounds, hasPicture: pictured)) {
+        continue;
+      }
+      if (audioTimelineDims(entry, hasPicture: pictured)) dimmed.add(id);
+      shown.add(entry);
+      continue;
+    }
+    if (soundMixFolds(entry)) {
+      folded.add(entry);
+      if (!mixOpen) continue;
+    }
+    shown.add(entry);
+  }
+  return (shown: shown, dimmed: dimmed, folded: folded);
 }
 
 /// What a column group is called — in its header, and on the bottom bar's

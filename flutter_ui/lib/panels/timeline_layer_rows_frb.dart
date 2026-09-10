@@ -124,6 +124,20 @@ class FoldRow extends StatelessWidget {
   final ValueChanged<String> onToggle;
   final VoidCallback onChanged;
 
+  /// Bypass the one effect a heading names, for a panel that offers the tick.
+  /// Null in the layer Timeline, whose effect headings carry none, so a
+  /// heading draws exactly as it always has unless a panel asks for it.
+  final void Function(String path, bool on)? onSetEnabled;
+
+  /// Add an effect to the stack this heading names, from a glyph on the
+  /// heading. [onSetEnabled]'s own shape, and null for the same reason: the
+  /// layer Timeline's Effects heading offers no such glyph, because the Effect
+  /// controls panel is where a layer's stack is filled. The Audio timeline
+  /// passes it on a track's Effects heading, which is the only door to the
+  /// track's own rack. The button's own context comes back, so the menu drops
+  /// from the glyph rather than from the corner of the panel.
+  final void Function(BuildContext at)? onAddEffect;
+
   /// Whether the layer this row belongs to is locked. A locked layer's
   /// rows are still *read* — the numbers are what the document holds and the
   /// curves still draw — but nothing on them can be touched.
@@ -147,6 +161,8 @@ class FoldRow extends StatelessWidget {
     required this.onToggle,
     required this.onChanged,
     required this.locked,
+    this.onSetEnabled,
+    this.onAddEffect,
   });
 
   @override
@@ -277,6 +293,26 @@ class FoldRow extends StatelessWidget {
     );
   }
 
+  /// The add-effect glyph on a heading that offers one: the catalogue, dropped
+  /// from the glyph itself. Its own gesture, so filling the rack does not also
+  /// twirl the heading shut.
+  Widget _addEffectGlyph(Color ink) => LumitTooltip(
+        message: l10n.addEffect,
+        child: Builder(
+          builder: (buttonContext) => GestureDetector(
+            key: ValueKey<String>(
+                'atl-track-add-effect-${layer.internallayerId}'),
+            behavior: HitTestBehavior.opaque,
+            onTap: () => onAddEffect!(buttonContext),
+            child: SizedBox(
+              width: iconSize + 6,
+              child: glyph.LumitIcon(LumitIcons.addEffect,
+                  size: iconSize, colour: ink),
+            ),
+          ),
+        ),
+      );
+
   Widget _control(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     return switch (row) {
@@ -319,7 +355,8 @@ class FoldRow extends StatelessWidget {
             },
           ),
         ),
-      FoldGroupRow(:final path, :final label, :final open) => GestureDetector(
+      FoldGroupRow(:final path, :final label, :final open, :final enabled) =>
+        GestureDetector(
           key: ValueKey<String>('tl-group-$path'),
           behavior: HitTestBehavior.opaque,
           // **A heading is picked as well as twirled**. Until this, a
@@ -346,6 +383,17 @@ class FoldRow extends StatelessWidget {
                   ),
           child: Row(
             children: [
+              // The effect's own bypass, where a panel offers it: this heading
+              // is the only place a clip's effect can be switched off, since a
+              // clip is nobody's subject in the Effect controls panel.
+              if (enabled != null && onSetEnabled != null) ...[
+                fxEnableSwitch(
+                  id: path,
+                  on: enabled,
+                  onChanged: (on) => onSetEnabled!(path, on),
+                ),
+                const SizedBox(width: 2),
+              ],
               GestureDetector(
                 key: ValueKey<String>('tl-twirl-$path'),
                 behavior: HitTestBehavior.opaque,
@@ -391,6 +439,10 @@ class FoldRow extends StatelessWidget {
                   child: Text(label,
                       style: t.body, overflow: TextOverflow.ellipsis),
                 ),
+              // The glyph that fills the rack this heading names, where a
+              // panel offers one. It sits after the word, so the heading reads
+              // as what it is and the button as what it does.
+              if (onAddEffect != null) _addEffectGlyph(t.textMuted),
             ],
           ),
         ),
@@ -614,6 +666,12 @@ class _TimelineParamRowState extends State<_TimelineParamRow> {
     // engine's shared instance lookup routes it to the group's own op.
     _editor.groupStack = switch (row.group) {
       final g? => () => widget.comp.getGroupEffects(group: g),
+      null => null,
+    };
+    // A clip's row: the fourth place a stack can be read from, and the commit
+    // routes to the clip's own list by the same shared lookup.
+    _editor.clipStack = switch (row.clip) {
+      final c? => () => widget.layer.getClipEffects(clip: c),
       null => null,
     };
     return EffectParamRowFrb(

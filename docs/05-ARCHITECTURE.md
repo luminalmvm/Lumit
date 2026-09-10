@@ -164,7 +164,8 @@ On every document edit, `lumit-eval` incrementally recompiles the affected comp:
    effect chain applied to the accumulated composite; Precomp layers lower to the nested
    comp's subgraph behind a single boundary node; a matte is a side input to the blend node.
 2. A **Sequence layer** lowers to a *time-multiplexed switch*: for any requested layer time,
-   exactly one clip is active (clips never overlap), so compilation resolves which clip covers
+   exactly one clip is active (clips on a layer that draws a picture never overlap - only an
+   audio-only layer's may, and nothing here compiles those), so compilation resolves which clip covers
    that time and emits that clip's subgraph — source node, the clip's Retime mapping, its
    frame-interpolation policy — then the Sequence layer's own effects/masks/transform apply to
    the switch output. Edit points are pure data; no node exists "between" clips.

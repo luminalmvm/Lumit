@@ -178,7 +178,16 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
         continue;
       }
       grouped.putIfAbsent(effect.category, () => []).add(effect);
-      headings[effect.category] = heading;
+      // A named heading always wins, as it does in the Add-effect menu: the
+      // Audio group holds Lumit's own effects and the installed plugins
+      // together, the built-ins bring the engine's Audio heading and the
+      // plugins bring none, and heading the lot "Audio plugins" because a
+      // plugin was read last would misname every built-in under it.
+      if (effect.categoryLabel.isNotEmpty) {
+        headings[effect.category] = heading;
+      } else {
+        headings.putIfAbsent(effect.category, () => heading);
+      }
     }
 
     return Column(

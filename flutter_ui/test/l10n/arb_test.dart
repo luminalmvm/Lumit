@@ -40,13 +40,18 @@ const _banned = {
   'CTI': 'playhead',
 };
 
-/// Strings where a banned word is not the banned *sense*.
+/// Strings where a banned word is not the banned *sense*, or is the
+/// glossary's own scoped exception.
 ///
 /// The glossary bans "track" where Lumit means a **layer**. It says nothing
 /// about tracking as a verb (§9), and these are features whose names contain
 /// it: following a camera, following motion, and the matte that After Effects
 /// calls a track matte. The menu rows are for work not built yet;
 /// `fxCameraTrack` is the effect itself, which is built.
+///
+/// The Audio timeline panel is the one place a row is called a track in what
+/// the user reads (docs/01-GLOSSARY.md, docs/07-UI-SPEC.md §4.8), so that
+/// panel's own strings are the exception the glossary already grants.
 const _bannedWordIsAnotherSense = {
   'menuTrackCamera',
   'menuTrackMotion',
@@ -55,6 +60,8 @@ const _bannedWordIsAnotherSense = {
   'fxCameraTrack',
   // The planar tracker is the same verb sense as the camera's.
   'fxPlanarTrack',
+  // The Audio timeline's own column header.
+  'columnTrack',
 };
 
 /// Every `.arb` in lib/l10n, source and translations alike, in a stable order.

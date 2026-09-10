@@ -5731,6 +5731,55 @@ void main() {
       expect(stack(), ['Top', 'Middle', 'Bottom']);
     });
 
+    /// A drop lands the layer where the row under it stands **in the stack**,
+    /// not where it stands on screen. With a row hidden by the shy filter, the
+    /// search box or the Sound mix fold, every slot below it counted short and
+    /// the drop put the layer somewhere else.
+    testWidgets('a drop counts the stack, not the rows on screen',
+        (tester) async {
+      final p = withComp();
+      for (final name in ['Bottom', 'Middle', 'Top', 'Backplate']) {
+        p.comp.addSolidLayer().rename(name: name);
+      }
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      List<String> stack() => [for (final l in p.comp.getLayers()) l.getName()];
+      expect(stack(), ['Backplate', 'Top', 'Middle', 'Bottom'],
+          reason: 'newest on top, as added');
+
+      // The top row goes shy and the filter takes it off the screen, so the
+      // rows on show start one below the top of the stack.
+      final shy = p.comp.getLayers().first;
+      await tester
+          .tap(find.byKey(ValueKey<String>('tl-shy-${shy.internallayerId}')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('tl-hide-shy')));
+      await tester.pump();
+      expect(find.text('Backplate'), findsNothing);
+
+      // The topmost row on show, dropped on the bottom one.
+      final visible = p.comp.getLayers().sublist(1);
+      final from = find.byKey(
+          ValueKey<String>('tl-name-${visible.first.internallayerId}'));
+      final onto = find
+          .byKey(ValueKey<String>('tl-row-${visible.last.internallayerId}'));
+      final start = tester.getCenter(from);
+      final end = tester.getCenter(onto);
+      final gesture = await tester.startGesture(start);
+      await tester.pump(const Duration(milliseconds: 200));
+      for (var i = 1; i <= 8; i++) {
+        await gesture.moveTo(start + (end - start) * (i / 8));
+        await tester.pump();
+      }
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      expect(stack(), ['Backplate', 'Middle', 'Bottom', 'Top'],
+          reason: 'the drop landed the layer at the slot it had on screen, '
+              'which is one place short of the stack with a row hidden');
+    });
+
     /// Mid-drag, **both halves of the table move**: the name in the
     /// outline and the bar in the lanes belong to one layer, and the lanes
     /// used to sit still while the names slid, because only the outline knew

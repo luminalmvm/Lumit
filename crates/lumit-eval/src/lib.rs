@@ -119,6 +119,22 @@ pub trait SourceStamper {
     fn camera(&self, _doc: &Document, comp: &Composition, t: f64) -> Option<CameraPose> {
         comp.camera_pose(t)
     }
+
+    /// A fingerprint of what `comp`'s **mix** sounds like
+    /// (docs/impl/audio-nodes.md §3).
+    ///
+    /// A Volume is a mixer control and moves no pixel, so nothing in this walk
+    /// hashes one. An Audio level driver left on *This comp* turns the mix into
+    /// pixels all the same, and without this term pulling a fader would hand
+    /// back the frame drawn before the pull, for ever. Asked of the host for
+    /// the reason the camera pose is: the mix is the render's own job list, and
+    /// this crate does not know what a decoder is.
+    ///
+    /// The default answers `None`, which folds nothing: a host with no mixer
+    /// keys such a frame exactly as it did before this existed.
+    fn mix_fingerprint(&self, _doc: &Arc<Document>, _comp: &Composition) -> Option<u64> {
+        None
+    }
 }
 
 /// The content-hash key for `comp` rendered at time `t` — or None when some
@@ -661,6 +677,24 @@ fn feed_effect_stack(
                     // other layers' own `feed_layer` calls (draw order is
                     // content). Recursing here would re-hash the same
                     // source for no gain.
+                    //
+                    // **Audio level's Audio row is a reading, not a picture**
+                    // (docs/impl/audio-nodes.md §3). Every source the node
+                    // offers is the comp's mix under a filter, the whole of
+                    // it, one layer of it, or one clip of one layer, so a fader
+                    // anywhere in the comp can move the number the picture
+                    // follows, and folding the named layer's own file says
+                    // nothing about it. The mix's fingerprint is the term that
+                    // does. It is asked for this one row alone, so no other
+                    // reference pays for a job list.
+                    let mix = (e.effect.namespace == lumit_core::model::EffectNamespace::Builtin
+                        && e.effect.match_name == "audio_level"
+                        && p.id == "audio")
+                        .then(|| stamper.mix_fingerprint(doc, comp))
+                        .flatten();
+                    if let Some(sig) = mix {
+                        h.update(&sig.to_le_bytes());
+                    }
                     if marker_layer.is_some_and(|l| *lref == Some(l.id)) {
                         h.update(&[2]);
                         continue;
@@ -720,6 +754,23 @@ fn feed_effect_stack(
                                     false,
                                 )?;
                             }
+                        }
+                        None => {
+                            h.update(&[0]);
+                        }
+                    }
+                }
+                EffectValue::Clip(named) => {
+                    // Which clip a node listens to
+                    // (docs/impl/audio-nodes.md §3). The id itself, as the
+                    // layer reference above feeds its own: two clips of one
+                    // layer share every other fact in this key, so nothing
+                    // else here tells them apart. Unset feeds the same
+                    // distinct 0 marker every reference does.
+                    match named {
+                        Some(id) => {
+                            h.update(&[1]);
+                            h.update(id.as_bytes());
                         }
                         None => {
                             h.update(&[0]);
@@ -1737,6 +1788,7 @@ mod tests {
     fn comp_with(layers: Vec<Layer>) -> Composition {
         Composition {
             master_volume_db: 0.0,
+            sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
             id: Uuid::now_v7(),
@@ -1752,6 +1804,81 @@ mod tests {
             motion_blur: Default::default(),
             extra: serde_json::Map::new(),
         }
+    }
+
+    /// **A frame drawn from the comp's mix is named by the mix**
+    /// (docs/impl/audio-nodes.md §3, plan 5).
+    ///
+    /// Audio level left on *This comp* draws pixels from a set of faders no
+    /// other part of this walk looks at, so the host's fingerprint has to reach
+    /// the key, and reach it only there, or every comp in the project would
+    /// re-render each time somebody moved a Volume.
+    #[test]
+    fn a_this_comp_reading_folds_the_mix_into_the_frame_key() {
+        use lumit_core::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
+
+        /// The stub stamper, answering a mix fingerprint of its own.
+        struct Mixed(u64);
+        impl SourceStamper for Mixed {
+            fn stamp(&self, item: Uuid, lt: f64, native: bool) -> Option<(String, u64)> {
+                StubStamper.stamp(item, lt, native)
+            }
+            fn mix_fingerprint(&self, _doc: &Arc<Document>, _comp: &Composition) -> Option<u64> {
+                Some(self.0)
+            }
+        }
+
+        let blur = lumit_core::fx::instantiate("blur").unwrap();
+        let blur_id = blur.id;
+        // Straight out of the catalogue: the Audio row is unset, which is the
+        // comp's own mix.
+        let level = lumit_core::fx::instantiate("audio_level").unwrap();
+        let level_id = level.id;
+        let wired = LayerGraph {
+            nodes: vec![level],
+            edges: vec![Edge {
+                from: OutputRef::Driver {
+                    node: level_id,
+                    port: "amplitude".into(),
+                },
+                to: InputRef::Param {
+                    node: NodeRef::Effect(blur_id),
+                    port: "radius".into(),
+                },
+            }],
+            ..LayerGraph::default()
+        };
+        let layer_with = |graph: LayerGraph| {
+            let mut l = text_layer("hello", 0.0, 5.0, 0.0);
+            l.effects = vec![blur.clone()];
+            l.graph = graph;
+            l
+        };
+
+        let doc = Document::new();
+        let driven = comp_with(vec![layer_with(wired)]);
+        let plain = comp_with(vec![layer_with(LayerGraph::default())]);
+        let key_with = |sig: u64, comp: &Composition| {
+            comp_frame_key(
+                &Arc::new(doc.clone()),
+                comp,
+                1.0,
+                Quality::default(),
+                &Mixed(sig),
+            )
+            .unwrap()
+        };
+
+        assert_ne!(
+            key_with(1, &driven),
+            key_with(2, &driven),
+            "the mix draws the picture, so it has to name the frame"
+        );
+        assert_eq!(
+            key_with(1, &plain),
+            key_with(2, &plain),
+            "and a comp that reads no mix keys exactly as it did before"
+        );
     }
 
     fn key(doc: &Document, comp: &Composition, t: f64) -> FrameKey {

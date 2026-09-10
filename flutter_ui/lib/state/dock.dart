@@ -42,7 +42,14 @@ enum Panel {
   /// levels with the clip lamp, the Beats section over the beat engine, and
   /// the selected layer's sound — volume, pan, fades, and the two
   /// graph-template buttons.
-  audio;
+  audio,
+
+  /// The sound table (docs/impl/audio-timeline.md §5): one row per layer that
+  /// can make a sound, each two lane rows tall, with the wave or the
+  /// spectrogram on the lane and the clips laid along it. It stands where the
+  /// Timeline stands in the Audio arrangement and keeps its own zoom, scroll
+  /// and twirls, so the two tables can be open together.
+  audioTimeline;
 
   String get title => switch (this) {
         Panel.project => l10n.panelProject,
@@ -57,6 +64,7 @@ enum Panel {
         Panel.node => l10n.panelNode,
         Panel.mixer => l10n.panelMixer,
         Panel.audio => l10n.panelAudio,
+        Panel.audioTimeline => l10n.panelAudioTimeline,
         Panel.debug => l10n.panelDebug
       };
 }
@@ -327,9 +335,11 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
       // Audio (the approved AudioWorkspace board): the Mixer fronting the
       // left column over Project and Effect controls, the Audio panel taking
       // the right column outright with Effects & presets tabbed behind, the
-      // Viewer reduced between them, and the Timeline taller than Edit's with
-      // its waveform lanes open. Shares are the board's own proportions:
-      // 260 / 840 / 340 across a 1440 drawing, the Timeline band 420 of 900.
+      // Viewer reduced between them, and the **Audio timeline** across the
+      // bottom where every other arrangement puts the Timeline - the sound
+      // table, with a row per audible layer. Shares are the board's own
+      // proportions: 260 / 840 / 340 across a 1440 drawing, the bottom band
+      // 420 of 900.
       WorkspacePreset.audio => DockSplit(
           DockAxis.vertical,
           [
@@ -349,7 +359,7 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
               ],
               [0.18, 0.58, 0.24],
             ),
-            DockPane(Panel.timeline),
+            DockPane(Panel.audioTimeline),
           ],
           [0.53, 0.47],
         ),

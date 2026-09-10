@@ -139,6 +139,11 @@ class WaveformRequest {
   int get hashCode => Object.hash(startSeconds, endSeconds, buckets);
 }
 
+/// The height a level is drawn at: the level itself, or its square root with
+/// its sign kept, which is the same curve either side of silence.
+double _level(double v, bool sqrtScale) =>
+    !sqrtScale ? v : (v < 0 ? -math.sqrt(-v) : math.sqrt(v));
+
 int _roundUpToPowerOfTwo(int n) {
   var p = 64;
   while (p < n && p < maxPeakBuckets) {
@@ -160,7 +165,18 @@ class WaveformStyle {
   /// of it mirroring the other half.
   final bool fromBottom;
 
-  const WaveformStyle({this.multiwave = true, this.fromBottom = false});
+  /// Draw each level on a square-root scale rather than straight through. A
+  /// mix sits well below full scale for most of its length, so a linear wave
+  /// spends the box on room nothing reaches into and reads as a line; the
+  /// square root lifts the quiet end and leaves the loud end where it is. The
+  /// sign rides through it, so a centred wave still swings both ways.
+  final bool sqrtScale;
+
+  const WaveformStyle({
+    this.multiwave = true,
+    this.fromBottom = false,
+    this.sqrtScale = false,
+  });
 
   /// What the peaks are fetched for. Only [multiwave] reaches the engine —
   /// where the wave sits is a drawing decision, so switching it repaints
@@ -171,10 +187,11 @@ class WaveformStyle {
   bool operator ==(Object other) =>
       other is WaveformStyle &&
       other.multiwave == multiwave &&
-      other.fromBottom == fromBottom;
+      other.fromBottom == fromBottom &&
+      other.sqrtScale == sqrtScale;
 
   @override
-  int get hashCode => Object.hash(multiwave, fromBottom);
+  int get hashCode => Object.hash(multiwave, fromBottom, sqrtScale);
 }
 
 /// The waveform of one span of audio, drawn a pixel column at a time.
@@ -280,6 +297,7 @@ class WaveformPainter extends CustomPainter {
     );
     final buckets = held.buckets;
     final span = held.endSeconds - held.startSeconds;
+    final curved = style.sqrtScale;
 
     for (var drawn = 0; drawn < bands.length; drawn++) {
       final band = bands[drawn].band;
@@ -304,9 +322,9 @@ class WaveformPainter extends CustomPainter {
         final bucket = at.floor();
         final base = 3 * (band * buckets + bucket);
         if (base + 2 >= held.values.length) continue;
-        final lo = held.values[base].clamp(-1.0, 1.0);
-        final hi = held.values[base + 1].clamp(-1.0, 1.0);
-        final rms = held.values[base + 2].clamp(0.0, 1.0);
+        final lo = _level(held.values[base].clamp(-1.0, 1.0), curved);
+        final hi = _level(held.values[base + 1].clamp(-1.0, 1.0), curved);
+        final rms = _level(held.values[base + 2].clamp(0.0, 1.0), curved);
         if (lo == 0 && hi == 0 && rms == 0) continue;
         if (style.fromBottom) {
           // Rectified: the column reaches up by how far the signal swung

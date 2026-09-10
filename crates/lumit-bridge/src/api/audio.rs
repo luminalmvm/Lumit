@@ -22,6 +22,7 @@
 
 use flutter_rust_bridge::frb;
 
+use crate::api::layer::BridgeAudioPeaks;
 use crate::api::{composition::CompositionReference, BridgeError};
 
 /// Where playback is, as the transport needs to know it.
@@ -62,6 +63,52 @@ impl CompositionReference {
         #[cfg(not(feature = "media"))]
         let _ = (start, document);
         Ok(())
+    }
+
+    /// This comp's **mix** summarised over `[start_seconds, end_seconds)` of
+    /// comp time, in `buckets` buckets - what the Timeline's Sound mix row
+    /// draws: every layer through its fader, the master and the limiter, the
+    /// sound that actually leaves the machine.
+    ///
+    /// Answered off the mix the engine is holding, so it is exact for the
+    /// comp being played and costs no second mixer. Each ask reads what is
+    /// loaded and then asks for a prepare, which the signature turns into
+    /// nothing when the comp sounds as it did: reading first is the whole
+    /// trick, because a prepare marks the worker busy before it has anything
+    /// to show and the row would never see an answer otherwise. Where the mix
+    /// is not loaded at all - nothing prepared yet, another comp in the
+    /// engine, no device - the answer is **empty** and the row asks again
+    /// shortly. One band, like a plain wave: the stack's filters want the
+    /// samples, and a mix keeps none.
+    ///
+    /// Not `#[frb(sync)]`: a wide window walks a fair stretch of the plan.
+    pub fn audio_mix_peaks(
+        &self,
+        start_seconds: f64,
+        end_seconds: f64,
+        buckets: u32,
+    ) -> Result<BridgeAudioPeaks, BridgeError> {
+        let document = self.document_snapshot()?;
+        #[cfg(feature = "media")]
+        {
+            let buckets = buckets.min(crate::api::layer::MAX_PEAK_BUCKETS);
+            let peaks =
+                crate::audio::mix_peaks(self.id, start_seconds, end_seconds, buckets as usize);
+            crate::audio::prepare(self.id, document);
+            if let Some((values, duration_seconds)) = peaks {
+                return Ok(BridgeAudioPeaks {
+                    duration_seconds,
+                    start_seconds,
+                    end_seconds,
+                    bands: 1,
+                    buckets,
+                    values,
+                });
+            }
+        }
+        #[cfg(not(feature = "media"))]
+        let _ = (document, start_seconds, end_seconds, buckets);
+        Ok(BridgeAudioPeaks::empty())
     }
 
     /// The document as it stands, for the mix to be built from.

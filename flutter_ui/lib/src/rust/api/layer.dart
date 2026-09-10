@@ -12,16 +12,18 @@ import 'folder.dart';
 import 'footage.dart';
 import 'graph.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
+import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'package:uuid/uuid.dart';
 import 'project_item.dart';
 import 'retime.dart';
 import 'roto.dart';
 import 'solid.dart';
 import 'state.dart';
+part 'layer.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `edit_shape_item`, `empty`, `empty`, `exr_path`, `instance_home`, `item`, `map_end_value`, `of`, `of`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read`, `read`, `read`, `reanchored_span`, `reload_extract_channels`, `retime_or_identity`, `seed_extract_channels`, `source_length`, `unretime_op`, `with_effects`, `with_instances`, `write_at`, `write_at`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_over`, `write`, `write`, `write`, `write`
+// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_ops`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `edit_shape_item`, `empty`, `empty`, `exr_path`, `instance_home`, `item`, `layer_time_of_frame`, `map_end_value`, `of`, `of`, `placed`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read`, `read`, `read`, `reanchored_span`, `reload_extract_channels`, `retime_or_identity`, `seed_extract_channels`, `source_length`, `unretime_op`, `with_effects`, `with_instances`, `write_at`, `write_at`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_over`, `write`, `write`, `write`, `write`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `InstanceHome`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `try_from`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `comp_id`, `id`, `new`, `project_id`
 
 /// Stand the puppet mesh preview down (see
@@ -210,6 +212,29 @@ class BridgeClip {
   final PlatformInt64? reachStartFrame;
   final PlatformInt64? reachEndFrame;
 
+  /// The fade stored at each end (docs/impl/audio-timeline.md §3). Zero
+  /// seconds is no fade; where the clip overlaps its neighbour the overlap
+  /// is the length and only the shape here is heard.
+  final BridgeClipFade fadeIn;
+  final BridgeClipFade fadeOut;
+
+  /// The clip's own effect stack, with every parameter's value - the same
+  /// plain drawing data a layer's stack rides in as. An edit reads fresh
+  /// instance handles at commit time.
+  final List<BridgeEffectInstanceInfo> effects;
+
+  /// The clip's whole-stack bypass, its twin of the layer's fx switch.
+  final bool fx;
+
+  /// The clip's own level in dB, which the gain line across the box draws
+  /// and drags (docs/impl/audio-timeline.md §2). Zero is unity.
+  final double gainDb;
+
+  /// What the clip plays, by name - the footage item's or the nested comp's.
+  /// Carried so the clip's header strip draws with no bridge call; empty
+  /// when the document no longer holds that source.
+  final String sourceName;
+
   const BridgeClip({
     required this.id,
     required this.placeStart,
@@ -221,6 +246,12 @@ class BridgeClip {
     required this.retime,
     this.reachStartFrame,
     this.reachEndFrame,
+    required this.fadeIn,
+    required this.fadeOut,
+    required this.effects,
+    required this.fx,
+    required this.gainDb,
+    required this.sourceName,
   });
 
   @override
@@ -234,7 +265,13 @@ class BridgeClip {
       retimed.hashCode ^
       retime.hashCode ^
       reachStartFrame.hashCode ^
-      reachEndFrame.hashCode;
+      reachEndFrame.hashCode ^
+      fadeIn.hashCode ^
+      fadeOut.hashCode ^
+      effects.hashCode ^
+      fx.hashCode ^
+      gainDb.hashCode ^
+      sourceName.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -250,7 +287,63 @@ class BridgeClip {
           retimed == other.retimed &&
           retime == other.retime &&
           reachStartFrame == other.reachStartFrame &&
-          reachEndFrame == other.reachEndFrame;
+          reachEndFrame == other.reachEndFrame &&
+          fadeIn == other.fadeIn &&
+          fadeOut == other.fadeOut &&
+          effects == other.effects &&
+          fx == other.fx &&
+          gainDb == other.gainDb &&
+          sourceName == other.sourceName;
+}
+
+/// One end of a clip's fade: how long it takes, and the curve it takes. Zero
+/// seconds is no fade.
+///
+/// Inside an overlap the seconds are not read - the overlap is the length of
+/// both fades across it - but the shape still is, so a crossfade takes its two
+/// curves from the two clips that make it.
+class BridgeClipFade {
+  final double seconds;
+  final BridgeClipFadeShape shape;
+
+  const BridgeClipFade({
+    required this.seconds,
+    required this.shape,
+  });
+
+  @override
+  int get hashCode => seconds.hashCode ^ shape.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeClipFade &&
+          runtimeType == other.runtimeType &&
+          seconds == other.seconds &&
+          shape == other.shape;
+}
+
+@freezed
+sealed class BridgeClipFadeShape with _$BridgeClipFadeShape {
+  const BridgeClipFadeShape._();
+
+  const factory BridgeClipFadeShape.linear() = BridgeClipFadeShape_Linear;
+
+  /// A quarter sine, and the default: Fast against Fast over one overlap
+  /// keeps the join as loud as either clip was.
+  const factory BridgeClipFadeShape.fast() = BridgeClipFadeShape_Fast;
+  const factory BridgeClipFadeShape.slow() = BridgeClipFadeShape_Slow;
+  const factory BridgeClipFadeShape.smooth() = BridgeClipFadeShape_Smooth;
+  const factory BridgeClipFadeShape.sharp() = BridgeClipFadeShape_Sharp;
+
+  /// A cubic bezier from (0, 0) to (1, 1) read at x, with the Easing panel's
+  /// own two handles and its own clamps.
+  const factory BridgeClipFadeShape.custom({
+    required double x1,
+    required double y1,
+    required double x2,
+    required double y2,
+  }) = BridgeClipFadeShape_Custom;
 }
 
 /// The curve a fade command writes (docs/09 §6) — the Audio panel's
@@ -1677,6 +1770,35 @@ class LayerReference {
     required this.internallayerId,
   });
 
+  /// Put a footage item down on this Sequence layer as a clip starting at
+  /// `at_frame` - the drop from the Project panel, and the only way a clip
+  /// reaches a row that already exists.
+  ///
+  /// The whole source is placed; trimming it is the next gesture. `overlap`
+  /// keeps what it lands on, so the overlap becomes a crossfade
+  /// (docs/impl/audio-timeline.md §2); without it the drop overwrites, which
+  /// is what a picture row does, since it can show only one clip at a time.
+  ///
+  /// A drop before the row's own zero lands at the zero: a clip's place is
+  /// layer time and cannot go negative.
+  void addClip(
+          {required FootageReference footage,
+          required PlatformInt64 atFrame,
+          required bool overlap}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceAddClip(
+          that: this, footage: footage, atFrame: atFrame, overlap: overlap);
+
+  /// Append the effect named `name` to one clip's own stack - the clip arm
+  /// of [`Self::add_effect`], and the road the clip header's add button
+  /// drives.
+  ///
+  /// A **driver** is refused: a clip carries no graph for the node to land
+  /// on, and dropping it on the layer's instead would be an edit nobody
+  /// asked for.
+  void addClipEffect({required UuidValue clip, required String name}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceAddClipEffect(
+          that: this, clip: clip, name: name);
+
   /// Append the built-in effect named `name` to this layer's stack — or, when
   /// `name` is a **driver**, to this layer's graph.
   ///
@@ -1897,6 +2019,30 @@ class LayerReference {
           buckets: buckets,
           multiwave: multiwave);
 
+  /// One Sequence clip's audio as a **spectrogram** - the twin of
+  /// [`Self::clip_audio_peaks`] for the spectral lane mode, and the
+  /// clip-level counterpart of [`Self::audio_spectrogram`].
+  ///
+  /// Columned in **clip-local placed time** for the reason the peaks are
+  /// bucketed there: a ramped clip plays its middle slowly, so a column
+  /// taken evenly in source time would draw the wrong moment. Each column's
+  /// edges go through the clip's own map here.
+  ///
+  /// Columns are `lumit_audio::spectra::BINS` bytes each, column-major, low
+  /// band first. An empty or backwards range is read as the whole clip.
+  /// Empty for a clip cut from a comp or from media with no sound.
+  Future<BridgeSpectrogram> clipAudioSpectrogram(
+          {required UuidValue clip,
+          required double startSeconds,
+          required double endSeconds,
+          required int columns}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceClipAudioSpectrogram(
+          that: this,
+          clip: clip,
+          startSeconds: startSeconds,
+          endSeconds: endSeconds,
+          columns: columns);
+
   /// A thumbnail of the **first frame this clip shows**.
   ///
   /// Not the file's first frame: a clip after a cut starts part way in, and
@@ -1930,12 +2076,20 @@ class LayerReference {
         that: this,
       );
 
-  /// Turn a Footage layer into a Sequence layer holding one clip of the whole
-  /// source — the way into the clip-editing surface.
+  /// Turn a Footage layer into a Sequence layer holding one clip of what the
+  /// layer is showing - the way into the clip-editing surface.
   ///
   /// Remove-then-add at the same index rather than an in-place kind change,
   /// because a layer's kind is not something any single op edits; the batch
   /// makes it one undo step. Only footage converts.
+  ///
+  /// **The conversion keeps the sound.** The clip is placed at the layer's
+  /// own in point with its trim the same distance into the source, so a
+  /// layer that has been trimmed or slid converts to the same seconds of the
+  /// same file at the same moment on the comp's clock and the mixer builds
+  /// the job it built before. A **retimed** layer is refused
+  /// ([`BridgeError::RetimedLayer`]): a retimed clip is silent (docs/09 §7),
+  /// so converting one would take its sound away.
   void convertToSequenced() =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceConvertToSequenced(
         that: this,
@@ -2174,6 +2328,16 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceGetCameraZoom(
         that: this,
       );
+
+  /// One clip's own effect stack as staged copies, exactly as
+  /// [`Self::get_effects`] hands out the layer's
+  /// (docs/impl/audio-timeline.md §4).
+  ///
+  /// Offset zero: a clip's parameters are keyed in clip time and a clip's
+  /// zero is its own start, which is the clock the clip's chain bakes in.
+  List<BridgeEffectInstance> getClipEffects({required UuidValue clip}) =>
+      BridgeLib.instance.api
+          .crateApiLayerLayerReferenceGetClipEffects(that: this, clip: clip);
 
   /// The clips on this Sequence layer, in the order it holds them.
   ///
@@ -2475,6 +2639,33 @@ class LayerReference {
   void loadPreset({required String text}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceLoadPreset(that: this, text: text);
 
+  /// Move a clip to `to_frame`, on this layer, on `target`, or onto a row
+  /// of its own.
+  ///
+  /// A `target` naming this layer is a slide; another layer takes the clip
+  /// off this row and puts it down there, keeping its trim, its map, its
+  /// fades and its own stack. `None` makes a new audio-only Sequence layer
+  /// directly below this one and puts the clip on that, which is how a clip
+  /// is spread out onto a fresh row without a button for an empty one.
+  ///
+  /// **One undo step** either way: the whole move is a single `Batch`, so
+  /// one Ctrl+Z puts the clip back where it came from rather than leaving it
+  /// on neither row or on both.
+  ///
+  /// `overlap` reads as it does on [`Self::add_clip`]: keep what is landed
+  /// on, or overwrite it.
+  void moveClip(
+          {required UuidValue clip,
+          LayerReference? target,
+          required PlatformInt64 toFrame,
+          required bool overlap}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceMoveClip(
+          that: this,
+          clip: clip,
+          target: target,
+          toFrame: toFrame,
+          overlap: overlap);
+
   /// Drag one of the shape's keys along the timeline — the lane
   /// diamond, which moves a path key exactly as it moves a scalar's.
   ///
@@ -2706,6 +2897,37 @@ class LayerReference {
   void setCameraZoom({required BridgeScalar zoom}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetCameraZoom(that: this, zoom: zoom);
 
+  /// Set the fade at one end of a clip, or at both
+  /// (docs/impl/audio-timeline.md §3).
+  ///
+  /// A side left `None` is left alone, so the corner drag writes the end it
+  /// is on and the shape menu writes a shape without disturbing the other
+  /// end's length. Zero seconds is no fade; where the clip overlaps its
+  /// neighbour the length is the overlap and only the shape is heard, which
+  /// is why the shape is stored either way.
+  void setClipFade(
+          {required UuidValue clip,
+          BridgeClipFade? fadeIn,
+          BridgeClipFade? fadeOut}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetClipFade(
+          that: this, clip: clip, fadeIn: fadeIn, fadeOut: fadeOut);
+
+  /// Bypass a clip's whole effect stack, or give it back - the clip's twin
+  /// of the layer's fx switch, and one undo step like every other clip edit.
+  void setClipFx({required UuidValue clip, required bool on_}) => BridgeLib
+      .instance.api
+      .crateApiLayerLayerReferenceSetClipFx(that: this, clip: clip, on_: on_);
+
+  /// Set one clip's own level in dB - what the gain line across the box
+  /// writes when it is let go (docs/impl/audio-timeline.md §2).
+  ///
+  /// It is heard where the fades are, so the ramps rise to it. At or under
+  /// the fader's own knee the clip is silent, and it is not clamped above:
+  /// a clip may be pushed past unity exactly as a row may.
+  void setClipGain({required UuidValue clip, required double db}) => BridgeLib
+      .instance.api
+      .crateApiLayerLayerReferenceSetClipGain(that: this, clip: clip, db: db);
+
   /// Replace one clip's whole retime map, keyed in clip-local time.
   ///
   /// The envelope in the sequence view writes through here: it speaks the
@@ -2761,9 +2983,16 @@ class LayerReference {
   /// than a coincidence of naming — a style's parameters are dragged, typed,
   /// keyed and expression-driven through exactly this path, and giving them a
   /// second commit would be a second place for the two to drift.
-  void setEffects({required List<BridgeEffectInstance> effects}) =>
-      BridgeLib.instance.api
-          .crateApiLayerLayerReferenceSetEffects(that: this, effects: effects);
+  ///
+  /// `clip` names the clip a staged list came off, for the one case the
+  /// lookup cannot answer: an **empty** list has no id to route by, and
+  /// removing a clip's last effect would otherwise land on the layer's own
+  /// stack. It is ignored while the list has anything in it, because then
+  /// the ids say where the list lives.
+  void setEffects(
+          {required List<BridgeEffectInstance> effects, UuidValue? clip}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetEffects(
+          that: this, effects: effects, clip: clip);
 
   /// Turn flow on or off. Off returns the layer to Nearest — the
   /// policy it had before flow is not recorded, and Nearest is the crisp
@@ -3054,9 +3283,16 @@ class LayerReference {
   /// Its length, its trim and its map are untouched — the same frames play,
   /// just earlier or later. Refused where it would start before the layer's
   /// own zero.
-  void slideClip({required UuidValue clip, required PlatformInt64 toFrame}) =>
+  ///
+  /// `overlap` keeps the neighbour it is slid over, so the overlap is a
+  /// crossfade (docs/impl/audio-timeline.md §2); without it the slide
+  /// overwrites, which is what a picture row does.
+  void slideClip(
+          {required UuidValue clip,
+          required PlatformInt64 toFrame,
+          required bool overlap}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceSlideClip(
-          that: this, clip: clip, toFrame: toFrame);
+          that: this, clip: clip, toFrame: toFrame, overlap: overlap);
 
   /// Razor: split this layer in two at `frame` (docs/07 §4.4).
   ///

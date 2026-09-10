@@ -141,7 +141,7 @@ The v1 driver set is the six the drawings show, in a **Drivers** catalogue categ
 | Driver | Inputs | Outputs | Notes |
 |---|---|---|---|
 | **Wiggle** | Amount, Frequency (number) | Value (number) | Deterministic value noise seeded by the node's id, sampled at layer time. Same recipe as the expressions' wiggle if one exists when built; otherwise pin the noise in this note's test plan. |
-| **Audio level** | Audio (layer reference, **unset = this comp's mix**), Window (seconds) | Amplitude, Low (number) | Windowed RMS of the chosen sound; Low is the same over a low band (one pole at 200 Hz). Deterministic per (audio fingerprint, time, window). |
+| **Audio level** | Source (This comp, Layer, Clip), Audio (layer reference), Clip (clip reference), Window (seconds) | Amplitude, Low, Peak, High (number) | Windowed RMS of the chosen sound, taken off the mixer's own job list under the Source row's filters (audio-nodes.md §2). Low and High are the same reading through a low band and a top band (one pole at 200 Hz, one at 4 kHz); Peak is the loudest single sample in the window. Deterministic per (audio fingerprint, time, window). |
 | **Colour cycle** | Phase (turns), Rate (turns/second), Saturation, Brightness | Colour (colour) | Hue rotation over time. |
 | **Math** | A, B (number), operation (choice) | Value (number) | An expression you can see. |
 | **Remap** | Value, in/out ranges (number) | Value (number) | Linear range map with clamp choice. |
@@ -228,6 +228,15 @@ window: each clip is clipped to the window *before* its Volume is baked, so a fi
 track costs a window's arithmetic per frame rather than a track's, and preview and export
 reach the same number because both run this same function at the same comp time
 (`headless::tests::a_comp_mix_driven_parameter_renders_the_same_picture_twice`).
+
+**Built 2026-09-08: the choice is three.** Audio level carries a **Source** row of
+*This comp*, *Layer* and *Clip* (audio-nodes.md §3). All three are the same windowed
+mixdown under a different filter on the job list, so *Layer* now hears its layer
+post-fader rather than raw off the file, and *Clip* narrows that again to one clip of
+a Sequence layer, listed by the picker under the Audio row and by no other layer's.
+An instance saved before the row keeps the raw reading it was driven by: it stays at
+version 1, which is what the driver reads, and `backfill_builtin_params` writes its
+Source row to say which of the two readings it was doing.
 
 **The window is centred by the host, not named by the driver.** `AudioTap` gained
 `mix(half, out)` beside `samples(layer, from, to, out)` because a driver knows only its

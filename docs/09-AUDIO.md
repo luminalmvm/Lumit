@@ -15,13 +15,40 @@ markers, beat snapping, volume keyframes, **pan**, mute/solo, multiple audio lay
 per comp, audio from video footage, audio scrubbing, audio in export, **level meters and a
 master fader**, and **fade in / fade out and clip crossfades**.
 
-Out (explicitly, §7): audio effects, mixer **buses and sends**, and audio retiming.
+Out (explicitly, §7): mixer **buses and sends**, and audio retiming. Hosted audio
+plugins are in, on a layer and on a clip, and a suite of built-in audio effects sits beside
+them ([impl/audio-effects.md](impl/audio-effects.md)).
 
 The engine layer (`lumit-audio`, `lumit-bridge`) is built, and so are the Flutter **Mixer**
 and **Audio** panels with the Audio workspace preset that hosts them (the approved
 AudioWorkspace board). Applying that preset also opens the Audio group and the Waveform
 lane on every layer that carries sound, so the Timeline shows the board's own
 picture — waves, rubber bands, lane chips — rather than a stack of shut rows.
+
+In the bottom band of that preset stands the **Audio timeline** panel (docs/07 §4.8), a
+second timeline for sound only, where the layer Timeline stands everywhere else. It lists
+what can be heard, dims a row that is also a picture until *Detach audio* gives its sound
+a row of its own, and gives each row its clips: laid end to end, trimmed by the edges,
+faded by the top corners, overlapped into a crossfade, and opened up to keyframe the
+effects on one clip alone. Nothing new is invented underneath - a row is a Sequence layer
+that draws nothing and a clip is a clip - so the mixing that is not on the panel, the
+master and the meters, is still the Mixer's and the Effect controls' beside it.
+[impl/audio-timeline.md](impl/audio-timeline.md) is the binding *how* for all of it.
+
+The first edit made in the panel marks the comp mixed (`Composition::sound_mix`, one
+undoable op, saved with the project); looking writes nothing. Back in any other preset a
+mixed comp's Audio layers stand behind
+one **Sound mix** row: the comp's mix, drawn as a waveform off the plan the engine is
+playing (`audio_mix_peaks`), with the master fader beside it and a twirl that brings the
+layers back for a look. A comp that has never been to the Audio workspace shows no row and
+keeps its layers in the stack. The mark is the one thing the document learns from the
+workspace; the mix is the same mix either way - one comp, one clock, one undo stack. The
+row's menu can **convert the mix to a precomp**: each Audio layer becomes a nested comp
+holding one layer per clip, those stand as Precomp layers in one mix comp, the parent keeps
+a Precomp layer in their place and loses the row, and there is no way back. A nested
+"sound comp" was considered
+and set aside: the Viewer would have had to be pinned to the parent while the Timeline
+edited the child, and the rows would have left the comp they belong to.
 [TODO.md](TODO.md) is the one document that says what remains.
 
 ## 2. Import and decode
@@ -211,13 +238,20 @@ same decoded ring, so it is warm wherever the cache bar is warm.
   own placed time, so a ramp's transients land where they are heard) and travel with the
   clip when it is slid; they are the primary visual for beat-checking an edit.
 - **A clip join's crossfade is drawn and handled where it happens**: where two
-  clips overlap, the open Sequence view draws the opposed-fades pair across the overlap
-  — the board's X — with a small handle at either end. Each handle drags the edge of the
-  clip whose ramp it is (the incoming clip's start, the outgoing clip's end), so
-  adjusting the fade is the same trim the clip edges already commit; a butt cut has no
-  overlap, no ramps and no handles, which is what a hard cut on the beat is for. The
-  drawing is derived from the overlap, never stored, so sliding either clip carries the
-  fade exactly as the mixer's ramps move with it.
+  clips overlap, the Audio timeline (docs/07 §4.8) draws the opposed-fades pair across the
+  overlap - the board's X - with a small handle at either end. Each handle drags the edge
+  of the clip whose ramp it is (the incoming clip's start, the outgoing clip's end), so
+  adjusting a crossfade's **length** is the same trim the clip edges already commit; a
+  butt cut has no overlap, no ramps and no handles, which is what a hard cut on the beat
+  is for. **The length is the overlap; the shape is stored on the clips.** Each clip
+  carries a `fade_in` and a `fade_out` of its own (docs/03 §5.3), and across an overlap
+  the mixer reads the two clips' shapes and ignores their seconds, so the outgoing curve
+  is the one clip's and the incoming curve the other's. The shapes are Linear, Fast, Slow,
+  Smooth, Sharp and Custom, named once and read backwards for a fade out; a fresh overlap
+  gets Fast against Fast, whose squares sum to one, so an untouched crossfade holds its
+  level. Sliding either clip carries the fade with it, because the overlap moves with the
+  clips and the shapes ride on them. Where a clip overlaps nothing at an end, the stored
+  seconds are the fade's own length, clamped to the clip.
 
 ## 5. Markers and beat detection
 
@@ -280,9 +314,10 @@ same decoded ring, so it is warm wherever the cache bar is warm.
 - **Volume** is an animatable property per audio-capable layer (dB scale, −∞..+50 dB,
   default 0 dB; the owner raised the ceiling from the original +12), keyframable
   and expression-visible like any property. −100 dB is the −∞ knee: at or below it the
-  gain is exactly zero (the UI reads "−inf"), never a denormal whisper. Fades are volume
-  keyframes; the fade-in/fade-out commands that write eased keyframe pairs are still to
-  come. **Shipped:** `Layer.volume_db` + `Op::SetLayerVolume`; an animated volume
+  gain is exactly zero (the UI reads "−inf"), never a denormal whisper. A **layer's** fade
+  is volume keyframes; the fade-in/fade-out commands that write eased keyframe pairs are
+  still to come. A **clip's** fade is not: it is stored on the clip and applied by the
+  mixer as a gain of its own (§4), so a clip can be faded without keying anything. **Shipped:** `Layer.volume_db` + `Op::SetLayerVolume`; an animated volume
   bakes to a ~10 ms control-rate gain envelope applied identically by the live mix plan
   and the baked mixdown (playback == export, pinned by test); it lives in the layer's
   **Audio** group in the timeline outline, beside a **Waveform** twirl that draws that
@@ -299,6 +334,15 @@ same decoded ring, so it is warm wherever the cache bar is warm.
   of one curve.
 - **Mute / solo** via the audible and solo switches ([01-GLOSSARY.md](01-GLOSSARY.md) §2).
   Solo on any layer silences non-soloed audio, matching video solo semantics.
+- **The layer's `fx` switch now bypasses the layer's audio effects too.** Until this
+  version it silenced a layer's picture effects and left its audio plugins processing,
+  which was a bug in a switch whose one job is "run this layer's stack or do not". From
+  this version the mixer reads it, in preview and in export alike. **So a project saved
+  with the switch off on a layer carrying an audio plugin now sounds different**: it plays
+  and exports without that plugin, which is what the switch says. Switching it back on
+  restores the sound exactly. A clip carries the same switch over its own stack (§4 of
+  [impl/audio-timeline.md](impl/audio-timeline.md)), and the two are independent: either
+  one off drops its own rack and leaves the other running.
 - **Audio from video footage**: a Footage layer with audio exposes its audio as part of
   the same layer (audible switch, volume property, waveform lane). **Shipped:**
   *Add audio only* on a footage item places that item's sound as its own **Audio layer** —
@@ -343,17 +387,30 @@ same decoded ring, so it is warm wherever the cache bar is warm.
   Smooth) — the ducking move, labelled in plain words. The chain's own comp-mix
   tap reads the **pre-duck** mix, so one level of ducking is heard and a duck driven by
   a duck terminates.
+- **What Audio level listens to is a choice of three** ([impl/audio-nodes.md](impl/audio-nodes.md) §3): the
+  composition's own mix, one layer of it, or one clip of a Sequence layer, each of them
+  the same windowed mixdown over a different set of the mixer's own jobs, read as four
+  numbers a wire can carry: Amplitude, Low, Peak and High.
 - Stereo is the v1 channel model; mono sources upmix centred.
 
 ## 7. Out of scope for v1
 
-- **Audio effects** (EQ, reverb, compression) — none in v1. The effect stack accepts no
-  audio effects until the Composer phase; the [12-PLUGINS.md](12-PLUGINS.md) LFX surface
-  reserves an audio-effect extension so the ABI does not need breaking later.
+- **Audio effects** (EQ, reverb, compression) - *reversed:* Lumit ships its own suite and
+  hosts CLAP and VST3 besides. A plugin is an ordinary entry on a layer's effect stack
+  ([impl/audio-plugins.md](impl/audio-plugins.md)), and **a clip now carries a stack of
+  its own** as well ([impl/audio-timeline.md](impl/audio-timeline.md) §4). The clip's rack
+  runs first and the layer's runs on its output, which is the order a mixing desk reads
+  and the order the Audio timeline draws. The built-ins were reversed with the Audio
+  timeline: a rack with nothing to put in it unless a plugin is installed is not a rack,
+  so the engine ships fifteen of its own
+  ([impl/audio-effects.md](impl/audio-effects.md)); the [12-PLUGINS.md](12-PLUGINS.md)
+  LFX surface still reserves the extension.
 - **Mixing console** — *partly reversed by the Audio workspace board.* A **Mixer** panel of
-  layer strips plus a master strip ships (the board's four decisions); what stays out
-  is **buses and sends**, which have nowhere to go until audio effects exist. So: per-layer
-  volume and pan, a master fader, meters, and the limiter — no bus architecture.
+  layer strips plus a master strip ships (the board's four decisions), and the Audio
+  timeline gives each layer and each clip its own rack; what stays out
+  is **buses and sends**, which have nowhere to send to while every rack is an insert. So:
+  per-layer volume and pan, per-layer and per-clip inserts, a master fader, meters, and
+  the limiter, and no bus architecture.
 - **Audio retiming.** Retime is video-only in v1: a retimed Footage layer's own audio is
   intended to mute with a badge whenever its retime map differs from identity ("Retime mutes
   audio in this version") - the mute-on-retime detection and badge are **not yet wired**

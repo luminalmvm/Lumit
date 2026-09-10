@@ -26,7 +26,7 @@ use crate::api::{
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod style_tests;
 
-/// Which list an instance id lives on — the three homes
+/// Which list an instance id lives on - the four homes
 /// `LayerReference::with_instances` can commit to. Internal to the shared
 /// lookup: no panel ever sees it, which is the point.
 #[frb(ignore)]
@@ -35,6 +35,9 @@ pub(crate) enum InstanceHome {
     Effects,
     Styles,
     Group(Uuid),
+    /// One clip's own stack on this Sequence layer - the rack on the clip
+    /// (docs/impl/audio-timeline.md §4), named by the clip's id.
+    Clip(Uuid),
 }
 
 /// A layer's on/off switches, read as a group because the Timeline draws them
@@ -1212,6 +1215,106 @@ pub(crate) fn bridge_switches(layer: &lumit_core::model::Layer) -> BridgeLayerSw
     }
 }
 
+/// The curve one end of a clip's fade follows, written as the gain of a fade
+/// **in** (docs/impl/audio-timeline.md §3). A fade out reads the same curve
+/// backwards, so a shape is named once and the end it sits on decides which
+/// way it is read.
+///
+/// Not [`BridgeFadeShape`], which is the *layer* fade commands' three chips
+/// and writes Volume keyframes. These five are the clip's own, and the sixth
+/// carries the two handles the custom editor drags.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum BridgeClipFadeShape {
+    Linear,
+    /// A quarter sine, and the default: Fast against Fast over one overlap
+    /// keeps the join as loud as either clip was.
+    Fast,
+    Slow,
+    Smooth,
+    Sharp,
+    /// A cubic bezier from (0, 0) to (1, 1) read at x, with the Easing panel's
+    /// own two handles and its own clamps.
+    Custom {
+        x1: f64,
+        y1: f64,
+        x2: f64,
+        y2: f64,
+    },
+}
+
+/// One end of a clip's fade: how long it takes, and the curve it takes. Zero
+/// seconds is no fade.
+///
+/// Inside an overlap the seconds are not read - the overlap is the length of
+/// both fades across it - but the shape still is, so a crossfade takes its two
+/// curves from the two clips that make it.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BridgeClipFade {
+    pub seconds: f64,
+    pub shape: BridgeClipFadeShape,
+}
+
+impl From<lumit_core::sequence::FadeShape> for BridgeClipFadeShape {
+    fn from(shape: lumit_core::sequence::FadeShape) -> Self {
+        use lumit_core::sequence::FadeShape as S;
+        match shape {
+            S::Linear => BridgeClipFadeShape::Linear,
+            S::Fast => BridgeClipFadeShape::Fast,
+            S::Slow => BridgeClipFadeShape::Slow,
+            S::Smooth => BridgeClipFadeShape::Smooth,
+            S::Sharp => BridgeClipFadeShape::Sharp,
+            S::Custom { x1, y1, x2, y2 } => BridgeClipFadeShape::Custom { x1, y1, x2, y2 },
+        }
+    }
+}
+
+impl From<BridgeClipFadeShape> for lumit_core::sequence::FadeShape {
+    fn from(shape: BridgeClipFadeShape) -> Self {
+        use lumit_core::sequence::FadeShape as S;
+        match shape {
+            BridgeClipFadeShape::Linear => S::Linear,
+            BridgeClipFadeShape::Fast => S::Fast,
+            BridgeClipFadeShape::Slow => S::Slow,
+            BridgeClipFadeShape::Smooth => S::Smooth,
+            BridgeClipFadeShape::Sharp => S::Sharp,
+            // Through the constructor, so a handle dragged past its bound
+            // arrives inside the box rather than as a curve the engine would
+            // have to guard against later.
+            BridgeClipFadeShape::Custom { x1, y1, x2, y2 } => S::custom(x1, y1, x2, y2),
+        }
+    }
+}
+
+impl From<lumit_core::sequence::Fade> for BridgeClipFade {
+    fn from(fade: lumit_core::sequence::Fade) -> Self {
+        BridgeClipFade {
+            seconds: fade.seconds.to_f64(),
+            shape: fade.shape.into(),
+        }
+    }
+}
+
+impl TryFrom<BridgeClipFade> for lumit_core::sequence::Fade {
+    type Error = BridgeError;
+
+    fn try_from(fade: BridgeClipFade) -> Result<Self, BridgeError> {
+        // On the millisecond grid, which is finer than any fade a person drags
+        // and exact enough that the handle lands where the readout says. A
+        // negative or unrepresentable length is refused rather than clamped:
+        // it can only come from a caller bug.
+        if !(fade.seconds.is_finite() && fade.seconds >= 0.0) {
+            return Err(BridgeError::InvalidTime);
+        }
+        Ok(lumit_core::sequence::Fade {
+            seconds: lumit_core::time::Rational::from_f64_on_grid(fade.seconds, 1000)
+                .map_err(|_| BridgeError::InvalidTime)?,
+            shape: fade.shape.into(),
+        })
+    }
+}
+
 /// One clip on a Sequence layer, as the Timeline needs to draw it: where it
 /// starts on the layer's own timeline and how long it occupies there.
 ///
@@ -1269,6 +1372,24 @@ pub struct BridgeClip {
     /// ghost is one more positioned box and no time↔frame trip rides a rebuild.
     pub reach_start_frame: Option<i64>,
     pub reach_end_frame: Option<i64>,
+    /// The fade stored at each end (docs/impl/audio-timeline.md §3). Zero
+    /// seconds is no fade; where the clip overlaps its neighbour the overlap
+    /// is the length and only the shape here is heard.
+    pub fade_in: BridgeClipFade,
+    pub fade_out: BridgeClipFade,
+    /// The clip's own effect stack, with every parameter's value - the same
+    /// plain drawing data a layer's stack rides in as. An edit reads fresh
+    /// instance handles at commit time.
+    pub effects: Vec<crate::api::effect::BridgeEffectInstanceInfo>,
+    /// The clip's whole-stack bypass, its twin of the layer's fx switch.
+    pub fx: bool,
+    /// The clip's own level in dB, which the gain line across the box draws
+    /// and drags (docs/impl/audio-timeline.md §2). Zero is unity.
+    pub gain_db: f64,
+    /// What the clip plays, by name - the footage item's or the nested comp's.
+    /// Carried so the clip's header strip draws with no bridge call; empty
+    /// when the document no longer holds that source.
+    pub source_name: String,
 }
 
 /// How long a clip's source runs, which is the one thing
@@ -1316,12 +1437,14 @@ fn clip_source_duration(
 /// different depending on which read found it.
 #[frb(ignore)]
 fn bridge_clip(
+    state: &LumitBridgeState,
+    doc: &lumit_core::Document,
     comp: &lumit_core::model::Composition,
     layer: &Layer,
     clip: &lumit_core::sequence::Clip,
-    source_duration: Option<lumit_core::time::Rational>,
 ) -> BridgeClip {
     use lumit_core::time::CompTime;
+    let source_duration = clip_source_duration(state, doc, clip.source);
     // A clip's `place_*` are in layer time; every frame below carries the
     // layer's own zero already added.
     let at = |t: lumit_core::time::Rational| {
@@ -1343,6 +1466,26 @@ fn bridge_clip(
         retime: BridgeScalar::read_at(&clip.effective_retime(), lumit_core::time::Rational::ZERO),
         reach_start_frame: reach.map(|(start, _)| at(start)),
         reach_end_frame: reach.map(|(_, end)| at(end)),
+        fade_in: clip.fade_in.into(),
+        fade_out: clip.fade_out.into(),
+        // Offset zero, for the reason the retime above crosses that way: a
+        // clip's effects are keyed in clip time and a clip's zero is its own
+        // start, so nothing is carried out here. The panel walks the keys out
+        // by the clip's place and the layer's offset when it draws them.
+        effects: clip
+            .effects
+            .iter()
+            .map(|e| crate::api::effect::read_instance_info(e, lumit_core::time::Rational::ZERO))
+            .collect(),
+        fx: clip.fx,
+        gain_db: clip.gain_db,
+        source_name: match clip.source {
+            lumit_core::sequence::ClipSource::Footage(id)
+            | lumit_core::sequence::ClipSource::Comp(id) => doc
+                .item(id)
+                .map(|i| i.name().to_string())
+                .unwrap_or_default(),
+        },
     }
 }
 
@@ -1518,23 +1661,17 @@ pub(crate) fn read_layer_info(
         K::Solid { def } => Some(def),
         _ => None,
     };
-    let clip_frames = match &layer.kind {
+    let clips: Vec<BridgeClip> = match &layer.kind {
         K::Sequence { clips } => clips
             .iter()
-            .map(|c| {
-                comp.frame_rate
-                    .frame_at(lumit_core::time::CompTime(c.place_start))
-            })
+            .map(|c| bridge_clip(state, doc, comp, layer, c))
             .collect(),
         _ => Vec::new(),
     };
-    let clips = match &layer.kind {
-        K::Sequence { clips } => clips
-            .iter()
-            .map(|c| bridge_clip(comp, layer, c, clip_source_duration(state, doc, c.source)))
-            .collect(),
-        _ => Vec::new(),
-    };
+    // Read straight off the clips, so a split line cannot land anywhere but on
+    // the box it belongs to. A clip's own place is layer time, and it is
+    // [`bridge_clip`] that carries it out by the row's start offset.
+    let clip_frames = clips.iter().map(|c| c.start_frame).collect();
     BridgeLayerInfo {
         name: layer.name.clone(),
         kind: bridge_kind(layer),
@@ -1743,7 +1880,7 @@ impl BridgeAudioPeaks {
     /// The answer for a source with nothing to draw: no audio, no media
     /// feature, a file that has gone missing. A lane draws it as an empty lane.
     #[frb(ignore)]
-    fn empty() -> BridgeAudioPeaks {
+    pub(crate) fn empty() -> BridgeAudioPeaks {
         BridgeAudioPeaks {
             duration_seconds: 0.0,
             start_seconds: 0.0,
@@ -3197,14 +3334,7 @@ impl LayerReference {
         };
         Ok(clips
             .iter()
-            .map(|c| {
-                bridge_clip(
-                    comp,
-                    &layer,
-                    c,
-                    clip_source_duration(&state, &doc, c.source),
-                )
-            })
+            .map(|c| bridge_clip(&state, &doc, comp, &layer, c))
             .collect())
     }
 
@@ -3275,23 +3405,237 @@ impl LayerReference {
         self.commit_clips(clips)
     }
 
+    /// Set the fade at one end of a clip, or at both
+    /// (docs/impl/audio-timeline.md §3).
+    ///
+    /// A side left `None` is left alone, so the corner drag writes the end it
+    /// is on and the shape menu writes a shape without disturbing the other
+    /// end's length. Zero seconds is no fade; where the clip overlaps its
+    /// neighbour the length is the overlap and only the shape is heard, which
+    /// is why the shape is stored either way.
+    #[frb(sync)]
+    pub fn set_clip_fade(
+        &self,
+        clip: Uuid,
+        fade_in: Option<BridgeClipFade>,
+        fade_out: Option<BridgeClipFade>,
+    ) -> Result<(), BridgeError> {
+        let (mut clips, index) = self.clips_and_index(clip)?;
+        if let Some(fade) = fade_in {
+            clips[index].fade_in = fade.try_into()?;
+        }
+        if let Some(fade) = fade_out {
+            clips[index].fade_out = fade.try_into()?;
+        }
+        self.commit_clips(clips)
+    }
+
+    /// Bypass a clip's whole effect stack, or give it back - the clip's twin
+    /// of the layer's fx switch, and one undo step like every other clip edit.
+    #[frb(sync)]
+    pub fn set_clip_fx(&self, clip: Uuid, on: bool) -> Result<(), BridgeError> {
+        let (mut clips, index) = self.clips_and_index(clip)?;
+        clips[index].fx = on;
+        self.commit_clips(clips)
+    }
+
+    /// Set one clip's own level in dB - what the gain line across the box
+    /// writes when it is let go (docs/impl/audio-timeline.md §2).
+    ///
+    /// It is heard where the fades are, so the ramps rise to it. At or under
+    /// the fader's own knee the clip is silent, and it is not clamped above:
+    /// a clip may be pushed past unity exactly as a row may.
+    #[frb(sync)]
+    pub fn set_clip_gain(&self, clip: Uuid, db: f64) -> Result<(), BridgeError> {
+        // A level that is not a number is refused rather than written: it can
+        // only come from a caller bug, and the save writes it as null, which
+        // the reopen will not take.
+        if !db.is_finite() {
+            return Err(BridgeError::InvalidTime);
+        }
+        let (mut clips, index) = self.clips_and_index(clip)?;
+        clips[index].gain_db = db;
+        self.commit_clips(clips)
+    }
+
+    /// Put a footage item down on this Sequence layer as a clip starting at
+    /// `at_frame` - the drop from the Project panel, and the only way a clip
+    /// reaches a row that already exists.
+    ///
+    /// The whole source is placed; trimming it is the next gesture. `overlap`
+    /// keeps what it lands on, so the overlap becomes a crossfade
+    /// (docs/impl/audio-timeline.md §2); without it the drop overwrites, which
+    /// is what a picture row does, since it can show only one clip at a time.
+    ///
+    /// A drop before the row's own zero lands at the zero: a clip's place is
+    /// layer time and cannot go negative.
+    #[frb(sync)]
+    pub fn add_clip(
+        &self,
+        footage: &FootageReference,
+        at_frame: i64,
+        overlap: bool,
+    ) -> Result<(), BridgeError> {
+        let layer = self.item()?;
+        let lumit_core::model::LayerKind::Sequence { clips } = &layer.kind else {
+            return Err(BridgeError::NotSequence);
+        };
+        let comp = self.composition()?;
+        let item = footage.id();
+        let source = lumit_core::sequence::ClipSource::Footage(item);
+        // The media's own length, or the comp's when it will not probe - the
+        // fallback every other placement path takes.
+        let duration = {
+            let proj = self.project()?;
+            let state = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+            let doc = state.store.snapshot();
+            if doc.item(item).is_none() {
+                return Err(BridgeError::InvalidItem);
+            }
+            clip_source_duration(&state, &doc, source)
+        }
+        .unwrap_or(comp.duration.0);
+
+        let at = self.layer_time_of_frame(&comp, &layer, at_frame)?;
+        let mut clips = clips.clone();
+        let clip = lumit_core::sequence::Clip::new(source, Rational::ZERO, duration, at, duration);
+        let dropped = clip.id;
+        clips.push(clip);
+        self.commit_clips(placed(clips, dropped, overlap))
+    }
+
+    /// Move a clip to `to_frame`, on this layer, on `target`, or onto a row
+    /// of its own.
+    ///
+    /// A `target` naming this layer is a slide; another layer takes the clip
+    /// off this row and puts it down there, keeping its trim, its map, its
+    /// fades and its own stack. `None` makes a new audio-only Sequence layer
+    /// directly below this one and puts the clip on that, which is how a clip
+    /// is spread out onto a fresh row without a button for an empty one.
+    ///
+    /// **One undo step** either way: the whole move is a single `Batch`, so
+    /// one Ctrl+Z puts the clip back where it came from rather than leaving it
+    /// on neither row or on both.
+    ///
+    /// `overlap` reads as it does on [`Self::add_clip`]: keep what is landed
+    /// on, or overwrite it.
+    #[frb(sync)]
+    pub fn move_clip(
+        &self,
+        clip: Uuid,
+        target: Option<LayerReference>,
+        to_frame: i64,
+        overlap: bool,
+    ) -> Result<(), BridgeError> {
+        if target.is_some_and(|t| t.layer_id == self.layer_id) {
+            return self.slide_clip(clip, to_frame, overlap);
+        }
+        let layer = self.item()?;
+        let comp = self.composition()?;
+        let (mut clips, index) = self.clips_and_index(clip)?;
+        let moved = clips.remove(index);
+        let mut ops = self.clip_ops(clips, layer.start_offset)?;
+
+        match target {
+            Some(target) => {
+                let onto = target.item()?;
+                let lumit_core::model::LayerKind::Sequence { clips: theirs } = &onto.kind else {
+                    return Err(BridgeError::NotSequence);
+                };
+                let mut theirs = theirs.clone();
+                let mut moved = moved;
+                moved.place_start = self.layer_time_of_frame(&comp, &onto, to_frame)?;
+                let dropped = moved.id;
+                theirs.push(moved);
+                ops.extend(target.clip_ops(placed(theirs, dropped, overlap), onto.start_offset)?);
+            }
+            None => {
+                let index = comp
+                    .layers
+                    .iter()
+                    .position(|l| l.id == self.layer_id)
+                    .ok_or(BridgeError::InvalidLayer)?;
+                let mut moved = moved;
+                // A fresh row's own zero is the comp's, so the clip's place is
+                // simply the comp time it was dropped at, never before zero.
+                let at = comp
+                    .frame_rate
+                    .time_of_frame(to_frame.max(0))
+                    .map_err(|_| BridgeError::InvalidTime)?
+                    .0;
+                moved.place_start = at;
+                let (start, end) = (moved.place_start, moved.place_end());
+                let mut row = crate::edits::base_layer(
+                    layer.name.clone(),
+                    lumit_core::model::LayerKind::Sequence { clips: vec![moved] },
+                    end,
+                    crate::edits::centred_transform(
+                        f64::from(comp.width),
+                        f64::from(comp.height),
+                        comp.width,
+                        comp.height,
+                    ),
+                );
+                row.audio_only = true;
+                row.in_point = lumit_core::time::CompTime(start);
+                row.out_point = lumit_core::time::CompTime(end);
+                crate::edits::solo_on_arrival(&mut row, comp.layers.iter());
+                ops.push(lumit_core::Op::AddLayer {
+                    comp: self.comp_id,
+                    // Directly below the row it came off, where the eye looks.
+                    index: index + 1,
+                    layer: Box::new(row),
+                });
+            }
+        }
+        self.commit(lumit_core::Op::Batch { ops })
+    }
+
+    /// A comp frame as a time on `layer`'s own clock, never before its zero.
+    ///
+    /// A clip's place is layer time and cannot go negative, so a drop before
+    /// the start of the row lands at the start of the row.
+    #[frb(ignore)]
+    fn layer_time_of_frame(
+        &self,
+        comp: &lumit_core::model::Composition,
+        layer: &Layer,
+        frame: i64,
+    ) -> Result<Rational, BridgeError> {
+        let at = comp
+            .frame_rate
+            .time_of_frame(frame)
+            .map_err(|_| BridgeError::InvalidTime)?
+            .0
+            .checked_sub(layer.start_offset.0)
+            .map_err(|_| BridgeError::InvalidTime)?;
+        Ok(if at.is_negative() { Rational::ZERO } else { at })
+    }
+
     /// Slide a clip along the row so it starts at `to_frame` (docs/04 §8.2).
     ///
     /// Its length, its trim and its map are untouched — the same frames play,
     /// just earlier or later. Refused where it would start before the layer's
     /// own zero.
+    ///
+    /// `overlap` keeps the neighbour it is slid over, so the overlap is a
+    /// crossfade (docs/impl/audio-timeline.md §2); without it the slide
+    /// overwrites, which is what a picture row does.
     #[frb(sync)]
-    pub fn slide_clip(&self, clip: Uuid, to_frame: i64) -> Result<(), BridgeError> {
+    pub fn slide_clip(&self, clip: Uuid, to_frame: i64, overlap: bool) -> Result<(), BridgeError> {
         let (mut clips, index) = self.clips_and_index(clip)?;
         let comp = self.composition()?;
         let layer = self.item()?;
 
         // The travel, as a signed time: `to_frame` may be before the start of
         // the composition, and a frame count is the only place the sign
-        // survives cleanly.
-        let start_frame = comp
-            .frame_rate
-            .frame_at(lumit_core::time::CompTime(clips[index].place_start));
+        // survives cleanly. `to_frame` is a comp frame, and the panel read it
+        // off `BridgeClip::start_frame`, so the clip's own start is carried
+        // out by the row's start offset the way `bridge_clip` carries it.
+        let start = clips[index].place_start;
+        let start_frame = comp.frame_rate.frame_at(lumit_core::time::CompTime(
+            layer.start_offset.0.checked_add(start).unwrap_or(start),
+        ));
         let moved = to_frame - start_frame;
         let step = comp
             .frame_rate
@@ -3330,7 +3674,7 @@ impl LayerReference {
             }
             clips[index].place_start = Rational::ZERO;
             let dropped = clips[index].id;
-            let clips = lumit_core::sequence::overwrite_with(&clips, dropped);
+            let clips = placed(clips, dropped, overlap);
             let offset = layer
                 .start_offset
                 .0
@@ -3341,7 +3685,7 @@ impl LayerReference {
 
         clips[index] = clips[index].slide(delta).ok_or(BridgeError::InvalidTime)?;
         let dropped = clips[index].id;
-        self.commit_clips(lumit_core::sequence::overwrite_with(&clips, dropped))
+        self.commit_clips(placed(clips, dropped, overlap))
     }
 
     /// Trim one edge of a clip inward (docs/04 §8.2, non-ripple).
@@ -3361,13 +3705,11 @@ impl LayerReference {
     ) -> Result<(), BridgeError> {
         let (mut clips, index) = self.clips_and_index(clip)?;
         let comp = self.composition()?;
-        let at = |f: i64| {
-            comp.frame_rate
-                .time_of_frame(f.max(0))
-                .map(|t| t.0)
-                .map_err(|_| BridgeError::InvalidTime)
-        };
-        let (start, end) = (at(start_frame)?, at(end_frame)?);
+        let layer = self.item()?;
+        // Both edges arrive as comp frames, and a clip is placed on the row's
+        // own clock, so the row's zero comes off before either is used.
+        let start = self.layer_time_of_frame(&comp, &layer, start_frame)?;
+        let end = self.layer_time_of_frame(&comp, &layer, end_frame)?;
         let mut next = clips[index].clone();
         if end < next.place_end() {
             next = next.trim_end(end).ok_or(BridgeError::InvalidTime)?;
@@ -3730,12 +4072,20 @@ impl LayerReference {
         self.commit_clips(clips)
     }
 
-    /// Turn a Footage layer into a Sequence layer holding one clip of the whole
-    /// source — the way into the clip-editing surface.
+    /// Turn a Footage layer into a Sequence layer holding one clip of what the
+    /// layer is showing - the way into the clip-editing surface.
     ///
     /// Remove-then-add at the same index rather than an in-place kind change,
     /// because a layer's kind is not something any single op edits; the batch
     /// makes it one undo step. Only footage converts.
+    ///
+    /// **The conversion keeps the sound.** The clip is placed at the layer's
+    /// own in point with its trim the same distance into the source, so a
+    /// layer that has been trimmed or slid converts to the same seconds of the
+    /// same file at the same moment on the comp's clock and the mixer builds
+    /// the job it built before. A **retimed** layer is refused
+    /// ([`BridgeError::RetimedLayer`]): a retimed clip is silent (docs/09 §7),
+    /// so converting one would take its sound away.
     #[frb(sync)]
     pub fn convert_to_sequenced(&self) -> Result<(), BridgeError> {
         use lumit_core::model::LayerKind;
@@ -3746,6 +4096,9 @@ impl LayerReference {
         let LayerKind::Footage { item } = &layer.kind else {
             return Err(BridgeError::NotFootage);
         };
+        if layer.retime.is_some() {
+            return Err(BridgeError::RetimedLayer);
+        }
         let comp = self.composition()?;
         let index = comp
             .layers
@@ -3759,29 +4112,41 @@ impl LayerReference {
         let duration =
             Rational::from_f64_on_grid(span, Rational::FLICK_DEN).unwrap_or(layer.out_point.0);
 
+        // Where the layer starts showing, on its own clock. A footage layer
+        // shows the source moment that far past its zero, so the clip is
+        // placed there and trimmed there and the two read the same source at
+        // the same moment. Never negative: a clip's place cannot be.
+        let local = layer
+            .in_point
+            .0
+            .checked_sub(layer.start_offset.0)
+            .unwrap_or(Rational::ZERO);
+        let local = if local.is_negative() {
+            Rational::ZERO
+        } else {
+            local
+        };
+        let source_out = local.checked_add(duration).unwrap_or(duration);
+
         let mut converted = layer.clone();
         converted.kind = LayerKind::Sequence {
             clips: vec![Clip {
                 id: Uuid::now_v7(),
                 source: ClipSource::Footage(*item),
-                source_in: Rational::ZERO,
-                source_out: duration,
-                place_start: Rational::ZERO,
+                source_in: local,
+                source_out,
+                place_start: local,
                 place_duration: duration,
-                // **The layer's own map comes with it.** A layer's Retime is
-                // keyed in layer time and a clip's in clip time, and here they
-                // are the same clock: the clip spans the whole layer, starting
-                // at its zero. The two are the same kind of map, so
-                // nothing is converted — it is the same keyframes, read
-                // against the same instant. (They stop coinciding the moment
-                // the clip is cut or slid, but by then the map is the clip's
-                // and travels with it.)
-                //
-                // The mirror of `convert_from_sequenced`, which brings it
-                // back the same way: converting one direction and back must
-                // leave the layer playing what it played.
-                retime: layer.retime.clone(),
+                // None by construction: a retimed layer is refused above, and
+                // `convert_from_sequenced` still brings a clip's own map back
+                // the other way.
+                retime: None,
                 interpolation: layer.interpolation.clone(),
+                fade_in: Default::default(),
+                fade_out: Default::default(),
+                effects: Vec::new(),
+                fx: true,
+                gain_db: 0.0,
                 extra: serde_json::Map::new(),
             }],
         };
@@ -3921,8 +4286,27 @@ impl LayerReference {
         clips: Vec<lumit_core::sequence::Clip>,
         start_offset: lumit_core::time::CompTime,
     ) -> Result<(), BridgeError> {
-        let mut layer = self.item()?;
-        layer.start_offset = start_offset;
+        let mut ops = self.clip_ops(clips, start_offset)?;
+        // A batch of one undoes identically and reads worse in the journal.
+        if ops.len() == 1 {
+            return self.commit(ops.remove(0));
+        }
+        self.commit(lumit_core::Op::Batch { ops })
+    }
+
+    /// The ops [`Self::commit_clips_with_offset`] commits: the clip write, and
+    /// the span that follows it when the row's extent has moved.
+    ///
+    /// Handed back rather than committed so a move **across two rows** can be
+    /// one `Batch` and therefore one undo step, with both rows' clips and both
+    /// rows' bars inside it.
+    #[frb(ignore)]
+    fn clip_ops(
+        &self,
+        clips: Vec<lumit_core::sequence::Clip>,
+        start_offset: lumit_core::time::CompTime,
+    ) -> Result<Vec<lumit_core::Op>, BridgeError> {
+        let layer = self.item()?;
         let set_clips = lumit_core::Op::SetSequenceClips {
             comp: self.comp_id,
             layer: self.layer_id,
@@ -3931,28 +4315,26 @@ impl LayerReference {
         // Clip places are in layer time; a span is in comp time, and the two
         // differ by the layer's own zero.
         let Some((start, end)) = lumit_core::sequence::clips_span(&clips) else {
-            return self.commit(set_clips);
+            return Ok(vec![set_clips]);
         };
-        let offset = layer.start_offset.0;
+        let offset = start_offset.0;
         let (Ok(in_point), Ok(out_point)) = (offset.checked_add(start), offset.checked_add(end))
         else {
-            return self.commit(set_clips);
+            return Ok(vec![set_clips]);
         };
         if in_point == layer.in_point.0 && out_point == layer.out_point.0 {
-            return self.commit(set_clips);
+            return Ok(vec![set_clips]);
         }
-        self.commit(lumit_core::Op::Batch {
-            ops: vec![
-                set_clips,
-                lumit_core::Op::SetLayerSpan {
-                    comp: self.comp_id,
-                    layer: self.layer_id,
-                    in_point: lumit_core::time::CompTime(in_point),
-                    out_point: lumit_core::time::CompTime(out_point),
-                    start_offset,
-                },
-            ],
-        })
+        Ok(vec![
+            set_clips,
+            lumit_core::Op::SetLayerSpan {
+                comp: self.comp_id,
+                layer: self.layer_id,
+                in_point: lumit_core::time::CompTime(in_point),
+                out_point: lumit_core::time::CompTime(out_point),
+                start_offset,
+            },
+        ])
     }
 
     /// The project item this layer draws from, when it has one.
@@ -4715,6 +5097,91 @@ impl LayerReference {
         {
             let _ = (item, start_seconds, end_seconds, buckets, multiwave);
             Ok(BridgeAudioPeaks::empty())
+        }
+    }
+
+    /// One Sequence clip's audio as a **spectrogram** - the twin of
+    /// [`Self::clip_audio_peaks`] for the spectral lane mode, and the
+    /// clip-level counterpart of [`Self::audio_spectrogram`].
+    ///
+    /// Columned in **clip-local placed time** for the reason the peaks are
+    /// bucketed there: a ramped clip plays its middle slowly, so a column
+    /// taken evenly in source time would draw the wrong moment. Each column's
+    /// edges go through the clip's own map here.
+    ///
+    /// Columns are `lumit_audio::spectra::BINS` bytes each, column-major, low
+    /// band first. An empty or backwards range is read as the whole clip.
+    /// Empty for a clip cut from a comp or from media with no sound.
+    pub fn clip_audio_spectrogram(
+        &self,
+        clip: Uuid,
+        start_seconds: f64,
+        end_seconds: f64,
+        columns: u32,
+    ) -> Result<BridgeSpectrogram, BridgeError> {
+        let (clips, index) = self.clips_and_index(clip)?;
+        let Some(clip) = clips.get(index) else {
+            return Ok(BridgeSpectrogram::empty());
+        };
+        let lumit_core::sequence::ClipSource::Footage(item) = clip.source else {
+            return Ok(BridgeSpectrogram::empty());
+        };
+
+        #[cfg(feature = "media")]
+        {
+            let path = {
+                let proj = self.project()?;
+                let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+                let snapshot = proj.store.snapshot();
+                let Some(lumit_core::model::ProjectItem::Footage(footage)) = snapshot.item(item)
+                else {
+                    return Ok(BridgeSpectrogram::empty());
+                };
+                crate::api::footage::FootageReference::resolve_path(&proj, footage)
+            };
+            let Some(path) = path else {
+                return Ok(BridgeSpectrogram::empty());
+            };
+            let Some(grid) = crate::peaks::spectrogram_for(&path) else {
+                return Ok(BridgeSpectrogram::empty());
+            };
+
+            let bins = lumit_audio::spectra::BINS;
+            let columns = columns.clamp(1, MAX_PEAK_BUCKETS) as usize;
+            let clip_start = clip.place_start.to_f64();
+            let clip_end = clip_start + clip.place_duration.to_f64();
+            let (start, end) = if end_seconds > start_seconds {
+                (
+                    start_seconds.max(clip_start).min(clip_end),
+                    end_seconds.max(clip_start).min(clip_end),
+                )
+            } else {
+                (clip_start, clip_end)
+            };
+            if end <= start {
+                return Ok(BridgeSpectrogram::empty());
+            }
+            let step = (end - start) / columns as f64;
+            let mut values = vec![0u8; columns * bins];
+            for (c, col) in values.chunks_exact_mut(bins).enumerate() {
+                let a = clip.source_time(start + step * c as f64);
+                let b = clip.source_time(start + step * (c + 1) as f64);
+                grid.window_into(a.min(b), a.max(b), col);
+            }
+            Ok(BridgeSpectrogram {
+                duration_seconds: grid.duration_seconds(),
+                start_seconds: start,
+                end_seconds: end,
+                columns: columns as u32,
+                bins: bins as u32,
+                values,
+            })
+        }
+
+        #[cfg(not(feature = "media"))]
+        {
+            let _ = (item, start_seconds, end_seconds, columns);
+            Ok(BridgeSpectrogram::empty())
         }
     }
 
@@ -5494,15 +5961,16 @@ impl LayerReference {
         self.with_instances(InstanceHome::Effects, edit)
     }
 
-    /// [`Self::with_effects`] for any of the three instance lists a param
+    /// [`Self::with_effects`] for any of the four instance lists a param
     /// command can land on — the layer's effect stack, its **styles**
-    /// (docs/impl/layer-styles.md §5), or a **group header's** stack in
-    /// this comp (docs/impl/group-effects.md §6).
+    /// (docs/impl/layer-styles.md §5), a **group header's** stack in this comp
+    /// (docs/impl/group-effects.md §6), or one **clip's** own rack
+    /// (docs/impl/audio-timeline.md §4).
     ///
-    /// A style and a header effect are both `EffectInstance`s in another list,
-    /// so the only thing that differs between editing one and editing an
-    /// effect is which list is read and which op commits it. All three live
-    /// here, which is why no command below grows a branch of its own.
+    /// A style, a header effect and a clip effect are all `EffectInstance`s in
+    /// another list, so the only thing that differs between editing one and
+    /// editing an effect is which list is read and which op commits it. All
+    /// four live here, which is why no command below grows a branch of its own.
     #[frb(ignore)]
     pub(crate) fn with_instances(
         &self,
@@ -5547,6 +6015,16 @@ impl LayerReference {
                     effects: list,
                 }
             }
+            // Through `commit_clips`, like every other clip write, so the
+            // whole-list replace and the row's bar stay one undo step. The
+            // op's inverse clones every clip's stack, plugin state and all;
+            // ponytail: that is the ceiling, and reusing the untouched clips
+            // is the upgrade if an edit ever breaks the docs/13 budget.
+            InstanceHome::Clip(clip) => {
+                let (mut clips, index) = self.clips_and_index(clip)?;
+                edit(&mut clips[index].effects)?;
+                return self.commit_clips(clips);
+            }
         };
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
@@ -5557,11 +6035,12 @@ impl LayerReference {
     /// **The one find-instance lookup** (docs/impl/layer-styles.md §5,
     /// docs/impl/group-effects.md §6): which list `id` lives on.
     ///
-    /// The effect stack is searched first, then the style list, then the
-    /// comp's group headers — ids are unique across all three, so the order is
-    /// only a statement about which is the common case. `Effects` for an id on
-    /// none of them, which leaves the caller's own "no such instance" error to
-    /// be the one the user sees rather than inventing a second one here.
+    /// The effect stack is searched first, then the style list, then this
+    /// layer's clips, then the comp's group headers - ids are unique across
+    /// all four, so the order is only a statement about which is the common
+    /// case. `Effects` for an id on none of them, which leaves the caller's
+    /// own "no such instance" error to be the one the user sees rather than
+    /// inventing a second one here.
     ///
     /// Every param command — set a value, move a key, bypass, remove — routes
     /// through this rather than asking whether its caller was a styles panel
@@ -5576,6 +6055,11 @@ impl LayerReference {
         }
         if layer.styles.iter().any(|s| s.id == id) {
             return Ok(InstanceHome::Styles);
+        }
+        if let lumit_core::model::LayerKind::Sequence { clips } = &layer.kind {
+            if let Some(clip) = clips.iter().find(|c| c.effects.iter().any(|e| e.id == id)) {
+                return Ok(InstanceHome::Clip(clip.id));
+            }
         }
         let comp = self.composition()?;
         Ok(comp
@@ -5817,19 +6301,31 @@ impl LayerReference {
     /// than a coincidence of naming — a style's parameters are dragged, typed,
     /// keyed and expression-driven through exactly this path, and giving them a
     /// second commit would be a second place for the two to drift.
+    ///
+    /// `clip` names the clip a staged list came off, for the one case the
+    /// lookup cannot answer: an **empty** list has no id to route by, and
+    /// removing a clip's last effect would otherwise land on the layer's own
+    /// stack. It is ignored while the list has anything in it, because then
+    /// the ids say where the list lives.
     #[frb(sync)]
-    pub fn set_effects(&self, effects: Vec<BridgeEffectInstance>) -> Result<(), BridgeError> {
+    pub fn set_effects(
+        &self,
+        effects: Vec<BridgeEffectInstance>,
+        clip: Option<Uuid>,
+    ) -> Result<(), BridgeError> {
         let staged: Vec<EffectInstance> = effects
             .iter()
             .map(BridgeEffectInstance::get_effects)
             .collect();
 
-        // An empty staged list is an empty *effect* stack: there is nothing to
-        // ask the lookup about, and clearing the style list is `remove_effect`'s
-        // job rather than a silent consequence of a stale panel.
-        let home = match staged.first() {
-            Some(first) => self.instance_home(first.id)?,
-            None => InstanceHome::Effects,
+        // An empty staged list with no clip named is an empty *effect* stack:
+        // there is nothing to ask the lookup about, and clearing the style
+        // list is `remove_effect`'s job rather than a silent consequence of a
+        // stale panel.
+        let home = match (staged.first(), clip) {
+            (Some(first), _) => self.instance_home(first.id)?,
+            (None, Some(clip)) => InstanceHome::Clip(clip),
+            (None, None) => InstanceHome::Effects,
         };
         self.with_instances(home, move |current| {
             let same_stack = current.len() == staged.len()
@@ -5838,6 +6334,51 @@ impl LayerReference {
                 return Err(BridgeError::StaleEffectStack);
             }
             *current = staged;
+            Ok(())
+        })
+    }
+
+    /// One clip's own effect stack as staged copies, exactly as
+    /// [`Self::get_effects`] hands out the layer's
+    /// (docs/impl/audio-timeline.md §4).
+    ///
+    /// Offset zero: a clip's parameters are keyed in clip time and a clip's
+    /// zero is its own start, which is the clock the clip's chain bakes in.
+    #[frb(sync)]
+    pub fn get_clip_effects(&self, clip: Uuid) -> Result<Vec<BridgeEffectInstance>, BridgeError> {
+        let (clips, index) = self.clips_and_index(clip)?;
+        Ok(clips[index]
+            .effects
+            .iter()
+            .map(|e| BridgeEffectInstance::new(e.clone(), lumit_core::time::Rational::ZERO))
+            .collect())
+    }
+
+    /// Append the effect named `name` to one clip's own stack - the clip arm
+    /// of [`Self::add_effect`], and the road the clip header's add button
+    /// drives.
+    ///
+    /// A **driver** is refused: a clip carries no graph for the node to land
+    /// on, and dropping it on the layer's instead would be an edit nobody
+    /// asked for.
+    #[frb(sync)]
+    pub fn add_clip_effect(&self, clip: Uuid, name: String) -> Result<(), BridgeError> {
+        if lumit_core::fx::BUILTIN_DEFS
+            .get(&name)
+            .is_some_and(|def| def.schema().category == lumit_core::fx::FxCategory::Drivers)
+        {
+            return Err(BridgeError::UnknownEffectName);
+        }
+        let comp = self.composition()?;
+        let mut instance = lumit_core::fx::instantiate_for_raster(
+            &name,
+            f64::from(comp.width),
+            f64::from(comp.height),
+        )
+        .ok_or(BridgeError::UnknownEffectName)?;
+        lumit_core::fx::point_self_layer_params_at(&mut instance, self.layer_id);
+        self.with_instances(InstanceHome::Clip(clip), move |effects| {
+            effects.push(instance);
             Ok(())
         })
     }
@@ -6195,6 +6736,26 @@ pub struct BridgeRevealGroups {
     /// Whether anything qualified at all. The panel leaves the layer's own
     /// twirl shut when nothing did, rather than opening onto an empty list.
     pub any: bool,
+}
+
+/// The row after a clip has been put down on it.
+///
+/// With `overlap` the neighbours stay where they are and the intersection is
+/// the crossfade, which is what an audio row wants
+/// (docs/impl/audio-timeline.md §2). Without it the drop overwrites, the NLE
+/// rule a picture row keeps: `sequence::resolve` shows one clip at a time and
+/// cannot dissolve, so two clips over one frame there would simply hide one.
+#[frb(ignore)]
+fn placed(
+    clips: Vec<lumit_core::sequence::Clip>,
+    dropped: Uuid,
+    overlap: bool,
+) -> Vec<lumit_core::sequence::Clip> {
+    if overlap {
+        clips
+    } else {
+        lumit_core::sequence::overwrite_with(&clips, dropped)
+    }
 }
 
 /// The last source position a map reaches — what the clip asks of its source.

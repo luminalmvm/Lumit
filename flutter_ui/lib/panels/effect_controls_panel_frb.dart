@@ -69,7 +69,6 @@ import 'shader_editor.dart';
 import 'fx_section.dart';
 import 'timeline_extras_frb.dart' show DoubleTap;
 import 'transform_rows_frb.dart';
-import '../state/audio_effects.dart';
 import '../state/clipboard.dart';
 import '../state/file_dialogs.dart';
 import '../theme/theme.dart';
@@ -973,7 +972,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
           {required bool audio}) =>
       [
         for (var i = 0; i < effects.length; i++)
-          if (isAudioEffectName(effects[i].name) == audio) i,
+          if (effects[i].audio == audio) i,
       ];
 
   /// One twirling heading over a group of cards — the Audio rack's and the
@@ -1360,7 +1359,7 @@ class _Header extends StatelessWidget {
               key: const ValueKey('fx-add'),
               small: true,
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              onPressed: () => _showAddMenu(buttonContext, onAdd),
+              onPressed: () => showAddEffectMenu(buttonContext, onAdd),
               // Add effect is a container label like every other kicker, so the
               // capitals live here rather than in the arb file.
               child: Text(l10n.addEffect.toUpperCase(),
@@ -1379,8 +1378,16 @@ class _Header extends StatelessWidget {
 /// [context] is the *button's*, so the menu drops from it rather than from the
 /// panel's left edge. The whole list used to be one 380 px scroller, which is
 /// a lot of reading to find one effect.
-Future<void> _showAddMenu(
-    BuildContext context, ValueChanged<String> onAdd) async {
+///
+/// [category] narrows the catalogue to one family: the Audio timeline's clip
+/// header passes `audio`, so its add button offers everything a clip can
+/// actually be heard through and nothing else. The **family**, not the
+/// provenance: Lumit's own audio effects and a hosted plugin file under the
+/// one Audio key, and a menu that asked where an entry came from would offer
+/// half of them.
+Future<void> showAddEffectMenu(
+    BuildContext context, ValueChanged<String> onAdd,
+    {String? category}) async {
   final box = context.findRenderObject();
   if (box is! RenderBox) return;
   // Dropped from the button's left edge so a wide menu opens back across the
@@ -1392,16 +1399,22 @@ Future<void> _showAddMenu(
   final grouped = <String, List<BridgeEffectInfo>>{};
   final headings = <String, String>{};
   for (final e in listEffects()) {
+    if (category != null && e.category != category) continue;
     grouped.putIfAbsent(e.category, () => []).add(e);
     // A plugin group can arrive unheaded — audio plugins always do, an OFX
     // one that declared no grouping can — and a submenu with a blank name is
     // a door nobody can find, so the panel words it the way the browser does
-    // (AP5).
-    headings[e.category] = e.categoryLabel.isEmpty
-        ? (e.namespace == 'audio'
-            ? l10n.effectsAudioPlugins
-            : l10n.effectsPlugins)
-        : engineLabel(e.categoryLabel);
+    // (AP5). A named label always wins: a built-in audio effect brings the
+    // engine's own Audio heading, and the plugins share it.
+    if (e.categoryLabel.isNotEmpty) {
+      headings[e.category] = engineLabel(e.categoryLabel);
+    } else {
+      headings.putIfAbsent(
+          e.category,
+          () => e.namespace == 'audio'
+              ? l10n.effectsAudioPlugins
+              : l10n.effectsPlugins);
+    }
   }
 
   await showLumitPopup<void>(

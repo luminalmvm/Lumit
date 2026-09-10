@@ -574,9 +574,14 @@ pub(super) fn resolve_into_arena(
             // nothing anywhere. It is not a value, so it is not in the bag,
             // and so it is not in the frame key either — pressing Analyse
             // renames no frame.
+            //
+            // A **clip reference** skips for the File slot's reason: which
+            // clip is meant is a question for the host that reads the sound
+            // (docs/impl/audio-nodes.md §2), not a number a kernel reads.
             ParamKind::File { .. }
             | ParamKind::ColourName { .. }
             | ParamKind::Layer { .. }
+            | ParamKind::Clip
             | ParamKind::MaskPath { .. }
             | ParamKind::Action => continue,
             // A curve is small enough to ride in the bag itself, so

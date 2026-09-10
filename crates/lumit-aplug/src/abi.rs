@@ -249,15 +249,15 @@ impl AnyInstance {
         }
     }
 
-    /// Prepare the plugin for 512-frame blocks at 48 kHz, in stereo.
+    /// Prepare the plugin for 512-frame blocks at `rate` hertz, in stereo.
     ///
     /// # Errors
     ///
     /// The plugin refused the rate, the block size or the stereo pair.
-    pub fn activate(&mut self) -> Result<(), HostError> {
+    pub fn activate(&mut self, rate: f64) -> Result<(), HostError> {
         match self {
-            Self::Clap(instance) => instance.activate(),
-            Self::Vst3(instance) => instance.activate(),
+            Self::Clap(instance) => instance.activate(rate),
+            Self::Vst3(instance) => instance.activate(rate),
         }
     }
 

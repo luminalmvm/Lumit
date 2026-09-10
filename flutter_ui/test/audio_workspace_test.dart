@@ -10,7 +10,8 @@ void main() {
   group('Audio workspace preset', () {
     /// The board's arrangement: Mixer fronting the left column over Project
     /// and Effect controls, the Audio panel fronting the right over
-    /// Effects & presets, the Viewer between, the Timeline across the bottom.
+    /// Effects & presets, the Viewer between, and the **Audio timeline**
+    /// across the bottom where every other arrangement puts the Timeline.
     test('the preset holds the board\'s panels, fronted as drawn', () {
       final layout = presetLayout(WorkspacePreset.audio);
       final panels = panelsIn(layout);
@@ -20,12 +21,14 @@ void main() {
           Panel.mixer,
           Panel.audio,
           Panel.viewer,
-          Panel.timeline,
+          Panel.audioTimeline,
           Panel.project,
           Panel.effectControls,
           Panel.effectsAndPresets,
         ]),
       );
+      expect(panels, isNot(contains(Panel.timeline)),
+          reason: 'the sound table stands where the layer stack stood');
 
       final upper = layout.children.first as DockSplit;
       final left = upper.children.first as DockTabs;
@@ -35,7 +38,8 @@ void main() {
       expect(right.activePane.panel, Panel.audio,
           reason: 'the board fronts the Audio panel on the right column');
       expect(layout.children.last, isA<DockPane>(),
-          reason: 'the Timeline runs the full width alone');
+          reason: 'the Audio timeline runs the full width alone');
+      expect((layout.children.last as DockPane).panel, Panel.audioTimeline);
     });
 
     /// A saved arrangement from a build that predates these panels still
