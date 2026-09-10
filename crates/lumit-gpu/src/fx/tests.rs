@@ -2218,8 +2218,12 @@ fn wgsl_shake_matches_the_cpu_oracle_through_the_transform_kernel() {
 #[test]
 fn wgsl_shake_motion_blur_matches_the_cpu_oracle() {
     // The GPU crate can't name lumit-core's const (dev-dependency only), so pin
-    // the two — and the WGSL `array<Tap, 9>` literal — in agreement here.
+    // the two — and the WGSL `array<Tap, 64>` literal — in agreement here.
     assert_eq!(SHAKE_MB_SAMPLES, lumit_core::fx::SHAKE_MB_SAMPLES);
+    assert!(
+        include_str!("../fx_shake_mb.wgsl").contains(&format!("array<Tap, {SHAKE_MB_SAMPLES}>")),
+        "the WGSL tap array is sized to SHAKE_MB_SAMPLES"
+    );
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -2245,7 +2249,7 @@ fn wgsl_shake_motion_blur_matches_the_cpu_oracle() {
         z_freq: 0.7,
     };
     let base = 2.0f64;
-    let offsets = lumit_core::fx::shake_mb_offsets(0.8);
+    let offsets = lumit_core::fx::shake_mb_offsets(0.8, SHAKE_MB_SAMPLES);
     let mut samples = [lumit_core::fx::ShakeSample::IDENTITY; SHAKE_MB_SAMPLES];
     for (s, db) in samples.iter_mut().zip(offsets) {
         let (offset_px, rotation_deg, zoom) = wobble.at(base + db);

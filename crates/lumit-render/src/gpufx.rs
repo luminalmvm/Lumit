@@ -3133,7 +3133,12 @@ impl GpuEffect for Shake {
                     },
                 )
             }
-            Shaken::Blurred { samples, edge, mix } => {
+            Shaken::Blurred {
+                samples,
+                count,
+                edge,
+                mix,
+            } => {
                 let mut taps = [lumit_gpu::fx::ShakeMbTap {
                     m: [1.0, 0.0, 0.0, 1.0],
                     off: [0.0, 0.0],
@@ -3159,7 +3164,7 @@ impl GpuEffect for Shake {
                     aux.matte(),
                     &lumit_gpu::fx::ShakeMbOp {
                         taps,
-                        count: samples.len() as u32,
+                        count: count as u32,
                         edge,
                         mix,
                     },
@@ -7005,10 +7010,11 @@ mod tests {
     ///
     /// Shake is the one migrated effect whose dispatch forks: plain, it is the
     /// Transform kernel; with its own motion blur on, it is the averaging one,
-    /// fed nine affines. Nothing but this test joins the fork to the bag — a
-    /// wrapper that read the sub-frames and still called `transform` would
-    /// render a picture, just not a smeared one — so both modes run end to end
-    /// against the CPU reference, and the two must differ from each other.
+    /// fed one affine per sub-frame. Nothing but this test joins the fork to
+    /// the bag — a wrapper that read the sub-frames and still called
+    /// `transform` would render a picture, just not a smeared one — so both
+    /// modes run end to end against the CPU reference, and the two must differ
+    /// from each other.
     #[test]
     fn shake_renders_through_run_ops_in_both_modes() {
         let Some(ctx) = lumit_gpu::test_support::lease() else {

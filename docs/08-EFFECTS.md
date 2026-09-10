@@ -892,6 +892,7 @@ exponentially over Decay seconds, so shakes hit on the beat and settle.
 | *Motion blur* (twirl) | | |
 | — Motion blur | boolean | off |
 | — Shutter | 0–1 | 0.5 |
+| — Samples | 2–64 | 9 |
 | Edges | Transparent / Repeat / Mirror | Mirror |
 | Mode | Continuous / Triggered | Continuous |
 | Trigger source | marker-trigger | comp beat markers |
@@ -911,8 +912,10 @@ the wobble is a pure function of time, so with the toggle on it is sampled at se
 sub-frame placements across the shutter and the resamples are averaged — translation,
 rotation and zoom smear together, along the shake's own inter-frame movement, and only this
 effect's output is affected (not the layer or comp motion blur). The Shutter (0–1) sets how
-far across the shutter window the samples spread; off, or Shutter 0, is the plain single
-resample. This is the streak the S_Shake feature wiggle expressions never had.
+far across the shutter window the samples spread, and Samples (2–64) how many there are: a
+wide amplitude at few samples shows each tap as a ghost, more samples fill the same window
+smoothly. Off, or Shutter 0, is the plain single resample. This is the streak the S_Shake
+feature wiggle expressions never had.
 
 **Status (v1, continuous form, shipped):** Amplitude, Frequency, Rotation amount and
 Rotation frequency, the
@@ -925,10 +928,11 @@ at local time × frequency — deterministic and hop-free per §2.4. Resolved ho
 affine and dispatched through the §3.5 Transform kernel (which now carries the Edges
 policy): no kernel of its own, and the zero-wobble state is a bit-exact passthrough (pinned
 by test). **Motion blur (T18):** with the twirl on, the resolver samples the wobble at
-a fixed, odd number of sub-frame placements (host-side — the noise lattice needs 64-bit
-integers the GPU has not got) and a dedicated averaging kernel resamples the input through
-each and takes the premultiplied-linear mean; off, or Shutter 0, is the exact single
-resample. The shutter window is measured in the shake's own phase (local time × frequency),
+Samples sub-frame placements, 2 to 64 and 9 by default (host-side — the noise lattice needs
+64-bit integers the GPU has not got) and a dedicated averaging kernel resamples the input
+through each and takes the premultiplied-linear mean; off, or Shutter 0, is the exact single
+resample. A shake saved before the Samples row keeps the nine it was made with.
+The shutter window is measured in the shake's own phase (local time × frequency),
 not seconds, so the effect resolver stays frame-rate-agnostic and the smear is frame-rate
 independent. **Migration (FX-11):** this reshape replaced the old Zoom
 pump and Auto-scale bool — a project saved before it maps its Zoom pump to the Z amount, and

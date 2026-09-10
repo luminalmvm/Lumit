@@ -4089,7 +4089,10 @@ fn shake_instantiates_with_a_per_instance_seed_and_resolves() {
     );
     assert_eq!(schema.groups[1].label, "Motion blur");
     assert!(schema.groups[1].collapsed);
-    assert_eq!(schema.groups[1].params, &["motion_blur", "mb_amount"]);
+    assert_eq!(
+        schema.groups[1].params,
+        &["motion_blur", "mb_amount", "mb_samples"]
+    );
 
     // Resolving is deterministic: the same instance at the same time
     // yields the identical wobble, twice.
@@ -4278,6 +4281,55 @@ fn shake_with_mb(amount: f64) -> crate::model::EffectInstance {
     e
 }
 
+/// The Samples row sets how many sub-frames the smear averages. The shutter
+/// ends stay where they are; only the density between them changes. Absent
+/// (a shake saved before the row), the count is the nine it was made with.
+#[test]
+fn shake_samples_row_sets_the_sub_frame_count_without_moving_the_shutter_ends() {
+    use effects::shake::Shaken;
+
+    // One instance, so one seed and one noise curve: only the row moves.
+    let base = shake_with_mb(0.5);
+    let with_samples = |n: f64| {
+        let mut e = base.clone();
+        for p in &mut e.params {
+            if p.id == "mb_samples" {
+                p.value = EffectValue::Float(crate::anim::Property::fixed(n));
+            }
+        }
+        e
+    };
+    let blurred = |e: &crate::model::EffectInstance| {
+        let Shaken::Blurred { samples, count, .. } = shake_packed(e, 0.4, 1000.0) else {
+            panic!("motion blur on carries sub-frames");
+        };
+        (samples, count)
+    };
+
+    let (nine, n9) = blurred(&with_samples(9.0));
+    let (thirty_two, n32) = blurred(&with_samples(32.0));
+    let (two, n2) = blurred(&with_samples(2.0));
+    assert_eq!((n9, n32, n2), (9, 32, 2));
+    assert_eq!(nine[0], thirty_two[0], "the first sub-frame stays put");
+    assert_eq!(nine[8], thirty_two[31], "the last sub-frame stays put");
+    assert_eq!(two[0], nine[0]);
+    assert_eq!(two[1], nine[8]);
+    assert!(
+        thirty_two[1..31].iter().any(|s| !nine.contains(s)),
+        "more samples land between the old ones"
+    );
+
+    // Out of range rounds and clamps rather than failing.
+    assert_eq!(blurred(&with_samples(1.0)).1, 2);
+    assert_eq!(blurred(&with_samples(500.0)).1, SHAKE_MB_SAMPLES);
+    assert_eq!(blurred(&with_samples(15.6)).1, 16);
+
+    // A shake saved before the row has no `mb_samples` and keeps its nine.
+    let mut old = base.clone();
+    old.params.retain(|p| p.id != "mb_samples");
+    assert_eq!(blurred(&old), (nine, 9));
+}
+
 #[test]
 fn resolve_shake_motion_blur_samples_the_shutter_and_centres_on_the_frame() {
     use effects::shake::Shaken;
@@ -4294,10 +4346,10 @@ fn resolve_shake_motion_blur_samples_the_shutter_and_centres_on_the_frame() {
     // wobble exactly, and the samples actually differ across the shutter.
     let on = shake_with_mb(0.5);
     let packed = shake_packed(&on, 0.4, 1000.0);
-    let Shaken::Blurred { samples, .. } = packed else {
+    let Shaken::Blurred { samples, count, .. } = packed else {
         panic!("motion blur on carries sub-frames");
     };
-    assert_eq!(samples.len(), SHAKE_MB_SAMPLES);
+    assert_eq!(count, crate::fx::SHAKE_MB_DEFAULT_SAMPLES);
     // The frame-time wobble is what the same instance packs to with the smear
     // taken away — the centre sub-frame lands on offset 0, so the two are one
     // sample of one noise curve.
@@ -4310,14 +4362,10 @@ fn resolve_shake_motion_blur_samples_the_shutter_and_centres_on_the_frame() {
     let Shaken::Plain { wobble, .. } = shake_packed(&off_by_hand, 0.4, 1000.0) else {
         panic!("the smear is off now");
     };
-    assert_eq!(
-        samples[SHAKE_MB_SAMPLES / 2],
-        wobble,
-        "centre sample is the frame"
-    );
+    assert_eq!(samples[count / 2], wobble, "centre sample is the frame");
     assert_ne!(
         samples[0].offset_px,
-        samples[SHAKE_MB_SAMPLES - 1].offset_px,
+        samples[count - 1].offset_px,
         "the wobble moves across the shutter"
     );
 
@@ -4533,9 +4581,11 @@ fn shake_packs_the_wobble_the_old_arm_resolved() {
     let Shaken::Blurred { samples, .. } = shake_packed(&e, lt, diag_px) else {
         panic!("the smear is on");
     };
-    for (i, db) in shake_mb_offsets(fl("mb_amount").unwrap())
-        .into_iter()
-        .enumerate()
+    for (i, db) in shake_mb_offsets(
+        fl("mb_amount").unwrap(),
+        crate::fx::SHAKE_MB_DEFAULT_SAMPLES,
+    )
+    .enumerate()
     {
         assert_eq!(samples[i], old(base + db), "sub-frame {i}");
     }
