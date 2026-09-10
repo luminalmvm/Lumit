@@ -19,7 +19,7 @@ use crate::api::state::LumitBridgeState;
 fn a_style_is_added_ordered_refused_twice_and_edited_through_the_shared_lookup() {
     let project = LumitBridgeState::new_project(None).expect("a project");
     let comp = project.new_composition("Scene".into(), None).expect("comp");
-    let layer = comp.add_solid_layer().expect("a solid");
+    let layer = comp.add_solid_layer(None).expect("a solid");
 
     // Asked for out of order on purpose: the op sorts, so no caller has to.
     layer.add_style("style_stroke".into()).expect("stroke");

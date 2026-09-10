@@ -2239,10 +2239,13 @@ fn wire__crate__api__composition__composition_reference_add_adjustment_layer_imp
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_that =
                 <crate::api::composition::CompositionReference>::sse_decode(&mut deserializer);
+            let api_row = <Option<u32>>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, BridgeError>((move || {
                 let output_ok =
-                    crate::api::composition::CompositionReference::add_adjustment_layer(&api_that)?;
+                    crate::api::composition::CompositionReference::add_adjustment_layer(
+                        &api_that, api_row,
+                    )?;
                 Ok(output_ok)
             })())
         },
@@ -2310,10 +2313,12 @@ fn wire__crate__api__composition__composition_reference_add_camera_layer_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_that =
                 <crate::api::composition::CompositionReference>::sse_decode(&mut deserializer);
+            let api_row = <Option<u32>>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, BridgeError>((move || {
-                let output_ok =
-                    crate::api::composition::CompositionReference::add_camera_layer(&api_that)?;
+                let output_ok = crate::api::composition::CompositionReference::add_camera_layer(
+                    &api_that, api_row,
+                )?;
                 Ok(output_ok)
             })())
         },
@@ -2345,12 +2350,14 @@ fn wire__crate__api__composition__composition_reference_add_footage_layer_impl(
             let api_footage =
                 <crate::api::footage::FootageReference>::sse_decode(&mut deserializer);
             let api_as_sequence = <bool>::sse_decode(&mut deserializer);
+            let api_row = <Option<u32>>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, BridgeError>((move || {
                 let output_ok = crate::api::composition::CompositionReference::add_footage_layer(
                     &api_that,
                     &api_footage,
                     api_as_sequence,
+                    api_row,
                 )?;
                 Ok(output_ok)
             })())
@@ -2416,10 +2423,11 @@ fn wire__crate__api__composition__composition_reference_add_light_layer_impl(
             let api_that =
                 <crate::api::composition::CompositionReference>::sse_decode(&mut deserializer);
             let api_kind = <u32>::sse_decode(&mut deserializer);
+            let api_row = <Option<u32>>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, BridgeError>((move || {
                 let output_ok = crate::api::composition::CompositionReference::add_light_layer(
-                    &api_that, api_kind,
+                    &api_that, api_kind, api_row,
                 )?;
                 Ok(output_ok)
             })())
@@ -2449,10 +2457,12 @@ fn wire__crate__api__composition__composition_reference_add_null_layer_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_that =
                 <crate::api::composition::CompositionReference>::sse_decode(&mut deserializer);
+            let api_row = <Option<u32>>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, BridgeError>((move || {
-                let output_ok =
-                    crate::api::composition::CompositionReference::add_null_layer(&api_that)?;
+                let output_ok = crate::api::composition::CompositionReference::add_null_layer(
+                    &api_that, api_row,
+                )?;
                 Ok(output_ok)
             })())
         },
@@ -2483,10 +2493,11 @@ fn wire__crate__api__composition__composition_reference_add_precomp_layer_impl(
                 <crate::api::composition::CompositionReference>::sse_decode(&mut deserializer);
             let api_comp =
                 <crate::api::composition::CompositionReference>::sse_decode(&mut deserializer);
+            let api_row = <Option<u32>>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, BridgeError>((move || {
                 let output_ok = crate::api::composition::CompositionReference::add_precomp_layer(
-                    &api_that, &api_comp,
+                    &api_that, &api_comp, api_row,
                 )?;
                 Ok(output_ok)
             })())
@@ -2516,10 +2527,12 @@ fn wire__crate__api__composition__composition_reference_add_sequence_layer_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_that =
                 <crate::api::composition::CompositionReference>::sse_decode(&mut deserializer);
+            let api_row = <Option<u32>>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, BridgeError>((move || {
-                let output_ok =
-                    crate::api::composition::CompositionReference::add_sequence_layer(&api_that)?;
+                let output_ok = crate::api::composition::CompositionReference::add_sequence_layer(
+                    &api_that, api_row,
+                )?;
                 Ok(output_ok)
             })())
         },
@@ -2586,10 +2599,12 @@ fn wire__crate__api__composition__composition_reference_add_solid_layer_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_that =
                 <crate::api::composition::CompositionReference>::sse_decode(&mut deserializer);
+            let api_row = <Option<u32>>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, BridgeError>((move || {
-                let output_ok =
-                    crate::api::composition::CompositionReference::add_solid_layer(&api_that)?;
+                let output_ok = crate::api::composition::CompositionReference::add_solid_layer(
+                    &api_that, api_row,
+                )?;
                 Ok(output_ok)
             })())
         },
@@ -2618,10 +2633,12 @@ fn wire__crate__api__composition__composition_reference_add_text_layer_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_that =
                 <crate::api::composition::CompositionReference>::sse_decode(&mut deserializer);
+            let api_row = <Option<u32>>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, BridgeError>((move || {
-                let output_ok =
-                    crate::api::composition::CompositionReference::add_text_layer(&api_that)?;
+                let output_ok = crate::api::composition::CompositionReference::add_text_layer(
+                    &api_that, api_row,
+                )?;
                 Ok(output_ok)
             })())
         },
@@ -18416,6 +18433,17 @@ impl SseDecode for Option<crate::api::project::ProjectReference> {
     }
 }
 
+impl SseDecode for Option<u32> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<u32>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<u64> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -27129,6 +27157,16 @@ impl SseEncode for Option<crate::api::project::ProjectReference> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <crate::api::project::ProjectReference>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<u32> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <u32>::sse_encode(value, serializer);
         }
     }
 }

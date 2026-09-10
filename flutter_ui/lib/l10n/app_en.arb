@@ -3834,12 +3834,36 @@
   "@keyMoveTheLayerSOutPointToThePlayhead": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyNewAdjustmentLayer": "New Adjustment layer",
+  "@keyNewAdjustmentLayer": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyNewCameraLayer": "New Camera layer",
+  "@keyNewCameraLayer": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
   "keyNewComposition": "New composition",
   "@keyNewComposition": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyNewNullLayer": "New Null layer",
+  "@keyNewNullLayer": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyNewPointLightLayer": "New Point light layer",
+  "@keyNewPointLightLayer": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
   "keyNewProject": "New project",
   "@keyNewProject": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyNewSolidLayer": "New Solid layer",
+  "@keyNewSolidLayer": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyNewTextLayer": "New Text layer",
+  "@keyNewTextLayer": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
   "keyNextEditPoint": "Next edit point",

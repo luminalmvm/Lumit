@@ -193,6 +193,34 @@ void main() {
               1e-9));
     });
 
+    /// The cut hands the selection to the half **after** it, which is the
+    /// piece you carry on working with.
+    testWidgets('Ctrl+Shift+D leaves the second half selected', (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      p.uiState.setSelection([layer]);
+      p.uiState.playheadFrame.value = 12;
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyD);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+
+      final selected = p.uiState.selectedLayers.value;
+      expect(selected.length, 1, reason: 'one half, not both');
+      final cut = p.comp.timeOfFrame(frame: 12);
+      final at = cut.num / cut.den;
+      final span = selected.single.getSpan();
+      expect(span.inPoint.num / span.inPoint.den, closeTo(at, 1e-9),
+          reason: 'the half that starts at the cut');
+      expect(selected.single.internallayerId, isNot(layer.internallayerId),
+          reason: 'the original kept the head, so the tail is the new layer');
+    });
+
     /// A cut with nothing selected, or one the engine refuses, is silence.
     testWidgets('Ctrl+Shift+D with nothing selected cuts nothing',
         (tester) async {
@@ -4889,6 +4917,67 @@ void main() {
     // Without the built library there is nothing to test against; the harness
     // throws with the command to run.
     /// The gesture the whole Project panel drag exists for. It had no drop
+    /// **One drop is one undo step.** The layer used to go on at the top and
+    /// then be walked down to the row it was dropped on, so Ctrl+Z put it back
+    /// at the top before a second press took it away.
+    testWidgets('a drop below the top takes one undo, not two', (tester) async {
+      final p = withComp();
+      final footage = p.state.project!.importFootage(path: 'C:/clips/shot.mov');
+      for (var i = 0; i < 3; i++) {
+        p.comp.addNullLayer();
+      }
+      final before = [
+        for (final l in p.comp.getLayers()) l.internallayerId,
+      ];
+      p.uiState.model.refresh();
+
+      await tester.pumpWidget(hostPanel(
+        child: const Row(
+          children: [
+            SizedBox(width: 300, child: ProjectPanelFrb()),
+            Expanded(child: TimelinePanelFrb()),
+          ],
+        ),
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(1400, 700),
+      ));
+      await tester.pump();
+
+      // Let go over the second layer's row, which is not the top of the stack.
+      final onto = find.byKey(ValueKey<String>('tl-row-${before[1]}'));
+      expect(onto, findsOneWidget);
+      final target = tester.getCenter(onto);
+      final row =
+          find.byKey(ValueKey<String>('project-row-${footage.internalid}'));
+      final gesture = await tester.startGesture(tester.getCenter(row));
+      await tester.pump(const Duration(milliseconds: 200));
+      final from = tester.getCenter(row);
+      for (var i = 1; i <= 10; i++) {
+        await gesture.moveTo(Offset(
+          from.dx + (target.dx - from.dx) * i / 10,
+          from.dy + (target.dy - from.dy) * i / 10,
+        ));
+        await tester.pump();
+      }
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      final after = p.comp.getLayers();
+      expect(after, hasLength(4), reason: 'the drop reached the document');
+      expect(after.first.internallayerId, before.first,
+          reason: 'it landed where it was dropped, not at the top');
+
+      p.state.project!.undo();
+      p.uiState.model.refresh();
+      await tester.pump();
+      expect(
+        [for (final l in p.comp.getLayers()) l.internallayerId],
+        before,
+        reason: 'one press put the whole drop back',
+      );
+    });
+
     /// target at all: the drag lifted, showed feedback, and dropped into
     /// nothing, which reads as the app ignoring you.
     testWidgets('footage dragged from the Project panel becomes a layer',

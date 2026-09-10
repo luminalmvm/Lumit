@@ -468,7 +468,8 @@ fn footage_places_into_a_composition_even_when_the_media_is_missing() {
 
     // The fixture's media has an empty absolute path and an unsaved project, so
     // it cannot resolve — the comp's own duration and size are used.
-    comp.add_footage_layer(footage, false).expect("placed");
+    comp.add_footage_layer(footage, false, None)
+        .expect("placed");
 
     let layers = comp.get_layers().expect("layers");
     assert_eq!(layers.len(), 1);
@@ -821,7 +822,7 @@ fn composition_settings_round_trip_including_a_drop_frame_rate() {
 fn changing_only_the_frame_rate_leaves_the_comp_and_its_layers_where_they_were() {
     let (project, ..) = project_with_folder();
     let comp = add_comp(&project, "Scene");
-    let layer = comp.add_solid_layer().expect("layer");
+    let layer = comp.add_solid_layer(None).expect("layer");
     let span_before = layer.get_span().expect("span");
 
     let before = comp.get_settings().expect("settings");
@@ -1487,7 +1488,7 @@ fn a_value_written_past_a_parameters_hard_range_is_clamped_to_it() {
 
     let (project, layer) = project_with_layer();
     let comp = CompositionReference::new(project.id, layer.comp_id());
-    let target = comp.add_solid_layer().expect("a layer to blur");
+    let target = comp.add_solid_layer(None).expect("a layer to blur");
     target.add_effect("blur".into()).expect("blur added");
 
     let radius = |staged: &Vec<crate::api::effect::BridgeEffectInstance>| match staged[0]
@@ -2277,7 +2278,7 @@ fn volume_round_trips_and_a_solid_reports_no_audio() {
 
     let (project, ..) = project_with_folder();
     let comp = add_comp(&project, "Scene");
-    let layer = comp.add_solid_layer().expect("layer");
+    let layer = comp.add_solid_layer(None).expect("layer");
 
     assert!(
         matches!(
@@ -2317,7 +2318,7 @@ fn pan_the_master_fader_and_the_fade_commands_round_trip() {
 
     let (project, ..) = project_with_folder();
     let comp = add_comp(&project, "Scene");
-    let layer = comp.add_solid_layer().expect("layer");
+    let layer = comp.add_solid_layer(None).expect("layer");
 
     // Pan: centre to start with, one op, one undo step.
     assert!(matches!(
@@ -2384,7 +2385,7 @@ fn a_precomp_layer_over_footage_that_sings_says_it_has_audio() {
         .expect("imported");
     let inner = add_comp(&project, "Music");
     inner
-        .add_footage_layer(&footage, false)
+        .add_footage_layer(&footage, false, None)
         .expect("the sound is placed");
     let inner_layer = inner.get_layers().expect("layers").remove(0);
     if !inner_layer.has_audio().expect("asked") {
@@ -2394,14 +2395,14 @@ fn a_precomp_layer_over_footage_that_sings_says_it_has_audio() {
     }
 
     let outer = add_comp(&project, "Edit");
-    let precomp = outer.add_precomp_layer(&inner).expect("nested");
+    let precomp = outer.add_precomp_layer(&inner, None).expect("nested");
     assert!(
         precomp.has_audio().expect("asked"),
         "the song is a comp down, and the mute switch belongs on the row"
     );
 
     let quiet = add_comp(&project, "Nothing");
-    let over_nothing = outer.add_precomp_layer(&quiet).expect("nested");
+    let over_nothing = outer.add_precomp_layer(&quiet, None).expect("nested");
     assert!(
         !over_nothing.has_audio().expect("asked"),
         "a precomp with nothing in it must not claim a mute switch"
@@ -2433,7 +2434,7 @@ fn detaching_audio_leaves_the_comp_sounding_exactly_as_it_did() {
         .expect("imported");
     let inner = add_comp(&project, "Music");
     inner
-        .add_footage_layer(&footage, false)
+        .add_footage_layer(&footage, false, None)
         .expect("the sound is placed");
     if !inner.get_layers().expect("layers")[0]
         .has_audio()
@@ -2448,7 +2449,7 @@ fn detaching_audio_leaves_the_comp_sounding_exactly_as_it_did() {
     // is the row this command exists for. (Footage that draws and sings needs a
     // real container; the precomp asks the same question of the same walk.)
     let outer = add_comp(&project, "Edit");
-    let precomp = outer.add_precomp_layer(&inner).expect("nested");
+    let precomp = outer.add_precomp_layer(&inner, None).expect("nested");
     precomp
         .set_volume_db(BridgeScalar::Static(-3.0))
         .expect("a level to carry across");
@@ -2490,7 +2491,7 @@ fn detaching_audio_leaves_the_comp_sounding_exactly_as_it_did() {
     // clones the row, solo and all; a row that was not being heard before the
     // detach must not start being heard because of it, or the command changes
     // the mix it promises to leave alone.
-    let mask = outer.add_solid_layer().expect("another row");
+    let mask = outer.add_solid_layer(None).expect("another row");
     mask.set_switch(crate::api::layer::BridgeLayerSwitch::Solo, true)
         .expect("soloed");
     let under_a_solo = audible_jobs(&project, &outer);
@@ -2518,7 +2519,7 @@ fn detaching_audio_leaves_the_comp_sounding_exactly_as_it_did() {
 fn detaching_audio_from_something_silent_is_refused() {
     let (project, ..) = project_with_folder();
     let comp = add_comp(&project, "Scene");
-    let solid = comp.add_solid_layer().expect("layer");
+    let solid = comp.add_solid_layer(None).expect("layer");
     assert!(matches!(solid.detach_audio(), Err(BridgeError::NoAudio)));
     assert_eq!(
         comp.get_layers().expect("layers").len(),
@@ -2536,7 +2537,7 @@ fn a_layer_added_under_a_solo_arrives_soloed() {
 
     let (project, ..) = project_with_folder();
     let comp = add_comp(&project, "Scene");
-    let first = comp.add_solid_layer().expect("solid");
+    let first = comp.add_solid_layer(None).expect("solid");
     assert!(
         !first.get_switches().expect("switches").solo,
         "a comp with no solo up hands out no solo"
@@ -2545,7 +2546,7 @@ fn a_layer_added_under_a_solo_arrives_soloed() {
     first
         .set_switch(BridgeLayerSwitch::Solo, true)
         .expect("soloed");
-    let second = comp.add_solid_layer().expect("solid");
+    let second = comp.add_solid_layer(None).expect("solid");
     assert!(
         second.get_switches().expect("switches").solo,
         "the new layer is on screen, where it was just asked for"
@@ -2563,15 +2564,15 @@ fn a_layer_added_under_a_solo_arrives_soloed() {
 
     // Every other new-content road answers the same, this one through
     // `add_at_top` rather than its own commit.
-    let text = comp.add_text_layer().expect("text");
+    let text = comp.add_text_layer(None).expect("text");
     assert!(text.get_switches().expect("switches").solo);
 
     // A Camera and a Null show nothing of their own, so soloing one would blank
     // the comp rather than reveal anything — and a camera is chosen by its
     // visible switch, never by solo, so it works in a soloed comp untouched.
-    let camera = comp.add_camera_layer().expect("camera");
+    let camera = comp.add_camera_layer(None).expect("camera");
     assert!(!camera.get_switches().expect("switches").solo);
-    let null = comp.add_null_layer().expect("null");
+    let null = comp.add_null_layer(None).expect("null");
     assert!(!null.get_switches().expect("switches").solo);
 }
 
@@ -2585,8 +2586,8 @@ fn precompose_arrives_soloed_only_when_a_solo_stays_behind() {
 
     let (project, ..) = project_with_folder();
     let comp = add_comp(&project, "Scene");
-    let stays = comp.add_solid_layer().expect("solid");
-    let packed = comp.add_solid_layer().expect("solid");
+    let stays = comp.add_solid_layer(None).expect("solid");
+    let packed = comp.add_solid_layer(None).expect("solid");
     stays
         .set_switch(BridgeLayerSwitch::Solo, true)
         .expect("soloed");
@@ -2599,8 +2600,8 @@ fn precompose_arrives_soloed_only_when_a_solo_stays_behind() {
     );
 
     let other = add_comp(&project, "Other");
-    let going = other.add_solid_layer().expect("solid");
-    let staying = other.add_solid_layer().expect("solid");
+    let going = other.add_solid_layer(None).expect("solid");
+    let staying = other.add_solid_layer(None).expect("solid");
     going
         .set_switch(BridgeLayerSwitch::Solo, true)
         .expect("soloed");
@@ -2718,7 +2719,8 @@ fn the_sound_of_a_clip_can_be_its_own_layer() {
     // The ordinary placement of the same clip is unchanged — a Footage layer
     // that draws. Without a decoder nothing can be probed, so the picture is
     // assumed present rather than assumed away.
-    comp.add_footage_layer(&footage, false).expect("placed");
+    comp.add_footage_layer(&footage, false, None)
+        .expect("placed");
     let drawn = comp.get_layers().expect("layers").remove(0);
     assert_eq!(drawn.get_kind().expect("kind"), BridgeLayerKind::Footage);
 }
@@ -2843,15 +2845,15 @@ fn every_layer_kind_adds_and_undoes_as_one_step() {
         BridgeLayerKind::Light,
     ] {
         let added = match expected {
-            BridgeLayerKind::Solid => comp.add_solid_layer(),
-            BridgeLayerKind::Text => comp.add_text_layer(),
-            BridgeLayerKind::Camera => comp.add_camera_layer(),
-            BridgeLayerKind::Adjustment => comp.add_adjustment_layer(),
-            BridgeLayerKind::NullLayer => comp.add_null_layer(),
-            BridgeLayerKind::Sequence => comp.add_sequence_layer(),
+            BridgeLayerKind::Solid => comp.add_solid_layer(None),
+            BridgeLayerKind::Text => comp.add_text_layer(None),
+            BridgeLayerKind::Camera => comp.add_camera_layer(None),
+            BridgeLayerKind::Adjustment => comp.add_adjustment_layer(None),
+            BridgeLayerKind::NullLayer => comp.add_null_layer(None),
+            BridgeLayerKind::Sequence => comp.add_sequence_layer(None),
             // The area kind — the one with a size, and so the one
             // worth checking reaches the document intact.
-            BridgeLayerKind::Light => comp.add_light_layer(2),
+            BridgeLayerKind::Light => comp.add_light_layer(2, None),
             other => panic!("{other:?} has no Layer-menu entry"),
         }
         .expect("layer added");
@@ -2883,18 +2885,18 @@ fn the_pixel_less_kinds_report_no_picture() {
     let (_project, layer) = project_with_layer();
     let comp = CompositionReference::new(_project.id, layer.comp_id());
 
-    let null = comp.add_null_layer().expect("null added");
+    let null = comp.add_null_layer(None).expect("null added");
     assert!(
         !null.has_picture().expect("has_picture"),
         "a Null has no pixels, so it can never be a matte or a layer parameter"
     );
-    let camera = comp.add_camera_layer().expect("camera added");
+    let camera = comp.add_camera_layer(None).expect("camera added");
     assert!(!camera.has_picture().expect("has_picture"));
     // And the kinds that do draw still say so, so the fix did not empty the
     // dropdowns it was meant to correct.
-    let solid = comp.add_solid_layer().expect("solid added");
+    let solid = comp.add_solid_layer(None).expect("solid added");
     assert!(solid.has_picture().expect("has_picture"));
-    let adjustment = comp.add_adjustment_layer().expect("adjustment added");
+    let adjustment = comp.add_adjustment_layer(None).expect("adjustment added");
     assert!(adjustment.has_picture().expect("has_picture"));
 }
 
@@ -2913,7 +2915,7 @@ fn an_effect_on_a_null_layer_keeps_its_animated_value() {
 
     let (project, layer) = project_with_layer();
     let comp = CompositionReference::new(project.id, layer.comp_id());
-    let null = comp.add_null_layer().expect("null added");
+    let null = comp.add_null_layer(None).expect("null added");
 
     null.add_effect("blur".into())
         .expect("the drop is accepted");
@@ -2968,7 +2970,7 @@ fn a_copied_layer_pastes_whole_and_lands_at_the_playhead() {
 
     let (project, layer) = project_with_layer();
     let comp = CompositionReference::new(project.id, layer.comp_id());
-    let source = comp.add_solid_layer().expect("a layer to copy");
+    let source = comp.add_solid_layer(None).expect("a layer to copy");
     source.rename("Hero".into()).expect("named");
     source.add_effect("blur".into()).expect("an effect on it");
 
@@ -3033,8 +3035,8 @@ fn a_copied_layer_pastes_whole_and_lands_at_the_playhead() {
 fn a_layer_pasted_into_another_comp_drops_the_references_it_left_behind() {
     let (project, layer) = project_with_layer();
     let comp = CompositionReference::new(project.id, layer.comp_id());
-    let parent = comp.add_null_layer().expect("a parent");
-    let source = comp.add_solid_layer().expect("a layer to copy");
+    let parent = comp.add_null_layer(None).expect("a parent");
+    let source = comp.add_solid_layer(None).expect("a layer to copy");
     source.set_parent(Some(parent.layer_id)).expect("parented");
 
     let text = source.copy_layer().expect("copied");
@@ -3078,7 +3080,7 @@ fn a_pasted_effect_starts_its_animation_at_the_playhead() {
 
     let (project, layer) = project_with_layer();
     let comp = CompositionReference::new(project.id, layer.comp_id());
-    let source = comp.add_solid_layer().expect("a layer");
+    let source = comp.add_solid_layer(None).expect("a layer");
     source.add_effect("blur".into()).expect("an effect");
 
     let key = |num: i64, value: f64| crate::api::effect::BridgeKeyframe {
@@ -3098,7 +3100,7 @@ fn a_pasted_effect_starts_its_animation_at_the_playhead() {
     source.set_effects(staged).expect("committed");
 
     let text = source.copy_effects(Vec::new()).expect("copied");
-    let target = comp.add_solid_layer().expect("somewhere to paste");
+    let target = comp.add_solid_layer(None).expect("somewhere to paste");
     // 12 seconds at 30 fps.
     target.paste_effects(text, 360).expect("pasted");
 
@@ -3130,7 +3132,7 @@ fn a_pasted_effect_starts_its_animation_at_the_playhead() {
 fn copying_several_effects_takes_them_in_stack_order() {
     let (project, layer) = project_with_layer();
     let comp = CompositionReference::new(project.id, layer.comp_id());
-    let source = comp.add_solid_layer().expect("a layer");
+    let source = comp.add_solid_layer(None).expect("a layer");
     source.add_effect("blur".into()).expect("first");
     source.add_effect("sharpen".into()).expect("second");
     source.add_effect("vignette".into()).expect("third");
@@ -3141,7 +3143,7 @@ fn copying_several_effects_takes_them_in_stack_order() {
     let text = source
         .copy_effects(vec![ids[2], ids[0]])
         .expect("copied both");
-    let target = comp.add_solid_layer().expect("somewhere to paste");
+    let target = comp.add_solid_layer(None).expect("somewhere to paste");
     target.paste_effects(text, 0).expect("pasted");
 
     let pasted: Vec<_> = target
@@ -3166,14 +3168,14 @@ fn copying_several_effects_takes_them_in_stack_order() {
 fn a_pasted_effect_with_no_keyframes_is_left_where_it_is() {
     let (project, layer) = project_with_layer();
     let comp = CompositionReference::new(project.id, layer.comp_id());
-    let source = comp.add_solid_layer().expect("a layer");
+    let source = comp.add_solid_layer(None).expect("a layer");
     source.add_effect("blur".into()).expect("an effect");
     let before = source.get_effects().expect("effects")[0]
         .get_value("radius".into())
         .expect("radius");
 
     let text = source.copy_effects(Vec::new()).expect("copied");
-    let target = comp.add_solid_layer().expect("somewhere to paste");
+    let target = comp.add_solid_layer(None).expect("somewhere to paste");
     target.paste_effects(text, 120).expect("pasted");
 
     let after = target.get_effects().expect("effects")[0]
@@ -3343,7 +3345,7 @@ fn a_matte_may_dangle_but_a_parent_loop_is_refused() {
 
     let (project, layer) = project_with_layer();
     let comp = CompositionReference::new(project.id, layer.comp_id());
-    let other = comp.add_adjustment_layer().expect("a second layer");
+    let other = comp.add_adjustment_layer(None).expect("a second layer");
 
     layer
         .set_matte(Some(BridgeMatte {
@@ -3452,7 +3454,8 @@ fn a_footage_layer_converts_to_a_sequence_layer_in_one_step() {
     let footage = project
         .import_footage("C:/clips/shot.mov".into())
         .expect("imported");
-    comp.add_footage_layer(&footage, false).expect("placed");
+    comp.add_footage_layer(&footage, false, None)
+        .expect("placed");
     let layer = comp.get_layers().expect("layers").remove(0);
 
     assert_eq!(layer.get_kind().expect("kind"), BridgeLayerKind::Footage);
@@ -3525,7 +3528,8 @@ fn the_adjustment_switch_writes_both_ways_on_a_layer_with_a_source() {
     let footage = project
         .import_footage("C:/clips/shot.mov".into())
         .expect("imported");
-    comp.add_footage_layer(&footage, false).expect("placed");
+    comp.add_footage_layer(&footage, false, None)
+        .expect("placed");
     let layer = comp.get_layers().expect("layers").remove(0);
     let source = layer.get_source_item().expect("source").is_some();
     assert!(source, "the shot is there to begin with");
@@ -3614,7 +3618,7 @@ fn a_layer_born_an_adjustment_gets_a_solid_when_it_is_switched_off() {
 fn the_adjustment_switch_refuses_the_kinds_with_no_picture() {
     let project = LumitBridgeState::new_project(None).expect("a new project");
     let comp = project.new_composition("Scene".into(), None).expect("comp");
-    let camera = comp.add_camera_layer().expect("camera");
+    let camera = comp.add_camera_layer(None).expect("camera");
     assert!(matches!(
         camera.set_adjustment(true),
         Err(BridgeError::NotConvertible)
@@ -3626,7 +3630,7 @@ fn the_adjustment_switch_refuses_the_kinds_with_no_picture() {
         Err(BridgeError::NotConvertible)
     ));
 
-    let null = comp.add_null_layer().expect("null");
+    let null = comp.add_null_layer(None).expect("null");
     assert!(matches!(
         null.set_adjustment(true),
         Err(BridgeError::NotConvertible)
@@ -3634,7 +3638,7 @@ fn the_adjustment_switch_refuses_the_kinds_with_no_picture() {
 
     // But every kind that draws takes it, including a hidden one: what a layer
     // is and whether it is being shown are two answers.
-    let solid = comp.add_solid_layer().expect("solid");
+    let solid = comp.add_solid_layer(None).expect("solid");
     solid
         .set_switch(crate::api::layer::BridgeLayerSwitch::Visible, false)
         .expect("hidden");
@@ -3655,7 +3659,8 @@ fn the_razor_cuts_through_a_ramped_clip() {
     let footage = project
         .import_footage("C:/clips/shot.mov".into())
         .expect("imported");
-    comp.add_footage_layer(&footage, false).expect("placed");
+    comp.add_footage_layer(&footage, false, None)
+        .expect("placed");
     let layer = comp.get_layers().expect("layers").remove(0);
     layer.convert_to_sequenced().expect("converted");
     let layer = comp.get_layers().expect("layers").remove(0);
@@ -3696,7 +3701,8 @@ fn the_razor_cuts_and_deletes_without_moving_the_other_clips() {
     let footage = project
         .import_footage("C:/clips/shot.mov".into())
         .expect("imported");
-    comp.add_footage_layer(&footage, false).expect("placed");
+    comp.add_footage_layer(&footage, false, None)
+        .expect("placed");
     let layer = comp.get_layers().expect("layers").remove(0);
     layer.convert_to_sequenced().expect("converted");
     let layer = comp.get_layers().expect("layers").remove(0);
@@ -3846,7 +3852,7 @@ fn a_preset_round_trips_with_fresh_instance_ids() {
     assert!(text.contains("\"format\""), "it is a .lumfx document");
     assert!(text.contains("My look"), "and carries its name");
 
-    let second = comp.add_adjustment_layer().expect("a second layer");
+    let second = comp.add_adjustment_layer(None).expect("a second layer");
     second.load_preset(text.clone()).expect("loaded");
 
     let source = first.get_effects().expect("effects");
@@ -3960,7 +3966,7 @@ fn a_composition_nests_into_another_but_not_into_itself() {
     let inner = project.new_composition("Inner".into(), None).expect("comp");
     let outer = project.new_composition("Outer".into(), None).expect("comp");
 
-    let placed = outer.add_precomp_layer(&inner).expect("nested");
+    let placed = outer.add_precomp_layer(&inner, None).expect("nested");
     assert_eq!(placed.get_kind().expect("kind"), BridgeLayerKind::Precomp);
     assert_eq!(placed.get_name().expect("name"), "Inner");
 
@@ -3970,7 +3976,7 @@ fn a_composition_nests_into_another_but_not_into_itself() {
     assert!(matches!(source, ItemReference::Composition(_)));
 
     assert!(matches!(
-        outer.add_precomp_layer(&outer),
+        outer.add_precomp_layer(&outer, None),
         Err(BridgeError::InvalidComp)
     ));
     assert_eq!(outer.get_layers().expect("layers").len(), 1);
@@ -3985,9 +3991,9 @@ fn precompose_packs_the_chosen_layers_and_leaves_one_precomp_behind() {
 
     let project = LumitBridgeState::new_project(None).expect("a new project");
     let comp = project.new_composition("Scene".into(), None).expect("comp");
-    let bottom = comp.add_solid_layer().expect("solid");
-    let middle = comp.add_solid_layer().expect("solid");
-    let top = comp.add_solid_layer().expect("solid");
+    let bottom = comp.add_solid_layer(None).expect("solid");
+    let middle = comp.add_solid_layer(None).expect("solid");
+    let top = comp.add_solid_layer(None).expect("solid");
     let spans: Vec<_> = [&bottom, &middle, &top]
         .iter()
         .map(|l| l.get_span().expect("span"))
@@ -4045,8 +4051,8 @@ fn precompose_refuses_nothing_and_survives_a_stray_reference() {
     let project = LumitBridgeState::new_project(None).expect("a new project");
     let comp = project.new_composition("Scene".into(), None).expect("comp");
     let other = project.new_composition("Other".into(), None).expect("comp");
-    let mine = comp.add_solid_layer().expect("solid");
-    let theirs = other.add_solid_layer().expect("solid");
+    let mine = comp.add_solid_layer(None).expect("solid");
+    let theirs = other.add_solid_layer(None).expect("solid");
 
     assert!(matches!(
         comp.precompose(Vec::new(), String::new(), false, false, None),
@@ -4077,9 +4083,9 @@ fn precompose_refuses_nothing_and_survives_a_stray_reference() {
 fn precompose_leaving_attributes_keeps_them_on_the_precomp_layer_only() {
     let project = LumitBridgeState::new_project(None).expect("a new project");
     let comp = project.new_composition("Scene".into(), None).expect("comp");
-    let solid = comp.add_solid_layer().expect("solid");
+    let solid = comp.add_solid_layer(None).expect("solid");
     solid.add_effect("blur".into()).expect("effect");
-    let second = comp.add_solid_layer().expect("solid");
+    let second = comp.add_solid_layer(None).expect("solid");
     // Two layers have no single layer to leave the attributes on, so this is
     // refused outright rather than applied to one of them.
     assert!(matches!(
@@ -4118,7 +4124,7 @@ fn precompose_adjusting_the_duration_trims_the_new_comp_to_the_selection() {
 
     let project = LumitBridgeState::new_project(None).expect("a new project");
     let comp = project.new_composition("Scene".into(), None).expect("comp");
-    let solid = comp.add_solid_layer().expect("solid");
+    let solid = comp.add_solid_layer(None).expect("solid");
     // Two seconds of a thirty-second comp, starting at five.
     let span = BridgeSpan {
         in_point: BridgeRational { num: 5, den: 1 },
@@ -5572,7 +5578,7 @@ fn adding_the_first_animator_moves_the_anchor_and_undoes_in_one_step() {
 
     let (project, layer) = project_with_layer();
     let comp = CompositionReference::new(project.id, layer.comp_id());
-    let text = comp.add_text_layer().expect("a text layer");
+    let text = comp.add_text_layer(None).expect("a text layer");
     let zero = || BridgeScalar::Static(0.0);
     let plain = BridgeTextDocument {
         text: "Lumit".into(),
@@ -5684,7 +5690,7 @@ fn converting_a_text_layer_leaves_the_original_where_it_was() {
 
     let (project, layer) = project_with_layer();
     let comp = CompositionReference::new(project.id, layer.comp_id());
-    let text = comp.add_text_layer().expect("a text layer");
+    let text = comp.add_text_layer(None).expect("a text layer");
     text.set_text(BridgeTextDocument {
         text: "Lumit".into(),
         expression: None,
@@ -5768,7 +5774,7 @@ fn a_text_layer_round_trips_its_document() {
 
     let (project, layer) = project_with_layer();
     let comp = CompositionReference::new(project.id, layer.comp_id());
-    let text = comp.add_text_layer().expect("a text layer");
+    let text = comp.add_text_layer(None).expect("a text layer");
 
     let before = text.get_text().expect("text").expect("it is text");
     assert_eq!(before.text, "Text", "the starter document");
@@ -5832,7 +5838,7 @@ fn a_text_expression_round_trips_and_clears() {
 
     let (project, layer) = project_with_layer();
     let comp = CompositionReference::new(project.id, layer.comp_id());
-    let text = comp.add_text_layer().expect("a text layer");
+    let text = comp.add_text_layer(None).expect("a text layer");
 
     let document = |expression: Option<&str>| BridgeTextDocument {
         text: "typed".into(),
@@ -5870,7 +5876,7 @@ fn a_text_expression_round_trips_and_clears() {
 fn a_camera_zoom_reads_and_writes_as_a_scalar() {
     let (project, layer) = project_with_layer();
     let comp = CompositionReference::new(project.id, layer.comp_id());
-    let camera = comp.add_camera_layer().expect("a camera");
+    let camera = comp.add_camera_layer(None).expect("a camera");
 
     let zoom = camera
         .get_camera_zoom()
@@ -5905,7 +5911,7 @@ fn editing_a_solid_changes_every_layer_that_uses_it() {
 
     let (project, layer) = project_with_layer();
     let comp = CompositionReference::new(project.id, layer.comp_id());
-    comp.add_solid_layer().expect("a solid layer");
+    comp.add_solid_layer(None).expect("a solid layer");
 
     // The solid asset it made, found in the project tree.
     let solid = project
@@ -5974,7 +5980,8 @@ fn sequenced_layer() -> (ProjectReference, CompositionReference, LayerReference)
     let footage = project
         .import_footage("C:/clips/shot.mov".into())
         .expect("imported");
-    comp.add_footage_layer(&footage, false).expect("placed");
+    comp.add_footage_layer(&footage, false, None)
+        .expect("placed");
     let layer = comp.get_layers().expect("layers").remove(0);
     layer.convert_to_sequenced().expect("sequenced");
     let layer = comp.get_layers().expect("layers").remove(0);
@@ -6068,7 +6075,8 @@ fn converting_a_retimed_layer_both_ways_keeps_its_map() {
     let footage = project
         .import_footage("C:/clips/shot.mov".into())
         .expect("imported");
-    comp.add_footage_layer(&footage, false).expect("placed");
+    comp.add_footage_layer(&footage, false, None)
+        .expect("placed");
     let layer = comp.get_layers().expect("layers").remove(0);
 
     layer.toggle_retime_property().expect("retimed");
@@ -6197,7 +6205,7 @@ fn a_sequence_shape_copies_onto_another_layer() {
     // Converted rather than auto-wrapped: this path's media does not exist,
     // so the wrap rule correctly declines it (a file it cannot read is not
     // known to run).
-    comp.add_footage_layer(&other_footage, false)
+    comp.add_footage_layer(&other_footage, false, None)
         .expect("placed");
     comp.get_layers()
         .expect("layers")
@@ -6275,7 +6283,8 @@ fn footage_layer() -> (ProjectReference, CompositionReference, LayerReference) {
     let footage = project
         .import_footage("C:/clips/shot.mov".into())
         .expect("imported");
-    comp.add_footage_layer(&footage, false).expect("placed");
+    comp.add_footage_layer(&footage, false, None)
+        .expect("placed");
     let layer = comp.get_layers().expect("layers").remove(0);
     (project, comp, layer)
 }
@@ -6676,7 +6685,7 @@ fn video_is_wrapped_and_a_still_is_not() {
         let video = project
             .import_footage(clip.to_string_lossy().into_owned())
             .expect("imported");
-        comp.add_footage_layer(&video, true).expect("placed");
+        comp.add_footage_layer(&video, true, None).expect("placed");
         let layers = comp.get_layers().expect("layers");
         assert_eq!(
             layers[0].get_kind().expect("kind"),
@@ -6693,7 +6702,7 @@ fn video_is_wrapped_and_a_still_is_not() {
             let image = project
                 .import_footage(still.to_string_lossy().into_owned())
                 .expect("imported");
-            comp.add_footage_layer(&image, true).expect("placed");
+            comp.add_footage_layer(&image, true, None).expect("placed");
             assert_eq!(
                 comp.get_layers().expect("layers")[0]
                     .get_kind()
@@ -6704,7 +6713,7 @@ fn video_is_wrapped_and_a_still_is_not() {
         }
 
         // …and with the preference off, video is a Footage layer as always.
-        comp.add_footage_layer(&video, false).expect("placed");
+        comp.add_footage_layer(&video, false, None).expect("placed");
         assert_eq!(
             comp.get_layers().expect("layers")[0]
                 .get_kind()
@@ -6739,7 +6748,7 @@ fn a_placed_layer_is_the_same_whether_the_probe_was_warm_or_not() {
 
     // Cold: whatever the import queued may still be in flight, so this
     // placement is the one that has to stand on the synchronous fallback.
-    comp.add_footage_layer(&footage, false)
+    comp.add_footage_layer(&footage, false, None)
         .expect("placed cold");
     let cold = comp.get_layers().expect("layers")[0]
         .get_info()
@@ -6748,7 +6757,7 @@ fn a_placed_layer_is_the_same_whether_the_probe_was_warm_or_not() {
     // Warm: the answer is certainly held now, so this placement is a look-up.
     let probed = crate::probe::ensure_probed(&clip).expect("the fixture probes");
     assert!(probed.video.is_some(), "the fixture has a picture");
-    comp.add_footage_layer(&footage, false)
+    comp.add_footage_layer(&footage, false, None)
         .expect("placed warm");
     let warm = comp.get_layers().expect("layers")[0]
         .get_info()
@@ -6774,7 +6783,8 @@ fn unreadable_media_is_never_wrapped() {
     let footage = project
         .import_footage("C:/clips/not-really-here.mov".into())
         .expect("imported");
-    comp.add_footage_layer(&footage, true).expect("placed");
+    comp.add_footage_layer(&footage, true, None)
+        .expect("placed");
     assert_eq!(
         comp.get_layers().expect("layers")[0]
             .get_kind()
@@ -6802,7 +6812,8 @@ fn interpolation_is_a_layer_setting_of_its_own() {
     let footage = project
         .import_footage("C:/clips/shot.mov".into())
         .expect("imported");
-    comp.add_footage_layer(&footage, false).expect("placed");
+    comp.add_footage_layer(&footage, false, None)
+        .expect("placed");
     let layer = comp.get_layers().expect("layers").remove(0);
 
     assert_eq!(
@@ -6966,7 +6977,8 @@ fn a_layer_named_as_the_beat_source_is_heard_through_a_solo() {
     let footage = project
         .import_footage(clicks.to_string_lossy().into_owned())
         .expect("imported");
-    comp.add_footage_layer(&footage, false).expect("placed");
+    comp.add_footage_layer(&footage, false, None)
+        .expect("placed");
     let music_row = comp.get_layers().expect("layers").remove(0);
     if !music_row.has_audio().expect("asked") {
         // No decoder in this build, or none that reads the fixture: there is
@@ -6976,7 +6988,7 @@ fn a_layer_named_as_the_beat_source_is_heard_through_a_solo() {
 
     // The everyday way to reach the bug: a picture row is soloed, which takes
     // the music out of the mix.
-    let solid = comp.add_solid_layer().expect("layer");
+    let solid = comp.add_solid_layer(None).expect("layer");
     solid
         .set_switch(BridgeLayerSwitch::Solo, true)
         .expect("soloed");
@@ -7284,7 +7296,7 @@ fn dropping_a_comp_in_copies_its_markers_onto_the_layer() {
         }])
         .expect("marked");
 
-    let placed = outer.add_precomp_layer(&source).expect("placed");
+    let placed = outer.add_precomp_layer(&source, None).expect("placed");
     let on_layer = placed.get_markers().expect("layer markers");
     assert_eq!(on_layer.len(), 1, "the marker came along");
     assert_eq!(on_layer[0].label, "Drop");
@@ -7427,8 +7439,8 @@ fn rename_label_and_matte_each_undo_in_one_step() {
 
     let project = LumitBridgeState::new_project(None).expect("a new project");
     let comp = add_comp(&project, "Scene");
-    let source = comp.add_solid_layer().expect("matte source");
-    let layer = comp.add_solid_layer().expect("layer");
+    let source = comp.add_solid_layer(None).expect("matte source");
+    let layer = comp.add_solid_layer(None).expect("layer");
     let before = layer.get_info().expect("info").name;
 
     layer.rename("Hero".into()).expect("renamed");
@@ -7678,7 +7690,7 @@ fn the_animated_reveal_names_only_keyframed_groups() {
     use crate::api::layer::BridgeRevealKind;
     let (project, ..) = project_with_folder();
     let comp = add_comp(&project, "Scene");
-    let layer = comp.add_solid_layer().expect("layer");
+    let layer = comp.add_solid_layer(None).expect("layer");
 
     let fresh = layer
         .reveal_groups(BridgeRevealKind::Animated)
@@ -7722,7 +7734,7 @@ fn the_modified_reveal_catches_a_change_that_was_never_keyframed() {
     use crate::api::layer::BridgeRevealKind;
     let (project, ..) = project_with_folder();
     let comp = add_comp(&project, "Scene");
-    let layer = comp.add_solid_layer().expect("layer");
+    let layer = comp.add_solid_layer(None).expect("layer");
 
     assert!(
         !layer
@@ -7763,7 +7775,7 @@ fn an_effect_is_modified_on_arrival_and_animated_only_once_keyed() {
     use crate::api::layer::BridgeRevealKind;
     let (project, ..) = project_with_folder();
     let comp = add_comp(&project, "Scene");
-    let layer = comp.add_solid_layer().expect("layer");
+    let layer = comp.add_solid_layer(None).expect("layer");
     let fx_name = list_effects()
         .first()
         .expect("the engine ships effects")
@@ -7832,7 +7844,7 @@ fn switching_retime_off_re_hangs_the_layer_on_its_source() {
         )
         .expect("comp");
     let outer = project.new_composition("Outer".into(), None).expect("comp");
-    let layer = outer.add_precomp_layer(&inner).expect("nested");
+    let layer = outer.add_precomp_layer(&inner, None).expect("nested");
 
     // Retimed, a layer is any length it likes: stretched to twenty seconds.
     layer.toggle_retime_property().expect("on");
@@ -7933,7 +7945,7 @@ fn a_flattened_retime_is_removed_rather_than_freezing_the_layer() {
         )
         .expect("comp");
     let outer = project.new_composition("Outer".into(), None).expect("comp");
-    let layer = outer.add_precomp_layer(&inner).expect("nested");
+    let layer = outer.add_precomp_layer(&inner, None).expect("nested");
 
     layer.toggle_retime_property().expect("on");
     assert!(layer.get_retime_property().expect("read").is_some());
@@ -7994,7 +8006,7 @@ fn keyframes_cross_on_the_comp_clock_and_travel_with_the_layer() {
 
     let project = LumitBridgeState::new_project(None).expect("a new project");
     let comp = project.new_composition("Scene".into(), None).expect("comp");
-    let layer = comp.add_solid_layer().expect("solid");
+    let layer = comp.add_solid_layer(None).expect("solid");
 
     // A key at comp second 2, written the way a panel writes one.
     layer
@@ -8037,7 +8049,7 @@ fn enabling_retime_keys_the_layer_where_it_sits() {
     let project = LumitBridgeState::new_project(None).expect("a new project");
     let comp = project.new_composition("Scene".into(), None).expect("comp");
     let inner = project.new_composition("Inner".into(), None).expect("comp");
-    let layer = comp.add_precomp_layer(&inner).expect("nested");
+    let layer = comp.add_precomp_layer(&inner, None).expect("nested");
 
     // Moved to comp second 3 and trimmed a second off its head: its own zero
     // sits at comp second 2, so local time at the in point is one second.
@@ -8427,7 +8439,8 @@ fn a_tracked_layer() -> (
     let footage = project
         .import_footage("C:/clips/tracked.mov".into())
         .expect("imported");
-    comp.add_footage_layer(&footage, false).expect("placed");
+    comp.add_footage_layer(&footage, false, None)
+        .expect("placed");
     let layer = comp.get_layers().expect("layers").remove(0);
     layer
         .add_effect(lumit_core::track::CAMERA_TRACK.to_owned())
@@ -8685,7 +8698,7 @@ fn a_correction_shows_on_both_rows_and_clears() {
     );
 
     // A layer with no camera on it, and no track, says nothing either way.
-    let solid = comp.add_solid_layer().expect("a solid");
+    let solid = comp.add_solid_layer(None).expect("a solid");
     assert!(!corrected(solid));
 }
 
@@ -8723,7 +8736,7 @@ fn the_status_reads_the_solve_and_the_buttons_are_refused_honestly() {
     ));
 
     // A layer with no Camera track has no analysis to read.
-    let solid = comp.add_solid_layer().expect("a solid");
+    let solid = comp.add_solid_layer(None).expect("a solid");
     assert_eq!(track_status(solid).stage, BridgeTrackStage::Idle);
 }
 
@@ -8808,7 +8821,7 @@ fn is_used_answers_for_a_placed_item_and_only_a_placed_one() {
     let ItemReference::Footage(footage) = &filed else {
         panic!("the fixture built footage");
     };
-    comp.add_footage_layer(&FootageReference::new(project.id, footage.id), false)
+    comp.add_footage_layer(&FootageReference::new(project.id, footage.id), false, None)
         .expect("placed");
     assert!(filed.is_used().expect("asked"), "a layer names it");
     assert!(!loose.is_used().expect("asked"), "and only that one");
@@ -8976,7 +8989,7 @@ fn vector_pairs_and_their_chains_cross_the_seam() {
 
     let project = LumitBridgeState::new_project(None).expect("a project");
     let comp = project.new_composition("Scene".into(), None).expect("comp");
-    let layer = comp.add_solid_layer().expect("a solid");
+    let layer = comp.add_solid_layer(None).expect("a solid");
     layer.add_effect("lens_flare".into()).expect("added");
 
     // Default unlinked, which is what every older project means.
@@ -9021,7 +9034,7 @@ use crate::api::graph::{
 fn layer_to_wire() -> (ProjectReference, LayerReference) {
     let (project, ..) = project_with_folder();
     let comp = add_comp(&project, "Scene");
-    let layer = comp.add_solid_layer().expect("a solid");
+    let layer = comp.add_solid_layer(None).expect("a solid");
     (project, layer)
 }
 
@@ -10975,8 +10988,9 @@ fn a_planar_tracked_layer() -> (
     let footage = project
         .import_footage("C:/clips/planar.mov".into())
         .expect("imported");
-    comp.add_footage_layer(&footage, false).expect("placed");
-    comp.add_solid_layer().expect("a layer to pin");
+    comp.add_footage_layer(&footage, false, None)
+        .expect("placed");
+    comp.add_solid_layer(None).expect("a layer to pin");
     let layers = comp.get_layers().expect("layers");
     // Newest first: the solid was added last, so it is index 0.
     let (target, shot) = (layers[0], layers[1]);
@@ -11588,7 +11602,7 @@ fn pressing_a_plugins_button_writes_what_it_did_into_the_document() {
 
     let (project, layer) = project_with_layer();
     let comp = CompositionReference::new(project.id, layer.comp_id());
-    let target = comp.add_solid_layer().expect("a layer for the plugin");
+    let target = comp.add_solid_layer(None).expect("a layer for the plugin");
     target
         .add_effect(schema.match_name.to_owned())
         .expect("the plugin added");
@@ -12280,7 +12294,7 @@ fn setting_a_shader_source_is_one_undo_step() {
 fn a_composition_draws_its_own_thumbnail_without_a_viewer() {
     let project = LumitBridgeState::new_project(None).expect("a new project");
     let comp = add_comp(&project, "Scene");
-    comp.add_solid_layer().expect("something to draw");
+    comp.add_solid_layer(None).expect("something to draw");
 
     let Some(thumb) = comp.thumbnail(0, 128).expect("the comp is a comp") else {
         eprintln!("no graphics adapter; skipping");

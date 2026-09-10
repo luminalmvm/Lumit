@@ -22,6 +22,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/shell/menu_bar_frb.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/state/external_links.dart';
 import 'package:lumit_flutter/state/viewer_view.dart';
@@ -483,6 +484,81 @@ void main() {
         expect(comp.getLayers(), hasLength(before + 1),
             reason: '$item added one');
       }
+    });
+
+    /// A new layer arrives directly above the layer you had selected, the way
+    /// After Effects does it, so it lands where you were working.
+    testWidgets('Layer ▸ New puts the layer above the selected one',
+        (tester) async {
+      final p = await mount(tester);
+      await makeComp(tester);
+      final comp = p.uiState.selectedComp!;
+      for (var i = 0; i < 3; i++) {
+        await choose(tester, 'Layer', 'Null', under: 'New');
+        await tester.pump();
+      }
+      final before = comp.getLayers();
+      expect(before, hasLength(3));
+
+      // The middle row: the new layer takes its place and pushes it down.
+      p.uiState.setSelection([before[1]]);
+      await tester.pump();
+      await choose(tester, 'Layer', 'Solid', under: 'New');
+      await tester.pump();
+
+      final after = comp.getLayers();
+      expect(after, hasLength(4));
+      expect(after[1].getKind(), BridgeLayerKind.solid,
+          reason: 'it landed on the row the selected layer had');
+      expect(
+        [for (final l in after) l.internallayerId],
+        [
+          before[0].internallayerId,
+          after[1].internallayerId,
+          before[1].internallayerId,
+          before[2].internallayerId,
+        ],
+      );
+
+      // Nothing selected still means the top of the stack.
+      p.uiState.clearSelection();
+      await tester.pump();
+      await choose(tester, 'Layer', 'Camera', under: 'New');
+      await tester.pump();
+      expect(comp.getLayers().first.getKind(), BridgeLayerKind.camera);
+    });
+
+    /// The rows that have a chord say so in the blank beside the name, the
+    /// way Enable Retime always has.
+    testWidgets('Layer ▸ New shows each row its own chord', (tester) async {
+      await mount(tester);
+      await tester.tap(find.byKey(const ValueKey<String>('menu-Layer')));
+      await tester.pump();
+      await tester.tap(find.text('New'));
+      await tester.pump();
+
+      for (final (item, chord) in [
+        ('Solid', 'Ctrl+Y'),
+        ('Adjustment', 'Ctrl+Alt+Y'),
+        ('Null', 'Ctrl+Alt+Shift+Y'),
+      ]) {
+        expect(
+          find.descendant(
+            of: find.byKey(ValueKey<String>('menu-row-$item')),
+            matching: find.text(chord),
+          ),
+          findsOneWidget,
+          reason: '$item reads $chord',
+        );
+      }
+      // Spot light has no chord, so its row shows the name alone.
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey<String>('menu-row-Spot light')),
+          matching: find.textContaining('Ctrl'),
+        ),
+        findsNothing,
+      );
     });
 
     // Text to shapes and Text to points: the copy lands beside the

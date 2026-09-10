@@ -294,6 +294,10 @@ panel layout is.
   remaining panel MUST NOT be hideable.
 - **Effect** MUST offer one submenu per effect category, each item applying to *every* selected
   layer, and the whole menu MUST be disabled with nothing selected.
+- **Layer ▸ New** MUST make the layer **directly above the selected layer** — the topmost of
+  them where several are selected — and at the top of the stack with nothing selected. It is
+  where the work is, and it is what After Effects does. The chords in §15 make the same
+  layers in the same place.
 - **File ▸ Open recent** lists the ten most recent project paths, newest first.
 - **Help ▸ Check for updates** MUST carry the whole update sequence in the one row:
   disabled and reading "Checking for updates…" while a check runs, then either
@@ -1681,9 +1685,10 @@ A Sequence layer's row renders its clips back-to-back (glossary §2):
   tracks. Cutting a Footage (or any non-Sequence) layer converts nothing — it **splits the
   layer** in two (AE behaviour): both halves keep the source, effects, masks, parent, label
   and keyframes, they meet exactly at the cut with no gap and no overlap, and each keeps the
-  same start offset so neither half's content or keyframes move. Cutting inside a Sequence
-  layer creates an **edit point** instead and the layer stays one layer. Each cut is one undo
-  step (§4.7).
+  same start offset so neither half's content or keyframes move. The cut leaves the **second
+  half selected** — the piece after the cut is the one the work carries on with. Cutting
+  inside a Sequence layer creates an **edit point** instead and the layer stays one layer,
+  so its own row keeps the selection. Each cut is one undo step (§4.7).
   The razor is armed from the **toolbar** (§1.7); the Timeline's own menu item is a second
   door into the same state, never a second razor. While it is armed the pointer over the
   lanes is the **scissors icon** and a vertical line MUST follow it across every row at the
@@ -1900,7 +1905,10 @@ two, and `Shift+=`.
   never be undone), **shy**, and the **label** colour.
   Footage or a comp dragged in from the Project panel lands **where it was dropped** —
   the slot the pointer let go over, by the same midpoint rule — rather than always at the
-  top of the stack; a drop past the last layer lands at the bottom.
+  top of the stack; a drop past the last layer lands at the bottom. It arrives there in one
+  op, so **one item dropped is one undo step**: it MUST NOT be placed at the top and then
+  moved down, which would leave the user pressing Ctrl+Z twice and show them a position they
+  never asked for on the way back.
 
   **The ends are handles, and the source is the limit.** Dragging the last few
   pixels of either end of a bar trims that end — the pointer shows the horizontal resize
@@ -3159,6 +3167,7 @@ app-wide, so a list, a field or a canvas is free to use them for moving within i
 | Timeline | `Ctrl+D` | Duplicate selection |
 | Timeline | `Ctrl+Shift+C` | Precompose |
 | Global | `Ctrl+Alt+T` | Give the selected layer a Retime, or take it away (this one chord only — AE's own, and one Windows cannot steal; the Composition menu offers the same command) |
+| Global | `Ctrl+Y` / `Ctrl+Alt+Shift+T` / `Ctrl+Alt+Shift+C` / `Ctrl+Alt+Shift+L` / `Ctrl+Alt+Y` / `Ctrl+Alt+Shift+Y` | New Solid / Text / Camera / Point light / Adjustment / Null layer in the fronted composition, AE's own chords. Layer ▸ New shows each beside its row; Spot light, Area light and Sequence ship without one |
 | Timeline | `=` / `-` | Zoom time in / out (`Ctrl+wheel` at pointer) |
 | Timeline | `\` | Toggle full-comp zoom / previous zoom |
 | Timeline | `Enter` | Rename selected layer |

@@ -3070,12 +3070,15 @@ class LayerReference {
   /// One `Batch`, so it is one undo step — docs/07 §4.7 requires that of every
   /// destructive-feeling action, and a razor that took two would be two.
   ///
-  /// The copy goes directly above the original, where a duplicate goes.
+  /// The copy goes directly above the original, where a duplicate goes, and
+  /// is handed back so the caller can select it: the tail is the half you go
+  /// on working with after a cut.
   /// `frame` must land strictly inside the layer's span: cutting at either end
   /// would make a layer of no length, so it is a calm error rather than a
   /// zero-length layer nobody asked for.
-  void splitAt({required PlatformInt64 frame}) => BridgeLib.instance.api
-      .crateApiLayerLayerReferenceSplitAt(that: this, frame: frame);
+  LayerReference splitAt({required PlatformInt64 frame}) =>
+      BridgeLib.instance.api
+          .crateApiLayerLayerReferenceSplitAt(that: this, frame: frame);
 
   /// **Stretch** the layer (docs/04 §11.2): play it at `speed_percent` of the
   /// rate it plays at now, and give it the length that implies — 50% is half
