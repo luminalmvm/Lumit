@@ -502,6 +502,10 @@
   "@fxPinLayer": {
     "description": "Effect controls — a control on Planar track: which layer the Create corner pin and Create transform keys buttons write to."
   },
+  "fxPixelSort": "Pixel sort",
+  "@fxPixelSort": {
+    "description": "Effect name in the Add effect menu — runs of pixels picked out by a threshold, each one sorted along its own line."
+  },
   "fxPlanarTrack": "Planar track",
   "@fxPlanarTrack": {
     "description": "Effect name in the Add effect menu — follows one flat surface through a shot and produces corner-pin data."
@@ -754,6 +758,10 @@
   "@fxRandom": {
     "description": "Effect controls — a Flip axis and Flip direction option on Card wipe."
   },
+  "fxRandomSpanOffsets": "Random span offsets",
+  "@fxRandomSpanOffsets": {
+    "description": "Effect controls — a control on Pixel sort: which offsets the spans take on each line, so the length cap does not draw itself as a column."
+  },
   "fxRandomness": "Randomness",
   "@fxRandomness": {
     "description": "Effect controls — a control on Card wipe: how far the order of the flips is shuffled."
@@ -814,6 +822,14 @@
   "@fxSides": {
     "description": "Effect controls — a control on Radio waves: how many corners the emitted shape has."
   },
+  "fxSort": "Sort",
+  "@fxSort": {
+    "description": "Effect controls — a Span mode on Pixel sort: the span is simply put in order."
+  },
+  "fxSortBy": "Sort by",
+  "@fxSortBy": {
+    "description": "Effect controls — a control on Pixel sort: which property a span of pixels is put in order by."
+  },
   "fxSpacing": "Spacing",
   "@fxSpacing": {
     "description": "Effect controls — a control on Scribble and Stroke: how far apart the strokes or the brush stamps are laid."
@@ -829,6 +845,10 @@
   "fxSpacingZ": "Spacing z",
   "@fxSpacingZ": {
     "description": "Effect controls — a control on Grid: the gap between the lattice's planes, one behind another."
+  },
+  "fxSpanMode": "Span mode",
+  "@fxSpanMode": {
+    "description": "Effect controls — a control on Pixel sort: what a sorted span is written back as."
   },
   "fxSpherize": "Spherize",
   "@fxSpherize": {
@@ -2761,6 +2781,14 @@
   "fxMatteLayer": "Matte layer",
   "@fxMatteLayer": {
     "description": "Effect controls — a control on Lens flare."
+  },
+  "fxMax": "Max",
+  "@fxMax": {
+    "description": "Effect controls — a control on Pixel sort: the top of the band of values that sorts."
+  },
+  "fxMin": "Min",
+  "@fxMin": {
+    "description": "Effect controls — a control on Pixel sort: the bottom of the band of values that sorts."
   },
   "fxMaxTrails": "Max trails",
   "@fxMaxTrails": {
@@ -8316,6 +8344,10 @@
   "fxMaximumSignal": "Maximum signal",
   "@fxMaximumSignal": {
     "description": "Effect controls — a control on Broadcast safe: the largest signal amplitude allowed, in IRE."
+  },
+  "fxMaximumSpanLength": "Maximum span length",
+  "@fxMaximumSpanLength": {
+    "description": "Effect controls — a control on Pixel sort: the most pixels one span may hold."
   },
   "fxMedian": "Median",
   "@fxMedian": {

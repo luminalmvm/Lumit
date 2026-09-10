@@ -156,6 +156,16 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
             ("intensity", f(7.0)),
         ],
         "median" => vec![("radius", f(3.0))],
+        // Down columns, with a much shorter span than the default and a Min
+        // that leaves the darkest quarter of the street alone. Min does not go
+        // much higher than this on a photograph, since the noise starts
+        // breaking the runs into a few pixels each and the figure reads as
+        // nothing at all.
+        "pixel_sort" => vec![
+            ("direction", choice(1)),
+            ("min", f(0.08)),
+            ("max_span", f(35.0)),
+        ],
         // Radial blur's centre is px@comp, and the schema default is the
         // nominal 1080p middle. This plate is 1920x816, so the picture asks
         // for *its* middle — which is what `instantiate_for_raster` would have

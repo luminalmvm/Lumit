@@ -77,6 +77,7 @@ pub mod ocio;
 pub mod offset;
 pub mod particulate;
 pub mod photo_filter;
+pub mod pixel_sort;
 pub mod planar_track;
 pub mod point_control;
 pub mod polar_coordinates;

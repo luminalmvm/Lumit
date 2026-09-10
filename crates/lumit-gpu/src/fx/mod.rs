@@ -241,6 +241,10 @@ pub struct FxEngine {
     /// over the picture, then §3.14's contrast. Another reader of the
     /// shared `fx_noise_core.wgsl`.
     mood_lighting: wgpu::ComputePipeline,
+    /// Pixel sort (docs/08 §3.99): every pixel walks its own span and counts
+    /// its way to its place in it. No workgroup memory, for the reason the
+    /// kernel's own header gives.
+    pixel_sort: wgpu::ComputePipeline,
     /// Broadcast safe (docs/08 §3.69): the composite signal's amplitude measured
     /// and clamped, or the pixels that fail keyed out.
     broadcast_safe: wgpu::ComputePipeline,

@@ -1226,6 +1226,49 @@ impl FxEngine {
         out
     }
 
+    /// Apply one Pixel sort (docs/08 §3.99) to a linear working texture,
+    /// returning a new texture of the same size.
+    ///
+    /// One pass, one invocation a pixel, and each one reads its own span to
+    /// find its place in it — so the cost is the span length a pixel, and
+    /// Maximum span length is the dial that sets it.
+    pub fn pixel_sort(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        matte: Option<&wgpu::Texture>,
+        op: &PixelSortOp,
+    ) -> wgpu::Texture {
+        let out = work_texture(ctx, w, h, "fx-pixel-sort-out");
+        self.dispatch_matted(
+            ctx,
+            &self.pixel_sort,
+            src,
+            src,
+            matte,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&PixelSortParams {
+                min_v: op.min,
+                max_v: op.max,
+                mix_amt: op.mix,
+                matte_on: f32::from(matte.is_some()),
+                sort_by: op.sort_by,
+                span_mode: op.span_mode,
+                stride: op.stride.clamp(1, PIXEL_SORT_MAX_SPAN),
+                seed: op.seed,
+                vertical: u32::from(op.vertical),
+                reverse: u32::from(op.reverse),
+                pad0: 0,
+                pad1: 0,
+            }),
+        );
+        out
+    }
+
     /// Apply one Texturize (docs/08 §3.68) to a linear working texture,
     /// returning a new texture of the same size.
     ///
@@ -1347,6 +1390,53 @@ impl FxEngine {
         );
         out
     }
+}
+
+/// The most pixels one span may hold — mirrors
+/// `lumit_core::fx::cpu::PIXEL_SORT_MAX_SPAN`. Both paths clamp, so both reach
+/// the same ceiling when a nonsense number arrives.
+pub const PIXEL_SORT_MAX_SPAN: u32 = 1024;
+
+/// One resolved Pixel sort (docs/08 §3.99). Mirrors
+/// `lumit_core::fx::cpu::PixelSortParams` field-for-field so the kernel and the
+/// CPU oracle consume the identical numbers.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PixelSortOp {
+    /// 0 Red, 1 Green, 2 Blue, 3 Luminance, 4 Hue, 5 Saturation.
+    pub sort_by: u32,
+    /// True when spans run down columns instead of along rows.
+    pub vertical: bool,
+    /// 0 Sort, 1 Stretch, 2 Mirror.
+    pub span_mode: u32,
+    /// True when a span is ordered the other way round.
+    pub reverse: bool,
+    /// The bottom of the band that sorts, 0..1.
+    pub min: f32,
+    /// The top of it, 0..1.
+    pub max: f32,
+    /// The most pixels one span may hold, raster pixels.
+    pub stride: u32,
+    /// Which offsets the spans take on each line.
+    pub seed: u32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct PixelSortParams {
+    min_v: f32,
+    max_v: f32,
+    mix_amt: f32,
+    matte_on: f32,
+    sort_by: u32,
+    span_mode: u32,
+    stride: u32,
+    seed: u32,
+    vertical: u32,
+    reverse: u32,
+    pad0: u32,
+    pad1: u32,
 }
 
 /// One resolved Stroke **style**. Mirrors

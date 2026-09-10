@@ -98,6 +98,7 @@ use super::effects::{
     offset::{Offset, OffsetDef},
     particulate::{Particulate, ParticulateDef},
     photo_filter::{PhotoFilter, PhotoFilterDef},
+    pixel_sort::{PixelSort, PixelSortDef},
     planar_track::{PlanarTrack, PlanarTrackDef},
     point_control::{PointControl, PointControlDef},
     polar_coordinates::{PolarCoordinates, PolarCoordinatesDef},
@@ -291,6 +292,10 @@ crate::catalogue![
     // them: pools of light laid over the picture rather than a colour
     // moved, which is what puts it here and not in Colour.
     MoodLightingDef => MoodLighting,
+    // Pixel sort (docs/08 §3.99), at the Stylise family's end after it. It
+    // rearranges the pixels that are already there rather than changing the
+    // colour of any of them, which is as squarely Stylise as an effect gets.
+    PixelSortDef => PixelSort,
     // The Transition family, in docs/08 §3.46–§3.47 order.
     LinearWipeDef => LinearWipe,
     RadialWipeDef => RadialWipe,
