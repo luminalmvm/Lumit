@@ -183,12 +183,10 @@ class LayerArea extends StatelessWidget {
   /// Where the open sequence views sit, so the row seams skip them.
   final List<(double, double)> sequenceBlanks;
 
-  /// Each layer's source peaks, for the waveform lanes.
-  final Map<String, BridgeAudioPeaks> peaks;
-
-  /// Each spectral-mode layer's spectrogram window — the other
-  /// picture, fetched instead of peaks while a lane's chip reads Spectral.
-  final Map<String, BridgeSpectrogram> spectra;
+  /// Every open lane's peaks and spectrograms, listened to by the lanes
+  /// themselves: a summary arriving repaints the lanes and rebuilds no part of
+  /// the table ([AudioLaneSummaries]).
+  final AudioLaneSummaries summaries;
 
   /// How waveforms draw — the lanes' own answer, handed down so
   /// an open Sequence view's clips agree with it.
@@ -320,8 +318,7 @@ class LayerArea extends StatelessWidget {
     this.sequenceBlanks = const [],
     this.hScroll,
     this.onClipPreview,
-    required this.peaks,
-    this.spectra = const {},
+    required this.summaries,
     required this.waveformStyle,
     required this.fps,
     required this.axis,
@@ -1062,7 +1059,9 @@ class LayerArea extends StatelessWidget {
       // The mode store is listened to here, so flipping a chip repaints this
       // lane and nothing else — the toggle never rebuilds the table.
       return ListenableBuilder(
-        listenable: laneModes,
+        // The chip's choice and the summary in hand, both of which change
+        // this lane's picture and nothing else on the table.
+        listenable: Listenable.merge([laneModes, summaries]),
         builder: (context, _) => ValueListenableBuilder<BarDragPreview?>(
         valueListenable: dragPreview,
         builder: (context, preview, _) {
@@ -1094,7 +1093,7 @@ class LayerArea extends StatelessWidget {
                     width: axis.width,
                     height: t.density.laneRow,
                     child: SpectralLane(
-                      grid: spectra[id],
+                      grid: summaries.spectra[id],
                       originSeconds:
                           -startOffset - TimelineAxis.pad * secondsPerPixel,
                       secondsPerPixel: secondsPerPixel,
@@ -1110,7 +1109,7 @@ class LayerArea extends StatelessWidget {
                 key: ValueKey<String>('tl-wave-$id'),
                 size: Size(axis.width, t.density.laneRow),
                 painter: WaveformPainter(
-                  peaks: peaks[id],
+                  peaks: summaries.peaks[id],
                   // Canvas x 0 is the axis's left padding, comp time 0 sits a
                   // padding's width in, and the source's own clock runs from
                   // there less wherever the layer starts it.

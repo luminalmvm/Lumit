@@ -182,15 +182,17 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// the one nearly every layer uses.
   final Map<String, bool> _hasPicture = {};
 
-  /// Each layer's waveform peaks, by id — the stretch of its source the lanes
-  /// are currently showing, summarised to one bucket per pixel column.
+  /// Each open lane's peaks and spectrogram, by layer id — the stretch of
+  /// source it is currently showing, summarised to one bucket per pixel
+  /// column.
   ///
   /// Refetched when the zoom or the scroll moves the window far enough to
   /// matter, which is what keeps the drawn detail level with the zoom instead
   /// of blocky. Peaks belong to the file, so the painter maps them through the
   /// live in/out/offset and a drag or a trim carries the transients with it
-  /// without asking again.
-  final Map<String, BridgeAudioPeaks> _peaks = {};
+  /// without asking again. The lanes listen to the store for the answers, so
+  /// an arrival never rebuilds the table ([AudioLaneSummaries]).
+  final AudioLaneSummaries _summaries = AudioLaneSummaries();
 
   /// What each layer's peaks were fetched for: the window, the bucket count
   /// and the wave style. Equal keys mean the answer in hand is still the right
@@ -198,12 +200,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// same key by design ([WaveformRequest]).
   final Map<String, String> _peakKeys = {};
 
-  /// Each spectral-mode layer's spectrogram window, and what it was
-  /// fetched for — the peaks' own bargain, for the other picture. A layer
-  /// holds one or the other, never both: the mode decides which fetch runs,
-  /// and the loser's entry is dropped so a long session does not keep two
-  /// summaries of every lane it has looked at.
-  final Map<String, BridgeSpectrogram> _spectra = {};
+  /// What each spectral-mode lane's spectrogram was fetched for — the peaks'
+  /// own bargain, for the other picture. A layer holds one summary or the
+  /// other, never both: the mode decides which fetch runs, and the loser's
+  /// entry is dropped so a long session does not keep two summaries of every
+  /// lane it has looked at.
   final Map<String, String> _spectraKeys = {};
 
   /// A lane-mode chip changed: fetch what the new mode needs. No
@@ -313,9 +314,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       if (!_open.contains(waveformPath(id))) {
         // A shut lane keeps nothing: the window it was fetched for is stale by
         // the time it opens again, and the memory is a whole track's summary.
-        _peaks.remove(id);
+        _summaries.peaks.remove(id);
         _peakKeys.remove(id);
-        _spectra.remove(id);
+        _summaries.spectra.remove(id);
         _spectraKeys.remove(id);
         continue;
       }
@@ -338,7 +339,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       // spectrogram in spectral mode, the peaks otherwise — never both.
       final mode = laneModes.of(id);
       if (mode == LaneMode.spectral) {
-        _peaks.remove(id);
+        _summaries.peaks.remove(id);
         _peakKeys.remove(id);
         final key = '${request.key}$retimed';
         if (_spectraKeys[id] == key) continue;
@@ -351,11 +352,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         )
             .then((grid) {
           if (!mounted || _spectraKeys[id] != key) return;
-          setState(() => _spectra[id] = grid);
+          _summaries.spectra[id] = grid;
+          _summaries.changed();
         });
         continue;
       }
-      _spectra.remove(id);
+      _summaries.spectra.remove(id);
       _spectraKeys.remove(id);
       final bands = mode == LaneMode.stack;
       final key = '${request.key}|$bands$retimed';
@@ -375,7 +377,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         // decoding; the newest ask wins, so an old answer is dropped rather
         // than drawn over a lane that has moved on.
         if (!mounted || _peakKeys[id] != key) return;
-        setState(() => _peaks[id] = peaks);
+        _summaries.peaks[id] = peaks;
+        _summaries.changed();
       });
     }
     _refreshMixPeaks(ui, viewStart, viewEnd);
@@ -435,7 +438,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// `setState` only when an answer actually arrives.
   void _onLaneScroll() {
     if (_peakKeys.isEmpty &&
-        _peaks.isEmpty &&
+        _summaries.peaks.isEmpty &&
         _spectraKeys.isEmpty &&
         !_mixRowShown) {
       return;
@@ -2955,6 +2958,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _ui?.selectedEffects.removeListener(_onEffectSelectionChanged);
     _ui?.playheadFrame.removeListener(_edgeFollow);
     _boundTools?.removeListener(_onToolChanged);
+    _summaries.dispose();
     _zoomMotion.dispose();
     _barDrag.dispose();
     _layerDrag.dispose();
@@ -4232,8 +4236,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                         clip: clip.id,
                         retime: BridgeScalar.keyframed(keys),
                       ),
-                      peaks: _peaks,
-                      spectra: _spectra,
+                      summaries: _summaries,
                       waveformStyle: _waveformStyle,
                       fps: ui.model.fps,
                       fpsNum: fpsNum,

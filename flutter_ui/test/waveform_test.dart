@@ -6,6 +6,7 @@
 
 import 'dart:math' as math;
 import 'dart:typed_data';
+import 'dart:ui' show PointMode;
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -555,6 +556,30 @@ void main() {
       }
     });
 
+    /// The lane is the widest thing on the table and the Audio workspace opens
+    /// ten of them. A line at a time was a draw call a column a band —
+    /// tens of thousands a frame — so a band goes down in one call now, and
+    /// the wave it draws is the wave it always drew.
+    test('a band is drawn in one call, however many columns it has', () {
+      final canvas = _RecordingCanvas();
+      WaveformPainter(
+        peaks: peaks(
+          start: 0,
+          end: 1,
+          bands: 3,
+          values: [...loud(600), ...loud(600), ...loud(600)],
+        ),
+        originSeconds: 0,
+        secondsPerPixel: 1 / 600,
+        left: 0,
+        right: 600,
+        colours: colours,
+      ).paint(canvas, const Size(600, 30));
+      expect(canvas.lines.length, greaterThan(1500),
+          reason: 'every column of every band is still drawn');
+      expect(canvas.calls, 3, reason: 'one call a band');
+    });
+
     test('no peaks, or empty peaks, draw nothing at all', () {
       for (final held in [
         null,
@@ -586,9 +611,27 @@ class _Stroke {
 class _RecordingCanvas implements Canvas {
   final List<_Stroke> lines = [];
 
+  /// How many times the painter asked the canvas for anything — the number
+  /// the batching is about.
+  int calls = 0;
+
   @override
-  void drawLine(Offset p1, Offset p2, Paint paint) =>
-      lines.add(_Stroke(p1, p2, paint.color));
+  void drawLine(Offset p1, Offset p2, Paint paint) {
+    calls++;
+    lines.add(_Stroke(p1, p2, paint.color));
+  }
+
+  /// The painter batches a band's columns into one call; a pair of points is
+  /// the line it used to draw one at a time, so the recorded list reads the
+  /// same either way.
+  @override
+  void drawRawPoints(PointMode pointMode, Float32List points, Paint paint) {
+    calls++;
+    for (var i = 0; i + 3 < points.length; i += 4) {
+      lines.add(_Stroke(Offset(points[i], points[i + 1]),
+          Offset(points[i + 2], points[i + 3]), paint.color));
+    }
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => null;
