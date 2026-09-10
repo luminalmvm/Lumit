@@ -35,6 +35,7 @@
 //! could not have freed itself, and a leak is a number a test can read.
 
 use half::f16;
+use half::slice::HalfFloatSliceExt;
 use serde::{Deserialize, Serialize};
 
 use crate::status::Status;
@@ -149,11 +150,13 @@ impl Frame16 {
     ///
     /// As [`Frame16::from_pixels`].
     pub fn from_f32(width: usize, height: usize, pixels: &[f32]) -> Result<Self, Status> {
-        Self::from_pixels(
-            width,
-            height,
-            pixels.iter().copied().map(f16::from_f32).collect(),
-        )
+        // The whole plane in one call. `half` narrows eight values an
+        // instruction where the CPU has F16C, and rounds to nearest even
+        // either way, so the bits are the ones the per-value loop gave. At 8K
+        // the loop was 269 ms.
+        let mut narrowed = vec![f16::ZERO; pixels.len()];
+        narrowed.convert_from_f32_slice(pixels);
+        Self::from_pixels(width, height, narrowed)
     }
 
     #[must_use]
@@ -257,12 +260,14 @@ impl Image {
             let ofx_y = frame.height() - 1 - y;
             let source_start = y * frame.width() * CHANNELS;
             let row = image.row_mut(ofx_y).ok_or(Status::ErrFatal)?;
-            for (index, slot) in row.iter_mut().enumerate() {
-                *slot = frame
-                    .pixels()
-                    .get(source_start + index)
-                    .map_or(0.0, |value| value.to_f32());
-            }
+            // A row at a time, the same widening eight values an instruction.
+            // A frame always holds exactly its own pixels, so a short row is a
+            // broken invariant rather than an edge to pad.
+            frame
+                .pixels()
+                .get(source_start..source_start + row.len())
+                .ok_or(Status::ErrFatal)?
+                .convert_to_f32_slice(row);
         }
         Ok(image)
     }
@@ -275,11 +280,15 @@ impl Image {
     /// [`Status::ErrValue`] if the image is empty.
     pub fn to_frame(&self) -> Result<Frame16, Status> {
         let (width, height) = (self.bounds.width(), self.bounds.height());
-        let mut pixels = Vec::with_capacity(pixel_count(width, height)?);
+        let mut pixels = vec![f16::ZERO; pixel_count(width, height)?];
         for y in 0..height {
             let ofx_y = height - 1 - y;
             let row = self.row(ofx_y).ok_or(Status::ErrFatal)?;
-            pixels.extend(row.iter().copied().map(f16::from_f32));
+            let start = y * width * CHANNELS;
+            pixels
+                .get_mut(start..start + row.len())
+                .ok_or(Status::ErrFatal)?
+                .convert_from_f32_slice(row);
         }
         Frame16::from_pixels(width, height, pixels)
     }
@@ -434,6 +443,39 @@ mod tests {
             assert_eq!(bottom[1], 2.0, "{order:?}");
             let top = image.row(2).unwrap();
             assert_eq!(top[1], 0.0, "{order:?}");
+        }
+    }
+
+    /// The plane narrowing and the per-value narrowing are the same answer,
+    /// bit for bit, over a few thousand values that include the ends of the
+    /// half range and floats too small to be halves at all.
+    #[test]
+    fn narrowing_a_plane_matches_the_per_value_answer() {
+        let (width, height) = (64, 17);
+        let awkward = [
+            65504.0f32,
+            -65504.0,
+            0.0,
+            -0.0,
+            1e-8,
+            -1e-8,
+            6.1e-5,
+            1.0 / 3.0,
+        ];
+        let floats: Vec<f32> = (0..width * height * CHANNELS)
+            .map(|i| {
+                if i % 3 == 0 {
+                    awkward[i % awkward.len()]
+                } else {
+                    (i as f32).mul_add(0.001, -2.0)
+                }
+            })
+            .collect();
+        let frame = Frame16::from_f32(width, height, &floats).unwrap();
+        let scalar: Vec<f16> = floats.iter().copied().map(f16::from_f32).collect();
+        assert_eq!(frame.pixels().len(), scalar.len());
+        for (i, (got, want)) in frame.pixels().iter().zip(&scalar).enumerate() {
+            assert_eq!(got.to_bits(), want.to_bits(), "value {i}: {}", floats[i]);
         }
     }
 

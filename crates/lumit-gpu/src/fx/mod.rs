@@ -638,7 +638,34 @@ pub fn fit_centred(ctx: &GpuContext, tex: wgpu::Texture, nw: u32, nh: u32) -> wg
     out
 }
 
+/// A pass's output texture: one an earlier pass in this frame has finished
+/// with, or a new one.
+///
+/// The reuse is what keeps a stack of effects from holding one frame-sized
+/// texture per effect for the whole frame (`GpuContext::pool`). A texture only
+/// comes back if it matches in size and format, and it arrives cleared, so the
+/// caller cannot tell which it got.
 fn work_texture(ctx: &GpuContext, w: u32, h: u32, label: &str) -> wgpu::Texture {
+    let format = ctx.working();
+    let mut pool = ctx.pool.borrow_mut();
+    if let Some(i) = pool
+        .iter()
+        .position(|t| t.width() == w && t.height() == h && t.format() == format)
+    {
+        return pool.swap_remove(i);
+    }
+    drop(pool);
+    new_work_texture(ctx, w, h, label)
+}
+
+/// A work texture of its own, never one from the pool.
+///
+/// One caller, and it is a rule rather than a preference: `queue.write_texture`
+/// is staged and runs at the head of the next submission, not where it was
+/// asked for. A recycled texture is only safe because the commands that read it
+/// were recorded first, and a queue write would jump every one of them.
+fn new_work_texture(ctx: &GpuContext, w: u32, h: u32, label: &str) -> wgpu::Texture {
+    ctx.work_made.set(ctx.work_made.get().saturating_add(1));
     ctx.device.create_texture(&wgpu::TextureDescriptor {
         label: Some(label),
         size: wgpu::Extent3d {
@@ -650,11 +677,7 @@ fn work_texture(ctx: &GpuContext, w: u32, h: u32, label: &str) -> wgpu::Texture 
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: ctx.working(),
-        usage: wgpu::TextureUsages::TEXTURE_BINDING
-            | wgpu::TextureUsages::STORAGE_BINDING
-            | wgpu::TextureUsages::COPY_SRC
-            | wgpu::TextureUsages::COPY_DST
-            | wgpu::TextureUsages::RENDER_ATTACHMENT,
+        usage: crate::WORK_USAGE,
         view_formats: &[],
     })
 }

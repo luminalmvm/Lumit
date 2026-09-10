@@ -38,7 +38,7 @@ use uuid::Uuid;
 /// One layer's own picture: the bytes, the decoded size, the native source
 /// size, and how wide the bytes' samples are. Everything but a float footage
 /// source is `Srgb8`, which is what it has always been.
-pub type LayerPixels = (Vec<u8>, u32, u32, (f32, f32), lumit_media::PixelFormat);
+pub type LayerPixels = (Arc<Vec<u8>>, u32, u32, (f32, f32), lumit_media::PixelFormat);
 
 /// The map of already-decoded pixels a build reads, keyed by layer id.
 pub type PixelsByLayer<'a> = HashMap<Uuid, &'a CompLayerPixels>;
@@ -141,7 +141,7 @@ fn warp_puppet(
         lumit_media::PixelFormat::Srgb8 => lumit_core::puppet::apply_puppet,
     };
     warp(
-        pixels.0.as_mut_slice(),
+        Arc::make_mut(&mut pixels.0).as_mut_slice(),
         w,
         h,
         f64::from(natural.0),
@@ -997,7 +997,7 @@ pub fn build_comp_draws_at(
                     && !layer.styles.iter().any(|e| e.enabled);
                 let (tw, th) = if plain { (8, 8) } else { (sd.width, sd.height) };
                 (
-                    px_tile(&px, tw, th),
+                    Arc::new(px_tile(&px, tw, th)),
                     tw,
                     th,
                     (sd.width as f32, sd.height as f32),
@@ -1045,7 +1045,12 @@ pub fn build_comp_draws_at(
                         lumit_text::rasterise_line_animated(&line, size, document.fill, &xforms)
                     }
                 };
-                (r.rgba, r.width, r.height, (r.width as f32, r.height as f32))
+                (
+                    Arc::new(r.rgba),
+                    r.width,
+                    r.height,
+                    (r.width as f32, r.height as f32),
+                )
             }),
             // Vector art: rasterised at the size the frame is being drawn at,
             // into its own bounding box, which is also the layer's natural
@@ -1063,7 +1068,9 @@ pub fn build_comp_draws_at(
                     let w = natural_w.round().max(1.0) as u32;
                     let h = natural_h.round().max(1.0) as u32;
                     (
-                        lumit_core::shape::rasterise_contents(contents, w, h, x0, y0, x1, y1, lt),
+                        Arc::new(lumit_core::shape::rasterise_contents(
+                            contents, w, h, x0, y0, x1, y1, lt,
+                        )),
                         w,
                         h,
                         (natural_w as f32, natural_h as f32),
@@ -1084,43 +1091,51 @@ pub fn build_comp_draws_at(
             _ => lumit_media::PixelFormat::Srgb8,
         };
         raw.map(|(mut rgba, w, h, natural)| {
-            // Paint first, masks second: a stroke is part of the layer's
-            // picture, and a mask gates the picture (docs/06 render
-            // order). Painting after the mask would let a brush draw outside
-            // the shape the mask cut.
-            //
-            // Both stages come in a width to match the plate, so a float layer
-            // stays float through either of them.
-            let strokes = match format {
-                lumit_media::PixelFormat::LinearF32 => lumit_core::paint::apply_strokes_f32,
-                lumit_media::PixelFormat::Srgb8 => lumit_core::paint::apply_strokes,
-            };
-            strokes(
-                &mut rgba,
-                w,
-                h,
-                f64::from(natural.0),
-                f64::from(natural.1),
-                &layer.paint,
-                // The layer's own clock, as a mask's keys are read on:
-                // a stroke keyed to draw itself on travels with the layer.
-                lt,
-            );
-            // A mask only ever touches alpha, so both widths keep their colour
-            // exactly as it arrived — a masked OpenEXR is still an OpenEXR.
-            let gate = match format {
-                lumit_media::PixelFormat::LinearF32 => lumit_core::mask::apply_masks_f32,
-                lumit_media::PixelFormat::Srgb8 => lumit_core::mask::apply_masks,
-            };
-            gate(
-                &mut rgba,
-                w,
-                h,
-                f64::from(natural.0),
-                f64::from(natural.1),
-                &layer.masks,
-                lt,
-            );
+            // Nothing to stamp in is the ordinary layer, and it keeps the
+            // bytes it arrived with: both stages return on an empty list
+            // anyway, and asking for them by name is what lets a decoded frame
+            // travel to the draw shared rather than copied.
+            if !layer.paint.is_empty() || !layer.masks.is_empty() {
+                let rgba = Arc::make_mut(&mut rgba);
+                // Paint first, masks second: a stroke is part of the layer's
+                // picture, and a mask gates the picture (docs/06 render
+                // order). Painting after the mask would let a brush draw
+                // outside the shape the mask cut.
+                //
+                // Both stages come in a width to match the plate, so a float
+                // layer stays float through either of them.
+                let strokes = match format {
+                    lumit_media::PixelFormat::LinearF32 => lumit_core::paint::apply_strokes_f32,
+                    lumit_media::PixelFormat::Srgb8 => lumit_core::paint::apply_strokes,
+                };
+                strokes(
+                    rgba,
+                    w,
+                    h,
+                    f64::from(natural.0),
+                    f64::from(natural.1),
+                    &layer.paint,
+                    // The layer's own clock, as a mask's keys are read on:
+                    // a stroke keyed to draw itself on travels with the layer.
+                    lt,
+                );
+                // A mask only ever touches alpha, so both widths keep their
+                // colour exactly as it arrived — a masked OpenEXR is still an
+                // OpenEXR.
+                let gate = match format {
+                    lumit_media::PixelFormat::LinearF32 => lumit_core::mask::apply_masks_f32,
+                    lumit_media::PixelFormat::Srgb8 => lumit_core::mask::apply_masks,
+                };
+                gate(
+                    rgba,
+                    w,
+                    h,
+                    f64::from(natural.0),
+                    f64::from(natural.1),
+                    &layer.masks,
+                    lt,
+                );
+            }
             (rgba, w, h, natural, format)
         })
     };
@@ -1291,7 +1306,7 @@ pub fn build_comp_draws_at(
             Default::default()
         };
         Some(DofInputDraw {
-            rgba,
+            rgba: rgba.to_vec(),
             tex_w,
             tex_h,
             format,
@@ -1866,7 +1881,7 @@ pub fn build_comp_draws_at(
             // masks keep them.
             let (m_rgba, m_w, m_h, m_nat, m_fmt) = if let Some(n) = &nested {
                 (
-                    Vec::new(),
+                    Arc::new(Vec::new()),
                     n.width,
                     n.height,
                     (n.width as f32, n.height as f32),
@@ -1916,7 +1931,7 @@ pub fn build_comp_draws_at(
                 Default::default()
             };
             Some(MatteDraw {
-                rgba: m_rgba,
+                rgba: m_rgba.to_vec(),
                 tex_w: m_w,
                 tex_h: m_h,
                 format: m_fmt,
@@ -2871,7 +2886,8 @@ pub fn accumulation_mb_below(
 /// (docs/08 §3.26): the clip averaged over its own shutter moments, which the
 /// decode planner fetched onto [`CompLayerPixels::shutter`] for exactly this.
 /// The frame-time pixels unchanged when the layer carries no live copy of the
-/// effect, which is every ordinary layer.
+/// effect, which is every ordinary layer, and that case hands back the decode's
+/// own allocation rather than a copy of it.
 ///
 /// A plain carrier has nothing beneath it to re-render, so this is what the
 /// effect means there: the motion inside the footage, averaged the way a Blend
@@ -2884,15 +2900,19 @@ pub fn accumulation_mb_below(
 /// ponytail: a scalar byte average, N reads of the frame on the CPU each
 /// render. Sum the moments on the card if a profile ever shows it; the
 /// planner and worker need not change.
-fn own_shutter_average(layer: &lumit_core::model::Layer, lp: &CompLayerPixels, lt: f64) -> Vec<u8> {
+fn own_shutter_average(
+    layer: &lumit_core::model::Layer,
+    lp: &CompLayerPixels,
+    lt: f64,
+) -> Arc<Vec<u8>> {
     let offsets = match lumit_core::fx::stack_accumulation_mb(&layer.effects, layer.switches.fx, lt)
     {
         Some(p) if !layer.is_adjustment() => (p.sample_offsets(), p.mix),
-        _ => return lp.rgba.clone(),
+        _ => return Arc::clone(&lp.rgba),
     };
     let (offsets, mix) = offsets;
     if offsets.is_empty() {
-        return lp.rgba.clone();
+        return Arc::clone(&lp.rgba);
     }
     let n = lp.rgba.len();
     let mut sum = vec![0u32; n];
@@ -2913,11 +2933,11 @@ fn own_shutter_average(layer: &lumit_core::model::Layer, lp: &CompLayerPixels, l
         .iter()
         .map(|&s| ((s + count / 2) / count) as u8)
         .collect();
-    if mix >= 1.0 {
+    Arc::new(if mix >= 1.0 {
         average
     } else {
         lumit_core::pixels::blend_rgba(&lp.rgba, &average, mix as f32)
-    }
+    })
 }
 
 /// The neighbour below-stacks a flow-consuming effect on an **adjustment**

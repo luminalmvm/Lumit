@@ -116,18 +116,44 @@ fn open_codec_ctx(
 ) -> Result<(AVCodecContext, bool), MediaError> {
     let mut ctx = AVCodecContext::new(codec);
     ctx.apply_codecpar(par)?;
-    // Library-default libav is SINGLE-threaded (unlike the ffmpeg CLI); 0 asks
-    // for automatic frame/slice threading across the machine's cores, which is
-    // the difference between one core grinding 4K H.264 and all of them.
+    // Library-default libav is SINGLE-threaded (unlike the ffmpeg CLI), so this
+    // asks for threads: 0 for one a core, fewer where a frame is big enough
+    // that a picture in flight per thread costs more than the speed is worth.
     // SAFETY: plain field write on the owned, not-yet-opened context — the
     // same pattern rsmpeg's own setters use.
     #[allow(unsafe_code)]
     unsafe {
-        ctx.deref_mut().thread_count = 0;
+        ctx.deref_mut().thread_count = thread_cap(par.width, par.height);
     }
     let hardware = try_hw && attach_d3d11va(codec, &mut ctx);
     ctx.open(None)?;
     Ok((ctx, hardware))
+}
+
+/// How many decode threads a frame this size may have, or 0 to leave it to
+/// libav (a thread a core, up to its own ceiling of sixteen).
+///
+/// Frame threading keeps a picture in flight per thread, and the hardware
+/// decoder's surface pool grows by one frame per thread with it. At 8K a frame
+/// is fifty megabytes, so sixteen threads cost about a gigabyte before the
+/// first picture comes back, and the graphics card is no quicker for them.
+/// Measured at 8K: sixty frames in 397 ms on sixteen threads, 391 ms on five,
+/// and a gigabyte of working set against six hundred megabytes. Bounding the
+/// pictures in flight at 256 MB leaves 1080p and 4K exactly as they were and
+/// gives 8K five threads.
+fn thread_cap(width: i32, height: i32) -> i32 {
+    const BUDGET: i64 = 256 * 1024 * 1024;
+    // NV12: the shape a hardware surface and an ordinary eight-bit software
+    // frame both arrive in, twelve bits a pixel.
+    let per_frame = i64::from(width.max(1)) * i64::from(height.max(1)) * 3 / 2;
+    let cap = BUDGET / per_frame.max(1);
+    // Sixteen is libav's own ceiling for automatic threading, so any cap at or
+    // above it is already what asking for 0 gets.
+    if cap >= 16 {
+        0
+    } else {
+        i32::try_from(cap.max(1)).unwrap_or(1)
+    }
 }
 
 /// Attach a D3D11VA hardware device to `ctx` when this codec supports
@@ -1029,5 +1055,152 @@ mod tests {
         ];
         let out = copy_tight_rows(&data, 6, 4, 2).unwrap();
         assert_eq!(out, vec![1, 2, 3, 4, 5, 6, 7, 8]);
+    }
+
+    // ---- thread_cap: pure arithmetic, no ffmpeg required ----------------
+
+    /// A frame whose pictures in flight fit the budget keeps a thread a core;
+    /// one big enough that sixteen of them would cost a gigabyte gets fewer.
+    /// Without the cap every one of these answers 0.
+    #[test]
+    fn a_big_frame_asks_for_fewer_decode_threads() {
+        assert_eq!(thread_cap(1920, 1080), 0, "1080p keeps a thread a core");
+        assert_eq!(thread_cap(3840, 2160), 0, "4K keeps a thread a core");
+        assert_eq!(thread_cap(7680, 4320), 5, "8K gets five");
+        assert_eq!(thread_cap(15360, 8640), 1, "16K gets one");
+        // A stream whose header never carried a size must still open.
+        assert_eq!(thread_cap(0, 0), 0);
+        assert_eq!(thread_cap(-1, -1), 0);
+    }
+
+    // ---- what a clip costs to decode (run by hand) ----------------------
+
+    /// The process working set, in bytes. Windows only; everywhere else this
+    /// reports nothing and the report below prints zeroes.
+    #[cfg(windows)]
+    fn working_set() -> u64 {
+        #[repr(C)]
+        #[derive(Default)]
+        struct Counters {
+            cb: u32,
+            page_faults: u32,
+            peak_working_set: usize,
+            working_set: usize,
+            peak_paged_pool: usize,
+            paged_pool: usize,
+            peak_nonpaged_pool: usize,
+            nonpaged_pool: usize,
+            pagefile: usize,
+            peak_pagefile: usize,
+        }
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn K32GetProcessMemoryInfo(process: isize, out: *mut Counters, cb: u32) -> i32;
+        }
+        let mut c = Counters {
+            cb: u32::try_from(std::mem::size_of::<Counters>()).unwrap_or(0),
+            ..Counters::default()
+        };
+        // SAFETY: -1 is the pseudo-handle for this process, and the struct is
+        // the one the call expects with its own size written into `cb`.
+        #[allow(unsafe_code)]
+        unsafe {
+            K32GetProcessMemoryInfo(-1, &mut c, c.cb);
+        }
+        c.working_set as u64
+    }
+
+    #[cfg(not(windows))]
+    fn working_set() -> u64 {
+        0
+    }
+
+    fn mb(bytes: u64) -> f64 {
+        bytes as f64 / (1024.0 * 1024.0)
+    }
+
+    /// What one clip costs to decode, in memory and in time. Kept out of the
+    /// suite because it wants a big file and a quiet machine.
+    ///
+    /// Point it at a clip with `LUMIT_DECODE_MEM_CLIP`, or let it make a 1080p
+    /// one:
+    /// `cargo test -p lumit-media --release decode_working_set_report -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn decode_working_set_report() {
+        let dir = tempfile::tempdir().unwrap();
+        let clip = match std::env::var("LUMIT_DECODE_MEM_CLIP") {
+            Ok(p) => std::path::PathBuf::from(p),
+            Err(_) => {
+                let Some(bin) = crate::index::tests_support::ffmpeg_bin() else {
+                    eprintln!("skipping: no ffmpeg CLI available");
+                    return;
+                };
+                let out = dir.path().join("clip_1080.mp4");
+                let ok = std::process::Command::new(bin)
+                    .args([
+                        "-v",
+                        "error",
+                        "-y",
+                        "-f",
+                        "lavfi",
+                        "-i",
+                        "testsrc2=duration=2:size=1920x1080:rate=30",
+                        "-c:v",
+                        "libx264",
+                        "-g",
+                        "30",
+                        "-pix_fmt",
+                        "yuv420p",
+                    ])
+                    .arg(&out)
+                    .status()
+                    .map(|s| s.success())
+                    .unwrap_or(false);
+                assert!(ok, "fixture encode failed");
+                out
+            }
+        };
+
+        let index = build_frame_index(&clip).unwrap();
+        let base = working_set();
+        let mut dec = VideoDecoder::open(&clip, index).unwrap();
+        println!(
+            "clip {}, working set {:.0} MB before open, {:.0} MB after",
+            clip.display(),
+            mb(base),
+            mb(working_set())
+        );
+
+        let mut digest = String::new();
+        let whole = std::time::Instant::now();
+        for n in 0..12 {
+            let t = std::time::Instant::now();
+            let frame = dec.frame_rgba(n, None).unwrap();
+            let ms = t.elapsed().as_secs_f64() * 1000.0;
+            if n == 3 {
+                digest = frame_hash(&frame);
+            }
+            let (w, h) = (frame.width, frame.height);
+            drop(frame);
+            println!(
+                "  frame {n} {w}x{h} {ms:.1} ms, working set {:.0} MB",
+                mb(working_set())
+            );
+        }
+        // `pix_fmt` only tells the truth once a frame has been through: it is
+        // the format libav actually chose, where `is_hardware` is only what was
+        // asked for.
+        println!(
+            "  12 frames in {:.0} ms, pix_fmt {}, threads {}",
+            whole.elapsed().as_secs_f64() * 1000.0,
+            dec.decoder.pix_fmt,
+            dec.decoder.thread_count
+        );
+        drop(dec);
+        println!(
+            "closed, working set {:.0} MB; frame 3 digest {digest}",
+            mb(working_set())
+        );
     }
 }

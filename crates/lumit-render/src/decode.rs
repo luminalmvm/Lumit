@@ -123,7 +123,10 @@ pub struct CompLayerPixels {
     pub layer: Uuid,
     pub width: u32,
     pub height: u32,
-    pub rgba: Vec<u8>,
+    /// The decoded frame, held behind a handle so the build can share it
+    /// rather than copy it: an ordinary layer's draw carries this same
+    /// allocation, which at 8K is 133 MB a layer a frame.
+    pub rgba: Arc<Vec<u8>>,
     /// How wide `rgba`'s samples are, and those of every neighbour in
     /// `temporal` beside it — they come from the one decoder, so they agree.
     /// Float here is a source (OpenEXR) that kept its range and precision.
@@ -1053,7 +1056,7 @@ fn decode_comp(
                         layer: job.layer,
                         width,
                         height,
-                        rgba,
+                        rgba: Arc::new(rgba),
                         format,
                         natural_w: job.natural_w,
                         natural_h: job.natural_h,
@@ -1088,7 +1091,7 @@ fn decode_comp(
             layer: job.layer,
             width,
             height,
-            rgba,
+            rgba: Arc::new(rgba),
             format,
             natural_w: job.natural_w,
             natural_h: job.natural_h,

@@ -156,7 +156,10 @@ pub struct NestedInputDraw {
 /// comp realised recursively on the GPU (Precomp layers).
 pub enum DrawSource {
     Pixels {
-        rgba: Vec<u8>,
+        /// The picture itself. A decoded layer with nothing stamped into it
+        /// shares the decode's own allocation rather than copying it, which is
+        /// why this is a handle (`build`'s `own_shutter_average`).
+        rgba: std::sync::Arc<Vec<u8>>,
         tex_w: u32,
         tex_h: u32,
         /// How wide `rgba`'s samples are. `Srgb8` is uploaded and then

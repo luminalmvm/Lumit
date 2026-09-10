@@ -73,7 +73,7 @@ fn footage_geometry_uses_native_size_not_decoded_size() {
         layer: layer.id,
         width: 480,
         height: 270,
-        rgba: vec![0u8; 480 * 270 * 4],
+        rgba: vec![0u8; 480 * 270 * 4].into(),
         format: lumit_media::PixelFormat::Srgb8,
         natural_w: 1920,
         natural_h: 1080,
@@ -355,7 +355,7 @@ fn patch_layer_prop_overrides_the_previewed_value() {
         layer: layer.id,
         width: 1920,
         height: 1080,
-        rgba: vec![0u8; 16],
+        rgba: vec![0u8; 16].into(),
         format: lumit_media::PixelFormat::Srgb8,
         natural_w: 1920,
         natural_h: 1080,
@@ -1452,7 +1452,7 @@ fn a_matte_from_tagged_footage_carries_its_own_colour_space() {
         layer: l.id,
         width: 640,
         height: 360,
-        rgba: vec![0u8; 640 * 360 * 4],
+        rgba: vec![0u8; 640 * 360 * 4].into(),
         format: lumit_media::PixelFormat::Srgb8,
         natural_w: 640,
         natural_h: 360,
@@ -1796,7 +1796,7 @@ fn float_layer_comp(
         layer: layer.id,
         width: 4,
         height: 4,
-        rgba,
+        rgba: rgba.into(),
         format: lumit_media::PixelFormat::LinearF32,
         natural_w: 4,
         natural_h: 4,
@@ -1868,5 +1868,39 @@ fn colour_tables_fill_one_slot_per_table_effect_in_stack_order() {
                 inverse: false,
             })),
         ]
+    );
+}
+
+/// The picture an ordinary footage layer draws is the decode's own allocation,
+/// not a copy of it: at 8K a copy is 133 MB a layer a frame, and it was the
+/// whole of the build stage. Accumulation motion blur on the layer is the one
+/// case that averages the clip's own moments, so that one owns its buffer.
+#[test]
+fn a_plain_footage_draw_shares_the_decoded_bytes() {
+    let (mut comp, layer_id, mut lp) = float_layer_comp(Vec::new(), Vec::new());
+    lp.format = lumit_media::PixelFormat::Srgb8;
+    lp.rgba = vec![128u8; 4 * 4 * 4].into();
+    let mut map: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
+    map.insert(layer_id, &lp);
+    let doc = std::sync::Arc::new(Document::new());
+    let drawn = |comp: &Composition| {
+        let mut visited = vec![comp.id];
+        let draws = build_comp_draws(&doc, comp, 0.0, &map, &mut visited);
+        assert_eq!(draws.len(), 1);
+        match &draws[0].source {
+            DrawSource::Pixels { rgba, .. } => rgba.as_ptr(),
+            _ => panic!("a footage layer draws pixels"),
+        }
+    };
+
+    assert!(
+        std::ptr::eq(drawn(&comp), lp.rgba.as_ptr()),
+        "a layer with nothing stamped into it draws the decoded bytes themselves"
+    );
+
+    comp.layers[0].effects = vec![lumit_core::fx::instantiate("accumulation_mb").unwrap()];
+    assert!(
+        !std::ptr::eq(drawn(&comp), lp.rgba.as_ptr()),
+        "the average of the shutter moments is a buffer of its own"
     );
 }

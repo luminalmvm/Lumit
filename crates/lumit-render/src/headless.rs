@@ -8390,7 +8390,17 @@ surfaces:
         let (cw, ch) = (32u32, 16u32);
         let (mut doc, comp_id, _) = matrix_base(cw, ch, LinearColour([0.8, 0.1, 0.1, 1.0]));
         for _ in 0..15 {
-            matrix_top(&mut doc, comp_id, LinearColour([0.1, 0.2, 0.9, 1.0]));
+            let (_, id) = matrix_top(&mut doc, comp_id, LinearColour([0.1, 0.2, 0.9, 1.0]));
+            // An effect apiece. The property is about work being handed over
+            // layer by layer, and a layer with nothing on it has none to hand:
+            // its picture goes straight from its upload to the composite.
+            if let Some(l) = doc
+                .comp_mut(comp_id)
+                .and_then(|c| c.layers.iter_mut().find(|l| l.id == id))
+            {
+                l.effects
+                    .push(lumit_core::fx::instantiate("exposure").expect("a built-in"));
+            }
         }
         let store = DocumentStore::new(doc);
         let doc = store.snapshot();

@@ -15714,3 +15714,81 @@ fn a_readback_inside_a_batch_waits_for_what_is_still_batched() {
         read.len()
     );
 }
+
+/// The frame's work-texture pool: a pass gets the texture an earlier pass in
+/// the same frame was done with, as long as the shape matches, and the pool
+/// ends with the frame.
+///
+/// This is the whole of the memory claim. Without it a stack of effects holds
+/// one frame-sized texture per effect for the length of the frame, which on an
+/// 8K layer is a quarter of a gigabyte apiece.
+#[test]
+fn a_frame_hands_a_finished_work_texture_to_the_pass_after_it() {
+    let Some(ctx) = crate::test_support::lease() else {
+        crate::no_adapter();
+        return;
+    };
+    let made_before = ctx.work_textures_made();
+    ctx.begin_frame();
+
+    let a = work_texture(&ctx, 64, 36, "pool-a");
+    let b = work_texture(&ctx, 64, 36, "pool-b");
+    assert_ne!(a, b, "two textures in hand at once are two textures");
+
+    ctx.recycle(a.clone());
+    assert_eq!(
+        work_texture(&ctx, 64, 36, "pool-again"),
+        a,
+        "the pass after it writes into the one just given back"
+    );
+
+    // A different size asks for its own.
+    ctx.recycle(a.clone());
+    let wider = work_texture(&ctx, 128, 36, "pool-wider");
+    assert_ne!(wider, a, "a wider pass cannot be given a narrower texture");
+    assert_eq!(
+        work_texture(&ctx, 64, 36, "pool-back"),
+        a,
+        "and the one it would not take is still there for the pass that fits"
+    );
+
+    // So does a different format.
+    let other = ctx.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("pool-eight-bit"),
+        size: wgpu::Extent3d {
+            width: 64,
+            height: 36,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: crate::WORK_USAGE,
+        view_formats: &[],
+    });
+    ctx.recycle(other.clone());
+    assert_ne!(
+        work_texture(&ctx, 64, 36, "pool-after"),
+        other,
+        "a pass working in one depth is never given another's texture"
+    );
+
+    assert_eq!(
+        ctx.work_textures_made() - made_before,
+        4,
+        "four shapes were asked for, so four textures were made"
+    );
+
+    ctx.end_frame();
+
+    // Outside a batch nothing orders the passes, so nothing is kept: the pool
+    // is only safe inside the one command buffer that puts its writes in order.
+    let solo = work_texture(&ctx, 64, 36, "pool-solo");
+    ctx.recycle(solo.clone());
+    assert_ne!(
+        work_texture(&ctx, 64, 36, "pool-solo-again"),
+        solo,
+        "a texture given back outside a frame is not handed out again"
+    );
+}

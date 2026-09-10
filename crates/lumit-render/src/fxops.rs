@@ -667,6 +667,13 @@ pub fn run_ops_with_roto(
             }
         }
     }
+    // Whether the pictures this walk makes are going into the cache. One that
+    // is filed is read again on a later frame, so it is never handed back to
+    // the frame's texture pool; one that is not is dead the moment the op after
+    // it has read it.
+    let filing = cache.is_some_and(|(store, _)| store.borrow().keep);
+    // The picture the op before this one made, once nothing can read it again.
+    let mut spent: Option<Tex> = None;
     // Outputs made this walk, filed at the end rather than as they are made:
     // a flare bake queued *during* the walk means a picture of the previous
     // lens, which must not be filed under the name of the new one.
@@ -772,6 +779,11 @@ pub fn run_ops_with_roto(
             }
             continue;
         }
+        // The picture this op is handed, kept for the recycling below: an op
+        // that passes its input straight through has made nothing, and the one
+        // texture must not be offered to the pool while the chain still holds
+        // it.
+        let given = tex.clone();
         // Only a bound matte costs anything: the input texture is held (a
         // cheap handle clone) so the dissolve below has something to lerp
         // back towards, and nothing at all happens when the row is unset.
@@ -981,8 +993,23 @@ pub fn run_ops_with_roto(
             tex = fx.matte_mix(ctx, &input, &tex, m, w, h, invert);
         }
 
-        if let Some(key) = keys.get(i).copied().flatten() {
+        let named = keys.get(i).copied().flatten();
+        if let Some(key) = named {
             made.push((key, tex.clone()));
+        }
+
+        // The picture the op before this one made has now been read, so hand it
+        // back for a later pass to write into. Only what this walk made itself
+        // is ever offered: never the layer's source, never one the cache gave us
+        // or is about to take, and never one an op passed straight through.
+        let done_with = spent.take();
+        if !(filing && named.is_some()) && tex != given {
+            spent = Some(tex.clone());
+        }
+        if let Some(done_with) = done_with {
+            if done_with != tex {
+                ctx.recycle(done_with);
+            }
         }
 
         if let (Some(started), Some(into)) = (started, timings.as_mut()) {
@@ -1963,5 +1990,85 @@ mod tests {
             to: "anything".into(),
         });
         assert!(cache.get_or_bake(&ctx, engine, &edge, None).is_none());
+    }
+
+    // ----- The frame's texture pool -----
+
+    /// The chain, batched, with every side list empty and no cache.
+    fn chain(fx: &FxEngine, ctx: &GpuContext, ops: &lumit_core::fx::ResolvedStack) -> Vec<f32> {
+        let out = run_ops(
+            fx,
+            ctx,
+            source(ctx),
+            W,
+            H,
+            ops,
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            None,
+            None,
+        );
+        lumit_gpu::fx::readback_linear_f32(ctx, &out, W, H).expect("readback")
+    }
+
+    /// Three effects on one layer make two work textures, not three: the third
+    /// op writes into the picture the second one read. The pixels do not move,
+    /// and a cache that is keeping outputs gets its own textures back.
+    ///
+    /// A frame is one command buffer, so before this every effect in a stack
+    /// held a frame-sized texture until the frame ended.
+    #[test]
+    fn a_chain_writes_into_the_texture_the_op_before_it_finished_with() {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let fx = ctx.fx();
+        let ops = stack(&[
+            ("saturation", "saturation", 20.0),
+            ("exposure", "stops", 1.0),
+            ("exposure", "stops", -0.5),
+        ]);
+
+        // The pool lives inside a frame batch, so a walk outside one is the
+        // same chain with nothing reused.
+        let before = ctx.work_textures_made();
+        let plain = chain(fx, &ctx, &ops);
+        let alone = ctx.work_textures_made() - before;
+        assert_eq!(
+            alone, 4,
+            "the source and one texture an op, with nothing to reuse"
+        );
+
+        ctx.begin_frame();
+        let pooled = chain(fx, &ctx, &ops);
+        let batched = ctx.work_textures_made() - before - alone;
+        ctx.end_frame();
+        assert_eq!(pooled, plain, "the same picture, whosever texture it is in");
+        assert_eq!(
+            batched, 3,
+            "the source and two textures for three ops, the third writing into the first"
+        );
+
+        // A cache that is taking outputs reads them on a later frame, so none
+        // of them may be written into.
+        let cache = warm_cache();
+        let before = ctx.work_textures_made();
+        ctx.begin_frame();
+        let kept = run(fx, &ctx, &ops, &cache, 11);
+        let made = ctx.work_textures_made() - before;
+        ctx.end_frame();
+        assert_eq!(kept, plain, "and the cached walk draws the same picture");
+        assert_eq!(made, alone, "a filed picture is never handed back");
+        ctx.begin_frame();
+        let again = run(fx, &ctx, &ops, &cache, 11);
+        ctx.end_frame();
+        assert_eq!(again, plain, "which the walk after it reads unharmed");
     }
 }
