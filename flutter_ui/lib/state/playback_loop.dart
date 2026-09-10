@@ -44,3 +44,21 @@
   if (playhead > end) return null;
   return (start: start, end: end);
 }
+
+/// Where the playhead stands `sinceAnchorMicros` after the engine last showed
+/// `anchorFrame`, for an adaptive run at `fps`, never past `end`.
+///
+/// Adaptive playback keeps time by skipping frames, so a playhead moved only
+/// by the pictures jumped in steps of however many frames each render cost.
+/// Counting on from the last picture at the comp's rate is what fills the
+/// gaps, and every picture that arrives re-anchors the count so it never drifts.
+int clockFrame({
+  required int anchorFrame,
+  required int sinceAnchorMicros,
+  required double fps,
+  required int end,
+}) {
+  final ahead = (sinceAnchorMicros * fps / 1e6).floor();
+  return (anchorFrame + ahead)
+      .clamp(anchorFrame, end < anchorFrame ? anchorFrame : end);
+}
