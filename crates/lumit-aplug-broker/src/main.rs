@@ -63,14 +63,42 @@ fn main() -> ExitCode {
 
 /// Everything, once the arguments are known.
 fn run(module_path: PathBuf, pipe_name: &str) -> Result<(), String> {
+    // The credential, first thing, before the pipe and long before the module.
+    // It arrives on standard input rather than on the command line, which every
+    // process on the machine can read.
+    let secret = lumit_peer::Secret::from_stdin().map_err(|error| error.to_string())?;
+
     let stream = pipe::connect(pipe_name).map_err(|error| error.to_string())?;
-    let (receiver, mut sender) = pipe::split(stream);
+    let (mut receiver, mut sender) = pipe::split(stream);
+
+    // A nonce, and nothing else. Whoever is listening at that name gets this
+    // much; it proves nothing and gives nothing away.
+    let ours = lumit_peer::Nonce::generate().map_err(|error| error.to_string())?;
+    say(&mut sender, &BrokerMessage::Ready { nonce: ours })?;
+
+    // The host's answer to it. The module is not opened until this has passed —
+    // which it would not have been anyway, for the reason below, but now there
+    // is a second reason and it is the stronger one.
+    let HostMessage::Challenge { nonce, proof } =
+        pipe::recv::<_, HostMessage>(&mut receiver).map_err(|error| error.to_string())?
+    else {
+        return Err("the host said something other than a challenge".into());
+    };
+    if !proof.matches(&lumit_peer::Proof::host(&secret, ours)) {
+        return Err("the host on this pipe could not prove who it is".into());
+    }
 
     let version = std::env::var(PROTOCOL_ENV)
         .ok()
         .and_then(|text| text.parse::<u32>().ok())
         .unwrap_or(PROTOCOL_VERSION);
-    say(&mut sender, &BrokerMessage::Hello { version })?;
+    say(
+        &mut sender,
+        &BrokerMessage::Hello {
+            version,
+            proof: lumit_peer::Proof::broker(&secret, nonce),
+        },
+    )?;
 
     // The module is **not** opened yet. Opening it runs a `clap_entry.init` or
     // an `InitDll`, which is third-party code either way, and a host that has
@@ -133,8 +161,21 @@ impl Session {
     /// One message.
     fn handle(&mut self, message: HostMessage) -> Result<(), String> {
         match message {
+            // The handshake happened before the module was opened, in `run`.
+            // Nothing in the protocol asks for a second one, so it is refused
+            // rather than answered.
+            HostMessage::Challenge { .. } => {
+                Err("the host challenged twice on one connection".into())
+            }
             HostMessage::Open { ring } => {
                 self.ring = Ring::open(&ring).ok();
+                // Say so, so the host can take the ring's name out of the
+                // directory. Only when it really is mapped: acknowledging a
+                // ring we failed to open would have the host unlink a file we
+                // still need to try again through.
+                if self.ring.is_some() {
+                    say(&mut self.sender, &BrokerMessage::RingOpened)?;
+                }
                 Ok(())
             }
             HostMessage::Describe { disabled } => self.describe(&disabled),

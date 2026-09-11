@@ -25,7 +25,10 @@ use crate::process::ParamEvent;
 /// shape: an old broker beside a new host is a mismatch, not a crash.
 ///
 /// Two, since a descriptor carries the standard the plugin speaks.
-pub const PROTOCOL_VERSION: u32 = 2;
+pub const PROTOCOL_VERSION: u32 = 3;
+// 3 added the handshake: the broker's first word is now `Ready` rather than
+// `Hello`, and neither side says anything of substance until each has proved to
+// the other that it holds the session secret ([`lumit_peer`]).
 
 /// Which instance a message is about — the bits of a
 /// [`Handle`](crate::ipc::handles::Handle), which the host mints and the broker
@@ -71,6 +74,17 @@ pub struct Bring {
 /// What the host says.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum HostMessage {
+    /// The host's half of the handshake: a nonce for the broker to answer, and
+    /// the host's own answer to the nonce the broker opened with.
+    ///
+    /// The broker checks the proof **before it opens the module**, so an
+    /// impostor at the endpoint never gets the plugin's code to run.
+    Challenge {
+        /// For the broker to answer.
+        nonce: lumit_peer::Nonce,
+        /// The host's answer to [`BrokerMessage::Ready`]'s nonce.
+        proof: lumit_peer::Proof,
+    },
     /// Here is the ring; map it.
     Open {
         /// The ring's layout.
@@ -125,11 +139,24 @@ pub enum HostMessage {
 /// What the broker says.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum BrokerMessage {
-    /// The first word, before anything else is believed.
+    /// The actual first word: a nonce, and nothing else. Whoever connected gets
+    /// to say this much; it proves nothing and reveals nothing.
+    Ready {
+        /// For the host to answer.
+        nonce: lumit_peer::Nonce,
+    },
+    /// The broker's answer to the host's challenge, with the protocol it
+    /// speaks. Checked before the version: a peer that cannot prove who it is
+    /// has no version worth hearing.
     Hello {
         /// The protocol the broker speaks.
         version: u32,
+        /// The broker's answer to [`HostMessage::Challenge`]'s nonce.
+        proof: lumit_peer::Proof,
     },
+    /// The ring is mapped, and the host may now unlink its path. On Unix a
+    /// mapping outlives the name it was opened through.
+    RingOpened,
     /// What the module holds.
     Described {
         /// One per plugin that described itself successfully.

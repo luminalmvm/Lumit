@@ -5675,6 +5675,64 @@
   "@settingsGroupMemory": {
     "description": "Settings window: heading over a group of rows."
   },
+  "settingsGroupResourceGovernor": "Resource governor",
+  "@settingsGroupResourceGovernor": {
+    "description": "Settings window: heading over a group of rows."
+  },
+  "settingsGovernorGraphicsMemory": "Graphics memory",
+  "@settingsGovernorGraphicsMemory": {
+    "description": "Settings, resource governor: the name of the row reporting memory reserved on the graphics card."
+  },
+  "settingsGovernorOrdinaryMemory": "Ordinary memory",
+  "@settingsGovernorOrdinaryMemory": {
+    "description": "Settings, resource governor: the name of the row reporting memory reserved in ordinary (system) RAM."
+  },
+  "settingsGovernorUsedOfBudget": "{used} of {budget}",
+  "@settingsGovernorUsedOfBudget": {
+    "description": "Settings, resource governor: what a tier holds against its ceiling. Both placeholders are amounts such as 1.5 GB.",
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "budget": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGovernorPeak": "Most at once: {peak}",
+  "@settingsGovernorPeak": {
+    "description": "Settings, resource governor: the largest amount a tier held at any one moment this session. The placeholder is an amount such as 1.5 GB.",
+    "placeholders": {
+      "peak": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGovernorEasy": "Room to spare",
+  "@settingsGovernorEasy": {
+    "description": "Settings, resource governor: the state of a memory tier that is comfortably under its ceiling."
+  },
+  "settingsGovernorTight": "Getting tight",
+  "@settingsGovernorTight": {
+    "description": "Settings, resource governor: the state of a memory tier that is approaching its ceiling."
+  },
+  "settingsGovernorSevere": "Nearly full — pausing cache fill",
+  "@settingsGovernorSevere": {
+    "description": "Settings, resource governor: the state of a memory tier close enough to its ceiling that the renderer has stopped adding to its caches."
+  },
+  "settingsGovernorFull": "Full — giving back cold frames",
+  "@settingsGovernorFull": {
+    "description": "Settings, resource governor: the state of a memory tier at its ceiling, where the renderer is evicting cached frames to make room."
+  },
+  "settingsGovernorTurnedAway": "{count, plural, =1{1 request turned away} other{{count} requests turned away}}",
+  "@settingsGovernorTurnedAway": {
+    "description": "Settings, resource governor: how many memory reservations were refused this session. Shown only when there has been at least one.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "settingsGroupPanels": "Panels",
   "@settingsGroupPanels": {
     "description": "Settings window: heading over a group of rows."
@@ -7796,6 +7854,18 @@
   "updateChecksumMismatch": "The downloaded update did not match its checksum",
   "@updateChecksumMismatch": {
     "description": "Why an update was rejected: the file is not the one that was published."
+  },
+  "updateNotSigned": "This update is not signed, so Lumit will not install it",
+  "@updateNotSigned": {
+    "description": "Why an update was rejected: the release carries no signed manifest, or Lumit could not fetch it. Shown only on builds that carry a release signing key."
+  },
+  "updateSignatureMismatch": "This update was not signed by Lumit, so it will not be installed",
+  "@updateSignatureMismatch": {
+    "description": "Why an update was rejected: the release manifest's signature is not the one this build's pinned key makes. Calm, not alarming - the ordinary cause is a mirror or a proxy, not an attack."
+  },
+  "updateNotInManifest": "This update is not the file Lumit published, so it will not be installed",
+  "@updateNotInManifest": {
+    "description": "Why an update was rejected: the signature held up, but the signed list of files does not name this download, or names it at a different size or checksum."
   },
   "updateClickToUpdate": "Click to update - v{version}",
   "@updateClickToUpdate": {
@@ -11117,6 +11187,15 @@
         "type": "String"
       },
       "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "ocioTooLarge": "this config would take more memory or nesting to read than Lumit allows ({reason})",
+  "@ocioTooLarge": {
+    "description": "Project settings, Colour group. Why the colour config is not in force, lower case. Shown when the file is within the grammar but past a resource ceiling — a very large file, an enormous number of nodes, or nesting far deeper than any real config. Reason is the engine's own short English phrase naming which ceiling was met and its number.",
+    "placeholders": {
+      "reason": {
         "type": "String"
       }
     }

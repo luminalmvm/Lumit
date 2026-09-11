@@ -36,7 +36,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
@@ -77,6 +76,14 @@ pub const PRESS_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 pub(crate) fn describe_deadline(quirks: &crate::quirks::Quirks) -> Duration {
     HANDSHAKE_TIMEOUT.max(quirks.control_timeout)
 }
+
+/// How many instances of one bundle's plugins may be alive at once.
+///
+/// A comp with a thousand OFX effects from one vendor's bundle on it is not a
+/// comp anybody has built; a runaway that keeps making them is. Each one costs
+/// memory in the broker and a message on every restart, so the ceiling bounds
+/// both.
+pub const MAX_LIVE_INSTANCES: usize = 1_024;
 
 /// How many of the plugin's messages are kept. A plugin in a loop can call the
 /// message suite as fast as it likes; the host keeps the most recent few and
@@ -165,6 +172,16 @@ pub enum BrokerError {
     /// No such instance.
     #[error("no such plugin instance")]
     NoSuchInstance,
+    /// The peer on the pipe could not prove it is the broker this host started,
+    /// or the credential could not be minted or handed over at all.
+    #[error(transparent)]
+    Peer(lumit_peer::PeerError),
+    /// More instances of one bundle than [`MAX_LIVE_INSTANCES`].
+    #[error("this plugin already has {limit} instances, which is as many as Lumit hosts at once")]
+    TooManyInstances {
+        /// The ceiling.
+        limit: usize,
+    },
 }
 
 /// Where the frames a plugin asks for come from: the evaluation graph, in
@@ -264,6 +281,11 @@ enum Incoming {
 pub struct Broker {
     config: BrokerConfig,
     ring: Ring,
+    /// The frame size the current ring was built for. `config.frame` is only
+    /// the size it *started* at; `fit` grows it, and a restart has to rebuild
+    /// the ring at the size the plugin is actually being asked for rather than
+    /// at the size the scan opened with.
+    ring_frame: (usize, usize),
     link: Option<Link>,
     descriptors: Vec<PluginDescriptor>,
     instances: BTreeMap<InstanceId, InstanceRecord>,
@@ -276,16 +298,22 @@ pub struct Broker {
     notes: Vec<(String, String)>,
 }
 
-/// A counter, so two brokers in one process never pick the same pipe name.
-static PIPE_COUNTER: AtomicU64 = AtomicU64::new(0);
-
-/// A name no other pipe or ring in this process has had.
-fn fresh_identifier() -> String {
-    format!(
-        "{}-{}",
-        std::process::id(),
-        PIPE_COUNTER.fetch_add(1, Ordering::Relaxed)
-    )
+/// A name no other pipe or ring on this machine will have, and none of them can
+/// work out in advance.
+///
+/// This used to be the host's process id and a counter. That is unique, which
+/// is all a name needs to be to keep two brokers apart — and it is also
+/// something any other program on the machine can compute, which is not all a
+/// name needs to be when the endpoint it names is one somebody could connect to
+/// instead of the broker. The programs best placed to do the computing are the
+/// *other* brokers, each of which is running a third party's compiled code.
+///
+/// A failure here is a broker that does not start, deliberately: there is no
+/// fallback to a counter, because a guessable name is the thing being fixed.
+fn fresh_identifier() -> Result<String, BrokerError> {
+    Ok(lumit_peer::Token::generate()
+        .map_err(BrokerError::Peer)?
+        .as_name())
 }
 
 /// Where the ring with this name lives.
@@ -303,12 +331,14 @@ impl Broker {
     /// [`BrokerError`] — the executable, the pipe, the ring, or a broker that
     /// speaks another protocol.
     pub fn spawn(config: BrokerConfig) -> Result<Self, BrokerError> {
-        let identifier = fresh_identifier();
+        let identifier = fresh_identifier()?;
         let ring = Ring::create(&ring_path(&identifier), config.frame.0, config.frame.1)?;
 
+        let ring_frame = config.frame;
         let mut broker = Self {
             config,
             ring,
+            ring_frame,
             link: None,
             descriptors: Vec::new(),
             instances: BTreeMap::new(),
@@ -329,21 +359,43 @@ impl Broker {
         let name = pipe::pipe_name(identifier);
         let listener = pipe::listen(&name)?;
 
+        // One secret per broker, per start. A restart after a crash mints a
+        // new one, so nothing learned about a dead broker is worth anything
+        // against its replacement.
+        let secret = lumit_peer::Secret::generate().map_err(BrokerError::Peer)?;
+
         let exe = self.config.exe.clone().unwrap_or_else(broker_exe);
         let mut command = Command::new(exe);
         command
             .arg(&self.config.bundle)
             .arg(&name)
+            // The secret goes down standard input, never on the command line
+            // beside the pipe name: `/proc/<pid>/cmdline` is readable by every
+            // process on the machine on Linux, and a command line is in every
+            // `ps` listing on all of them. Standard input is the child's own.
+            .stdin(Stdio::piped())
             // The child's own output is its own: a plugin that prints must not
             // be able to reach the protocol, which is why the protocol is not
             // on standard output in the first place (see `ipc::pipe`).
-            .stdin(Stdio::null())
             .stdout(Stdio::null());
         no_console(&mut command);
         for (key, value) in &self.config.env {
             command.env(key, value);
         }
-        let child = command.spawn().map_err(BrokerError::Spawn)?;
+        let mut child = command.spawn().map_err(BrokerError::Spawn)?;
+
+        // Hand the credential over and close the pipe. Closing matters: the
+        // child reads exactly one line and would otherwise wait for an end that
+        // never comes if this process died between the two.
+        match child.stdin.take() {
+            Some(stdin) => secret.hand_over(stdin).map_err(BrokerError::Peer)?,
+            None => {
+                let _ = child.kill();
+                return Err(BrokerError::Peer(lumit_peer::PeerError::Handover(
+                    "the broker was spawned without a standard input".into(),
+                )));
+            }
+        }
 
         let (tx, rx) = mpsc::channel();
         std::thread::spawn(move || read_loop(listener, &tx));
@@ -358,14 +410,44 @@ impl Broker {
             incoming: rx,
         });
 
-        match self.wait_for(HANDSHAKE_TIMEOUT) {
-            Ok(BrokerMessage::Hello { version }) if version == PROTOCOL_VERSION => {}
-            Ok(BrokerMessage::Hello { version }) => {
+        // Whoever connected says a nonce first. That much anybody can do; it
+        // proves nothing and reveals nothing.
+        let theirs = match self.wait_for(HANDSHAKE_TIMEOUT) {
+            Ok(BrokerMessage::Ready { nonce }) => nonce,
+            Ok(_) => {
                 self.kill();
-                return Err(BrokerError::ProtocolMismatch {
-                    theirs: version,
-                    ours: PROTOCOL_VERSION,
-                });
+                return Err(BrokerError::Unexpected("something other than a nonce"));
+            }
+            Err(_) => {
+                self.kill();
+                return Err(BrokerError::NoHandshake);
+            }
+        };
+
+        // The host answers it — which is how a genuine broker knows it is
+        // talking to Lumit — and sets its own for the broker to answer.
+        let ours = lumit_peer::Nonce::generate().map_err(BrokerError::Peer)?;
+        self.send(&HostMessage::Challenge {
+            nonce: ours,
+            proof: lumit_peer::Proof::host(&secret, theirs),
+        })?;
+
+        match self.wait_for(HANDSHAKE_TIMEOUT) {
+            Ok(BrokerMessage::Hello { version, proof }) => {
+                // Who, before what: a peer that cannot prove who it is has no
+                // version worth hearing, and answering a mismatch first would
+                // tell an impostor which build it is up against.
+                if !proof.matches(&lumit_peer::Proof::broker(&secret, ours)) {
+                    self.kill();
+                    return Err(BrokerError::Peer(lumit_peer::PeerError::NotAuthenticated));
+                }
+                if version != PROTOCOL_VERSION {
+                    self.kill();
+                    return Err(BrokerError::ProtocolMismatch {
+                        theirs: version,
+                        ours: PROTOCOL_VERSION,
+                    });
+                }
             }
             Ok(_) => {
                 self.kill();
@@ -379,6 +461,11 @@ impl Broker {
 
         let spec = self.ring.spec().clone();
         self.send(&HostMessage::Open { ring: spec })?;
+        // And once the broker has it mapped, the ring's name comes out of the
+        // directory: on Unix a mapping outlives the name, so from here the file
+        // is reachable only by the two processes holding it and the kernel
+        // reclaims it when the last of them goes — a crash included.
+        self.ring_is_shared();
         Ok(())
     }
 
@@ -438,6 +525,19 @@ impl Broker {
         context: Context,
         params: ParamSnapshot,
     ) -> Result<InstanceId, BrokerError> {
+        // A ceiling on how many of one bundle's plugins may be alive at once.
+        //
+        // Every instance is memory and state inside the broker, and every one
+        // of them is rebuilt from scratch on a restart (this crate's replay, in
+        // `restart`) — so a project that had accumulated tens of thousands of
+        // them would turn every plugin crash into a very long pause. The
+        // ceiling is far above a real comp: a thousand instances of one
+        // bundle's plugins is a timeline nobody has built.
+        if self.instances.len() >= MAX_LIVE_INSTANCES {
+            return Err(BrokerError::TooManyInstances {
+                limit: MAX_LIVE_INSTANCES,
+            });
+        }
         let instance = self.next_instance;
         self.next_instance = self.next_instance.saturating_add(1);
         let record = InstanceRecord {
@@ -691,6 +791,18 @@ impl Broker {
         std::mem::take(&mut self.notes)
     }
 
+    /// The path the current ring was made at, for the tests that assert the
+    /// name is unguessable and that it is unlinked once both ends hold it.
+    ///
+    /// Not private, because those tests live in `lumit-ofx-broker` — the
+    /// package that owns the binary, which is the only place a test can spawn a
+    /// real second process. Not a general accessor either: it is named so that
+    /// nothing in the application reaches for it by accident.
+    #[must_use]
+    pub fn ring_path_for_test(&self) -> String {
+        self.ring.spec().path.clone()
+    }
+
     // ------------------------------------------------------------ the wire --
 
     /// One action, with its deadline and its consequences: a failure is a
@@ -808,6 +920,38 @@ impl Broker {
         Ok(())
     }
 
+    /// Wait for the broker to say it has the ring mapped, then take the ring's
+    /// name out of the directory.
+    ///
+    /// Notes are absorbed on the way past, the way [`Self::exchange`] absorbs
+    /// them: the plugin's own code has run by this point (the bundle is loaded
+    /// before the broker answers anything) and a plugin that used the message
+    /// suite while loading would otherwise put a `Note` where the
+    /// acknowledgement was expected — and leave the acknowledgement sitting in
+    /// the queue for whatever asked next. Which is exactly what happened.
+    ///
+    /// Losing the acknowledgement is not fatal: it costs the tidying, not the
+    /// ring. The file is then removed by `Drop` as it always was.
+    fn ring_is_shared(&mut self) {
+        let expiry = Instant::now() + HANDSHAKE_TIMEOUT;
+        loop {
+            let left = expiry.saturating_duration_since(Instant::now());
+            match self.wait_for(left) {
+                Ok(BrokerMessage::Note { kind, text }) => {
+                    if self.notes.len() >= MAX_NOTES {
+                        self.notes.remove(0);
+                    }
+                    self.notes.push((kind, text));
+                }
+                Ok(BrokerMessage::RingOpened) => {
+                    self.ring.unlink_now_it_is_shared();
+                    return;
+                }
+                _ => return,
+            }
+        }
+    }
+
     /// Wait for one message, or for the deadline, or for the process to die.
     fn wait_for(&mut self, left: Duration) -> Result<BrokerMessage, Fault> {
         let Some(link) = self.link.as_ref() else {
@@ -830,10 +974,15 @@ impl Broker {
         if slot_bytes_for(width, height) <= self.ring.spec().slot_bytes {
             return Ok(());
         }
-        self.ring = Ring::create(&ring_path(&fresh_identifier()), width, height)?;
+        self.ring = Ring::create(&ring_path(&fresh_identifier()?), width, height)?;
+        self.ring_frame = (width, height);
         self.next_slot = 0;
         let spec = self.ring.spec().clone();
-        self.send(&HostMessage::Open { ring: spec })
+        self.send(&HostMessage::Open { ring: spec })?;
+        // The replacement ring loses its name once the broker has mapped it,
+        // exactly as the first one did.
+        self.ring_is_shared();
+        Ok(())
     }
 
     /// The next slot, round-robin. A slot is not reused until every other slot
@@ -865,7 +1014,19 @@ impl Broker {
     fn restart(&mut self) -> Result<(), BrokerError> {
         self.kill();
         self.restarts = self.restarts.saturating_add(1);
-        self.start(&fresh_identifier())?;
+        // A fresh ring, not the old one.
+        //
+        // The old ring's *name* is gone: it is unlinked as soon as the broker
+        // that died had it mapped, which is what stops a third program opening
+        // it and what has the kernel reclaim it when that broker fell over. A
+        // replacement broker therefore has no name to open, so it gets a new
+        // ring — which is the same answer this function already gives to every
+        // other question, since a restart is a replay and the broker keeps
+        // nothing worth keeping.
+        let (width, height) = self.ring_frame;
+        self.ring = Ring::create(&ring_path(&fresh_identifier()?), width, height)?;
+        self.next_slot = 0;
+        self.start(&fresh_identifier()?)?;
 
         let control = self.config.quirks.control_timeout;
         if let Ok(BrokerMessage::Described { plugins }) =

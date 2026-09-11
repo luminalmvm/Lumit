@@ -64,14 +64,43 @@ fn main() -> ExitCode {
 
 /// Everything, once the arguments are known.
 fn run(bundle_path: &std::ffi::OsStr, pipe_name: &str) -> Result<(), String> {
+    // The credential, first thing, before the pipe and long before the plugin.
+    // It arrives on standard input rather than on the command line, which every
+    // process on the machine can read; reading it here and now means the
+    // bundle's own code never runs while it is still there to be read.
+    let secret = lumit_peer::Secret::from_stdin().map_err(|error| error.to_string())?;
+
     let stream = pipe::connect(pipe_name).map_err(|error| error.to_string())?;
-    let (receiver, mut sender) = pipe::split(stream);
+    let (mut receiver, mut sender) = pipe::split(stream);
+
+    // A nonce, and nothing else. Whoever is listening at that name gets this
+    // much; it proves nothing and gives nothing away.
+    let ours = lumit_peer::Nonce::generate().map_err(|error| error.to_string())?;
+    say(&mut sender, &BrokerMessage::Ready { nonce: ours })?;
+
+    // The host's answer to it. **This is the gate the plugin sits behind**: an
+    // impostor at that endpoint cannot produce this, and the bundle is not
+    // opened until it has.
+    let HostMessage::Challenge { nonce, proof } =
+        pipe::recv::<_, HostMessage>(&mut receiver).map_err(|error| error.to_string())?
+    else {
+        return Err("the host said something other than a challenge".into());
+    };
+    if !proof.matches(&lumit_peer::Proof::host(&secret, ours)) {
+        return Err("the host on this pipe could not prove who it is".into());
+    }
 
     let version = std::env::var(PROTOCOL_ENV)
         .ok()
         .and_then(|text| text.parse::<u32>().ok())
         .unwrap_or(PROTOCOL_VERSION);
-    say(&mut sender, &BrokerMessage::Hello { version })?;
+    say(
+        &mut sender,
+        &BrokerMessage::Hello {
+            version,
+            proof: lumit_peer::Proof::broker(&secret, nonce),
+        },
+    )?;
 
     let mut bundle = Bundle::open(bundle_path).map_err(|error| error.to_string())?;
     bundle.load();
@@ -130,8 +159,24 @@ impl Session {
     /// One message.
     fn handle(&mut self, message: HostMessage) -> Result<(), String> {
         match message {
+            // The handshake happened before the bundle was opened, in `run`. A
+            // second challenge, once the conversation is under way, is not a
+            // host that wants re-authenticating — nothing in the protocol asks
+            // for one — so it is refused rather than answered.
+            HostMessage::Challenge { .. } => {
+                Err("the host challenged twice on one connection".into())
+            }
             HostMessage::Open { ring } => {
                 self.ring = Ring::open(&ring).ok();
+                // Say so, so the host can take the ring's name out of the
+                // directory: on Unix the mapping outlives the name, and from
+                // that point no third program can open it and the kernel
+                // reclaims it when the last of us exits. Only when it really is
+                // mapped — acknowledging a ring we failed to open would have
+                // the host unlink a file we still need to try again through.
+                if self.ring.is_some() {
+                    self.reply(&BrokerMessage::RingOpened)?;
+                }
                 Ok(())
             }
             HostMessage::Describe => {

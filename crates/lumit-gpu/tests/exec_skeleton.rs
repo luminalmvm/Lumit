@@ -374,6 +374,28 @@ fn srgb_decode(encoded: f64) -> f64 {
 }
 
 struct Rig {
+    /// The shared GPU fixture's lease, held for as long as this rig's own
+    /// device exists.
+    ///
+    /// # Why a rig with its own device still takes the lease
+    ///
+    /// This file's tests run in parallel, as Rust's harness runs everything,
+    /// and each one used to call `GpuContext::headless()` on its own. That is
+    /// one wgpu device per test, all live at once, all submitting to the same
+    /// card — which on a CI runner's software adapter means contention, and on
+    /// a real one means several tests inside the same TDR window. It shows up
+    /// as flakes that move about when tests are added, which is the worst kind
+    /// to chase.
+    ///
+    /// Holding the lease makes the device's *lifetime* the serialised thing,
+    /// rather than nothing being serialised at all. The rig keeps building its
+    /// own context because these tests drive a bare compositor skeleton and
+    /// want a device with nothing else's state on it — but now only one of them
+    /// exists at a time, and no shared-GPU test is running beside it either.
+    ///
+    /// Named with a leading underscore because it is never read: its whole job
+    /// is to be dropped when the rig is.
+    _lease: lumit_gpu::test_support::Lease,
     ctx: Rc<GpuContext>,
     colour: Rc<ColourEngine>,
     frames: Rc<RefCell<Frames>>,
@@ -382,6 +404,10 @@ struct Rig {
 
 impl Rig {
     fn new(size: (u32, u32)) -> Option<Self> {
+        // Before the device, not after: a rig that built its own card first and
+        // then waited for the lease would be exactly the overlap this is here
+        // to prevent.
+        let lease = lumit_gpu::test_support::lease()?;
         let Ok(ctx) = GpuContext::headless() else {
             lumit_gpu::no_adapter();
             return None;
@@ -389,6 +415,7 @@ impl Rig {
         let ctx = Rc::new(ctx);
         let colour = Rc::new(ColourEngine::new(&ctx));
         Some(Self {
+            _lease: lease,
             ctx,
             colour,
             frames: Rc::new(RefCell::new(Frames {

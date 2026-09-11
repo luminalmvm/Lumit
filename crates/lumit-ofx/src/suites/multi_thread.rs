@@ -85,6 +85,20 @@ pub fn host_thread_count() -> usize {
     lumit_eval::pool::worker_threads(cores)
 }
 
+/// The most tasks one `multiThread` call may fan out to.
+///
+/// In plain terms: a plugin asks the host to run its function `nThreads` times
+/// at once, and the host used to believe the number. `multiThreadNumCPUs` has
+/// already told the plugin how many cores there are, so anything well behaved
+/// asks for that or fewer; the ceiling is here for the one that asks for four
+/// billion, which is four billion closures queued before the first one runs.
+///
+/// Four thousand is a hundred times the core count of a large workstation, so
+/// no real plugin can reach it — including the ones that deliberately
+/// oversubscribe to hide IO latency, which is a legitimate thing to do and
+/// lands around four times the core count, not a hundred.
+const MAX_FAN_OUT: c_uint = 4_096;
+
 /// The plugin's `customArg`, carried across threads.
 ///
 /// It is the plugin's own pointer and this host never follows it — it is passed
@@ -117,6 +131,17 @@ unsafe extern "C" fn multi_thread(
 ) -> c_int {
     guard(|| {
         if n_threads == 0 {
+            return Err(Status::ErrValue);
+        }
+        // And not more than [`MAX_FAN_OUT`].
+        //
+        // The count cannot be quietly clamped: OFX promises the plugin's
+        // function is called exactly `nThreads` times with indices 0..n-1, and
+        // the plugin partitions its work by that index — running fewer would
+        // leave part of the picture unrendered, silently, which is far worse
+        // than refusing. So an absurd request is refused by the same code a
+        // zero one is, and the plugin gets an answer it is required to handle.
+        if n_threads > MAX_FAN_OUT {
             return Err(Status::ErrValue);
         }
         // Nesting a fan-out inside a fan-out is the plugin's mistake and OFX

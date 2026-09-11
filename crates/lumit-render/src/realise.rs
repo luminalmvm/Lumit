@@ -483,13 +483,78 @@ impl Realiser<'_> {
         // outermost `end_frame`, so a frame costs one round trip rather than one
         // per layer and per effect. `begin_frame` nests, which is what lets this
         // sit on the recursive entry point rather than being threaded by hand.
-        self.ctx.begin_frame();
+        //
+        // It is also the one place a frame's video memory can still be refused
+        // (docs/13 §3): a texture cannot be denied half way through a pass, so
+        // the whole frame is reserved for before a single one of them records.
+        let (tw, th) = lumit_gpu::scaled_size(width, height, self.render_scale);
+        self.open_frame(tw, th, layers);
         let out = self.realise_at_depth(camera, width, height, background, layers, region);
         self.ctx.end_frame();
         if let Some(p) = self.profiler {
             p.leave_comp();
         }
         out
+    }
+
+    /// Reserve this frame's video memory and open its command batch, stepping
+    /// down the degradation ladder (docs/13 §4) if the governor says no.
+    ///
+    /// # In plain terms
+    ///
+    /// The two rungs the renderer owns are here, in order and cheapest first:
+    /// stop filling the intermediate cache, then give the cold half of it back.
+    /// Both are invisible — the picture that comes out is identical, only made
+    /// again rather than read back — which is exactly why they are the rungs
+    /// that may be taken on a memory reading. The rungs that *are* visible (the
+    /// preview resolution tier, tiling, the flow swap, the calm banner) change
+    /// what is drawn, so they belong to the caller, which reads the denial
+    /// count and steps down deliberately; export never takes them at all.
+    ///
+    /// A frame that is still refused after both is **rendered anyway**. There
+    /// is nothing honest to return instead — a texture cannot be refused half
+    /// way through a pass, and a black frame is a worse answer than a slow one
+    /// — so what the refusal buys is a truthful readout and a governor that
+    /// says no earlier next time, not an abort. Nested frames take this path
+    /// too and reserve nothing: they are already inside their parent's
+    /// reservation, and counting them again would refuse a frame that fits.
+    fn open_frame(&self, tw: u32, th: u32, layers: &[CompLayerDraw]) {
+        let estimate = self.frame_estimate(tw, th, layers);
+        if self.ctx.try_begin_frame(estimate).is_ok() {
+            return;
+        }
+        // Rung one is already taken and takes itself back: the effect walk
+        // reads the same pressure and stops filing while it lasts
+        // ([`crate::fxops::run_ops`]), so there is no flag here to set and
+        // later remember to clear. Rung two is this.
+        self.fx_cache.borrow_mut().trim_under_pressure();
+        if self.ctx.try_begin_frame(estimate).is_err() {
+            self.ctx.begin_frame();
+        }
+    }
+
+    /// What this frame is expected to hold on the card at its **peak** — not
+    /// its total, which is a far larger and far less useful number.
+    ///
+    /// Layers are composited one at a time into one accumulator and the effect
+    /// walk ping-pongs through the frame's texture pool, so a hundred-layer
+    /// comp peaks at a handful of pictures rather than a hundred. What does
+    /// grow with the project is the layers that stage through a comp-sized
+    /// intermediate of their own — an adjustment layer, which needs everything
+    /// below it composited first, and a motion-blurred one, which holds an
+    /// accumulator across its shutter. They are the same two the region
+    /// window steps aside for ([`region_is_safe`]), and for the same reason.
+    fn frame_estimate(&self, tw: u32, th: u32, layers: &[CompLayerDraw]) -> u64 {
+        /// The accumulator, the layer being drawn, the two the effect walk
+        /// passes between, and headroom for the matte or plate an effect reads
+        /// beside them.
+        const FRAME_PEAK_TEXTURES: u64 = 6;
+        let staged = layers
+            .iter()
+            .filter(|l| matches!(l.source, DrawSource::Adjust) || !l.mb.is_empty())
+            .count() as u64;
+        lumit_gpu::texture_bytes(self.ctx.working(), tw, th)
+            .saturating_mul(FRAME_PEAK_TEXTURES.saturating_add(staged))
     }
 
     fn realise_at_depth(
@@ -643,28 +708,7 @@ impl Realiser<'_> {
         ab: &AccumulationBelow,
         below: &wgpu::Texture,
     ) -> wgpu::Texture {
-        let frames: Vec<wgpu::Texture> = ab
-            .samples
-            .iter()
-            .map(|(draws, camera)| {
-                let frame = self.realise(*camera, width, height, background, draws);
-                // Hand this sample's work to the card and wait for it before
-                // starting the next. A frame is one batch, and nothing a
-                // batch allocates comes back until it has run: with the N
-                // samples inside it, every sample's intermediates stayed
-                // alive together. Eight samples over one 1080p layer held
-                // 2.1 GB against 200 MB for the frame alone, which is enough
-                // to take a card down. Waiting per sample keeps one sample's
-                // scratch alive at a time; the finished sample textures are
-                // all that accumulate. The wait costs the overlap between
-                // encoding a sample and drawing the last, small beside N
-                // full renders.
-                self.ctx.flush();
-                self.ctx.settle();
-                frame
-            })
-            .collect();
-        if frames.is_empty() {
+        if ab.samples.is_empty() {
             // No samples (N < 2) degrades to the plain below — never a panic.
             return below.clone();
         }
@@ -682,6 +726,42 @@ impl Realiser<'_> {
             .into_iter()
             .next()
             .and_then(|slot| slot.texture(below).cloned());
+        // Each sample is rendered, folded into the running average, and let go
+        // of before the next one starts.
+        //
+        // **This is the whole shape of the thing.** The samples used to be
+        // collected into a `Vec` and handed to the combine in one go, which
+        // meant N finished composites alive together: a thirty-two-sample
+        // shutter at 4K is two gigabytes of them, waiting for a pass that reads
+        // each exactly once and never looks at it again. Both combines were
+        // already one-sample-at-a-time internally; all that was needed was to
+        // let the samples arrive that way.
+        //
+        // Peak memory is now flat in N — the accumulator plus whichever sample
+        // is in hand — and the arithmetic is unchanged, which is the part that
+        // had to be got right rather than merely made smaller. The equal-weight
+        // path still sums in fp32 across the same two ping-ponged targets, in
+        // the same order, resolving once at the end;
+        // `streaming_accumulation_matches_the_one_shot` in `lumit-gpu` holds
+        // that byte for byte against the previous implementation.
+        let n = ab.samples.len();
+        let sample_at = |k: usize| -> Option<wgpu::Texture> {
+            let (draws, camera) = ab.samples.get(k)?;
+            let frame = self.realise(*camera, width, height, background, draws);
+            // Hand this sample's work to the card and wait for it before
+            // starting the next. A frame is one batch, and nothing a batch
+            // allocates comes back until it has run: with the N samples inside
+            // it, every sample's intermediates stayed alive together. Eight
+            // samples over one 1080p layer held 2.1 GB against 200 MB for the
+            // frame alone, which is enough to take a card down. Waiting per
+            // sample keeps one sample's scratch alive at a time. The wait costs
+            // the overlap between encoding a sample and drawing the last, small
+            // beside N full renders.
+            self.ctx.flush();
+            self.ctx.settle();
+            Some(frame)
+        };
+
         let average = if let Some(matte) = matte {
             // Channel and Invert, once, before anything reads it. The
             // dispatch seam does this for every other effect; this one has no
@@ -699,14 +779,38 @@ impl Realiser<'_> {
                 } else {
                     matte
                 };
-            self.fx
-                .accumulate_with_shutter(&self.ctx, &frames, &matte, tw, th, ab.anchor)
+            let mut acc: Option<wgpu::Texture> = None;
+            for k in 0..n {
+                let Some(frame) = sample_at(k) else { continue };
+                acc = Some(self.fx.accumulate_shutter_step(
+                    &self.ctx,
+                    acc.as_ref(),
+                    &frame,
+                    &matte,
+                    tw,
+                    th,
+                    ab.anchor,
+                    n as f32,
+                    k,
+                ));
+            }
+            // `n` is not zero — the empty case returned above — so the loop ran
+            // at least once unless every sample failed to render, which is the
+            // plain below rather than a panic.
+            match acc {
+                Some(acc) => acc,
+                None => return below.clone(),
+            }
         } else {
             // Equal weights 1/N sum to 1: the premultiplied arithmetic mean.
-            let weight = 1.0 / frames.len() as f32;
-            let avg_layers: Vec<(&wgpu::Texture, f32)> =
-                frames.iter().map(|f| (f, weight)).collect();
-            self.compositor.accumulate(&self.ctx, tw, th, &avg_layers)
+            let weight = 1.0 / n as f32;
+            let mut running = self.compositor.accumulator(&self.ctx, tw, th);
+            for k in 0..n {
+                let Some(frame) = sample_at(k) else { continue };
+                self.compositor
+                    .add_into(&self.ctx, &mut running, &frame, weight);
+            }
+            self.compositor.resolve(&self.ctx, &running)
         };
         if ab.mix >= 1.0 {
             average

@@ -15824,6 +15824,216 @@ fn a_readback_inside_a_batch_waits_for_what_is_still_batched() {
     );
 }
 
+/// The governor's ledger must equal reality (docs/13 §3).
+///
+/// A ledger that reads low is worse than none at all: it grants the frame that
+/// breaks the machine, confidently. So every work texture is charged when it is
+/// made, a texture handed back out of the pool is *not* charged again — it is
+/// the same memory, which is the pool's whole purpose — and the frame's charge
+/// is given back at the one moment every work texture's life ends.
+#[test]
+fn every_work_texture_is_charged_to_the_ledger_and_given_back_with_the_frame() {
+    use lumit_budget::Tier;
+
+    let Some(ctx) = crate::test_support::lease() else {
+        crate::no_adapter();
+        return;
+    };
+    // The shared fixture is reset between tests, but the ledger is not a
+    // per-test thing, so measure the change rather than the absolute.
+    let before = ctx.ledger().used(Tier::Vram);
+    let one = crate::texture_bytes(ctx.working(), 64, 36);
+    assert!(one > 0, "a 64x36 texture is not nothing");
+
+    ctx.begin_frame();
+    let a = work_texture(&ctx, 64, 36, "ledger-a");
+    assert_eq!(
+        ctx.ledger().used(Tier::Vram),
+        before + one,
+        "a new work texture must be charged"
+    );
+
+    let b = work_texture(&ctx, 64, 36, "ledger-b");
+    assert_eq!(ctx.ledger().used(Tier::Vram), before + one * 2);
+
+    // Give one back to the pool and take it again: the same memory, so the
+    // ledger must not move.
+    ctx.recycle(a);
+    let held = ctx.ledger().used(Tier::Vram);
+    let again = work_texture(&ctx, 64, 36, "ledger-again");
+    assert_eq!(
+        ctx.ledger().used(Tier::Vram),
+        held,
+        "a texture out of the pool is memory already counted"
+    );
+
+    drop((b, again));
+    ctx.end_frame();
+    assert_eq!(
+        ctx.ledger().used(Tier::Vram),
+        before,
+        "the frame's charge ends with the frame"
+    );
+}
+
+/// `try_begin_frame` is where "no" is said.
+///
+/// A texture cannot be refused half way through a pass — the pass would draw
+/// nothing rather than something smaller — so the decision is made once, before
+/// any of it starts, at the one boundary that can still answer. A refusal is the
+/// degradation ladder's cue, not a crash.
+#[test]
+fn a_frame_that_will_not_fit_is_refused_before_it_starts() {
+    use lumit_budget::{BudgetError, Tier};
+
+    let Some(ctx) = crate::test_support::lease() else {
+        crate::no_adapter();
+        return;
+    };
+    let was = ctx.ledger().budget(Tier::Vram);
+    ctx.ledger().set_budget(Tier::Vram, 4096);
+
+    // A frame that fits opens, and holds its reservation while it is open.
+    ctx.try_begin_frame(1024).expect("a small frame fits");
+    assert!(ctx.ledger().used(Tier::Vram) >= 1024);
+    ctx.end_frame();
+
+    // One that does not is refused, and takes nothing on the way out.
+    let held = ctx.ledger().used(Tier::Vram);
+    let refused = ctx.try_begin_frame(1 << 30);
+    assert!(
+        matches!(refused, Err(BudgetError::Denied { .. })),
+        "{refused:?}"
+    );
+    assert_eq!(
+        ctx.ledger().used(Tier::Vram),
+        held,
+        "a refused frame must not leave a charge behind"
+    );
+
+    ctx.ledger().set_budget(Tier::Vram, was);
+}
+
+/// A frame that outgrows what was reserved for it records the overdraft rather
+/// than pretending, because `work_texture` has no way to say no and a pass
+/// without its output would draw nothing at all.
+///
+/// The recorded figure is what makes the *next* frame's grant honest, and what
+/// the status readout shows — silent degradation is a bug (docs/14 §8).
+#[test]
+fn a_frame_that_outgrows_its_reservation_says_so() {
+    use lumit_budget::Tier;
+
+    let Some(ctx) = crate::test_support::lease() else {
+        crate::no_adapter();
+        return;
+    };
+    let was = ctx.ledger().budget(Tier::Vram);
+    let one = crate::texture_bytes(ctx.working(), 64, 36);
+
+    // Room for the frame's reservation and one texture, and no more.
+    ctx.ledger()
+        .set_budget(Tier::Vram, ctx.ledger().used(Tier::Vram) + one + 8);
+    ctx.try_begin_frame(8).expect("the reservation itself fits");
+    assert_eq!(ctx.vram_overdrawn(), 0);
+
+    let _a = work_texture(&ctx, 64, 36, "overdraw-a");
+    assert_eq!(ctx.vram_overdrawn(), 0, "the first one fits");
+
+    let _b = work_texture(&ctx, 64, 36, "overdraw-b");
+    assert_eq!(
+        ctx.vram_overdrawn(),
+        one,
+        "the second does not, and the amount is recorded rather than lost"
+    );
+    // And the pressure a kernel reads has gone to the top.
+    assert_eq!(ctx.vram_pressure(), lumit_budget::Pressure::Full);
+
+    ctx.end_frame();
+    ctx.ledger().set_budget(Tier::Vram, was);
+}
+
+/// **A texture that outlives its frame** takes its charge with it: the frame
+/// puts the bytes down as the new owner picks them up, so the card is never
+/// told it holds the same texture twice, and the frame ending does not release
+/// memory somebody else is still sitting on.
+///
+/// The effect cache is the one caller — an intermediate is kept precisely so a
+/// later frame can read it (docs/13 §3, issue #132 finding 15).
+#[test]
+fn a_texture_handed_out_of_a_frame_takes_its_charge_with_it() {
+    use lumit_budget::Tier;
+
+    let Some(ctx) = crate::test_support::lease() else {
+        crate::no_adapter();
+        return;
+    };
+    let one = crate::texture_bytes(ctx.working(), 64, 36);
+    let before = ctx.ledger().used(Tier::Vram);
+
+    ctx.try_begin_frame(0).expect("an empty reservation");
+    let kept = work_texture(&ctx, 64, 36, "handed-out");
+    assert_eq!(ctx.ledger().used(Tier::Vram), before + one);
+
+    // The store takes it, and reserves for it in its own right. The frame is
+    // told to let go of exactly what the store took up.
+    let store = ctx
+        .ledger()
+        .reserve(Tier::Vram, one)
+        .expect("the store's own reservation");
+    ctx.hand_off_vram(one);
+    assert_eq!(
+        ctx.ledger().used(Tier::Vram),
+        before + one,
+        "one texture, one charge — not two while both hold it"
+    );
+
+    ctx.end_frame();
+    assert_eq!(
+        ctx.ledger().used(Tier::Vram),
+        before + one,
+        "the frame ended but the picture did not: the store still holds it"
+    );
+
+    drop(store);
+    drop(kept);
+    assert_eq!(ctx.ledger().used(Tier::Vram), before);
+}
+
+/// An overdraft is settled before the reservation is: those bytes were never
+/// granted, so giving them back would credit the ledger for memory it never
+/// lent, and the card would read as emptier than it is.
+#[test]
+fn handing_out_an_overdrawn_texture_settles_the_overdraft_first() {
+    use lumit_budget::Tier;
+
+    let Some(ctx) = crate::test_support::lease() else {
+        crate::no_adapter();
+        return;
+    };
+    let was = ctx.ledger().budget(Tier::Vram);
+    let one = crate::texture_bytes(ctx.working(), 64, 36);
+
+    ctx.ledger()
+        .set_budget(Tier::Vram, ctx.ledger().used(Tier::Vram));
+    ctx.try_begin_frame(0).expect("an empty reservation");
+    let used = ctx.ledger().used(Tier::Vram);
+
+    let _over = work_texture(&ctx, 64, 36, "overdrawn");
+    assert_eq!(ctx.vram_overdrawn(), one, "there was no room for it");
+
+    ctx.hand_off_vram(one);
+    assert_eq!(ctx.vram_overdrawn(), 0, "the overdraft is what was settled");
+    assert_eq!(
+        ctx.ledger().used(Tier::Vram),
+        used,
+        "and nothing was handed back, because nothing had been lent"
+    );
+
+    ctx.end_frame();
+    ctx.ledger().set_budget(Tier::Vram, was);
+}
+
 /// The frame's work-texture pool: a pass gets the texture an earlier pass in
 /// the same frame was done with, as long as the shape matches, and the pool
 /// ends with the frame.

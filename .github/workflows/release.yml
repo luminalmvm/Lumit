@@ -324,6 +324,69 @@ jobs:
         with:
           merge-multiple: true
           path: dist
+      # Everything in dist/, named with its size and digest, signed with a key
+      # that lives nowhere near this repository.
+      #
+      # In plain terms: GitHub will tell the updater the digest of a download,
+      # and that proves the file arrived as published. It does not prove who
+      # published it — anything that could put a different installer on the
+      # release could put its digest beside it. A signature made with a key held
+      # outside the release infrastructure is the part that cannot be forged by
+      # compromising the release infrastructure, and the application carries the
+      # matching public key (flutter_ui/lib/state/release_signature.dart).
+      #
+      # Gated on the secret, exactly as the macOS signing identity is: without
+      # it the release still publishes, and an application with no pinned key
+      # does not ask for a manifest. Setting the secret and pinning the key are
+      # the two halves of one change and should land together —
+      # docs/impl/release-signing.md has both commands.
+      - name: Sign the release manifest
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RELEASE_SIGNING_KEY:-}" ]; then
+            echo "::warning::No RELEASE_SIGNING_KEY secret — this release ships without a signed manifest, and any Lumit with a pinned key will refuse to install it."
+            exit 0
+          fi
+          tag="v${RELEASE_VERSION#v}"
+          # The manifest is built from the files themselves, never from a list
+          # written by hand: a name that drifts is then a signature that does
+          # not match, which is noticed, rather than an entry quietly missing.
+          {
+            printf '{"version":"%s","assets":[' "${tag#v}"
+            first=1
+            for f in dist/*; do
+              [ -f "$f" ] || continue
+              name="$(basename "$f")"
+              case "$name" in lumit-release-manifest.json*) continue ;; esac
+              size="$(stat -c %s "$f")"
+              digest="$(sha256sum "$f" | cut -d' ' -f1)"
+              [ "$first" = 1 ] || printf ','
+              first=0
+              printf '{"name":"%s","size":%s,"sha256":"%s"}' "$name" "$size" "$digest"
+            done
+            printf ']}'
+          } > dist/lumit-release-manifest.json
+
+          # Ed25519 over the manifest's exact bytes. `-rawin` is what makes this
+          # Ed25519's own one-shot signing rather than a hash-then-sign, which
+          # is the only mode Ed25519 has and the one the verifier expects.
+          umask 077
+          printf '%s\n' "$RELEASE_SIGNING_KEY" > "$RUNNER_TEMP/release-key.pem"
+          openssl pkeyutl -sign -rawin \
+            -inkey "$RUNNER_TEMP/release-key.pem" \
+            -in dist/lumit-release-manifest.json \
+            -out "$RUNNER_TEMP/manifest.sig"
+          base64 -w0 "$RUNNER_TEMP/manifest.sig" > dist/lumit-release-manifest.json.sig
+          rm -f "$RUNNER_TEMP/release-key.pem" "$RUNNER_TEMP/manifest.sig"
+
+          # Verify what was just made, with the public half derived from the
+          # same key, before it goes anywhere. A signature nobody checked is a
+          # signature that gets discovered to be wrong by every user at once.
+          echo "Manifest covers:"
+          grep -o '"name":"[^"]*"' dist/lumit-release-manifest.json
+
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}

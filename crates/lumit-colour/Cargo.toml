@@ -11,6 +11,7 @@ publish = false
 # The `.cube` grammar already lives there; this crate reads it rather than
 # parsing the format a second time (docs/impl/ocio.md §4).
 lumit-core = { path = "../lumit-core" }
+lumit-ingress = { path = "../lumit-ingress" }
 thiserror = "2"
 # OCIO configs are YAML 1.2 with custom tags (`!<ColorSpace>`). `serde_yaml` is
 # archived and hides tags; `yaml-rust2` is pure Rust, maintained, and exposes

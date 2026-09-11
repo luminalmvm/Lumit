@@ -496,3 +496,122 @@ fn a_frame_bigger_than_the_ring_regrows_it() {
     assert!(!rendered.errored, "{:?}", rendered.error);
     assert!((first(&rendered.frame) - 0.25).abs() < 1e-2);
 }
+
+// ------------------------------------------------------- who is on the pipe --
+
+/// A broker started without a credential on its standard input refuses to go on
+/// — it does not fall back to an unauthenticated session.
+///
+/// This is the case that matters most, because it is the one a mistake would
+/// quietly re-introduce: if a missing credential meant "carry on anyway", every
+/// protection the handshake buys would be one refactor from being optional.
+#[test]
+fn a_broker_with_no_credential_does_not_start() {
+    let Ok(root) = tempfile::tempdir() else {
+        return;
+    };
+    let Some(binary) = a_bundle_in(root.path()) else {
+        skipped("a_broker_with_no_credential_does_not_start");
+        return;
+    };
+
+    // Run the broker by hand, the way an impostor would have to: a pipe name it
+    // was given, and nothing on standard input.
+    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_lumit-ofx-broker"))
+        .arg(&binary)
+        .arg("lumit-ofx-nobody-is-listening.sock")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .expect("the broker starts");
+    let status = child.wait().expect("the broker exits");
+    assert!(
+        !status.success(),
+        "a broker with no credential must refuse rather than serve"
+    );
+}
+
+/// The endpoint names are unguessable, and no two are alike.
+///
+/// The old names were the host's process id and a counter, which any program on
+/// the machine — including another broker, running somebody else's plugin code —
+/// could work out and connect to first.
+#[test]
+fn two_brokers_do_not_share_a_name_and_neither_name_is_a_process_id() {
+    let Ok(root) = tempfile::tempdir() else {
+        return;
+    };
+    let Some((first_broker, _)) = a_broker(root.path(), &[]) else {
+        skipped("two_brokers_do_not_share_a_name_and_neither_name_is_a_process_id");
+        return;
+    };
+    let Some((second_broker, _)) = a_broker(root.path(), &[]) else {
+        return;
+    };
+
+    let names: Vec<String> = [&first_broker, &second_broker]
+        .iter()
+        .map(|b| b.ring_path_for_test())
+        .collect();
+    assert_ne!(
+        names.first(),
+        names.get(1),
+        "two brokers shared a ring name"
+    );
+    for name in &names {
+        let stem: String = name
+            .rsplit(['/', '\\'])
+            .next()
+            .unwrap_or(name)
+            .chars()
+            .filter(|c| c.is_ascii_hexdigit())
+            .collect();
+        assert!(
+            stem.len() >= 32,
+            "the ring name carries no unguessable part: {name}"
+        );
+        assert!(
+            !name.contains(&format!("-{}-", std::process::id())),
+            "the ring name still carries this process's id: {name}"
+        );
+    }
+}
+
+/// On Unix the ring's name comes out of the directory once both processes have
+/// it mapped. The ring keeps working — a render still crosses it — and the file
+/// is gone from `/tmp`, so no third program can open it and the kernel reclaims
+/// it when the last of the two exits, a crash included.
+#[cfg(unix)]
+#[test]
+fn the_ring_file_is_unlinked_once_both_ends_hold_it() {
+    let Ok(root) = tempfile::tempdir() else {
+        return;
+    };
+    let Some((mut broker, plugin)) = a_broker(root.path(), &[]) else {
+        skipped("the_ring_file_is_unlinked_once_both_ends_hold_it");
+        return;
+    };
+
+    let path = broker.ring_path_for_test();
+    assert!(
+        !Path::new(&path).exists(),
+        "the ring is still reachable by name at {path}"
+    );
+
+    // And it is still a working ring, which is the half that would be easy to
+    // break: an unlinked mapping is only correct because the mapping outlives
+    // the name.
+    let instance = broker
+        .create_instance(plugin, Context::Filter, ParamSnapshot::default())
+        .expect("an instance");
+    let rendered = broker
+        .render(
+            instance,
+            &RenderRequest::filter(0.0, a_flat_frame(0.75)),
+            &|_, _| None,
+        )
+        .expect("a frame back");
+    assert!(!rendered.errored, "{:?}", rendered.error);
+    assert!((first(&rendered.frame) - 0.75).abs() < 1e-2);
+}

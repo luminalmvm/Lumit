@@ -16,3 +16,9 @@ wgpu = "24"
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+# The shared test device (`lumit_gpu::test_support`). These tests used to open a
+# wgpu device each, in parallel, against one card; the lease is what makes them
+# take turns.
+lumit-gpu = { path = "../lumit-gpu", features = ["test-fixtures"] }

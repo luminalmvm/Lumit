@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `read`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// The cache's live numbers.
 ///
@@ -20,6 +20,11 @@ BridgeCacheStats cacheStats() =>
 /// Read the memory report. Cheap: five atomics, one lock and one syscall.
 BridgeMemoryReport memoryReport() =>
     BridgeLib.instance.api.crateApiCacheMemoryReport();
+
+/// The governor's live numbers. Cheap: eleven relaxed atomic loads and no lock
+/// at all, so this may be polled on the interface's own cadence.
+BridgeGovernorReport governorReport() =>
+    BridgeLib.instance.api.crateApiCacheGovernorReport();
 
 /// Resize the cache, returning what it holds afterwards.
 ///
@@ -203,6 +208,55 @@ class BridgeDiskCacheStats {
           root == other.root;
 }
 
+/// **What the resource governor is holding, and whether it is refusing
+/// anything.**
+///
+/// Every byte-budgeted store in the process — the frame cache, the card's
+/// frames, decoded source frames, measured flow fields, the per-effect
+/// intermediates — is registered against this one account, so this is the
+/// question "is the machine short?" asked once rather than five times with five
+/// answers that cannot be added up.
+///
+/// It exists because a ladder nobody can see stepping is a bug in itself
+/// (docs/13 §4: "silent degradation is a bug"). A user reporting that Lumit
+/// "went slow" and a user reporting that it "ran out of memory" are describing
+/// the same reading, and this is where that reading is.
+class BridgeGovernorReport {
+  /// Memory on the graphics card.
+  final BridgeTierBudget vram;
+
+  /// Ordinary memory.
+  final BridgeTierBudget ram;
+
+  /// Bytes the last frame drawn asked the card for and did not get.
+  ///
+  /// Nought on every ordinary frame. Anything else means a frame outgrew what
+  /// was reserved for it — which is a fact about the composition rather than
+  /// a failure, since a texture cannot be refused half way through a pass, but
+  /// it is the fact that explains why the next frame is reserved for more
+  /// tightly.
+  final BigInt vramOverdrawnBytes;
+
+  const BridgeGovernorReport({
+    required this.vram,
+    required this.ram,
+    required this.vramOverdrawnBytes,
+  });
+
+  @override
+  int get hashCode =>
+      vram.hashCode ^ ram.hashCode ^ vramOverdrawnBytes.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeGovernorReport &&
+          runtimeType == other.runtimeType &&
+          vram == other.vram &&
+          ram == other.ram &&
+          vramOverdrawnBytes == other.vramOverdrawnBytes;
+}
+
 /// Where this process's memory has gone: what each tier admits to holding, and
 /// what the operating system says the process holds.
 ///
@@ -360,6 +414,61 @@ class BridgeProjectCacheLocation {
           runtimeType == other.runtimeType &&
           location == other.location &&
           folder == other.folder;
+}
+
+/// One tier of the resource governor's ledger (docs/13 §3), for the status
+/// readout.
+class BridgeTierBudget {
+  /// What is reserved right now.
+  final BigInt usedBytes;
+
+  /// The ceiling it is reserved against: 70% of the card for video memory,
+  /// 60% of physical for host memory, or whatever Preferences has set.
+  final BigInt budgetBytes;
+
+  /// The most that was ever reserved at once this session.
+  final BigInt peakBytes;
+
+  /// Reservations refused since the session began.
+  ///
+  /// **The field to read when something is slow.** A tier sitting under its
+  /// budget with this climbing is a tier turning work away, which is a
+  /// different fault from one that is merely full and is invisible in every
+  /// other number here.
+  final BigInt denials;
+
+  /// How close to the ceiling, as the degradation ladder reads it: `0` easy,
+  /// `1` tight, `2` severe, `3` full. At `2` and above the renderer has begun
+  /// stepping down — it stops filling the intermediate cache, then gives the
+  /// cold half of it back.
+  final BigInt pressure;
+
+  const BridgeTierBudget({
+    required this.usedBytes,
+    required this.budgetBytes,
+    required this.peakBytes,
+    required this.denials,
+    required this.pressure,
+  });
+
+  @override
+  int get hashCode =>
+      usedBytes.hashCode ^
+      budgetBytes.hashCode ^
+      peakBytes.hashCode ^
+      denials.hashCode ^
+      pressure.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeTierBudget &&
+          runtimeType == other.runtimeType &&
+          usedBytes == other.usedBytes &&
+          budgetBytes == other.budgetBytes &&
+          peakBytes == other.peakBytes &&
+          denials == other.denials &&
+          pressure == other.pressure;
 }
 
 /// Which route a rendered frame takes from the engine to the Viewer.

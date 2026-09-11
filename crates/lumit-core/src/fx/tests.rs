@@ -14242,6 +14242,98 @@ fn particulate_scrubs_in_any_order() {
 
 /// **The birth schedule** (§9 item 3), three ways: a constant rate against the
 /// closed-form count, a keyframed ramp against a hand-computed table, and a
+/// A layer's time comes from a retime curve, and a retime curve is a project
+/// file's numbers. "At frame 10 this layer is at ten million seconds" is a thing
+/// a keyframe can say, and the scan used to answer it by stepping one frame at a
+/// time from the in point — six hundred million steps, each one asking the Emit
+/// rate what it is through keyframes, expressions and driver wires, on the
+/// render thread.
+///
+/// Not slow: stopped. The ceiling is what keeps a project file from hanging the
+/// application, and the flag is what keeps the clamp from being silent
+/// (docs/14 §8).
+#[test]
+fn a_layer_carried_absurdly_far_forward_does_not_hang_the_scan() {
+    let dt = 1.0 / 60.0;
+    // Every frame the walk visits calls this, so it counts the walk.
+    let calls = std::cell::Cell::new(0u64);
+    let rate = |_: f64| {
+        calls.set(calls.get() + 1);
+        150.0
+    };
+
+    // Ten million seconds in, which is a retime keyframe away.
+    let absurd = 600_000_000i64;
+    let s = Schedule::scan(dt, absurd, 60, &rate);
+
+    assert!(
+        calls.get() <= points::MAX_SCAN_FRAMES as u64 + 1,
+        "the walk visited {} frames, past the ceiling of {}",
+        calls.get(),
+        points::MAX_SCAN_FRAMES
+    );
+    assert!(
+        !s.is_exact(),
+        "a clamped walk must say so rather than pass for a complete one"
+    );
+    // And it is still a usable schedule: the window it records is the window
+    // the frame can see, so the particles that are drawn are drawn properly.
+    assert_eq!(s.counts().len(), 60);
+
+    // An ordinary layer is untouched — no clamp, no flag, the same answer as
+    // ever.
+    let ordinary = Schedule::scan(dt, 599, 60, &|_| 150.0);
+    assert!(ordinary.is_exact());
+    assert_eq!(
+        ordinary.total(),
+        Schedule::scan(dt, 599, 60, &|_| 150.0).total()
+    );
+}
+
+/// Trimming used to sum the whole `counts` vector to ask whether it was under
+/// the ceiling yet, and then `Vec::remove(0)` — both linear, inside a loop that
+/// runs once per dropped frame. At the hundred thousand frames the window
+/// permits that is 10^10 operations for one trim, from a Life somebody typed.
+///
+/// This asserts the answer is unchanged; that it now arrives in one pass is what
+/// makes it finish.
+#[test]
+fn trimming_to_the_newest_drops_the_right_frames_in_one_pass() {
+    let dt = 1.0 / 60.0;
+    // Ten births a frame, a thousand frames: ten thousand candidates.
+    let mut s = Schedule::scan(dt, 999, 1000, &|_| 600.0);
+    let before = s.candidates();
+    assert!(before > 5_000, "the fixture needs enough to trim: {before}");
+
+    let first_frame = s.first_frame();
+    let first_birth = s.first_birth();
+    s.trim_to_newest(500);
+
+    assert!(
+        s.candidates() <= 500 || s.counts().len() == 1,
+        "trimmed to {} candidates over a ceiling of 500",
+        s.candidates()
+    );
+    // The newest are what survive, so the window moved forward and the first
+    // birth index moved with it by exactly what was dropped.
+    assert!(s.first_frame() > first_frame);
+    assert_eq!(
+        s.first_birth() - first_birth,
+        before - s.candidates(),
+        "the births dropped and the index moved by different amounts"
+    );
+    // Trimming again to the same ceiling is a no-op rather than a walk.
+    let settled = (s.first_frame(), s.first_birth(), s.candidates());
+    s.trim_to_newest(500);
+    assert_eq!((s.first_frame(), s.first_birth(), s.candidates()), settled);
+
+    // A ceiling nothing reaches leaves it alone.
+    let mut untouched = Schedule::scan(dt, 59, 60, &|_| 60.0);
+    let was = (untouched.first_frame(), untouched.candidates());
+    untouched.trim_to_newest(u64::MAX);
+    assert_eq!((untouched.first_frame(), untouched.candidates()), was);
+}
+
 /// cache hit against the cold scan.
 #[test]
 fn the_birth_schedule_is_the_rate_curves_integral() {

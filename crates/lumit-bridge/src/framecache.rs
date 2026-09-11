@@ -602,6 +602,92 @@ pub(crate) mod decode {
     }
 }
 
+/// **The resource governor's readout** (docs/13 §3), as the worker last
+/// published it.
+///
+/// Every tier in this file keeps a byte budget of its own. This is the account
+/// they are all registered against — the one that can say whether the machine
+/// as a whole is short, and whether the degradation ladder is stepping. Without
+/// it the ladder degrades silently, which docs/13 §4 names as a bug in itself.
+pub(crate) mod governor {
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    /// One tier's five numbers, as a flat set of atomics. Published together
+    /// each turn; a reader takes them together, so the worst a torn read can
+    /// show is one turn's drift rather than an impossible state.
+    struct Mirror {
+        used: AtomicU64,
+        budget: AtomicU64,
+        peak: AtomicU64,
+        denials: AtomicU64,
+        /// [`lumit_budget::Pressure`] as its discriminant, so the whole mirror
+        /// is atomics and needs no lock.
+        pressure: AtomicU64,
+    }
+
+    impl Mirror {
+        const fn new() -> Self {
+            Self {
+                used: AtomicU64::new(0),
+                budget: AtomicU64::new(0),
+                peak: AtomicU64::new(0),
+                denials: AtomicU64::new(0),
+                pressure: AtomicU64::new(0),
+            }
+        }
+
+        fn store(&self, t: lumit_budget::TierSnapshot) {
+            self.used.store(t.used, Ordering::Relaxed);
+            self.budget.store(t.budget, Ordering::Relaxed);
+            self.peak.store(t.peak, Ordering::Relaxed);
+            self.denials.store(t.denials, Ordering::Relaxed);
+            self.pressure.store(rank(t.pressure), Ordering::Relaxed);
+        }
+
+        fn load(&self) -> TierNumbers {
+            (
+                self.used.load(Ordering::Relaxed),
+                self.budget.load(Ordering::Relaxed),
+                self.peak.load(Ordering::Relaxed),
+                self.denials.load(Ordering::Relaxed),
+                self.pressure.load(Ordering::Relaxed),
+            )
+        }
+    }
+
+    /// `Pressure` as a number the interface can compare and draw a chip from:
+    /// 0 easy, 1 tight, 2 severe, 3 full. Written out rather than cast so
+    /// adding a rung cannot silently renumber the ones below it.
+    fn rank(p: lumit_budget::Pressure) -> u64 {
+        match p {
+            lumit_budget::Pressure::Easy => 0,
+            lumit_budget::Pressure::Tight => 1,
+            lumit_budget::Pressure::Severe => 2,
+            lumit_budget::Pressure::Full => 3,
+        }
+    }
+
+    /// One tier's numbers as they leave this module: used, budget, peak,
+    /// denials, and the pressure rank.
+    pub(crate) type TierNumbers = (u64, u64, u64, u64, u64);
+
+    static VRAM: Mirror = Mirror::new();
+    static RAM: Mirror = Mirror::new();
+    /// Bytes the last frame asked the card for and did not get.
+    static OVERDRAWN: AtomicU64 = AtomicU64::new(0);
+
+    pub(crate) fn publish(snapshot: lumit_budget::Snapshot, overdrawn: u64) {
+        VRAM.store(snapshot.vram);
+        RAM.store(snapshot.ram);
+        OVERDRAWN.store(overdrawn, Ordering::Relaxed);
+    }
+
+    /// `(VRAM's numbers, RAM's numbers, overdrawn bytes)`.
+    pub(crate) fn stats() -> (TierNumbers, TierNumbers, u64) {
+        (VRAM.load(), RAM.load(), OVERDRAWN.load(Ordering::Relaxed))
+    }
+}
+
 /// What the graphics driver holds for the worker's device, as it last
 /// published — the layer under every tier in this file, and the one nothing
 /// could see until now.

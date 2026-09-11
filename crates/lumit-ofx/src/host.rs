@@ -68,6 +68,11 @@ pub struct HostState {
     /// `memoryFree` can reject one we never handed out **without following
     /// it**, which is the only safe answer to a forged pointer.
     pub allocations: std::collections::BTreeMap<usize, usize>,
+    /// What those allocations add up to, kept as a running total rather than
+    /// summed on demand: it is read on every `memoryAlloc` to bill against
+    /// [`crate::suites::memory::MAX_PLUGIN_BYTES`], and summing a long list
+    /// there would make the quota cost more than what it protects against.
+    pub allocated_bytes: usize,
     /// The most recent messages, oldest first.
     pub messages: Vec<HostMessage>,
 }
@@ -88,6 +93,7 @@ impl HostState {
             effects: HandleRegistry::new(HandleKind::ImageEffect),
             params: HandleRegistry::new(HandleKind::Param),
             clips: HandleRegistry::new(HandleKind::Clip),
+            allocated_bytes: 0,
             mutexes: HandleRegistry::new(HandleKind::Mutex),
             host_props,
             allocations: std::collections::BTreeMap::new(),

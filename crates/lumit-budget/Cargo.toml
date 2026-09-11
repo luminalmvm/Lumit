@@ -1,0 +1,19 @@
+[package]
+name = "lumit-budget"
+version.workspace = true
+edition = "2021"
+license = "GPL-3.0-only"
+# Never goes to crates.io: these crates are the application, and they
+# reference each other by path (docs/05-ARCHITECTURE.md).
+publish = false
+
+[dependencies]
+# The checked size arithmetic every reservation is worked out with. The two
+# crates are the same idea at two ends of the pipe — `lumit-ingress` bounds what
+# is read in, this bounds what is held — so they share the one multiplication
+# that must not wrap.
+lumit-ingress = { path = "../lumit-ingress" }
+thiserror = "2"
+
+[lints]
+workspace = true

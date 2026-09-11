@@ -30,7 +30,7 @@ use crate::props::{Element, PropValue, PropertySet};
 use crate::quirks::QuirksTable;
 use crate::render::{RenderError, RenderRequest, Rendered};
 use crate::status::Status;
-use crate::suites::{memory, message, property};
+use crate::suites::{memory, message, multi_thread, property};
 
 // ---------------------------------------------------------------- handles --
 
@@ -529,6 +529,85 @@ fn the_memory_suite_gives_back_only_what_it_gave_out() {
         assert_eq!(
             (suite.memory_alloc)(std::ptr::null_mut(), 16, std::ptr::null_mut()),
             Status::ErrValue.code()
+        );
+    }
+}
+
+/// A plugin's allocations are billed against a ceiling, and the ceiling is what
+/// stops a runaway taking the machine with it rather than only itself.
+///
+/// The refusal is `kOfxStatErrMemory`, which every plugin already handles
+/// because a real allocator can return it — so this is the answer they have
+/// code for, not a new one they have to learn.
+#[test]
+fn a_plugin_may_not_allocate_past_its_ceiling() {
+    let suite = &memory::SUITE;
+    let mut block: *mut c_void = std::ptr::null_mut();
+
+    // SAFETY: a valid out-parameter throughout; every block that is handed out
+    // is freed before the test ends.
+    unsafe {
+        let before = memory::plugin_bytes_live();
+
+        // One request past the whole ceiling, refused outright.
+        assert_eq!(
+            (suite.memory_alloc)(
+                std::ptr::null_mut(),
+                memory::MAX_PLUGIN_BYTES.saturating_add(1),
+                &raw mut block
+            ),
+            Status::ErrMemory.code()
+        );
+        // A size whose addition to the running total would overflow is the same
+        // refusal rather than a wrap into a small number.
+        assert_eq!(
+            (suite.memory_alloc)(std::ptr::null_mut(), usize::MAX, &raw mut block),
+            Status::ErrMemory.code()
+        );
+        // Nothing was allocated on either refusal.
+        assert_eq!(memory::plugin_bytes_live(), before);
+
+        // An ordinary request is billed, and giving it back gives the budget
+        // back — a plugin that allocates and frees in a loop is not slowly
+        // refused for memory it no longer holds.
+        assert_eq!(
+            (suite.memory_alloc)(std::ptr::null_mut(), 4096, &raw mut block),
+            Status::Ok.code()
+        );
+        assert_eq!(memory::plugin_bytes_live(), before + 4096);
+        assert_eq!((suite.memory_free)(block), Status::Ok.code());
+        assert_eq!(memory::plugin_bytes_live(), before);
+    }
+}
+
+/// A fan-out is refused rather than quietly narrowed.
+///
+/// OFX promises the plugin's function runs exactly `nThreads` times with
+/// indices 0..n-1, and plugins partition their work by that index — so running
+/// fewer would leave part of a picture unrendered without saying so, which is
+/// worse than any refusal.
+#[test]
+fn an_absurd_fan_out_is_refused_rather_than_run() {
+    let suite = &multi_thread::SUITE;
+    // A function that would be called once per thread. It is never reached:
+    // every call below is refused before the fan-out starts.
+    unsafe extern "C" fn never(_index: c_uint, _count: c_uint, _arg: *mut c_void) {
+        // Reached only if the ceiling stopped working, and a test that fails
+        // by hanging is a test nobody can read. Do nothing.
+    }
+
+    // SAFETY: a real function pointer of the declared signature and a null
+    // custom argument, which the host never follows.
+    unsafe {
+        assert_eq!(
+            (suite.multi_thread)(never, 0, std::ptr::null_mut()),
+            Status::ErrValue.code(),
+            "no threads at all is still a value error"
+        );
+        assert_eq!(
+            (suite.multi_thread)(never, u32::MAX, std::ptr::null_mut()),
+            Status::ErrValue.code(),
+            "four billion threads must be refused, not queued"
         );
     }
 }

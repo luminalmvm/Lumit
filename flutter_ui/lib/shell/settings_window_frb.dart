@@ -207,6 +207,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     BridgeDiskCacheStats disk,
     BridgePlaybackTier tier,
     BridgeMemoryReport? memory,
+    BridgeGovernorReport governor,
     BridgeProjectCacheLocation? own,
   })? _perf;
   Timer? _perfTimer;
@@ -235,6 +236,10 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         // Only read when it is going to be drawn: the report is a debug-build
         // instrument, and a release build should not be making the call at all.
         memory: kDebugMode ? memoryReport() : null,
+        // Unlike the memory report above, this is not a debug instrument: a
+        // ladder nobody can see stepping is a bug in itself (docs/13 §4,
+        // "silent degradation is a bug"). It ships.
+        governor: governorReport(),
         own: _project(context)?.cacheLocation(),
       );
 
@@ -1937,6 +1942,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     final vram = perf.vram;
     final tier = perf.tier;
     final memory = perf.memory;
+    final governor = perf.governor;
 
     return _sections(t, [
       (
@@ -2070,6 +2076,34 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         ],
       ),
       _diskCache(t, ui),
+      // What the governor says about all of it. Above the memory report
+      // because it is the answer rather than the evidence: the report weighs
+      // each store, and this is the one account they are all registered
+      // against (docs/13 §3) — the place that can say whether the machine is
+      // short and whether the renderer has begun stepping down for it.
+      //
+      // **Not debug-only**, unlike the report below. Every active rung of the
+      // ladder is owed to the user in the status readout (docs/13 §4: "silent
+      // degradation is a bug"), and a preview that quietly stopped caching
+      // because the card filled is exactly the case that reads as "Lumit went
+      // slow for no reason" when nothing says so.
+      (
+        l10n.settingsGroupResourceGovernor,
+        [
+          _governorRow(
+            t,
+            l10n.settingsGovernorGraphicsMemory,
+            governor.vram,
+            'vram',
+          ),
+          _governorRow(
+            t,
+            l10n.settingsGovernorOrdinaryMemory,
+            governor.ram,
+            'ram',
+          ),
+        ],
+      ),
       // Where the memory has gone. Last on the page, under the tiers
       // it weighs: each section above reports one store, and this one reports
       // the whole process and what none of them accounts for.
@@ -2397,6 +2431,65 @@ class _SettingsWindowState extends State<_SettingsWindow> {
 
   /// Bytes as a person reads them — MB up to a gigabyte, GB above, one
   /// decimal so 85.4 GB does not print as 85.
+  /// One tier of the governor's ledger: what it holds against its ceiling, the
+  /// state that puts it in, the most it ever held at once, and — only when
+  /// there has been one — how many reservations it has refused.
+  ///
+  /// The refusal count is the line that earns this section. A tier sitting
+  /// under its budget with requests being turned away is a different fault
+  /// from one that is merely full, and it is invisible in every other number
+  /// on this page.
+  Widget? _governorRow(
+    LumitTheme t,
+    String title,
+    BridgeTierBudget tier,
+    String key,
+  ) {
+    final denials = tier.denials.toInt();
+    return _row(
+      t,
+      title,
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            l10n.settingsGovernorUsedOfBudget(
+                _bytes(tier.usedBytes), _bytes(tier.budgetBytes)),
+            key: ValueKey<String>('settings-governor-$key'),
+            style: t.small,
+          ),
+          Text(
+            _pressureLabel(tier.pressure.toInt()),
+            key: ValueKey<String>('settings-governor-$key-pressure'),
+            style: t.small.copyWith(color: t.textMuted),
+          ),
+          if (denials > 0)
+            Text(
+              l10n.settingsGovernorTurnedAway(denials),
+              key: ValueKey<String>('settings-governor-$key-denials'),
+              style: t.small.copyWith(color: t.textMuted),
+            ),
+          Text(
+            l10n.settingsGovernorPeak(_bytes(tier.peakBytes)),
+            key: ValueKey<String>('settings-governor-$key-peak'),
+            style: t.small.copyWith(color: t.textMuted),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The rung of the ladder this tier has the renderer standing on, in the
+  /// user's terms rather than the engine's — what is happening to their
+  /// preview, not what the number is.
+  static String _pressureLabel(int pressure) => switch (pressure) {
+        0 => l10n.settingsGovernorEasy,
+        1 => l10n.settingsGovernorTight,
+        2 => l10n.settingsGovernorSevere,
+        _ => l10n.settingsGovernorFull,
+      };
+
   static String _bytes(BigInt bytes) {
     final b = bytes.toDouble();
     if (b >= 1 << 30) {

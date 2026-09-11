@@ -1623,6 +1623,7 @@ dependencies = [
  "libloading",
  "lumit-aplug-testplug",
  "lumit-core",
+ "lumit-peer",
  "memmap2",
  "serde",
  "serde_json",
@@ -1638,6 +1639,7 @@ dependencies = [
  "lumit-aplug",
  "lumit-aplug-testplug",
  "lumit-core",
+ "lumit-peer",
  "tempfile",
 ]
 
@@ -1673,9 +1675,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "lumit-budget"
+version = "0.3.3"
+dependencies = [
+ "lumit-ingress",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "lumit-cache"
 version = "0.3.3"
 dependencies = [
+ "lumit-budget",
  "lz4_flex",
  "tempfile",
 ]
@@ -1685,6 +1696,7 @@ name = "lumit-colour"
 version = "0.3.3"
 dependencies = [
  "lumit-core",
+ "lumit-ingress",
  "quick-xml",
  "thiserror 2.0.18",
  "yaml-rust2",
@@ -1752,6 +1764,7 @@ dependencies = [
  "core-foundation",
  "glam",
  "half",
+ "lumit-budget",
  "lumit-core",
  "lumit-eval",
  "lumit-gpu",
@@ -1782,6 +1795,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "lumit-ingress"
+version = "0.3.3"
+dependencies = [
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "lumit-keymap"
 version = "0.3.3"
 dependencies = [
@@ -1796,6 +1816,7 @@ dependencies = [
  "bincode",
  "blake3",
  "exr",
+ "lumit-ingress",
  "rsmpeg",
  "serde",
  "tempfile",
@@ -1814,6 +1835,7 @@ dependencies = [
  "lumit-core",
  "lumit-eval",
  "lumit-ofx-testplug",
+ "lumit-peer",
  "memmap2",
  "parking_lot",
  "rayon",
@@ -1831,6 +1853,7 @@ dependencies = [
  "lumit-eval",
  "lumit-ofx",
  "lumit-ofx-testplug",
+ "lumit-peer",
  "tempfile",
 ]
 
@@ -1839,6 +1862,16 @@ name = "lumit-ofx-testplug"
 version = "0.3.3"
 dependencies = [
  "lumit-ofx",
+]
+
+[[package]]
+name = "lumit-peer"
+version = "0.3.3"
+dependencies = [
+ "blake3",
+ "getrandom 0.4.3",
+ "serde",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -1866,12 +1899,14 @@ dependencies = [
  "bytemuck",
  "half",
  "lumit-audio",
+ "lumit-budget",
  "lumit-cache",
  "lumit-colour",
  "lumit-core",
  "lumit-eval",
  "lumit-flow",
  "lumit-gpu",
+ "lumit-ingress",
  "lumit-media",
  "lumit-project",
  "lumit-render",
@@ -1922,6 +1957,7 @@ dependencies = [
  "flutter_rust_bridge",
  "lumit-aplug",
  "lumit-audio",
+ "lumit-budget",
  "lumit-core",
  "lumit-eval",
  "lumit-import",

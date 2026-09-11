@@ -105,6 +105,34 @@ pub enum ColourError {
         size: usize,
         limit: usize,
     },
+
+    /// A config or table file that would cost more to read than Lumit spends on
+    /// one — too many bytes, too many nodes, or nested too deep.
+    ///
+    /// Separate from [`ColourError::Parse`] because the file is not
+    /// *ungrammatical*: a YAML bomb is perfectly valid YAML, and saying "this
+    /// could not be read: syntax" about it would send the user looking for a
+    /// typo that is not there.
+    #[error("this colour config is larger than Lumit reads: {0}")]
+    TooLarge(lumit_ingress::IngressError),
+}
+
+/// A bounded read's refusal as this crate's own.
+///
+/// The one that is *not* a size refusal keeps its old name: a `FileTransform`
+/// pointing at a file that has been moved is the commonest thing that goes
+/// wrong with a config, it already has its sentence and its translation key,
+/// and "this colour config is larger than Lumit reads: no such file" would be
+/// a worse answer than the one shipped before this check existed.
+impl From<lumit_ingress::IngressError> for ColourError {
+    fn from(e: lumit_ingress::IngressError) -> Self {
+        match e {
+            lumit_ingress::IngressError::Io { path, reason } => {
+                ColourError::FileRead { path, reason }
+            }
+            other => ColourError::TooLarge(other),
+        }
+    }
 }
 
 impl ColourError {
@@ -143,6 +171,13 @@ impl ColourError {
             ColourError::FileRead { .. } => "file_read",
             ColourError::Parse { .. } => "parse",
             ColourError::TableTooLarge { .. } => "table_too_large",
+            // One id for the variant, as every other arm here: which ceiling
+            // was met is a fact the sentence carries, not a separate refusal.
+            // `engine_labels_test.dart` derives these ids from the variant
+            // names, so an arm that answered `e.key()` would promise the
+            // frontend an id the scrape cannot see and the window would show a
+            // raw key.
+            ColourError::TooLarge(_) => "too_large",
         }
     }
 
@@ -191,6 +226,9 @@ impl ColourError {
                 ("size", size.to_string()),
                 ("limit", limit.to_string()),
             ],
+            // One named fact: the ceiling sentence itself, which already names
+            // its own numbers and is not a config's word to be left untranslated.
+            ColourError::TooLarge(e) => vec![("reason", e.to_string())],
         }
     }
 }
@@ -269,6 +307,7 @@ mod tests {
                 size: 512,
                 limit: 128,
             },
+            ColourError::TooLarge(lumit_ingress::IngressError::Depth { limit: 32 }),
         ];
 
         let mut keys = std::collections::BTreeSet::new();

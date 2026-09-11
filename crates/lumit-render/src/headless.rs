@@ -686,17 +686,27 @@ impl HeadlessRenderer {
         fx: lumit_gpu::fx::FxEngine,
         scope: lumit_gpu::scope::ScopeEngine,
     ) -> Self {
+        // The intermediate store holds frame-sized textures across frames, so
+        // it is registered with the governor rather than spending the card
+        // behind its back (docs/13 §3). Every other cache on this renderer is
+        // host memory; this one is the card's.
+        let mut fx_cache = crate::fxops::FxCache::default();
+        fx_cache.account_against(std::sync::Arc::clone(gpu.ledger()));
         let parts = Parts {
             colour,
             compositor,
             fx: std::collections::HashMap::from([(gpu.working(), fx)]),
             lut_cache: std::cell::RefCell::new(crate::fxops::LutCache::default()),
-            fx_cache: std::cell::RefCell::new(crate::fxops::FxCache::default()),
+            fx_cache: std::cell::RefCell::new(fx_cache),
             flow: std::cell::RefCell::new(crate::realise::CompositeFlow::default()),
         };
         // Flow runs on this same device rather than opening one of its own.
         // The handles are reference-counted, so this shares it.
         let pool = DecodePool::with_gpu(&gpu);
+        // One ledger for the whole renderer, taken before the device moves into
+        // the struct: every store below that holds frame-sized memory registers
+        // against this one account (docs/13 §3).
+        let ledger = std::sync::Arc::clone(gpu.ledger());
         Self {
             gpu,
             parts: Some(parts),
@@ -712,6 +722,9 @@ impl HeadlessRenderer {
                 // Evictions have to be visible, or the tiers below never hear
                 // that a frame exists and the ladder is a drop (docs/06 §5.3).
                 lru.collect_evictions();
+                // Finished frames held on the card, kept across frames like the
+                // intermediates and counted in the same account (docs/13 §3).
+                lru.account_against(ledger, lumit_budget::Tier::Vram);
                 lru
             },
             demotions: Vec::new(),
@@ -1688,6 +1701,45 @@ impl HeadlessRenderer {
     #[must_use]
     pub fn decode_memory(&self) -> (usize, usize) {
         self.pool.memory()
+    }
+
+    /// What the resource governor is holding, across both tiers
+    /// (docs/13 §3) — every store on this renderer that has registered with it,
+    /// plus whatever frame is in flight.
+    ///
+    /// The readout the degradation ladder owes the user: "silent degradation is
+    /// a bug" (docs/13 §4), and a ladder nobody can see stepping is exactly
+    /// that. Read in one go so the numbers shown together were true together.
+    #[must_use]
+    pub fn governor(&self) -> lumit_budget::Snapshot {
+        self.gpu.ledger().snapshot()
+    }
+
+    /// Set the governor's two ceilings (docs/13 §3), from the figures the
+    /// frontend read off the machine.
+    ///
+    /// The renderer sized the card's tier from its own adapter as it opened,
+    /// which is all a graphics context can honestly answer for. This is where
+    /// the rest arrives: what the machine has in ordinary memory, and — on a
+    /// card that draws from that same memory — the share of it the card may
+    /// have, which needed both figures to work out and so could not be decided
+    /// either side alone.
+    ///
+    /// Changing a ceiling frees nothing and takes nothing away: the
+    /// reservations that exist are memory that exists. What it changes is what
+    /// is granted from here on, and where the degradation ladder starts
+    /// stepping.
+    pub fn set_memory_budgets(&self, vram: u64, ram: u64) {
+        self.gpu.ledger().set_budget(lumit_budget::Tier::Vram, vram);
+        self.gpu.ledger().set_budget(lumit_budget::Tier::Ram, ram);
+    }
+
+    /// Bytes the frame being drawn asked the card for and did not get — see
+    /// [`lumit_gpu::GpuContext::vram_overdrawn`]. Nought on every ordinary
+    /// frame; anything else is a frame that outgrew what was reserved for it.
+    #[must_use]
+    pub fn vram_overdrawn(&self) -> u64 {
+        self.gpu.vram_overdrawn()
     }
 
     /// What the graphics driver holds for this renderer's device — see
