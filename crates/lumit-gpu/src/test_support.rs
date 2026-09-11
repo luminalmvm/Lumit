@@ -59,8 +59,21 @@ impl SharedGpu {
         // test starts on a closed one.
         self.ctx.frame.replace(None);
         self.ctx.frame_depth.set(0);
-        // The pool belongs to the frame that was open, and that frame is gone.
-        self.ctx.pool.borrow_mut().clear();
+        // The pool belongs to the frame that was open, and that frame is gone —
+        // and so does the ledger charge that accounts for it. A test that ended
+        // between `begin_frame` and `end_frame` would otherwise hand the next
+        // one a card the ledger believes is already half full, which is a
+        // failure that moves about as tests are added.
+        self.ctx.release_frame_memory();
+        // The budgets too: a test that lowered one to reach a ceiling must not
+        // leave every test after it renting a smaller card.
+        self.ctx
+            .ledger()
+            .set_budget(lumit_budget::Tier::Vram, lumit_budget::DEFAULT_VRAM_BUDGET);
+        self.ctx
+            .ledger()
+            .set_budget(lumit_budget::Tier::Ram, lumit_budget::DEFAULT_RAM_BUDGET);
+        self.ctx.ledger().reset_statistics();
         self.fx.reset_for_tests();
     }
 }

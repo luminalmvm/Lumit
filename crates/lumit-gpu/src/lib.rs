@@ -104,6 +104,32 @@ pub struct GpuContext {
     /// How many work textures this context has created rather than taken from
     /// the pool ([`Self::work_textures_made`]).
     work_made: std::cell::Cell<u64>,
+    /// The governor's ledger: what this renderer is holding, across every
+    /// context that shares it (docs/13 §3).
+    ///
+    /// Shared by `Arc` because a nested comp gets a context of its own
+    /// ([`Self::clone_handle`]) and the card does not: two contexts drawing one
+    /// frame are spending one pool of video memory, and a ledger per context
+    /// would let each of them believe it had all of it.
+    ledger: std::sync::Arc<lumit_budget::Ledger>,
+    /// What this frame has charged the ledger for, given back at the outermost
+    /// [`Self::end_frame`].
+    ///
+    /// One reservation rather than one per texture, folded as the frame goes:
+    /// a work texture's life *is* the frame (the pool is emptied when the frame
+    /// closes, and nothing is meant to outlive it), so one value released at
+    /// the one moment they all end is both simpler and harder to get wrong than
+    /// a reservation travelling beside each texture.
+    frame_charge: std::cell::RefCell<Option<lumit_budget::Reservation>>,
+    /// Bytes this frame asked for and the ledger would not grant.
+    ///
+    /// A frame cannot be stopped half way through by a texture that will not
+    /// fit — `work_texture` has no way to say no, and a pass without its output
+    /// would draw nothing rather than something smaller. So the overdraft is
+    /// *recorded* instead, which is what makes the next frame's grant honest
+    /// and what the readout shows. Nought on a frame that stayed inside its
+    /// budget, which is every ordinary frame.
+    overdrawn: std::cell::Cell<u64>,
     /// How many command buffers **this context** has handed to the driver
     /// ([`Self::submits_so_far`]).
     ///
@@ -455,6 +481,9 @@ impl GpuContext {
             frame_depth: std::cell::Cell::new(0),
             pool: std::cell::RefCell::new(Vec::new()),
             work_made: std::cell::Cell::new(0),
+            ledger: lumit_budget::Ledger::new(),
+            frame_charge: std::cell::RefCell::new(None),
+            overdrawn: std::cell::Cell::new(0),
             submits: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
             // No callback is installed on a device somebody else opened, so
             // this stays down: a context built this way does not know when its
@@ -522,6 +551,11 @@ impl GpuContext {
             frame_depth: std::cell::Cell::new(0),
             pool: std::cell::RefCell::new(Vec::new()),
             work_made: std::cell::Cell::new(0),
+            // The ledger is shared, not copied: two contexts drawing one frame
+            // are spending one card's memory.
+            ledger: std::sync::Arc::clone(&self.ledger),
+            frame_charge: std::cell::RefCell::new(None),
+            overdrawn: std::cell::Cell::new(0),
             submits: std::sync::Arc::clone(&self.submits),
             lost: std::sync::Arc::clone(&self.lost),
         }
@@ -670,6 +704,170 @@ impl GpuContext {
         self.frame_depth.set(self.frame_depth.get() + 1);
     }
 
+    /// Let go of everything the frame was holding: the work-texture pool, and
+    /// the ledger charge that accounts for it.
+    ///
+    /// **The two must always go together.** The pool is only safe because one
+    /// command buffer orders it, so it ends with that command buffer; the charge
+    /// is what the ledger believes about that pool, so it has to end at exactly
+    /// the same moment. Two `clear()` calls in two places would eventually
+    /// disagree, and a ledger that disagrees with the pool is a ledger that
+    /// grants memory which is gone — so there is one function and both callers
+    /// use it.
+    ///
+    /// What is dropped here the driver hands back on the next `reclaim`
+    /// (§7.0.2).
+    fn release_frame_memory(&self) {
+        self.pool.borrow_mut().clear();
+        // Dropping the reservation is the whole release: nothing to remember to
+        // call, and no way to call it twice.
+        self.frame_charge.borrow_mut().take();
+        self.overdrawn.set(0);
+    }
+
+    // ------------------------------------------------ the governor's ledger --
+
+    /// What this renderer is holding, and what it may still hold (docs/13 §3).
+    ///
+    /// Shared across every context that came from one device, because they are
+    /// all spending one card's memory.
+    #[must_use]
+    pub fn ledger(&self) -> &std::sync::Arc<lumit_budget::Ledger> {
+        &self.ledger
+    }
+
+    /// How close the card is to its ceiling right now.
+    ///
+    /// The signal a kernel reads to trim its own work before it is refused, and
+    /// the one the effect walk reads to stop adding passes (docs/13 §4). Two
+    /// relaxed atomic loads, so asking once per effect costs nothing worth
+    /// measuring.
+    #[must_use]
+    pub fn vram_pressure(&self) -> lumit_budget::Pressure {
+        self.ledger.pressure(lumit_budget::Tier::Vram)
+    }
+
+    /// Open a frame, refusing it outright if `estimate` bytes of video memory
+    /// cannot be reserved for it.
+    ///
+    /// # In plain terms
+    ///
+    /// This is where "no" is said. A texture cannot be refused half way through
+    /// a pass — the pass would draw nothing rather than something smaller — so
+    /// the decision is made once, before any of it starts, at the one boundary
+    /// that can still answer. A refusal here is the degradation ladder's cue
+    /// (docs/13 §4): render at a lower tier, tile the frame, or say so calmly.
+    ///
+    /// `estimate` is the frame's expected **peak**, not its total: the work
+    /// texture pool hands the same memory round, so a stack of forty effects on
+    /// one layer peaks at a handful of frame-sized textures rather than forty.
+    ///
+    /// Only the outermost frame reserves. A nested comp or a shutter sample
+    /// opens a frame inside this one and is already covered by it — reserving
+    /// again would count the same memory twice and refuse a frame that fits.
+    ///
+    /// # Errors
+    ///
+    /// [`lumit_budget::BudgetError::Denied`], naming what was wanted and what
+    /// was free.
+    pub fn try_begin_frame(&self, estimate: u64) -> Result<(), lumit_budget::BudgetError> {
+        if self.frame_depth.get() == 0 {
+            let held = self.ledger.reserve(lumit_budget::Tier::Vram, estimate)?;
+            // Folded in rather than put in place: a texture made between two
+            // frames (a source upload, a LUT bake) charged into this same
+            // value, and it is still on the card. Replacing would hand those
+            // bytes back to a ledger that would then lend them to somebody
+            // else.
+            self.hold_vram(held);
+            self.overdrawn.set(0);
+        }
+        self.begin_frame();
+        Ok(())
+    }
+
+    /// Fold a granted reservation into the frame's one charge.
+    fn hold_vram(&self, more: lumit_budget::Reservation) {
+        let mut charge = self.frame_charge.borrow_mut();
+        match charge.as_mut() {
+            // A same-tier fold always succeeds; the branch exists because
+            // `absorb` hands the reservation back rather than dropping it on a
+            // mismatch, and dropping it here would release memory that is very
+            // much still held.
+            Some(held) => {
+                if let Err(unabsorbed) = held.absorb(more) {
+                    drop(charge);
+                    // Cannot happen — both are Vram — but if it ever did,
+                    // keeping it is the safe direction.
+                    *self.frame_charge.borrow_mut() = Some(unabsorbed);
+                }
+            }
+            None => *charge = Some(more),
+        }
+    }
+
+    /// Charge the ledger for a texture this frame has just made.
+    ///
+    /// Folded into the frame's one reservation rather than held per texture,
+    /// because a work texture's life *is* the frame: the pool is emptied when
+    /// the frame closes and nothing is meant to outlive it, so one value
+    /// released at the one moment they all end is both simpler and harder to
+    /// get wrong.
+    ///
+    /// **It cannot refuse**, and that is deliberate rather than an oversight:
+    /// the caller has no way to carry on without the texture. What it does
+    /// instead is record the overdraft, which makes [`Self::vram_pressure`]
+    /// truthful, makes the next frame's reservation honest, and shows up in the
+    /// readout. The place that can say no is [`Self::try_begin_frame`], and the
+    /// place that acts on the pressure before it gets here is the effect walk.
+    pub(crate) fn charge_vram(&self, bytes: u64) {
+        match self.ledger.reserve(lumit_budget::Tier::Vram, bytes) {
+            Ok(more) => self.hold_vram(more),
+            Err(_) => self
+                .overdrawn
+                .set(self.overdrawn.get().saturating_add(bytes)),
+        }
+    }
+
+    /// Let go of `bytes` of this frame's charge, because something that
+    /// outlives the frame has taken the texture and reserved for it itself.
+    ///
+    /// # In plain terms
+    ///
+    /// One texture, one charge, at every moment — docs/13 §3's "the ledger MUST
+    /// equal reality" read in both directions. A work texture is normally the
+    /// frame's and dies with it, which is why the whole frame's charge is one
+    /// value released at `end_frame`. An intermediate the effect cache files is
+    /// the exception: it leaves the frame and is read on a later one, so the
+    /// store takes up the charge and the frame puts it down. Without this the
+    /// pair would be counted twice until the frame ended, and a card that had
+    /// room would be told it was full.
+    ///
+    /// An overdraft is settled first, because those bytes were never granted —
+    /// giving them back would credit the ledger for memory it never lent.
+    pub fn hand_off_vram(&self, bytes: u64) {
+        let over = self.overdrawn.get();
+        let settled = over.min(bytes);
+        self.overdrawn.set(over - settled);
+        let Some(rest) = bytes.checked_sub(settled).filter(|b| *b > 0) else {
+            return;
+        };
+        if let Some(held) = self.frame_charge.borrow_mut().as_mut() {
+            let keeping = held.bytes().saturating_sub(rest);
+            held.shrink_to(keeping);
+        }
+    }
+
+    /// Bytes this frame asked the ledger for and did not get.
+    ///
+    /// Nought on every ordinary frame. Anything else means the frame outgrew
+    /// what was reserved for it, which is a fact about the project rather than
+    /// a failure — and a fact the next frame's reservation and the status
+    /// readout both need.
+    #[must_use]
+    pub fn vram_overdrawn(&self) -> u64 {
+        self.overdrawn.get()
+    }
+
     /// Close one [`Self::begin_frame`]. On the outermost one, submit whatever
     /// the batch holds and empty the work-texture pool.
     pub fn end_frame(&self) {
@@ -677,10 +875,7 @@ impl GpuContext {
         self.frame_depth.set(depth);
         if depth == 0 {
             self.flush();
-            // The pool is only safe because one command buffer orders it, so it
-            // ends with that command buffer. What is dropped here the driver
-            // hands back on the next `reclaim` (§7.0.2).
-            self.pool.borrow_mut().clear();
+            self.release_frame_memory();
         }
     }
 
@@ -935,6 +1130,9 @@ impl GpuContext {
             frame_depth: std::cell::Cell::new(0),
             pool: std::cell::RefCell::new(Vec::new()),
             work_made: std::cell::Cell::new(0),
+            ledger: lumit_budget::Ledger::new(),
+            frame_charge: std::cell::RefCell::new(None),
+            overdrawn: std::cell::Cell::new(0),
             submits: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
             lost,
         })
@@ -1147,6 +1345,41 @@ pub(crate) const WORK_USAGE: wgpu::TextureUsages = wgpu::TextureUsages::TEXTURE_
 /// linear light, and an sRGB target would have the hardware encode on every
 /// write and decode on every read of an intermediate. Anything above white is
 /// clipped at eight bits, which is the trade that setting is.
+/// What one texture of this size and format occupies, for the ledger.
+///
+/// Worked out in `u64` and checked, because the width and height reach here
+/// from a composition's own numbers and the product of two believable ones is
+/// not always believable. A format this engine does not use answers with the
+/// widest it does, which errs toward refusing early — the safe direction for a
+/// budget.
+///
+/// Ignores mip levels and alignment padding: every texture the engine makes is
+/// a single mip, and a driver's row padding is a few per cent that would only
+/// ever make the true figure larger than the one recorded. A ledger that reads
+/// slightly low grants a frame it should not; one that reads slightly high
+/// refuses early. This rounds the safe way by counting the widest format when
+/// it is unsure, and is otherwise exact.
+#[must_use]
+pub fn texture_bytes(format: wgpu::TextureFormat, width: u32, height: u32) -> u64 {
+    let per_texel: u64 = match format {
+        wgpu::TextureFormat::Rgba8Unorm | wgpu::TextureFormat::Rgba8UnormSrgb => 4,
+        wgpu::TextureFormat::Rgba16Float => 8,
+        wgpu::TextureFormat::Rgba32Float => 16,
+        wgpu::TextureFormat::R8Unorm => 1,
+        wgpu::TextureFormat::R16Float => 2,
+        wgpu::TextureFormat::R32Float | wgpu::TextureFormat::Rg16Float => 4,
+        wgpu::TextureFormat::Rg32Float => 8,
+        // Not one of ours: count it as the widest we use, so an unfamiliar
+        // format makes the budget cautious rather than blind.
+        _ => 16,
+    };
+    lumit_budget::checked_raster_bytes(u64::from(width), u64::from(height), 1, per_texel)
+        // A size whose product does not fit a u64 is not a texture any card
+        // will make; reporting the largest number there is refuses it at the
+        // ledger rather than at the driver.
+        .unwrap_or(u64::MAX)
+}
+
 #[must_use]
 pub fn working_format_for(bits: u32) -> wgpu::TextureFormat {
     match bits {

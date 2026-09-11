@@ -1675,6 +1675,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "lumit-budget"
+version = "0.3.3"
+dependencies = [
+ "lumit-ingress",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "lumit-cache"
 version = "0.3.3"
 dependencies = [
@@ -1755,6 +1763,7 @@ dependencies = [
  "core-foundation",
  "glam",
  "half",
+ "lumit-budget",
  "lumit-core",
  "lumit-eval",
  "lumit-gpu",
@@ -1889,6 +1898,7 @@ dependencies = [
  "bytemuck",
  "half",
  "lumit-audio",
+ "lumit-budget",
  "lumit-cache",
  "lumit-colour",
  "lumit-core",

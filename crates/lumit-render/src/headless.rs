@@ -686,12 +686,18 @@ impl HeadlessRenderer {
         fx: lumit_gpu::fx::FxEngine,
         scope: lumit_gpu::scope::ScopeEngine,
     ) -> Self {
+        // The intermediate store holds frame-sized textures across frames, so
+        // it is registered with the governor rather than spending the card
+        // behind its back (docs/13 §3). Every other cache on this renderer is
+        // host memory; this one is the card's.
+        let mut fx_cache = crate::fxops::FxCache::default();
+        fx_cache.account_against(std::sync::Arc::clone(gpu.ledger()));
         let parts = Parts {
             colour,
             compositor,
             fx: std::collections::HashMap::from([(gpu.working(), fx)]),
             lut_cache: std::cell::RefCell::new(crate::fxops::LutCache::default()),
-            fx_cache: std::cell::RefCell::new(crate::fxops::FxCache::default()),
+            fx_cache: std::cell::RefCell::new(fx_cache),
             flow: std::cell::RefCell::new(crate::realise::CompositeFlow::default()),
         };
         // Flow runs on this same device rather than opening one of its own.
