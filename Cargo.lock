@@ -1686,6 +1686,7 @@ dependencies = [
 name = "lumit-cache"
 version = "0.3.3"
 dependencies = [
+ "lumit-budget",
  "lz4_flex",
  "tempfile",
 ]
@@ -1956,6 +1957,7 @@ dependencies = [
  "flutter_rust_bridge",
  "lumit-aplug",
  "lumit-audio",
+ "lumit-budget",
  "lumit-core",
  "lumit-eval",
  "lumit-import",

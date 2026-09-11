@@ -5675,6 +5675,64 @@
   "@settingsGroupMemory": {
     "description": "Settings window: heading over a group of rows."
   },
+  "settingsGroupResourceGovernor": "Resource governor",
+  "@settingsGroupResourceGovernor": {
+    "description": "Settings window: heading over a group of rows."
+  },
+  "settingsGovernorGraphicsMemory": "Graphics memory",
+  "@settingsGovernorGraphicsMemory": {
+    "description": "Settings, resource governor: the name of the row reporting memory reserved on the graphics card."
+  },
+  "settingsGovernorOrdinaryMemory": "Ordinary memory",
+  "@settingsGovernorOrdinaryMemory": {
+    "description": "Settings, resource governor: the name of the row reporting memory reserved in ordinary (system) RAM."
+  },
+  "settingsGovernorUsedOfBudget": "{used} of {budget}",
+  "@settingsGovernorUsedOfBudget": {
+    "description": "Settings, resource governor: what a tier holds against its ceiling. Both placeholders are amounts such as 1.5 GB.",
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "budget": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGovernorPeak": "Most at once: {peak}",
+  "@settingsGovernorPeak": {
+    "description": "Settings, resource governor: the largest amount a tier held at any one moment this session. The placeholder is an amount such as 1.5 GB.",
+    "placeholders": {
+      "peak": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGovernorEasy": "Room to spare",
+  "@settingsGovernorEasy": {
+    "description": "Settings, resource governor: the state of a memory tier that is comfortably under its ceiling."
+  },
+  "settingsGovernorTight": "Getting tight",
+  "@settingsGovernorTight": {
+    "description": "Settings, resource governor: the state of a memory tier that is approaching its ceiling."
+  },
+  "settingsGovernorSevere": "Nearly full — pausing cache fill",
+  "@settingsGovernorSevere": {
+    "description": "Settings, resource governor: the state of a memory tier close enough to its ceiling that the renderer has stopped adding to its caches."
+  },
+  "settingsGovernorFull": "Full — giving back cold frames",
+  "@settingsGovernorFull": {
+    "description": "Settings, resource governor: the state of a memory tier at its ceiling, where the renderer is evicting cached frames to make room."
+  },
+  "settingsGovernorTurnedAway": "{count, plural, =1{1 request turned away} other{{count} requests turned away}}",
+  "@settingsGovernorTurnedAway": {
+    "description": "Settings, resource governor: how many memory reservations were refused this session. Shown only when there has been at least one.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "settingsGroupPanels": "Panels",
   "@settingsGroupPanels": {
     "description": "Settings window: heading over a group of rows."

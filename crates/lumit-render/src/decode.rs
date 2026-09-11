@@ -194,6 +194,58 @@ pub struct CompFrame {
     /// otherwise every frame would appear to cost one repaint (~16 ms) and the
     /// resolution would walk down even on comps that play fine at Full.
     pub render_cost: std::time::Duration,
+    /// The governor's grant for every raster in `layers` (docs/13 §3): the
+    /// decoded frames, their temporal neighbours, the measured flow fields and
+    /// each shutter moment, weighed once and held until this frame is done
+    /// with. `None` on a pool nobody registered with the governor.
+    ///
+    /// # In plain terms
+    ///
+    /// This is the renderer's largest allocation that is neither a cache entry
+    /// nor a frame's own texture, and it was the one nobody was counting. A
+    /// comp of twenty 4K layers, each with four temporal neighbours, a measured
+    /// flow field and eight shutter moments, is a decode job that reaches for
+    /// tens of gigabytes of ordinary memory before anything is drawn — every
+    /// piece of it a reasonable size on its own.
+    ///
+    /// It is made on the decode thread, sent down a channel, and dropped by
+    /// whoever finished drawing it, so there is no scope that spans its life
+    /// and no release anybody could be relied on to call. Which is exactly the
+    /// shape a reservation is for: it goes back when the frame does, including
+    /// when the frame is dropped because a newer one superseded it.
+    pub held: Option<lumit_budget::Reservation>,
+}
+
+/// What a decoded comp frame's rasters weigh, all of them: the frame, its
+/// temporal neighbours, the flow fields measured against them, and each
+/// shutter moment with everything hanging off it.
+///
+/// Every term is the length of a buffer that exists, not a size worked out
+/// from the dimensions — a raster that decoded short weighs what it is.
+#[must_use]
+fn weigh(layers: &[CompLayerPixels]) -> u64 {
+    layers
+        .iter()
+        .map(|l| {
+            let rgba = l.rgba.len() as u64;
+            let temporal: u64 = l.temporal.iter().map(|(_, t)| t.len() as u64).sum();
+            let flow: u64 = l
+                .flow_fields
+                .iter()
+                .map(|(_, (u, v, c))| ((u.len() + v.len() + c.len()) * 4) as u64)
+                .sum();
+            // A moment is a whole layer-pixels of its own, so it is weighed by
+            // the same rule rather than a second one that could drift.
+            let shutter: u64 = l
+                .shutter
+                .iter()
+                .map(|(_, m)| weigh(std::slice::from_ref(m)))
+                .sum();
+            rgba.saturating_add(temporal)
+                .saturating_add(flow)
+                .saturating_add(shutter)
+        })
+        .fold(0u64, u64::saturating_add)
 }
 
 pub enum PreviewResult {
@@ -334,6 +386,11 @@ pub struct DecodePool {
     /// thing the drag fast path is *measured* by: a value drag must not move it
     /// (see the headless preview tests).
     comp_decodes: u64,
+    /// The governor's ledger, once the owner has registered this pool
+    /// ([`DecodePool::account_against`]). Held here as well as inside the two
+    /// stores' own accounts because the frames this pool sends *out* are
+    /// charged against it too, and they belong to no store at all.
+    ledger: Option<std::sync::Arc<lumit_budget::Ledger>>,
 }
 
 /// The decoded-frame cache's default share of RAM; Settings → Performance
@@ -407,6 +464,7 @@ impl DecodePool {
             gpu: None,
             flow_cache: lumit_cache::ByteLru::new(DEFAULT_FLOW_CACHE_BYTES),
             comp_decodes: 0,
+            ledger: None,
         }
     }
 
@@ -415,15 +473,78 @@ impl DecodePool {
     /// the device rather than duplicating it — flow work then queues behind the
     /// same driver as everything else instead of competing with it from a
     /// second context.
+    ///
+    /// The governor's ledger is shared with it for the same reason
+    /// ([`lumit_gpu::GpuContext::sharing`]): flow fields are spending the same
+    /// card as the frames they are measured from, and a second ledger would
+    /// have both halves believing they had all of it.
     #[must_use]
     pub fn with_gpu(ctx: &lumit_gpu::GpuContext) -> Self {
-        Self {
-            gpu: Some(lumit_gpu::GpuContext::from_parts(
-                ctx.device.clone(),
-                ctx.queue.clone(),
-            )),
+        let mut pool = Self {
+            gpu: Some(lumit_gpu::GpuContext::sharing(ctx)),
             ..Self::new()
+        };
+        pool.account_against(std::sync::Arc::clone(ctx.ledger()));
+        pool
+    }
+
+    /// Account both of this pool's stores against the governor's ledger
+    /// (docs/13 §3), in the **host memory** tier.
+    ///
+    /// Decoded frames and measured flow fields are the largest things this
+    /// process holds in ordinary memory — three quarters of a gigabyte of
+    /// default budget between them — and until now each knew only its own
+    /// ceiling. Two private budgets that cannot see each other, next to the
+    /// card's, is how a machine ends up holding rather more than any one of
+    /// them would have allowed.
+    ///
+    /// The pool's own flow work is on the card and is already counted there by
+    /// the context it shares.
+    pub fn account_against(&mut self, ledger: std::sync::Arc<lumit_budget::Ledger>) {
+        self.frame_cache
+            .account_against(std::sync::Arc::clone(&ledger), lumit_budget::Tier::Ram);
+        self.flow_cache
+            .account_against(std::sync::Arc::clone(&ledger), lumit_budget::Tier::Ram);
+        self.ledger = Some(ledger);
+    }
+
+    /// **The second rung of the ladder** (docs/13 §4) for host memory: when the
+    /// governor says memory is spent, give back the cold half of both stores.
+    ///
+    /// They are the cheapest thing in the process to lose — a cache entry is a
+    /// decode that need not happen again, never a picture that cannot be made —
+    /// and losing one is invisible in the output, which is what makes this a
+    /// step that may be taken on a memory reading at all. Answers whether
+    /// anything actually went.
+    pub fn trim_under_pressure(&mut self) -> bool {
+        if !self.ram_pressure().should_trim() {
+            return false;
         }
+        halve(&mut self.frame_cache) | halve(&mut self.flow_cache)
+    }
+
+    /// Reserve what a decoded frame's rasters weigh, for as long as the frame
+    /// lives (docs/13 §3).
+    ///
+    /// The rasters exist by the time this runs — they had to be decoded for
+    /// their weight to be known — so a refusal is **recorded, not obeyed**: the
+    /// ledger counts the denial and the pressure it reads from goes to the top,
+    /// which is what makes the *next* decode trim before it starts. Obeying it
+    /// would mean handing back a frame with layers missing, and changing the
+    /// picture on a memory reading is the one thing the ladder never does.
+    fn charge(&self, made: &CompFrame) -> Option<lumit_budget::Reservation> {
+        self.ledger
+            .as_ref()?
+            .try_reserve(lumit_budget::Tier::Ram, weigh(&made.layers))
+    }
+
+    /// How close host memory is to its ceiling, as the governor sees it —
+    /// every store that has registered with it, not just this pool's two.
+    #[must_use]
+    pub fn ram_pressure(&self) -> lumit_budget::Pressure {
+        self.frame_cache
+            .pressure()
+            .unwrap_or(lumit_budget::Pressure::Easy)
     }
 
     /// How many comp frames this pool has decoded since it was made.
@@ -495,7 +616,12 @@ impl DecodePool {
         progress: &dyn Fn(usize),
     ) -> Result<CompFrame, String> {
         self.comp_decodes += 1;
-        decode_comp(
+        // Before a byte is decoded: a machine already at its ceiling gives up
+        // the cold half of both stores first, so this frame's rasters land in
+        // room that was made for them rather than on top of a cache nobody is
+        // about to read.
+        self.trim_under_pressure();
+        let mut made = decode_comp(
             &mut self.decoders,
             &mut self.frame_cache,
             &mut self.flow_engine,
@@ -506,7 +632,9 @@ impl DecodePool {
             jobs,
             media_epoch,
             progress,
-        )
+        )?;
+        made.held = self.charge(&made);
+        Ok(made)
     }
 }
 
@@ -870,6 +998,26 @@ fn combine_pair(
     })
 }
 
+/// Give back about half of a store, by its own eviction order, and answer
+/// whether anything went.
+///
+/// The store's own cost-aware score decides which (docs/06 §5.3) — the same one
+/// that runs when its budget is exceeded — reached by asking it to fit a
+/// smaller budget for a moment. Its real budget is put straight back, so this
+/// is a one-off release and not a permanent shrink, and a pin is never dropped.
+fn halve<K: std::hash::Hash + Eq + Clone, V: lumit_cache::ByteSized>(
+    store: &mut lumit_cache::ByteLru<K, V>,
+) -> bool {
+    let before = store.used_bytes();
+    if before == 0 {
+        return false;
+    }
+    let budget = store.budget_bytes();
+    store.set_budget(before / 2);
+    store.set_budget(budget);
+    store.used_bytes() < before
+}
+
 #[allow(clippy::too_many_arguments)] // one worker call; bundling would hide it
 fn decode_comp(
     decoders: &mut HashMap<Uuid, lumit_media::VideoDecoder>,
@@ -1111,6 +1259,9 @@ fn decode_comp(
         media_epoch,
         layers,
         render_cost: decode_started.elapsed(),
+        // Charged by the pool, which is the thing that holds the ledger. The
+        // free function stays free of it so a test can decode without one.
+        held: None,
     })
 }
 

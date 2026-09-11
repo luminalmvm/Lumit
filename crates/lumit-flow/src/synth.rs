@@ -79,7 +79,7 @@ fn storage_entry(binding: u32, read_only: bool) -> wgpu::BindGroupLayoutEntry {
 
 impl GpuSynth {
     pub fn new(ctx: &GpuContext) -> Result<Self, FlowError> {
-        let ctx = GpuContext::from_parts(ctx.device.clone(), ctx.queue.clone());
+        let ctx = GpuContext::sharing(ctx);
         ctx.device.push_error_scope(wgpu::ErrorFilter::Validation);
         let shader = ctx
             .device

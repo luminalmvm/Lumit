@@ -424,6 +424,13 @@ fn sync_caches(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
     let (textures, buffers) = state.renderer.gpu_live_objects();
     crate::framecache::gpu::publish(allocated, reserved, textures, buffers);
     crate::framecache::gpu::publish_unified(state.renderer.unified_memory());
+    // The governor's own account of all of it (docs/13 §3), published beside
+    // the driver's so a report can be read against the thing it is meant to
+    // describe: the ladder stepping is only visible if somebody says so.
+    crate::framecache::governor::publish(
+        state.renderer.governor(),
+        state.renderer.vram_overdrawn(),
+    );
     let (used, _, entries) = state.renderer.frame_texture_stats();
     if (used as u64, entries as u64) != state.published_vram {
         state.published_vram = (used as u64, entries as u64);

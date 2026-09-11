@@ -493,6 +493,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeFrameProfile dco_decode_bridge_frame_profile(dynamic raw);
 
   @protected
+  BridgeGovernorReport dco_decode_bridge_governor_report(dynamic raw);
+
+  @protected
   BridgeGraphEdge dco_decode_bridge_graph_edge(dynamic raw);
 
   @protected
@@ -793,6 +796,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeTextDocument dco_decode_bridge_text_document(dynamic raw);
+
+  @protected
+  BridgeTierBudget dco_decode_bridge_tier_budget(dynamic raw);
 
   @protected
   BridgeTrackFailure dco_decode_bridge_track_failure(dynamic raw);
@@ -1776,6 +1782,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeGovernorReport sse_decode_bridge_governor_report(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeGraphEdge sse_decode_bridge_graph_edge(SseDeserializer deserializer);
 
   @protected
@@ -2116,6 +2126,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   BridgeTextDocument sse_decode_bridge_text_document(
       SseDeserializer deserializer);
+
+  @protected
+  BridgeTierBudget sse_decode_bridge_tier_budget(SseDeserializer deserializer);
 
   @protected
   BridgeTrackFailure sse_decode_bridge_track_failure(
@@ -3214,6 +3227,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeFrameProfile self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_governor_report(
+      BridgeGovernorReport self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_graph_edge(
       BridgeGraphEdge self, SseSerializer serializer);
 
@@ -3599,6 +3616,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_text_document(
       BridgeTextDocument self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_tier_budget(
+      BridgeTierBudget self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_track_failure(

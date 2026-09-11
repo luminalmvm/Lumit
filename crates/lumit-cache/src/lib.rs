@@ -64,6 +64,27 @@ pub struct ByteLru<K, V> {
     /// waiting to be drained. Empty — and never filled — unless it did.
     evicted: Vec<(K, V, u32)>,
     collect_evicted: bool,
+    /// The governor's account of what this store holds, once somebody has
+    /// registered it ([`ByteLru::account_against`]).
+    account: Option<Account>,
+}
+
+/// A store's standing reservation against the resource governor (docs/13 §3).
+///
+/// # In plain terms
+///
+/// A byte budget of its own tells a store when *it* has had enough. It does
+/// not tell it that four other stores, a decode queue and a frame in flight
+/// have between them already spent the machine — and five private budgets that
+/// cannot see each other is exactly how a process ends up holding five times
+/// what any one of them would allow. This is the store saying what it holds
+/// somewhere they can all be added up.
+struct Account {
+    ledger: std::sync::Arc<lumit_budget::Ledger>,
+    tier: lumit_budget::Tier,
+    /// What the ledger has granted for the current contents. Re-sized after
+    /// every change; dropped, and so given back entire, when the store empties.
+    held: Option<lumit_budget::Reservation>,
 }
 
 struct Entry<V> {
@@ -93,6 +114,82 @@ impl<K: Eq + Hash + Clone, V: ByteSized> ByteLru<K, V> {
             tick: 0,
             evicted: Vec::new(),
             collect_evicted: false,
+            account: None,
+        }
+    }
+
+    /// Account this store's contents against the governor's ledger, in `tier`
+    /// (docs/13 §3: every frame-sized allocation is registered with size, tier
+    /// and owner).
+    ///
+    /// Called once, by whoever builds the store, with the ledger of the device
+    /// or machine the bytes are actually on. A store nobody registers keeps its
+    /// private budget and nothing changes — which is what a test, and a store
+    /// whose bytes are already counted somewhere else, both want.
+    pub fn account_against(
+        &mut self,
+        ledger: std::sync::Arc<lumit_budget::Ledger>,
+        tier: lumit_budget::Tier,
+    ) {
+        self.account = Some(Account {
+            ledger,
+            tier,
+            held: None,
+        });
+        self.resync();
+    }
+
+    /// How close the tier this store is accounted in is to its ceiling, or
+    /// `None` when nobody has registered it. The reading the degradation ladder
+    /// steps on (docs/13 §4).
+    #[must_use]
+    pub fn pressure(&self) -> Option<lumit_budget::Pressure> {
+        self.account.as_ref().map(|a| a.ledger.pressure(a.tier))
+    }
+
+    /// Bring the reservation into line with what the store now holds. Called
+    /// after every change to the contents, so there is no path that changes
+    /// them and forgets to say so.
+    ///
+    /// A refusal is **recorded, not obeyed**: the entries are already in
+    /// memory when this runs, so the reservation simply falls short and the
+    /// shortfall reads as pressure. Dropping one here instead would be the
+    /// ledger deciding what the store holds, which is backwards — its job is
+    /// to describe what is held truthfully enough that the ladder can act.
+    fn resync(&mut self) {
+        let want = self.used as u64;
+        let Some(account) = self.account.as_mut() else {
+            return;
+        };
+        let have = account
+            .held
+            .as_ref()
+            .map_or(0, lumit_budget::Reservation::bytes);
+        if want == have {
+            return;
+        }
+        if want < have {
+            match account.held.as_mut() {
+                Some(held) if want > 0 => held.shrink_to(want),
+                // Nothing held any more, so nothing to hold it with: dropping
+                // the reservation gives the whole of it back at once.
+                _ => drop(account.held.take()),
+            }
+            return;
+        }
+        let Some(more) = account.ledger.try_reserve(account.tier, want - have) else {
+            return;
+        };
+        match account.held.as_mut() {
+            Some(held) => {
+                if let Err(unabsorbed) = held.absorb(more) {
+                    // Cannot happen — one store, one tier — but keeping it is
+                    // the safe direction: dropping it would hand back bytes
+                    // the entries below are still sitting on.
+                    account.held = Some(unabsorbed);
+                }
+            }
+            None => account.held = Some(more),
         }
     }
 
@@ -208,6 +305,7 @@ impl<K: Eq + Hash + Clone, V: ByteSized> ByteLru<K, V> {
             },
         );
         self.used += bytes;
+        self.resync();
         true
     }
 
@@ -222,6 +320,7 @@ impl<K: Eq + Hash + Clone, V: ByteSized> ByteLru<K, V> {
     pub fn set_budget(&mut self, budget_bytes: usize) {
         self.budget = budget_bytes;
         self.evict_to_fit();
+        self.resync();
     }
 
     /// Protect a key from eviction (docs §5.3): the shell pins the displayed
@@ -288,6 +387,7 @@ impl<K: Eq + Hash + Clone, V: ByteSized> ByteLru<K, V> {
     pub fn clear(&mut self) {
         self.map.clear();
         self.used = 0;
+        self.resync();
     }
 }
 
@@ -329,6 +429,79 @@ mod tests {
         assert!(lru.insert("a", v(30)));
         assert_eq!(lru.used_bytes(), 30);
         assert_eq!(lru.len(), 1);
+    }
+
+    /// **The governor's ledger follows the contents** (docs/13 §3: "the ledger
+    /// MUST equal reality"), through every way they can change — an insert, an
+    /// eviction that insert caused, a replacement, a lowered budget, and the
+    /// store being emptied.
+    #[test]
+    fn an_accounted_store_tells_the_ledger_exactly_what_it_holds() {
+        let ledger = lumit_budget::Ledger::with_budgets(10_000, 10_000);
+        let mut lru: ByteLru<&str, Vec<u8>> = ByteLru::new(100);
+        lru.account_against(std::sync::Arc::clone(&ledger), lumit_budget::Tier::Ram);
+        let used = || ledger.used(lumit_budget::Tier::Ram);
+
+        assert_eq!(used(), 0, "an empty store holds nothing");
+        assert!(lru.insert("a", v(60)));
+        assert_eq!(used(), 60);
+
+        // The insert that evicts: the ledger is told the net, not the gross.
+        assert!(lru.insert("b", v(60)));
+        assert_eq!(lru.used_bytes(), 60, "\"a\" made room for \"b\"");
+        assert_eq!(used(), 60);
+
+        assert!(lru.insert("b", v(30)), "the same key, smaller");
+        assert_eq!(used(), 30);
+
+        lru.insert("c", v(30));
+        assert_eq!(used(), 60);
+        lru.set_budget(30);
+        assert_eq!(lru.used_bytes(), 30, "the lower budget evicted one");
+        assert_eq!(used(), 30);
+
+        lru.clear();
+        assert_eq!(used(), 0, "and emptying it gives back the whole of it");
+    }
+
+    /// A store nobody registered is exactly what it was: its own budget, and
+    /// no opinion about anyone else's memory.
+    #[test]
+    fn an_unaccounted_store_has_no_pressure_and_charges_nobody() {
+        let mut lru: ByteLru<&str, Vec<u8>> = ByteLru::new(100);
+        assert!(lru.insert("a", v(60)));
+        assert_eq!(lru.used_bytes(), 60);
+        assert_eq!(lru.pressure(), None);
+    }
+
+    /// The entries are already in memory by the time the store asks, so a
+    /// refusal is **recorded, not obeyed**: the store keeps what it was given,
+    /// the ledger counts the denial, and the pressure that reads from goes to
+    /// the top — which is what makes whoever is watching act.
+    #[test]
+    fn a_refused_reservation_is_recorded_and_not_obeyed() {
+        let ledger = lumit_budget::Ledger::with_budgets(10_000, 50);
+        let mut lru: ByteLru<&str, Vec<u8>> = ByteLru::new(1000);
+        lru.account_against(std::sync::Arc::clone(&ledger), lumit_budget::Tier::Ram);
+
+        assert!(lru.insert("a", v(40)));
+        assert_eq!(ledger.used(lumit_budget::Tier::Ram), 40);
+
+        assert!(lru.insert("b", v(40)), "the store's own budget has room");
+        assert_eq!(lru.used_bytes(), 80, "and it kept both");
+        assert_eq!(
+            ledger.used(lumit_budget::Tier::Ram),
+            40,
+            "the second reservation was refused, not the entry"
+        );
+        assert_eq!(ledger.denials(lumit_budget::Tier::Ram), 1);
+        // The denial is the honest signal, not the used figure: a refusal
+        // leaves the ledger *under*-reporting by exactly the entry it could
+        // not grant, and only the counter says so. A reader that watched the
+        // bytes alone would see a tier with room to spare.
+        assert!(lru
+            .pressure()
+            .is_some_and(|p| p > lumit_budget::Pressure::Easy));
     }
 
     #[test]

@@ -703,6 +703,10 @@ impl HeadlessRenderer {
         // Flow runs on this same device rather than opening one of its own.
         // The handles are reference-counted, so this shares it.
         let pool = DecodePool::with_gpu(&gpu);
+        // One ledger for the whole renderer, taken before the device moves into
+        // the struct: every store below that holds frame-sized memory registers
+        // against this one account (docs/13 §3).
+        let ledger = std::sync::Arc::clone(gpu.ledger());
         Self {
             gpu,
             parts: Some(parts),
@@ -718,6 +722,9 @@ impl HeadlessRenderer {
                 // Evictions have to be visible, or the tiers below never hear
                 // that a frame exists and the ladder is a drop (docs/06 §5.3).
                 lru.collect_evictions();
+                // Finished frames held on the card, kept across frames like the
+                // intermediates and counted in the same account (docs/13 §3).
+                lru.account_against(ledger, lumit_budget::Tier::Vram);
                 lru
             },
             demotions: Vec::new(),
@@ -1694,6 +1701,26 @@ impl HeadlessRenderer {
     #[must_use]
     pub fn decode_memory(&self) -> (usize, usize) {
         self.pool.memory()
+    }
+
+    /// What the resource governor is holding, across both tiers
+    /// (docs/13 §3) — every store on this renderer that has registered with it,
+    /// plus whatever frame is in flight.
+    ///
+    /// The readout the degradation ladder owes the user: "silent degradation is
+    /// a bug" (docs/13 §4), and a ladder nobody can see stepping is exactly
+    /// that. Read in one go so the numbers shown together were true together.
+    #[must_use]
+    pub fn governor(&self) -> lumit_budget::Snapshot {
+        self.gpu.ledger().snapshot()
+    }
+
+    /// Bytes the frame being drawn asked the card for and did not get — see
+    /// [`lumit_gpu::GpuContext::vram_overdrawn`]. Nought on every ordinary
+    /// frame; anything else is a frame that outgrew what was reserved for it.
+    #[must_use]
+    pub fn vram_overdrawn(&self) -> u64 {
+        self.gpu.vram_overdrawn()
     }
 
     /// What the graphics driver holds for this renderer's device — see

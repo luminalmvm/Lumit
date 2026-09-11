@@ -393,6 +393,58 @@ impl Ledger {
             _ => Pressure::Full,
         }
     }
+
+    /// Every number this ledger keeps, read in one go.
+    ///
+    /// For the status readout, which has to show all of them together or not at
+    /// all: "silent degradation is a bug" (docs/13 §4), and a reader that took
+    /// them one at a time would show a used figure from one moment against a
+    /// budget from another and could report an impossible state.
+    #[must_use]
+    pub fn snapshot(&self) -> Snapshot {
+        Snapshot {
+            vram: self.tier_snapshot(Tier::Vram),
+            ram: self.tier_snapshot(Tier::Ram),
+        }
+    }
+
+    fn tier_snapshot(&self, tier: Tier) -> TierSnapshot {
+        TierSnapshot {
+            used: self.used(tier),
+            budget: self.budget(tier),
+            peak: self.peak(tier),
+            denials: self.denials(tier),
+            pressure: self.pressure(tier),
+        }
+    }
+}
+
+/// What the governor is holding, across both tiers, at one moment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Snapshot {
+    pub vram: TierSnapshot,
+    pub ram: TierSnapshot,
+}
+
+/// One tier's numbers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TierSnapshot {
+    /// What is reserved right now.
+    pub used: u64,
+    /// The ceiling it is reserved against.
+    pub budget: u64,
+    /// The most that was ever reserved at once, since the last
+    /// [`Ledger::reset_statistics`].
+    pub peak: u64,
+    /// How many reservations have been refused since then.
+    ///
+    /// **The field to read when something is slow.** A tier sitting under its
+    /// budget with a denial count climbing is a tier that is turning work away
+    /// — which is a different fault from one that is merely full, and is
+    /// invisible in every other number here.
+    pub denials: u64,
+    /// How close to the ceiling, as the degradation ladder reads it.
+    pub pressure: Pressure,
 }
 
 /// How close a tier is to its ceiling.

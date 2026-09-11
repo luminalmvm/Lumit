@@ -492,6 +492,29 @@ impl GpuContext {
         }
     }
 
+    /// [`Self::from_parts`] over the same device as `other`, **on `other`'s
+    /// ledger**.
+    ///
+    /// # In plain terms
+    ///
+    /// One card, one account of it. A second context over the same device is
+    /// spending the same video memory, so giving it a ledger of its own would
+    /// leave two of them each believing they had the whole card — which is the
+    /// one thing docs/13 §3's "one component owns memory" is there to prevent.
+    /// The engine's compute side-paths (flow synthesis, the decode pool's
+    /// colour conversion) are built this way.
+    ///
+    /// The adapter's answers are not carried, exactly as [`Self::from_parts`]
+    /// does not carry them: these are compute paths that never multisample. A
+    /// caller that wants them wants [`Self::clone_handle`].
+    #[must_use]
+    pub fn sharing(other: &Self) -> Self {
+        Self {
+            ledger: std::sync::Arc::clone(&other.ledger),
+            ..Self::from_parts(other.device.clone(), other.queue.clone())
+        }
+    }
+
     /// The count this context will actually give for `requested` — the project
     /// setting resolved against what the adapter said (see
     /// [`Self::sample_flags`]). Never fails and never exceeds what the card

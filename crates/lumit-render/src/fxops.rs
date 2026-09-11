@@ -291,18 +291,6 @@ pub struct FxCache {
     /// Test hooks: nested frames realised, and served held.
     nested_made: u64,
     nested_served: u64,
-    /// The governor's ledger, and this store's standing reservation against it
-    /// (docs/13 §3: "the ledger MUST equal reality"). Every other frame-sized
-    /// allocation in the renderer belongs to the frame that made it and is
-    /// released when that frame closes; these are the ones that do not — an
-    /// intermediate is kept precisely so a *later* frame can read it. So the
-    /// frame hands its charge over ([`lumit_gpu::GpuContext::hand_off_vram`])
-    /// and the store carries it for as long as the picture is held.
-    ///
-    /// `None` until [`Self::account_against`] is called, which is what lets a
-    /// test build a bare store without a card behind it.
-    ledger: Option<std::sync::Arc<lumit_budget::Ledger>>,
-    held: Option<lumit_budget::Reservation>,
 }
 
 impl Default for FxCache {
@@ -322,74 +310,19 @@ impl FxCache {
             hits: 0,
             nested_made: 0,
             nested_served: 0,
-            ledger: None,
-            held: None,
         }
     }
 
     /// Account this store's contents against the governor's ledger from now on
-    /// (docs/13 §3). Called once, as the realiser builds it, with the ledger
+    /// (docs/13 §3). Called once, as the renderer builds it, with the ledger
     /// its [`GpuContext`] carries.
+    ///
+    /// **Video memory**, not host memory: what is held here is a texture on the
+    /// card. It is the one store in the renderer whose bytes are the card's,
+    /// which is exactly why it is worth saying so — a frame's own textures die
+    /// with the frame, and these are kept so a *later* frame can read them.
     pub fn account_against(&mut self, ledger: std::sync::Arc<lumit_budget::Ledger>) {
-        self.ledger = Some(ledger);
-        self.resync();
-    }
-
-    /// Bring the reservation into line with what the store holds. Called after
-    /// every change to the contents, so there is no path that changes them and
-    /// forgets.
-    ///
-    /// The pictures are already on the card when this runs, so a refusal is
-    /// **recorded, not obeyed**: the reservation simply falls short, the
-    /// shortfall reads as pressure, and the pressure is what stops the next
-    /// walk filing. Dropping an entry here instead would be the ledger
-    /// deciding what the renderer holds, which is backwards — the ledger's job
-    /// is to describe what is held truthfully enough that the ladder can act
-    /// on it.
-    fn resync(&mut self) {
-        let Some(ledger) = self.ledger.as_ref() else {
-            return;
-        };
-        let want = self.lru.used_bytes() as u64;
-        let have = self
-            .held
-            .as_ref()
-            .map_or(0, lumit_budget::Reservation::bytes);
-        if want <= have {
-            match self.held.as_mut() {
-                Some(held) if want > 0 => held.shrink_to(want),
-                // Nothing held any more: dropping the reservation gives the
-                // whole of it back, which is the one case `shrink_to(0)` and a
-                // `Drop` would both do — the `take` just says so plainly.
-                _ => drop(self.held.take()),
-            }
-            return;
-        }
-        let Some(more) = ledger.try_reserve(lumit_budget::Tier::Vram, want - have) else {
-            return;
-        };
-        match self.held.as_mut() {
-            Some(held) => {
-                if let Err(unabsorbed) = held.absorb(more) {
-                    // Cannot happen — both are Vram — but keeping it is the
-                    // safe direction: dropping it would give back bytes the
-                    // pictures below are still sitting on.
-                    self.held = Some(unabsorbed);
-                }
-            }
-            None => self.held = Some(more),
-        }
-    }
-
-    /// File one effect's output, answering whether the store took it.
-    ///
-    /// The one way an intermediate enters: the insert and the ledger resync
-    /// happen together, so there is no order in which the store holds a
-    /// picture the governor has not been told about.
-    fn file(&mut self, key: u128, tex: Tex) -> bool {
-        let took = self.lru.insert(key, CachedTex(tex));
-        self.resync();
-        took
+        self.lru.account_against(ledger, lumit_budget::Tier::Vram);
     }
 
     /// The finished texture of a nested comp's frame, by the name the realiser
@@ -412,7 +345,7 @@ impl FxCache {
     /// cache is taking entries ([`Self::keep_outputs`]).
     pub fn put_nested(&mut self, key: u128, tex: Tex) {
         if self.keep {
-            self.file(key, tex);
+            self.lru.insert(key, CachedTex(tex));
         }
     }
 
@@ -440,13 +373,11 @@ impl FxCache {
 
     pub fn set_budget(&mut self, bytes: usize) {
         self.lru.set_budget(bytes);
-        self.resync();
     }
 
     pub fn clear(&mut self) {
         self.lru.clear();
         self.pins.clear();
-        self.resync();
     }
 
     /// **The second rung of the ladder** (docs/13 §4), for the card this store
@@ -463,10 +394,11 @@ impl FxCache {
     /// A pin is never dropped: the decode planner skipped work on the strength
     /// of one, and the frame being rendered needs it to still be here.
     pub fn trim_under_pressure(&mut self) -> bool {
-        let Some(ledger) = self.ledger.as_ref() else {
-            return false;
-        };
-        if !ledger.pressure(lumit_budget::Tier::Vram).should_trim() {
+        if !self
+            .lru
+            .pressure()
+            .is_some_and(lumit_budget::Pressure::should_trim)
+        {
             return false;
         }
         let before = self.lru.used_bytes();
@@ -476,7 +408,6 @@ impl FxCache {
         let budget = self.lru.budget_bytes();
         self.lru.set_budget(before / 2);
         self.lru.set_budget(budget);
-        self.resync();
         self.lru.used_bytes() < before
     }
 
@@ -1205,7 +1136,7 @@ pub fn run_ops_with_roto(
                 // and only when the store actually took it, since a refused
                 // output dies here with the rest of the frame's textures.
                 let bytes = intermediate_bytes(out.width(), out.height()) as u64;
-                if store.file(key, out) {
+                if store.lru.insert(key, CachedTex(out)) {
                     ctx.hand_off_vram(bytes);
                 }
             }
