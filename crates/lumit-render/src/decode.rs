@@ -1270,6 +1270,115 @@ fn decode_comp(
 mod tests {
     use super::*;
 
+    /// A layer's decoded pixels, made rather than decoded, so what a frame
+    /// weighs can be asked without a file or a codec.
+    fn pixels(bytes: usize) -> CompLayerPixels {
+        CompLayerPixels {
+            layer: Uuid::nil(),
+            width: 4,
+            height: 4,
+            rgba: Arc::new(vec![0u8; bytes]),
+            format: lumit_media::PixelFormat::Srgb8,
+            natural_w: 4,
+            natural_h: 4,
+            temporal: Vec::new(),
+            flow_fields: Vec::new(),
+            shutter: Vec::new(),
+            source_key: 0,
+            source_frame: 0,
+        }
+    }
+
+    /// **Everything a decoded frame holds is weighed** (issue #132 finding 12).
+    /// The frame is the obvious part; the neighbours a temporal effect needs,
+    /// the flow measured against them and the moments a shutter asked for are
+    /// each a whole raster again, and they are how a comp that looks like five
+    /// layers turns out to be holding forty.
+    #[test]
+    fn a_decoded_frame_weighs_its_neighbours_and_moments_as_well_as_itself() {
+        let mut layer = pixels(100);
+        assert_eq!(weigh(std::slice::from_ref(&layer)), 100);
+
+        layer.temporal = vec![(-1, vec![0u8; 100]), (1, vec![0u8; 100])];
+        assert_eq!(
+            weigh(std::slice::from_ref(&layer)),
+            300,
+            "and its neighbours"
+        );
+
+        // Three planes of f32 — u, v and the confidence — at four bytes each.
+        layer.flow_fields = vec![(1, (vec![0.0; 10], vec![0.0; 10], vec![0.0; 10]))];
+        assert_eq!(
+            weigh(std::slice::from_ref(&layer)),
+            300 + 120,
+            "and the motion measured against them"
+        );
+
+        layer.shutter = vec![(0.0, Box::new(pixels(100))), (0.5, Box::new(pixels(100)))];
+        assert_eq!(
+            weigh(std::slice::from_ref(&layer)),
+            300 + 120 + 200,
+            "and every moment the shutter asked for"
+        );
+
+        // Two such layers weigh twice as much, which is the whole point: it is
+        // the sum nobody was taking.
+        let both = [pixels(100), layer];
+        assert_eq!(weigh(&both), 100 + 620);
+    }
+
+    /// The frame in flight holds its reservation for as long as it lives and
+    /// gives it back when it goes — including when it goes because a newer
+    /// frame superseded it, which is the case no scope could have covered.
+    #[test]
+    fn a_decoded_frame_holds_its_memory_until_it_is_dropped() {
+        let ledger = lumit_budget::Ledger::with_budgets(1 << 30, 1 << 30);
+        let mut pool = DecodePool::new();
+        pool.account_against(std::sync::Arc::clone(&ledger));
+
+        let made = CompFrame {
+            comp: Uuid::nil(),
+            frame: 0,
+            media_epoch: 0,
+            layers: vec![pixels(4096), pixels(2048)],
+            render_cost: std::time::Duration::ZERO,
+            held: None,
+        };
+        let charged = CompFrame {
+            held: pool.charge(&made),
+            ..made
+        };
+        assert_eq!(
+            ledger.used(lumit_budget::Tier::Ram),
+            6144,
+            "the frame is on the books while it is in flight"
+        );
+
+        drop(charged);
+        assert_eq!(
+            ledger.used(lumit_budget::Tier::Ram),
+            0,
+            "and off them the moment it is let go"
+        );
+    }
+
+    /// A pool nobody registered charges nobody, so a test — or an exporter
+    /// running without a governor — decodes exactly as it did.
+    #[test]
+    fn an_unaccounted_pool_charges_nothing() {
+        let pool = DecodePool::new();
+        let made = CompFrame {
+            comp: Uuid::nil(),
+            frame: 0,
+            media_epoch: 0,
+            layers: vec![pixels(4096)],
+            render_cost: std::time::Duration::ZERO,
+            held: None,
+        };
+        assert!(pool.charge(&made).is_none());
+        assert_eq!(pool.ram_pressure(), lumit_budget::Pressure::Easy);
+    }
+
     /// **The decode-ahead hand-off.** A frame filed by [`DecodePool::preload`]
     /// must be served by the render's own decode as a cache hit — proven by
     /// requesting it against a path that does not exist, which would error if

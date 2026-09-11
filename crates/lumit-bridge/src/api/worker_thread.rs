@@ -2448,6 +2448,28 @@ fn build_viewer_renderer(
         }
     };
     drop(building);
+    // The governor's ceilings, from what this machine actually has (docs/13 §3:
+    // 70% of the card, 60% of physical, and one share of the pool rather than
+    // two when the card *is* the machine's memory). The renderer sized the
+    // card's tier from its own adapter as it opened; host memory is set here,
+    // because this is the layer that can ask what the machine has — a graphics
+    // context has no business making a system call about RAM.
+    //
+    // Every reading the degradation ladder makes is a fraction of these two
+    // numbers, so a governor left on its fallbacks is a governor stepping the
+    // ladder at the wrong moments on every machine that is not the size of the
+    // fallback.
+    {
+        // `video_memory_bytes` is the one place that knows how to ask each
+        // platform — DXGI here on Windows, Metal and Vulkan through the
+        // renderer elsewhere — and answers 0 where none of them will say.
+        let (vram, ram) = lumit_budget::budgets_for(
+            crate::api::system::video_memory_bytes(),
+            crate::api::system::system_memory_bytes(),
+            renderer.unified_memory(),
+        );
+        renderer.set_memory_budgets(vram, ram);
+    }
     // This is the *Viewer's* renderer, so a Lens flare's bake is made beside
     // the frame rather than inside it: picking a lens shows the lens
     // before it and swaps the new one in when the optics are done, instead of

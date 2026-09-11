@@ -1715,6 +1715,25 @@ impl HeadlessRenderer {
         self.gpu.ledger().snapshot()
     }
 
+    /// Set the governor's two ceilings (docs/13 §3), from the figures the
+    /// frontend read off the machine.
+    ///
+    /// The renderer sized the card's tier from its own adapter as it opened,
+    /// which is all a graphics context can honestly answer for. This is where
+    /// the rest arrives: what the machine has in ordinary memory, and — on a
+    /// card that draws from that same memory — the share of it the card may
+    /// have, which needed both figures to work out and so could not be decided
+    /// either side alone.
+    ///
+    /// Changing a ceiling frees nothing and takes nothing away: the
+    /// reservations that exist are memory that exists. What it changes is what
+    /// is granted from here on, and where the degradation ladder starts
+    /// stepping.
+    pub fn set_memory_budgets(&self, vram: u64, ram: u64) {
+        self.gpu.ledger().set_budget(lumit_budget::Tier::Vram, vram);
+        self.gpu.ledger().set_budget(lumit_budget::Tier::Ram, ram);
+    }
+
     /// Bytes the frame being drawn asked the card for and did not get — see
     /// [`lumit_gpu::GpuContext::vram_overdrawn`]. Nought on every ordinary
     /// frame; anything else is a frame that outgrew what was reserved for it.

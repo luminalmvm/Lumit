@@ -1142,6 +1142,20 @@ impl GpuContext {
                 .contains(wgpu::Features::FLOAT32_FILTERABLE),
         );
 
+        // The governor's ceiling, from what this adapter actually reports rather
+        // than from a constant (docs/13 §3). It matters in both directions: a
+        // 24 GB card told it had the fallback 2 GB would declare itself full
+        // with 22 GB free and step the ladder down for no reason, and a 4 GB
+        // card told the same would hand out twice what it has and lose the
+        // device. `video_memory_bytes` answers 0 where the platform will not
+        // say, which is where the fallback belongs and the only place it is
+        // used. Host memory is left at its fallback here — a graphics context
+        // has no business asking what the machine has — and the frontend sets
+        // it from the figure it already reads (`set_budget`).
+        let ledger = lumit_budget::Ledger::new();
+        let (vram_budget, _) = lumit_budget::budgets_for(video_memory_bytes(), 0, unified_memory);
+        ledger.set_budget(lumit_budget::Tier::Vram, vram_budget);
+
         Ok(Self {
             device,
             queue,
@@ -1153,7 +1167,7 @@ impl GpuContext {
             frame_depth: std::cell::Cell::new(0),
             pool: std::cell::RefCell::new(Vec::new()),
             work_made: std::cell::Cell::new(0),
-            ledger: lumit_budget::Ledger::new(),
+            ledger,
             frame_charge: std::cell::RefCell::new(None),
             overdrawn: std::cell::Cell::new(0),
             submits: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),

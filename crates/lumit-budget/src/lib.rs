@@ -111,21 +111,19 @@ impl From<lumit_ingress::IngressError> for BudgetError {
 // Default budgets
 // ---------------------------------------------------------------------------
 
-/// What the ledger starts at when nobody has said otherwise.
+/// What the ledger falls back to on a machine that **will not say** what it
+/// has — a platform with no implementation, a build without the graphics
+/// features that carry the query, or a Linux renderer that has not opened an
+/// adapter yet.
 ///
-/// Deliberately conservative and deliberately *a number*: docs/13 §3 wants 70%
-/// of the card and 60% of physical RAM, and getting those figures needs a
-/// platform call per platform (DXGI's `DedicatedVideoMemory`, Metal's
-/// `recommendedMaxWorkingSetSize`, the largest device-local Vulkan heap) that
-/// wgpu does not offer portably today. Until each is wired,
-/// [`Ledger::set_budget`] is how the real figure arrives — from the frontend's
-/// preference, exactly as the frame cache's budget already does — and this is
-/// what a build that has not been told operates at.
+/// Deliberately conservative: the fallback's job is to be wrong in the
+/// direction that costs a little speed rather than the direction that loses
+/// the device. Two gigabytes of video memory is a 4K comp with a deep stack
+/// and room to spare, and is inside the smallest card anybody runs this on.
+/// Four gigabytes of system memory against the 16 GB reference machine is a
+/// quarter of it, beside a frame cache that has its own budget on top.
 ///
-/// Two gigabytes of video memory is a 4K comp with a deep stack and room to
-/// spare, and is inside the smallest card anybody runs this on. Four gigabytes
-/// of system memory against the 16 GB reference machine is a quarter of it,
-/// beside a frame cache that has its own budget on top.
+/// A machine that *does* answer never uses these: see [`budgets_for`].
 pub const DEFAULT_VRAM_BUDGET: u64 = 2 << 30;
 /// See [`DEFAULT_VRAM_BUDGET`].
 pub const DEFAULT_RAM_BUDGET: u64 = 4 << 30;
@@ -133,7 +131,9 @@ pub const DEFAULT_RAM_BUDGET: u64 = 4 << 30;
 /// The share of a reported pool the governor will spend, per docs/13 §3.
 ///
 /// Used by whoever *can* ask the platform, so the percentage lives in one place
-/// rather than at each call site that learns a figure.
+/// rather than at each call site that learns a figure. A pool of 0 — "not known
+/// here" — yields 0, which [`budgets_for`] reads as "fall back" rather than as
+/// a budget of nothing.
 #[must_use]
 pub fn vram_budget_for(reported_bytes: u64) -> u64 {
     reported_bytes.saturating_mul(70) / 100
@@ -143,6 +143,62 @@ pub fn vram_budget_for(reported_bytes: u64) -> u64 {
 #[must_use]
 pub fn ram_budget_for(physical_bytes: u64) -> u64 {
     physical_bytes.saturating_mul(60) / 100
+}
+
+/// The share of system memory the governor will spend on the **card** when the
+/// card *is* system memory (docs/13 §3): every Apple Silicon Mac, and any
+/// integrated adapter.
+///
+/// Lower than either single-pool share, and it has to be: on unified memory the
+/// two tiers are one pool, so 70% and 60% of the same machine is 130% of it.
+#[must_use]
+pub fn shared_vram_budget_for(physical_bytes: u64) -> u64 {
+    physical_bytes.saturating_mul(40) / 100
+}
+
+/// The pair of budgets a machine's own figures give, with the fallbacks applied
+/// where it would not answer (docs/13 §3).
+///
+/// # In plain terms
+///
+/// Every reading the degradation ladder makes is a fraction of these two
+/// numbers, so getting them from the machine rather than from a constant is
+/// what makes the whole governor mean anything: a 24 GB card told it had 2 GB
+/// would declare itself full with 22 GB free and step down for no reason, and a
+/// 4 GB card told the same would hand out twice what it has and lose the
+/// device. One is merely slow; the other is the crash this is all here to
+/// prevent.
+///
+/// `reported_vram` and `physical_ram` are what the platform said, each **0**
+/// where it would not say — which is the honest answer a query gives rather
+/// than a guess, and the one case the fallbacks above exist for. Asking the
+/// platform is the caller's job, not this crate's: the queries need a graphics
+/// adapter or a system call, and a crate whose whole content is arithmetic
+/// stays that way.
+///
+/// `unified` means the card draws from system memory — every Apple Silicon Mac,
+/// any integrated adapter — where the two tiers are one pool, and spending 70%
+/// of it as well as 60% of it would be spending the same memory twice.
+#[must_use]
+pub fn budgets_for(reported_vram: u64, physical_ram: u64, unified: bool) -> (u64, u64) {
+    let ram = ram_budget_for(physical_ram);
+    let card = vram_budget_for(reported_vram);
+    // On unified memory the share of the machine is a *ceiling* on the card's
+    // own figure rather than a replacement for it: Metal's
+    // `recommendedMaxWorkingSetSize` is already a share of the unified memory
+    // and is the better number of the two, so the cap only bites where the card
+    // reported something optimistic — or nothing at all, which is where it
+    // becomes the whole answer.
+    let vram = match (unified, shared_vram_budget_for(physical_ram)) {
+        (true, 0) => card,
+        (true, share) if card == 0 => share,
+        (true, share) => card.min(share),
+        (false, _) => card,
+    };
+    (
+        if vram == 0 { DEFAULT_VRAM_BUDGET } else { vram },
+        if ram == 0 { DEFAULT_RAM_BUDGET } else { ram },
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -558,6 +614,63 @@ impl Drop for Reservation {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
+
+    const GB: u64 = 1 << 30;
+
+    /// **The budgets come from the machine** (docs/13 §3). Every reading the
+    /// ladder makes is a fraction of these two numbers, so a card told the
+    /// wrong size steps down at the wrong moment in one direction and loses the
+    /// device in the other.
+    #[test]
+    fn a_machine_that_answers_is_budgeted_by_what_it_has() {
+        let (vram, ram) = budgets_for(24 * GB, 32 * GB, false);
+        assert_eq!(vram, 24 * GB * 70 / 100, "70% of the card");
+        assert_eq!(ram, 32 * GB * 60 / 100, "60% of physical");
+
+        // A small card is budgeted small, which is the direction that matters:
+        // the fallback would have promised this one every byte it has and then
+        // some, which is the driver reset the whole ledger exists to avoid.
+        let (small, _) = budgets_for(2 * GB, 32 * GB, false);
+        assert_eq!(small, 2 * GB * 70 / 100);
+        assert!(
+            small < DEFAULT_VRAM_BUDGET,
+            "under the fallback, which on this card is the whole of it"
+        );
+    }
+
+    /// A machine that will not say gets the fallback, per tier and
+    /// independently: a platform that knows its RAM and not its card must not
+    /// lose the figure it does have.
+    #[test]
+    fn a_machine_that_will_not_say_falls_back_one_tier_at_a_time() {
+        assert_eq!(
+            budgets_for(0, 0, false),
+            (DEFAULT_VRAM_BUDGET, DEFAULT_RAM_BUDGET)
+        );
+        let (vram, ram) = budgets_for(0, 32 * GB, false);
+        assert_eq!(vram, DEFAULT_VRAM_BUDGET, "the card would not say");
+        assert_eq!(ram, 32 * GB * 60 / 100, "but the machine did");
+    }
+
+    /// On unified memory the two tiers are one pool, so the card's share is
+    /// capped at 40% of the machine — 70% of it *and* 60% of it would be 130%
+    /// of the same memory.
+    #[test]
+    fn a_unified_card_does_not_spend_the_machines_memory_twice() {
+        // Apple Silicon: 24 GB of RAM, and Metal recommends most of it.
+        let (vram, ram) = budgets_for(20 * GB, 24 * GB, true);
+        assert_eq!(vram, 24 * GB * 40 / 100, "capped at the machine's share");
+        assert_eq!(ram, 24 * GB * 60 / 100);
+        assert!(
+            vram + ram <= 24 * GB,
+            "and the two together fit inside the machine"
+        );
+
+        // The cap only bites when the card was the more optimistic of the two:
+        // a modest reported figure is still the better number and is kept.
+        let (modest, _) = budgets_for(2 * GB, 24 * GB, true);
+        assert_eq!(modest, 2 * GB * 70 / 100);
+    }
 
     #[test]
     fn a_reservation_holds_its_bytes_and_gives_them_back_when_it_drops() {
