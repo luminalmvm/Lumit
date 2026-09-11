@@ -151,6 +151,20 @@ memory reading at all.
    the decode stores by their own cost-aware eviction order, then asks again. A
    pin is never dropped — the decode planner skipped work on the strength of one.
 
+Beside them sits one more thing a frame at the ceiling does, invisible for the
+same reason: it **gives up its batching**. Handing a texture back to the frame's
+pool is an engine-side promise, but the driver only stops holding what a
+recorded command refers to once that command has been submitted — so a
+forty-effect stack recorded into one batch keeps every transient in the driver
+until the frame closes. At `Pressure::Full` the walk flushes effect by effect,
+the same trade a profiled frame already makes and the same one the lens flare
+makes between its own batches. It costs round trips, which is time; it bounds
+what the driver holds, which is what has run out.
+
+That all three are invisible is a claim worth being able to falsify, so it is a
+test: the same stack rendered on an empty card and on a full one, compared byte
+for byte.
+
 **Rungs 3 to 7 change what is drawn** — the preview resolution tier, tiling, the
 flow-to-blend swap, the CPU fallback, the calm banner — so they belong to the
 caller, which reads the denial count and steps down deliberately. Export never

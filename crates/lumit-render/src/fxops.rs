@@ -1122,6 +1122,24 @@ pub fn run_ops_with_roto(
             ctx.flush();
             ctx.device.poll(wgpu::Maintain::Wait);
             into.push(started.elapsed().as_secs_f32() * 1000.0);
+        } else if ctx.vram_pressure() == lumit_budget::Pressure::Full {
+            // **Submission lifetime** (issue #132 finding 15). Handing a
+            // texture back to the frame's pool is an engine-side promise; the
+            // driver only stops holding what a recorded command still refers to
+            // once that command has actually been submitted. A forty-effect
+            // stack recorded into one batch therefore keeps every transient in
+            // the driver until the frame closes, which on a card that is
+            // already full is the difference between finishing and not.
+            //
+            // So a frame at the ceiling gives its batching up, effect by
+            // effect — the same trade a measured frame makes above, and the
+            // same one the lens flare makes between its own batches. It costs
+            // round trips, which is a cost paid in time; it bounds what the
+            // driver holds, which is the thing that has run out. **The picture
+            // is identical either way**: submission order is the recording
+            // order, so this changes when the work is handed over and nothing
+            // about what it computes.
+            ctx.flush();
         }
     }
     if let Some((store, _)) = cache {
@@ -1677,6 +1695,40 @@ mod tests {
             ctx.ledger().used(lumit_budget::Tier::Vram),
             after as u64,
             "and the ledger followed them out"
+        );
+    }
+
+    /// **Pressure never moves a pixel.** Everything the renderer does on a
+    /// memory reading — stop filing, give the cold intermediates back, hand the
+    /// batch over effect by effect instead of once at the end — is invisible in
+    /// the output by construction, which is the whole reason those are the
+    /// steps it is allowed to take without being told (docs/13 §4; the rungs
+    /// that *do* change what is drawn belong to the caller, and export takes
+    /// none of them).
+    ///
+    /// This is the test that makes that claim falsifiable: the same stack, run
+    /// on an empty card and on a full one, byte for byte.
+    #[test]
+    fn a_card_under_pressure_draws_the_same_picture() {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let fx = ctx.fx();
+        let ops = long_stack(5);
+
+        let easy = run(fx, &ctx, &ops, &warm_cache(), 7);
+        assert_eq!(ctx.vram_pressure(), lumit_budget::Pressure::Easy);
+
+        let used = ctx.ledger().used(lumit_budget::Tier::Vram);
+        assert!(used > 0, "the first walk put textures on the card");
+        ctx.ledger().set_budget(lumit_budget::Tier::Vram, used);
+        assert_eq!(ctx.vram_pressure(), lumit_budget::Pressure::Full);
+
+        let full = run(fx, &ctx, &ops, &warm_cache(), 7);
+        assert_eq!(
+            easy, full,
+            "a full card renders what an empty one renders, to the bit"
         );
     }
 
