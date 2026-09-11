@@ -243,6 +243,56 @@ impl FxEngine {
         h: u32,
         anchor: f32,
     ) -> wgpu::Texture {
+        let n = samples.len().max(1) as f32;
+        let mut acc: Option<wgpu::Texture> = None;
+        for (k, frame) in samples.iter().enumerate() {
+            acc = Some(self.accumulate_shutter_step(
+                ctx,
+                acc.as_ref(),
+                frame,
+                matte,
+                w,
+                h,
+                anchor,
+                n,
+                k,
+            ));
+        }
+        // `samples` is documented as non-empty, so the loop ran; an empty one
+        // gets a blank rather than a panic.
+        acc.unwrap_or_else(|| work_texture(ctx, w, h, "fx-accum-shutter"))
+    }
+
+    /// One sample of [`Self::accumulate_with_shutter`], so the caller can feed
+    /// them in as it renders them rather than holding all N.
+    ///
+    /// The work was already one sample at a time — this only moves the loop out
+    /// to whoever is making the samples, which is the difference between
+    /// holding one finished composite and holding thirty-two of them. A
+    /// thirty-two-sample shutter at 4K is two gigabytes of samples waiting for a
+    /// pass that reads each one exactly once.
+    ///
+    /// `acc` is `None` for the first sample and the previous answer after that.
+    /// The shader is told which sample this is and ignores `acc` on the first,
+    /// so nothing has to invent a blank accumulator to start from — passing the
+    /// frame itself is exactly as meaningful as passing a cleared texture, and
+    /// costs one fewer allocation.
+    ///
+    /// After the last sample the answer is the finished average.
+    #[must_use]
+    #[allow(clippy::too_many_arguments)]
+    pub fn accumulate_shutter_step(
+        &self,
+        ctx: &GpuContext,
+        acc: Option<&wgpu::Texture>,
+        frame: &wgpu::Texture,
+        matte: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        anchor: f32,
+        n: f32,
+        k: usize,
+    ) -> wgpu::Texture {
         #[repr(C)]
         #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
         struct AccumShutterParams {
@@ -251,29 +301,25 @@ impl FxEngine {
             k: f32,
             first: f32,
         }
-        let n = samples.len().max(1) as f32;
-        let mut acc = work_texture(ctx, w, h, "fx-accum-shutter");
-        for (k, frame) in samples.iter().enumerate() {
-            let next = work_texture(ctx, w, h, "fx-accum-shutter");
-            self.dispatch_matted(
-                ctx,
-                &self.accum_shutter,
-                &acc,
-                frame,
-                Some(matte),
-                &next,
-                w,
-                h,
-                bytemuck::bytes_of(&AccumShutterParams {
-                    anchor,
-                    n,
-                    k: k as f32,
-                    first: f32::from(k == 0),
-                }),
-            );
-            acc = next;
-        }
-        acc
+        let next = work_texture(ctx, w, h, "fx-accum-shutter");
+        self.dispatch_matted(
+            ctx,
+            &self.accum_shutter,
+            // Ignored when `first` is set, so the frame stands in for it.
+            acc.unwrap_or(frame),
+            frame,
+            Some(matte),
+            &next,
+            w,
+            h,
+            bytemuck::bytes_of(&AccumShutterParams {
+                anchor,
+                n,
+                k: k as f32,
+                first: f32::from(k == 0),
+            }),
+        );
+        next
     }
 
     /// A supplied **Motion vectors** layer read as a dense flow field

@@ -643,28 +643,7 @@ impl Realiser<'_> {
         ab: &AccumulationBelow,
         below: &wgpu::Texture,
     ) -> wgpu::Texture {
-        let frames: Vec<wgpu::Texture> = ab
-            .samples
-            .iter()
-            .map(|(draws, camera)| {
-                let frame = self.realise(*camera, width, height, background, draws);
-                // Hand this sample's work to the card and wait for it before
-                // starting the next. A frame is one batch, and nothing a
-                // batch allocates comes back until it has run: with the N
-                // samples inside it, every sample's intermediates stayed
-                // alive together. Eight samples over one 1080p layer held
-                // 2.1 GB against 200 MB for the frame alone, which is enough
-                // to take a card down. Waiting per sample keeps one sample's
-                // scratch alive at a time; the finished sample textures are
-                // all that accumulate. The wait costs the overlap between
-                // encoding a sample and drawing the last, small beside N
-                // full renders.
-                self.ctx.flush();
-                self.ctx.settle();
-                frame
-            })
-            .collect();
-        if frames.is_empty() {
+        if ab.samples.is_empty() {
             // No samples (N < 2) degrades to the plain below — never a panic.
             return below.clone();
         }
@@ -682,6 +661,42 @@ impl Realiser<'_> {
             .into_iter()
             .next()
             .and_then(|slot| slot.texture(below).cloned());
+        // Each sample is rendered, folded into the running average, and let go
+        // of before the next one starts.
+        //
+        // **This is the whole shape of the thing.** The samples used to be
+        // collected into a `Vec` and handed to the combine in one go, which
+        // meant N finished composites alive together: a thirty-two-sample
+        // shutter at 4K is two gigabytes of them, waiting for a pass that reads
+        // each exactly once and never looks at it again. Both combines were
+        // already one-sample-at-a-time internally; all that was needed was to
+        // let the samples arrive that way.
+        //
+        // Peak memory is now flat in N — the accumulator plus whichever sample
+        // is in hand — and the arithmetic is unchanged, which is the part that
+        // had to be got right rather than merely made smaller. The equal-weight
+        // path still sums in fp32 across the same two ping-ponged targets, in
+        // the same order, resolving once at the end;
+        // `streaming_accumulation_matches_the_one_shot` in `lumit-gpu` holds
+        // that byte for byte against the previous implementation.
+        let n = ab.samples.len();
+        let sample_at = |k: usize| -> Option<wgpu::Texture> {
+            let (draws, camera) = ab.samples.get(k)?;
+            let frame = self.realise(*camera, width, height, background, draws);
+            // Hand this sample's work to the card and wait for it before
+            // starting the next. A frame is one batch, and nothing a batch
+            // allocates comes back until it has run: with the N samples inside
+            // it, every sample's intermediates stayed alive together. Eight
+            // samples over one 1080p layer held 2.1 GB against 200 MB for the
+            // frame alone, which is enough to take a card down. Waiting per
+            // sample keeps one sample's scratch alive at a time. The wait costs
+            // the overlap between encoding a sample and drawing the last, small
+            // beside N full renders.
+            self.ctx.flush();
+            self.ctx.settle();
+            Some(frame)
+        };
+
         let average = if let Some(matte) = matte {
             // Channel and Invert, once, before anything reads it. The
             // dispatch seam does this for every other effect; this one has no
@@ -699,14 +714,38 @@ impl Realiser<'_> {
                 } else {
                     matte
                 };
-            self.fx
-                .accumulate_with_shutter(&self.ctx, &frames, &matte, tw, th, ab.anchor)
+            let mut acc: Option<wgpu::Texture> = None;
+            for k in 0..n {
+                let Some(frame) = sample_at(k) else { continue };
+                acc = Some(self.fx.accumulate_shutter_step(
+                    &self.ctx,
+                    acc.as_ref(),
+                    &frame,
+                    &matte,
+                    tw,
+                    th,
+                    ab.anchor,
+                    n as f32,
+                    k,
+                ));
+            }
+            // `n` is not zero — the empty case returned above — so the loop ran
+            // at least once unless every sample failed to render, which is the
+            // plain below rather than a panic.
+            match acc {
+                Some(acc) => acc,
+                None => return below.clone(),
+            }
         } else {
             // Equal weights 1/N sum to 1: the premultiplied arithmetic mean.
-            let weight = 1.0 / frames.len() as f32;
-            let avg_layers: Vec<(&wgpu::Texture, f32)> =
-                frames.iter().map(|f| (f, weight)).collect();
-            self.compositor.accumulate(&self.ctx, tw, th, &avg_layers)
+            let weight = 1.0 / n as f32;
+            let mut running = self.compositor.accumulator(&self.ctx, tw, th);
+            for k in 0..n {
+                let Some(frame) = sample_at(k) else { continue };
+                self.compositor
+                    .add_into(&self.ctx, &mut running, &frame, weight);
+            }
+            self.compositor.resolve(&self.ctx, &running)
         };
         if ab.mix >= 1.0 {
             average
