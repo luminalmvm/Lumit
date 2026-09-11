@@ -311,6 +311,175 @@ fn the_sidecar_round_trips_and_refuses_what_it_cannot_vouch_for() {
     );
 }
 
+/// A sidecar is Lumit's own writing, but it lives in a cache directory on an
+/// ordinary disk: it can be truncated by a full disk, corrupted by a failing
+/// drive, carried between machines in a project folder, or simply edited. Every
+/// number in it decides an allocation, so every number is checked.
+///
+/// A refused sidecar costs a re-propagation, which is what happens when there is
+/// no sidecar at all — so the whole file is refused rather than salvaged.
+#[test]
+fn a_sidecar_whose_numbers_do_not_hold_together_is_refused() {
+    /// One valid record, then whatever the caller wants changed about it.
+    fn framed(edit: impl FnOnce(&mut Record)) -> Vec<u8> {
+        let boxed = vec![7_u8; 4];
+        let mut record = Record {
+            key: [0_u8; 32],
+            width: 8,
+            height: 8,
+            fps: 25.0,
+            clip_frames: 4,
+            frames: vec![FrameRecord {
+                frame: 0,
+                chain: [1_u8; 32],
+                bbox: [0, 0, 2, 2],
+                lz4: lz4_flex::compress_prepend_size(&boxed),
+            }],
+        };
+        edit(&mut record);
+        let body = bincode::serialize(&record).expect("serialises");
+        crate::sidecar::frame(MAGIC, FORMAT_VERSION, &body)
+    }
+
+    // The shape itself is sound, or none of the rest would mean anything.
+    assert!(
+        decode(&framed(|_| {}), None).is_some(),
+        "the fixture decodes"
+    );
+
+    // A raster no picture has. `expand` would allocate width x height from
+    // these, which is the whole reason they are checked here instead.
+    for (what, edit) in [
+        (
+            "zero width",
+            (|r: &mut Record| r.width = 0) as fn(&mut Record),
+        ),
+        ("zero height", |r: &mut Record| r.height = 0),
+        ("an absurd width", |r: &mut Record| r.width = u32::MAX),
+        ("an absurd height", |r: &mut Record| r.height = u32::MAX),
+    ] {
+        assert!(
+            decode(&framed(edit), None).is_none(),
+            "{what} must be refused"
+        );
+    }
+
+    // A rate that is not a positive finite number reaches the retime maths,
+    // where an infinity or a NaN spreads quietly rather than failing.
+    for (what, edit) in [
+        (
+            "a NaN rate",
+            (|r: &mut Record| r.fps = f64::NAN) as fn(&mut Record),
+        ),
+        ("an infinite rate", |r: &mut Record| r.fps = f64::INFINITY),
+        ("a zero rate", |r: &mut Record| r.fps = 0.0),
+        ("a negative rate", |r: &mut Record| r.fps = -25.0),
+    ] {
+        assert!(
+            decode(&framed(edit), None).is_none(),
+            "{what} must be refused"
+        );
+    }
+
+    // A box that leaves the raster: the row arithmetic in `expand` would be
+    // writing somewhere the picture is not.
+    for (what, edit) in [
+        (
+            "a box past the right edge",
+            (|r: &mut Record| {
+                if let Some(f) = r.frames.first_mut() {
+                    f.bbox = [7, 0, 2, 2];
+                }
+            }) as fn(&mut Record),
+        ),
+        ("a box past the bottom", |r: &mut Record| {
+            if let Some(f) = r.frames.first_mut() {
+                f.bbox = [0, 7, 2, 2];
+            }
+        }),
+        ("a box whose origin overflows", |r: &mut Record| {
+            if let Some(f) = r.frames.first_mut() {
+                f.bbox = [u32::MAX, 0, 2, 2];
+            }
+        }),
+    ] {
+        assert!(
+            decode(&framed(edit), None).is_none(),
+            "{what} must be refused"
+        );
+    }
+
+    // The payload's own announcement. `decompress_size_prepended` reads this
+    // four-byte prefix and allocates it before it decompresses anything, so a
+    // ten-byte payload announcing four gigabytes is four gigabytes — unless the
+    // announcement is checked against the box first, which is what this is.
+    let lying = framed(|r| {
+        if let Some(f) = r.frames.first_mut() {
+            if let Some(head) = f.lz4.get_mut(..4) {
+                head.copy_from_slice(&u32::MAX.to_le_bytes());
+            }
+        }
+    });
+    assert!(
+        decode(&lying, None).is_none(),
+        "an LZ4 payload claiming more than its box holds must be refused"
+    );
+
+    // An empty box carries no pixels; one that does is not the file it says.
+    let stowaway = framed(|r| {
+        if let Some(f) = r.frames.first_mut() {
+            f.bbox = [0, 0, 0, 0];
+        }
+    });
+    assert!(
+        decode(&stowaway, None).is_none(),
+        "an empty box with a payload must be refused"
+    );
+
+    // Ascending by frame is what makes a lookup a binary search. Out of order
+    // is a wrong matte rather than a slow one, which is worse.
+    let unsorted = framed(|r| {
+        let Some(first) = r.frames.first().cloned() else {
+            return;
+        };
+        r.frames.push(FrameRecord { frame: -1, ..first });
+    });
+    assert!(
+        decode(&unsorted, None).is_none(),
+        "records out of frame order must be refused"
+    );
+}
+
+/// And the second line behind `validate`: `expand` is reached from the render
+/// path, so a record that somehow got past the gate must still cost a blank
+/// matte rather than a panic or a wild write.
+#[test]
+fn expand_refuses_a_record_the_gate_would_have_caught() {
+    let record = FrameRecord {
+        frame: 0,
+        chain: [0_u8; 32],
+        bbox: [0, 0, 2, 2],
+        lz4: lz4_flex::compress_prepend_size(&[9_u8; 4]),
+    };
+    // The honest case, so the rest means something.
+    let plane = expand(&record, 4, 4);
+    assert_eq!(plane.len(), 16);
+    assert_eq!(plane.get(0..2), Some(&[9, 9][..]));
+
+    // A box larger than the raster it is being drawn into.
+    assert!(expand(&record, 1, 1).iter().all(|&v| v == 0));
+
+    // A raster whose own product does not fit: a blank answer, not a panic.
+    assert!(expand(&record, u32::MAX, u32::MAX).is_empty());
+
+    // A payload announcing more than the box holds is never decompressed.
+    let mut lying = record.clone();
+    if let Some(head) = lying.lz4.get_mut(..4) {
+        head.copy_from_slice(&u32::MAX.to_le_bytes());
+    }
+    assert!(expand(&lying, 4, 4).iter().all(|&v| v == 0));
+}
+
 /// §10 item 8, and §6's fifth step: a cancel **finalises rather than discards**.
 /// The frames already solved are kept, correctly named, and the span says how
 /// far it got.

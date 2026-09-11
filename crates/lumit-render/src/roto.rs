@@ -330,6 +330,13 @@ fn lz4_advertised_size(lz4: &[u8]) -> Option<u32> {
 /// checked as a second line rather than a first — but it is checked, because a
 /// panic here is a frame lost and `expand` is reached from the render path.
 fn expand(record: &FrameRecord, width: u32, height: u32) -> Vec<u8> {
+    // Checked multiplication is not on its own enough: `65535 x 65535` fits a
+    // 64-bit `usize` perfectly well and `vec![0; that]` still aborts the
+    // process on a capacity overflow. The ceiling has to be on the answer, not
+    // only on the arithmetic that produced it.
+    if !raster_is_sane(width, height) {
+        return Vec::new();
+    }
     let (w, h) = (width as usize, height as usize);
     let Some(n) = w.checked_mul(h) else {
         return Vec::new();
@@ -364,9 +371,9 @@ fn expand(record: &FrameRecord, width: u32, height: u32) -> Vec<u8> {
     }
     for row in 0..bh {
         let (Some(dst), Some(src)) = (
-            by.checked_add(row).and_then(|y| y.checked_mul(w)).and_then(
-                |row_start| row_start.checked_add(bx),
-            ),
+            by.checked_add(row)
+                .and_then(|y| y.checked_mul(w))
+                .and_then(|row_start| row_start.checked_add(bx)),
             row.checked_mul(bw),
         ) else {
             continue;
@@ -487,6 +494,24 @@ const MAX_SIDECAR_BYTES: u64 = 512 << 20;
 /// actually be.
 const MAX_RASTER_SIDE: u32 = 65_536;
 
+/// And how many pixels it may hold in total.
+///
+/// Both are needed, not either. A side limit alone still permits 65536 × 65536,
+/// which is four gigabytes of gray8 — a number that fits a `usize` and then
+/// aborts the process inside `Vec`'s own capacity check, where there is nothing
+/// to catch. A gigapixel is 32768 on a side, past any comp anybody composites.
+const MAX_RASTER_PIXELS: u64 = 1 << 30;
+
+/// Whether a raster size is one this crate will allocate for.
+fn raster_is_sane(width: u32, height: u32) -> bool {
+    if width == 0 || height == 0 || width > MAX_RASTER_SIDE || height > MAX_RASTER_SIDE {
+        return false;
+    }
+    u64::from(width)
+        .checked_mul(u64::from(height))
+        .is_some_and(|pixels| pixels <= MAX_RASTER_PIXELS)
+}
+
 /// The most frames one run may hold. A feature at 24fps is around 150,000
 /// frames end to end; a single Roto brush run is a shot, not a feature.
 const MAX_FRAME_RECORDS: usize = 1_000_000;
@@ -510,11 +535,7 @@ const MAX_LENDABLE_BYTES: u64 = 4 << 30;
 /// downstream — [`expand`] most of all — is working from sizes that have been
 /// checked rather than sizes that were read.
 fn validate(record: &Record) -> bool {
-    if record.width == 0
-        || record.height == 0
-        || record.width > MAX_RASTER_SIDE
-        || record.height > MAX_RASTER_SIDE
-    {
+    if !raster_is_sane(record.width, record.height) {
         return false;
     }
     // A rate that is not a positive finite number is not a rate. It reaches the
@@ -610,8 +631,7 @@ fn record_to_run(record: Record) -> Option<RotoRun> {
 }
 
 fn read_sidecar(dir: &Path, key: RotoKey) -> Option<RotoRun> {
-    let bytes =
-        lumit_ingress::read_capped(&dir.join(key.file_name()), MAX_SIDECAR_BYTES).ok()?;
+    let bytes = lumit_ingress::read_capped(&dir.join(key.file_name()), MAX_SIDECAR_BYTES).ok()?;
     record_to_run(decode(&bytes, Some(key))?)
 }
 
