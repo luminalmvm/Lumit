@@ -7797,6 +7797,18 @@
   "@updateChecksumMismatch": {
     "description": "Why an update was rejected: the file is not the one that was published."
   },
+  "updateNotSigned": "This update is not signed, so Lumit will not install it",
+  "@updateNotSigned": {
+    "description": "Why an update was rejected: the release carries no signed manifest, or Lumit could not fetch it. Shown only on builds that carry a release signing key."
+  },
+  "updateSignatureMismatch": "This update was not signed by Lumit, so it will not be installed",
+  "@updateSignatureMismatch": {
+    "description": "Why an update was rejected: the release manifest's signature is not the one this build's pinned key makes. Calm, not alarming - the ordinary cause is a mirror or a proxy, not an attack."
+  },
+  "updateNotInManifest": "This update is not the file Lumit published, so it will not be installed",
+  "@updateNotInManifest": {
+    "description": "Why an update was rejected: the signature held up, but the signed list of files does not name this download, or names it at a different size or checksum."
+  },
   "updateClickToUpdate": "Click to update - v{version}",
   "@updateClickToUpdate": {
     "description": "Help menu row when a new version is waiting.",

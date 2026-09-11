@@ -77,6 +77,14 @@ pub(crate) fn describe_deadline(quirks: &crate::quirks::Quirks) -> Duration {
     HANDSHAKE_TIMEOUT.max(quirks.control_timeout)
 }
 
+/// How many instances of one bundle's plugins may be alive at once.
+///
+/// A comp with a thousand OFX effects from one vendor's bundle on it is not a
+/// comp anybody has built; a runaway that keeps making them is. Each one costs
+/// memory in the broker and a message on every restart, so the ceiling bounds
+/// both.
+pub const MAX_LIVE_INSTANCES: usize = 1_024;
+
 /// How many of the plugin's messages are kept. A plugin in a loop can call the
 /// message suite as fast as it likes; the host keeps the most recent few and
 /// drops the rest, because an unbounded queue fed by somebody else's code is
@@ -168,6 +176,12 @@ pub enum BrokerError {
     /// or the credential could not be minted or handed over at all.
     #[error(transparent)]
     Peer(lumit_peer::PeerError),
+    /// More instances of one bundle than [`MAX_LIVE_INSTANCES`].
+    #[error("this plugin already has {limit} instances, which is as many as Lumit hosts at once")]
+    TooManyInstances {
+        /// The ceiling.
+        limit: usize,
+    },
 }
 
 /// Where the frames a plugin asks for come from: the evaluation graph, in
@@ -511,6 +525,19 @@ impl Broker {
         context: Context,
         params: ParamSnapshot,
     ) -> Result<InstanceId, BrokerError> {
+        // A ceiling on how many of one bundle's plugins may be alive at once.
+        //
+        // Every instance is memory and state inside the broker, and every one
+        // of them is rebuilt from scratch on a restart (this crate's replay, in
+        // `restart`) — so a project that had accumulated tens of thousands of
+        // them would turn every plugin crash into a very long pause. The
+        // ceiling is far above a real comp: a thousand instances of one
+        // bundle's plugins is a timeline nobody has built.
+        if self.instances.len() >= MAX_LIVE_INSTANCES {
+            return Err(BrokerError::TooManyInstances {
+                limit: MAX_LIVE_INSTANCES,
+            });
+        }
         let instance = self.next_instance;
         self.next_instance = self.next_instance.saturating_add(1);
         let record = InstanceRecord {

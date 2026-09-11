@@ -13,6 +13,11 @@ dependencies:
     sdk: flutter
   intl: any
   crypto: ^3.0.7
+  # Ed25519, for checking that a release really was signed by the key this
+  # application carries (lib/state/release_signature.dart). A digest published
+  # beside the download it describes proves the file arrived intact; only a
+  # signature made away from the release infrastructure proves who made it.
+  cryptography: ^2.7.0
   # The clock a widget test drives, so double-click timing holds on a slow machine.
   clock: ^1.1.2
   ffi: ^2.1.0
