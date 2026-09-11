@@ -682,10 +682,6 @@ class UpdateService extends ChangeNotifier {
     if (release.assetBytes > 0 && length != release.assetBytes) {
       return l10n.updateIncomplete;
     }
-    final digest = (await sha256.bind(file.openRead()).first)
-        .toString()
-        .toLowerCase();
-
     // The strong check first, where this build has a key to make it with.
     //
     // A digest out of the GitHub API proves the file arrived as published; a
@@ -695,7 +691,8 @@ class UpdateService extends ChangeNotifier {
     // fallen back on — falling back would mean anything able to publish a
     // release could also delete the manifest and be trusted again.
     if (releaseSigningIsEnforced) {
-      return _verifySignature(release, length: length, digest: digest);
+      return _verifySignature(release,
+          length: length, digest: await _digestOf(file));
     }
 
     final expected = release.sha256;
@@ -703,11 +700,24 @@ class UpdateService extends ChangeNotifier {
     final wanted = expected.startsWith('sha256:')
         ? expected.substring('sha256:'.length)
         : expected;
-    if (digest != wanted.toLowerCase()) {
+    if (await _digestOf(file) != wanted.toLowerCase()) {
       return l10n.updateChecksumMismatch;
     }
     return null;
   }
+
+  /// The downloaded file's SHA-256, lower case, as the manifest and the API
+  /// both spell it.
+  ///
+  /// Read where the answer is about to be *used*, and nowhere else. It streams
+  /// the whole download, so a release that names no digest and is not signed
+  /// must not pay for it — and the sharper consequence is that a widget test
+  /// driving this service runs inside a fake clock, where a real file read
+  /// never completes at all and the test hangs until the harness gives up.
+  /// Hoisting this to the top of [_verify] for tidiness is the way back to
+  /// that, which is why it is a call and not a local.
+  static Future<String> _digestOf(File file) async =>
+      (await sha256.bind(file.openRead()).first).toString().toLowerCase();
 
   /// The signed-manifest half of [_verify]. Reached only on a build that
   /// carries a release signing key, where it is the whole decision.
