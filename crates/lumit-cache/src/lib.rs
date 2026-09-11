@@ -2,7 +2,9 @@
 //! docs/06-RENDER-PIPELINE.md §5. The RAM tier ([`ByteLru`]) is a
 //! byte-budget store with cost-aware (GreedyDual-style) eviction and pinning
 //! (§5.3); the disk tier ([`disk`]) parks frames in a cache folder and keeps an
-//! [`index`] of them. The governor joins as the evaluator grows.
+//! [`index`] of them. Every store registers with the resource governor
+//! ([`ByteLru::account_against`]), which is where its own byte budget stops
+//! being private to it (docs/13-PERFORMANCE-RULES.md §3).
 //!
 //! The disk tier keeps an [`index`] of what it holds — size, recompute cost and
 //! last use — so it can evict by the same rule the tiers above it use rather than

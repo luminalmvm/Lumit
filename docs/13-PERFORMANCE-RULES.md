@@ -185,6 +185,12 @@ Notes:
 
 One component owns memory. Nothing render-related allocates outside it.
 
+Built: `crates/lumit-budget` is the ledger, and
+[impl/resource-governor.md](impl/resource-governor.md) is the binding *how* —
+where the budgets come from, what is registered against them, which rungs of §4
+the renderer takes on its own, and what is deliberately still open (live budget
+renegotiation and graph-derived pool lifetimes are both named there).
+
 - **Budgets**: defaults — VRAM: 70% of the reported card memory for dedicated GPUs, 40% of
   system RAM treated as the ceiling for shared-memory GPUs; RAM: 60% of physical RAM for the
   sum of caches, decode queues, and working buffers. Both user-overridable in preferences. The
