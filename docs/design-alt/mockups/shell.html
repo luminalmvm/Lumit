@@ -1,0 +1,1136 @@
+<title>Lumit Shell Specimens</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500&family=Geist+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400&family=Jost:wght@400;500&family=DM+Mono:wght@400;500&display=swap">
+<style>
+/* ------------------------------------------------------------------
+   Lumit shell specimens — docs/design-alt/mockups/shell.html
+
+   One markup, three design languages. Every visible difference between
+   the three panes below is a token value or a grammar switch; no panel
+   is laid out twice. That is the claim the canonical doc makes about
+   Light mode ("a token swap, not a redesign") tested against two styles
+   that were not designed alongside it.
+
+   The page's own surround is a fixed neutral grey and does not follow
+   the viewer's theme. Three palettes are being judged against each
+   other here, and a ground that moved would move the judgement.
+   ------------------------------------------------------------------ */
+
+:root {
+  --mount: #3d3d3c;
+  --mount-deep: #2f2f2e;
+  --mount-line: #565654;
+  --mount-ink: #eceae6;
+  --mount-ink-2: #b3b1ac;
+  --mount-ink-3: #86847f;
+  --mount-hi: #e0a24a;
+  --page-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --page-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--mount);
+  color: var(--mount-ink);
+  font-family: var(--page-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding-inline: 20px;
+  padding-block: 28px 64px;
+}
+
+/* ---------- page chrome ---------- */
+
+.masthead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 18px; }
+.masthead h1 {
+  margin: 0; font-size: 19px; font-weight: 500; letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+.masthead .sub { margin: 0; color: var(--mount-ink-2); font-size: 13px; }
+
+.intro {
+  margin: 14px 0 0; max-width: 68ch; color: var(--mount-ink-2);
+  font-size: 13.5px; line-height: 1.6;
+}
+.intro strong { color: var(--mount-ink); font-weight: 500; }
+
+.bar {
+  display: flex; flex-wrap: wrap; gap: 10px 26px; align-items: flex-end;
+  margin-top: 22px; padding-bottom: 12px;
+  border-bottom: 1px solid var(--mount-line);
+}
+.group { display: flex; flex-direction: column; gap: 6px; }
+.group > .glabel {
+  font-family: var(--page-mono); font-size: 9px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--mount-ink-3);
+}
+.seg { display: flex; gap: 0; }
+.seg button {
+  appearance: none; cursor: pointer;
+  font-family: var(--page-sans); font-size: 12.5px; line-height: 1;
+  padding: 8px 13px;
+  color: var(--mount-ink-2);
+  background: var(--mount-deep);
+  border: 1px solid var(--mount-line);
+  border-right-width: 0;
+}
+.seg button:last-child { border-right-width: 1px; }
+.seg button:hover { color: var(--mount-ink); }
+.seg button[aria-pressed="true"] {
+  color: #201f1d; background: var(--mount-hi); border-color: var(--mount-hi);
+}
+.seg button:focus-visible { outline: 2px solid var(--mount-hi); outline-offset: 2px; }
+
+/* ---------- specimen frame ---------- */
+
+.stage { margin-top: 26px; }
+.stage-head {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px;
+  margin-bottom: 10px;
+}
+.stage-head .name { font-size: 15px; font-weight: 500; }
+.stage-head .room {
+  font-family: var(--page-mono); font-size: 10px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--mount-ink-3);
+}
+.stage-head .gloss { color: var(--mount-ink-2); font-size: 12.5px; }
+
+.viewport { overflow-x: auto; overflow-y: hidden; }
+.scaler { transform-origin: top left; width: 1180px; }
+
+/* ==================================================================
+   THE SHELL
+   Laid out once. Everything below styles it through tokens.
+   ================================================================== */
+
+.shell {
+  width: 1180px; height: 706px;
+  display: grid;
+  grid-template-columns: 300px 1fr 226px;
+  grid-template-rows: 1fr 274px;
+  gap: var(--tilegap);
+  padding: var(--tilegap);
+  background: var(--grid);
+  font-family: var(--f-ui);
+  color: var(--ts);
+  font-size: 11px;
+  --tilegap: 1px;
+  --radius: 2px;
+}
+.shell, .shell * { box-sizing: border-box; }
+
+.pane { background: var(--s1); min-width: 0; display: flex; flex-direction: column; }
+.pane--project { grid-row: 1; }
+.pane--viewer  { grid-row: 1; }
+.pane--fx      { grid-row: 1; }
+.pane--timeline { grid-column: 1 / -1; }
+
+/* --- panel header: label, optional rule, right-hand controls --- */
+.phead {
+  height: 24px; flex: none; display: flex; align-items: center; gap: 8px;
+  padding: 0 8px; background: var(--s2);
+  border-bottom: 1px solid var(--hair);
+}
+.plabel {
+  font-family: var(--f-label); font-size: var(--label-size);
+  letter-spacing: var(--label-track); text-transform: var(--label-case);
+  color: var(--tm); white-space: nowrap;
+}
+.prule { display: none; flex: 1; height: 2px; background: var(--rule); }
+.phead .spacer { flex: 1; }
+.phead .mini { font-family: var(--f-num); font-size: 9px; color: var(--tm); }
+
+/* --- generic bits --- */
+.row { display: flex; align-items: center; gap: 8px; }
+.num { font-family: var(--f-num); font-variant-numeric: tabular-nums; }
+.glyph {
+  width: 13px; height: 13px; flex: none; display: block;
+  color: var(--ts);
+}
+.glyph svg { display: block; width: 100%; height: 100%; }
+
+/* the field: an inset well, or (Bauhaus) a rule under the value */
+.well {
+  background: var(--well); border-radius: var(--radius);
+  padding: 0 6px; height: 20px; display: flex; align-items: center; gap: 5px;
+  font-family: var(--f-num); font-variant-numeric: tabular-nums;
+  font-size: 11px; color: var(--tp); min-width: 0;
+}
+.well .unit { font-size: 10px; color: var(--tm); }
+
+/* the one filled action */
+.filled {
+  height: 18px; padding: 0 10px; display: flex; align-items: center;
+  background: var(--signal); color: var(--signal-ink);
+  border-radius: var(--radius);
+  font-family: var(--f-label); font-size: var(--label-size);
+  letter-spacing: var(--label-track); text-transform: var(--label-case);
+}
+.ghost {
+  height: 18px; padding: 0 8px; display: flex; align-items: center;
+  border: 1px solid var(--hairS); border-radius: var(--radius);
+  color: var(--ts); font-size: 10px;
+}
+
+/* ---------- project panel ---------- */
+.proj-preview {
+  height: 75px; flex: none; padding: 10px; background: var(--s1);
+  border-bottom: 1px solid var(--hair);
+}
+.poster {
+  width: 96px; height: 54px; border: 1px solid var(--hair);
+  background: linear-gradient(160deg, #6c5f52, #2a2724 60%, #171513);
+  border-radius: var(--radius);
+}
+.proj-search { height: 34px; flex: none; display: flex; align-items: center; padding: 0 8px; }
+.swatchfilter {
+  width: 10px; height: 10px; flex: none; border-radius: var(--radius);
+  background: conic-gradient(var(--c-blue) 0 25%, var(--c-yellow) 0 50%, var(--layer-precomp) 0 75%, var(--c-red) 0);
+}
+.proj-cols, .proj-row {
+  display: grid; grid-template-columns: 1fr 28px 44px 26px 52px;
+  gap: 6px; padding: 0 8px; align-items: center;
+}
+.proj-cols { height: 19px; flex: none; color: var(--tm); }
+.proj-cols span {
+  font-family: var(--f-label); font-size: var(--label-size);
+  letter-spacing: var(--label-track); text-transform: var(--label-case);
+  text-align: right;
+}
+.proj-cols span:first-child { text-align: left; }
+.proj-cols span:last-child { text-align: left; }
+.proj-rows { flex: 1; overflow: hidden; }
+.proj-row { height: 22px; font-size: 11px; color: var(--ts); }
+.proj-row.is-sel { background: var(--sel-fill); box-shadow: inset 0 0 0 var(--sel-w) var(--signal); }
+.proj-row .nm { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.proj-row .nm .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.proj-row .num { font-size: 10px; color: var(--tm); text-align: right; }
+.proj-row .pth { font-size: 10px; color: var(--td); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.badge {
+  height: 14px; padding: 0 4px; display: inline-flex; align-items: center; flex: none;
+  font-family: var(--f-num); font-size: 9px; border-radius: var(--radius);
+  border: 1px solid currentColor; color: var(--tm);
+}
+.badge--use { color: var(--on); }
+.badge--miss { color: var(--attn); }
+.proj-foot {
+  height: 20px; flex: none; display: flex; align-items: center; gap: 10px;
+  padding: 0 8px; background: var(--s2); border-top: 1px solid var(--hair);
+  color: var(--tm);
+}
+.proj-foot .cnt { margin-left: auto; font-family: var(--f-num); font-size: 10px; }
+.foot-word {
+  font-family: var(--f-label); font-size: var(--label-size);
+  letter-spacing: var(--label-track); text-transform: var(--label-case);
+}
+
+/* ---------- viewer ---------- */
+.pane--viewer { background: var(--s1); }
+.viewer-stage {
+  flex: 1; background: var(--surround); display: flex;
+  align-items: center; justify-content: center; position: relative; min-height: 0;
+}
+.frame {
+  width: 448px; height: 252px; position: relative; overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 28% 12%, #ffd9a3 0%, #f0a35f 26%, #c2653f 52%, #5d3552 78%, #241c33 100%);
+}
+.frame .hill {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 44%;
+  background: #16121f;
+  clip-path: polygon(0 62%, 13% 40%, 27% 56%, 41% 24%, 56% 49%, 72% 31%, 86% 52%, 100% 38%, 100% 100%, 0 100%);
+}
+.frame .hill2 {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 28%;
+  background: #0c0a12;
+  clip-path: polygon(0 74%, 18% 52%, 34% 70%, 52% 44%, 68% 66%, 84% 50%, 100% 68%, 100% 100%, 0 100%);
+}
+.frame .sun { position: absolute; left: 27%; top: 30%; width: 54px; height: 54px; border-radius: 50%; background: #fff3dd; opacity: .92; }
+.frame .ttl {
+  position: absolute; left: 34px; bottom: 40px; color: #f6f1e8;
+  font-family: var(--f-ui); font-size: 21px; letter-spacing: 0.14em; text-transform: uppercase;
+}
+.selname {
+  position: absolute; left: 16px; top: 8px;
+  padding: 1px 4px; font-family: var(--f-num); font-size: 9px; letter-spacing: 0.08em;
+  color: var(--sel-ink); border: 1px solid var(--sel-ink);
+}
+.gizmo { position: absolute; inset: 30px 46px 44px 46px; border: 1px solid var(--sel-ink); }
+.gizmo i {
+  position: absolute; width: 6px; height: 6px; background: var(--sel-ink);
+  border: 1px solid var(--rule);
+}
+.gizmo i:nth-child(1) { left: -3px; top: -3px; }
+.gizmo i:nth-child(2) { right: -3px; top: -3px; }
+.gizmo i:nth-child(3) { left: -3px; bottom: -3px; }
+.gizmo i:nth-child(4) { right: -3px; bottom: -3px; }
+
+.viewer-bar {
+  height: 24px; flex: none; display: flex; align-items: center; gap: 8px;
+  padding: 0 10px; background: var(--s2); border-top: 1px solid var(--hair);
+}
+.viewer-bar .seam { width: 1px; height: 12px; background: var(--hair); flex: none; }
+.transport { display: flex; align-items: center; gap: 10px; margin: 0 auto; }
+.transport .glyph { width: 14px; height: 14px; }
+.clock { font-family: var(--f-num); font-variant-numeric: tabular-nums; font-size: 11px; color: var(--tp); }
+.reading { font-family: var(--f-num); font-size: 10px; color: var(--tm); white-space: nowrap; }
+.expo { font-family: var(--f-num); font-size: 10px; color: var(--ts); }
+
+/* ---------- effect controls ---------- */
+.fx-head {
+  height: 24px; flex: none; display: flex; align-items: center; gap: 6px;
+  padding: 0 8px; border-bottom: 1px solid var(--hair);
+  font-family: var(--f-label); font-size: var(--label-size);
+  letter-spacing: var(--label-track); text-transform: var(--label-case); color: var(--tm);
+}
+.prop {
+  height: 27px; flex: none; display: flex; align-items: center; gap: 6px;
+  padding: 0 8px;
+}
+.prop .stop {
+  width: 11px; height: 11px; flex: none; border: 1px solid var(--tm);
+  border-radius: var(--stop-radius);
+}
+.prop .stop.on { background: var(--stop-on); border-color: var(--stop-on); }
+.prop .nav { width: 26px; flex: none; }
+.prop .lbl { flex: 1; color: var(--ts); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prop .well { width: 62px; }
+.prop.pair .well { width: 44px; }
+.link { width: 10px; height: 10px; flex: none; color: var(--tm); }
+.link svg { display: block; width: 100%; height: 100%; }
+
+/* ---------- timeline ---------- */
+.pane--timeline { display: flex; flex-direction: column; }
+.tl-head {
+  height: 24px; flex: none; display: flex; align-items: center; gap: 10px;
+  padding: 0 8px; background: var(--s2); border-bottom: 1px solid var(--hair);
+}
+.comptab {
+  height: 24px; display: flex; align-items: center; padding: 0 10px;
+  font-size: 11px; color: var(--tm); position: relative;
+}
+.comptab.is-front { color: var(--tp); background: var(--s1); }
+.comptab.is-front::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0;
+  height: var(--tabrule); background: var(--signal); display: var(--tabrule-show);
+}
+.tl-body { flex: 1; display: grid; grid-template-columns: 560px 1fr; min-height: 0; }
+.outline { border-right: 1px solid var(--hair); display: flex; flex-direction: column; min-width: 0; }
+.lanes { display: flex; flex-direction: column; min-width: 0; position: relative; }
+
+.tl-chrome1 { height: 24px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 8px; }
+.tl-chrome1 .well { height: 20px; }
+.tl-chrome1 .modetabs { display: flex; gap: 2px; margin-left: auto; }
+.modetab {
+  height: 20px; padding: 0 8px; display: flex; align-items: center;
+  font-size: 10px; color: var(--tm); border-radius: var(--radius);
+}
+.modetab.on { color: var(--tp); box-shadow: inset 0 calc(-1 * var(--tabrule)) 0 var(--signal); }
+.tl-chrome2 {
+  height: 24px; flex: none; display: grid; align-items: center;
+  grid-template-columns: 70px 22px 1fr 84px 84px 64px 34px;
+  gap: 8px; padding: 0 8px; border-bottom: 1px solid var(--hair);
+  color: var(--tm);
+}
+.tl-chrome2 span {
+  font-family: var(--f-label); font-size: var(--label-size);
+  letter-spacing: var(--label-track); text-transform: var(--label-case);
+}
+.orows { flex: 1; overflow: hidden; }
+.orow {
+  height: 24px; display: grid; align-items: center;
+  grid-template-columns: 70px 22px 1fr 84px 84px 64px 34px;
+  gap: 8px; padding: 0 8px; border-bottom: 1px solid var(--hair);
+}
+.orow.is-sel { background: var(--sel-fill); box-shadow: inset 0 0 0 var(--sel-w) var(--signal); }
+.switches { display: flex; gap: 6px; }
+.switches i {
+  width: 10px; height: 10px; border: 1px solid var(--tm); border-radius: 1px;
+}
+.switches i.on { background: var(--tp); border-color: var(--tp); }
+.lnum { font-family: var(--f-num); font-size: 10px; color: var(--tm); text-align: right; }
+.lname { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.ldot { width: 6px; height: 6px; flex: none; border-radius: var(--dot-radius); }
+.lname .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ts); }
+.picker {
+  height: 18px; display: flex; align-items: center; justify-content: space-between;
+  padding: 0 5px; font-size: 10px; color: var(--ts);
+  background: var(--well); border-radius: var(--radius);
+}
+.ms { font-family: var(--f-num); font-size: 10px; color: var(--tm); text-align: right; }
+.ofoot {
+  height: 20px; flex: none; display: flex; align-items: center; gap: 8px;
+  padding: 0 8px; background: var(--s2); border-top: 1px solid var(--hair); color: var(--tm);
+}
+
+/* ruler */
+.ruler {
+  height: 48px; flex: none; position: relative; background: var(--s2);
+  border-bottom: 1px solid var(--hair); overflow: hidden;
+}
+.ruler .ticks {
+  position: absolute; inset: 0 0 24px 0;
+  background-image:
+    repeating-linear-gradient(to right, var(--hairS) 0 1px, transparent 1px 76px),
+    repeating-linear-gradient(to right, var(--hair) 0 1px, transparent 1px 38px);
+  background-size: 100% 7px, 100% 4px;
+  background-position: 0 100%, 0 100%;
+  background-repeat: repeat-x;
+}
+.ruler .tnums {
+  position: absolute; left: 0; right: 0; top: 3px; height: 12px;
+  display: flex; font-family: var(--f-num); font-size: 9px; color: var(--tm);
+}
+.ruler .tnums span { width: 76px; flex: none; padding-left: 3px; }
+.ruler .wa {
+  position: absolute; left: 114px; right: 190px; bottom: 0; height: 24px;
+  background: var(--wa);
+}
+.ruler .wa i {
+  position: absolute; top: -14px; bottom: 0; width: 4px; background: var(--wa-solid);
+}
+.ruler .wa i:first-child { left: 0; }
+.ruler .wa i:last-child { right: 0; }
+.cache { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; display: flex; }
+.cache b { display: block; height: 100%; align-self: flex-end; }
+.marker {
+  position: absolute; left: 236px; bottom: 4px; display: flex; align-items: center;
+}
+.marker .flag {
+  width: 8px; height: 6px; background: var(--markc);
+  clip-path: polygon(50% 0, 100% 100%, 0 100%); position: relative; z-index: 2;
+}
+.marker .pill {
+  height: 12px; margin-left: -4px; padding: 0 5px 0 7px; background: var(--s4);
+  display: flex; align-items: center; font-family: var(--f-num); font-size: 8px; color: var(--tp);
+}
+.playhead { position: absolute; left: 318px; top: 0; bottom: 0; width: 1px; background: var(--signal); z-index: 4; }
+.playhead::before {
+  content: ""; position: absolute; left: -5px; top: 0; width: 11px; height: 8px;
+  background: var(--signal); clip-path: var(--ph-head);
+}
+.lane-well { flex: 1; background: var(--well); position: relative; overflow: hidden; }
+.lane {
+  height: 24px; border-bottom: 1px solid var(--hair); position: relative; z-index: 2;
+}
+.lbar {
+  position: absolute; top: 4px; height: 16px; border-radius: var(--radius);
+  display: flex; align-items: center; background: var(--s2); overflow: visible;
+}
+.lbar::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  background: var(--bar-tab); opacity: var(--bar-mix);
+}
+.lbar::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--bar-tab); z-index: 1;
+}
+.lbar.is-sel { box-shadow: 0 0 0 var(--sel-w) var(--signal); }
+.lbar .trimghost {
+  position: absolute; top: -4px; bottom: -4px; border: 1px dashed var(--hairS);
+}
+.lane .phline { position: absolute; left: 318px; top: 0; bottom: 0; width: 1px; background: var(--signal); z-index: 3; }
+.lane .waband { position: absolute; left: 114px; right: 190px; top: 0; bottom: 0; background: var(--wa); }
+
+/* keyframe marks */
+.kf { position: relative; width: 11px; height: 11px; flex: none; }
+.kf::before {
+  content: ""; position: absolute; inset: -1px; background: var(--rule);
+  clip-path: var(--kf-shape); display: var(--kf-keyline);
+}
+.kf::after { content: ""; position: absolute; inset: 0; background: var(--kf-col); clip-path: var(--kf-shape); }
+.kf.k-linear { --kf-shape: var(--shape-linear); --kf-col: var(--col-linear); }
+.kf.k-hold   { --kf-shape: var(--shape-hold);   --kf-col: var(--col-hold); }
+.kf.k-bezier { --kf-shape: var(--shape-bezier); --kf-col: var(--col-bezier); }
+.kf.on-lane { position: absolute; top: 6px; z-index: 1; }
+
+/* ==================================================================
+   TOKENS — three languages, two rooms each
+   ================================================================== */
+
+/* ---- shared shape defaults ---- */
+.shell {
+  --shape-linear: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  --shape-hold:   inset(0);
+  --shape-bezier: polygon(0 0, 100% 0, 0 100%, 100% 100%);
+  --kf-keyline: none;
+  --stop-radius: 0;
+  --dot-radius: 50%;
+  --ph-head: polygon(0 0, 100% 0, 50% 100%);
+  --sel-w: 1px;
+  --tabrule: 2px;
+  --tabrule-show: block;
+  --label-size: 9px;
+}
+
+/* ---------- 1. CANONICAL (docs/15-DESIGN.md, Sharp) ---------- */
+.shell[data-style="canonical"] {
+  --f-ui: "Hanken Grotesk", system-ui, sans-serif;
+  --f-num: "Geist Mono", ui-monospace, monospace;
+  --f-label: "Geist Mono", ui-monospace, monospace;
+  --label-case: uppercase; --label-track: 0.12em;
+  --radius: 2px; --tilegap: 1px;
+  --col-linear: var(--ts); --col-hold: var(--ts); --col-bezier: var(--ts);
+  --tabrule-show: none;
+}
+.shell[data-style="canonical"][data-room="a"] {
+  --bar-mix: 0.20;
+  --grid: #0b0c0e; --s1: #131517; --s2: #1a1d20; --s3: #212528; --s4: #2b3034;
+  --well: #0b0c0e; --surround: #121212;
+  --tp: #eef1f2; --ts: #c2c8cb; --tm: #8b9296; --td: #5e666b;
+  --hair: #26292c; --hairS: #3c4145; --rule: #26292c;
+  --signal: #35785e; --signal-ink: #0b0c0e;
+  --on: #5fcfae; --attn: #dd9a82; --fault: #d1729c;
+  --sel-fill: rgba(53,120,94,.16); --sel-ink: #d8a24a;
+  --wa: rgba(216,162,74,.16); --wa-solid: #8a6a34;
+  --markc: #c4c4c4;
+  --c-blue: #8ee3ef; --c-yellow: #d8a24a; --c-red: #d1729c;
+  --layer-footage: #56707f; --layer-sequence: #5a6a8c; --layer-precomp: #7a5a74;
+  --layer-solid: #5c6165; --layer-text: #8c8468; --layer-camera: #806f4a;
+  --cache-hot: #5fcfae; --cache-disk: #5f93b8;
+  --stop-on: #d8a24a;
+}
+.shell[data-style="canonical"][data-room="b"] {
+  --bar-mix: 0.24;
+  --grid: #d9d9d6; --s1: #ffffff; --s2: #f1f1ef; --s3: #ffffff; --s4: #e3e3e0;
+  --well: #ebebe8; --surround: #a8a8a8;
+  --tp: #16181a; --ts: #3f4448; --tm: #6b7276; --td: #9aa0a4;
+  --hair: #dcdcd8; --hairS: #b9b9b4; --rule: #dcdcd8;
+  --signal: #35785e; --signal-ink: #ffffff;
+  --on: #2f8266; --attn: #a8573a; --fault: #a33c68;
+  --sel-fill: rgba(53,120,94,.16); --sel-ink: #9a6c1c;
+  --wa: rgba(154,108,28,.16); --wa-solid: #c2a05c;
+  --markc: #565656;
+  --c-blue: #2f8fa0; --c-yellow: #9a6c1c; --c-red: #a33c68;
+  --layer-footage: #4d6673; --layer-sequence: #51607f; --layer-precomp: #6e5069;
+  --layer-solid: #53585c; --layer-text: #7c755c; --layer-camera: #726243;
+  --cache-hot: #2f8266; --cache-disk: #4a7fa3;
+  --stop-on: #9a6c1c;
+}
+
+/* ---------- 2. RAMS ---------- */
+.shell[data-style="rams"] {
+  --f-ui: "IBM Plex Sans", system-ui, sans-serif;
+  --f-num: "IBM Plex Sans", system-ui, sans-serif;
+  --f-label: "IBM Plex Sans", system-ui, sans-serif;
+  --label-case: lowercase; --label-track: 0.04em;
+  --radius: 2px; --tilegap: 1px;
+  --col-linear: var(--ts); --col-hold: var(--ts); --col-bezier: var(--ts);
+  --sel-w: 1px;
+}
+.shell[data-style="rams"][data-room="a"] {
+  --bar-mix: 0.30;
+  --grid: #cdcbc6; --s1: #ecebe7; --s2: #e4e2de; --s3: #f7f6f3; --s4: #d2d0cb;
+  --well: #dedcd8; --surround: #7f7f7f;
+  --tp: #1b1b1a; --ts: #4c4c49; --tm: #696864; --td: #848380;
+  --hair: #cdcbc6; --hairS: #a9a7a1; --rule: #a9a7a1;
+  --signal: #b8500d; --signal-ink: #ffffff;
+  --on: #2f6f4a; --attn: #8a5f04; --fault: #a6331e;
+  --sel-fill: rgba(184,80,13,.14); --sel-ink: #b8500d;
+  /* the work-area handles are grey: §3.1's signal list does not include them */
+  --wa: transparent; --wa-solid: #696864;
+  --markc: #565656;
+  --c-blue: #4a6b7d; --c-yellow: #8a5f04; --c-red: #a6331e;
+  --layer-footage: #6f7f88; --layer-sequence: #6c7a94; --layer-precomp: #8a7284;
+  --layer-solid: #7c7c78; --layer-text: #8b8570; --layer-camera: #8a7c5c;
+  --cache-hot: #2f6f4a; --cache-disk: #4a6b7d;
+  --stop-on: #1b1b1a;
+}
+.shell[data-style="rams"][data-room="b"] {
+  --bar-mix: 0.24;
+  --grid: #353532; --s1: #262625; --s2: #2e2e2c; --s3: #383836; --s4: #454542;
+  --well: #1c1c1b; --surround: #7f7f7f;
+  --tp: #f0efeb; --ts: #c4c2bc; --tm: #918f89; --td: #78756f;
+  --hair: #353532; --hairS: #4e4e4a; --rule: #4e4e4a;
+  --signal: #e8712a; --signal-ink: #17110c;
+  --on: #5cb083; --attn: #d2a23f; --fault: #e58367;
+  --sel-fill: rgba(232,113,42,.14); --sel-ink: #e8712a;
+  --wa: transparent; --wa-solid: #918f89;
+  --markc: #c4c4c4;
+  --c-blue: #5f8196; --c-yellow: #d2a23f; --c-red: #e58367;
+  --layer-footage: #77878f; --layer-sequence: #74839d; --layer-precomp: #917a8c;
+  --layer-solid: #84847f; --layer-text: #938d78; --layer-camera: #928463;
+  --cache-hot: #5cb083; --cache-disk: #5f8196;
+  --stop-on: #f0efeb;
+}
+/* Rams grammar: the work area is the undimmed part, so the band is not painted
+   and the ground outside it steps darker instead. */
+.shell[data-style="rams"] .lane .waband { background: transparent; }
+.shell[data-style="rams"] .lane-well { background: var(--well); }
+.shell[data-style="rams"] .lane-well::before,
+.shell[data-style="rams"] .lane-well::after {
+  content: ""; position: absolute; top: 0; bottom: 0; background: rgba(0,0,0,.10); z-index: 1;
+}
+.shell[data-style="rams"][data-room="b"] .lane-well::before,
+.shell[data-style="rams"][data-room="b"] .lane-well::after { background: rgba(0,0,0,.28); }
+.shell[data-style="rams"] .lane-well::before { left: 0; width: 114px; }
+.shell[data-style="rams"] .lane-well::after { right: 0; width: 190px; }
+.shell[data-style="rams"] .ruler .wa { background: transparent; }
+
+/* ---------- 3. BAUHAUS ---------- */
+.shell[data-style="bauhaus"] {
+  --f-ui: "Jost", system-ui, sans-serif;
+  --f-num: "DM Mono", ui-monospace, monospace;
+  --f-label: "Jost", system-ui, sans-serif;
+  --label-case: lowercase; --label-track: 0.06em;
+  --radius: 0; --tilegap: 3px;
+  --shape-linear: polygon(50% 0, 100% 100%, 0 100%);
+  --shape-hold: inset(0);
+  --shape-bezier: circle(50%);
+  --kf-keyline: block;
+  --stop-radius: 50%;
+  --dot-radius: 0;
+  /* a position is a square standing on its corner; the triangle is yellow's alone */
+  --ph-head: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  --sel-w: 2px;
+  --label-size: 9px;
+}
+.shell[data-style="bauhaus"][data-room="a"] {
+  --bar-mix: 0.22;
+  --grid: #121211; --s1: #f4f2ec; --s2: #e6e2d8; --s3: #ffffff; --s4: #d5d0c2;
+  --well: #ddd8cb; --surround: #7f7f7f;
+  --tp: #121211; --ts: #3d3b36; --tm: #6f6c64; --td: #8a8679;
+  --hair: #cfcabc; --hairS: #cfcabc; --rule: #121211;
+  --signal: #d3241e; --signal-ink: #f4f2ec;
+  --on: #3d3b36; --attn: #8e7a12; --fault: #f2c200;
+  --sel-fill: transparent; --sel-ink: #d3241e;
+  --wa: rgba(242,194,0,.34); --wa-solid: #f2c200;
+  --markc: #565656;
+  --c-blue: #17479e; --c-yellow: #f2c200; --c-red: #d3241e;
+  --col-linear: #f2c200; --col-hold: #d3241e; --col-bezier: #17479e;
+  --layer-footage: #2f6ea3; --layer-sequence: #4d5fa8; --layer-precomp: #8a4e96;
+  --layer-solid: #6f6f6a; --layer-text: #a8621d; --layer-camera: #8e7a12;
+  --cache-hot: #17479e; --cache-disk: #8fb0d8;
+  --stop-on: #121211;
+}
+.shell[data-style="bauhaus"][data-room="b"] {
+  --bar-mix: 0.26;
+  --grid: #cfccc3; --s1: #1a1a19; --s2: #232320; --s3: #2c2c29; --s4: #3a3a36;
+  --well: #111110; --surround: #7f7f7f;
+  --tp: #f4f2ec; --ts: #c8c5bc; --tm: #8f8c84; --td: #6b6862;
+  --hair: #3a3a36; --hairS: #3a3a36; --rule: #f4f2ec;
+  --signal: #e8493d; --signal-ink: #1a1a19;
+  --on: #c8c5bc; --attn: #f6cf2e; --fault: #f6cf2e;
+  --sel-fill: transparent; --sel-ink: #e8493d;
+  --wa: rgba(246,207,46,.26); --wa-solid: #f6cf2e;
+  --markc: #c4c4c4;
+  --c-blue: #5b8ee0; --c-yellow: #f6cf2e; --c-red: #e8493d;
+  --col-linear: #f6cf2e; --col-hold: #e8493d; --col-bezier: #5b8ee0;
+  --layer-footage: #5e9ac9; --layer-sequence: #7d8cd0; --layer-precomp: #ab77b6;
+  --layer-solid: #94948d; --layer-text: #cd8a45; --layer-camera: #b8a034;
+  --cache-hot: #5b8ee0; --cache-disk: #2c4f80;
+  --stop-on: #f4f2ec;
+}
+/* Bauhaus grammar: a label's rule runs to the far edge; a field is a rule,
+   not a recess; a selection is an edge, not a wash. */
+.shell[data-style="bauhaus"] .prule { display: block; }
+.shell[data-style="bauhaus"] .phead,
+.shell[data-style="bauhaus"] .tl-head { border-bottom: none; }
+.shell[data-style="bauhaus"] .well,
+.shell[data-style="bauhaus"] .picker {
+  background: transparent; border-bottom: 2px solid var(--rule);
+  padding-left: 0; padding-right: 4px;
+}
+.shell[data-style="bauhaus"] .lbar { border-radius: 0; }
+.shell[data-style="bauhaus"] .badge { border-radius: 0; }
+.shell[data-style="bauhaus"] .switches i { border-radius: 0; }
+/* Bayer's single alphabet: words the application chose are lowercase.
+   Names the user chose — comp tabs, item names, layer names — are not. */
+.shell[data-style="bauhaus"] .picker,
+.shell[data-style="bauhaus"] .modetab,
+.shell[data-style="bauhaus"] .mini,
+.shell[data-style="bauhaus"] .fx-head,
+.shell[data-style="bauhaus"] .prop .lbl,
+.shell[data-style="bauhaus"] .uiword { text-transform: lowercase; }
+
+/* ---------- reference strips ---------- */
+.refs {
+  margin-top: 30px; display: grid; gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(248px, 1fr));
+}
+.ref {
+  background: var(--mount-deep); border: 1px solid var(--mount-line); padding: 14px 15px 16px;
+}
+.ref h3 {
+  margin: 0 0 11px; font-family: var(--page-mono); font-size: 9px;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--mount-ink-3); font-weight: 400;
+}
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { display: flex; flex-direction: column; gap: 5px; width: 62px; }
+.chip .sw { height: 30px; border: 1px solid var(--mount-line); }
+.chip .cn { font-family: var(--page-mono); font-size: 9px; color: var(--mount-ink-2); }
+.chip .cv { font-family: var(--page-mono); font-size: 8.5px; color: var(--mount-ink-3); }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; font-size: 12px; }
+.kv dt { font-family: var(--page-mono); font-size: 9px; letter-spacing: .08em; text-transform: uppercase; color: var(--mount-ink-3); padding-top: 2px; }
+.kv dd { margin: 0; color: var(--mount-ink-2); line-height: 1.45; }
+.notes { margin: 0; padding-left: 17px; color: var(--mount-ink-2); font-size: 12.5px; line-height: 1.55; }
+.notes li { margin-bottom: 6px; }
+.notes li:last-child { margin-bottom: 0; }
+.notes b { color: var(--mount-ink); font-weight: 500; }
+
+.foot {
+  margin-top: 34px; padding-top: 14px; border-top: 1px solid var(--mount-line);
+  color: var(--mount-ink-3); font-size: 12px; line-height: 1.6;
+}
+.foot code { font-family: var(--page-mono); font-size: 11px; color: var(--mount-ink-2); }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <h1>Lumit shell specimens</h1>
+    <p class="sub">One markup, three design languages, two rooms each</p>
+  </header>
+
+  <p class="intro">
+    The same panel tree — Project, Viewer, Effect controls, Timeline — drawn three times. Every
+    difference you can see is a token value or a grammar switch; <strong>no panel is laid out
+    twice</strong>. Style 1 is the shipping language in <a style="color:var(--mount-hi)" href="../../15-DESIGN.md">docs/15-DESIGN.md</a>;
+    styles 2 and 3 are the envisionings in this folder. The page's own surround is a fixed neutral
+    grey and ignores your system theme, because three palettes are being judged against each other
+    and a ground that moved would move the judgement.
+  </p>
+
+  <div class="bar">
+    <div class="group">
+      <span class="glabel" id="lbl-style">Design language</span>
+      <div class="seg" role="group" aria-labelledby="lbl-style">
+        <button type="button" id="s-canonical" data-set="canonical" aria-pressed="true">1 · Canonical</button>
+        <button type="button" id="s-rams" data-set="rams" aria-pressed="false">2 · Rams</button>
+        <button type="button" id="s-bauhaus" data-set="bauhaus" aria-pressed="false">3 · Bauhaus</button>
+      </div>
+    </div>
+    <div class="group">
+      <span class="glabel" id="lbl-room">Room</span>
+      <div class="seg" role="group" aria-labelledby="lbl-room">
+        <button type="button" id="r-a" data-room="a" aria-pressed="true">Dark</button>
+        <button type="button" id="r-b" data-room="b" aria-pressed="false">Light</button>
+      </div>
+    </div>
+  </div>
+
+  <section class="stage">
+    <div class="stage-head">
+      <span class="name" id="styleName">The 2026-08-23 redesign</span>
+      <span class="room" id="roomName">dark</span>
+      <span class="gloss" id="styleGloss">Dark-first, one spruce accent, mono-caps kickers, inset value wells.</span>
+    </div>
+
+    <div class="viewport" id="viewport">
+      <div class="scaler" id="scaler">
+        <div class="shell" id="shell" data-style="canonical" data-room="a">
+
+          <!-- ============ PROJECT ============ -->
+          <section class="pane pane--project">
+            <div class="phead"><span class="plabel">Project</span><span class="prule"></span></div>
+            <div class="proj-preview"><div class="poster"></div></div>
+            <div class="proj-search">
+              <div class="well" style="flex:1">
+                <span class="swatchfilter"></span><span class="uiword" style="color:var(--tm)">Search</span>
+              </div>
+            </div>
+            <div class="proj-cols"><span>Name</span><span>Items</span><span>Size</span><span>fps</span><span>Path</span></div>
+            <div class="proj-rows">
+              <div class="proj-row is-sel">
+                <span class="nm"><span class="glyph"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2.5" y="3.5" width="11" height="9"/><path d="M2.5 6.5h11"/></svg></span><span class="t">Opening sequence</span></span>
+                <span class="num">12</span><span class="num">—</span><span class="num">25</span><span class="pth">comps/</span>
+              </div>
+              <div class="proj-row">
+                <span class="nm"><span class="glyph" style="color:var(--c-blue)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2.5" y="4" width="11" height="8"/><path d="M6.5 6.5v3l3-1.5z"/></svg></span><span class="t">rooftop_a012.mov</span><span class="badge badge--use">in use</span></span>
+                <span class="num">—</span><span class="num">842M</span><span class="num">25</span><span class="pth">footage/day2</span>
+              </div>
+              <div class="proj-row">
+                <span class="nm"><span class="glyph" style="color:var(--c-blue)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2.5" y="4" width="11" height="8"/><path d="M6.5 6.5v3l3-1.5z"/></svg></span><span class="t">rooftop_a017.mov</span><span class="badge badge--miss">missing</span></span>
+                <span class="num">—</span><span class="num">— </span><span class="num">25</span><span class="pth">footage/day2</span>
+              </div>
+              <div class="proj-row">
+                <span class="nm"><span class="glyph" style="color:var(--layer-camera)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2.5 8h11M8 2.5v11"/><circle cx="8" cy="8" r="5.5"/></svg></span><span class="t">grade_master.cube</span></span>
+                <span class="num">—</span><span class="num">1.1M</span><span class="num">—</span><span class="pth">luts/</span>
+              </div>
+              <div class="proj-row">
+                <span class="nm"><span class="glyph"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2.5 12.5V4.5h4l1.5 2h5.5v6z"/></svg></span><span class="t">Audio</span></span>
+                <span class="num">3</span><span class="num">—</span><span class="num">—</span><span class="pth">—</span>
+              </div>
+              <div class="proj-row">
+                <span class="nm" style="padding-left:14px"><span class="glyph" style="color:var(--layer-solid)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 8.5v-2M6 11V5M9 13V3M13 8.5v-2"/></svg></span><span class="t">stinger_04.wav</span></span>
+                <span class="num">—</span><span class="num">6.4M</span><span class="num">48k</span><span class="pth">audio/</span>
+              </div>
+            </div>
+            <div class="proj-foot">
+              <span class="glyph"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 3.5v9M3.5 8h9"/></svg></span>
+              <span class="foot-word">New comp</span>
+              <span class="cnt">1 missing · 10 items</span>
+            </div>
+          </section>
+
+          <!-- ============ VIEWER ============ -->
+          <section class="pane pane--viewer">
+            <div class="phead">
+              <span class="plabel">Viewer</span><span class="prule"></span><span class="spacer"></span>
+              <span class="mini">Fit 62%</span><span class="mini">Half</span><span class="mini" style="text-transform:none">sRGB</span>
+            </div>
+            <div class="viewer-stage">
+              <div class="frame">
+                <div class="sun"></div><div class="hill"></div><div class="hill2"></div>
+                <div class="ttl">Rooftop</div>
+                <div class="selname">Rooftop · title</div>
+                <div class="gizmo"><i></i><i></i><i></i><i></i></div>
+              </div>
+            </div>
+            <div class="viewer-bar">
+              <span class="glyph"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M8 2.5v11"/></svg></span>
+              <span class="expo">+0.0</span>
+              <span class="seam"></span>
+              <span class="glyph"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2.5" y="3.5" width="11" height="9"/></svg></span>
+              <div class="transport">
+                <span class="glyph"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 3v10M11 8L4 3v10z"/></svg></span>
+                <span class="glyph"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M10 8L5 4.5v7z"/></svg></span>
+                <span class="clock num">00:00:04:12</span>
+                <span class="glyph"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 3v10M5 8l7-5v10z"/></svg></span>
+              </div>
+              <span class="reading">1920×1080 → 960×540 · 62%</span>
+            </div>
+          </section>
+
+          <!-- ============ EFFECT CONTROLS ============ -->
+          <section class="pane pane--fx">
+            <div class="phead"><span class="plabel">Effect controls</span><span class="prule"></span></div>
+            <div class="fx-head">
+              <span class="glyph"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 6l4 4 4-4"/></svg></span>
+              Gaussian blur
+            </div>
+            <div class="prop"><span class="stop on"></span><span class="nav"></span><span class="lbl">Blurriness</span><span class="well"><span>24.0</span><span class="unit">px</span></span></div>
+            <div class="prop"><span class="stop"></span><span class="nav"></span><span class="lbl">Dimensions</span><span class="well"><span>Both</span></span></div>
+            <div class="prop pair"><span class="stop"></span><span class="nav"></span><span class="lbl">Centre</span><span class="well"><span>960</span></span><span class="link"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 10l4-4M4.5 8.5a2.5 2.5 0 010-3.5l1-1a2.5 2.5 0 013.5 3.5M11.5 7.5a2.5 2.5 0 010 3.5l-1 1a2.5 2.5 0 01-3.5-3.5"/></svg></span><span class="well"><span>540</span></span></div>
+            <div class="fx-head" style="margin-top:2px">
+              <span class="glyph"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 6l4 4 4-4"/></svg></span>
+              Transform
+            </div>
+            <div class="prop"><span class="stop"></span><span class="nav"></span><span class="lbl">Anchor</span><span class="well"><span>960</span></span></div>
+            <div class="prop"><span class="stop on"></span><span class="nav"></span><span class="lbl">Position</span><span class="well"><span>948</span></span></div>
+            <div class="prop"><span class="stop"></span><span class="nav"></span><span class="lbl">Scale</span><span class="well"><span>104.0</span><span class="unit">%</span></span></div>
+            <div class="prop"><span class="stop on"></span><span class="nav"></span><span class="lbl">Rotation</span><span class="well"><span>2.4</span><span class="unit">°</span></span></div>
+            <div class="prop"><span class="stop"></span><span class="nav"></span><span class="lbl">Opacity</span><span class="well"><span>100</span><span class="unit">%</span></span></div>
+          </section>
+
+          <!-- ============ TIMELINE ============ -->
+          <section class="pane pane--timeline">
+            <div class="tl-head">
+              <span class="plabel">Timeline</span><span class="prule" style="max-width:40px"></span>
+              <span class="comptab is-front">Opening sequence</span>
+              <span class="comptab">Rooftop</span>
+              <span class="comptab">Titles</span>
+              <span class="spacer" style="flex:1"></span>
+              <span class="filled">Export</span>
+            </div>
+
+            <div class="tl-body">
+              <!-- outline -->
+              <div class="outline">
+                <div class="tl-chrome1">
+                  <span class="well" style="width:78px">00:00:04:12</span>
+                  <span class="well" style="width:56px">F48<span class="unit">/250</span></span>
+                  <span class="well" style="flex:1;height:16px"><span class="uiword">Search</span></span>
+                  <span class="modetabs"><span class="modetab on">Layers</span><span class="modetab">Graph</span></span>
+                </div>
+                <div class="tl-chrome2">
+                  <span>Switches</span><span style="text-align:right">#</span><span>Layer</span>
+                  <span>Matte</span><span>Blend</span><span>Parent</span><span style="text-align:right">ms</span>
+                </div>
+                <div class="orows">
+                  <div class="orow is-sel">
+                    <span class="switches"><i class="on"></i><i></i><i></i><i></i><i></i><i></i></span>
+                    <span class="lnum">1</span>
+                    <span class="lname"><span class="ldot" style="background:var(--layer-text)"></span><span class="t">Rooftop · title</span></span>
+                    <span class="picker">None<span style="color:var(--tm)">▾</span></span>
+                    <span class="picker">Normal<span style="color:var(--tm)">▾</span></span>
+                    <span class="picker">None<span style="color:var(--tm)">▾</span></span>
+                    <span class="ms">3.1</span>
+                  </div>
+                  <div class="orow">
+                    <span class="switches"><i class="on"></i><i></i><i></i><i class="on"></i><i></i><i></i></span>
+                    <span class="lnum">2</span>
+                    <span class="lname"><span class="ldot" style="background:var(--layer-precomp)"></span><span class="t">Glow pass</span></span>
+                    <span class="picker">Alpha<span style="color:var(--tm)">▾</span></span>
+                    <span class="picker">Screen<span style="color:var(--tm)">▾</span></span>
+                    <span class="picker">1<span style="color:var(--tm)">▾</span></span>
+                    <span class="ms">14.7</span>
+                  </div>
+                  <div class="orow">
+                    <span class="switches"><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i></span>
+                    <span class="lnum">3</span>
+                    <span class="lname"><span class="ldot" style="background:var(--layer-sequence)"></span><span class="t">Rooftop edit</span></span>
+                    <span class="picker">None<span style="color:var(--tm)">▾</span></span>
+                    <span class="picker">Normal<span style="color:var(--tm)">▾</span></span>
+                    <span class="picker">None<span style="color:var(--tm)">▾</span></span>
+                    <span class="ms">8.2</span>
+                  </div>
+                  <div class="orow">
+                    <span class="switches"><i class="on"></i><i></i><i></i><i></i><i></i><i></i></span>
+                    <span class="lnum">4</span>
+                    <span class="lname"><span class="ldot" style="background:var(--layer-footage)"></span><span class="t">rooftop_a012.mov</span></span>
+                    <span class="picker">None<span style="color:var(--tm)">▾</span></span>
+                    <span class="picker">Normal<span style="color:var(--tm)">▾</span></span>
+                    <span class="picker">None<span style="color:var(--tm)">▾</span></span>
+                    <span class="ms">21.4</span>
+                  </div>
+                  <div class="orow">
+                    <span class="switches"><i class="on"></i><i></i><i></i><i></i><i></i><i></i></span>
+                    <span class="lnum">5</span>
+                    <span class="lname"><span class="ldot" style="background:var(--layer-solid)"></span><span class="t">Vignette</span></span>
+                    <span class="picker">None<span style="color:var(--tm)">▾</span></span>
+                    <span class="picker">Multiply<span style="color:var(--tm)">▾</span></span>
+                    <span class="picker">None<span style="color:var(--tm)">▾</span></span>
+                    <span class="ms">1.9</span>
+                  </div>
+                  <div class="orow">
+                    <span class="switches"><i class="on"></i><i></i><i></i><i></i><i></i><i></i></span>
+                    <span class="lnum">6</span>
+                    <span class="lname"><span class="ldot" style="background:var(--layer-camera)"></span><span class="t">Camera 1</span></span>
+                    <span class="picker">—<span style="color:var(--tm)">▾</span></span>
+                    <span class="picker">—<span style="color:var(--tm)">▾</span></span>
+                    <span class="picker">None<span style="color:var(--tm)">▾</span></span>
+                    <span class="ms">0.4</span>
+                  </div>
+                </div>
+                <div class="ofoot">
+                  <span style="display:flex;gap:5px;align-items:center">
+                    <span class="kf k-linear"></span><span class="kf k-hold"></span><span class="kf k-bezier"></span>
+                  </span>
+                  <span class="seam" style="width:1px;height:12px;background:var(--hair)"></span>
+                  <span class="foot-word">Reverse</span>
+                  <span class="foot-word">Copy</span>
+                  <span style="margin-left:auto;display:flex;gap:8px">
+                    <span class="foot-word">Switches</span><span class="foot-word">Modes</span><span class="foot-word">Parent</span>
+                  </span>
+                </div>
+              </div>
+
+              <!-- lanes -->
+              <div class="lanes">
+                <div class="ruler">
+                  <div class="ticks"></div>
+                  <div class="tnums"><span>0s</span><span>2s</span><span>4s</span><span>6s</span><span>8s</span><span>10s</span><span>12s</span><span>14s</span></div>
+                  <div class="wa"><i></i><i></i></div>
+                  <div class="cache">
+                    <b style="width:114px;background:var(--cache-disk);height:70%"></b>
+                    <b style="width:132px;background:var(--cache-hot)"></b>
+                    <b style="width:58px;background:var(--cache-hot);opacity:.55;height:70%"></b>
+                    <b style="width:64px;background:var(--cache-disk);opacity:.7;height:45%"></b>
+                    <b style="width:120px;background:var(--cache-disk);opacity:.5;height:45%"></b>
+                  </div>
+                  <div class="marker"><span class="flag"></span><span class="pill">beat 4</span></div>
+                  <div class="playhead"></div>
+                </div>
+                <div class="lane-well">
+                  <div class="waband"></div>
+                  <div class="lane"><div class="lbar is-sel" style="left:96px;width:236px;--bar-tab:var(--layer-text)">
+                    <span class="kf on-lane k-hold" style="left:104px"></span>
+                    <span class="kf on-lane k-bezier" style="left:176px"></span>
+                    <span class="kf on-lane k-linear" style="left:224px"></span>
+                  </div></div>
+                  <div class="lane"><div class="lbar" style="left:150px;width:190px;--bar-tab:var(--layer-precomp)">
+                    <span class="kf on-lane k-linear" style="left:40px"></span>
+                    <span class="kf on-lane k-bezier" style="left:128px"></span>
+                  </div></div>
+                  <div class="lane"><div class="lbar" style="left:20px;width:420px;--bar-tab:var(--layer-sequence)"></div></div>
+                  <div class="lane"><div class="lbar" style="left:20px;width:288px;--bar-tab:var(--layer-footage)">
+                    <span class="trimghost" style="left:0;width:360px"></span>
+                  </div></div>
+                  <div class="lane"><div class="lbar" style="left:0px;width:466px;--bar-tab:var(--layer-solid)"></div></div>
+                  <div class="lane"><div class="lbar" style="left:0px;width:466px;--bar-tab:var(--layer-camera)">
+                    <span class="kf on-lane k-bezier" style="left:212px"></span>
+                    <span class="kf on-lane k-bezier" style="left:300px"></span>
+                  </div></div>
+                  <div class="phline"></div>
+                </div>
+                <div class="ofoot">
+                  <span class="glyph"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="6.5" cy="6.5" r="4"/><path d="M9.5 9.5l4 4"/></svg></span>
+                  <span style="width:90px;height:3px;background:var(--hairS);position:relative">
+                    <span style="position:absolute;left:52px;top:-3px;width:9px;height:9px;border-radius:50%;background:var(--tm)"></span>
+                  </span>
+                  <span class="glyph"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 3v5a4 4 0 008 0V3M4 6h3M9 6h3"/></svg></span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="refs">
+    <div class="ref">
+      <h3>Palette in force</h3>
+      <div class="chips" id="chips"></div>
+    </div>
+    <div class="ref">
+      <h3>Type and geometry</h3>
+      <dl class="kv" id="kv"></dl>
+    </div>
+    <div class="ref">
+      <h3>What this style changes</h3>
+      <ul class="notes" id="notes"></ul>
+    </div>
+  </div>
+
+  <p class="foot">
+    Specimen data is invented for the mockup. Heights follow each document's own metrics —
+    canonical rows at 23/22 are drawn at the Rams module's 24 throughout this page so the three
+    panes stay comparable row-for-row; that simplification is the one place the specimen is not
+    literal. Sources: <code>docs/15-DESIGN.md</code>,
+    <code>docs/design-alt/15-DESIGN-RAMS.md</code>,
+    <code>docs/design-alt/15-DESIGN-BAUHAUS.md</code>.
+  </p>
+</div>
+
+<script>
+(function () {
+  var shell = document.getElementById('shell');
+  var scaler = document.getElementById('scaler');
+  var viewport = document.getElementById('viewport');
+
+  var META = {
+    canonical: {
+      name: 'The 2026-08-23 redesign',
+      gloss: 'Dark-first, one spruce accent plus amber for keyed state, mono-caps kickers, inset value wells.',
+      rooms: ['Dark', 'Light'],
+      roomWords: ['dark', 'light'],
+      kv: [
+        ['Faces', 'Hanken Grotesk (UI) · Geist Mono (all numbers, all container labels)'],
+        ['Labels', 'MONO CAPS, 9px, +0.12em, muted'],
+        ['Radii', '4 / 8 / 16 / full — drawn at 2 on controls'],
+        ['Fields', 'Inset well on surface_0'],
+        ['Keys', 'Diamond linear · square hold · hourglass bezier, all in text_secondary'],
+        ['Elevation', 'Hairline, plus a 50px-blur float shadow on menus and modals'],
+        ['Stateful colour', 'Two: accent (spruce) and animated (amber)']
+      ],
+      notes: [
+        'This is the reference. Everything below is measured against it.',
+        '<b>Two saturated roles.</b> <i>accent</i> carries the playhead, the one filled action and selection; <i>animated</i> carries keyed state, the focused field and the work-area band.',
+        '<b>Every editable value is a recess.</b> The well is what says "you can type here" — twelve of them on the Timeline alone.',
+        '<b>Container labels shout.</b> Forty mono-caps kickers, one per container.',
+        'The doc’s own closing question already doubts two of <i>animated</i>’s seven jobs.'
+      ]
+    },
+    rams: {
+      name: 'Rams — the grey room',
+      gloss: 'Grey-first, one signal orange, lowercase labels, one face, everything on a 4px module.',
+      rooms: ['Grey room', 'Graphite'],
+      roomWords: ['grey room', 'graphite'],
+      kv: [
+        ['Faces', 'IBM Plex Sans alone, tabular figures on; Plex Mono only for machine text'],
+        ['Labels', 'lowercase, 9px, +0.04em, muted'],
+        ['Radii', '2 everywhere; full only for true dials'],
+        ['Fields', 'Inset well — kept, because a recess is honest about being editable'],
+        ['Keys', 'Shape alone; selected is the signal. There is no amber'],
+        ['Elevation', 'Hairline, and a 3px-blur shadow at 14% — a millimetre, not five centimetres'],
+        ['Stateful colour', 'One: signal. Plus on / attention / fault']
+      ],
+      notes: [
+        '<b>The room is grey, not black.</b> Principle 7 — near-black chrome is a decade’s fashion; a light grey room shows a picture honestly, which is why finishing suites are painted one.',
+        '<b>The Viewer surround is #7f7f7f in both rooms.</b> An instrument that changes its reading when you change the lighting is dishonest.',
+        '<b><i>animated</i> is dissolved.</b> Its seven jobs go to form (a filled stopwatch, the key’s own shape) or to the one signal. Every state is now legible in a greyscale screenshot.',
+        '<b>The work area is the undimmed part</b> — look at the lanes: nothing is painted in, the ground outside steps darker instead.',
+        '<b>Six heights, all multiples of 4.</b> The canonical 41-row metrics table collapses to one pitch.',
+        '<b>One face.</b> Mono was solving jitter; <code>tnum</code> solves jitter. A second bundled face for a solved problem is design that was not needed.'
+      ]
+    },
+    bauhaus: {
+      name: 'Bauhaus — the workshop',
+      gloss: 'Paper plates on a black grid, three primaries with one referent each, no capitals anywhere.',
+      rooms: ['Paper', 'Night'],
+      roomWords: ['paper', 'night'],
+      kv: [
+        ['Faces', 'Jost∗ (Renner’s Futura line) · DM Mono for every number'],
+        ['Labels', 'lowercase, flush left, a 2px rule running to the far edge'],
+        ['Radii', '0, or full where the control is genuinely round'],
+        ['Fields', 'No well: the value with a 2px rule under it'],
+        ['Keys', 'Square red hold · triangle yellow linear · circle blue bezier'],
+        ['Elevation', 'None. A 3px grid between plates; no shadow anywhere'],
+        ['Stateful colour', 'Three: red = now, yellow = look here, blue = content held']
+      ],
+      notes: [
+        '<b>Kandinsky’s pairing is the keyframe code.</b> Square/red is the held value, triangle/yellow the constant rate, circle/blue the smooth curve. Interpolation now reads from shape, from colour, and from both.',
+        '<b>No capitals.</b> Bayer’s single alphabet, and his argument for it was an efficiency argument.',
+        '<b>A field is a rule.</b> Every well in the application becomes one line — the largest reduction in drawn elements of the three styles.',
+        '<b>The grid is visible.</b> 3px of black between every plate; that is the whole elevation system.',
+        '<b>There is no success colour and no error colour.</b> A finished export says <i>finished</i>; a fault is black type on a yellow bar at 11.2:1.',
+        '<b>The cost, stated:</b> a bright shell beside a picture raises the room’s ambient level. Paper for editing, night for grading — and the Viewer’s neutral belt binds in both.'
+      ]
+    }
+  };
+
+  var TOKENS = ['grid','s1','s2','s3','s4','well','surround','tp','ts','tm','hair','signal','on','attn','fault','c-blue','c-yellow','c-red'];
+  var TOKEN_LABEL = {
+    'grid':'ground','s1':'panel','s2':'strip','s3':'float','s4':'raised','well':'well',
+    'surround':'surround','tp':'text 1','ts':'text 2','tm':'text 3','hair':'hairline',
+    'signal':'signal','on':'on','attn':'attention','fault':'fault',
+    'c-blue':'blue','c-yellow':'yellow','c-red':'red'
+  };
+
+  function paint() {
+    var style = shell.dataset.style, room = shell.dataset.room;
+    var m = META[style];
+    document.getElementById('styleName').textContent = m.name;
+    document.getElementById('styleGloss').textContent = m.gloss;
+    document.getElementById('roomName').textContent = m.roomWords[room === 'a' ? 0 : 1];
+    document.getElementById('r-a').textContent = m.rooms[0];
+    document.getElementById('r-b').textContent = m.rooms[1];
+
+    var cs = getComputedStyle(shell);
+    var chips = TOKENS.map(function (t) {
+      var v = cs.getPropertyValue('--' + t).trim();
+      if (!v || v === 'transparent') return '';
+      return '<div class="chip"><div class="sw" style="background:' + v + '"></div>' +
+             '<div class="cn">' + TOKEN_LABEL[t] + '</div><div class="cv">' + v + '</div></div>';
+    }).join('');
+    document.getElementById('chips').innerHTML = chips;
+
+    document.getElementById('kv').innerHTML = m.kv.map(function (p) {
+      return '<dt>' + p[0] + '</dt><dd>' + p[1] + '</dd>';
+    }).join('');
+    document.getElementById('notes').innerHTML = m.notes.map(function (n) {
+      return '<li>' + n + '</li>';
+    }).join('');
+  }
+
+  function fit() {
+    var w = viewport.clientWidth;
+    var s = Math.min(1, w / 1180);
+    scaler.style.transform = 'scale(' + s + ')';
+    viewport.style.height = Math.ceil(706 * s) + 'px';
+  }
+
+  document.querySelectorAll('[data-set]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      shell.dataset.style = b.dataset.set;
+      document.querySelectorAll('[data-set]').forEach(function (o) {
+        o.setAttribute('aria-pressed', String(o === b));
+      });
+      paint();
+    });
+  });
+  document.querySelectorAll('[data-room]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      shell.dataset.room = b.dataset.room;
+      document.querySelectorAll('[data-room]').forEach(function (o) {
+        o.setAttribute('aria-pressed', String(o === b));
+      });
+      paint();
+    });
+  });
+
+  window.addEventListener('resize', fit);
+  fit();
+  paint();
+})();
+</script>

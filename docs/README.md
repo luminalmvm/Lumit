@@ -73,6 +73,10 @@ matching note before implementing its feature.
 - [research/](research/) - the background research that informed the specs.
 Compiled 2026-07-12, under the project's former name Kiriko. Not
 canonical: where it disagrees with a spec, the spec wins.
+- [design-alt/](design-alt/) - speculative alternative design languages: complete
+re-derivations of [15-DESIGN](15-DESIGN.md) from Dieter Rams' ten principles and from
+the Bauhaus, plus a mockup drawing the shell under all three. Not canonical, and
+binding on nothing - written to be judged before anything is built.
 - [archive/](archive/) - frozen, dated material: audits, the egui-to-Flutter port
 notes, and superseded ledgers. Read-only history; never updated.
 
