@@ -1804,6 +1804,7 @@ dependencies = [
  "bincode",
  "blake3",
  "exr",
+ "lumit-ingress",
  "rsmpeg",
  "serde",
  "tempfile",

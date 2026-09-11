@@ -37,6 +37,11 @@ pub enum MediaError {
     NoStreams,
     #[error("index cache: {0}")]
     IndexCache(String),
+    /// A file whose own numbers ask for more memory or more entries than Lumit
+    /// spends on one (docs/14 §5) — an EXR header claiming a picture bigger
+    /// than any picture, a sidecar claiming more records than a timeline holds.
+    #[error("this file is larger than Lumit reads: {0}")]
+    TooLarge(#[from] lumit_ingress::IngressError),
 }
 
 impl From<rsmpeg::error::RsmpegError> for MediaError {
