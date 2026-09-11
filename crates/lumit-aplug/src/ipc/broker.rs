@@ -43,7 +43,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
@@ -260,6 +259,10 @@ pub enum BrokerError {
     /// The broker refused, in its own words.
     #[error("{0}")]
     Refused(String),
+    /// The peer on the pipe could not prove it is the broker this host started,
+    /// or the credential could not be minted or handed over at all.
+    #[error(transparent)]
+    Peer(lumit_peer::PeerError),
     /// More instances than a handle can name.
     #[error("this session has made every instance a handle can name")]
     NoMoreHandles,
@@ -366,9 +369,6 @@ pub struct Broker {
     restarts: usize,
 }
 
-/// A counter, so two brokers in one process never pick the same pipe name.
-static PIPE_COUNTER: AtomicU64 = AtomicU64::new(0);
-
 impl Broker {
     /// Start a broker for one module.
     ///
@@ -377,7 +377,7 @@ impl Broker {
     /// [`BrokerError`] — the executable, the pipe, the ring, or a broker that
     /// speaks another protocol.
     pub fn spawn(config: BrokerConfig) -> Result<Self, BrokerError> {
-        let identifier = next_identifier();
+        let identifier = next_identifier()?;
         let mut ring_path = std::env::temp_dir();
         ring_path.push(format!("lumit-aplug-{identifier}.ring"));
         let ring = Ring::create(&ring_path)?;
@@ -404,21 +404,43 @@ impl Broker {
         let name = pipe::pipe_name(identifier);
         let listener = pipe::listen(&name)?;
 
+        // One secret per broker, per start. A restart after a crash mints a new
+        // one, so nothing learned about a dead broker is worth anything against
+        // its replacement.
+        let secret = lumit_peer::Secret::generate().map_err(BrokerError::Peer)?;
+
         let exe = self.config.exe.clone().unwrap_or_else(broker_exe);
         let mut command = Command::new(exe);
         command
             .arg(&self.config.module)
             .arg(&name)
+            // The secret goes down standard input, never on the command line
+            // beside the pipe name: `/proc/<pid>/cmdline` is readable by every
+            // process on the machine on Linux, and a command line is in every
+            // `ps` listing on all of them.
+            .stdin(Stdio::piped())
             // The child's own output is its own: a plugin that prints must not
             // be able to reach the protocol, which is why the protocol is not
             // on standard output in the first place (see `ipc::pipe`).
-            .stdin(Stdio::null())
             .stdout(Stdio::null());
         no_console(&mut command);
         for (key, value) in &self.config.env {
             command.env(key, value);
         }
-        let child = command.spawn().map_err(BrokerError::Spawn)?;
+        let mut child = command.spawn().map_err(BrokerError::Spawn)?;
+
+        // Hand the credential over and close the pipe. Closing matters: the
+        // child reads exactly one line and would otherwise wait for an end that
+        // never comes if this process died between the two.
+        match child.stdin.take() {
+            Some(stdin) => secret.hand_over(stdin).map_err(BrokerError::Peer)?,
+            None => {
+                let _ = child.kill();
+                return Err(BrokerError::Peer(lumit_peer::PeerError::Handover(
+                    "the broker was spawned without a standard input".into(),
+                )));
+            }
+        }
 
         let (tx, rx) = mpsc::channel();
         std::thread::spawn(move || read_loop(listener, &tx));
@@ -433,14 +455,44 @@ impl Broker {
             incoming: rx,
         });
 
-        match self.wait_for(HANDSHAKE_TIMEOUT) {
-            Ok(BrokerMessage::Hello { version }) if version == PROTOCOL_VERSION => {}
-            Ok(BrokerMessage::Hello { version }) => {
+        // Whoever connected says a nonce first. That much anybody can do; it
+        // proves nothing and reveals nothing.
+        let theirs = match self.wait_for(HANDSHAKE_TIMEOUT) {
+            Ok(BrokerMessage::Ready { nonce }) => nonce,
+            Ok(_) => {
                 self.kill();
-                return Err(BrokerError::ProtocolMismatch {
-                    theirs: version,
-                    ours: PROTOCOL_VERSION,
-                });
+                return Err(BrokerError::Unexpected("something other than a nonce"));
+            }
+            Err(_) => {
+                self.kill();
+                return Err(BrokerError::NoHandshake);
+            }
+        };
+
+        // The host answers it — which is how a genuine broker knows it is
+        // talking to Lumit — and sets its own for the broker to answer.
+        let ours = lumit_peer::Nonce::generate().map_err(BrokerError::Peer)?;
+        self.send(&HostMessage::Challenge {
+            nonce: ours,
+            proof: lumit_peer::Proof::host(&secret, theirs),
+        })?;
+
+        match self.wait_for(HANDSHAKE_TIMEOUT) {
+            Ok(BrokerMessage::Hello { version, proof }) => {
+                // Who, before what: a peer that cannot prove who it is has no
+                // version worth hearing, and answering a mismatch first would
+                // tell an impostor which build it is up against.
+                if !proof.matches(&lumit_peer::Proof::broker(&secret, ours)) {
+                    self.kill();
+                    return Err(BrokerError::Peer(lumit_peer::PeerError::NotAuthenticated));
+                }
+                if version != PROTOCOL_VERSION {
+                    self.kill();
+                    return Err(BrokerError::ProtocolMismatch {
+                        theirs: version,
+                        ours: PROTOCOL_VERSION,
+                    });
+                }
             }
             Ok(_) => {
                 self.kill();
@@ -454,6 +506,11 @@ impl Broker {
 
         let spec = self.ring.spec().clone();
         self.send(&HostMessage::Open { ring: spec })?;
+        // And once the broker has it mapped, the ring's name comes out of the
+        // directory. Losing the acknowledgement costs the tidying, not the ring.
+        if let Ok(BrokerMessage::RingOpened) = self.wait_for(HANDSHAKE_TIMEOUT) {
+            self.ring.unlink_now_it_is_shared();
+        }
         Ok(())
     }
 
@@ -752,7 +809,17 @@ impl Broker {
     fn restart(&mut self) -> Result<(), BrokerError> {
         self.kill();
         self.restarts = self.restarts.saturating_add(1);
-        self.start(&next_identifier())?;
+        // A fresh ring, not the old one: the old ring's *name* is gone, because
+        // it is unlinked as soon as the broker that died had it mapped, and a
+        // replacement has no name to open. Which is the answer this function
+        // gives to everything else too — a restart is a replay, and the broker
+        // keeps nothing worth keeping.
+        let identifier = next_identifier()?;
+        let mut ring_path = std::env::temp_dir();
+        ring_path.push(format!("lumit-aplug-{identifier}.ring"));
+        self.ring = Ring::create(&ring_path)?;
+        self.next_slot = 0;
+        self.start(&identifier)?;
 
         let control = self.config.quirks.control_timeout;
         let disabled = self.disabled_now().into_iter().collect();
@@ -795,13 +862,19 @@ impl Drop for Broker {
     }
 }
 
-/// A name no other broker in this process, or in another copy of Lumit, uses.
-fn next_identifier() -> String {
-    format!(
-        "{}-{}",
-        std::process::id(),
-        PIPE_COUNTER.fetch_add(1, Ordering::Relaxed)
-    )
+/// A name no other broker on this machine uses, and none of them can work out
+/// in advance.
+///
+/// This used to be the host's process id and a counter. Unique is all a name
+/// needs to be to keep two brokers apart; unguessable is what it also needs to
+/// be when something else could connect to the endpoint instead of the broker,
+/// and the programs best placed to guess are the other brokers, each running a
+/// third party's compiled code. There is no fallback to a counter: a guessable
+/// name is the thing being fixed.
+fn next_identifier() -> Result<String, BrokerError> {
+    Ok(lumit_peer::Token::generate()
+        .map_err(BrokerError::Peer)?
+        .as_name())
 }
 
 /// The reading thread: accept the one connection, hand the writing half back,

@@ -108,11 +108,31 @@ The main process runs a thin proxy node in the evaluation graph.
 
 - **Control plane**: a small RPC protocol (describe, instance lifecycle, parameter change
   notifications, message suite traffic) over a local pipe.
+- **Who is on the pipe**: a local endpoint has a name, and a name is something any other
+  program on the machine can also say — including another broker, which is running a third
+  party's compiled code. So the name is 128 bits of operating-system randomness rather than
+  anything derivable, and both ends prove they hold a per-broker session secret before
+  either says anything of substance: the broker opens with a nonce, the host answers it and
+  sets its own, the broker answers that. The broker checks the host's proof **before it
+  loads the plugin**. The secret is handed to the child down its standard input, never on
+  its command line, because `/proc/<pid>/cmdline` is readable by every process on the
+  machine on Linux and a command line is in every `ps` listing on all of them. The
+  mechanism is `lumit-peer`; it is not a defence against a plugin that has already taken
+  over the *application's* process, and raises the floor from "any local process can walk
+  into the conversation" to "you must already be inside it".
 - **Frame plane**: frames cross via **shared memory** — the host writes input frames into a
   shared ring, the plugin renders into shared output buffers; no per-frame copies through
-  the pipe. A **shared-texture fast path** (DXGI shared handles on Windows, IOSurface on
-  macOS) is the later optimisation for GPU-rendering plugins, reusing the LFX transport
-  (§3.5).
+  the pipe. The ring's backing file is created exclusively under an unguessable name
+  (never opened-and-truncated, which a planted symlink would have redirected), and on Unix
+  its name is removed as soon as the broker acknowledges the mapping: a mapping outlives
+  the name it was opened through, so from that point no third program can open it and the
+  kernel reclaims the space when the last of the two processes exits — a crash included,
+  which a destructor cannot promise. Windows cannot unlink a mapped file, so the handle
+  carries `FILE_FLAG_DELETE_ON_CLOSE` and the operating system does the same job.
+  A restarted broker therefore gets a *new* ring, which is consistent with a restart being
+  a replay rather than a recovery. A **shared-texture fast path** (DXGI shared handles on
+  Windows, IOSurface on macOS) is the later optimisation for GPU-rendering plugins, reusing
+  the LFX transport (§3.5).
 - **Watchdog policy**: every plugin call carries a deadline (default 10 s for `render`,
   2 s for control actions, except describe, which opens the module and so waits under the ten-second handshake ceiling; configurable per plugin in the quirks table). A missed deadline
   or a crashed process kills and restarts the server; the in-flight node renders as an

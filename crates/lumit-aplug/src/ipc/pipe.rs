@@ -61,7 +61,13 @@ pub enum PipeError {
 
 /// The name of one broker's pipe, in the form the platform wants.
 ///
-/// The identifier is the host's own — a process id and a counter — so two
+/// `identifier` is 128 bits of operating-system randomness in hex
+/// ([`lumit_peer::Token`]), not a process id and a counter as it once was: a
+/// unique name keeps two brokers apart, but an unguessable one also keeps
+/// everything else off the endpoint. See `lumit_ofx::ipc::pipe` for the longer
+/// version of the same reasoning; the two hosts share the shape.
+///
+/// The old comment, for the record — the identifier was the host's own, so two
 /// brokers, and two copies of Lumit, never collide.
 #[must_use]
 pub fn pipe_name(identifier: &str) -> String {
@@ -82,12 +88,13 @@ pub fn pipe_name(identifier: &str) -> String {
 ///
 /// [`PipeError::Io`] if the name cannot be claimed.
 pub fn listen(name: &str) -> Result<Listener, PipeError> {
-    // A Unix socket is a file, and a stale one from a broker that died without
-    // tidying up would refuse the bind. Removing it is safe: the name carries
-    // this process's own id.
-    if !cfg!(windows) {
-        let _ = std::fs::remove_file(name);
-    }
+    // The name is claimed, never cleared. This used to remove a file at the
+    // path first, so that a stale socket from a crashed broker would not refuse
+    // the bind — which mattered when the names were predictable and cannot
+    // happen now they are 128 random bits. What the removal did make possible
+    // was for something that had planted a file at a predicted path to have it
+    // quietly deleted; refusing a name already taken is safer and is a better
+    // sign that something is wrong.
     let options = if cfg!(windows) {
         ListenerOptions::new().name(name.to_ns_name::<GenericNamespaced>()?)
     } else {

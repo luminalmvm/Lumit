@@ -29,7 +29,11 @@ use crate::instance::ParamSnapshot;
 
 /// The version both sides must agree on. Bump it whenever a message changes
 /// shape: an old broker beside a new host is a mismatch, not a crash.
-pub const PROTOCOL_VERSION: u32 = 4;
+///
+/// 5 added the handshake: the broker's first word is now `Ready` rather than
+/// `Hello`, and neither side says anything of substance until each has proved
+/// to the other that it holds the session secret ([`lumit_peer`]).
+pub const PROTOCOL_VERSION: u32 = 5;
 
 /// Which instance a message is about. The host mints these; the broker only
 /// ever quotes one back.
@@ -74,6 +78,18 @@ pub struct RingSpec {
 /// What the host says.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum HostMessage {
+    /// The host's half of the handshake: a nonce for the broker to answer, and
+    /// the host's own answer to the nonce the broker opened with.
+    ///
+    /// The broker checks the proof **before it loads the plugin**. Until then
+    /// nothing on the far end of this pipe has been told anything, and the
+    /// bundle's code has not run.
+    Challenge {
+        /// For the broker to answer.
+        nonce: lumit_peer::Nonce,
+        /// The host's answer to [`BrokerMessage::Ready`]'s nonce.
+        proof: lumit_peer::Proof,
+    },
     /// Here is the ring; map it.
     Open {
         /// The ring's layout.
@@ -150,11 +166,33 @@ pub enum HostMessage {
 /// What the broker says.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum BrokerMessage {
-    /// The first word, before anything else is believed.
+    /// The actual first word: a nonce, and nothing else.
+    ///
+    /// Nothing is proved here and nothing is revealed — whoever connected to
+    /// the endpoint gets to say this much. The host answers it with a
+    /// [`HostMessage::Challenge`] carrying a proof only the real host can
+    /// compute, which is what tells a genuine broker it is talking to Lumit.
+    Ready {
+        /// For the host to answer.
+        nonce: lumit_peer::Nonce,
+    },
+    /// The broker's answer to the host's challenge, with the protocol it
+    /// speaks. The host believes nothing before this and checks it before the
+    /// version: a peer that cannot prove who it is has no version worth
+    /// hearing.
     Hello {
         /// The protocol the broker speaks.
         version: u32,
+        /// The broker's answer to [`HostMessage::Challenge`]'s nonce.
+        proof: lumit_peer::Proof,
     },
+    /// The ring is mapped, and the host may now unlink its path.
+    ///
+    /// On Unix a mapping outlives the name it was opened through, so once this
+    /// arrives the file can be taken out of the directory: it stays whole for
+    /// both processes, it disappears the moment the last of them exits — a
+    /// crash included — and no third program can open it by name in between.
+    RingOpened,
     /// What the bundle holds. The index into this list is what
     /// [`HostMessage::CreateInstance`] names.
     Described {

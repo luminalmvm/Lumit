@@ -1623,6 +1623,7 @@ dependencies = [
  "libloading",
  "lumit-aplug-testplug",
  "lumit-core",
+ "lumit-peer",
  "memmap2",
  "serde",
  "serde_json",
@@ -1638,6 +1639,7 @@ dependencies = [
  "lumit-aplug",
  "lumit-aplug-testplug",
  "lumit-core",
+ "lumit-peer",
  "tempfile",
 ]
 
@@ -1823,6 +1825,7 @@ dependencies = [
  "lumit-core",
  "lumit-eval",
  "lumit-ofx-testplug",
+ "lumit-peer",
  "memmap2",
  "parking_lot",
  "rayon",
@@ -1840,6 +1843,7 @@ dependencies = [
  "lumit-eval",
  "lumit-ofx",
  "lumit-ofx-testplug",
+ "lumit-peer",
  "tempfile",
 ]
 
@@ -1848,6 +1852,16 @@ name = "lumit-ofx-testplug"
 version = "0.3.3"
 dependencies = [
  "lumit-ofx",
+]
+
+[[package]]
+name = "lumit-peer"
+version = "0.3.3"
+dependencies = [
+ "blake3",
+ "getrandom 0.4.3",
+ "serde",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

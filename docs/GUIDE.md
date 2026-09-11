@@ -381,6 +381,8 @@ One job per crate.
 | `lumit-roto` | The roto brush's arithmetic: seeding, geodesic segmentation, the edge refine, carrying a matte along a flow field |
 | `lumit-import` | After Effects import: reading a capture bundle into a document, with a report of what changed |
 | `lumit-keymap` | Shortcuts: chords, contexts, bindings, clash detection, no windowing code |
+| `lumit-ingress` | One budget every reader of untrusted input spends: bytes, items, recursion depth and work, plus checked raster arithmetic and capped file reads. Depends on nothing, so the crates that depend on nothing else can still use it |
+| `lumit-peer` | Proving who is on the other end of a broker pipe: an unguessable endpoint name, a session secret handed over out of sight, and a mutual challenge and response |
 | `lumit-fx-macros` | `#[derive(Effect)]`: one declaration per built-in effect produces its catalogue entry, parameters and dispatch |
 | `lumit-ofx` | The OpenFX host: suites, property sets, action dispatch, the out-of-process transport |
 | `lumit-ofx-broker` | The expendable program a third-party OFX plugin runs in, one per bundle, so a crash costs one frame |
