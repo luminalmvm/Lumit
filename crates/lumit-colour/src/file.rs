@@ -19,13 +19,19 @@ pub const READABLE: [&str; 11] = [
     "cube", "spi1d", "spi3d", "spimtx", "cub", "3dl", "clf", "ctf", "cc", "ccc", "cdl",
 ];
 
+/// The most a table file may weigh on disk.
+///
+/// These are text formats, and a text float costs about ten bytes, so the
+/// largest table this crate will accept at all — the point ceiling the
+/// grammars enforce — is comfortably inside this. It is here to stop the read
+/// itself, before the grammar gets a chance to count anything: a `FileTransform`
+/// naming a 40 GB file should cost a sentence, not the machine's memory.
+const TABLE_FILE_BYTES: u64 = 256 << 20;
+
 /// Read a table file into a chain. `path` is used for the grammar and for the
 /// sentence any refusal shows.
 pub fn load(path: &Path) -> Result<Chain> {
-    let text = std::fs::read_to_string(path).map_err(|e| ColourError::FileRead {
-        path: path.to_path_buf(),
-        reason: e.to_string(),
-    })?;
+    let text = lumit_ingress::read_to_string_capped(path, TABLE_FILE_BYTES)?;
     let name = path
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())

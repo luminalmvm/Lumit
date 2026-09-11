@@ -11121,6 +11121,15 @@
       }
     }
   },
+  "ocioTooLarge": "this config would take more memory or nesting to read than Lumit allows ({reason})",
+  "@ocioTooLarge": {
+    "description": "Project settings, Colour group. Why the colour config is not in force, lower case. Shown when the file is within the grammar but past a resource ceiling — a very large file, an enormous number of nodes, or nesting far deeper than any real config. Reason is the engine's own short English phrase naming which ceiling was met and its number.",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
   "ocioProblemInSpace": "{problem} (the colour space {space})",
   "@ocioProblemInSpace": {
     "description": "Project settings, Colour group. Wraps any of the ocio* reasons above when the trouble surfaced while working out one particular colour space, so the reader knows where to look. The space name comes out of the user's own config file and stays as it is.",

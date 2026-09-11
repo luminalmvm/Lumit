@@ -1685,6 +1685,7 @@ name = "lumit-colour"
 version = "0.3.3"
 dependencies = [
  "lumit-core",
+ "lumit-ingress",
  "quick-xml",
  "thiserror 2.0.18",
  "yaml-rust2",
@@ -1779,6 +1780,13 @@ dependencies = [
  "toml",
  "uuid",
  "zip",
+]
+
+[[package]]
+name = "lumit-ingress"
+version = "0.3.3"
+dependencies = [
+ "thiserror 2.0.18",
 ]
 
 [[package]]

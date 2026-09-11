@@ -1,0 +1,18 @@
+[package]
+name = "lumit-ingress"
+version.workspace = true
+edition = "2021"
+license = "GPL-3.0-only"
+# Never goes to crates.io: these crates are the application, and they
+# reference each other by path (docs/05-ARCHITECTURE.md).
+publish = false
+
+[dependencies]
+# Deliberately nothing but the error derive. Every crate that reads a file a
+# stranger could have written depends on this one, including the two that
+# depend on nothing else (`lumit-media`, `lumit-roto`), so a dependency added
+# here is a dependency added to all of them.
+thiserror = "2"
+
+[lints]
+workspace = true

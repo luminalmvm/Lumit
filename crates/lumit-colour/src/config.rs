@@ -31,10 +31,19 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
+use lumit_ingress::{Budget, Limits};
 use yaml_rust2::parser::{Event, Parser, Tag};
 
 use crate::error::{ColourError, Result};
 use crate::op::Direction;
+
+/// The most a `config.ocio` may weigh on disk.
+///
+/// The largest configs anyone ships (the ACES Studio set) are a few megabytes
+/// of YAML; the ceiling is where a config stops being a config and starts being
+/// a payload. Reading it is what the [`Budget`] below bounds; this bounds
+/// getting it into memory in the first place.
+const CONFIG_FILE_BYTES: u64 = 64 << 20;
 
 // ---------------------------------------------------------------------------
 // A tagged YAML tree — the shape this module walks.
@@ -195,9 +204,57 @@ fn tag_name(tag: &Option<Tag>) -> Option<String> {
     })
 }
 
-fn parse_document(what: &str, text: &str) -> Result<Tagged> {
+/// What one parsed subtree costs, so that grafting it somewhere else can be
+/// charged for at the price of the tree rather than the price of the reference.
+///
+/// In plain terms: YAML lets a document name a value once (`&anchor`) and then
+/// say "that one again" (`*anchor`) as often as it likes, and a reader that
+/// takes a copy each time is doing work proportional to the copies while the
+/// file grows by six characters. Two lines of that is a convenience; twenty
+/// lines of it, each aliasing the line above twice, is 2²⁰ nodes out of a file
+/// you could read aloud — the "billion laughs" shape, and the reason an alias
+/// here is charged what it expands to and not what it is written as.
+#[derive(Debug, Clone, Copy, Default)]
+struct Weight {
+    /// Nodes in the subtree, counting itself.
+    nodes: u64,
+    /// Bytes of string the subtree holds, keys and scalars alike.
+    bytes: u64,
+    /// How many levels the subtree is tall, counting itself.
+    depth: u32,
+}
+
+impl Weight {
+    /// A leaf holding `bytes` of text.
+    fn leaf(bytes: u64) -> Self {
+        Weight {
+            nodes: 1,
+            bytes,
+            depth: 1,
+        }
+    }
+
+    /// This weight with a child's folded in — one more node, its bytes, and
+    /// tall enough to hold it.
+    fn with_child(self, child: Weight) -> Self {
+        Weight {
+            nodes: self.nodes.saturating_add(child.nodes),
+            bytes: self.bytes.saturating_add(child.bytes),
+            depth: self.depth.max(child.depth.saturating_add(1)),
+        }
+    }
+
+    /// Charge this subtree to the budget: its nodes as items, its text as bytes.
+    fn charge(self, budget: &mut Budget) -> Result<()> {
+        budget.take_items(self.nodes)?;
+        budget.take_bytes(self.bytes)?;
+        Ok(())
+    }
+}
+
+fn parse_document(what: &str, text: &str, budget: &mut Budget) -> Result<Tagged> {
     let mut parser = Parser::new_from_str(text).keep_tags(true);
-    let mut anchors: BTreeMap<usize, Tagged> = BTreeMap::new();
+    let mut anchors: BTreeMap<usize, (Tagged, Weight)> = BTreeMap::new();
     let bad = |reason: String| ColourError::Parse {
         what: what.to_string(),
         reason,
@@ -221,14 +278,48 @@ fn parse_document(what: &str, text: &str) -> Result<Tagged> {
             _ => break,
         }
     }
-    parse_node(what, &mut parser, &mut anchors)
+    parse_node(what, &mut parser, &mut anchors, budget).map(|(node, _)| node)
+}
+
+/// Weigh a subtree that arrived by being copied rather than by being parsed.
+///
+/// Only the merge key needs this: its entries are lifted out of a mapping whose
+/// own weight is known, but only *some* of them survive the "already stated
+/// here" test, so the copy's cost is not the source's cost. The walk itself is
+/// charged as work, because a config full of merges could otherwise spend the
+/// reader's time walking without spending any of its budget.
+fn weigh(node: &Tagged, budget: &mut Budget) -> Result<Weight> {
+    budget.take_work(1)?;
+    let mut weight = Weight::leaf(0);
+    match &node.node {
+        Node::Empty => {}
+        Node::Scalar(s) => weight.bytes = text_bytes(s),
+        Node::Seq(items) => {
+            for item in items {
+                weight = weight.with_child(weigh(item, budget)?);
+            }
+        }
+        Node::Map(entries) => {
+            for (key, value) in entries {
+                weight.bytes = weight.bytes.saturating_add(text_bytes(key));
+                weight = weight.with_child(weigh(value, budget)?);
+            }
+        }
+    }
+    Ok(weight)
+}
+
+/// A string's length as a `u64`, for charging.
+fn text_bytes(s: &str) -> u64 {
+    u64::try_from(s.len()).unwrap_or(u64::MAX)
 }
 
 fn parse_node(
     what: &str,
     parser: &mut Parser<std::str::Chars<'_>>,
-    anchors: &mut BTreeMap<usize, Tagged>,
-) -> Result<Tagged> {
+    anchors: &mut BTreeMap<usize, (Tagged, Weight)>,
+    budget: &mut Budget,
+) -> Result<(Tagged, Weight)> {
     let bad = |reason: String| ColourError::Parse {
         what: what.to_string(),
         reason,
@@ -238,82 +329,123 @@ fn parse_node(
         .map_err(|e| bad(format!("the YAML could not be read ({e})")))?;
     Ok(match event {
         Event::Scalar(value, _, anchor, tag) => {
+            let weight = Weight::leaf(text_bytes(&value));
+            weight.charge(budget)?;
             let node = Tagged {
                 tag: tag_name(&tag),
                 node: Node::Scalar(value),
             };
             if anchor > 0 {
-                anchors.insert(anchor, node.clone());
+                anchors.insert(anchor, (node.clone(), weight));
             }
-            node
+            (node, weight)
         }
-        Event::Alias(anchor) => anchors.get(&anchor).cloned().unwrap_or_default(),
-        Event::SequenceStart(anchor, tag) => {
-            let mut items = Vec::new();
-            loop {
-                let (peeked, _) = parser
-                    .peek()
-                    .map_err(|e| bad(format!("the YAML could not be read ({e})")))?
-                    .clone();
-                if matches!(peeked, Event::SequenceEnd) {
-                    parser
-                        .next_token()
-                        .map_err(|e| bad(format!("the YAML could not be read ({e})")))?;
-                    break;
-                }
-                items.push(parse_node(what, parser, anchors)?);
+        Event::Alias(anchor) => match anchors.get(&anchor) {
+            Some((node, weight)) => {
+                let (node, weight) = (node.clone(), *weight);
+                // Grafting a subtree of its own height here must not make the
+                // tree taller than the ceiling, or the walkers over the finished
+                // tree (transform groups, most of all) would recurse past what
+                // the parse depth promised them.
+                budget.check_depth(weight.depth)?;
+                weight.charge(budget)?;
+                (node, weight)
             }
+            // An alias to an anchor this document never declared. The previous
+            // reader treated that as an empty value rather than a fault, and a
+            // config that reaches a name it never set is not Lumit's to refuse.
+            None => (Tagged::default(), Weight::leaf(0)),
+        },
+        Event::SequenceStart(anchor, tag) => {
+            let mut weight = Weight::leaf(0);
+            let items = budget.nested(|budget| {
+                let mut items = Vec::new();
+                loop {
+                    let (peeked, _) = parser
+                        .peek()
+                        .map_err(|e| bad(format!("the YAML could not be read ({e})")))?
+                        .clone();
+                    if matches!(peeked, Event::SequenceEnd) {
+                        parser
+                            .next_token()
+                            .map_err(|e| bad(format!("the YAML could not be read ({e})")))?;
+                        break;
+                    }
+                    let (item, item_weight) = parse_node(what, parser, anchors, budget)?;
+                    weight = weight.with_child(item_weight);
+                    items.push(item);
+                }
+                Ok::<_, ColourError>(items)
+            })?;
             let node = Tagged {
                 tag: tag_name(&tag),
                 node: Node::Seq(items),
             };
             if anchor > 0 {
-                anchors.insert(anchor, node.clone());
+                anchors.insert(anchor, (node.clone(), weight));
             }
-            node
+            (node, weight)
         }
         Event::MappingStart(anchor, tag) => {
-            let mut entries: Vec<(String, Tagged)> = Vec::new();
-            loop {
-                let (peeked, _) = parser
-                    .peek()
-                    .map_err(|e| bad(format!("the YAML could not be read ({e})")))?
-                    .clone();
-                if matches!(peeked, Event::MappingEnd) {
-                    parser
-                        .next_token()
-                        .map_err(|e| bad(format!("the YAML could not be read ({e})")))?;
-                    break;
-                }
-                let key = parse_node(what, parser, anchors)?;
-                let value = parse_node(what, parser, anchors)?;
-                let key = key.scalar().unwrap_or_default().to_string();
-                if key == "<<" {
-                    // A merge key: the referenced mapping's entries fill in
-                    // whatever this one does not state itself.
-                    let sources: Vec<&Tagged> = match &value.node {
-                        Node::Seq(items) => items.iter().collect(),
-                        _ => vec![&value],
-                    };
-                    for source in sources {
-                        for (k, v) in source.entries() {
-                            if !entries.iter().any(|(existing, _)| existing == k) {
-                                entries.push((k.clone(), v.clone()));
+            let mut weight = Weight::leaf(0);
+            let entries = budget.nested(|budget| {
+                let mut entries: Vec<(String, Tagged)> = Vec::new();
+                loop {
+                    let (peeked, _) = parser
+                        .peek()
+                        .map_err(|e| bad(format!("the YAML could not be read ({e})")))?
+                        .clone();
+                    if matches!(peeked, Event::MappingEnd) {
+                        parser
+                            .next_token()
+                            .map_err(|e| bad(format!("the YAML could not be read ({e})")))?;
+                        break;
+                    }
+                    let (key, _) = parse_node(what, parser, anchors, budget)?;
+                    let (value, value_weight) = parse_node(what, parser, anchors, budget)?;
+                    let key = key.scalar().unwrap_or_default().to_string();
+                    if key == "<<" {
+                        // A merge key: the referenced mapping's entries fill in
+                        // whatever this one does not state itself. Each entry
+                        // that survives is a second copy of that subtree and is
+                        // charged as one.
+                        let sources: Vec<&Tagged> = match &value.node {
+                            Node::Seq(items) => items.iter().collect(),
+                            _ => vec![&value],
+                        };
+                        let mut merged: Vec<(String, Tagged)> = Vec::new();
+                        for source in sources {
+                            for (k, v) in source.entries() {
+                                if entries.iter().any(|(existing, _)| existing == k)
+                                    || merged.iter().any(|(existing, _)| existing == k)
+                                {
+                                    continue;
+                                }
+                                let child = weigh(v, budget)?;
+                                let entry = Weight::leaf(text_bytes(k)).with_child(child);
+                                budget.check_depth(entry.depth)?;
+                                entry.charge(budget)?;
+                                weight = weight.with_child(entry);
+                                merged.push((k.clone(), v.clone()));
                             }
                         }
+                        entries.extend(merged);
+                        continue;
                     }
-                    continue;
+                    weight.bytes = weight.bytes.saturating_add(text_bytes(&key));
+                    weight = weight.with_child(value_weight);
+                    entries.push((key, value));
                 }
-                entries.push((key, value));
-            }
+                Ok::<_, ColourError>(entries)
+            })?;
             let node = Tagged {
                 tag: tag_name(&tag),
                 node: Node::Map(entries),
             };
             if anchor > 0 {
-                anchors.insert(anchor, node.clone());
+                anchors.insert(anchor, (node.clone(), weight));
             }
-            node
+            (node, weight)
         }
         other => return Err(bad(format!("unexpected YAML event {other:?}"))),
     })
@@ -919,19 +1051,27 @@ fn parse_view(entry: &Tagged) -> View {
 
 impl Config {
     /// Read a `config.ocio` from disk.
+    ///
+    /// The file is capped on the way in and its contents budgeted on the way
+    /// through: a config is a stranger's file, arriving from a studio share, a
+    /// downloaded look pack or a project someone sent, and neither its length
+    /// nor the shape inside it is Lumit's to trust (docs/14 §5).
     pub fn load(path: &Path) -> Result<Self> {
-        let text = std::fs::read_to_string(path).map_err(|e| ColourError::FileRead {
-            path: path.to_path_buf(),
-            reason: e.to_string(),
-        })?;
+        let text = lumit_ingress::read_to_string_capped(path, CONFIG_FILE_BYTES)?;
         let dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
         Self::parse(&dir, &text)
     }
 
     /// The grammar half of [`Config::load`], split out so tests need no files.
     pub fn parse(dir: &Path, text: &str) -> Result<Self> {
+        Self::parse_within(dir, text, &mut Budget::new(Limits::COLOUR_CONFIG))
+    }
+
+    /// [`Config::parse`] against a budget the caller owns, for a reader already
+    /// spending one — and for the tests that set a ceiling low enough to reach.
+    pub fn parse_within(dir: &Path, text: &str, budget: &mut Budget) -> Result<Self> {
         let what = "this config";
-        let root = parse_document(what, text)?;
+        let root = parse_document(what, text, budget)?;
 
         let version_text = root
             .get("ocio_profile_version")
@@ -1533,5 +1673,161 @@ colorspaces:
     fn broken_yaml_is_a_typed_error_not_a_panic() {
         assert!(Config::parse(Path::new("."), "colorspaces: [").is_err());
         assert!(Config::parse(Path::new("."), "").is_err());
+    }
+
+    /// The "billion laughs" shape: each anchor names the one above it twice, so
+    /// the node count doubles per line while the file grows by a few bytes.
+    /// Twenty-eight lines of this is a quarter of a billion nodes out of a file
+    /// that fits on a postcard, and the reader must charge what it expands to.
+    #[test]
+    fn an_alias_bomb_is_refused_rather_than_expanded() {
+        let mut text = String::from("ocio_profile_version: 1\na0: &a0 [x, x, x, x, x, x, x, x]\n");
+        for i in 1..28 {
+            text.push_str(&format!("a{i}: &a{i} [*a{}, *a{}]\n", i - 1, i - 1));
+        }
+        let out = Config::parse(Path::new("."), &text);
+        assert!(
+            matches!(out, Err(ColourError::TooLarge(_))),
+            "an alias bomb must be refused, got {out:?}"
+        );
+    }
+
+    /// A merge key copies entries rather than referencing them. It cannot
+    /// double the way an alias can — two entries under the same key collapse to
+    /// one, so the copies grow by addition and not by multiplication — but each
+    /// copy is still a copy, and the budget has to see all of them or a config
+    /// could name one big mapping in a hundred places for free.
+    #[test]
+    fn a_merge_key_is_charged_for_every_copy_it_makes() {
+        let mut base = String::from("ocio_profile_version: 1\nbase: &base\n");
+        for k in 0..200 {
+            base.push_str(&format!("  k{k}: v{k}\n"));
+        }
+        let mut merged_text = base.clone();
+        for i in 0..4 {
+            merged_text.push_str(&format!("copy{i}:\n  <<: *base\n"));
+        }
+
+        let mut alone = Budget::new(Limits::COLOUR_CONFIG);
+        Config::parse_within(Path::new("."), &base, &mut alone).expect("the base config parses");
+        let mut merged = Budget::new(Limits::COLOUR_CONFIG);
+        Config::parse_within(Path::new("."), &merged_text, &mut merged)
+            .expect("the merged config parses");
+
+        assert!(
+            merged.spent_items() >= alone.spent_items().saturating_mul(4),
+            "four merged copies of a 200-entry mapping cost {} items, one copy cost {}",
+            merged.spent_items(),
+            alone.spent_items()
+        );
+    }
+
+    /// The same shape against a ceiling it cannot fit under.
+    #[test]
+    fn a_merge_key_bomb_meets_the_ceiling() {
+        let mut text = String::from("ocio_profile_version: 1\nbase: &base\n");
+        for k in 0..200 {
+            text.push_str(&format!("  k{k}: [a, b, c, d, e, f, g, h]\n"));
+        }
+        for i in 0..8 {
+            text.push_str(&format!("copy{i}:\n  <<: *base\n"));
+        }
+        let mut budget = Budget::new(Limits {
+            items: 8_000,
+            ..Limits::COLOUR_CONFIG
+        });
+        let out = Config::parse_within(Path::new("."), &text, &mut budget);
+        assert!(
+            matches!(
+                out,
+                Err(ColourError::TooLarge(
+                    lumit_ingress::IngressError::Items { .. }
+                ))
+            ),
+            "a merge bomb must meet the item ceiling, got {out:?}"
+        );
+    }
+
+    /// Deep nesting is the one that does not merely exhaust memory: a
+    /// recursive-descent reader that follows it far enough overflows the stack,
+    /// and a stack overflow is not a catchable error — it ends the process,
+    /// which is the one thing this application promises not to do (docs/14 §4).
+    #[test]
+    fn nesting_deeper_than_the_ceiling_is_refused_by_depth() {
+        let mut budget = Budget::new(Limits {
+            depth: 8,
+            ..Limits::COLOUR_CONFIG
+        });
+        let deep = format!(
+            "ocio_profile_version: 1\ndeep: {}x{}\n",
+            "[".repeat(20),
+            "]".repeat(20)
+        );
+        let out = Config::parse_within(Path::new("."), &deep, &mut budget);
+        assert!(
+            matches!(
+                out,
+                Err(ColourError::TooLarge(
+                    lumit_ingress::IngressError::Depth { .. }
+                ))
+            ),
+            "deep nesting must be refused by depth, got {out:?}"
+        );
+    }
+
+    /// And the extreme of the same file is a typed error rather than a crash,
+    /// whichever guard reaches it first — `yaml-rust2` carries a recursion
+    /// limit of its own well above ours, so a file this deep is caught twice
+    /// over. The assertion is deliberately only "an error": which of the two
+    /// guards fires is an implementation detail of the YAML reader, and a test
+    /// that pinned it would fail on a dependency bump that changed nothing here.
+    #[test]
+    fn absurdly_deep_nesting_is_an_error_and_not_a_stack_overflow() {
+        let deep = format!(
+            "ocio_profile_version: 1\ndeep: {}x{}\n",
+            "[".repeat(100_000),
+            "]".repeat(100_000)
+        );
+        assert!(Config::parse(Path::new("."), &deep).is_err());
+    }
+
+    /// An alias declared shallow and used deep adds its whole height at once,
+    /// so the depth check has to look at where it lands, not where it was
+    /// written. Otherwise the finished tree is taller than the parse ever went
+    /// and the walkers over it — `parse_transform` through its groups — recurse
+    /// past the ceiling the parse promised them.
+    #[test]
+    fn an_alias_may_not_graft_a_subtree_past_the_depth_ceiling() {
+        let mut budget = Budget::new(Limits {
+            depth: 6,
+            ..Limits::COLOUR_CONFIG
+        });
+        // `tall` is five deep; naming it four levels down would make nine.
+        let text = "ocio_profile_version: 1\ntall: &tall [[[[[x]]]]]\nhere: [[[[*tall]]]]\n";
+        let out = Config::parse_within(Path::new("."), text, &mut budget);
+        assert!(
+            matches!(
+                out,
+                Err(ColourError::TooLarge(
+                    lumit_ingress::IngressError::Depth { .. }
+                ))
+            ),
+            "a grafted subtree must be measured where it lands, got {out:?}"
+        );
+    }
+
+    /// The ceilings must not be so tight that an ordinary config meets one. The
+    /// vendored ACES configs are the real check (they parse in the suite next
+    /// door); this one states the intent in the same file as the limits.
+    #[test]
+    fn an_ordinary_config_spends_a_small_share_of_its_budget() {
+        let mut budget = Budget::new(Limits::COLOUR_CONFIG);
+        let text = "ocio_profile_version: 2\nroles:\n  scene_linear: lin\ncolorspaces:\n  - !<ColorSpace>\n    name: lin\n    to_reference: !<MatrixTransform> {matrix: [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]}\n";
+        Config::parse_within(Path::new("."), text, &mut budget).expect("parses");
+        assert!(
+            budget.spent_items() < Limits::COLOUR_CONFIG.items / 1000,
+            "an ordinary config spent {} items",
+            budget.spent_items()
+        );
     }
 }

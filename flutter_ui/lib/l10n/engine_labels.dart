@@ -1414,6 +1414,8 @@ String? _colourRefusal(String key, String Function(String) a) {
       return l10n.ocioParse(a('what'), a('reason'));
     case 'table_too_large':
       return l10n.ocioTableTooLarge(a('what'), a('size'), a('limit'));
+    case 'too_large':
+      return l10n.ocioTooLarge(a('reason'));
 
     default:
       return null;
