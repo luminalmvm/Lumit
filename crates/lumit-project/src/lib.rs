@@ -36,6 +36,19 @@ pub enum ProjectError {
         schema_version: String,
         min_reader: String,
     },
+    /// An archive entry that decompresses past what Lumit reads — a zip bomb,
+    /// or a project from a future nobody planned for. Either way the answer is
+    /// a sentence rather than the machine's memory.
+    #[error("this project file holds {size} bytes where Lumit reads at most {limit}")]
+    EntryTooLarge { size: u64, limit: u64 },
+    /// A composition whose declared size no picture has. Refused rather than
+    /// clamped: a project opened quietly at a size other than the one it states
+    /// would export at that size too, and a wrong picture delivered quietly is
+    /// the one failure this codebase refuses to ship.
+    #[error(
+        "this project has a {width} by {height} composition; Lumit composes up to {limit} a side"
+    )]
+    CompTooLarge { width: u32, height: u32, limit: u32 },
 }
 
 /// manifest.json — MUST be the archive's first entry and parse standalone.
@@ -421,16 +434,106 @@ pub fn save(doc: &Document, path: &Path) -> Result<(), ProjectError> {
 }
 
 /// Open a `.lum` file. Unknown JSON fields survive via the model's `extra` maps.
+/// The widest or tallest a composition may be.
+///
+/// 16K delivery is 15360 across, and the anti-aliasing cap already refuses to
+/// multisample above 4K. Sixty-five thousand is far past any format anybody
+/// delivers and is the same ceiling the EXR reader and the roto sidecar hold to,
+/// so the three agree about what a picture can be.
+pub const MAX_COMP_SIDE: u32 = 65_536;
+
+/// And how many pixels one may hold in total.
+///
+/// Both are needed, not either: 65536 x 65536 passes a side check and is four
+/// gigapixels, which at four half-floats a pixel is thirty-two gigabytes for one
+/// intermediate. A gigapixel is 32768 square, past any comp anybody builds.
+pub const MAX_COMP_PIXELS: u64 = 1 << 30;
+
+/// Whether a composition's declared size is one this application will allocate
+/// for.
+#[must_use]
+pub fn comp_size_is_sane(width: u32, height: u32) -> bool {
+    if width == 0 || height == 0 || width > MAX_COMP_SIDE || height > MAX_COMP_SIDE {
+        return false;
+    }
+    u64::from(width)
+        .checked_mul(u64::from(height))
+        .is_some_and(|pixels| pixels <= MAX_COMP_PIXELS)
+}
+
+/// The most `manifest.json` may decompress to. It is six short strings.
+const MANIFEST_MAX_BYTES: u64 = 1 << 20;
+
+/// The most `project.json` may decompress to.
+///
+/// The document's structure, not its pixels: two hundred comps, five thousand
+/// layers and a quarter of a million keyframes (docs/13 §2.1) is a few tens of
+/// megabytes of JSON. Half a gigabyte is an order past the largest project the
+/// budgets describe, and is a number rather than no number.
+const PROJECT_JSON_MAX_BYTES: u64 = 512 << 20;
+
+/// One archive entry as text, refusing one that decompresses past `limit`.
+///
+/// # In plain terms
+///
+/// A `.lum` is a ZIP, and a ZIP entry's *compressed* size tells you nothing
+/// about its decompressed one: a few hundred kilobytes of deflated zeros expand
+/// to gigabytes. Reading an entry with `read_to_string` believes whatever comes
+/// out of the decompressor, so a project file somebody sent — and project files
+/// are sent, that is what they are for — could take the machine's memory before
+/// a single field had been parsed. The classic zip bomb, and it arrives through
+/// the one file type this application exists to open.
+///
+/// Both halves are checked, because either alone is not enough: the entry's
+/// declared uncompressed size is a cheap refusal but it is the *archive's* claim
+/// and a crafted one can understate it, so the read itself is also capped and a
+/// stream that produces more than it promised is refused on the byte that proves
+/// it.
+fn entry_text(entry: impl Read + ZipEntry, limit: u64) -> Result<String, ProjectError> {
+    if entry.size() > limit {
+        return Err(ProjectError::EntryTooLarge {
+            size: entry.size(),
+            limit,
+        });
+    }
+    let mut s = String::new();
+    // One byte past the ceiling, so a stream that lied about its size is caught
+    // by having produced the extra byte rather than by being believed.
+    let mut capped = entry.take(limit.saturating_add(1));
+    capped.read_to_string(&mut s)?;
+    if u64::try_from(s.len()).unwrap_or(u64::MAX) > limit {
+        return Err(ProjectError::EntryTooLarge {
+            size: limit.saturating_add(1),
+            limit,
+        });
+    }
+    Ok(s)
+}
+
+/// What [`entry_text`] needs of an archive entry besides being readable: the
+/// uncompressed size the archive claims for it.
+///
+/// A trait rather than the concrete `ZipFile` so the test can hand over a reader
+/// that claims one size and produces another, which is the whole shape of the
+/// attack and is not something a real archive library will do on request.
+trait ZipEntry {
+    fn size(&self) -> u64;
+}
+
+impl ZipEntry for zip::read::ZipFile<'_> {
+    fn size(&self) -> u64 {
+        zip::read::ZipFile::size(self)
+    }
+}
+
 pub fn open(path: &Path) -> Result<(Document, Manifest), ProjectError> {
     let mut zip = ZipArchive::new(File::open(path)?)?;
 
     let manifest: Manifest = {
-        let mut entry = zip
+        let entry = zip
             .by_name("manifest.json")
             .map_err(|_| ProjectError::NotALumitProject)?;
-        let mut s = String::new();
-        entry.read_to_string(&mut s)?;
-        serde_json::from_str(&s)?
+        serde_json::from_str(&entry_text(entry, MANIFEST_MAX_BYTES)?)?
     };
     if manifest.format != FORMAT {
         return Err(ProjectError::NotALumitProject);
@@ -448,11 +551,10 @@ pub fn open(path: &Path) -> Result<(Document, Manifest), ProjectError> {
     }
 
     let doc: Document = {
-        let mut entry = zip
+        let entry = zip
             .by_name("project.json")
             .map_err(|_| ProjectError::NotALumitProject)?;
-        let mut s = String::new();
-        entry.read_to_string(&mut s)?;
+        let s = entry_text(entry, PROJECT_JSON_MAX_BYTES)?;
         // A file at an older schema is migrated up before it is typed (docs/10
         // §1). A current-schema file takes the direct path unchanged, so nothing
         // routes through `Value` needlessly.
@@ -470,6 +572,23 @@ pub fn open(path: &Path) -> Result<(Document, Manifest), ProjectError> {
     // so the panel has values to draw and edits have ids to write.
     for item in &mut doc.items {
         if let lumit_core::model::ProjectItem::Composition(comp) = item {
+            // A composition's size decides every raster allocation made for it,
+            // and it arrives as two plain integers out of the file's JSON. A
+            // comp declared four billion on a side is a number somebody can
+            // type into a document with a text editor, and everything
+            // downstream would then multiply by it.
+            //
+            // Refused at the door rather than clamped: a project silently opened
+            // at a different size than it says would export at that size too,
+            // which is a wrong picture delivered quietly — the one failure this
+            // codebase refuses to ship. The sentence names both numbers.
+            if !comp_size_is_sane(comp.width, comp.height) {
+                return Err(ProjectError::CompTooLarge {
+                    width: comp.width,
+                    height: comp.height,
+                    limit: MAX_COMP_SIDE,
+                });
+            }
             let (w, h) = (f64::from(comp.width), f64::from(comp.height));
             for layer in &mut comp.layers {
                 lumit_core::fx::backfill_builtin_params(&mut layer.effects);
@@ -3538,5 +3657,155 @@ mod tests {
             "an instance with no blob must write no key for one:
 {json}"
         );
+    }
+
+    /// A `.lum` is a ZIP, and a ZIP entry's compressed size says nothing about
+    /// its decompressed one: a few hundred kilobytes of deflated zeros expand to
+    /// gigabytes. `read_to_string` believes whatever comes out of the
+    /// decompressor — so a project file somebody sent, which is what project
+    /// files are for, could take the machine's memory before a single field had
+    /// been parsed.
+    #[test]
+    fn a_project_entry_that_decompresses_without_end_is_refused() {
+        /// A reader that claims one size and produces another — which is the
+        /// whole shape of the attack, and not something a real archive library
+        /// will do on request.
+        struct Liar {
+            claims: u64,
+            produced: usize,
+        }
+        impl std::io::Read for Liar {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                // Endless, like a decompressor fed a bomb.
+                buf.fill(b'x');
+                self.produced = self.produced.saturating_add(buf.len());
+                Ok(buf.len())
+            }
+        }
+        impl ZipEntry for Liar {
+            fn size(&self) -> u64 {
+                self.claims
+            }
+        }
+
+        // Honest and over the ceiling: refused from the header, having read
+        // nothing.
+        let out = entry_text(
+            Liar {
+                claims: 1 << 40,
+                produced: 0,
+            },
+            1024,
+        );
+        assert!(
+            matches!(out, Err(ProjectError::EntryTooLarge { limit: 1024, .. })),
+            "{out:?}"
+        );
+
+        // Understating its size and then never stopping: refused on the byte
+        // past the ceiling, rather than read until the memory ran out.
+        let out = entry_text(
+            Liar {
+                claims: 8,
+                produced: 0,
+            },
+            1024,
+        );
+        assert!(
+            matches!(out, Err(ProjectError::EntryTooLarge { limit: 1024, .. })),
+            "a stream that lied about its size must be caught by what it produced: {out:?}"
+        );
+
+        // And an ordinary entry is unaffected.
+        let honest = entry_text(
+            {
+                struct Short(&'static [u8]);
+                impl std::io::Read for Short {
+                    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                        std::io::Read::read(&mut self.0, buf)
+                    }
+                }
+                impl ZipEntry for Short {
+                    fn size(&self) -> u64 {
+                        3
+                    }
+                }
+                Short(b"{}\n")
+            },
+            1024,
+        )
+        .expect("an ordinary entry is read");
+        assert_eq!(honest.trim(), "{}");
+    }
+
+    /// A composition's size decides every raster allocation made for it, and it
+    /// arrives as two plain integers out of the file's JSON — which a text
+    /// editor can set to anything.
+    ///
+    /// Refused rather than clamped: a project opened quietly at a size other
+    /// than the one it states would *export* at that size too, and a wrong
+    /// picture delivered quietly is the failure this codebase refuses to ship.
+    #[test]
+    fn a_composition_no_picture_could_be_is_refused_rather_than_opened() {
+        fn comp_sized(width: u32, height: u32) -> lumit_core::model::Composition {
+            lumit_core::model::Composition {
+                master_volume_db: 0.0,
+                sound_mix: false,
+                groups: Vec::new(),
+                beat_grid: None,
+                id: Uuid::now_v7(),
+                name: "Comp 1".into(),
+                width,
+                height,
+                frame_rate: lumit_core::time::FrameRate::new(25, 1).unwrap(),
+                duration: lumit_core::time::Duration(
+                    lumit_core::time::Rational::new(10, 1).unwrap(),
+                ),
+                background: lumit_core::model::LinearColour::BLACK,
+                work_area: None,
+                layers: Vec::new(),
+                markers: Vec::new(),
+                motion_blur: Default::default(),
+                extra: serde_json::Map::new(),
+            }
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let saved = |w: u32, h: u32, name: &str| {
+            let mut doc = Document::default();
+            doc.items
+                .push(lumit_core::model::ProjectItem::Composition(comp_sized(
+                    w, h,
+                )));
+            let at = dir.path().join(name);
+            save(&doc, &at).unwrap();
+            at
+        };
+
+        assert!(
+            open(&saved(1920, 1080, "honest.lum")).is_ok(),
+            "an ordinary project opens"
+        );
+
+        for (w, h) in [
+            (u32::MAX, 1080),
+            (1920, u32::MAX),
+            // Each side inside the ceiling, the product far past it.
+            (65_536, 65_536),
+            (0, 1080),
+            (1920, 0),
+        ] {
+            let at = saved(w, h, &format!("{w}x{h}.lum"));
+            let out = open(&at);
+            assert!(
+                matches!(out, Err(ProjectError::CompTooLarge { .. })),
+                "{w} by {h} must be refused, got {out:?}"
+            );
+        }
+
+        // And the predicate agrees with the sizes people actually work at.
+        for (w, h) in [(1920, 1080), (3840, 2160), (15_360, 8640), (1, 1)] {
+            assert!(comp_size_is_sane(w, h), "{w} by {h} is an ordinary comp");
+        }
     }
 }
