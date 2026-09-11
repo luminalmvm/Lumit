@@ -302,28 +302,78 @@ impl RotoRun {
     }
 }
 
+/// The size LZ4 says its payload will decompress to, without decompressing it.
+///
+/// `lz4_flex::decompress_size_prepended` reads this same four-byte little-endian
+/// prefix and allocates it before it starts. The prefix is the file's number,
+/// and the file is a stranger's — nothing stops a ten-byte payload announcing
+/// four gigabytes. Since the caller already knows how many pixels the box holds,
+/// the announcement can simply be checked against that first, and the
+/// allocation never happens.
+fn lz4_advertised_size(lz4: &[u8]) -> Option<u32> {
+    let head = lz4.get(..4)?;
+    Some(u32::from_le_bytes([
+        *head.first()?,
+        *head.get(1)?,
+        *head.get(2)?,
+        *head.get(3)?,
+    ]))
+}
+
 /// Blow one record's boxed, compressed matte back out to the full raster.
 /// Anything that will not decompress reads as an empty matte rather than a
 /// panic — a corrupt cache costs a re-propagation, never a frame.
+///
+/// Every number this touches came out of a file: the raster size, the box, and
+/// the size LZ4 claims it will inflate to. [`validate`] has already refused a
+/// record whose numbers do not hold together, so the arithmetic below is
+/// checked as a second line rather than a first — but it is checked, because a
+/// panic here is a frame lost and `expand` is reached from the render path.
 fn expand(record: &FrameRecord, width: u32, height: u32) -> Vec<u8> {
-    let n = (width as usize) * (height as usize);
+    let (w, h) = (width as usize, height as usize);
+    let Some(n) = w.checked_mul(h) else {
+        return Vec::new();
+    };
     let mut plane = vec![0u8; n];
     let [bx, by, bw, bh] = record.bbox;
     if bw == 0 || bh == 0 {
         return plane;
     }
+    let (bx, by, bw, bh) = (bx as usize, by as usize, bw as usize, bh as usize);
+    // The box must sit inside the raster, or the row arithmetic below writes
+    // where it should not and the copy is nonsense even when it fits.
+    let (Some(right), Some(bottom)) = (bx.checked_add(bw), by.checked_add(bh)) else {
+        return plane;
+    };
+    if right > w || bottom > h {
+        return plane;
+    }
+    let Some(boxed_len) = bw.checked_mul(bh) else {
+        return plane;
+    };
+    // Checked before the decompression, not after: afterwards is after the
+    // allocation the number asked for.
+    if lz4_advertised_size(&record.lz4).map(|n| n as usize) != Some(boxed_len) {
+        return plane;
+    }
     let Ok(boxed) = lz4_flex::decompress_size_prepended(&record.lz4) else {
         return plane;
     };
-    if boxed.len() != (bw as usize) * (bh as usize) {
+    if boxed.len() != boxed_len {
         return plane;
     }
-    for row in 0..bh as usize {
-        let dst = ((by as usize + row) * width as usize) + bx as usize;
-        let src = row * bw as usize;
+    for row in 0..bh {
+        let (Some(dst), Some(src)) = (
+            by.checked_add(row).and_then(|y| y.checked_mul(w)).and_then(
+                |row_start| row_start.checked_add(bx),
+            ),
+            row.checked_mul(bw),
+        ) else {
+            continue;
+        };
         let (Some(d), Some(s)) = (
-            plane.get_mut(dst..dst + bw as usize),
-            boxed.get(src..src + bw as usize),
+            dst.checked_add(bw).and_then(|end| plane.get_mut(dst..end)),
+            src.checked_add(bw).and_then(|end| boxed.get(src..end)),
         ) else {
             continue;
         };
@@ -411,13 +461,133 @@ fn encode(key: RotoKey, run: &RotoRun) -> Option<Vec<u8>> {
     Some(sidecar::frame(MAGIC, FORMAT_VERSION, &body))
 }
 
+// ---------------------------------------------------------------------------
+// What a sidecar may claim
+// ---------------------------------------------------------------------------
+//
+// In plain terms: a `.lrot` file is Lumit's own writing, but it lives in a cache
+// directory on an ordinary disk, and "our own writing" is a statement about
+// where it came from, not about what is in it now. A file can be truncated by a
+// full disk, corrupted by a failing drive, carried between machines in a project
+// folder, or simply edited. Every number inside it — the raster size, the frame
+// count, each box, each payload's announced length — decides an allocation, so
+// every one of them is checked before it is believed.
+//
+// The cost of being wrong here is cheap and known: a refused sidecar is a
+// re-propagation, which is exactly what happens when there is no sidecar at all.
+// That is why the whole file is refused rather than salvaged.
+
+/// The most a sidecar may weigh on disk.
+///
+/// A propagated run is a few tens of kilobytes a frame; a thousand-frame run is
+/// tens of megabytes. 512 MiB is far past any run and still a bounded read.
+const MAX_SIDECAR_BYTES: u64 = 512 << 20;
+
+/// The widest or tallest matte a sidecar may claim, matching what a comp can
+/// actually be.
+const MAX_RASTER_SIDE: u32 = 65_536;
+
+/// The most frames one run may hold. A feature at 24fps is around 150,000
+/// frames end to end; a single Roto brush run is a shot, not a feature.
+const MAX_FRAME_RECORDS: usize = 1_000_000;
+
+/// What every box in one file may add up to once inflated.
+///
+/// The per-record check keeps one box inside the raster; this keeps a million
+/// records of legal boxes from adding up to a terabyte.
+const MAX_TOTAL_BOXED_BYTES: u64 = 4 << 30;
+
+/// How many sidecars [`lendable`] will open in one directory, and how much they
+/// may weigh together. A cache folder is not supposed to hold thousands of runs
+/// for one media prefix, and if it does, lending from the first few hundred is
+/// the same answer for far less work.
+const MAX_LENDABLE_FILES: usize = 512;
+const MAX_LENDABLE_BYTES: u64 = 4 << 30;
+
+/// Whether every number in a decoded record holds together.
+///
+/// Called before a `Record` becomes a [`RotoRun`], so that everything
+/// downstream — [`expand`] most of all — is working from sizes that have been
+/// checked rather than sizes that were read.
+fn validate(record: &Record) -> bool {
+    if record.width == 0
+        || record.height == 0
+        || record.width > MAX_RASTER_SIDE
+        || record.height > MAX_RASTER_SIDE
+    {
+        return false;
+    }
+    // A rate that is not a positive finite number is not a rate. It reaches the
+    // retime maths, where an infinity or a NaN spreads silently.
+    if !record.fps.is_finite() || record.fps <= 0.0 {
+        return false;
+    }
+    if record.frames.len() > MAX_FRAME_RECORDS {
+        return false;
+    }
+    let Some(raster) = u64::from(record.width).checked_mul(u64::from(record.height)) else {
+        return false;
+    };
+    let mut total: u64 = 0;
+    let mut previous: Option<i64> = None;
+    for frame in &record.frames {
+        // Ascending by frame is what makes a lookup a binary search. A file
+        // that is not sorted would make the search silently miss, which is a
+        // wrong matte rather than a slow one.
+        if previous.is_some_and(|p| frame.frame <= p) {
+            return false;
+        }
+        previous = Some(frame.frame);
+
+        let [bx, by, bw, bh] = frame.bbox;
+        if bw == 0 || bh == 0 {
+            // An empty matte carries no payload; one that does is not the file
+            // it says it is.
+            if !frame.lz4.is_empty() {
+                return false;
+            }
+            continue;
+        }
+        let (Some(right), Some(bottom)) = (bx.checked_add(bw), by.checked_add(bh)) else {
+            return false;
+        };
+        if right > record.width || bottom > record.height {
+            return false;
+        }
+        let boxed = u64::from(bw).saturating_mul(u64::from(bh));
+        if boxed > raster {
+            return false;
+        }
+        // The payload's own announcement, checked against the box it claims to
+        // fill — before anything decompresses it.
+        if lz4_advertised_size(&frame.lz4).map(u64::from) != Some(boxed) {
+            return false;
+        }
+        let Some(next) = total.checked_add(boxed) else {
+            return false;
+        };
+        total = next;
+        if total > MAX_TOTAL_BOXED_BYTES {
+            return false;
+        }
+    }
+    true
+}
+
 /// The inverse, refusing anything it cannot vouch for: wrong magic, a version
-/// from the future, a body that will not parse, or — when `key` is given — a
-/// stored key that is not the one asked for. Every refusal costs a
-/// re-propagation and nothing else.
+/// from the future, a body that will not parse, a body whose numbers do not
+/// hold together, or — when `key` is given — a stored key that is not the one
+/// asked for. Every refusal costs a re-propagation and nothing else.
 fn decode(bytes: &[u8], key: Option<RotoKey>) -> Option<Record> {
     let body = sidecar::unframe(bytes, MAGIC, FORMAT_VERSION)?;
+    // bincode reads counts out of the body and grows as it goes, so the body's
+    // own length is the ceiling on what deserialising can allocate — which is
+    // why the read that produced `bytes` is capped. What it cannot bound is
+    // what those counts then *mean*, which is `validate`'s job.
     let record: Record = bincode::deserialize(body).ok()?;
+    if !validate(&record) {
+        return None;
+    }
     match key {
         Some(k) if record.key != key_bytes(k) => None,
         _ => Some(record),
@@ -440,7 +610,8 @@ fn record_to_run(record: Record) -> Option<RotoRun> {
 }
 
 fn read_sidecar(dir: &Path, key: RotoKey) -> Option<RotoRun> {
-    let bytes = std::fs::read(dir.join(key.file_name())).ok()?;
+    let bytes =
+        lumit_ingress::read_capped(&dir.join(key.file_name()), MAX_SIDECAR_BYTES).ok()?;
     record_to_run(decode(&bytes, Some(key))?)
 }
 
@@ -460,14 +631,24 @@ fn lendable(dir: &Path, key: RotoKey) -> HashMap<[u8; 32], FrameRecord> {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return out;
     };
+    // Each file is bounded on its own; the directory is not. A cache folder
+    // holding thousands of runs for one media prefix would otherwise be read
+    // whole, every time a propagation starts.
+    let mut files = 0usize;
+    let mut read_bytes = 0u64;
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().into_owned();
         if !name.starts_with(&prefix) || !name.ends_with(".lrot") {
             continue;
         }
-        let Ok(bytes) = std::fs::read(entry.path()) else {
+        files = files.saturating_add(1);
+        if files > MAX_LENDABLE_FILES || read_bytes > MAX_LENDABLE_BYTES {
+            break;
+        }
+        let Ok(bytes) = lumit_ingress::read_capped(&entry.path(), MAX_SIDECAR_BYTES) else {
             continue;
         };
+        read_bytes = read_bytes.saturating_add(bytes.len() as u64);
         // No key check, and the run's **own** file lends too: what makes a
         // frame safe to borrow is its chain hash, which already covers the
         // settings, the base and every stroke that decides it. Reading the

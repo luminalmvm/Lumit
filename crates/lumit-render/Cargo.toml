@@ -19,6 +19,7 @@ lumit-colour = { path = "../lumit-colour" }
 lumit-eval = { path = "../lumit-eval" }
 lumit-flow = { path = "../lumit-flow" }
 lumit-gpu = { path = "../lumit-gpu" }
+lumit-ingress = { path = "../lumit-ingress" }
 lumit-media = { path = "../lumit-media" }
 lumit-project = { path = "../lumit-project" }
 lumit-text = { path = "../lumit-text" }
