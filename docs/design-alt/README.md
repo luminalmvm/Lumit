@@ -14,12 +14,15 @@ alternative style.
 | [15-DESIGN-RAMS.md](15-DESIGN-RAMS.md) | Dieter Rams' ten principles; Braun and Vitsœ | A calibrated grey room, one signal orange, one typeface, and every dimension on a 4px module |
 | [15-DESIGN-BAUHAUS.md](15-DESIGN-BAUHAUS.md) | Itten and Kandinsky's colour-and-form teaching; Bayer's single alphabet | Paper plates on a black grid, three primaries with one referent each, no capitals anywhere, and Kandinsky's square/triangle/circle as the keyframe code |
 
-**[mockups/shell.html](mockups/shell.html)** draws the Project panel, Viewer, Effect controls
-and Timeline under all three languages from one markup, with a switch between them and between
-each language's two rooms. Open it in a browser. Every visible difference between the three is
-a token value or a grammar switch — no panel is laid out twice, which is the same claim the
-canonical document makes about Light mode, tested against two languages it was not designed
-alongside.
+**[mockups/rams-shell.html](mockups/rams-shell.html)** is the one to open: the shell laid out
+again from scratch on the Rams document — a tool rail, a deck under the picture, bare panes,
+an engraved ruler — in both rooms, with the structural moves numbered on the drawing. Every
+function in the UI spec is on it; what moved is stated in the Rams document's §12B.
+
+[mockups/shell.html](mockups/shell.html) is the earlier control: the canonical layout drawn
+under all three languages from one markup, so the token-swap claim can be judged on its own
+before any layout changes. The Bauhaus envisioning is set aside for now; its document stays
+for the two findings below.
 
 ## What each document keeps
 

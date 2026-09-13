@@ -14,8 +14,10 @@ terminology still follows [01-GLOSSARY.md](../01-GLOSSARY.md) exactly.
 RFC-2119 keywords are used with their usual force *within this document's own world* — they
 bind an implementation of this style, not the shipping one.
 
-Visual reference: [mockups/shell.html](mockups/shell.html), which draws the same shell under
-the canonical style, this one, and the Bauhaus one from a single markup.
+Visual reference: **[mockups/rams-shell.html](mockups/rams-shell.html)** — the shell drawn
+from scratch to this document, in both rooms, with the structural moves numbered (§12B). The
+earlier [mockups/shell.html](mockups/shell.html) is the token-swap comparison against the
+canonical layout and is kept as the control.
 
 ---
 
@@ -570,6 +572,99 @@ fit one line. Three notes:
 
 Unchanged: transient, local, under the cursor, lasting as long as the gesture, leaving no
 trace. A panel nobody is touching looks exactly as §2 says it does.
+
+## 12B. The shell, laid out again
+
+The canonical shell is After Effects' shape, chosen so that the audience arrives home. This
+style keeps every panel, every control and every behaviour in [07-UI-SPEC.md](../07-UI-SPEC.md)
+and lays the *chrome* out again by one rule — Braun's: **a control sits where the hand goes
+most, at the size the hand needs, and nothing sits anywhere for tradition's sake**. The dock,
+the drop zones, the workspaces, floating windows and every keymap are untouched; what follows
+is the default arrangement and the chrome around it.
+
+### 12B.1 The tool rail
+
+The toolbar (07 §1.7) leaves the horizontal strip and becomes a **44px column down the left
+edge of the window**, running from under the top line to the bottom of the readout strip.
+
+- Every group from §1.7's table, in its order, one 44×44 cell each: Selection, Hand, Zoom,
+  Rotation, Anchor point, Razor; a seam; Shape, Pen, Type, Paint, Roto, Puppet, Camera. A
+  group's cell carries the member last used with the corner triangle; press-and-hold and
+  right-click open the flyout *to the right* of the rail; every shortcut and the cycling rule
+  are unchanged. Unbuilt tools draw disabled and decline, exactly as the spec says.
+- **The armed tool wears a 2px `signal` index on the rail's edge** — the Braun switch mark —
+  and sits on `surface_2`. It is the one saturated thing on the rail.
+- The snapping switch stands at the foot of the rail, apart from the tools, because it is a
+  mode and not a tool.
+- **Tool options** (§1.7's table) open as a small panel hanging off the rail beside the armed
+  tool, only while a tool with options is armed; Selection shows nothing.
+- The reason: §7.2's hit floor is 44 on both axes. The horizontal strip gave up the vertical
+  one (44 across, 30 down) to save height; a column gives up nothing, costs the panels 44px of
+  width instead of 30px of height, and is where the hand already is when it leaves the picture.
+
+### 12B.2 The top line
+
+One 28px strip: the mark, the nine menus as lowercase words, the workspace strip with its
+fronted name over a 2px `signal` rule, and the command palette's well at the right. On macOS
+the menus go to the system bar and the line keeps the rest, as the spec already provides.
+
+### 12B.3 Bare panes and engraved labels
+
+The default arrangement has **no tab bars**. Each pane is a bare pane — the spec's own term
+for a panel that sits alone — carrying its name as a 9px lowercase label in its top-left corner
+and its own controls on the same 24px line. Docking is unchanged: right-click a pane to pop it
+out, Window ▸ to add or drop one, drag a tab once a pane has company. Panels a preset stacks
+(Effects & presets and Scopes behind Effect controls in Edit) still stack, and a stacked group
+still shows its tabs; the resting default is simply built so that nothing is stacked.
+
+### 12B.4 The Viewer: ways of looking above, the deck below
+
+The Viewer's two strips (07 §2.2) are re-cut by what they are *for*:
+
+- **The bar above the picture holds only ways of looking**: magnification, preview
+  resolution, the channel mark, the transparency board, the view menu, the 3D view, the
+  exposure with its reset mark, the snapshot pair behind a seam, the colour pipeline, and the
+  degradation reading (`1920×1080 → 960×540`). Every item keeps §2.2's behaviour.
+- **The deck**, a fixed 32px instrument strip under the picture, holds everything about
+  *playing*: the five transport marks, **the clock at 15px** — the one large number in the
+  application — with the frame count beside it, the loop mode, the preview mode (cached /
+  realtime), the quality toggle, audio, and the cache-ready meter. This is §9's Preview panel
+  given a permanent seat; the dockable Preview panel still exists for a second monitor.
+- The "at effect" chip and the selection's name stay over the picture, where the selection is.
+
+### 12B.5 The Timeline
+
+- The header line: the panel label, the composition tabs (the fronted one over a `signal`
+  rule), and the one filled `export` at the right.
+- The outline's chrome row: the layer search well, the shy filter and the master motion-blur
+  switch as bare glyphs, and the Layers / Graph modes at the right. **The timecode and frame
+  count are not repeated here** — the deck's clock is the clock, and typing into it moves the
+  playhead exactly as §4.1 requires.
+- The outline row, on the 24px module: switches · number · name · modes · matte · blend ·
+  parent · ms, each control a bare glyph or a well, nothing boxed. The foot carries the ease
+  strip, Reverse / Copy / Paste at playhead, the three group toggles, and the measuring clock.
+- **The ruler is an engraved scale**: a tick every four frames, a taller one every second, a
+  labelled one every four seconds, on the upper half; the work-area handles, the markers and
+  the 4px cache bar on the floor. The playhead is the one `signal` index, its head the grab.
+  Outside the work area the ground steps darker (§3.2) — nothing is painted in.
+- **The lane foot holds the dial** (§12): the zoom as a real dial with a tick scale, its
+  reading beside it (`1 tick = 4 f`), then the horizontal scrollbar.
+
+### 12B.6 The readout strip
+
+The status line becomes a 20px strip of engraved readouts across the foot of the dock: the
+status message at the left; the three cache meters (vram / ram / disk) as 48×3 bars with their
+figures; the frame cost and the dropped-frame count at the right. It reports; it never alarms.
+
+### 12B.7 What this costs, beyond "What it would cost to build"
+
+- **The rail is a re-layout of the toolbar widget**, not a new one: same groups, flyouts and
+  state; the flyout opens to the right instead of down, and the options panel is re-hung.
+- **The deck is the Preview panel, docked by the shell** rather than by the user, with the
+  clock and frame count moved off the Timeline's chrome row.
+- **Bare panes by default** is a change to the shipped presets in 07 §1.6, and to nothing
+  else.
+- **The engraved ruler and the readout strip are drawing changes** to two painters.
 
 ## 13. New-panel checklist
 
