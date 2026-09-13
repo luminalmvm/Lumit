@@ -11,34 +11,54 @@ alternative style.
 
 | Document | The tradition | The one-line difference |
 |---|---|---|
-| [15-DESIGN-RAMS.md](15-DESIGN-RAMS.md) | Dieter Rams' ten principles; Braun and Vitsœ | A calibrated grey room, one signal orange, one typeface, and every dimension on a 4px module |
-| [15-DESIGN-BAUHAUS.md](15-DESIGN-BAUHAUS.md) | Itten and Kandinsky's colour-and-form teaching; Bayer's single alphabet | Paper plates on a black grid, three primaries with one referent each, no capitals anywhere, and Kandinsky's square/triangle/circle as the keyframe code |
+| [15-DESIGN-RAMS.md](15-DESIGN-RAMS.md) | Dieter Rams' ten principles; Braun and Vitsœ | A calibrated grey room, one signal orange, one typeface, a tool rail and a deck, and every dimension on a 4px module |
+| [15-DESIGN-LANTERN.md](15-DESIGN-LANTERN.md) | OUTLOUD's Lyrica editor, taken as a whole style | Dark cards in a light room, capsules and circles for everything you can press, a floating tool dock, the transport in one pill — the style meant to replace Round |
+| [15-DESIGN-BAUHAUS.md](15-DESIGN-BAUHAUS.md) | Itten and Kandinsky's colour-and-form teaching; Bayer's single alphabet | Set aside for now; kept for the two findings below |
 
-**[mockups/rams-shell.html](mockups/rams-shell.html)** is the one to open: the shell laid out
-again from scratch on the Rams document — a tool rail, a deck under the picture, bare panes,
-an engraved ruler — in both rooms, with the structural moves numbered on the drawing. Every
-function in the UI spec is on it; what moved is stated in the Rams document's §12B.
+**[GREY-ROOM-INVENTORY.md](GREY-ROOM-INVENTORY.md)** is the walk-through list for the Rams
+style: every surface, control and state in the UI spec, one checkbox each, with how the grey
+room draws it and whether that is drawn, specified, derived or still open.
 
-[mockups/shell.html](mockups/shell.html) is the earlier control: the canonical layout drawn
-under all three languages from one markup, so the token-swap claim can be judged on its own
-before any layout changes. The Bauhaus envisioning is set aside for now; its document stays
-for the two findings below.
+**Mockups**, each drawing the full shell in two rooms with the structural moves numbered:
+
+- **[mockups/rams-shell.html](mockups/rams-shell.html)** — the grey room, from scratch.
+- **[mockups/lantern-shell.html](mockups/lantern-shell.html)** — Lantern, from scratch.
+- [mockups/shell.html](mockups/shell.html) — the earlier control: the canonical layout under
+  three token sets from one markup, so the token-swap claim can be judged before any layout
+  changes.
+
+## Naming the styles
+
+The shipped names — Sharp, Round — name geometry, and "Dieter" would name a person. A style
+is a room you work in, so the proposal is one-word names for the rooms, chosen so that none
+describes a shape or borrows a name:
+
+| Today | Proposed | Why |
+|---|---|---|
+| Sharp (canonical) | **Slate** | Flat, dark, hairline-edged, and what everything else is measured against |
+| the Rams envisioning | **Instrument** | The deck, the dial, the rail, the engraved scale: a thing with controls on it |
+| Round → the Lyrica envisioning | **Lantern** | Dark cards lit inside a light room |
+
+Alternatives, if any of those fails to land: *Bench* or *Studio* for the Rams room; *Capsule*,
+*Bloom* or *Pebble* for the Lyrica one; *Ink* for the canonical. Each style's two rooms keep
+their own names inside it (grey room / graphite; day / night), and the canonical's stay dark /
+light.
 
 ## What each document keeps
 
-Both leave [07-UI-SPEC.md](../07-UI-SPEC.md) entirely alone. The dock, the drop zones, the
+All three leave [07-UI-SPEC.md](../07-UI-SPEC.md) entirely alone. The dock, the drop zones, the
 workspaces, the keymap, what each panel contains and how it responds are unchanged; so is
 KD-2's hit-target compensation, the Viewer neutrality zone, AccessKit from day one, the
 no-punishment rule, and British English. These are languages, not re-plans.
 
-Both also keep the canonical document's *behavioural* rulings in §12A wholesale — the fixed
+All keep the canonical document's *behavioural* rulings in §12A wholesale — the fixed
 column edges, Tab hopping pre-selected values, the matte column's conditional width, the
 per-format capability table, the degradation ladder. What they change is what the resting state
 draws.
 
 ## Two findings worth keeping regardless
 
-Both fell out of writing these and hold whether or not either style is ever built:
+These fell out of writing the envisionings and hold whether or not any is built:
 
 1. **`surface_0` carries two jobs.** It is the ground *between* panels and the ground *inside*
    one (the timeline well, graph paper, input wells). They only want the same colour because
@@ -49,7 +69,7 @@ Both fell out of writing these and hold whether or not either style is ever buil
    See [15-DESIGN-RAMS.md](15-DESIGN-RAMS.md) §12 and
    [15-DESIGN-BAUHAUS.md](15-DESIGN-BAUHAUS.md) §12.
 
-## The experiment both documents are waiting on
+## The experiment every document is waiting on
 
 Each proposes a shell lighter than the canonical near-black one, for different reasons, and
 each closes on the same unanswered question: **does a lighter shell survive beside a picture

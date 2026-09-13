@@ -1,0 +1,641 @@
+<title>Lumit Lantern</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap">
+<style>
+/* ------------------------------------------------------------------
+   Lumit — Lantern.  docs/design-alt/mockups/lantern-shell.html
+
+   A from-scratch shell on the cues the canonical doc records from
+   OUTLOUD's Lyrica editor (15-DESIGN §12.1) — taken as a whole style
+   rather than a shape: dark cards floating in a light room, stadium
+   controls, a transport in one pill, filled-pill actives, the header
+   dot, capsule bars. Every function in 07-UI-SPEC.md is kept.
+   ------------------------------------------------------------------ */
+:root {
+  --mount: #3b3b3a; --mount-deep: #2e2e2d; --mount-line: #545452;
+  --ink: #eceae6; --ink-2: #b3b1ac; --ink-3: #85837e; --hi: #e0a24a;
+  --page-sans: "Plus Jakarta Sans", system-ui, sans-serif;
+  --page-mono: "DM Mono", ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--mount); color: var(--ink); font-family: var(--page-sans); -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1400px; margin: 0 auto; padding-inline: 20px; padding-block: 26px 60px; }
+.masthead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }
+.masthead h1 { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
+.masthead .sub { margin: 0; color: var(--ink-2); font-size: 13px; }
+.intro { margin: 12px 0 0; max-width: 70ch; color: var(--ink-2); font-size: 13.5px; line-height: 1.6; }
+.intro strong { color: var(--ink); font-weight: 600; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px 24px; align-items: flex-end; margin-top: 20px; padding-bottom: 12px; border-bottom: 1px solid var(--mount-line); }
+.group { display: flex; flex-direction: column; gap: 6px; }
+.glabel { font-family: var(--page-mono); font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.seg { display: flex; }
+.seg button { appearance: none; cursor: pointer; font: 12.5px/1 var(--page-sans); padding: 8px 13px; color: var(--ink-2); background: var(--mount-deep); border: 1px solid var(--mount-line); border-right-width: 0; }
+.seg button:last-child { border-right-width: 1px; }
+.seg button:hover { color: var(--ink); }
+.seg button[aria-pressed="true"] { color: #201f1d; background: var(--hi); border-color: var(--hi); }
+.seg button:focus-visible { outline: 2px solid var(--hi); outline-offset: 2px; }
+.stage { margin-top: 22px; }
+.viewport { overflow-x: auto; overflow-y: hidden; }
+.scaler { transform-origin: top left; width: 1360px; }
+
+/* ==================================================================
+   TOKENS — two rooms
+   ================================================================== */
+.shell { --f: "Plus Jakarta Sans", system-ui, sans-serif; --fn: "DM Mono", ui-monospace, monospace; }
+.shell[data-room="day"] {
+  --room: #e4e4ea; --room2: #d9d9e1;
+  --card: #1e1e25; --card2: #27272f; --well: #15151b; --float: #2d2d37; --raised: #35353f;
+  --surround: #7f7f7f;
+  --tp: #f3f3f7; --ts: #c3c3cd; --tm: #8d8d9a; --td: #5c5c69;
+  --hair: #33333d;
+  --accent: #6a5aeb; --accent-ink: #ffffff; --accent-soft: rgba(106,90,235,.22);
+  --on: #4fc48f; --attn: #e9b84a; --fault: #f26d8d;
+  --l-footage: #5fa3d6; --l-sequence: #7d8ee0; --l-precomp: #c17ad1; --l-solid: #9a9aa6; --l-text: #e5b56a; --l-camera: #d7c36a; --l-audio: #55c9b4;
+  --cache-hot: #4fc48f; --cache-disk: #5fa3d6; --wave: #55c9b4;
+  --room-ink: #23232b; --room-ink2: #6b6b78;
+  --shadow: 0 6px 18px rgba(20,20,30,.20), 0 1px 2px rgba(20,20,30,.12);
+  --float-shadow: 0 10px 30px rgba(0,0,0,.35);
+}
+.shell[data-room="night"] {
+  --room: #0f0f13; --room2: #17171c;
+  --card: #1c1c22; --card2: #25252c; --well: #121217; --float: #2b2b33; --raised: #33333c;
+  --surround: #7f7f7f;
+  --tp: #f3f3f7; --ts: #c3c3cd; --tm: #8d8d9a; --td: #5c5c69;
+  --hair: #30303a;
+  --accent: #7c6cff; --accent-ink: #ffffff; --accent-soft: rgba(124,108,255,.22);
+  --on: #4fc48f; --attn: #e9b84a; --fault: #f26d8d;
+  --l-footage: #5fa3d6; --l-sequence: #7d8ee0; --l-precomp: #c17ad1; --l-solid: #9a9aa6; --l-text: #e5b56a; --l-camera: #d7c36a; --l-audio: #55c9b4;
+  --cache-hot: #4fc48f; --cache-disk: #5fa3d6; --wave: #55c9b4;
+  --room-ink: #e9e9ef; --room-ink2: #8d8d9a;
+  --shadow: 0 6px 18px rgba(0,0,0,.45), 0 1px 2px rgba(0,0,0,.3);
+  --float-shadow: 0 10px 30px rgba(0,0,0,.55);
+}
+
+/* ==================================================================
+   THE SHELL 1360 × 820
+   ================================================================== */
+.shell { width: 1360px; height: 820px; position: relative; background: var(--room); color: var(--ts); font-family: var(--f); font-size: 11px; font-variant-numeric: tabular-nums; display: grid; grid-template-rows: 44px 1fr; }
+.shell, .shell * { box-sizing: border-box; }
+.num { font-family: var(--fn); font-variant-numeric: tabular-nums; }
+.g { width: 14px; height: 14px; flex: none; display: block; color: currentColor; }
+.g svg { display: block; width: 100%; height: 100%; }
+.sp { flex: 1; }
+.dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+
+/* pills */
+.pill { height: 24px; padding: 0 10px; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; background: var(--card2); color: var(--ts); font-size: 10.5px; white-space: nowrap; }
+.pill.on { background: var(--accent); color: var(--accent-ink); font-weight: 500; }
+.pill.ghost { background: transparent; color: var(--tm); }
+.pill .chev { width: 8px; height: 8px; }
+.segp { display: inline-flex; padding: 2px; border-radius: 999px; background: var(--well); gap: 2px; }
+.segp .pill { height: 20px; padding: 0 9px; background: transparent; color: var(--tm); }
+.segp .pill.on { background: var(--accent); color: var(--accent-ink); }
+.well { height: 22px; padding: 0 9px; display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; background: var(--well); color: var(--tp); font-family: var(--fn); font-size: 11px; white-space: nowrap; }
+.well .u { font-size: 9.5px; color: var(--tm); font-family: var(--f); }
+.well.ghost { color: var(--tm); font-family: var(--f); }
+.rbtn { width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: var(--ts); background: transparent; flex: none; }
+.rbtn.on { background: var(--accent); color: var(--accent-ink); }
+.switch { width: 26px; height: 14px; border-radius: 999px; background: var(--well); position: relative; flex: none; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--tm); }
+.switch.on { background: var(--accent); }
+.switch.on::after { left: 14px; background: #fff; }
+
+/* ---------- top band (room) ---------- */
+.top { display: flex; align-items: center; gap: 12px; padding: 0 16px; color: var(--room-ink); }
+.mark { position: relative; width: 18px; height: 12px; display: block; margin-right: 4px; }
+.mark::before, .mark::after { content: ""; position: absolute; top: 1px; width: 9px; height: 9px; border-radius: 3px; transform: rotate(45deg); }
+.mark::before { left: 0; background: #4f8fc7; } .mark::after { left: 8px; background: #8b6bd6; }
+.mark b { position: absolute; left: 6px; top: 3px; width: 6px; height: 6px; border-radius: 2px; transform: rotate(45deg); background: #fff; z-index: 1; }
+.menus { display: flex; gap: 14px; font-size: 11.5px; }
+.menus span { color: var(--room-ink); opacity: .78; }
+.wsp { margin-left: 10px; display: inline-flex; padding: 3px; border-radius: 999px; background: var(--card); box-shadow: var(--shadow); gap: 2px; }
+.wsp .pill { height: 22px; padding: 0 11px; background: transparent; color: var(--tm); font-size: 11px; }
+.wsp .pill.on { background: var(--accent); color: var(--accent-ink); }
+.palette { margin-left: auto; height: 28px; padding: 0 12px; border-radius: 999px; background: var(--card); box-shadow: var(--shadow); display: inline-flex; align-items: center; gap: 8px; color: var(--tm); font-size: 11px; width: 240px; }
+.palette .k { margin-left: auto; font-family: var(--fn); font-size: 9px; color: var(--td); }
+
+/* ---------- cards ---------- */
+.dock { display: grid; grid-template-columns: 320px 1fr 272px; grid-template-rows: 1fr 268px; gap: 12px; padding: 0 12px 40px; min-height: 0; }
+.card { background: var(--card); border-radius: 18px; box-shadow: var(--shadow); min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+.card--timeline { grid-column: 1 / -1; }
+.chead { height: 40px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 14px 0 16px; }
+.chead .title { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--tp); }
+.chead .title .hdot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.chead .sub { font-size: 10.5px; color: var(--tm); }
+
+/* ---------- project ---------- */
+.specimen { flex: none; margin: 0 12px 8px; padding: 10px; border-radius: 12px; background: var(--card2); display: grid; grid-template-columns: 96px 1fr; gap: 12px; }
+.poster { width: 96px; height: 54px; border-radius: 8px; background: linear-gradient(160deg, #6c5f52, #2a2724 60%, #171513); }
+.meta { display: grid; grid-template-columns: auto 1fr; gap: 3px 8px; align-content: start; font-size: 10px; }
+.meta .k { color: var(--tm); }
+.meta .v { color: var(--ts); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.psearch { flex: none; padding: 0 12px 8px; display: flex; }
+.psearch .well { flex: 1; height: 26px; }
+.swatch { width: 10px; height: 10px; border-radius: 50%; flex: none; background: conic-gradient(#5fa3d6 0 25%, #e5b56a 0 50%, #c17ad1 0 75%, #55c9b4 0); }
+.cols, .prow { display: grid; grid-template-columns: 1fr 26px 42px 24px 42px; gap: 6px; padding: 0 12px 0 14px; align-items: center; }
+.cols { height: 20px; flex: none; color: var(--tm); font-size: 9.5px; }
+.cols span { text-align: right; } .cols span:first-child, .cols span:last-child { text-align: left; }
+.prows { flex: 1; overflow: hidden; padding: 0 6px; }
+.prow { height: 26px; border-radius: 10px; color: var(--ts); padding: 0 8px; }
+.prow.sel { background: var(--accent-soft); color: var(--tp); }
+.prow .nm { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.prow .nm .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prow .av { width: 18px; height: 18px; border-radius: 50%; flex: none; display: inline-flex; align-items: center; justify-content: center; background: var(--card2); }
+.prow .av .g { width: 11px; height: 11px; }
+.prow .n2 { font-family: var(--fn); font-size: 9.5px; color: var(--tm); text-align: right; }
+.prow .pth { font-size: 9.5px; color: var(--td); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.badge { height: 16px; padding: 0 6px; display: inline-flex; align-items: center; flex: none; font-size: 9px; border-radius: 999px; background: var(--card2); color: var(--tm); }
+.badge.use { color: var(--on); } .badge.miss { color: var(--attn); }
+.cfoot { height: 44px; flex: none; display: flex; align-items: center; gap: 4px; padding: 0 10px; }
+.cfoot .pill { padding: 0 8px; }
+
+/* ---------- viewer ---------- */
+.vbar { height: 40px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 14px 0 16px; }
+.stagearea { flex: 1; margin: 0 12px; border-radius: 12px; background: var(--surround); position: relative; display: flex; align-items: center; justify-content: center; min-height: 0; overflow: hidden; padding-bottom: 52px; }
+.frame { width: 496px; height: 279px; position: relative; overflow: hidden; border-radius: 4px;
+  background: radial-gradient(120% 90% at 28% 12%, #ffd9a3 0%, #f0a35f 26%, #c2653f 52%, #5d3552 78%, #241c33 100%); }
+.frame .sun { position: absolute; left: 27%; top: 30%; width: 62px; height: 62px; border-radius: 50%; background: #fff3dd; opacity: .92; }
+.frame .hill { position: absolute; left: 0; right: 0; bottom: 0; height: 44%; background: #16121f; clip-path: polygon(0 62%, 13% 40%, 27% 56%, 41% 24%, 56% 49%, 72% 31%, 86% 52%, 100% 38%, 100% 100%, 0 100%); }
+.frame .hill2 { position: absolute; left: 0; right: 0; bottom: 0; height: 28%; background: #0c0a12; clip-path: polygon(0 74%, 18% 52%, 34% 70%, 52% 44%, 68% 66%, 84% 50%, 100% 68%, 100% 100%, 0 100%); }
+.frame .ttl { position: absolute; left: 40px; bottom: 46px; color: #f6f1e8; font-size: 24px; letter-spacing: .14em; text-transform: uppercase; font-weight: 500; }
+.selname { position: absolute; left: 14px; top: 10px; padding: 2px 8px; font-size: 9px; color: var(--accent-ink); background: var(--accent); border-radius: 999px; }
+.atchip { position: absolute; right: 14px; top: 10px; padding: 2px 8px; font-size: 9px; color: var(--tp); background: var(--float); border-radius: 999px; }
+.gizmo { position: absolute; inset: 34px 54px 50px 54px; border: 1px solid var(--accent); border-radius: 2px; }
+.gizmo i { position: absolute; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); border: 1.5px solid #fff; }
+.gizmo i:nth-child(1){left:-4px;top:-4px} .gizmo i:nth-child(2){right:-4px;top:-4px} .gizmo i:nth-child(3){left:-4px;bottom:-4px} .gizmo i:nth-child(4){right:-4px;bottom:-4px}
+.gizmo .anchor { position: absolute; left: 50%; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border: 1.5px solid var(--accent); border-radius: 50%; }
+.gizmo .rot { position: absolute; left: 50%; top: -18px; width: 1px; height: 18px; background: var(--accent); }
+/* the floating tool dock */
+.tooldock { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); display: flex; flex-direction: row; gap: 2px; padding: 4px; border-radius: 999px; background: var(--float); box-shadow: var(--float-shadow); z-index: 5; }
+.tooldock .rbtn { width: 30px; height: 30px; position: relative; }
+.tooldock .rbtn .g { width: 15px; height: 15px; }
+.tooldock .rbtn.grp::after { content: ""; position: absolute; right: 5px; bottom: 5px; width: 0; height: 0; border-left: 3px solid transparent; border-bottom: 3px solid var(--tm); }
+.tooldock .rbtn.off { color: var(--td); }
+.tooldock .seamh { width: 1px; margin: 8px 3px; background: var(--hair); }
+/* the deck */
+.deck { height: 56px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 12px; }
+.transport { display: inline-flex; align-items: center; gap: 6px; padding: 4px; border-radius: 999px; background: var(--card2); }
+.transport .rbtn { width: 26px; height: 26px; color: var(--tp); }
+.transport .rbtn .g { width: 14px; height: 14px; }
+.transport .play { width: 34px; height: 34px; background: var(--accent); color: var(--accent-ink); }
+.transport .play .g { width: 16px; height: 16px; }
+.clock { display: inline-flex; align-items: baseline; gap: 8px; padding: 0 12px; height: 32px; border-radius: 999px; background: var(--well); }
+.clock .t { font-family: var(--fn); font-size: 15px; color: var(--tp); font-weight: 500; }
+.clock .f { font-family: var(--fn); font-size: 10px; color: var(--tm); white-space: nowrap; }
+.ready { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; color: var(--tm); }
+.ready i { width: 54px; height: 6px; border-radius: 999px; background: var(--well); overflow: hidden; position: relative; }
+.ready i b { position: absolute; left: 0; top: 0; bottom: 0; background: var(--cache-hot); border-radius: 999px; }
+
+/* ---------- inspector ---------- */
+.ibody { flex: 1; overflow: hidden; padding: 0 10px; display: flex; flex-direction: column; gap: 6px; }
+.sec { border-radius: 12px; background: var(--card2); padding: 6px 8px 6px 10px; flex: none; }
+.sec.selected { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.sechead { height: 26px; display: flex; align-items: center; gap: 8px; }
+.sechead .name { font-size: 11.5px; font-weight: 600; color: var(--tp); }
+.sechead .ms { margin-left: auto; font-family: var(--fn); font-size: 9px; color: var(--tm); }
+.sechead .x { width: 12px; height: 12px; color: var(--tm); }
+.tw { width: 8px; height: 8px; flex: none; color: var(--tm); }
+.prop { height: 28px; display: flex; align-items: center; gap: 6px; }
+.stop { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--tm); flex: none; }
+.stop.on { background: var(--accent); border-color: var(--accent); }
+.nav { width: 24px; flex: none; color: var(--tm); font-size: 8px; display: flex; justify-content: center; gap: 2px; }
+.prop .n { width: 66px; flex: none; color: var(--ts); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prop .well { width: 66px; height: 22px; }
+.prop.pair .well { width: 50px; }
+.link { width: 10px; height: 10px; flex: none; color: var(--tm); }
+.track { flex: 1; height: 4px; border-radius: 999px; background: var(--well); position: relative; margin: 0 6px 0 2px; }
+.track::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: var(--v, 60%); background: var(--accent); border-radius: 999px; }
+.track i { position: absolute; top: -4px; left: var(--v, 60%); width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.4); }
+.sw { width: 18px; height: 18px; border-radius: 50%; flex: none; box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.15); }
+.ifoot { height: 44px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 12px; }
+
+/* ---------- timeline ---------- */
+.tl-head { height: 40px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 14px 0 16px; }
+.ctabs { display: inline-flex; gap: 2px; padding: 2px; border-radius: 999px; background: var(--well); margin-left: 6px; }
+.ctabs .pill { height: 22px; background: transparent; color: var(--tm); font-size: 11px; }
+.ctabs .pill.on { background: var(--card2); color: var(--tp); font-weight: 500; }
+.tl-body { flex: 1; display: grid; grid-template-columns: 620px 1fr; min-height: 0; gap: 8px; padding: 0 12px 0 10px; }
+.outline { display: flex; flex-direction: column; min-width: 0; }
+.lanes { display: flex; flex-direction: column; min-width: 0; position: relative; border-radius: 12px; background: var(--card2); overflow: hidden; }
+.chrome1 { height: 32px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 6px; }
+.chrome1 .well { height: 24px; }
+.ocols, .orow { display: grid; grid-template-columns: 92px 20px 1fr 78px 72px 72px 56px 30px; gap: 6px; padding: 0 8px; align-items: center; }
+.ocols { height: 20px; flex: none; color: var(--tm); font-size: 9.5px; }
+.ocols .r { text-align: right; }
+.orows { flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 2px; }
+.orow { height: 26px; flex: none; border-radius: 10px; }
+.orow.sel { background: var(--accent-soft); }
+.switches { display: flex; gap: 5px; align-items: center; }
+.switches .g, .modes6 .g { width: 11px; height: 11px; color: var(--td); }
+.switches .g.on, .modes6 .g.on { color: var(--tp); }
+.lnum { font-family: var(--fn); font-size: 9.5px; color: var(--tm); text-align: right; }
+.lname { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.lname .av { width: 16px; height: 16px; border-radius: 50%; flex: none; }
+.lname .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ts); }
+.orow.sel .lname .t { color: var(--tp); }
+.modes6 { display: flex; gap: 5px; }
+.pick { height: 20px; display: flex; align-items: center; justify-content: space-between; padding: 0 8px; font-size: 10px; color: var(--ts); background: var(--well); border-radius: 999px; }
+.pick .c { width: 8px; height: 8px; color: var(--tm); }
+.ms { font-family: var(--fn); font-size: 9.5px; color: var(--tm); text-align: right; }
+.ofoot { height: 32px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 6px; }
+.kf { position: relative; width: 11px; height: 11px; flex: none; }
+.kf::after { content: ""; position: absolute; inset: 0; background: var(--kfc, var(--ts)); clip-path: var(--kfs); border-radius: 1px; }
+.kf.lin { --kfs: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+.kf.hold { --kfs: inset(0 round 2px); }
+.kf.bez { --kfs: polygon(0 0, 100% 0, 0 100%, 100% 100%); }
+.kf.sel { --kfc: var(--accent); }
+.kf.onlane { position: absolute; top: 7px; }
+/* ruler */
+.ruler { height: 48px; flex: none; position: relative; overflow: hidden; }
+.ruler .scale { position: absolute; left: 0; right: 0; top: 0; height: 24px;
+  background-image: repeating-linear-gradient(to right, var(--td) 0 1px, transparent 1px 100px), repeating-linear-gradient(to right, var(--hair) 0 1px, transparent 1px 25px);
+  background-size: 100% 10px, 100% 5px; background-position: 0 100%, 0 100%; background-repeat: repeat-x; }
+.ruler .nums { position: absolute; left: 0; right: 0; top: 4px; display: flex; font-family: var(--fn); font-size: 9px; color: var(--tm); }
+.ruler .nums span { width: 100px; flex: none; padding-left: 5px; }
+.ruler .wa { position: absolute; left: 140px; right: 210px; top: 26px; height: 14px; border-radius: 999px; background: var(--accent-soft); }
+.ruler .wa i { position: absolute; top: -2px; width: 6px; height: 18px; border-radius: 999px; background: var(--accent); }
+.ruler .wa i:first-child { left: -3px; } .ruler .wa i:last-child { right: -3px; }
+.cache { position: absolute; left: 0; right: 0; bottom: 3px; height: 4px; display: flex; gap: 2px; }
+.cache b { display: block; height: 100%; align-self: flex-end; border-radius: 999px; }
+.marker { position: absolute; left: 260px; bottom: 9px; display: flex; align-items: center; gap: 3px; }
+.marker .flag { width: 8px; height: 8px; border-radius: 50%; background: #c4c4c4; }
+.marker .pillm { height: 14px; padding: 0 6px; border-radius: 999px; background: var(--raised); display: flex; align-items: center; font-family: var(--fn); font-size: 8px; color: var(--tp); }
+.playhead { position: absolute; left: 372px; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--accent); z-index: 4; }
+.playhead::before { content: ""; position: absolute; left: -5px; top: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--card2); }
+.lanewell { flex: 1; background: var(--well); position: relative; overflow: hidden; }
+.lanewell::before, .lanewell::after { content: ""; position: absolute; top: 0; bottom: 0; background: rgba(0,0,0,.28); z-index: 1; }
+.lanewell::before { left: 0; width: 140px; } .lanewell::after { right: 0; width: 210px; }
+.lane { height: 28px; position: relative; z-index: 2; }
+.lbar { position: absolute; top: 5px; height: 18px; border-radius: 999px; background: var(--lc); opacity: .55; }
+.lbar.sel { opacity: .9; box-shadow: 0 0 0 2px var(--accent); }
+.lbar .ghost { position: absolute; top: -3px; bottom: -3px; border: 1px dashed var(--td); border-radius: 999px; }
+.lbar .wave { position: absolute; left: 6px; right: 6px; top: 3px; bottom: 3px; z-index: 1; opacity: .9;
+  background: repeating-linear-gradient(to right, rgba(255,255,255,.7) 0 1px, transparent 1px 3px);
+  -webkit-mask: linear-gradient(to bottom, transparent 0, #000 40%, #000 60%, transparent 100%); mask: linear-gradient(to bottom, transparent 0, #000 40%, #000 60%, transparent 100%); }
+.lane .phl { position: absolute; left: 372px; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--accent); z-index: 3; opacity: .9; }
+.lfoot { height: 32px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 10px; }
+.lfoot .zoom { flex: 1; max-width: 240px; height: 4px; border-radius: 999px; background: var(--well); position: relative; }
+.lfoot .zoom i { position: absolute; left: 44%; top: -4px; width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.4); }
+.lfoot .sbar { flex: 1; height: 6px; border-radius: 999px; background: var(--well); position: relative; }
+.lfoot .sbar i { position: absolute; left: 22%; width: 48%; top: 0; bottom: 0; border-radius: 999px; background: var(--raised); }
+
+/* readouts on the room (no strip: a pill) */
+.status { position: absolute; left: 12px; bottom: 0; height: 12px; }
+.readout { display: flex; align-items: center; gap: 14px; height: 24px; padding: 0 12px; border-radius: 999px; background: var(--card); box-shadow: var(--shadow); font-size: 9.5px; color: var(--tm); position: absolute; right: 12px; bottom: 8px; z-index: 6; }
+.readout .meter { display: inline-flex; align-items: center; gap: 5px; }
+.readout .meter i { width: 36px; height: 4px; border-radius: 999px; background: var(--well); position: relative; overflow: hidden; }
+.readout .meter i b { position: absolute; left: 0; top: 0; bottom: 0; background: var(--raised); }
+
+.tag { position: absolute; z-index: 20; width: 18px; height: 18px; border-radius: 50%; background: var(--hi); color: #201f1d; font: 600 10px/18px var(--page-sans); text-align: center; box-shadow: 0 0 0 2px rgba(0,0,0,.35); display: none; }
+.shell.notes .tag { display: block; }
+
+.refs { margin-top: 26px; display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.ref { background: var(--mount-deep); border: 1px solid var(--mount-line); padding: 14px 16px 16px; }
+.ref h3 { margin: 0 0 10px; font: 400 9px var(--page-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.notes { margin: 0; padding-left: 0; list-style: none; counter-reset: n; color: var(--ink-2); font-size: 12.5px; line-height: 1.55; }
+.notes li { position: relative; padding-left: 28px; margin-bottom: 8px; counter-increment: n; }
+.notes li::before { content: counter(n); position: absolute; left: 0; top: 1px; width: 18px; height: 18px; border-radius: 50%; background: var(--hi); color: #201f1d; font: 600 10px/18px var(--page-sans); text-align: center; }
+.notes b { color: var(--ink); font-weight: 600; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; font-size: 12px; }
+.kv dt { font: 9px var(--page-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); padding-top: 2px; }
+.kv dd { margin: 0; color: var(--ink-2); line-height: 1.45; }
+.foot { margin-top: 30px; padding-top: 12px; border-top: 1px solid var(--mount-line); color: var(--ink-3); font-size: 12px; line-height: 1.6; }
+.foot code { font: 11px var(--page-mono); color: var(--ink-2); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <h1>Lumit — Lantern</h1>
+    <p class="sub">A from-scratch shell on the Lyrica cues</p>
+  </header>
+  <p class="intro">
+    Dark cards lit inside a light room, which is the reference's own arrangement. Every function in the UI spec is
+    kept — this is the style meant to <strong>replace Round</strong>, and it is a whole style rather than a shape:
+    the cards, the pills, the transport, the floating tool dock and the type are all its own. Night is the same
+    design with the room turned down. <strong>Toggle the notes</strong> to see the structural moves numbered.
+  </p>
+  <div class="controls">
+    <div class="group"><span class="glabel" id="l-room">Room</span>
+      <div class="seg" role="group" aria-labelledby="l-room">
+        <button type="button" id="r-day" data-room="day" aria-pressed="true">Day</button>
+        <button type="button" id="r-night" data-room="night" aria-pressed="false">Night</button>
+      </div></div>
+    <div class="group"><span class="glabel" id="l-notes">Annotations</span>
+      <div class="seg" role="group" aria-labelledby="l-notes">
+        <button type="button" id="n-off" data-notes="off" aria-pressed="true">Resting state</button>
+        <button type="button" id="n-on" data-notes="on" aria-pressed="false">Show notes</button>
+      </div></div>
+  </div>
+
+  <section class="stage">
+    <div class="viewport" id="viewport"><div class="scaler" id="scaler">
+      <div class="shell" id="shell" data-room="day">
+
+        <!-- top band -->
+        <div class="top">
+          <span class="mark"><b></b></span>
+          <div class="menus"><span>File</span><span>Edit</span><span>Composition</span><span>Layer</span><span>Effect</span><span>Animation</span><span>View</span><span>Window</span><span>Help</span></div>
+          <div class="wsp"><span class="pill on">Edit</span><span class="pill">Effects</span><span class="pill">Colour</span><span class="pill">Audio</span><span class="pill">Retiming</span><span class="pill">Nodes</span></div>
+          <div class="palette"><span class="g" style="width:12px;height:12px"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="4"/><path d="M9.5 9.5l4 4"/></svg></span>Command or effect<span class="k">⌘⇧P</span></div>
+        </div>
+
+        <div class="dock">
+          <!-- project -->
+          <section class="card card--project">
+            <div class="chead"><span class="title"><span class="hdot"></span>Project</span><span class="sp"></span><span class="sub">10 items · 1 missing</span></div>
+            <div class="specimen">
+              <div class="poster"></div>
+              <div class="meta">
+                <span class="k">Name</span><span class="v">rooftop_a012.mov</span>
+                <span class="k">Size</span><span class="v num">1920 × 1080 · 25 fps</span>
+                <span class="k">Length</span><span class="v num">00:00:21:10</span>
+                <span class="k">Codec</span><span class="v">ProRes 422 HQ</span>
+                <span class="k">Sound</span><span class="v">48k stereo</span>
+              </div>
+            </div>
+            <div class="psearch"><div class="well ghost"><span class="swatch"></span>Search</div></div>
+            <div class="cols"><span>Name</span><span>Items</span><span>Size</span><span>fps</span><span>Path</span></div>
+            <div class="prows">
+              <div class="prow"><span class="nm"><span class="av"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="3.5" width="11" height="9" rx="2"/><path d="M2.5 6.5h11"/></svg></span></span><span class="t">Opening sequence</span></span><span class="n2">12</span><span class="n2">—</span><span class="n2">25</span><span class="pth">comps</span></div>
+              <div class="prow"><span class="nm"><span class="av"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="3.5" width="11" height="9" rx="2"/><path d="M2.5 6.5h11"/></svg></span></span><span class="t">Titles</span></span><span class="n2">4</span><span class="n2">—</span><span class="n2">25</span><span class="pth">comps</span></div>
+              <div class="prow sel"><span class="nm"><span class="av" style="color:var(--l-footage)"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="4" width="11" height="8" rx="2"/><path d="M6.5 6.5v3l3-1.5z"/></svg></span></span><span class="t">rooftop_a012.mov</span><span class="badge use">in use</span></span><span class="n2">—</span><span class="n2">842M</span><span class="n2">25</span><span class="pth">day2</span></div>
+              <div class="prow"><span class="nm"><span class="av" style="color:var(--l-footage)"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="4" width="11" height="8" rx="2"/><path d="M6.5 6.5v3l3-1.5z"/></svg></span></span><span class="t">rooftop_a017.mov</span><span class="badge miss">missing</span></span><span class="n2">—</span><span class="n2">—</span><span class="n2">25</span><span class="pth">day2</span></div>
+              <div class="prow"><span class="nm"><span class="av" style="color:var(--l-camera)"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="5.5"/><path d="M2.5 8h11M8 2.5v11"/></svg></span></span><span class="t">grade_master.cube</span></span><span class="n2">—</span><span class="n2">1.1M</span><span class="n2">—</span><span class="pth">luts</span></div>
+              <div class="prow"><span class="nm"><span class="av"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 12.5V4.5h4l1.5 2h5.5v6z" stroke-linejoin="round"/></svg></span></span><span class="t">Audio</span></span><span class="n2">3</span><span class="n2">—</span><span class="n2">—</span><span class="pth"></span></div>
+              <div class="prow"><span class="nm" style="padding-left:14px"><span class="av" style="color:var(--l-audio)"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 8.5v-2M6 11V5M9 13V3M13 8.5v-2"/></svg></span></span><span class="t">stinger_04.wav</span></span><span class="n2">—</span><span class="n2">6.4M</span><span class="n2">48k</span><span class="pth">audio</span></div>
+              <div class="prow"><span class="nm" style="padding-left:14px"><span class="av" style="color:var(--l-audio)"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 8.5v-2M6 11V5M9 13V3M13 8.5v-2"/></svg></span></span><span class="t">bed_loop.wav</span><span class="badge use">in use</span></span><span class="n2">—</span><span class="n2">18M</span><span class="n2">48k</span><span class="pth">audio</span></div>
+              <div class="prow"><span class="nm"><span class="av" style="color:var(--l-solid)"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="10" height="10" rx="2"/></svg></span></span><span class="t">Vignette solid</span></span><span class="n2">—</span><span class="n2">—</span><span class="n2">—</span><span class="pth"></span></div>
+            </div>
+            <div class="cfoot">
+              <span class="pill"><span class="g" style="width:11px;height:11px"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 12.5V4.5h4l1.5 2h5.5v6z" stroke-linejoin="round"/></svg></span>Folder</span>
+              <span class="pill"><span class="g" style="width:11px;height:11px"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="3.5" width="11" height="9" rx="2"/><path d="M2.5 6.5h11"/></svg></span>Composition</span>
+              <span class="pill"><span class="g" style="width:11px;height:11px"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 3v8M4.5 7.5L8 11l3.5-3.5M3 13h10"/></svg></span>Import</span>
+              <span class="sp"></span>
+              <span class="pill ghost">Proxies<span class="switch"></span></span>
+            </div>
+          </section>
+
+          <!-- viewer -->
+          <section class="card card--viewer">
+            <div class="vbar">
+              <span class="title" style="display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:var(--tp)"><span class="hdot" style="width:6px;height:6px;border-radius:50%;background:var(--accent)"></span>Viewer</span>
+              <span class="sp"></span>
+              <span class="pill">Fit 62%<span class="g chev"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l4 4 4-4"/></svg></span></span>
+              <span class="pill">Half<span class="g chev"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l4 4 4-4"/></svg></span></span>
+              <span class="rbtn" title="Channel"><span style="position:relative;width:13px;height:13px;display:inline-block"><i style="position:absolute;left:0;top:2px;width:8px;height:8px;border-radius:50%;background:#e0524a"></i><i style="position:absolute;left:5px;top:2px;width:8px;height:8px;border-radius:50%;background:#49b86b"></i><i style="position:absolute;left:2.5px;top:6px;width:8px;height:8px;border-radius:50%;background:#4a86e8"></i></span></span>
+              <span class="rbtn" title="Board"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="2.5" width="11" height="11" rx="2"/><path d="M2.5 8h11M8 2.5v11"/></svg></span></span>
+              <span class="rbtn" title="View"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="3.5" width="11" height="9" rx="2"/><rect x="5" y="6" width="6" height="4" rx="1"/></svg></span></span>
+              <span class="pill">Active camera<span class="g chev"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l4 4 4-4"/></svg></span></span>
+              <span class="pill num" title="Exposure">+0.0</span>
+              <span class="rbtn" title="Take snapshot"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="4.5" width="11" height="8" rx="2"/><circle cx="8" cy="8.5" r="2"/></svg></span></span>
+              <span class="rbtn" title="Show snapshot" style="color:var(--td)"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 8s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z"/><circle cx="8" cy="8" r="1.5"/></svg></span></span>
+              <span class="pill">sRGB<span class="g chev"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l4 4 4-4"/></svg></span></span>
+            </div>
+            <div class="stagearea">
+              <div class="tooldock">
+                <span class="rbtn on" title="Selection"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M3.5 2.5l9 7-4 .8 2.3 4.2-1.8 1-2.3-4.2-3.2 2.7z"/></svg></span></span>
+                <span class="rbtn" title="Hand"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5 8V3.5a1 1 0 012 0V7M7 6.5V3a1 1 0 012 0v4M9 6.5V3.5a1 1 0 012 0V8M11 7.5a1 1 0 012 0V10a4 4 0 01-4 4H8a4 4 0 01-3.5-2L3 9.5a1 1 0 011.7-1L5 9.5"/></svg></span></span>
+                <span class="rbtn" title="Zoom"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="6.5" cy="6.5" r="4"/><path d="M9.5 9.5l4 4M4.5 6.5h4M6.5 4.5v4"/></svg></span></span>
+                <span class="rbtn" title="Rotation"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M13 8a5 5 0 11-1.5-3.6M13 2.5v3h-3"/></svg></span></span>
+                <span class="rbtn" title="Anchor point"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 2v3M8 11v3M2 8h3M11 8h3"/></svg></span></span>
+                <span class="rbtn" title="Razor"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 3l10 10M13 3L3 13M8 8v5"/></svg></span></span>
+                <span class="seamh"></span>
+                <span class="rbtn grp" title="Shape"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="2.5" width="11" height="11" rx="2"/></svg></span></span>
+                <span class="rbtn grp" title="Pen"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M3 13l6.5-6.5 1.5 1.5L4.5 14.5H3zM9.5 6.5l2-2 1.5 1.5-2 2"/></svg></span></span>
+                <span class="rbtn grp" title="Type"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 3.5h10M8 3.5v10M6 13.5h4"/></svg></span></span>
+                <span class="rbtn grp" title="Paint"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M12.5 2.5l1 1-6 6-1-1zM6.5 8.5c-2 0-3 1.5-3 3.5 2 0 3.5-1 3.5-3"/></svg></span></span>
+                <span class="rbtn grp" title="Roto"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 10c1-4 4-6 8-5s3 6-1 7-6-2-7-2z" stroke-dasharray="2 2"/></svg></span></span>
+                <span class="rbtn grp" title="Puppet"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="2"/><path d="M8 2v4M8 10v4M2 8h4M10 8h4"/></svg></span></span>
+                <span class="rbtn grp" title="Camera"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="2.5" y="4.5" width="8" height="7" rx="2"/><path d="M10.5 7l3-2v6l-3-2"/></svg></span></span>
+                <span class="seamh"></span>
+                <span class="rbtn" title="Snapping"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 3v5a4 4 0 008 0V3M4 6h3M9 6h3"/></svg></span></span>
+              </div>
+              <div class="frame">
+                <div class="sun"></div><div class="hill"></div><div class="hill2"></div>
+                <div class="ttl">Rooftop</div>
+                <div class="selname">Rooftop · title</div>
+                <div class="atchip">at Gaussian blur</div>
+                <div class="gizmo"><i></i><i></i><i></i><i></i><span class="anchor"></span><span class="rot"></span></div>
+              </div>
+            </div>
+            <div class="deck">
+              <span class="clock"><span class="t">00:00:04:12</span><span class="f">f112 / 525</span></span>
+              <span class="sp"></span>
+              <span class="transport">
+                <span class="rbtn"><span class="g"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M3 3h2v10H3zM13 3L6 8l7 5z"/></svg></span></span>
+                <span class="rbtn"><span class="g"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M11 3L4 8l7 5z"/></svg></span></span>
+                <span class="rbtn play"><span class="g"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M5 3l8 5-8 5z"/></svg></span></span>
+                <span class="rbtn"><span class="g"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M5 3l7 5-7 5z"/></svg></span></span>
+                <span class="rbtn"><span class="g"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M11 3h2v10h-2zM3 3l7 5-7 5z"/></svg></span></span>
+              </span>
+              <span class="sp"></span>
+              <span class="pill">Loop<span class="g chev"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l4 4 4-4"/></svg></span></span>
+              <span class="pill">Cached<span class="g chev"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l4 4 4-4"/></svg></span></span>
+              <span class="pill">Full</span>
+              <span class="rbtn" title="Audio"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M3 6h3l4-3v10l-4-3H3zM12 6a3 3 0 010 4"/></svg></span></span>
+              <span class="ready"><i><b style="width:58%"></b></i><span class="num">58%</span></span>
+            </div>
+          </section>
+
+          <!-- inspector -->
+          <section class="card card--inspector">
+            <div class="chead"><span class="title"><span class="hdot"></span>Effect controls</span><span class="sp"></span><span class="sub">Rooftop · title</span></div>
+            <div class="ibody">
+              <div class="sec">
+                <div class="sechead"><span class="tw"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l4 4 4-4"/></svg></span><span class="name">Transform</span></div>
+                <div class="prop"><span class="stop"></span><span class="nav"></span><span class="n">Anchor</span><span class="well">960</span></div>
+                <div class="prop"><span class="stop on"></span><span class="nav">◂ ◆ ▸</span><span class="n">Position</span><span class="well">948</span></div>
+                <div class="prop"><span class="stop"></span><span class="nav"></span><span class="n">Scale</span><span class="well">104.0<span class="u">%</span></span></div>
+                <div class="prop"><span class="stop on"></span><span class="nav">◂ ◇ ▸</span><span class="n">Rotation</span><span class="well">2.4<span class="u">°</span></span></div>
+                <div class="prop"><span class="stop"></span><span class="nav"></span><span class="n">Opacity</span><span class="well">100<span class="u">%</span></span></div>
+              </div>
+              <div class="sec selected">
+                <div class="sechead"><span class="tw"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l4 4 4-4"/></svg></span><span class="switch on"></span><span class="name">Gaussian blur</span><span class="ms">3.1 ms</span><span class="x g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg></span></div>
+                <div class="prop"><span class="stop on"></span><span class="nav">◂ ◆ ▸</span><span class="n">Blurriness</span><span class="well">24.0<span class="u">px</span></span></div>
+                <div class="prop"><span class="stop"></span><span class="nav"></span><span class="n">Dimensions</span><span class="well" style="font-family:var(--f)">Both<span class="g chev" style="margin-left:auto;color:var(--tm)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l4 4 4-4"/></svg></span></span></div>
+                <div class="prop pair"><span class="stop"></span><span class="nav"></span><span class="n">Centre</span><span class="well">960</span><span class="link g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 10l4-4M4.5 8.5a2.5 2.5 0 010-3.5l1-1a2.5 2.5 0 013.5 3.5M11.5 7.5a2.5 2.5 0 010 3.5l-1 1a2.5 2.5 0 01-3.5-3.5"/></svg></span><span class="well">540</span></div>
+                <div class="prop"><span class="stop"></span><span class="nav"></span><span class="n">Mix</span><span class="well" style="width:46px">100<span class="u">%</span></span><span class="track" style="--v:100%"><i></i></span></div>
+              </div>
+              <div class="sec">
+                <div class="sechead"><span class="tw"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l4 4 4-4"/></svg></span><span class="switch on"></span><span class="name">Glow</span><span class="ms">11.6 ms</span><span class="x g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg></span></div>
+                <div class="prop"><span class="stop"></span><span class="nav"></span><span class="n">Threshold</span><span class="well" style="width:46px">62<span class="u">%</span></span><span class="track" style="--v:62%"><i></i></span></div>
+                <div class="prop"><span class="stop on"></span><span class="nav">◂ ◇ ▸</span><span class="n">Intensity</span><span class="well">1.4</span></div>
+                <div class="prop"><span class="stop"></span><span class="nav"></span><span class="n">Colour</span><span class="sw" style="background:#f0a35f"></span><span class="g" style="width:12px;height:12px;color:var(--tm)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 13l6-6M9 7l3-3 1 1-3 3zM8 6l2 2"/></svg></span></div>
+              </div>
+            </div>
+            <div class="ifoot"><span class="pill on">Add effect</span><span class="pill">Save preset</span></div>
+          </section>
+
+          <!-- timeline -->
+          <section class="card card--timeline">
+            <div class="tl-head">
+              <span class="title" style="display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:var(--tp)"><span class="hdot" style="width:6px;height:6px;border-radius:50%;background:var(--accent)"></span>Timeline</span>
+              <span class="ctabs"><span class="pill on">Opening sequence</span><span class="pill">Rooftop</span><span class="pill">Titles</span></span>
+              <span class="sp"></span>
+              <span class="segp"><span class="pill on">Layers</span><span class="pill">Graph</span></span>
+              <span class="pill on" style="margin-left:6px">Export</span>
+            </div>
+            <div class="tl-body">
+              <div class="outline">
+                <div class="chrome1">
+                  <span class="well ghost" style="flex:1;max-width:240px">Search layers</span>
+                  <span class="rbtn" title="Shy" style="width:24px;height:24px;color:var(--tm)"><span class="g" style="width:12px;height:12px"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 8s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z"/><path d="M3 3l10 10"/></svg></span></span>
+                  <span class="rbtn" title="Motion blur" style="width:24px;height:24px;color:var(--tm)"><span class="g" style="width:12px;height:12px"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="9" cy="8" r="4"/><path d="M2 5h3M2 8h4M2 11h3"/></svg></span></span>
+                  <span class="sp"></span>
+                  <span class="pill ghost">Switches</span><span class="pill ghost">Modes</span><span class="pill ghost">Pickers</span>
+                </div>
+                <div class="ocols"><span>Switches</span><span class="r">#</span><span>Layer</span><span>Modes</span><span>Matte</span><span>Blend</span><span>Parent</span><span class="r">ms</span></div>
+                <div class="orows" id="orows"></div>
+                <div class="ofoot">
+                  <span style="display:flex;gap:5px;align-items:center;padding:0 6px"><span class="kf lin"></span><span class="kf hold"></span><span class="kf bez"></span></span>
+                  <span class="pill">Ease</span>
+                  <span class="pill ghost">Reverse</span><span class="pill ghost">Copy</span><span class="pill ghost">Paste at playhead</span>
+                  <span class="sp"></span>
+                  <span class="rbtn" title="Measure" style="width:24px;height:24px;color:var(--tp)"><span class="g" style="width:12px;height:12px"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 1.5"/></svg></span></span>
+                </div>
+              </div>
+              <div class="lanes">
+                <div class="ruler">
+                  <div class="scale"></div>
+                  <div class="nums"><span>0s</span><span>4s</span><span>8s</span><span>12s</span><span>16s</span><span>20s</span><span>24s</span></div>
+                  <div class="wa"><i></i><i></i></div>
+                  <div class="cache">
+                    <b style="width:138px;background:var(--cache-disk);height:70%"></b>
+                    <b style="width:158px;background:var(--cache-hot)"></b>
+                    <b style="width:70px;background:var(--cache-hot);opacity:.55;height:70%"></b>
+                    <b style="width:88px;background:var(--cache-disk);opacity:.7;height:45%"></b>
+                    <b style="width:118px;background:var(--cache-disk);opacity:.5;height:45%"></b>
+                  </div>
+                  <div class="marker"><span class="flag"></span><span class="pillm">beat 4</span></div>
+                  <div class="playhead"></div>
+                </div>
+                <div class="lanewell" id="lanewell"></div>
+                <div class="lfoot">
+                  <span class="g" style="width:12px;height:12px;color:var(--tm)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 12l4-5 3 3 2-2 3 4z" stroke-linejoin="round"/></svg></span>
+                  <span class="zoom"><i></i></span>
+                  <span class="g" style="width:14px;height:14px;color:var(--ts)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 12l4-5 3 3 2-2 3 4z" stroke-linejoin="round"/></svg></span>
+                  <span class="rbtn" title="Snapping" style="width:24px;height:24px;color:var(--tp)"><span class="g" style="width:12px;height:12px"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 3v5a4 4 0 008 0V3M4 6h3M9 6h3"/></svg></span></span>
+                  <span class="sbar"><i></i></span>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- readouts: a pill over the room -->
+        <div class="readout">
+          <span style="color:var(--ts)">Lumit is up to date</span>
+          <span class="meter"><span>vram</span><i><b style="width:64%"></b></i><span class="num">2.6 / 4 GB</span></span>
+          <span class="meter"><span>ram</span><i><b style="width:31%"></b></i><span class="num">5.0 / 16 GB</span></span>
+          <span class="meter"><span>disk</span><i><b style="width:12%"></b></i></span>
+          <span class="num">49.7 ms · 0 dropped</span>
+        </div>
+
+        <span class="tag" style="left:560px;top:436px">1</span>
+        <span class="tag" style="left:640px;top:458px">2</span>
+        <span class="tag" style="left:20px;top:46px">3</span>
+        <span class="tag" style="left:470px;top:14px">4</span>
+        <span class="tag" style="left:1100px;top:120px">5</span>
+        <span class="tag" style="left:1010px;top:520px">6</span>
+        <span class="tag" style="left:30px;top:602px">7</span>
+        <span class="tag" style="left:1080px;top:786px">8</span>
+      </div>
+    </div></div>
+  </section>
+
+  <div class="refs">
+    <div class="ref">
+      <h3>The structural moves</h3>
+      <ol class="notes">
+        <li><b>The floating tool dock.</b> Every tool from §1.7, in order and in groups, as round buttons in one vertical capsule floating in the Viewer card's margin — over the neutral surround, never over the picture. The armed tool is a filled accent circle. Flyouts open beside it; options open as a second capsule.</li>
+        <li><b>The transport is one pill</b> with a large accent play button at its centre — the Lyrica cue — and the clock is a capsule beside it. Loop, preview mode, quality, audio and the cache-ready bar sit on the same deck band. The Viewer bar above keeps only ways of looking.</li>
+        <li><b>Cards in a room.</b> Every pane is a dark card with an 18px radius, 12px apart, on a light room; the card's name and its header dot on a 40px line. The dock is untouched — cards still split, tab, float and drop exactly as panes do.</li>
+        <li><b>The top band belongs to the room, not a card</b>: the mark, the menus, a workspace pill with the fronted name filled, and the command palette as a pill at the right.</li>
+        <li><b>Sections as sub-cards.</b> The inspector is one list, but each section is a rounded sub-card with a toggle switch for enable, its cost, and its ×; selected takes an accent inset ring. Wells are capsules; a slider is an accent track with a white dot thumb.</li>
+        <li><b>The playhead is a pin</b> — a round accent head on a 2px line — and the work area is an accent capsule on the ruler with round handles. Cache runs are rounded segments; markers are dots with a pill label.</li>
+        <li><b>Rows are pills too.</b> Outline rows have a 10px radius and an avatar circle for the layer type; the selected row fills with the accent at 22%. Layer bars are capsules in the label colour; keys are the same three marks, softened.</li>
+        <li><b>Readouts float.</b> The status line, cache meters and frame cost live in one pill over the room's bottom-right corner rather than a strip.</li>
+      </ol>
+    </div>
+    <div class="ref">
+      <h3>The system under it</h3>
+      <dl class="kv">
+        <dt>Room</dt><dd>Day: a cool light grey room around dark cards — the reference's own arrangement. Night: the same cards in a near-black room. The Viewer surround is #7f7f7f in both.</dd>
+        <dt>Accent</dt><dd>One violet-blue, spent on filled pills: the armed tool, the fronted workspace and mode, the play button, the selection, the playhead, the work area, Add effect and Export. Never a word on a card.</dd>
+        <dt>States</dt><dd>on · attention · fault as small marks; the header dot is decorative and never a status light.</dd>
+        <dt>Type</dt><dd>Plus Jakarta Sans for words, DM Mono for numbers. Card titles 12px semibold, body 11, pills 10.5, the clock 15. Sentence case; no caps, no kickers.</dd>
+        <dt>Shape</dt><dd>Cards 18, sub-cards and stages 12, rows 10, everything else a capsule. Controls are stadiums; buttons are circles.</dd>
+        <dt>Elevation</dt><dd>Real: a card casts a soft shadow into the room; a floating capsule casts a deeper one. No blur, no glass, no bevel.</dd>
+        <dt>Motion</dt><dd>This is the style where the spring lives: ≤150ms with the one signature overshoot on the drag ghost, and filled pills that slide between positions.</dd>
+      </dl>
+    </div>
+  </div>
+  <p class="foot">
+    Specimen data is invented. The Lyrica pages themselves could not be fetched from this sandbox, so the reference is read through the cues the canonical document records from it (<code>docs/15-DESIGN.md</code> §12.1) plus memory of the app; corrections against the real thing are expected. Written system: <code>docs/design-alt/15-DESIGN-LANTERN.md</code>.
+  </p>
+</div>
+
+<script>
+(function () {
+  var shell = document.getElementById('shell'), scaler = document.getElementById('scaler'), viewport = document.getElementById('viewport');
+  var G = {
+    eye: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 8s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z"/><circle cx="8" cy="8" r="1.5"/></svg>',
+    spk: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M3 6h3l4-3v10l-4-3H3z"/></svg>',
+    solo: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="4"/></svg>',
+    lock: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="7" width="8" height="6" rx="1.5"/><path d="M6 7V5a2 2 0 014 0v2"/></svg>',
+    shy: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 10c2-4 8-4 10 0"/></svg>',
+    guide: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="10" height="10" rx="1.5"/><path d="M1 7h14M1 10h14" stroke-dasharray="2 2"/></svg>',
+    fx: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 12V4h4M3 8h3M9 4h4M11 4v8"/></svg>',
+    d3: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M8 2l5 3v6l-5 3-5-3V5z"/></svg>',
+    mb: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="9" cy="8" r="4"/><path d="M2 6h3M2 10h3"/></svg>',
+    adj: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="5"/><path d="M8 3v10"/></svg>',
+    flow: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 8c3-4 9 4 12 0"/></svg>',
+    coll: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 5h10M3 8h10M3 11h10"/></svg>',
+    chev: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l4 4 4-4"/></svg>',
+    tw: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4l4 4-4 4"/></svg>'
+  };
+  function g(k, on) { return '<span class="g' + (on ? ' on' : '') + '">' + G[k] + '</span>'; }
+  function pick(v) { return v === '—' ? '<span class="pick" style="color:var(--td)">—</span>' : '<span class="pick">' + v + '<span class="c g">' + G.chev + '</span></span>'; }
+  var rows = [
+    { n: 1, name: 'Rooftop · title', c: 'var(--l-text)', sw: [1,0,0,0,0,0], md: [1,0,0,1,null,null], p: ['None','Normal','None'], ms: '3.1', sel: true },
+    { n: 2, name: 'Glow pass', c: 'var(--l-precomp)', sw: [1,0,0,1,0,0], md: [1,0,1,null,null,0], p: ['Alpha · 1','Screen','1'], ms: '14.7' },
+    { n: 3, name: 'Rooftop edit', c: 'var(--l-sequence)', sw: [1,1,0,0,0,0], md: [0,0,0,null,1,null], p: ['None','Normal','None'], ms: '8.2' },
+    { n: 4, name: 'rooftop_a012.mov', c: 'var(--l-footage)', sw: [1,1,0,0,0,0], md: [0,0,1,null,0,null], p: ['None','Normal','None'], ms: '21.4' },
+    { n: 5, name: 'Vignette', c: 'var(--l-solid)', sw: [1,0,0,0,0,0], md: [1,0,0,1,null,null], p: ['None','Multiply','None'], ms: '1.9' },
+    { n: 6, name: 'Camera 1', c: 'var(--l-camera)', sw: [1,null,null,0,0,0], md: [null,null,null,null,null,null], p: ['—','—','None'], ms: '0.4' },
+    { n: 7, name: 'bed_loop.wav', c: 'var(--l-audio)', sw: [null,1,null,null,null,null], md: [null,null,null,null,null,null], p: ['—','—','None'], ms: '0.2' }
+  ];
+  var swk = ['eye','spk','solo','lock','shy','guide'], mdk = ['fx','d3','mb','adj','flow','coll'];
+  document.getElementById('orows').innerHTML = rows.map(function (r) {
+    return '<div class="orow' + (r.sel ? ' sel' : '') + '">' +
+      '<span class="switches">' + r.sw.map(function (v, i) { return v === null ? '<span class="g"></span>' : g(swk[i], v); }).join('') + '</span>' +
+      '<span class="lnum">' + r.n + '</span>' +
+      '<span class="lname"><span class="tw">' + G.tw + '</span><span class="av" style="background:' + r.c + ';opacity:.85"></span><span class="t">' + r.name + '</span></span>' +
+      '<span class="modes6">' + r.md.map(function (v, i) { return v === null ? '<span class="g"></span>' : g(mdk[i], v); }).join('') + '</span>' +
+      pick(r.p[0]) + pick(r.p[1]) + pick(r.p[2]) +
+      '<span class="ms">' + r.ms + '</span></div>';
+  }).join('');
+  var lanes = [
+    { l: 120, w: 280, c: 'var(--l-text)', sel: true, k: [['hold',110],['bez',196,true],['lin',262]] },
+    { l: 180, w: 230, c: 'var(--l-precomp)', k: [['lin',50],['bez',150]] },
+    { l: 20, w: 520, c: 'var(--l-sequence)' },
+    { l: 20, w: 360, c: 'var(--l-footage)', ghost: 452 },
+    { l: 0, w: 600, c: 'var(--l-solid)' },
+    { l: 0, w: 600, c: 'var(--l-camera)', k: [['bez',240],['bez',352]] },
+    { l: 0, w: 600, c: 'var(--l-audio)', wave: true }
+  ];
+  document.getElementById('lanewell').innerHTML = lanes.map(function (n) {
+    return '<div class="lane"><div class="lbar' + (n.sel ? ' sel' : '') + '" style="left:' + n.l + 'px;width:' + n.w + 'px;--lc:' + n.c + '">' +
+      (n.ghost ? '<span class="ghost" style="left:0;width:' + n.ghost + 'px"></span>' : '') +
+      (n.wave ? '<span class="wave"></span>' : '') +
+      (n.k || []).map(function (k) { return '<span class="kf onlane ' + k[0] + (k[2] ? ' sel' : '') + '" style="left:' + k[1] + 'px"></span>'; }).join('') +
+      '</div></div>';
+  }).join('') + '<div class="phl"></div>';
+
+  function press(sel, active) { document.querySelectorAll(sel).forEach(function (b) { b.setAttribute('aria-pressed', String(b === active)); }); }
+  document.querySelectorAll('[data-room]').forEach(function (b) { b.addEventListener('click', function () { shell.dataset.room = b.dataset.room; press('[data-room]', b); }); });
+  document.querySelectorAll('[data-notes]').forEach(function (b) { b.addEventListener('click', function () { shell.classList.toggle('notes', b.dataset.notes === 'on'); press('[data-notes]', b); }); });
+  function fit() { var s = Math.min(1, viewport.clientWidth / 1360); scaler.style.transform = 'scale(' + s + ')'; viewport.style.height = Math.ceil(820 * s) + 'px'; }
+  window.addEventListener('resize', fit); fit();
+})();
+</script>
