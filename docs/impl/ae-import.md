@@ -723,6 +723,25 @@ rather than decoded; a fixture with real file footage, without which the remaini
 footage *interpretation* offsets (rate, alpha, fields, pulldown, loop) stay unread by
 choice — the name, path, placeholder and missing flags are read and measured; and corpus testing against real projects
 from more than one After Effects version — one fixture proves the offsets it contains
-and nothing about the ones it does not. Also still owed from §7's policy: the
-whole-file fallback to "footage references only", which today is the calm refusal
-instead.
+and nothing about the ones it does not.
+
+**The whole-file fallback** (docs/11 §7's "footage references only") is one
+function, `aep::parse_capture_or_footage`, which `open_aep` takes. It runs the
+whole parse and falls back on exactly one error: `AepError::NoItemTree`, the case
+where the container opened and walked but the `LIST Fold` everything hangs off could
+not be reached — its name or size word damaged, or a size word before it stopping
+the root walk. Then `rifx::carve` looks for `LIST Item` by its twelve-byte signature
+at every offset, hands each match to the ordinary walker (so the size is still
+bounded by the bytes that follow, and an overrunning match is dropped), and keeps
+the items whose descriptor says footage and which name a file or are After Effects'
+own placeholder for one. A solid is not a reference and a record with no path has
+nothing to relink, so neither comes; there is no tree, so no folder is invented; the
+project block, the comps and the layers are left out rather than guessed. The
+`Container` errors — no `RIFX`, the wrong form type, a header cut short — mean the
+bytes are not a project and refuse as before, and a fallback that finds not one
+reference refuses with the same `NoItemTree`, so rubbish never opens as an empty
+project. The bundle says which road it took (`Bundle::footage_only`), and
+`note_skipped_chunks` — the call the bridge already makes — raises the one row,
+`Reason::StructureUnreadable { count }`, against the project. A sibling of the
+damage sweep runs all sixty-four cases through the fallback and requires that it
+agrees with the whole parse wherever the rule says it must.

@@ -584,8 +584,12 @@ Policy:
   summary the mapping's own rows ride, and only on this route — a property the *Bridge*
   could not read is already an unreadable node in the capture, and saying it twice is
   worse than not saying it. Whole-file failure falls back to "import footage references
-  only" where the footage table is readable — **not built**: a whole-file failure today
-  is the calm notice naming the Bridge route, and the project already open stands.
+  only" where the footage table is readable — **built**: when the container opens but
+  its item tree cannot be reached, the footage records are found by their signature
+  instead and import alone, with no folders, comps or layers and one
+  `Reason::StructureUnreadable` row saying so. Bytes that are not an `.aep` at all, and
+  a file with not one readable footage reference in it, still refuse: the calm notice
+  names the Bridge route, and the project already open stands.
 - New AE versions MAY break the parser at any time; this is stated in the UI copy. The
   Bridge remains the answer for fidelity — and is what the failure notice points at.
 

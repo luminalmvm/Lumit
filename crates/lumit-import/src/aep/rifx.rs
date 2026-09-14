@@ -252,6 +252,33 @@ pub fn open_egg(bytes: &[u8]) -> Result<Chunks<'_>, RifxError> {
     Ok(Chunks::new(inner))
 }
 
+/// Every `LIST` of the given type that can be found by its signature, wherever
+/// it sits in `bytes` — for when the tree above it is gone.
+///
+/// The ordinary walk reaches a chunk by opening the boxes around it, so a
+/// damaged size word or a corrupted `LIST` name at the root costs everything
+/// underneath, however intact. This scan does not open boxes: it looks for the
+/// twelve-byte shape `LIST` ▸ size ▸ *type* at every offset and hands each
+/// match to the walker as if it were the top of a file. That keeps every
+/// safety the walk has — the declared size is still bounded by the bytes that
+/// actually follow, and a match whose size overruns is dropped rather than
+/// read — while asking nothing of the bytes *before* it. Nested lists are
+/// found at their own offsets, so a caller collecting one kind of record need
+/// not descend.
+///
+/// The one thing the scan cannot know is where a match sits in the tree, which
+/// is why it is the fallback and not the walk (docs/11 §7: footage references
+/// only, where they are readable).
+pub fn carve<'a>(bytes: &'a [u8], list_type: FourCc) -> impl Iterator<Item = Chunk<'a>> {
+    bytes
+        .windows(12)
+        .enumerate()
+        .filter(move |(_, window)| {
+            window.get(..4) == Some(b"LIST") && window.get(8..12) == Some(&list_type)
+        })
+        .filter_map(move |(at, _)| Chunks::new(bytes.get(at..)?).next()?.ok())
+}
+
 /// Read a big-endian `u8` from a fixed-layout record, or `None` past its end.
 pub fn u8_at(body: &[u8], offset: usize) -> Option<u8> {
     body.get(offset).copied()
@@ -437,6 +464,49 @@ mod tests {
         let found: Vec<Chunk<'_>> = open_egg(cut).unwrap().ok().collect();
         assert_eq!(found.len(), 1, "only the chunk that fits is read");
         assert_eq!(found[0].id, *b"head");
+    }
+
+    /// **A list can be found by its signature when the box around it is
+    /// broken, and an overrunning match is dropped rather than read.**
+    ///
+    /// The parent's size word is overwritten with the enormous size the sweep
+    /// uses, so the walk from the root stops at once and never sees the two
+    /// `Item` lists inside — and the scan finds both anyway, at their own
+    /// offsets, nested one inside the other. The decoy at the end has the
+    /// right twelve bytes and a size reaching past the file, which is exactly
+    /// the read the walker's one check refuses; the scan inherits the refusal.
+    #[test]
+    fn a_list_is_carved_by_its_signature_when_its_parent_is_broken() {
+        let inner = chunk(b"idta", &[0, 7]);
+        let mut nested = b"Item".to_vec();
+        nested.extend(chunk(b"LIST", &{
+            let mut i = b"Item".to_vec();
+            i.extend(inner);
+            i
+        }));
+        let mut folder = b"Fold".to_vec();
+        folder.extend(chunk(b"LIST", &nested));
+        let mut body = chunk(b"LIST", &folder);
+        // Break the folder's own size word.
+        body.splice(4..8, u32::MAX.to_be_bytes());
+        // A decoy: the signature, then a size the file cannot hold.
+        body.extend_from_slice(b"LIST");
+        body.extend_from_slice(&u32::MAX.to_be_bytes());
+        body.extend_from_slice(b"Item");
+        let bytes = file(b"Egg!", &body);
+
+        assert!(
+            open_egg(&bytes).unwrap().next().unwrap().is_err(),
+            "the walk from the root stops at the broken size"
+        );
+        let carved: Vec<Chunk<'_>> = carve(&bytes, *b"Item").collect();
+        assert_eq!(carved.len(), 2, "both nested lists, and not the decoy");
+        assert!(carved.iter().all(|c| c.is_list(b"Item")));
+        assert_eq!(carved[1].children().ok().next().unwrap().id, *b"idta");
+
+        // Bytes with nothing of the shape in them carve to nothing.
+        assert_eq!(carve(b"LIST", *b"Item").count(), 0);
+        assert_eq!(carve(&[0; 64], *b"Item").count(), 0);
     }
 
     /// **Nesting stops at the cap rather than recursing without bound.**
