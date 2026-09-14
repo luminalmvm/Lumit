@@ -184,6 +184,13 @@ Both are closed-form and pointwise — no window, no state, `driver_window` noug
 Split and back through Combine is the colour that went in, **bit for bit**, including a
 channel above one. That round trip is the whole specification of "nothing is converted".
 
+And an **eleventh**, the box whose outputs are what an expression returns — deferred from
+0.3.0 and landed with the decision the deferral recorded:
+
+| Driver | Inputs | Outputs | Notes |
+|---|---|---|---|
+| **Expression** | none on a wire; the text lives on the instance under `extra["expression"]["source"]`, as the Custom shader's WGSL does, and the one row is an *Edit expression…* action | Value (number), Colour (colour), Point x, Point y (number) | Evaluates the source with `expression::evaluate_value` against the frame's own `ExpressionContext` — the same `time`, comp constants and `layer("…")` helpers a property's expression reads. **Four static outputs, and the result decides which carry a value each frame**: a number fills Value, a pair fills Point x and Point y, three or four numbers fill Colour; the rest push nothing, and a parameter wired to one reads its keyframes. Static rather than typed by the result, because a port is a fact about the catalogue entry (one `ExpressionDef` serves every box) and nothing revalidates a wire when `extra` changes — an output whose type followed the text would strand a wire the moment the text was rewritten. A refused expression (syntax, a name not in scope, division by nought, a result of the wrong shape, an infinity) pushes nothing at all, so the driven parameter keeps its keyframes rather than snapping to a number that looks like an answer; the sentence about why is `evaluate_value`'s and an editor's to show. Pointwise and closed-form: `driver_window` nought, no state, and deterministic in the source and the context alone. `expression::source_of` and `set_source` are the two ways at the text. |
+
 **A tap reaches one layer, never two.** The far side is evaluated by a fresh walk over that
 layer's graph, built with the crossing flag cleared, so a tap over there answers the empty
 stream. Two layers naming each other therefore stop at the second hop — no visited set, no

@@ -23,6 +23,7 @@ use super::drivers::{
     audio_level::{AudioLevel, AudioLevelDef},
     colour_cycle::{ColourCycle, ColourCycleDef},
     combine::{Combine, CombineDef},
+    expression::{Expression, ExpressionDef},
     layer_points::{LayerPoints, LayerPointsDef},
     math::{Math, MathDef},
     points_sample::{PointsSample, PointsSampleDef},
@@ -410,4 +411,9 @@ crate::catalogue![
     // a stream rather than a number, and the one node that reaches outside the
     // layer its graph belongs to.
     LayerPointsDef => LayerPoints,
+    // The box whose outputs are what an expression returns (node-graph.md
+    // §1.3). Last, because it arrived last: it declares four static outputs
+    // and fills only the ones the result's kind fits each frame, the shape
+    // Split has, since a port is a fact about the entry and not the node.
+    ExpressionDef => Expression,
 ];

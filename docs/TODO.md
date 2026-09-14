@@ -38,21 +38,6 @@ surfaced and deliberately left open, so it is not re-derived:
 - Crowdin at the next push owes: the pre-programme ~360 keys, 53 safe-lane keys, every
     FP key (listed per commit), 63 changed tooltip values, tipBrushPressure, and the
     unused settingsHelpChromeLabels to cull.
-- **The Expression driver, deferred from 0.3.0** (owner, 2026-09-01). A driver box whose
-    output is what an expression returns. The groundwork landed with the decision to defer
-    it, because both halves stand on their own: `expression::evaluate_value` hands back a
-    number, a point or a colour - or Rhai's own sentence about why not, where `evaluate`
-    turns every refusal into -1 - and `DriverCx` now carries the expression context, as
-    `ResolveCx` always has.
-    What is left is the box itself, and one decision the owner has not made: its output
-    type cannot follow the expression's result, because a port is a fact about the
-    catalogue entry rather than the node (one shared `WiggleDef` serves every Wiggle) and
-    nothing revalidates a wire when `extra` changes, so editing the text after wiring would
-    strand a mismatched one. The recommendation put to the owner and not yet answered:
-    four static outputs - Value, Colour, Point x, Point y - with the result deciding which
-    carry a value each frame, the shape Split already has. All four labels are in
-    fx-labels.txt already. The text belongs in `extra["expression"]["source"]`, as Custom
-    shader's does.
 - **Syntax highlighting in the shader editor** (Airyz, 2026-09-01: "u can reuse the
     syntax highlighting logic from the expression editor"). Held back from 0.3.0, and not
     for the reason it looks like. `ExpressionTextEditingController` is forty lines over the
