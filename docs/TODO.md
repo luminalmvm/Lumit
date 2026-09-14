@@ -128,30 +128,26 @@ surfaced and deliberately left open, so it is not re-derived:
 
 The owner's interface mandate is measured and has an answer. The note is binding: the
 gesture table taken in the owner's own conditions (window maximised, live preview —
-the small-window empty-preview test trap flatters by 4×), the architecture, and six
-ordered work packages, each gated by a probe re-run in those conditions:
+the small-window empty-preview test trap flatters by 4×), the architecture, and the
+work packages. **WP-2 through WP-6 landed 2026-08-30** (the select click, incremental
+scroll, zero per-frame document calls during drags, the edit storm as one wave, and
+the repaint matrix as CI gates in `rebuild_budget_test.dart`) - the note's §7 carries
+each one's measured before-and-after. What is still open is the raster half, which is
+not Lumit's:
 
 - **WP-1 - LANDED, then reversed on shipping**: the unmet gap is the
     Windows embedder's own (4x MSAA whole-window resolve, no partial repaint - ~8
-    ms/megapixel) and WP-7 in the note pursues it (the drafted upstream issue, the
-    local-engine MSAA test); the runner meanwhile pins Skia.
+    ms/megapixel) and WP-7 in the note (§7.2) pursues it - the drafted upstream issue
+    (§7.1, still unfiled), the local-engine MSAA test; the runner meanwhile pins Skia.
 - **Per Flutter upgrade: re-run the §2.4 backend A/B** in the owner's conditions
     (docs/impl/ui-performance.md §2.1/§6, one run each backend) and flip
     `ImpellerSwitch::Disabled` back to `Default` in
     `flutter_ui/windows/runner/main.cpp` the day Impeller clears the 60 fps mandate.
     Standing, not one-off - delete only when the flip lands.
-- **WP-2 — the select click**: layer selection becomes listenable row state; a
-    first-visit click's worst build < 8.3 ms (was 39–67 ms).
-- **WP-3 — incremental scroll**: `LazyBlocks` reuses identical children across window
-    slides + a per-block `RepaintBoundary`. The "8–12 fps in every condition" that
-    outlived it was the probe grinding the scroll's stops plus its fps arithmetic
-    (note §2.6): on the pinned backend every notch answers inside the 16.6 ms
-    floor.
-- **WP-4 — zero per-frame document calls during drags**: `animated_mask_paths_at` and
-    `time_of_frame` off the scrub path (~1.3 ms a frame today).
-- **WP-5 — the edit storm becomes one wave**: the per-revision walks stop being
-    per-item sync calls (a switch click today: ~228 calls, 0.7–0.9 s to settled).
-- **WP-6 — the repaint matrix becomes CI gates** in `rebuild_budget_test.dart`.
+- **B1 and B2 have no standing gate in CI.** WP-6's matrix gates *rebuild counts*;
+    the 8 ms UI-thread frame and the next-frame acknowledgement are still read off
+    the probe by hand. The entry under *What the performance harness still cannot
+    measure* below is where that lives.
 
 ## Now - the effect registry (docs/impl/effect-registry.md §6)
 
