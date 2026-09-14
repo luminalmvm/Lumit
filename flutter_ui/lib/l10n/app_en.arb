@@ -2467,6 +2467,10 @@
   "@fxExposure": {
     "description": "Effect controls — the name of an effect."
   },
+  "fxExpression": "Expression",
+  "@fxExpression": {
+    "description": "Driver name in the Graph panel — a box whose outputs are what an expression returns."
+  },
   "fxExtractChannels": "Extract channels",
   "@fxExtractChannels": {
     "description": "Effect name in the Add effect menu — reads the layer's picture out of channels its file holds but its colour does not, such as a depth pass in an OpenEXR."
@@ -2822,6 +2826,10 @@
   "fxCustomShader": "Custom shader",
   "@fxCustomShader": {
     "description": "Effect controls — the name of the effect that runs a shader the user wrote."
+  },
+  "fxEditExpression": "Edit expression…",
+  "@fxEditExpression": {
+    "description": "Effect controls — the Expression driver's row that opens its expression for editing."
   },
   "fxEditShader": "Edit shader…",
   "@fxEditShader": {
@@ -9253,6 +9261,15 @@
     "description": "Import report row reason, lower case. Only the direct .aep route raises it. The placeholder is the four-letter name of a record inside the file; leave it as written.",
     "placeholders": {
       "chunk": {
+        "type": "String"
+      }
+    }
+  },
+  "aeStructureUnreadable": "the project's structure could not be read — only its footage references ({count}) were imported, with no compositions or layers",
+  "@aeStructureUnreadable": {
+    "description": "Import report row reason, lower case. Only the direct .aep route raises it, once per import, when the item tree cannot be walked but the footage records can. The placeholder is how many references were recovered.",
+    "placeholders": {
+      "count": {
         "type": "String"
       }
     }

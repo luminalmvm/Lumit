@@ -528,6 +528,7 @@ Map<String, String> get _table => {
       "Evolution options": l10n.fxEvolutionOptions,
       "Exclusion": l10n.fxExclusion,
       "Exposure": l10n.fxExposure,
+      "Expression": l10n.fxExpression,
       "Extract channels": l10n.fxExtractChannels,
       "F-stop": l10n.fxFStop,
       "Fade": l10n.fxFade,
@@ -623,6 +624,7 @@ Map<String, String> get _table => {
       "Left top tangent x": l10n.fxLeftTopTangentX,
       "Left top tangent y": l10n.fxLeftTopTangentY,
       "Custom shader": l10n.fxCustomShader,
+      "Edit expression…": l10n.fxEditExpression,
       "Edit shader…": l10n.fxEditShader,
       "Load from file…": l10n.fxLoadFromFile,
       "LUT": l10n.fxLut,
@@ -1283,6 +1285,8 @@ String? importReason(String key, Map<String, String> args) {
       return l10n.aePropertyUnreadable(a('match_name'));
     case 'chunk_unreadable':
       return l10n.aeChunkUnreadable(a('chunk'));
+    case 'structure_unreadable':
+      return l10n.aeStructureUnreadable(a('count'));
 
     // Masks.
     case 'mask_feather_axes_differ':
