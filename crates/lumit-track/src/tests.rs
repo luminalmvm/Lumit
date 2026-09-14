@@ -1975,10 +1975,22 @@ fn run_solve(
     Vec<ZoomBoundary>,
     Result<CameraSolve, SolveError>,
 ) {
+    run_solve_with(set, &SolveSettings::default())
+}
+
+/// [`run_solve`] with the solve's knobs chosen by the test.
+fn run_solve_with(
+    set: &mut TrackSet,
+    settings: &SolveSettings,
+) -> (
+    Vec<PairGeometry>,
+    Vec<ZoomBoundary>,
+    Result<CameraSolve, SolveError>,
+) {
     let pairs = select_keyframes(set, &GeometrySettings::default());
     segment_dynamic_tracks(set, &pairs, &SegmentSettings::default());
     let zooms = detect_zoom(set, &ZoomSettings::default());
-    let solved = solve_camera(set, &pairs, &zooms, &SolveSettings::default());
+    let solved = solve_camera(set, &pairs, &zooms, settings);
     (pairs, zooms, solved)
 }
 
@@ -2509,6 +2521,200 @@ fn two_solves_of_the_same_shot_agree_bit_for_bit() {
     assert_eq!(a, b, "the whole solve must agree bit for bit");
 }
 
+// --- The focal hint -----------------------------------------------------------------
+//
+// Self-calibration is the weakest number in the pipeline, and every tracker
+// worth using lets the operator type the lens in instead. The hint is the
+// operator's word: it replaces the search, it is held through the bundle, and
+// the measured cut ratios carry it to the later segments the way they carry a
+// searched focal.
+
+/// Default settings, with the lens typed in.
+fn hinted(focal_px: f64) -> SolveSettings {
+    SolveSettings {
+        focal_px: Some(focal_px),
+        ..SolveSettings::default()
+    }
+}
+
+#[test]
+fn a_focal_hint_pins_the_first_segment() {
+    let cams = orbit_cameras(25, 2.0, 6.0, 300.0);
+    let mut set = solve_shot(&cams, &orbit_cloud(150), usize::MAX, [0.0; 3], 0.3);
+    let (_, _, solved) = run_solve_with(&mut set, &hinted(300.0));
+    let solved = solved.expect("the orbit solves with its lens typed in");
+
+    // Exactly, not within a tolerance: the hint's knot is left out of the
+    // bundle's reduced system, so nothing ever steps it.
+    let focal = solved.segments.first().map_or(0.0, |s| s.focal_px);
+    assert_eq!(focal, 300.0, "the first segment carries the hint as typed");
+    for pose in &solved.poses {
+        assert_eq!(
+            pose.focal_px, 300.0,
+            "frame {} carries the hint as typed",
+            pose.frame
+        );
+    }
+    assert!(
+        !solved
+            .notes
+            .iter()
+            .any(|n| matches!(n, SolveNote::FocalGuessed { .. })),
+        "a hinted focal was not guessed: {:?}",
+        solved.notes
+    );
+    // And the rest of the solve is the solve it always was — the true lens
+    // pinned should be at least as good as the true lens searched.
+    let positions: Vec<[f64; 3]> = solved.poses.iter().map(|p| p.position).collect();
+    let (rms, extent) = ate(&positions, &truth_positions(&cams));
+    assert!(
+        rms / extent < 0.003,
+        "trajectory error {rms} over an extent of {extent}"
+    );
+    assert!(
+        solved.mean_reprojection_px < 0.2,
+        "mean reprojection {} px",
+        solved.mean_reprojection_px
+    );
+}
+
+#[test]
+fn a_focal_hint_is_honoured_even_when_wrong() {
+    let cams = orbit_cameras(25, 2.0, 6.0, 300.0);
+    let mut set = solve_shot(&cams, &orbit_cloud(150), usize::MAX, [0.0; 3], 0.3);
+    let hint = 450.0;
+    let (_, _, solved) = run_solve_with(&mut set, &hinted(hint));
+    let solved = solved.expect("a wrong lens is still a solve, not a refusal");
+    let focal = solved.segments.first().map_or(0.0, |s| s.focal_px);
+    assert_eq!(
+        focal, hint,
+        "the operator's word stands even against the pairs"
+    );
+    for pose in &solved.poses {
+        assert_eq!(pose.focal_px, hint, "frame {} carries the hint", pose.frame);
+    }
+    assert_eq!(
+        solved.poses.len(),
+        cams.len(),
+        "every frame still gets a pose"
+    );
+    // A wrong lens is not made to look right: the error the true lens leaves
+    // (0.10 px measured) is what the wrong one cannot reach (0.29 px measured).
+    let mut set = solve_shot(&cams, &orbit_cloud(150), usize::MAX, [0.0; 3], 0.3);
+    let right = run_solve_with(&mut set, &hinted(300.0))
+        .2
+        .expect("the true lens solves");
+    assert!(
+        solved.mean_reprojection_px.is_finite()
+            && solved.mean_reprojection_px > 1.5 * right.mean_reprojection_px,
+        "a lens 1.5× wrong reprojects at {} px against {} px with the true one",
+        solved.mean_reprojection_px,
+        right.mean_reprojection_px
+    );
+}
+
+#[test]
+fn a_focal_hint_carries_across_a_zoom_cut() {
+    let cut = 14usize;
+    let cams = dolly_cameras(30, cut, 300.0, 420.0);
+    let unhinted = {
+        let mut set = solve_shot(&cams, &dolly_cloud(250), usize::MAX, [0.0; 3], 0.3);
+        run_solve(&mut set).2.expect("the dolly solves unhinted")
+    };
+    let mut set = solve_shot(&cams, &dolly_cloud(250), usize::MAX, [0.0; 3], 0.3);
+    let hint = 300.0;
+    let (_, zooms, solved) = run_solve_with(&mut set, &hinted(hint));
+    let solved = solved.expect("the dolly solves hinted");
+    let cuts: Vec<&ZoomBoundary> = zooms.iter().filter(|z| z.kind == ZoomKind::Cut).collect();
+    assert_eq!(cuts.len(), 1, "one lens cut, got {zooms:?}");
+    let ratio = cuts.first().map_or(1.0, |z| z.log_scale.exp());
+
+    assert_eq!(solved.segments.len(), 2, "a cut still splits the segments");
+    let (a, b) = (
+        solved.segments.first().map_or(0.0, |s| s.focal_px),
+        solved.segments.get(1).map_or(0.0, |s| s.focal_px),
+    );
+    assert_eq!(a, hint, "the first segment is the hint");
+    let (ua, ub) = (
+        unhinted.segments.first().map_or(0.0, |s| s.focal_px),
+        unhinted.segments.get(1).map_or(0.0, |s| s.focal_px),
+    );
+    // The second segment started from hint × the detector's measured ratio
+    // and was refined by the bundle exactly as it is unhinted, so it lands
+    // where the unhinted solve lands *relative to its own first segment*.
+    // Measured: 420.29 px hinted against (297.33, 416.69) unhinted and a
+    // ratio of 1.39994 — 0.07 % off hint × ratio, 0.03 % off the unhinted
+    // ratio; the thresholds sit an order above both.
+    assert!(
+        ((b / hint) / ratio - 1.0).abs() < 0.01,
+        "second segment {b} against hint × cut ratio {}",
+        hint * ratio
+    );
+    assert!(
+        ((b / a) / (ub / ua) - 1.0).abs() < 0.005,
+        "hinted ratio {} against the unhinted {}",
+        b / a,
+        ub / ua
+    );
+    assert!(
+        (b - 420.0).abs() / 420.0 < 0.02,
+        "second segment focal {b} against a true 420"
+    );
+    for pose in &solved.poses {
+        let want = if pose.frame <= cut as i64 { a } else { b };
+        assert!(
+            (pose.focal_px - want).abs() < 1e-9,
+            "frame {} carries {} px",
+            pose.frame,
+            pose.focal_px
+        );
+    }
+}
+
+#[test]
+fn a_bad_focal_hint_is_refused() {
+    let cams = orbit_cameras(25, 2.0, 6.0, 300.0);
+    let set = solve_shot(&cams, &orbit_cloud(150), usize::MAX, [0.0; 3], 0.3);
+    let pairs = select_keyframes(&set, &GeometrySettings::default());
+    let zooms = detect_zoom(&set, &ZoomSettings::default());
+    for bad in [
+        0.0,
+        -0.0,
+        -300.0,
+        f64::NAN,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+    ] {
+        assert_eq!(
+            solve_camera(&set, &pairs, &zooms, &hinted(bad)),
+            Err(SolveError::BadFocalHint),
+            "a hint of {bad} is nonsense, and refused as such"
+        );
+    }
+    // The refusal is about the hint and nothing else: the same shot solves.
+    assert!(solve_camera(&set, &pairs, &zooms, &hinted(300.0)).is_ok());
+}
+
+#[test]
+fn no_hint_changes_nothing() {
+    assert!(
+        SolveSettings::default().focal_px.is_none(),
+        "the default self-calibrates"
+    );
+    let cams = orbit_cameras(21, 2.0, 6.0, 300.0);
+    let once = |settings: &SolveSettings| {
+        let mut set = solve_shot(&cams, &orbit_cloud(140), 120, [0.0, 0.05, 0.0], 0.3);
+        run_solve_with(&mut set, settings).2
+    };
+    let explicit = SolveSettings {
+        focal_px: None,
+        ..SolveSettings::default()
+    };
+    let (a, b) = (once(&SolveSettings::default()), once(&explicit));
+    assert!(a.is_ok(), "the shot solves");
+    assert_eq!(a, b, "an explicit None is the default, bit for bit");
+}
+
 // --- The bundle itself ------------------------------------------------------------
 
 #[test]
@@ -2579,6 +2785,7 @@ fn the_bundle_converges_from_a_perturbed_start() {
         centre,
         2.0,
         60,
+        &[],
         &|| false,
     );
     assert!(
@@ -2690,6 +2897,7 @@ fn the_bundle_recovers_a_focal_ramp_from_perturbed_knots() {
         centre,
         2.0,
         60,
+        &[],
         &|| false,
     );
     assert!(

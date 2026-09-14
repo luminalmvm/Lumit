@@ -330,7 +330,11 @@ impl PointBlock {
 /// independent column of the reduced system (docs/impl/tracking.md §4).
 ///
 /// `cams[0]` is the gauge and never moves; the overall scale is left free and
-/// held by the damping, which is what LM's diagonal term is for.
+/// held by the damping, which is what LM's diagonal term is for. A knot listed
+/// in `pinned_focals` never moves either: its column is left out of the
+/// reduced system (the damping floor keeps the factorisation whole) and its
+/// value is never stepped, so the operator's focal hint comes back exactly as
+/// it went in. Empty is every knot free, which is the self-calibrated case.
 ///
 /// ponytail: the reduced camera system is dense and factorised outright, so the
 /// cost is cubic in its width — six columns per keyframe plus one per focal
@@ -354,6 +358,7 @@ pub(crate) fn bundle_adjust(
     centre: [f64; 2],
     huber_px: f64,
     max_iterations: usize,
+    pinned_focals: &[usize],
     // Asked once per iteration; `true` stops the loop where it stands. The
     // caller discards the half-adjusted model — see `solve_camera_cancellable`.
     cancel: &dyn Fn() -> bool,
@@ -413,6 +418,13 @@ pub(crate) fn bundle_adjust(
             let (w, _) = huber(r[0].hypot(r[1]), huber_px);
             let jv = dproject(focal, v);
             columns(&mut cols, o.cam, focal_base, cam.focal, &cam.rot, v, &jv);
+            if !pinned_focals.is_empty() {
+                cols.retain(|(c, _)| {
+                    !pinned_focals
+                        .iter()
+                        .any(|k| focal_base.saturating_add(*k) == *c)
+                });
+            }
             let jp = point_jacobian(&cam.rot, &jv);
             let Some(block) = blocks.get_mut(o.point) else {
                 continue;
@@ -512,6 +524,9 @@ pub(crate) fn bundle_adjust(
                 }
             }
             for (s_index, focal) in trial_focals.iter_mut().enumerate() {
+                if pinned_focals.contains(&s_index) {
+                    continue;
+                }
                 *focal += dc.get(focal_base + s_index).copied().unwrap_or(0.0);
                 if !focal.is_finite() || *focal <= 1.0 {
                     *focal = 1.0;

@@ -279,7 +279,21 @@ focal in source pixels, a `ramp` flag), the `ScenePoint` cloud (track id and
 position, colourless — the tracker reads luma and has no colour to give), the
 keyframe list, the mean reprojection error over every observation the bundle
 saw, and a `notes` list. `SolveError` is a refusal, never a fault: `NoTracks`,
-`NoKeyframes`, `RotationOnly`, `NoPoints`.
+`NoKeyframes`, `RotationOnly`, `NoPoints`, and `BadFocalHint` for the one
+setting that can be nonsense.
+
+`SolveSettings::focal_px` (2026-09-14) is the operator's lens, in source pixels
+— the unit the segment table reports in. Every tracker worth using takes it,
+because deviation 1's search is the weakest number in the file. Set, it skips
+that search, pins the first segment's knot through both passes and the bundle
+(the knot's column is left out of the reduced system, so the number that comes
+back is the number typed in), and deviation 2's cut ratios carry it to every
+later segment and ramp knot exactly as they carry a searched focal — those
+knots are still refined. It is the operator's word: honoured even where the
+pairs would have disagreed, never clamped to the self-calibration's range, and
+refused only when it is not a positive finite number. The bridge row and the
+Camera track effect's setter that would let the operator type it are still
+owed.
 
 Ten things are deviations from, or decisions under, the wording above. Every one
 of them was forced by measuring the version that followed the note literally:
@@ -1120,7 +1134,19 @@ next honest step.
   by different amounts and required back to a ten-thousandth (measured floor
   ≈1e-5 px of focal: two knots are more correlated than one, since every camera
   between them reads a blend); and the forward-travel-then-rack shot solved end
-  to end against the true per-frame focal curve.
+  to end against the true per-frame focal curve. The focal hint (2026-09-14)
+  adds five: the orbit with its true lens typed in comes back carrying exactly
+  that number on the segment and on every frame, with the trajectory as good
+  as the searched solve's; the same orbit with a lens 1.5× wrong still solves
+  and still carries the wrong number, because the hint is the operator's word
+  — and reprojects at 0.29 px against the true lens's 0.10, because a wrong
+  lens is not made to look right either; the dolly through the scope-in with
+  its first lens typed in lands the second segment at 420.29 px — within 1 %
+  of hint × the detector's measured ratio (measured 0.07 %), within 0.5 % of
+  the unhinted solve's own 297.33→416.69 ratio (measured 0.03 %), and within
+  2 % of the true 420; zero, a negative, NaN and either infinity are each
+  refused with `SolveError::BadFocalHint`; and the default is `None`, with an
+  explicit `None` solving bit for bit as the default does.
 - **The phase-3 thresholds are mutation-checked too.** Flipping the sign of the
   rotation Jacobian's `−[v]×` term in `bundle.rs` — one `-` — fails five of the
   eight, including the three that only look at the pipeline's output; flipping
@@ -1556,4 +1582,6 @@ two boxes of different sizes would be a second row for a second thing.
   does not cross the bridge, so the panel cannot yet say "the lens moved during
   this shot"; and the *absolute* focal of a forward-dominated shot is weakly
   observable (measured 3.5 % low on the synthetic) — a focal hint from the user
-  is the honest lever if it matters in practice.
+  is the honest lever if it matters in practice, and `SolveSettings::focal_px`
+  is that lever since 2026-09-14 (§4's "As built"); what is still owed is the
+  bridge row that lets the operator type it.

@@ -1550,11 +1550,6 @@ the per-frame error. Forty-three tests, all synthetic, no assets.
    Camera layer, Convert to keyframes, the point cloud with select → Null/Solid,
    and the cancellation seam inside `solve_camera`. Still open from phase 3's
    hand-off list:
-   - **A focal hint.** Every tracker worth using lets the operator type the lens
-     in, and self-calibration is the weakest number in the pipeline (note §4's
-     deviation 1). `SolveSettings` wants an optional `focal_px` that skips the
-     search and pins the first segment; the cut ratios already carry it to the
-     rest.
    - **A nodal-pan product.** `SolveError::RotationOnly` refuses a shot with no
      baseline, and that refusal is right for a *camera* solve - but the
      rotations are recoverable and a Camera layer that only turns is a real
