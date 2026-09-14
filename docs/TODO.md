@@ -1278,10 +1278,12 @@ field; §7.1 and §7.2 are the proved layout maps.
    `Reason::ChunkUnreadable` rows on the same summary, raised only for this route so the
    Bridge's own unreadables are not said twice; an `.aep` this build cannot read posts a
    calm notice naming the Bridge route, project standing. Proved end to end by
-   `flutter_ui/test/frb/ae_import_frb_test.dart` on the real `fixture.aep`. **One policy
-   line from docs/11 §7 is still owed**: a whole-file failure should fall back to
-   "import footage references only" where the footage table is readable, and today
-   `parse_capture` simply refuses with `NoItemTree`.
+   `flutter_ui/test/frb/ae_import_frb_test.dart` on the real `fixture.aep`. **The
+   frontend's sentence for `Reason::StructureUnreadable` is owed**: the engine raises
+   it (docs/11 §7's footage-only fallback, `structure_unreadable` with a `count`), and
+   `test/l10n/engine_labels_test.dart` will fail until `engine_labels.dart` has a case
+   for it and `app_en.arb` an `aeStructureUnreadable` entry; until then the row shows
+   the engine's English.
  - **Corpus testing is owed.** One fixture from one After Effects version proves the
    offsets it contains and nothing about the ones it does not. Real community project
    files across several AE versions, run through the parser looking for panics, refusals
