@@ -314,14 +314,19 @@ Three rules keep it honest:
   the marker context is document state the key already covers; the hook only moves
   where the derivation runs, exactly as the old arms did it.
 
-**The trap: a derived value does not rescale.** `ResolvedStack::rescale_spatial` finds a
-value's unit by matching its id against the schema, and a derived id matches nothing — so
-a derived value in raster pixels is left behind when a stack resolved against one raster is
-reused at another. Scanlines is the live case: `derived.roll_px` is a product of the *raster*
-line period, and under rescale the period moves while the offset does not, shifting the
-pattern's phase with the size. Prefer deriving a quantity that is already unit-free (a tick,
-a strength, a count of periods) over one in pixels; where pixels are unavoidable the rescale
-pass has to be told, and that is a decision, not a batch (see §6).
+**A derived value has no unit to rescale by, so it declares one.**
+`ResolvedStack::rescale_spatial` finds a value's unit by matching its id against the
+schema, and a derived id matches nothing — so a derived value in raster pixels would be
+left behind when a stack resolved against one raster is reused at another. Scanlines was
+the live case: `derived.roll_px` is a product of the *raster* line period, and under
+rescale the period moved while the offset did not, shifting the pattern's phase with the
+size. A derived raster-pixel value therefore declares itself through
+`EffectDef::derived_spatial()` — a list of the derived ids whose values are lengths — and
+the rescale pass moves them with the declared `Px` rows by the same multiply (a `Float` as
+one length; a `Colour` or `Vec4` used as geometry, the flare's `(x, y, half_w, half_h)`,
+all four components). Ids whose values are not lengths (the flare's `(r, g, b, 0)`, a tick,
+a strength) stay off the list. Still prefer deriving a quantity that is already unit-free
+over one in pixels; where pixels are unavoidable, the list is how the pass is told.
 
 ### 2.5 The GPU half (`lumit-render/src/gpufx.rs`)
 
@@ -710,7 +715,8 @@ The old and new paths coexist for exactly as long as the migration takes, and no
    nine sub-frame samples of four floats each, and a dispatch that forks to a different
    kernel for them. Two changes settled it. `Value` gained a `Vec4`, so a small fixed vector
    is one entry rather than four ids. And Shake's noise became a **unit-free** derived value
-   — the raw −1..1 wobble with no amplitude in it — because derived values do not rescale;
+   — the raw −1..1 wobble with no amplitude in it — because derived values did not rescale
+   then (a derived pixel length now declares itself through `derived_spatial()`, §2.4a);
    `amplitude` declares `Px` instead, so the arena holds the rescalable half and
    `Shake::packed` multiplies the two back together at dispatch, reassembling
    `ShakeWobble::at` step for step. The kernel fork is an enum returned from `packed`, the

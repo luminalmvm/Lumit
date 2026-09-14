@@ -168,21 +168,6 @@ hand-written `BUILTINS` literal are all deleted, and with them the migration-onl
     follow for free - except for dynamic parameters, which are per *instance* rather than per
     effect and need a bridge call that takes an instance id.
 
-- **Rescale a derived spatial value, or stop deriving one.** Not a migration step - an open
-    defect the migration uncovered. Scanlines' `derived.roll_px` is
-    in raster pixels, but `ResolvedStack::rescale_spatial` only moves values whose id matches
-    a schema parameter with a spatial unit - a derived id matches nothing, so a stack resolved
-    against one raster and reused at another (`realise.rs`, a precomp at a different size)
-    scales the line period and leaves the roll offset behind, and the pattern's phase shifts
-    with the size. Before the migration neither moved, so the phase was right and the period wrong;
-    now it is the other way about. The Lens flare's `derived.light*` entries are the same
-    shape - raster pixels under a derived id - though there the old `rescale_px` match did
-    not move them either, so a Lights-mode flare on a resized precomp is no worse than it
-    was and no better. Two fixes, both small: give `EffectDef` a
-    `derived_spatial()` list the rescale pass consults (keeps the resolve maths bit-identical),
-    or derive the roll in *periods* rather than pixels and multiply in `packed()` (no new API,
-    but the f64 product rounds once more and so is not bit-identical to the old arm).
-
 - **The effect manual is five pages behind the catalogue.** The catalogue stands at 90 and
     `web-docs/src/content/docs/effects/` holds 85 pages: the Controls category has no
     index and no five pages, and the four wipes' Completion still prints as `float` where

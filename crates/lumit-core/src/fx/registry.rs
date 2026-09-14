@@ -318,6 +318,24 @@ pub trait EffectDef: Sync + Send + 'static {
     /// nothing else. The default pushes nothing, which is every effect but a few.
     fn resolve_derived(&self, _cx: &ResolveCx<'_>, _push: &mut dyn FnMut(ParamId, Value)) {}
 
+    /// Derived ids whose values are raster-pixel lengths and must move with
+    /// the raster exactly as a `Px`-unit declared row does.
+    ///
+    /// A derived id carries no declared unit, so
+    /// [`ResolvedStack::rescale_spatial`](super::ResolvedStack::rescale_spatial)
+    /// cannot find one by matching the schema — which is how Scanlines' roll
+    /// offset was left behind while its period moved, shifting the pattern's
+    /// phase with the size of the raster it was reused on. An effect whose
+    /// [`resolve_derived`](EffectDef::resolve_derived) pushes pixels names
+    /// those ids here, and the rescale pass multiplies them by the same factor
+    /// it multiplies a declared `Px` value by. A `Float` scales as one length;
+    /// a `Colour` or `Vec4` used as geometry scales all four components. Ids
+    /// whose values are not lengths — a colour, a count, a strength — must
+    /// **not** appear. The default is none, which is every effect but two.
+    fn derived_spatial(&self) -> &'static [ParamId] {
+        &[]
+    }
+
     /// The parameters **this instance** has beyond its schema's
     /// (docs/impl/effect-registry.md §4, docs/impl/custom-shader.md §1.5).
     ///

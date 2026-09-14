@@ -655,12 +655,20 @@ impl ResolvedStack {
     /// Every op's parameters are in the arena, and the arena declares its units,
     /// so this is one generic pass and no effect can be forgotten — which the
     /// per-variant `rescale_px` match it replaced could not promise.
+    ///
+    /// A **derived** value (docs/impl/effect-registry.md §2.4a) has no schema
+    /// row to declare a unit, so its effect names the ones in raster pixels
+    /// through [`EffectDef::derived_spatial`], and they move here by the same
+    /// multiply as a declared `Px` row. Scanlines' roll offset and the flare's
+    /// light geometry are the two; without this the period moved and the roll
+    /// stayed, and the pattern's phase shifted with the raster.
     pub fn rescale_spatial(&mut self, factor: f32) {
         if factor == 1.0 {
             return;
         }
         for op in &self.ops {
             let schema = op.def.schema();
+            let derived_spatial = op.def.derived_spatial();
             for slot in self
                 .entries
                 .get_mut(op.span.start as usize..op.span.end as usize)
@@ -676,6 +684,15 @@ impl ResolvedStack {
                     if let Value::Float(v) = slot.1 {
                         slot.1 = Value::Float(v * factor);
                     }
+                } else if derived_spatial.contains(&slot.0) {
+                    slot.1 = match slot.1 {
+                        Value::Float(v) => Value::Float(v * factor),
+                        // Geometry carried four to an entry — every component
+                        // is a length, so every component moves.
+                        Value::Colour(c) => Value::Colour(c.map(|v| v * factor)),
+                        Value::Vec4(c) => Value::Vec4(c.map(|v| v * factor)),
+                        other => other,
+                    };
                 }
             }
         }
