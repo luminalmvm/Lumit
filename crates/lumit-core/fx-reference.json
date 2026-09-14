@@ -20080,6 +20080,24 @@
       ],
       "groups": [],
       "matte_role": "none"
+    },
+    {
+      "slug": "expression",
+      "match_name": "expression",
+      "label": "Expression",
+      "version": 1,
+      "category": "Drivers",
+      "category_slug": "drivers",
+      "params": [
+        {
+          "id": "edit",
+          "label": "Edit expression…",
+          "kind": "action",
+          "unit": "raw"
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
     }
   ]
 }

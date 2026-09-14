@@ -5,9 +5,10 @@
 //!
 //! A driver makes a *value* rather than a picture, and a wire from a driver
 //! into an effect's socket makes that parameter follow the value instead of its
-//! keyframes. This module holds the eight of them — Wiggle, Audio level, Colour
-//! cycle, Math, Remap, Smooth, Points sample, Layer points — and the small walk
-//! that works out, at one frame, what every wire is carrying.
+//! keyframes. This module holds the eleven of them — Wiggle, Audio level,
+//! Colour cycle, Math, Remap, Smooth, Split, Combine, Points sample, Layer
+//! points, Expression — and the small walk that works out, at one frame, what
+//! every wire is carrying.
 //!
 //! **One of them carries no value at all.** Layer points is a *source*:
 //! it names another layer and hands out that layer's points stream, so what
@@ -56,6 +57,7 @@ use crate::model::EffectInstance;
 pub mod audio_level;
 pub mod colour_cycle;
 pub mod combine;
+pub mod expression;
 pub mod layer_points;
 pub mod math;
 pub mod points_sample;
@@ -3229,5 +3231,216 @@ mod tests {
             .param(NodeRef::Effect(target.id), ParamId::new("radius"))
             .expect("Count drove nothing");
         assert_eq!(count, Value::Float(15.0), "not the far lattice's count");
+    }
+
+    // ---- Expression -------------------------------------------------------
+
+    /// An Expression box holding `source`, for the tests below.
+    fn expression(source: &str) -> EffectInstance {
+        let mut e = inst("expression");
+        expression::set_source(&mut e, source);
+        e
+    }
+
+    /// What `node`'s `port` carries at `lt` under `context`, or `None` when
+    /// the socket it feeds keeps its keyframes.
+    fn carried(
+        node: &EffectInstance,
+        port: &str,
+        lt: f64,
+        context: Arc<ExpressionContext>,
+    ) -> Option<Value> {
+        let target = inst("blur");
+        let graph = LayerGraph {
+            edges: vec![edge(node, port, NodeRef::Effect(target.id), "radius")],
+            nodes: vec![node.clone()],
+            ..LayerGraph::default()
+        };
+        resolve_drivers(&graph, lt, context, None)
+            .param(NodeRef::Effect(target.id), ParamId::new("radius"))
+    }
+
+    /// Which of the four sockets carry a value: the result's own kind fills
+    /// its sockets and the others hand the keyframes back.
+    fn sockets_of(node: &EffectInstance) -> Vec<(&'static str, Option<Value>)> {
+        [
+            expression::VALUE_PORT,
+            expression::COLOUR_PORT,
+            expression::POINT_X_PORT,
+            expression::POINT_Y_PORT,
+        ]
+        .into_iter()
+        .map(|port| (port, carried(node, port, 0.0, ctx())))
+        .collect()
+    }
+
+    /// A number fills Value and nothing else (node-graph.md §1.3).
+    #[test]
+    fn an_expression_returning_a_number_carries_only_its_value_port() {
+        assert_eq!(
+            sockets_of(&expression("20 + 1.5")),
+            vec![
+                ("value", Some(Value::Float(21.5))),
+                ("colour", None),
+                ("point_x", None),
+                ("point_y", None),
+            ]
+        );
+    }
+
+    /// A pair fills Point x and Point y and nothing else.
+    #[test]
+    fn an_expression_returning_a_point_carries_x_and_y_and_nothing_else() {
+        assert_eq!(
+            sockets_of(&expression("[3, 4.5]")),
+            vec![
+                ("value", None),
+                ("colour", None),
+                ("point_x", Some(Value::Float(3.0))),
+                ("point_y", Some(Value::Float(4.5))),
+            ]
+        );
+    }
+
+    /// Three or four numbers fill Colour and nothing else, alpha defaulting to
+    /// opaque exactly as `evaluate_value` documents.
+    #[test]
+    fn an_expression_returning_a_colour_carries_only_its_colour_port() {
+        assert_eq!(
+            sockets_of(&expression("[1.0, 0.5, 0.25]")),
+            vec![
+                ("value", None),
+                ("colour", Some(Value::Colour([1.0, 0.5, 0.25, 1.0]))),
+                ("point_x", None),
+                ("point_y", None),
+            ]
+        );
+        assert_eq!(
+            carried(&expression("[0.5, 2.0, 0.0, 0.5]"), "colour", 0.0, ctx()),
+            Some(Value::Colour([0.5, 2.0, 0.0, 0.5])),
+            "four numbers are a colour with its own alpha, unclamped"
+        );
+    }
+
+    /// A refused expression pushes nothing, and the parameter it is wired to
+    /// resolves to its own stored value — the same calm the walk gives a
+    /// bypassed driver or a spent budget. Every kind of refusal: a runtime
+    /// error, a syntax error, a name not in scope, a result of the wrong
+    /// shape, an infinity, and no text at all.
+    #[test]
+    fn a_refused_expression_pushes_nothing_and_the_wired_parameter_keeps_its_keyframes() {
+        let mut blur = inst("blur");
+        set(&mut blur, "radius", 40.0);
+        let radius = |source: &str| -> f32 {
+            let e = expression(source);
+            let graph = LayerGraph {
+                edges: vec![edge(&e, "value", NodeRef::Effect(blur.id), "radius")],
+                nodes: vec![e],
+                ..LayerGraph::default()
+            };
+            let drivers = resolve_drivers(&graph, 0.5, ctx(), None);
+            assert!(drivers.is_empty(), "{source:?} carried something");
+            crate::fx::resolve_stack_temporal_named(
+                std::slice::from_ref(&blur),
+                &drivers,
+                0.5,
+                0.5,
+                1000.0,
+                1.0,
+                &MarkerContext::NONE,
+                ctx(),
+            )
+            .1
+            .get(0)
+            .expect("one op")
+            .params
+            .float(ParamId::new("radius"), -1.0)
+        };
+        for refused in [
+            "1 / 0",
+            "1 +",
+            "no_such_name * 2",
+            "\"words\"",
+            "[1]",
+            "[1, 2, 3, 4, 5]",
+            "1.0 / 0.0",
+            "",
+            "   ",
+        ] {
+            assert_eq!(radius(refused), 40.0, "{refused:?}: the stored keyframe");
+        }
+    }
+
+    /// The expression reads the frame's `time`: two times, two numbers; the
+    /// same time twice, the same number. Nothing else moves it.
+    #[test]
+    fn an_expression_reads_the_layer_time() {
+        let at = |t: f64| {
+            Arc::new(ExpressionContext {
+                comp_time: t,
+                ..ExpressionContext::detached()
+            })
+        };
+        let e = expression("time * 2");
+        let value = |t: f64| carried(&e, "value", t, at(t)).expect("a number");
+        assert_eq!(value(0.25), Value::Float(0.5));
+        assert_eq!(value(1.5), Value::Float(3.0));
+        assert_eq!(value(1.5), value(1.5), "the same frame, the same number");
+        assert_ne!(value(0.25), value(1.5));
+    }
+
+    /// The source is stored on the instance under `extra["expression"]
+    /// ["source"]`, and it survives the document being written out and read
+    /// back — the shape the Custom shader's text takes.
+    #[test]
+    fn the_expression_source_round_trips_through_the_document() {
+        use crate::model::Document;
+
+        let fresh = inst("expression");
+        assert_eq!(
+            expression::source_of(&fresh),
+            "",
+            "a fresh box holds no text"
+        );
+
+        let e = expression("sin(time) * 50");
+        assert_eq!(expression::source_of(&e), "sin(time) * 50");
+        assert_eq!(
+            e.extra.get("expression").and_then(|b| b.get("source")),
+            Some(&serde_json::Value::String("sin(time) * 50".into())),
+            "the key the bridge and the shader share the shape of"
+        );
+
+        let graph = LayerGraph {
+            nodes: vec![e.clone()],
+            ..LayerGraph::default()
+        };
+        let context = staged(Vec::new(), graph);
+        let json = serde_json::to_string(&*context.document).expect("serialises");
+        let back: Document = serde_json::from_str(&json).expect("deserialises");
+        let comp = back.comp(context.comp.expect("a comp")).expect("the comp");
+        let layer = comp
+            .layers
+            .iter()
+            .find(|l| Some(l.id) == context.layer)
+            .expect("the layer");
+        let node = layer.graph.node(e.id).expect("the box came back");
+        assert_eq!(expression::source_of(node), "sin(time) * 50");
+
+        // Rewriting the text keeps whatever else sits under the block.
+        let mut e = e;
+        if let Some(block) = e
+            .extra
+            .get_mut("expression")
+            .and_then(|b| b.as_object_mut())
+        {
+            block.insert("origin".into(), serde_json::Value::String("typed".into()));
+        }
+        expression::set_source(&mut e, "time");
+        assert_eq!(expression::source_of(&e), "time");
+        assert_eq!(
+            e.extra.get("expression").and_then(|b| b.get("origin")),
+            Some(&serde_json::Value::String("typed".into()))
+        );
     }
 }

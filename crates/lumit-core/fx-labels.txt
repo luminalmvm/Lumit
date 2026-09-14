@@ -238,6 +238,7 @@ Edge colour
 Edge sharpness
 Edge type
 Edges
+Edit expression…
 Edit shader…
 Element 1
 Element 10
@@ -277,6 +278,7 @@ Evolution options
 Exclusion
 Expansion
 Exposure
+Expression
 Extract channels
 F-stop
 Fade
