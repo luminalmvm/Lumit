@@ -63,6 +63,10 @@ lumit-text = { path = "../lumit-text" }
 # alone, so the docs/05 layering is unbroken.
 lumit-import = { path = "../lumit-import" }
 lumit-keymap = { path = "../lumit-keymap" }
+# The addons folder and the model runtime (docs/impl/addons.md §5). The bridge
+# is the composition root for these too: the Addons page is the one place that
+# knows what the user asked for and what the folder holds at once.
+lumit-ml = { path = "../lumit-ml" }
 lumit-project = { path = "../lumit-project" }
 # The realtime preview-tier controller lives here as a pure,
 # tested decision core; the bridge feeds it measured render costs and reads the

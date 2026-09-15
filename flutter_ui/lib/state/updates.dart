@@ -33,9 +33,15 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 
 import 'cache_dir.dart';
+import 'download.dart';
 import 'install_site.dart';
 import 'release_signature.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
+
+// The download, the digest check and the plain text fetch are shared with the
+// addons page, so they live in `download.dart`. This one stays exported from
+// here because the updater's own tests name it.
+export 'download.dart' show AssetDownloader;
 
 /// The repository releases are published from (the website reads the same one).
 const String updatesRepository = 'luminalmvm/lumit';
@@ -409,16 +415,6 @@ int compareVersions(String a, String b) {
 /// without a network.
 typedef ReleaseFetcher = Future<Map<String, dynamic>> Function(Uri url);
 
-/// Fetching the installer. [onProgress] is called with bytes received and the
-/// total expected; [cancelled] is asked as it goes and a true answer abandons
-/// the download. Injected for the same reason.
-typedef AssetDownloader = Future<void> Function(
-  Uri url,
-  File into, {
-  required void Function(int received, int total) onProgress,
-  required bool Function() cancelled,
-});
-
 /// Handing the downloaded file to the system. Injected so a test never runs an
 /// installer, which is the one thing in this file that cannot be undone.
 typedef InstallerLauncher = Future<void> Function(File file, String platform);
@@ -491,7 +487,7 @@ class UpdateService extends ChangeNotifier {
         site = site ?? InstallSite.detect(),
         _fetch = fetch ?? _fetchReleaseJson,
         _fetchBytes = fetchBytes ?? _fetchSmallFile,
-        _download = download ?? _downloadAsset,
+        _download = download ?? downloadAsset,
         _launch = launch ?? _launchInstaller,
         _extract = extract ?? _extractArchive,
         _relaunch = relaunch ?? _relaunchLumit,
@@ -667,16 +663,8 @@ class UpdateService extends ChangeNotifier {
   /// Check the file against what the release said it would be.
   ///
   /// Returns null when it is sound, or the sentence to show when it is not.
-  /// This is the gate before anything is executed: an installer is the most
-  /// dangerous file Lumit ever touches, so it is run only when its length and
-  /// — where GitHub publishes one — its digest are exactly what the release
-  /// described.
-  ///
-  /// The length is read synchronously on purpose: it keeps the whole sequence
-  /// — offer, download, verify, restart — free of real asynchronous IO except
-  /// where a digest genuinely needs streaming, which is what lets a widget test
-  /// drive the windows from end to end (`flutter_test` does not run real IO
-  /// outside `runAsync`).
+  /// The checking itself is `download.dart`'s, shared with the addons page;
+  /// the sentence shown when it fails is the updater's own.
   Future<String?> _verify(File file, UpdateRelease release) async {
     final length = file.lengthSync();
     if (release.assetBytes > 0 && length != release.assetBytes) {
@@ -887,32 +875,16 @@ void _exitProcess() => exit(0);
 Directory _defaultDownloadFolder() =>
     Directory('${lumitCacheDir().path}${Platform.pathSeparator}update');
 
-/// GitHub wants a user agent and answers JSON. Nothing is authenticated: the
-/// releases of a public repository are public, and asking anonymously means
-/// Lumit never holds a token.
+/// GitHub answers JSON and wants a media type named. The fetch itself is
+/// `download.dart`'s; what comes back has to be an object for the parser above
+/// to read it.
 Future<Map<String, dynamic>> _fetchReleaseJson(Uri url) async {
-  final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
-  try {
-    final request = await client.getUrl(url);
-    request.headers.set(HttpHeaders.userAgentHeader, 'Lumit');
-    request.headers
-        .set(HttpHeaders.acceptHeader, 'application/vnd.github+json');
-    final response = await request.close();
-    if (response.statusCode != 200) {
-      // Drained rather than dropped: an undrained response holds the socket.
-      await response.drain<void>();
-      throw HttpException(l10n.updateServerAnswered('${response.statusCode}'),
-          uri: url);
-    }
-    final body = await response.transform(utf8.decoder).join();
-    final json = jsonDecode(body);
-    if (json is! Map<String, dynamic>) {
-      throw FormatException(l10n.updateBadReleaseData);
-    }
-    return json;
-  } finally {
-    client.close(force: true);
+  final body = await fetchText(url, accept: 'application/vnd.github+json');
+  final json = jsonDecode(body);
+  if (json is! Map<String, dynamic>) {
+    throw FormatException(l10n.updateBadReleaseData);
   }
+  return json;
 }
 
 /// Fetch a small file whole, refusing one that turns out not to be small.
@@ -946,41 +918,6 @@ Future<List<int>> _fetchSmallFile(Uri url, int maxBytes) async {
   }
 }
 
-/// Stream the attachment to disk. GitHub redirects asset URLs at its CDN, which
-/// `HttpClient` follows; the file is written as it arrives rather than held in
-/// memory, because these are hundreds of megabytes.
-Future<void> _downloadAsset(
-  Uri url,
-  File into, {
-  required void Function(int received, int total) onProgress,
-  required bool Function() cancelled,
-}) async {
-  final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
-  IOSink? sink;
-  try {
-    final request = await client.getUrl(url);
-    request.headers.set(HttpHeaders.userAgentHeader, 'Lumit');
-    final response = await request.close();
-    if (response.statusCode != 200) {
-      await response.drain<void>();
-      throw HttpException(l10n.updateDownloadAnswered('${response.statusCode}'),
-          uri: url);
-    }
-    final total = response.contentLength;
-    var received = 0;
-    sink = into.openWrite();
-    await for (final chunk in response) {
-      if (cancelled()) break;
-      sink.add(chunk);
-      received += chunk.length;
-      onProgress(received, total);
-    }
-  } finally {
-    await sink?.flush();
-    await sink?.close();
-    client.close(force: true);
-  }
-}
 
 /// Start the installer, detached, so it outlives the process that started it —
 /// which it has to, since that process is about to end.

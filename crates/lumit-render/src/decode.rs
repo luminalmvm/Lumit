@@ -377,6 +377,21 @@ pub struct DecodePool {
     /// own. Falls back to a headless device, then to the CPU oracle;
     /// lumit-flow degrades by itself and never faults.
     flow_engine: Option<lumit_flow::FlowEngine>,
+    /// The synthesis model, opened on the first frame whose Flow engine row
+    /// names it and never before: a model runs only where a control names it
+    /// (docs/impl/addons.md §2). The refusal is kept beside the model because
+    /// opening a pack costs a second and asking again every frame would pay
+    /// that second every frame; the row's own sentence is read from
+    /// [`synthesis_refusal`] instead. The number is the addons folder's
+    /// generation when it was opened, so installing the pack is enough to get
+    /// the model painting without restarting Lumit.
+    synthesis: Option<(u64, Result<lumit_ml::Synthesis, lumit_ml::MlError>)>,
+    /// Whether a model that will not paint is a failure rather than a
+    /// substitution. Set on the pool an export renders through: a preview is a
+    /// thing you are looking at and a file is a thing you keep, so preview
+    /// stands the built-in engine in and says so on the row while an export
+    /// abandons the run (docs/08 §3.1, docs/impl/addons.md §6.3).
+    refuse_substitution: bool,
     /// The renderer's GPU, when the owner shared it.
     gpu: Option<lumit_gpu::GpuContext>,
     /// Measured flow pairs, so a scrub does not remeasure and the two
@@ -461,6 +476,8 @@ impl DecodePool {
             decoders: HashMap::new(),
             frame_cache: lumit_cache::ByteLru::new(DEFAULT_DECODE_CACHE_BYTES),
             flow_engine: None,
+            synthesis: None,
+            refuse_substitution: false,
             gpu: None,
             flow_cache: lumit_cache::ByteLru::new(DEFAULT_FLOW_CACHE_BYTES),
             comp_decodes: 0,
@@ -547,6 +564,14 @@ impl DecodePool {
             .unwrap_or(lumit_budget::Pressure::Easy)
     }
 
+    /// Fail rather than stand the built-in engine in when a layer's model
+    /// engine will not paint. Set on the pool an export writes through, and on
+    /// no other: the substitution is what keeps a shot lookable while a pack is
+    /// missing, and the refusal is what keeps it out of a file (docs/08 §3.1).
+    pub fn refuse_substitution(&mut self) {
+        self.refuse_substitution = true;
+    }
+
     /// How many comp frames this pool has decoded since it was made.
     #[must_use]
     pub fn comp_decodes(&self) -> u64 {
@@ -625,6 +650,8 @@ impl DecodePool {
             &mut self.decoders,
             &mut self.frame_cache,
             &mut self.flow_engine,
+            &mut self.synthesis,
+            self.refuse_substitution,
             &mut self.flow_cache,
             self.gpu.as_ref(),
             comp,
@@ -871,6 +898,209 @@ fn flow_for(
     (fwd, bwd)
 }
 
+/// Why the frame in front of you was painted by the built-in engine when the
+/// layer asked for a model (docs/impl/addons.md §6.3, §9).
+///
+/// Preview substitutes rather than refusing, because a shot you cannot look at
+/// is worse than one drawn with the other engine, but it never substitutes
+/// quietly: this is what the Flow group's engine row reads its description
+/// line from, and an export with a missing pack refuses to start rather than
+/// writing the substitution to a file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SynthesisRefusal {
+    /// No model runtime is installed, so no pack can be opened at all.
+    RuntimeMissing,
+    /// The runtime is there and nothing installed does synthesis.
+    PackMissing,
+    /// The pack is installed and would not open or would not run. Carries the
+    /// library's own sentence for the detail slot.
+    Failed(String),
+    /// The source is scene-linear float, whose values go above one, and the
+    /// model was trained on nought to one. Clamping an EXR to paint a frame
+    /// would be a quiet lie about the picture, so the built-in engine, which
+    /// carries float end to end, paints this one.
+    FloatSource,
+}
+
+/// The last refusal any decode pool met, the layer it was drawn for, and the
+/// addons-folder generation it was true of.
+///
+/// Process-wide because the reader is the bridge and the writer is whichever
+/// decode thread drew last. The layer is kept beside it because one of the
+/// refusals is not about the machine at all: a scene-linear source is a fact
+/// about one layer's footage, and the layer next to it on ordinary rushes is
+/// painted by the model all the same. The lock is taken to read or write one
+/// small value and never held across anything else.
+static SYNTHESIS_REFUSAL: std::sync::OnceLock<
+    std::sync::Mutex<Option<(u64, Uuid, SynthesisRefusal)>>,
+> = std::sync::OnceLock::new();
+
+/// Whether a refusal is one every layer on the model engine shares, rather
+/// than one about a single layer's own source.
+fn machine_wide(why: &SynthesisRefusal) -> bool {
+    !matches!(why, SynthesisRefusal::FloatSource)
+}
+
+/// The refusal still standing, and the layer it was about.
+///
+/// A refusal recorded before the user installed or removed something is not an
+/// answer about what is installed now, so it is dropped rather than shown: the
+/// addons folder's generation is kept beside it for exactly that.
+fn refusal_held() -> Option<(Uuid, SynthesisRefusal)> {
+    let held = SYNTHESIS_REFUSAL
+        .get_or_init(Default::default)
+        .lock()
+        .ok()?;
+    let (at, layer, why) = held.as_ref()?;
+    (*at == lumit_ml::store::generation()).then(|| (*layer, why.clone()))
+}
+
+/// What the engine row on `layer` says about the model: the machine's own
+/// refusal, or this layer's.
+#[must_use]
+pub fn synthesis_refusal(layer: Uuid) -> Option<SynthesisRefusal> {
+    let (about, why) = refusal_held()?;
+    (machine_wide(&why) || about == layer).then_some(why)
+}
+
+/// The refusal every layer shares, which is the one an export pre-flight can
+/// ask about before it knows which layer it is going to draw.
+fn machine_refusal() -> Option<SynthesisRefusal> {
+    let (_, why) = refusal_held()?;
+    machine_wide(&why).then_some(why)
+}
+
+/// Record what happened to the last frame of `layer` that asked for a model: a
+/// refusal, or `None` when it painted.
+fn note_synthesis(layer: Uuid, what: Option<SynthesisRefusal>) {
+    let Ok(mut held) = SYNTHESIS_REFUSAL.get_or_init(Default::default).lock() else {
+        return;
+    };
+    match what {
+        Some(why) => *held = Some((lumit_ml::store::generation(), layer, why)),
+        // A frame painted proves the machine can paint, so a refusal about the
+        // machine is stale. It proves nothing about another layer's source, so
+        // that one stays where it was.
+        None => {
+            if held
+                .as_ref()
+                .is_none_or(|(_, about, why)| *about == layer || machine_wide(why))
+            {
+                *held = None;
+            }
+        }
+    }
+}
+
+/// One layer or clip that asks for an addon this machine has not got.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Need {
+    /// The composition it sits in.
+    pub comp: Uuid,
+    /// The layer that asks.
+    pub layer: Uuid,
+    /// The clip inside a Sequence layer, when it is a clip that asks rather
+    /// than the layer itself.
+    pub clip: Option<Uuid>,
+}
+
+/// Every layer and clip in `doc` whose Flow engine names a model this machine
+/// cannot run (docs/impl/addons.md §6.3).
+///
+/// One function, two readers: the Flow group's engine row says so in preview,
+/// and export start refuses before it writes a frame. Preview drawing with
+/// the built-in engine and an export writing the same substitution are
+/// different things: a preview is a thing you are looking at, and a file is a
+/// thing you keep (docs/08 §3.1, docs/04 §10 - an export never silently
+/// downgrades).
+///
+/// It lives here rather than in `lumit-ml` because it reads a document, and
+/// `lumit-ml` knows nothing about one: it is a leaf crate under `lumit-core`,
+/// not above it.
+#[must_use]
+pub fn addon_needs(doc: &lumit_core::model::Document) -> Vec<Need> {
+    use lumit_core::model::{LayerKind, ProjectItem};
+    use lumit_core::retime::{FlowEngineChoice, Interpolation};
+    let wants_model = |interpolation: &Interpolation| matches!(interpolation, Interpolation::Flow(p) if p.engine == FlowEngineChoice::Rife);
+    // Asked once for the whole document, off the snapshot, so a project with
+    // three hundred layers does not walk the addons folder three hundred
+    // times.
+    if !doc.items.iter().any(|item| match item {
+        ProjectItem::Composition(comp) => comp.layers.iter().any(|layer| {
+            wants_model(&layer.interpolation)
+                || matches!(&layer.kind, LayerKind::Sequence { clips }
+                    if clips.iter().any(|clip| wants_model(&clip.interpolation)))
+        }),
+        _ => false,
+    }) {
+        return Vec::new();
+    }
+    // Installed is not the same as able to paint. The runtime can be there and
+    // refuse to load, and the pack can be the one the last frame that asked
+    // could not open, and an export that started on either of those would write
+    // the built-in engine's frames under the name of a model. The row reads the
+    // same three pieces of evidence, which is what "one function, two readers"
+    // means (§6.3).
+    if lumit_ml::synthesis::installed_identity().is_some()
+        && !matches!(
+            lumit_ml::runtime::status(),
+            lumit_ml::RuntimeStatus::Missing | lumit_ml::RuntimeStatus::Failed { .. }
+        )
+        && machine_refusal().is_none()
+    {
+        return Vec::new();
+    }
+
+    let mut needs = Vec::new();
+    for item in &doc.items {
+        let ProjectItem::Composition(comp) = item else {
+            continue;
+        };
+        for layer in &comp.layers {
+            if wants_model(&layer.interpolation) {
+                needs.push(Need {
+                    comp: comp.id,
+                    layer: layer.id,
+                    clip: None,
+                });
+            }
+            let LayerKind::Sequence { clips } = &layer.kind else {
+                continue;
+            };
+            for clip in clips.iter().filter(|clip| wants_model(&clip.interpolation)) {
+                needs.push(Need {
+                    comp: comp.id,
+                    layer: layer.id,
+                    clip: Some(clip.id),
+                });
+            }
+        }
+    }
+    needs
+}
+
+/// A model refusal as the sentence the export queue's row shows for the run it
+/// abandoned. The same channel every other export failure comes back through,
+/// and the one place the reason has to be said in words rather than picked off
+/// an enum, because nothing is left on screen to hang the enum on.
+fn refusal_sentence(why: &SynthesisRefusal) -> String {
+    match why {
+        SynthesisRefusal::RuntimeMissing => "the model runtime is not installed".into(),
+        SynthesisRefusal::PackMissing => "the RIFE pack is not installed".into(),
+        SynthesisRefusal::Failed(detail) => format!("RIFE would not run here: {detail}"),
+        SynthesisRefusal::FloatSource => "RIFE cannot read scene-linear footage".into(),
+    }
+}
+
+/// A model's own refusal as the row's.
+fn synthesis_refusal_of(why: &lumit_ml::MlError) -> SynthesisRefusal {
+    match why {
+        lumit_ml::MlError::RuntimeMissing => SynthesisRefusal::RuntimeMissing,
+        lumit_ml::MlError::PackMissing(_) => SynthesisRefusal::PackMissing,
+        other => SynthesisRefusal::Failed(other.to_string()),
+    }
+}
+
 /// The flow engine for this pool: on the renderer's device when one was
 /// shared, otherwise a headless device of its own, otherwise the CPU oracle.
 fn flow_engine_for(gpu: Option<&lumit_gpu::GpuContext>) -> lumit_flow::FlowEngine {
@@ -936,6 +1166,9 @@ fn combine_pair(
     decoders: &mut HashMap<Uuid, lumit_media::VideoDecoder>,
     cache: &mut lumit_cache::ByteLru<FrameCacheKey, CachedFrame>,
     flow_engine: &mut Option<lumit_flow::FlowEngine>,
+    synthesis: &mut Option<(u64, Result<lumit_ml::Synthesis, lumit_ml::MlError>)>,
+    refuse: bool,
+    refused: &mut Option<SynthesisRefusal>,
     flow_cache: &mut lumit_cache::ByteLru<FlowKey, CachedFlow>,
     gpu: Option<&lumit_gpu::GpuContext>,
     job: &CompJob,
@@ -968,8 +1201,37 @@ fn combine_pair(
             lumit_core::pixels::blend_rgba(&a.rgba, &b.rgba, w)
         });
     };
-    let set = flow_settings(params);
     let (fw, fh) = (a.width as usize, a.height as usize);
+    // A phase at either end is a frame already in hand, whichever engine the
+    // layer names, and both engines promise it bit for bit. Answered before
+    // either is asked, so the ends of a ramp cost nothing and cannot drift.
+    if let Some(frame) = lumit_ml::synthesis::endpoint(&a.rgba, &b.rgba, w) {
+        return Ok(frame.to_vec());
+    }
+    // The model paints the frame directly and measures nothing, so it sits
+    // above every line of the built-in engine's work: a field measured here
+    // would be a field nothing reads, paid for again at every shutter moment
+    // (docs/impl/addons.md §6.3).
+    if params.engine == lumit_core::retime::FlowEngineChoice::Rife {
+        match synthesised(synthesis, &a, &b, fw, fh, w, float) {
+            Ok(painted) => {
+                note_synthesis(job.layer, None);
+                return Ok(painted);
+            }
+            // An export carries the refusal out and abandons the file. The
+            // pre-flight turns away everything it can see from the document
+            // alone, and this is the rest: a pack that opened and then would
+            // not run, and a source the model was not trained on (§6.3, §9).
+            Err(why) if refuse => {
+                let sentence = refusal_sentence(&why);
+                *refused = Some(why);
+                return Err(sentence);
+            }
+            // Preview substitutes and says so on the layer's own engine row.
+            Err(why) => note_synthesis(job.layer, Some(why)),
+        }
+    }
+    let set = flow_settings(params);
     let (ga, gb, _) = if float {
         lumit_flow::flow_grays_f32(&a.rgba, &b.rgba, fw, fh, &set)
     } else {
@@ -998,11 +1260,47 @@ fn combine_pair(
     })
 }
 
+/// The in-between frame as the model paints it, or the reason it did not.
+///
+/// The pack is opened on the first frame that asks and kept for the life of
+/// the pool: opening one costs about a second while DirectML compiles the
+/// graph, and a scrub asks for a frame many times a second. A pack that
+/// refused to open is kept as the refusal for the same reason, so a machine
+/// with nothing installed does not try to open nothing sixty times a second.
+/// Installing one moves the addons folder's generation, and the next frame
+/// opens the pack that has just arrived.
+fn synthesised(
+    synthesis: &mut Option<(u64, Result<lumit_ml::Synthesis, lumit_ml::MlError>)>,
+    a: &FramePixels,
+    b: &FramePixels,
+    width: usize,
+    height: usize,
+    phi: f32,
+    float: bool,
+) -> Result<Vec<u8>, SynthesisRefusal> {
+    if float {
+        return Err(SynthesisRefusal::FloatSource);
+    }
+    // A pack installed since the door was opened is a different answer, and
+    // one the user has just pressed a button to get.
+    let now = lumit_ml::store::generation();
+    if synthesis.as_ref().is_none_or(|(at, _)| *at != now) {
+        *synthesis = Some((now, lumit_ml::Synthesis::open()));
+    }
+    let (_, door) = synthesis.as_mut().ok_or(SynthesisRefusal::PackMissing)?;
+    let model = door.as_mut().map_err(|why| synthesis_refusal_of(why))?;
+    model
+        .synthesise(&a.rgba, &b.rgba, width, height, phi)
+        .map_err(|why| synthesis_refusal_of(&why))
+}
+
 #[allow(clippy::too_many_arguments)] // one worker call; bundling would hide it
 fn decode_comp(
     decoders: &mut HashMap<Uuid, lumit_media::VideoDecoder>,
     cache: &mut lumit_cache::ByteLru<FrameCacheKey, CachedFrame>,
     flow_engine: &mut Option<lumit_flow::FlowEngine>,
+    synthesis: &mut Option<(u64, Result<lumit_ml::Synthesis, lumit_ml::MlError>)>,
+    refuse: bool,
     flow_cache: &mut lumit_cache::ByteLru<FlowKey, CachedFlow>,
     gpu: Option<&lumit_gpu::GpuContext>,
     comp: Uuid,
@@ -1149,6 +1447,10 @@ fn decode_comp(
         // of this clip is the same file at the same width, so they all carry
         // the plate's own sample width (docs/impl/media-io.md §5a).
         let format = px.format;
+        // A shutter moment that will not decode is left out, as it always has
+        // been, so the refusal an export must not swallow is carried out of the
+        // closure rather than read off the error the moment was dropped with.
+        let mut refused: Option<SynthesisRefusal> = None;
         let shutter: Vec<(f64, Box<CompLayerPixels>)> = job
             .shutter
             .iter()
@@ -1170,6 +1472,9 @@ fn decode_comp(
                     decoders,
                     cache,
                     flow_engine,
+                    synthesis,
+                    refuse,
+                    &mut refused,
                     flow_cache,
                     gpu,
                     job,
@@ -1202,12 +1507,21 @@ fn decode_comp(
                 ))
             })
             .collect();
+        // A moment the model would not paint is a moment missing from an
+        // exported frame's blur, which is the same silent downgrade one frame
+        // further down (docs/08 §3.1).
+        if let Some(why) = &refused {
+            return Err(refusal_sentence(why));
+        }
         // Blend / Flow policy: combine with the next source frame.
         let (width, height) = (px.width, px.height);
         let rgba = combine_pair(
             decoders,
             cache,
             flow_engine,
+            synthesis,
+            refuse,
+            &mut refused,
             flow_cache,
             gpu,
             job,
@@ -1357,6 +1671,118 @@ mod tests {
         };
         assert!(pool.charge(&made).is_none());
         assert_eq!(pool.ram_pressure(), lumit_budget::Pressure::Easy);
+    }
+
+    /// One at a time wherever the addons folder is pointed somewhere of its
+    /// own or the recorded refusal is written: both are process-wide, so two
+    /// overlapping tests would read each other's answers.
+    fn serially() -> std::sync::MutexGuard<'static, ()> {
+        static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        SERIAL.lock().unwrap_or_else(|held| held.into_inner())
+    }
+
+    /// **One layer's refusal is one layer's answer.** A scene-linear source is
+    /// a fact about a layer's own footage, so with an EXR layer and a MOV layer
+    /// both on the model engine the sentence belongs on the EXR layer's row and
+    /// nowhere else, and the MOV layer painting must not rub it out. A machine
+    /// with no runtime is the other sort: every layer on the model engine reads
+    /// it, and any frame painted proves it stale (docs/impl/addons.md §6.3, §9).
+    #[test]
+    fn a_refusal_about_one_layer_is_not_an_answer_about_another() {
+        let _serial = serially();
+        let (exr, mov) = (Uuid::now_v7(), Uuid::now_v7());
+
+        note_synthesis(exr, Some(SynthesisRefusal::FloatSource));
+        assert_eq!(synthesis_refusal(exr), Some(SynthesisRefusal::FloatSource));
+        assert_eq!(
+            synthesis_refusal(mov),
+            None,
+            "another layer's footage is not this layer's"
+        );
+
+        // The other layer paints. That says nothing about the first one's
+        // source, so the first one's row keeps what it had.
+        note_synthesis(mov, None);
+        assert_eq!(
+            synthesis_refusal(exr),
+            Some(SynthesisRefusal::FloatSource),
+            "no silent downgrade: the row that was refused still says so"
+        );
+
+        let broke = SynthesisRefusal::Failed("would not open".into());
+        note_synthesis(mov, Some(broke.clone()));
+        assert_eq!(
+            synthesis_refusal(exr),
+            Some(broke),
+            "a pack that will not open is every layer's answer"
+        );
+        note_synthesis(exr, None);
+        assert_eq!(
+            synthesis_refusal(mov),
+            None,
+            "and a frame painted clears it"
+        );
+    }
+
+    /// **An export abandons the file rather than writing the built-in engine's
+    /// frame under the model's name.** Preview stands the other engine in and
+    /// says so on the row, because a shot you cannot look at is worse than one
+    /// drawn the other way; a file is a thing the user keeps, so the run stops
+    /// (docs/08 §3.1, docs/04 §10, docs/impl/addons.md §6.3).
+    #[test]
+    fn an_export_refuses_the_frame_a_model_would_not_paint() {
+        let _serial = serially();
+        // A folder of its own with nothing in it: this machine has no pack.
+        let empty = tempfile::tempdir().unwrap();
+        lumit_ml::store::with_dir(Some(empty.path().to_path_buf()));
+
+        let (layer, item) = (Uuid::now_v7(), Uuid::now_v7());
+        let frame = |value: u8| lumit_media::DecodedFrame {
+            width: 4,
+            height: 4,
+            rgba: vec![value; 4 * 4 * 4],
+            format: lumit_media::PixelFormat::Srgb8,
+        };
+        let job = || CompJob {
+            layer,
+            item,
+            source: lumit_media::MediaSource::file("Z:/definitely/not/here/gone.mp4"),
+            source_frame: 0,
+            target_width: None,
+            natural_w: 4,
+            natural_h: 4,
+            // Half way between two frames, which is where an engine is asked
+            // for a picture neither frame has.
+            blend: Some((1, 0.5)),
+            flow: Some(lumit_core::retime::FlowParams {
+                engine: lumit_core::retime::FlowEngineChoice::Rife,
+                ..Default::default()
+            }),
+            temporal: Vec::new(),
+            flow_neighbours: Vec::new(),
+            slate: false,
+            channels: None,
+            shutter: Vec::new(),
+            shutter_flow: None,
+        };
+
+        let mut pool = DecodePool::new();
+        pool.refuse_substitution();
+        // Both ends of the pair handed over rather than decoded, so the test
+        // needs no media and the file in the job never has to exist.
+        pool.preload(item, 0, None, frame(10));
+        pool.preload(item, 1, None, frame(200));
+        let Err(why) = pool.decode_comp(Uuid::now_v7(), 0, &[job()], 0, &|_| {}) else {
+            panic!("an export never writes the substitution");
+        };
+        assert!(!why.is_empty(), "and it says what stopped it: {why}");
+        assert_eq!(
+            synthesis_refusal(layer),
+            None,
+            "an export leaves no sentence on a row: it failed instead"
+        );
+
+        lumit_ml::store::with_dir(None);
     }
 
     /// **The decode-ahead hand-off.** A frame filed by [`DecodePool::preload`]
@@ -1557,6 +1983,197 @@ mod tests {
                 "a synthesis knob must not split the measurement cache"
             );
         }
+    }
+
+    /// A float source is never handed to the model, and the substitution says
+    /// so by name (docs/impl/addons.md §6.3).
+    ///
+    /// A scene-linear frame carries values above one and the model was
+    /// trained on nought to one, so painting one would mean clamping an EXR
+    /// and calling the result the user's picture. The built-in engine carries
+    /// float end to end, so it paints this one and the row reads why. Proven
+    /// with no pack installed, because the refusal has to come before the
+    /// model is even opened.
+    #[test]
+    fn a_float_source_is_refused_by_name_rather_than_clamped() {
+        let frame = |value: u8| FramePixels {
+            width: 2,
+            height: 2,
+            rgba: vec![value; 4 * 4 * 4],
+            format: lumit_media::PixelFormat::LinearF32,
+            frame: 0,
+            item: Uuid::now_v7(),
+        };
+        let mut door = None;
+        let refusal = synthesised(&mut door, &frame(1), &frame(2), 2, 2, 0.5, true)
+            .expect_err("a float source is never painted by the model");
+        assert_eq!(refusal, SynthesisRefusal::FloatSource);
+        assert!(door.is_none(), "and nothing opened a pack to find that out");
+    }
+
+    /// Every layer and clip that asks for a model this machine has not got is
+    /// named, and nothing else is (docs/impl/addons.md §6.3).
+    ///
+    /// This is what export start refuses on, so a layer it missed would mean
+    /// an export written with the built-in engine under the name of a model,
+    /// which docs/08 §3.1 forbids outright.
+    #[test]
+    fn a_document_that_asks_for_a_model_names_what_needs_it() {
+        let _serial = serially();
+        use lumit_core::model::{
+            BlendMode, Composition, Document, Layer, LayerKind, LinearColour, ProjectItem,
+            Switches, TransformGroup,
+        };
+        use lumit_core::retime::{FlowEngineChoice, FlowParams, Interpolation};
+        use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
+
+        let flow = |engine: FlowEngineChoice| {
+            Interpolation::Flow(FlowParams {
+                engine,
+                ..FlowParams::default()
+            })
+        };
+        let at = |n: i64| CompTime(Rational::new(n, 1).unwrap());
+        let layer = |kind: LayerKind, interpolation: Interpolation| Layer {
+            graph: Default::default(),
+            markers: Vec::new(),
+            id: Uuid::now_v7(),
+            name: "layer".into(),
+            kind,
+            in_point: at(0),
+            out_point: at(4),
+            start_offset: at(0),
+            transform: TransformGroup::default(),
+            matte: None,
+            parent: None,
+            label: 0,
+            volume_db: lumit_core::anim::Property::zero(),
+            pan: lumit_core::anim::Property::zero(),
+            audio_only: false,
+            adjustment: false,
+            retime: None,
+            interpolation,
+            parked_flow: None,
+            graph_inputs: None,
+            blend: BlendMode::Normal,
+            masks: Vec::new(),
+            paint: Vec::new(),
+            puppet: None,
+            effects: Vec::new(),
+            styles: Vec::new(),
+            switches: Switches::default(),
+            extra: serde_json::Map::new(),
+        };
+
+        let item = Uuid::now_v7();
+        let plain = layer(LayerKind::Footage { item }, flow(FlowEngineChoice::Dis));
+        let asks = layer(LayerKind::Footage { item }, flow(FlowEngineChoice::Rife));
+        let mut clip = lumit_core::sequence::Clip::new(
+            lumit_core::sequence::ClipSource::Footage(item),
+            Rational::ZERO,
+            Rational::new(1, 1).unwrap(),
+            Rational::ZERO,
+            Rational::new(1, 1).unwrap(),
+        );
+        clip.interpolation = flow(FlowEngineChoice::Rife);
+        let clip_id = clip.id;
+        let row = layer(
+            LayerKind::Sequence { clips: vec![clip] },
+            Interpolation::Nearest,
+        );
+        let (asks_id, row_id) = (asks.id, row.id);
+        let comp = Composition {
+            graph: None,
+            master_volume_db: 0.0,
+            sound_mix: false,
+            groups: Vec::new(),
+            beat_grid: None,
+            id: Uuid::now_v7(),
+            name: "Needs".into(),
+            width: 64,
+            height: 64,
+            frame_rate: FrameRate::new(24, 1).unwrap(),
+            duration: Duration(Rational::new(4, 1).unwrap()),
+            background: LinearColour::BLACK,
+            work_area: None,
+            layers: vec![plain, asks, row],
+            markers: Vec::new(),
+            motion_blur: Default::default(),
+            extra: serde_json::Map::new(),
+        };
+        let comp_id = comp.id;
+
+        let mut doc = Document::new();
+        doc.items.push(ProjectItem::Composition(comp));
+
+        // A folder of its own with nothing in it: the machine has no pack.
+        let empty = tempfile::tempdir().unwrap();
+        lumit_ml::store::with_dir(Some(empty.path().to_path_buf()));
+        let needs = addon_needs(&doc);
+        lumit_ml::store::with_dir(None);
+
+        assert_eq!(
+            needs,
+            vec![
+                Need {
+                    comp: comp_id,
+                    layer: asks_id,
+                    clip: None
+                },
+                Need {
+                    comp: comp_id,
+                    layer: row_id,
+                    clip: Some(clip_id)
+                },
+            ],
+            "the layer and the clip that ask, and neither of the two that do not"
+        );
+
+        // A document that asks for nothing needs nothing, whatever is or is
+        // not installed.
+        assert!(addon_needs(&Document::new()).is_empty());
+
+        // And with both installed: a pack that is there is not a pack that
+        // paints, so the refusal the last frame recorded is a need too, or an
+        // export would start on a pack that has already given up once.
+        let home = tempfile::tempdir().unwrap();
+        let pack = |id: &str, kind: &str, file: &str, model: &str| {
+            let folder = home.path().join(id);
+            std::fs::create_dir_all(&folder).unwrap();
+            std::fs::write(folder.join(file), [0u8; 12]).unwrap();
+            std::fs::write(
+                folder.join(lumit_ml::store::MANIFEST_FILE),
+                format!(
+                    r#"{{"format":1,"id":"{id}","kind":"{kind}","name":"Test","version":"1",
+                       "licence":"MIT","platforms":{{"any":{{"downloads":[
+                         {{"url":"https://example.invalid/{file}",
+                           "sha256":"0000000000000000000000000000000000000000000000000000000000000001",
+                           "size":12,"unpack":"file","dest":"{file}"}}]}}}}{model}}}"#
+                ),
+            )
+            .unwrap();
+        };
+        pack("runtime", "runtime", lumit_ml::runtime::LIBRARY, "");
+        pack(
+            "rife",
+            "model",
+            "rife.onnx",
+            r#","model":{"task":"synthesis","arch":"rife","file":"rife.onnx"}"#,
+        );
+        lumit_ml::store::with_dir(Some(home.path().to_path_buf()));
+
+        assert!(
+            addon_needs(&doc).is_empty(),
+            "installed, and nothing has said it will not run"
+        );
+        note_synthesis(asks_id, Some(SynthesisRefusal::Failed("no graph".into())));
+        assert_eq!(
+            addon_needs(&doc).len(),
+            2,
+            "the pack is installed and it would not run, so the export waits"
+        );
+        note_synthesis(asks_id, None);
+        lumit_ml::store::with_dir(None);
     }
 
     /// A measured pair comes back from the cache instead of being measured

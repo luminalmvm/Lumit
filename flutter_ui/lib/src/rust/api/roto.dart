@@ -9,8 +9,8 @@ import 'layer.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 
-// These functions are ignored because they are not marked as `pub`: `boundary_of`, `job_of`, `media_rate`, `press`, `read`, `read`, `roto_block_mut`, `roto_block`, `stroke_of`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `boundary_of`, `job_of`, `media_rate`, `press`, `prompt_of`, `read`, `read`, `roto_block_mut`, `roto_block`, `stroke_of`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// The Roto brush `effect` on `layer`, as its status row draws it.
 ///
@@ -118,7 +118,47 @@ enum BridgeRotoFailure {
 
   /// The base frame's strokes do not describe a subject.
   noSeeds,
+
+  /// The seed row asks for a segmentation model and this machine has not got
+  /// one. The Addons page is where that is mended.
+  modelMissing,
+
+  /// The model is installed and would not open or would not run.
+  modelFailed,
   ;
+}
+
+/// One stored prompt, as the overlay draws it.
+class BridgeRotoPrompt {
+  final UuidValue id;
+
+  /// `[x0, y0, x1, y1, …]` in source raster pixels, as a stroke's are.
+  final Float32List points;
+
+  /// One byte a point: 1 for a tap on the subject, 0 for one against it.
+  final Uint8List labels;
+  final PlatformInt64 frame;
+
+  const BridgeRotoPrompt({
+    required this.id,
+    required this.points,
+    required this.labels,
+    required this.frame,
+  });
+
+  @override
+  int get hashCode =>
+      id.hashCode ^ points.hashCode ^ labels.hashCode ^ frame.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeRotoPrompt &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          points == other.points &&
+          labels == other.labels &&
+          frame == other.frame;
 }
 
 /// How far a propagation has got — the bridge form of
@@ -180,6 +220,15 @@ class BridgeRotoStatus {
   /// How many strokes the instance holds.
   final int strokes;
 
+  /// How many segmentation prompts it holds, which is what the card counts
+  /// when the seed row says Segment.
+  final int prompts;
+
+  /// Whether the seed row says Segment. The taps are only what the base
+  /// frame is cut from where it does, so this is what decides which idle
+  /// sentence the card reads - the engine's question, not the view's.
+  final bool segments;
+
   const BridgeRotoStatus({
     required this.stage,
     required this.done,
@@ -191,6 +240,8 @@ class BridgeRotoStatus {
     required this.clipFrames,
     this.baseFrame,
     required this.strokes,
+    required this.prompts,
+    required this.segments,
   });
 
   @override
@@ -204,7 +255,9 @@ class BridgeRotoStatus {
       lastFrame.hashCode ^
       clipFrames.hashCode ^
       baseFrame.hashCode ^
-      strokes.hashCode;
+      strokes.hashCode ^
+      prompts.hashCode ^
+      segments.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -220,7 +273,9 @@ class BridgeRotoStatus {
           lastFrame == other.lastFrame &&
           clipFrames == other.clipFrames &&
           baseFrame == other.baseFrame &&
-          strokes == other.strokes;
+          strokes == other.strokes &&
+          prompts == other.prompts &&
+          segments == other.segments;
 }
 
 /// One stored stroke, as the overlay draws it.

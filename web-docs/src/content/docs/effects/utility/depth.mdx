@@ -1,0 +1,61 @@
+---
+title: Depth
+description: "Reads how far away every pixel is, for other effects to use."
+---
+
+Depth is a **Utility** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Reads the shot with a trained model and files how far away every pixel is, one plane a
+frame. Point a **Depth of field**'s Matte row, a **Set matte** or a track matte at this
+layer and the depth is what they read.
+
+The numbers have no unit. Each frame's plane is scaled to that frame's own nearest and
+furthest, and nearer is brighter.
+
+The model is an **addon**, installed from **Settings ▸ Addons**. Without it the effect
+wears a badge naming the pack to install and leaves the picture alone.
+
+The planes are kept at the model's own size, a few hundred pixels on the long side.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Analyse** | Button | - | - | - |
+| **Cancel** | Button | - | - | - |
+| **Model** | Dropdown | Depth Anything V2 Small | Depth Anything V2 Small | - |
+| **View** | Dropdown | Depth · Source | Depth | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Analyse**: read the shot and file its depth. Only one analysis runs at a time.
+- **Cancel**: stop a run and keep the frames already read; a later Analyse carries on
+  from them.
+- **Model**: which trained model reads the frames.
+- **View**: the depth as a grey picture, or the layer's own picture untouched.
+- **Invert**: draws the plane the other way up, so far is bright.
+
+## Notes
+
+Frames the analysis has not reached render untouched.
+
+## Related
+
+- [Depth of field](/effects/blur-sharpen/depth-of-field/)
+- [Set matte](/effects/utility/set-matte/)
+- [Mattes](/use/mattes/)
+- [Utility](/effects/#utility)
+- [Effects](/use/effects/)

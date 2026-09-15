@@ -680,7 +680,9 @@ jobs:
           key: ffmpeg-${{ steps.ffmpeg.outputs.version }}
       # Engine crates must hold the line; the threshold may rise, never fall.
       # The FFmpeg-free engine crates are all gated (measured 83–99% locally).
-      # lumit-gpu is held out while its kernel tests skip on adapterless runners.
+      # lumit-gpu is held out while its kernel tests skip on adapterless runners,
+      # and lumit-ml for the same kind of reason: its inference half needs a model
+      # runtime no runner has.
       #
       # A new engine crate goes in this list as it is added. Three that did not
       # are here now: the bounded-ingress reader, the broker handshake and the

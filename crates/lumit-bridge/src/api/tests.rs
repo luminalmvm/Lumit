@@ -9503,6 +9503,7 @@ fn turning_flow_off_parks_its_tuning_and_one_undo_restores_both() {
     let (project, layer) = project_with_layer();
     layer.set_flow_enabled(true).expect("flow on");
     let tuned = BridgeFlowParams {
+        engine: 0,
         resolution: 1,
         detail: 3,
         smoothness: 80.0,
@@ -9531,6 +9532,158 @@ fn turning_flow_off_parks_its_tuning_and_one_undo_restores_both() {
 
     layer.set_flow_enabled(true).expect("already on is a no-op");
     assert_eq!(layer.get_flow_params().expect("read"), tuned);
+}
+
+/// The engine that paints the in-between frame writes and reads with the rest
+/// of the Flow group, in one op (docs/impl/addons.md §6.3).
+///
+/// A group of settings edited one at a time would be eight round trips and
+/// eight undo steps, so the engine rides the same write the others do. An
+/// unknown code keeps what was there: the panel and the engine disagreeing
+/// about how many engines exist is a bug, not a reason to change the user's
+/// picture.
+#[test]
+fn the_flow_engine_writes_whole_with_the_group() {
+    use crate::api::retime::BridgeFlowParams;
+
+    let (project, layer) = project_with_layer();
+    layer.set_flow_enabled(true).expect("flow on");
+    assert_eq!(
+        layer.get_flow_params().expect("read").engine,
+        0,
+        "a layer that has never been told reads as the built-in engine"
+    );
+
+    let asked = BridgeFlowParams {
+        engine: 1,
+        smoothness: 40.0,
+        ..layer.get_flow_params().expect("read")
+    };
+    layer.set_flow_params(asked.clone()).expect("written");
+    assert_eq!(
+        layer.get_flow_params().expect("read"),
+        asked,
+        "the whole group came back, engine included"
+    );
+
+    project.undo().expect("undone");
+    assert_eq!(
+        layer.get_flow_params().expect("read").engine,
+        0,
+        "and one undo put the engine back with everything else"
+    );
+
+    layer.set_flow_params(asked.clone()).expect("written again");
+    let nonsense = BridgeFlowParams {
+        engine: 99,
+        ..asked
+    };
+    layer.set_flow_params(nonsense).expect("written");
+    assert_eq!(
+        layer.get_flow_params().expect("read").engine,
+        1,
+        "an engine this build does not know keeps the one that was chosen"
+    );
+}
+
+/// With nothing installed, the engine row says which addon is missing rather
+/// than claiming the chosen engine is painting (docs/impl/addons.md §6.3, §9).
+#[test]
+fn the_flow_engine_state_names_what_is_missing() {
+    use crate::api::retime::BridgeFlowEngineState;
+
+    let (_project, layer) = project_with_layer();
+    let _serial = addons_serially();
+    let empty = tempfile::tempdir().expect("a folder");
+    lumit_ml::store::with_dir(Some(empty.path().to_path_buf()));
+    // Asked of the layer, because one of the five answers is about the layer's
+    // own footage rather than about the machine (docs/impl/addons.md §6.3).
+    let state = layer.flow_engine_state();
+    lumit_ml::store::with_dir(None);
+
+    // Which of the two depends on whether this machine has the runtime, and
+    // both are honest: one says install the runtime, the other says install
+    // the pack, and they send the user to different buttons.
+    assert!(
+        matches!(
+            state,
+            BridgeFlowEngineState::RuntimeMissing | BridgeFlowEngineState::PackMissing
+        ),
+        "{state:?}"
+    );
+}
+
+/// An export whose document names a model this machine cannot run refuses to
+/// start, and the same export starts once the layer asks for the built-in
+/// engine (docs/impl/addons.md §6.3, docs/08 §3.1).
+///
+/// Preview stands the built-in engine in and says so on the row. A file is
+/// different: it is kept, and nothing about it afterwards says which engine
+/// drew it, so the refusal is at the start and before a byte is written.
+#[test]
+fn an_export_refuses_a_model_engine_with_no_pack_installed() {
+    use crate::api::export::{export_cancel, BridgeExportSpec};
+    use crate::api::retime::BridgeFlowParams;
+
+    let (project, layer) = project_with_layer();
+    let comp = CompositionReference::new(project.id, layer.comp_id());
+    layer.set_flow_enabled(true).expect("flow on");
+    layer
+        .set_flow_params(BridgeFlowParams {
+            engine: 1,
+            ..layer.get_flow_params().expect("read")
+        })
+        .expect("the layer asks for the model");
+
+    let target = std::env::temp_dir().join("lumit-addon-export-probe.mp4");
+    let path = target.to_string_lossy().into_owned();
+    let _serial = addons_serially();
+    let empty = tempfile::tempdir().expect("a folder");
+    lumit_ml::store::with_dir(Some(empty.path().to_path_buf()));
+
+    let refused = comp.start_export(BridgeExportSpec::default(), path.clone());
+    assert!(
+        matches!(refused, Err(BridgeError::AddonMissing)),
+        "an export that names a missing addon is refused: {refused:?}"
+    );
+    assert!(!target.exists(), "and nothing was written");
+    assert!(
+        comp.addon_needed(),
+        "and the dialogue can tell this refusal from the encoder's"
+    );
+
+    // Both footer actions of the export dialogue are `queue_export`, so the
+    // pre-flight has to stand there too: an item added now is an item that
+    // renders this same snapshot later.
+    for start in [true, false] {
+        let queued = comp.queue_export(BridgeExportSpec::default(), path.clone(), start);
+        assert!(
+            matches!(queued, Err(BridgeError::AddonMissing)),
+            "the queue refuses it as well: {queued:?}"
+        );
+    }
+
+    // The same document with the built-in engine gets as far as the exporter,
+    // which on a machine with no graphics adapter says so. Either way it is
+    // past the pre-flight, which is what this proves.
+    layer
+        .set_flow_params(BridgeFlowParams {
+            engine: 0,
+            ..layer.get_flow_params().expect("read")
+        })
+        .expect("back to the built-in engine");
+    assert!(
+        !comp.addon_needed(),
+        "a document that asks for no model needs no addon, on any machine"
+    );
+    let started = comp.start_export(BridgeExportSpec::default(), path);
+    lumit_ml::store::with_dir(None);
+    assert!(
+        started.is_ok() || matches!(started, Err(BridgeError::ExportFailed(_))),
+        "an export either starts or explains itself: {started:?}"
+    );
+    export_cancel();
+    std::fs::remove_file(&target).ok();
 }
 
 // --- Camera track: the effect's surface across the seam -------------------
@@ -9873,6 +10026,266 @@ fn the_status_reads_the_solve_and_the_buttons_are_refused_honestly() {
     // A layer with no Camera track has no analysis to read.
     let solid = comp.add_solid_layer(None).expect("a solid");
     assert_eq!(track_status(solid).stage, BridgeTrackStage::Idle);
+}
+
+/// A segmentation prompt crosses the seam, lands in the document as a whole
+/// edit, and the status row counts it (docs/impl/addons.md §6.2, §11 test 10).
+///
+/// The taps ride the ordinary effect-stack commit, as the strokes do, so a
+/// prompt is one `SetLayerEffects` and one undo step; the first one sets the
+/// base frame, which is what makes Propagate answerable on a brush nobody
+/// scribbled on.
+#[test]
+fn a_prompt_lands_in_the_document_and_the_status_counts_it() {
+    use crate::api::roto::roto_status;
+
+    let (_project, comp, layer, _media) = a_tracked_layer();
+    layer
+        .add_effect(lumit_core::roto::ROTO_BRUSH.to_owned())
+        .expect("the Roto brush is a builtin");
+    let stack = layer.get_effects().expect("stack");
+    let effect = stack.last().expect("the Roto brush").id();
+
+    let before = roto_status(layer, effect).expect("a status");
+    assert_eq!((before.strokes, before.prompts), (0, 0));
+    assert_eq!(before.base_frame, None, "nothing has been asked of it yet");
+    assert!(
+        !before.segments,
+        "the seed row reads Strokes until somebody moves it, and the card is \
+         told so rather than guessing from the tap count"
+    );
+
+    let mut stack = layer.get_effects().expect("stack");
+    let brush = stack.last_mut().expect("the Roto brush");
+    brush
+        .roto_add_prompt(vec![12.0, 34.0], vec![1], 18)
+        .expect("one tap on the subject");
+    brush
+        .roto_add_prompt(vec![50.0, 60.0], vec![0], 18)
+        .expect("and one against it");
+    // A tap nobody can read never reaches the document.
+    assert!(matches!(
+        brush.roto_add_prompt(vec![1.0], vec![1], 18),
+        Err(BridgeError::InvalidParam)
+    ));
+    layer.set_effects(stack, None).expect("committed");
+
+    let after = roto_status(layer, effect).expect("a status");
+    assert_eq!(after.prompts, 2, "both taps are in the document");
+    assert_eq!(after.strokes, 0, "and neither of them is a stroke");
+    assert_eq!(
+        after.base_frame,
+        Some(18),
+        "the first tap sets the base frame"
+    );
+
+    // A tap away from the base frame is refused here rather than fenced in the
+    // Viewer: the model is only ever asked about the base, so a prompt stored
+    // anywhere else would be hashed into every frame's name on that side and
+    // then never read (docs/impl/addons.md §6.2).
+    let mut stack = layer.get_effects().expect("stack");
+    let brush = stack.last_mut().expect("the Roto brush");
+    assert!(matches!(
+        brush.roto_add_prompt(vec![12.0, 34.0], vec![1], 40),
+        Err(BridgeError::InvalidParam)
+    ));
+
+    // And moving the base takes the taps the new one can never read with it, in
+    // this same staged edit, so one undo brings both back.
+    brush.roto_set_base_frame(Some(40)).expect("the base moves");
+    layer.set_effects(stack, None).expect("committed");
+    let moved = roto_status(layer, effect).expect("a status");
+    assert_eq!(moved.base_frame, Some(40));
+    assert_eq!(
+        moved.prompts, 0,
+        "taps stranded on the old base would rename mattes and change no picture"
+    );
+
+    // An effect that is not a Roto brush refuses the call rather than growing a
+    // block nothing will ever read.
+    let mut other = layer.get_effects().expect("stack");
+    assert!(matches!(
+        other[0].roto_add_prompt(vec![1.0, 2.0], vec![1], 0),
+        Err(BridgeError::InvalidEffect)
+    ));
+    let solid = comp.add_solid_layer(None).expect("a solid");
+    assert!(matches!(
+        roto_status(solid, effect),
+        Err(BridgeError::InvalidEffect)
+    ));
+}
+
+/// The Depth effect's status row, and what a press of each button does with no
+/// model on the machine (docs/impl/addons.md §6.1, §9, §11 test 8).
+#[test]
+fn the_depth_status_reads_idle_and_a_press_with_no_model_refuses_by_name() {
+    use crate::api::planes::{plane_status, BridgePlaneFailure, BridgePlaneStage};
+    use crate::api::track::fire_effect_action;
+
+    let (_project, comp, layer, _media) = a_tracked_layer();
+    layer
+        .add_effect(lumit_core::planes::DEPTH.to_owned())
+        .expect("Depth is a builtin");
+    let stack = layer.get_effects().expect("stack");
+    let effect = stack.last().expect("the Depth instance").id();
+
+    // Nothing has been asked for, so the card reads Idle and every span is
+    // empty: a passthrough with an honest reading, not a failure.
+    let status = plane_status(layer, effect).expect("a status");
+    assert_eq!(status.stage, BridgePlaneStage::Idle);
+    assert_eq!((status.done, status.total, status.clip_frames), (0, 0, 0));
+    assert_eq!(status.first_frame, None);
+    assert!(status.provider.is_empty(), "nothing has read anything yet");
+    assert!(status.failure.is_none());
+
+    // Cancel is always safe: nothing is running, and saying so is a no-op
+    // rather than an error the panel would have to explain.
+    fire_effect_action(layer, effect, "cancel".to_owned(), None).expect("cancel is accepted");
+
+    // A parameter that is not an Action is refused rather than ignored.
+    assert!(matches!(
+        fire_effect_action(layer, effect, "view".to_owned(), None),
+        Err(BridgeError::InvalidParam)
+    ));
+
+    // Analyse with no addon installed refuses before a thread is spawned, and
+    // leaves the reason where the next status read finds it.
+    let _serial = addons_serially();
+    let empty = tempfile::tempdir().expect("a folder");
+    lumit_ml::store::with_dir(Some(empty.path().to_path_buf()));
+    let pressed = fire_effect_action(layer, effect, "analyse".to_owned(), None);
+    let after = plane_status(layer, effect).expect("a status");
+    lumit_ml::store::with_dir(None);
+
+    assert!(
+        matches!(pressed, Err(BridgeError::AddonMissing)),
+        "{pressed:?}"
+    );
+    assert_eq!(after.stage, BridgePlaneStage::Failed);
+    // Which of the two depends on whether this machine has the runtime, and
+    // both are honest: one says install the runtime, the other the pack, and
+    // they send the user to different buttons.
+    assert!(
+        matches!(
+            after.failure,
+            Some(BridgePlaneFailure::RuntimeMissing | BridgePlaneFailure::PackMissing)
+        ),
+        "{:?}",
+        after.failure
+    );
+
+    // A layer wearing no such effect has no analysis to read.
+    let solid = comp.add_solid_layer(None).expect("a solid");
+    let other = layer.get_effects().expect("stack")[0].id();
+    assert!(matches!(
+        plane_status(layer, other),
+        Err(BridgeError::InvalidEffect)
+    ));
+    assert!(matches!(
+        plane_status(solid, effect),
+        Err(BridgeError::InvalidEffect)
+    ));
+}
+
+/// With no model on the machine the Depth effect wears the calm `addon_missing`
+/// badge naming the addon to install, and its values stay live (§6.1, §9).
+#[test]
+fn a_depth_effect_with_no_model_wears_the_addon_badge() {
+    let (_project, _comp, layer, _media) = a_tracked_layer();
+    layer
+        .add_effect(lumit_core::planes::DEPTH.to_owned())
+        .expect("Depth is a builtin");
+
+    let instance = layer
+        .item()
+        .expect("the layer")
+        .effects
+        .last()
+        .expect("the Depth instance")
+        .clone();
+
+    let _serial = addons_serially();
+    let empty = tempfile::tempdir().expect("a folder");
+    lumit_ml::store::with_dir(Some(empty.path().to_path_buf()));
+    let info = crate::api::effect::read_instance_info(&instance, lumit_core::time::Rational::ZERO);
+    lumit_ml::store::with_dir(None);
+
+    assert_eq!(info.badge_reason.as_deref(), Some("addon_missing"));
+    let detail = info.badge_detail.expect("the badge names the addon");
+    assert!(
+        detail == "runtime" || detail == "depth-anything-v2-small",
+        "the badge named {detail}"
+    );
+    assert!(
+        crate::api::effect::BADGE_REASONS.contains(&"addon_missing"),
+        "the reason is not in the list Dart's table is held against"
+    );
+    assert!(
+        info.values.iter().any(|v| v.id == "view"),
+        "an inert effect keeps its rows"
+    );
+}
+
+/// Remove background reaches the same doorway, reads the same status and wears
+/// the same badge as Depth, and the badge names **its** pack (§6.1, §11 test 8).
+///
+/// The tier's whole surface is one predicate and one module, so the second
+/// effect on it needs nothing new across the seam. This is what says so.
+#[test]
+fn remove_background_presses_through_the_same_door_and_names_its_own_pack() {
+    use crate::api::planes::{plane_status, BridgePlaneFailure, BridgePlaneStage};
+    use crate::api::track::fire_effect_action;
+
+    let (_project, _comp, layer, _media) = a_tracked_layer();
+    layer
+        .add_effect(lumit_core::planes::REMOVE_BACKGROUND.to_owned())
+        .expect("Remove background is a builtin");
+    let stack = layer.get_effects().expect("stack");
+    let effect = stack.last().expect("the instance").id();
+
+    let status = plane_status(layer, effect).expect("a status");
+    assert_eq!(status.stage, BridgePlaneStage::Idle);
+    assert!(status.failure.is_none());
+    fire_effect_action(layer, effect, "cancel".to_owned(), None).expect("cancel is accepted");
+    assert!(matches!(
+        fire_effect_action(layer, effect, "detail".to_owned(), None),
+        Err(BridgeError::InvalidParam)
+    ));
+
+    let _serial = addons_serially();
+    let empty = tempfile::tempdir().expect("a folder");
+    lumit_ml::store::with_dir(Some(empty.path().to_path_buf()));
+    let pressed = fire_effect_action(layer, effect, "analyse".to_owned(), None);
+    let after = plane_status(layer, effect).expect("a status");
+    let instance = layer
+        .item()
+        .expect("the layer")
+        .effects
+        .last()
+        .expect("the instance")
+        .clone();
+    let info = crate::api::effect::read_instance_info(&instance, lumit_core::time::Rational::ZERO);
+    lumit_ml::store::with_dir(None);
+
+    assert!(
+        matches!(pressed, Err(BridgeError::AddonMissing)),
+        "{pressed:?}"
+    );
+    assert_eq!(after.stage, BridgePlaneStage::Failed);
+    assert!(
+        matches!(
+            after.failure,
+            Some(BridgePlaneFailure::RuntimeMissing | BridgePlaneFailure::PackMissing)
+        ),
+        "{:?}",
+        after.failure
+    );
+    assert_eq!(info.badge_reason.as_deref(), Some("addon_missing"));
+    let detail = info.badge_detail.expect("the badge names the addon");
+    assert!(
+        detail == "runtime" || detail == "rvm",
+        "the badge named {detail}, which is not this effect's pack"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -14744,4 +15157,106 @@ fn the_graph_console_offers_time_offset_and_never_layer_points() {
         menu.contains(&"blur".to_owned()),
         "and the rest of the catalogue is where it was"
     );
+}
+
+// ---------------------------------------------------------------------------
+// The Addons page's four engine answers (docs/impl/addons.md §5).
+// ---------------------------------------------------------------------------
+
+/// One test at a time wherever the addons folder is pointed at one of its own.
+///
+/// `with_dir` is process-wide, because an install runs on a worker thread and
+/// a thread-local would not follow it there. The suite runs in parallel, so
+/// two tests overlapping would read each other's addons.
+fn addons_serially() -> std::sync::MutexGuard<'static, ()> {
+    static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    SERIAL.lock().unwrap_or_else(|held| held.into_inner())
+}
+
+/// A manifest for a pack whose one download is a plain file of `bytes` bytes.
+/// Written here rather than fetched: the page's whole contract with the engine
+/// is this text plus a list of paths.
+fn an_addon_manifest(id: &str, format: u32, bytes: u64) -> String {
+    format!(
+        r#"{{"format":{format},"id":"{id}","kind":"model","name":"Test pack",
+           "version":"1.0","summary":"A depth map from a single frame",
+           "licence":"Apache-2.0","licence_url":"https://example.invalid/licence",
+           "size":{bytes},"requires":["runtime"],
+           "platforms":{{"any":{{"downloads":[
+             {{"url":"https://example.invalid/model.onnx",
+               "sha256":"0000000000000000000000000000000000000000000000000000000000000001",
+               "size":{bytes},"unpack":"file","dest":"model.onnx"}}]}}}},
+           "model":{{"task":"depth","arch":"depth-anything","file":"model.onnx"}}}}"#
+    )
+}
+
+/// The page installs what Dart fetched, reads the row back, removes it, and
+/// meets each of its refusals as a typed variant rather than a sentence it
+/// would have to parse.
+///
+/// The addons folder is pointed at a temporary one for the length of the test,
+/// because the install runs wherever frb puts it and must never write into the
+/// user's own. The one refusal not driven here is `AddonBusy`: the install slot
+/// is private to `lumit-ml`, and the rule is pinned there, in
+/// `a_second_install_is_refused_rather_than_queued`.
+#[test]
+fn an_addon_installs_lists_and_removes_and_is_refused_honestly() {
+    use crate::api::addons::{
+        addon_install, addon_list, addon_remove, addon_runtime, addons_dir, BridgeAddonKind,
+        BridgeRuntimeState,
+    };
+
+    let _serial = addons_serially();
+    let root = tempfile::tempdir().expect("a folder");
+    let downloads = tempfile::tempdir().expect("a folder");
+    lumit_ml::store::with_dir(Some(root.path().to_path_buf()));
+
+    assert_eq!(
+        addons_dir().as_deref(),
+        Some(root.path().to_string_lossy().as_ref()),
+        "Dart and Rust read one folder, not two"
+    );
+    assert!(addon_list().is_empty());
+
+    let fetched = downloads.path().join("model.onnx");
+    std::fs::write(&fetched, vec![0u8; 12]).expect("the download");
+    let path = fetched.to_string_lossy().into_owned();
+
+    addon_install(an_addon_manifest("depth-pack", 1, 12), vec![path.clone()]).expect("installed");
+
+    let listed = addon_list();
+    assert_eq!(listed.len(), 1);
+    let row = &listed[0];
+    assert_eq!(row.id, "depth-pack");
+    assert_eq!(row.kind, BridgeAddonKind::Model);
+    assert_eq!(row.name, "Test pack");
+    assert_eq!(row.task, "depth", "the word the row shows");
+    assert_eq!(row.licence, "Apache-2.0");
+    assert_eq!(row.size_bytes, 12);
+    assert!(!row.broken);
+
+    // With no runtime installed, the row says so, and every model button
+    // reads "Needs the runtime" off that.
+    assert_eq!(addon_runtime().state, BridgeRuntimeState::Missing);
+
+    // A manifest from a newer build is refused with the engine's own sentence,
+    // which is the only thing the page can say about it.
+    let refusal = addon_install(an_addon_manifest("newer", 2, 12), vec![path])
+        .expect_err("a newer format is refused");
+    let BridgeError::AddonInvalid(why) = &refusal else {
+        panic!("the wrong refusal: {refusal:?}");
+    };
+    assert!(why.contains("newer build"), "{why}");
+
+    // An id nothing is installed under is missing, not invalid: the page has
+    // a different sentence for each.
+    assert!(matches!(
+        addon_remove("nothing-here".to_owned()),
+        Err(BridgeError::AddonMissing)
+    ));
+
+    addon_remove("depth-pack".to_owned()).expect("removed");
+    assert!(addon_list().is_empty());
+
+    lumit_ml::store::with_dir(None);
 }

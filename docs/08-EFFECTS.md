@@ -335,7 +335,14 @@ matte, which is a mask's job. And **Set matte**: every Matte row answers "how mu
 of me happens here", and Set matte has no answer to give — what it takes from another
 layer is the coverage itself, so the row it shows is its own source picker, riding the
 ordinary auxiliary-layer carriage beside Light wrap's Background rather than the universal
-one. Both keep their stored ids, so a project saved before either drop loads exactly as it
+one. The **Roto brush** arrives at Set matte's answer from the other side: what it applies
+*is* a coverage, so a second picture saying how much of it happens here would be a coverage
+over a coverage. And **Depth** (§3.104) is the fourth of that family: what it draws is a
+reading of the picture underneath, and a matte over a reading would gate a measurement.
+**Remove background** (§3.105) is the fifth, on the same tier and by the Roto brush's
+argument: what it applies is the coverage a model made of the frame, and the honest way to
+keep part of the background is a mask on the layer.
+Each keeps its stored ids, so a project saved before any of the drops loads exactly as it
 did (the forward-migration walk only appends what a schema has *grown*, and
 carries a row nobody declares any more along untouched). **Merge**, **Switch** and **Time
 offset** are the other three: Compositing entries only a node graph holds (§3.97, §3.98,
@@ -589,6 +596,8 @@ specified in §3.1's original text but surfaced as layer UI, not an effect. Summ
 | 3.45 | Channel blur | AE Channel Blur | moderate | `{0}` |
 | 3.46 | Linear wipe | AE Linear Wipe | trivial | `{0}` |
 | 3.47 | Radial wipe | AE Radial Wipe | cheap | `{0}` |
+| 3.104 | Depth | depth-pass plug-ins | trivial | `{0}` |
+| 3.105 | Remove background | AE Roto Brush, keying plug-ins | trivial | `{0}` |
 
 ### 3.1 Flow engine — optical-flow retime interpolation (Twixtor-class)
 
@@ -654,6 +663,7 @@ because each changes the synthesised picture.
 
 | Parameter | Range / type | Default | Notes |
 |---|---|---|---|
+| Engine | Built in / RIFE | Built in | Which one paints the in-between frame. RIFE is a model pack the user installs ([impl/addons.md](impl/addons.md) §6.3): it measures nothing, so Motion blur and Datamosh keep the built-in engine's vectors whatever this says, and a machine without the pack previews with the built-in engine, says so on the row, and refuses to export |
 | Flow resolution | Native / Half / Quarter | Native | The size flow is *measured* at. Independent of the preview quality tier — see below |
 | Vector detail | Low / Medium / High / Ultra | Medium | Pyramid depth + refinement iterations |
 | Smoothness | 0–100 | 50 | Regularisation weight; high = fewer tears, gloopier. Scales the smoothing pass's flow-range sigma, 50 being the tuned default the analytic tests were fitted against |
@@ -662,6 +672,12 @@ because each changes the synthesised picture.
 | HUD guard | bool | on | Step 5's static-region bias; off for footage with no overlay |
 | Always | bool | off | Force flow past the engagement gate below |
 | Input rate | fps, keyframeable | 0 (Auto) | The conform rate above. Shipped with cadence presets beside the field — Auto, On 2s (12), On 3s (8), On 4s (6), 24, 25, 30 — named for the cadence rather than the number, since an editor knows a cut is "on 2s" without doing 24 ÷ 2 |
+
+**A model engine is the one place two machines may legitimately differ.** Synthesis keeps
+no sidecar, so the frames a model paints are ordinary frame-cache material and an export
+paints them again. The frame key carries the engine and, under a model, the pack that ran
+it, so a frame made by one is never served for another
+([impl/addons.md](impl/addons.md) §7).
 
 **Flow resolution is not the preview resolution.** Flow used to be measured on
 whatever the preview scale had shrunk the decode to, which made a draft scrub and an export
@@ -6225,10 +6241,11 @@ degradation ladder's CPU rung renders it as a passthrough.
 
 ### 3.96 Roto brush — a scribble on one frame, a matte on the whole shot
 
-**Parameters:** **Propagate** (action), **Cancel** (action), **Matte mode** (Matte / Matte
-inverted, default Matte), **View** (Result / Matte / Boundary, default Result), **Refine
-radius** (0–64, default 8, a plain number rather than px@comp), **Flow resolution** (Native /
-Half / Quarter, default Half), **Flow smoothness** (0–100, default 50).
+**Parameters:** **Propagate** (action), **Cancel** (action), **Seed from** (Strokes /
+Segment, default Strokes), **Matte mode** (Matte / Matte inverted, default Matte), **View**
+(Result / Matte / Boundary, default Result), **Refine radius** (0–64, default 8, a plain
+number rather than px@comp), **Flow resolution** (Native / Half / Quarter, default Half),
+**Flow smoothness** (0–100, default 50).
 
 Rotoscoping is cutting a moving thing out of its shot: for every frame, a greyscale
 **matte** that is white where the subject is and black where it is not. Doing it by hand is
@@ -6264,14 +6281,20 @@ right one's face.
 nothing to key a cache with), *Flow unavailable* (no GPU flow on this device — the CPU
 oracle at seconds a pair would misrepresent a minutes-long job as hung, and mixing backends
 would break the byte-identical rebuild claim), *Busy* (one propagation at a time), *No base
-frame* (Propagate pressed before any stroke). **Cancel finalises rather than discards**:
-the frames already solved are kept and correctly named, and a later Propagate
-resumes from them.
+frame* (Propagate pressed before any stroke), *Model missing* and *Model failed* (the Seed
+from row asks for a segmentation model this machine has not got, or has and cannot run).
+**Cancel finalises rather than discards**: the frames already solved are kept and correctly
+named, and a later Propagate resumes from them.
 
 **Honest about its ceiling.** This is classical machinery — stroke-seeded geodesic
 segmentation with a guided-filter edge, pinned in [impl/roto.md](impl/roto.md) — not a neural
-matter. On well-separated subjects it does the job with a handful of strokes; on hair against
-a similar tone it needs more correction strokes than a network would. The distance leaks
+matter, unless the **Seed from** row says Segment. It then asks a segmentation model what the
+taps on the base frame point at, takes that as the seeds, and stamps the strokes over them;
+the model is an addon and with none installed the effect says so rather than seeding itself
+some other way ([impl/addons.md](impl/addons.md) §6.2). Everything after the seeds is the
+same machinery either way. On well-separated subjects it does the job with a handful of
+strokes; on hair against a similar tone it needs more correction strokes than a network
+would. The distance leaks
 through any low-contrast gap in the boundary, and the fix is a stroke across the leak rather
 than beside it.
 
@@ -6574,6 +6597,114 @@ its sockets are `input`, `offset` and `output`, it declares `is_image_op() == fa
 the graph walk realises it by asking its input cone at the shifted time rather than by
 running a kernel, so a Time offset lowers to no step of its own. A layer's stack refuses it,
 as it refuses Merge. [impl/node-graph-comp.md](impl/node-graph-comp.md) §5.2.
+
+### 3.104 Depth - how far away every pixel is, read by a model
+
+**Parameters:** **Analyse** (action), **Cancel** (action), **Model** (Depth Anything V2
+Small, default the first), **View** (Depth / Source, default Depth), **Invert** (default
+off).
+
+A **Utility** effect, beside the Camera track and the Roto brush: a handle for a background
+job rather than a look. Drop it on a shot and press Analyse. A trained model reads every
+frame and guesses how far away each pixel is, and the answer is kept beside the shot so it
+is worked out once. Then point a Depth of field's Matte row, a Set matte or a track matte at
+this layer and the reading is what they read.
+
+**The numbers have no unit.** What a depth model knows is what is nearer than what, not how
+many metres away anything is, so each frame's plane is scaled to that frame's own nearest
+and furthest and nearer is brighter. That is enough for every consumer of it, and pretending
+otherwise would be pretending. **Invert** draws it the other way up, and changes nothing
+about the reading.
+
+**The model is an addon** the user installs from Settings, and Lumit never ships or fetches
+one on its own ([impl/addons.md](impl/addons.md)). Without it the effect wears the calm
+`addon_missing` badge naming the pack to install, renders identity, and keeps every value
+it holds. Nothing about it is automatic: the model runs where Analyse is pressed and
+nowhere else.
+
+**The planes are not the document.** They live in the `planes/` sidecar tier
+([10-FILE-FORMAT.md](10-FILE-FORMAT.md) §3) and can be deleted at any moment for the price
+of one Analyse. They are filed against the media's own frames, so one shot's answer serves
+every composition that cuts it and survives every transform, retime and preview tier, and
+they are kept at the **model's** own raster, which is a few hundred pixels on the long side:
+the model produced nothing finer, so growing it would be inventing detail and then storing
+it. The draw resamples.
+
+**It is an image operation**, like the Roto brush and unlike the two tracking handles: what
+it holds is a job whose answer is a picture drawn where the effect stands in the stack,
+which is also what lets another layer read it. In **Depth** view the layer's picture is the
+plane as an opaque grey picture; in **Source** view the effect is a passthrough, so the
+layer can be looked at. A layer feeding a consumer is left on Depth view. **It carries no
+Matte row**: what it draws is a reading of the picture underneath, and a matte over a
+reading would gate a measurement. Where a reading is wanted in part of the frame, the effect
+that consumes it takes the matte.
+
+**Outside the analysed span the effect is a passthrough**, with the card saying how far the
+span reaches and which provider read the frames. Never a held neighbouring plane.
+
+**Refusals, each named and none a fault:** *Runtime missing* and *Pack missing* (the addon
+is not installed, and the two send the user to different buttons), *Model failed* (a pack
+that will not open, or a run the model turned down), *Busy* (one model job at a time,
+because two on one graphics card halve each other), *Unreadable* and *No frames* (the media).
+**Cancel keeps what it had**: the frames already read are correct and correctly named, so
+they are kept and a later Analyse carries on from them.
+
+**Determinism.** A model is not bit-stable across cards and drivers, which is why it runs as
+a baked analysis and never inside a render. Every key a plane is filed under carries the
+pack's hash and the provider that ran it, so an answer made under one backend is never
+served for another, and once it is cached it is an input like any other
+([14-ENGINEERING-RULES.md](14-ENGINEERING-RULES.md) §3, [impl/addons.md](impl/addons.md) §7).
+
+### 3.105 Remove background - the subject cut out of what is behind it
+
+**Parameters:** **Analyse** (action), **Cancel** (action), **Model** (Robust Video Matting /
+BiRefNet, default the first), **View** (Composite / Matte, default Composite), **Invert**
+(default off), **Detail** (Portrait / Full body, default Portrait, greyed out unless the
+model is Robust Video Matting).
+
+A **Utility** effect beside Depth (§3.104), on the same tier and in the same shape: a handle
+for a background job rather than a look. Drop it on a shot of a person and press Analyse. A
+trained model reads every frame and works out how much of each pixel is them rather than
+what is behind them, and the answer is kept beside the shot so it is worked out once.
+
+**The two models read a shot differently.** Robust Video Matting reads it in order and
+carries what it made of one frame into the next, so an edge holds steady while somebody
+moves; **Detail** is how much of the frame it works at, Portrait for head and shoulders and
+Full body for a whole person at a distance. BiRefNet reads each frame on its own, knows
+nothing of the frame before it and is slower by a long way, but it is not trained on people
+alone. Detail means nothing to it and greys out.
+
+**The model is an addon** the user installs from Settings, and Lumit never ships or fetches
+one on its own ([impl/addons.md](impl/addons.md)). Without the pack the **Model** row names,
+the effect wears the calm `addon_missing` badge saying which one to install, renders
+identity, and keeps every value it holds. The badge asks for that pack rather than for any
+pack that does matting, because the other model is a different answer and not a substitute.
+
+**The mattes are not the document.** They live in the `planes/` sidecar tier
+([10-FILE-FORMAT.md](10-FILE-FORMAT.md) §3), filed against the media's own frames, and can
+be deleted at any moment for the price of one Analyse. Each is kept as the box it covers,
+compressed, because a matte is a subject with nothing around it.
+
+**It is an image operation.** In **Composite** view the coverage is multiplied into the
+layer's own alpha and the colour is left alone, so a layer that was already partly
+transparent stays so; in **Matte** view the coverage is drawn as an opaque grey picture,
+which is how a matte is judged. **Invert** keeps the background and cuts the subject away
+instead. Another layer reads the answer through the ordinary matte and layer-input
+carriages, exactly as it reads a Roto brush's. **It carries no Matte row**: what it applies
+is a coverage, and the honest way to keep part of the background is a mask on the layer.
+
+**Outside the analysed span the effect is a passthrough**, with the card saying how far the
+span reaches and which provider read the frames. Never a held neighbouring matte.
+
+**Refusals** are Depth's, each named and none a fault. **Cancel keeps the frames already
+read** to look at, but Robust Video Matting starts again: it carries its state from one
+frame to the next and the record does not keep it, so there is nothing for a later Analyse
+to carry on from ([impl/addons.md](impl/addons.md) §13). BiRefNet reads each frame on its
+own and does carry on.
+
+**Determinism** is §3.104's, word for word: the model runs as a baked analysis and never
+inside a render, every key carries the pack's hash and the provider that ran it, and once a
+matte is cached it is an input like any other.
 
 ## 4. Tier 2 — AE parity direction (post-v1)
 

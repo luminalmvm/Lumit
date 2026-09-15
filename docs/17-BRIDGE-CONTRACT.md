@@ -827,28 +827,41 @@ Nothing here does the work; this is the doorway.
 thread, over the media file — and this is the doorway.
 
 - **A stroke is an ordinary effect-stack edit.** `BridgeEffectInstance::roto_add_stroke`,
-  `roto_set_base_frame` and `roto_clear` stage on the same copy `set_value` and
-  `set_shader_source` stage on, and `LayerReference::set_effects` commits, so a scribble is
-  one op, one journal entry and one undo step. There is no roto-shaped op and no roto-shaped
-  commit, because there is no roto-shaped question the whole-stack commit cannot answer.
+  `roto_add_prompt`, `roto_set_base_frame` and `roto_clear` stage on the same copy
+  `set_value` and `set_shader_source` stage on, and `LayerReference::set_effects` commits,
+  so a scribble is one op, one journal entry and one undo step. There is no roto-shaped op
+  and no roto-shaped commit, because there is no roto-shaped question the whole-stack
+  commit cannot answer.
 - **Points cross in source raster pixels**, as a flat `[x0, y0, x1, y1, …]`. The
   viewer converts, because only it knows the chain of transforms the pointer came through,
   and the matte has to describe the *file's* frames rather than one composition's — which is
   what lets one shot's mattes serve every composition that cuts it. A stroke with no points,
   an odd-length list, or a non-finite number is **refused**, never stored: a stroke nobody can
-  stamp would silently do nothing.
+  stamp would silently do nothing. A **prompt** crosses the same way with a label a point:
+  `roto_add_prompt(points, labels, frame)` carries the taps a segmentation model reads when the
+  effect's Seed from row says Segment ([impl/addons.md](impl/addons.md) §6.2), and refuses a
+  label that is neither for the subject nor against it, or one missing from a point.
+- **What the overlay draws is read off the staged instance.** `roto_strokes` and
+  `roto_prompts` hand back this brush's scribbles and taps in source pixels, and
+  `roto_base_frame` answers the frame the shot is decided from, which is how the Viewer knows
+  whether a tap here may seed the model at all: a prompt is only ever read on the base frame,
+  so a tap anywhere else stays the correction dab it has always been. All three are read once
+  a frame and once a document revision, never per rebuild.
 - **The buttons go through the one Action doorway.** `fire_effect_action` carries Propagate
   and Cancel exactly as it carries Analyse and Cancel — an Action carries no value, so a press
   is an event: nothing is staged, nothing is committed, no undo entry appears.
 - **The status is polled, and only while it is moving.** `roto_status(layer, effect)` answers
   the stage, `done`/`total`, how many frames were **copied** rather than re-solved, the span
-  the matte covers in source frames, the clip's length, the base frame and the stroke count —
-  one crossing for a whole row. A press moves no document revision, so there is nothing to
-  refresh against; the engine keeps progress as a value in a map precisely so nobody has to
-  hold a subscription (the camera track's arrangement).
-- **The reason crosses as an enum with no text in it.** `BridgeRotoFailure` is seven variants
-  — offline, no flow on this device, busy, no base frame, unreadable, no frames, no seeds —
-  and Dart's exhaustive switch (`panels/roto_display_frb.dart`) picks the arb key. The
+  the matte covers in source frames, the clip's length, the base frame, the stroke count and
+  the prompt count and whether the seed row says Segment - one crossing for a whole row,
+  and the seed row is in it because which of them the base frame is cut from is the
+  engine's question and not the card's. A press moves no document revision, so
+  there is nothing to refresh against; the engine keeps progress as a value in a map
+  precisely so nobody has to hold a subscription (the camera track's arrangement).
+- **The reason crosses as an enum with no text in it.** `BridgeRotoFailure` is nine
+  variants (offline, no flow on this device, busy, no base frame, unreadable, no frames,
+  no seeds, no segmentation model installed, and one that would not run), and Dart's
+  exhaustive switch (`panels/roto_display_frb.dart`) picks the arb key. The
   engine-labels chain at its strictest: there is no free text to fall back to, so a reason
   added to the engine is a Dart compile error rather than a blank line.
 - **The span is what makes the passthrough legible.** Outside `first_frame..last_frame` the
@@ -869,6 +882,76 @@ thread, over the media file — and this is the doorway.
   **outline** does, because the Boundary view is the overlay's to draw and an outline is a few
   thousand numbers rather than two megabytes — thinned to a fixed cap engine-side, so the answer
   never grows with the picture.
+
+### The planes tier: a button down, a span and a provider up
+
+`crates/lumit-bridge/src/api/planes.rs`, and it is the camera track's shape with one field
+more. The reading itself is `lumit-render`'s, on its own thread over the media file, and
+this is the doorway for every effect that asks a trained model for a plane: Depth today
+([08-EFFECTS.md](08-EFFECTS.md) §3.104), Remove background beside it
+([impl/addons.md](impl/addons.md) §6.1).
+
+- **The buttons go through the one Action doorway.** `fire_effect_action` carries Analyse and
+  Cancel exactly as it carries the Camera track's, on the one predicate `lumit_core::planes`
+  owns rather than a list of names at the door. A press is an event: nothing is staged,
+  nothing is committed, no undo entry appears.
+- **A press that cannot work refuses on the spot.** With no model runtime and no pack there
+  is nothing to spawn a thread for, so `BridgeError::AddonMissing` comes back at once and the
+  reason is left where the next status read finds it. A press has nothing else to poll
+  against.
+- **The status is polled, and only while it is moving.** `plane_status(layer, effect)`
+  answers the stage, `done`/`total`, the failure, **which provider read the frames**, the
+  span in source frames and the clip's length, in one crossing. The provider is there
+  because a fall back to the processor is allowed and must never be silent
+  ([impl/addons.md](impl/addons.md) §8).
+- **The reason crosses as an enum with no text in it.** `BridgePlaneFailure` is seven
+  variants: runtime missing, pack missing, model failed, busy, unreadable, no frames,
+  cancelled. The first two are apart on purpose, because they send the user to different
+  buttons.
+- **A missing addon is a badge, not a dialogue.** An effect whose pack is not installed
+  wears `addon_missing` from `BADGE_REASONS`, with the addon's own id in the detail slot,
+  which is the one place a word crosses untranslated. The effect renders identity and every
+  value it holds stays live and saved.
+- **What is not a call**: the plane itself. It is pixels, the render path already reads it
+  out of the store on the way to the card, and nothing about it needs to cross.
+
+### Addons: an install asked for, a list and a state up
+
+`crates/lumit-bridge/src/api/addons.rs` is the doorway to the model runtime and the model
+packs ([12-PLUGINS.md](12-PLUGINS.md) §6), and the split is the unusual part: **the
+download is Dart's, the unpack, the placement and the registry are the engine's**. No crate
+in the workspace speaks HTTP, and the frontend already streams a release asset to disk,
+checks its size and its hash and reports a percentage for the updater, so the addon rides
+the same three functions. Fetching bytes into a temporary file decides nothing about the
+document, which is the line "Flutter is a thin view" actually draws; everything that
+decides what is installed happens on this side of the seam.
+
+- **Six functions, four of them sync.** `addons_dir()` answers the folder, so the two sides
+  can never disagree about where a download lands. `addon_list()` is the scan: one
+  `BridgeAddon` for each folder found, carrying the id, the kind, the name, the version,
+  the summary, the licence and its url, the size, the task a pack does, and `broken` when a
+  file the manifest names is missing or the wrong size. `addon_runtime()` is one
+  `BridgeRuntimeStatus`: the state (missing, present, loaded or failed), the provider, the
+  version and a detail. `addon_remove(id)` deletes one folder. The two that are not sync
+  are `addon_install(manifest, files)`, which parses the manifest, unpacks each verified
+  file into a staging folder and renames that folder into place, a second or three for a
+  large pack, and `addon_runtime_load()`, which opens the shared library and initialises
+  the provider once per run and answers the same `BridgeRuntimeStatus` the reader does.
+  Both ride the worker pool the way the plugin rescan does.
+- **The folder is the registry.** There is no preference file listing what is installed, so
+  nothing can disagree with what is on disk, and `addon_list` is a directory walk and a
+  parse. It is read on opening the page and again after an install or a remove, never in a
+  rebuild.
+- **The refusal is a variant, not a sentence.** `AddonBusy` (one install at a time),
+  `AddonInvalid` (a manifest this build will not accept, or a file that failed its hash)
+  and `AddonMissing` (an effect or an export naming a pack that is not installed) are
+  `BridgeError` variants, and Dart's switch over them picks the arb key. The one piece of
+  English that crosses here is the runtime library's own failure text in
+  `BridgeRuntimeStatus.detail`, which is the channel the shader compiler's own message
+  already uses: somebody else's words, passed through untranslated and marked as such.
+- **Progress is not a call.** The download belongs to Dart, so its fraction is the
+  service's own value and the page listens to it directly. Nothing polls the engine while a
+  file is coming down.
 
 ### The export dialogue's settings cross flat
 

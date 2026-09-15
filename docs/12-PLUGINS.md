@@ -528,12 +528,74 @@ Boundaries:
   activation needing user-profile and occasionally network access) is an open question
   below. Sandboxing MUST NOT silently break plugin licensing checks — a blocked capability
   surfaces as a per-plugin permission the user can grant.
+- **Addons (§6)**: a downloaded model file is untrusted input like any other, and it is
+  treated as data rather than as code. Nothing in an addon's manifest is executed, the
+  manifest names files and tensors and nothing else, and ONNX Runtime is given no custom
+  operator libraries, so a model cannot smuggle an implementation of its own alongside its
+  weights. Every downloaded file MUST be verified against the hash the catalogue published
+  before the engine is allowed to open it, and an install that fails part way leaves
+  nothing behind.
 - **Bundles and project files**: opening a `.lum` project or an AE-import bundle
   executes nothing — no plugin runs until the comp actually evaluates, expressions run
   only under §4.3's hermetic rules, and parsers treat all input as hostile (fuzzed in CI).
 - **No dynamic code from projects**: project files carry expression *text* interpreted
   under the sandbox, never native code, never file paths that are auto-executed or
   auto-fetched.
+
+---
+
+## 6. Addons: the optional downloads
+
+An **addon** is a large optional download the user installs from the Settings window, and
+Lumit never ships one or fetches one on its own. **Lumit MUST work fully with none
+installed**: an addon adds an analysis the compositor can consume, so a machine with none
+of them is running a whole Lumit and not a reduced one.
+
+There are two kinds. The **model runtime** is ONNX Runtime with the provider library for
+the platform, loaded at run time through the `ort` crate's dynamic loading: DirectML on
+Windows, CoreML on macOS, the CPU provider on Linux. A **model pack** is one analysis
+model: its weights, a manifest naming the task it does and the tensors it speaks, its
+licence, and the hash it was verified against. Every pack needs the runtime, and nothing
+else is shared between them.
+
+The packs by name, each running only where a control the user set names it: **RIFE**
+synthesises the in-between frame at Retime's Flow seam, **Depth Anything V2** answers the
+depth plane the Depth effect draws and Depth of field reads, **Robust Video Matting** and
+**BiRefNet** cut the foreground for Remove background, and **SAM 2** seeds the Roto brush
+from a click ([impl/roto.md](impl/roto.md) §9). A model runs as a baked analysis with a
+sidecar, or as a named engine on a control that already exists. Never as a default, never
+on the application's own initiative, and never inline in a render path.
+
+**Nothing generative ships, as an addon or in any other form.** No text to image, no image
+to video, no prompt-written shaders, no bring-your-own-key provider. A model here produces
+a primitive the compositor consumes: a plane of depth, a plane of coverage, an in-between
+frame. It never produces a picture from a description. This is a rule and not a
+preference, and it is enforced where it can be: a pack whose task is not one of the four
+the engine binds to is refused by the manifest parser, and the catalogue refuses to
+publish it in the first place.
+
+**Every pack carries its licence and the page shows it**, beside the name and the size,
+because a model's terms are somebody else's and the user reads them before installing, not
+after. A pack whose terms forbid the use people would put it to is not listed, and one
+whose training set carries terms of its own says so on its row.
+
+**What produced a frame is recorded.** A model under a GPU execution provider is not
+bit-stable across cards or driver versions, so the pack's hash and the provider that ran
+it go into every key a model result is filed under, and the sidecar holding that result
+records what made it ([14-ENGINEERING-RULES.md](14-ENGINEERING-RULES.md) §3). A result
+made under one backend is never served for another.
+
+**A missing addon behaves the way a missing plugin does (§1).** A project naming a pack
+this machine does not have keeps every value and every keyframe, saves them back
+unchanged, and renders the affected effect as identity under a calm badge naming what is
+missing. Nothing is downgraded in silence: where an engine was chosen and its pack is
+absent, the row says so in a sentence and links to the Addons page, and an export whose
+document names a missing pack refuses to start rather than quietly writing different
+pictures.
+
+[impl/addons.md](impl/addons.md) is the binding note: the runtime, the pack format, the
+install job and its Settings page, where each model runs, the determinism record, the
+budgets, traps, test plans, and the work packages AD1 to AD6.
 
 ---
 

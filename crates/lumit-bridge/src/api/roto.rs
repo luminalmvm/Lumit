@@ -1,5 +1,6 @@
 //! The Roto brush's surface across the seam (docs/impl/roto.md §5–§8):
-//! strokes down, the two buttons down, the span and the progress up.
+//! strokes and taps down, the two buttons down, the span, the progress and
+//! what the overlay draws up.
 //!
 //! # In plain terms
 //!
@@ -25,7 +26,7 @@
 
 use flutter_rust_bridge::frb;
 use lumit_core::model::LayerKind;
-use lumit_core::roto::{RotoBlock, RotoStroke, RotoStrokeKind, ROTO_BRUSH};
+use lumit_core::roto::{RotoBlock, RotoPrompt, RotoStroke, RotoStrokeKind, ROTO_BRUSH};
 use uuid::Uuid;
 
 use crate::api::{effect::BridgeEffectInstance, layer::LayerReference, BridgeError};
@@ -90,6 +91,28 @@ fn stroke_of(
     })
 }
 
+/// One validated prompt from the wire's flat form.
+///
+/// An odd-length `points`, a prompt with none, a non-finite coordinate, a label
+/// per point that is not there, and a label that is neither for the subject nor
+/// against it are each refused rather than stored: a tap the model cannot read
+/// is a tap that would silently do nothing.
+fn prompt_of(points: &[f32], labels: &[u8], frame: i64) -> Result<RotoPrompt, BridgeError> {
+    if points.is_empty() || !points.len().is_multiple_of(2) || !points.iter().all(|v| v.is_finite())
+    {
+        return Err(BridgeError::InvalidParam);
+    }
+    if labels.len() != points.len() / 2 || !labels.iter().all(|label| *label <= 1) {
+        return Err(BridgeError::InvalidParam);
+    }
+    Ok(RotoPrompt {
+        id: Uuid::now_v7(),
+        frame,
+        points: points.chunks_exact(2).map(|p| (p[0], p[1])).collect(),
+        labels: labels.to_vec(),
+    })
+}
+
 impl LayerReference {
     /// The first scribble on a layer that carries no Roto brush: add the brush
     /// **and** file the stroke, in one commit.
@@ -126,6 +149,7 @@ impl LayerReference {
         instance.roto = Some(RotoBlock {
             base_frame: Some(frame),
             strokes: vec![stroke],
+            prompts: Vec::new(),
         });
         let id = instance.id;
         self.with_effects(move |effects| {
@@ -171,18 +195,64 @@ impl BridgeEffectInstance {
         Ok(())
     }
 
+    /// Add one segmentation prompt to this Roto brush, on the **staged** copy.
+    ///
+    /// `points` are `[x0, y0, x1, y1, …]` in **source raster pixels**, as a
+    /// stroke's are and for the same reason, and `labels` carries one byte a
+    /// point: 1 for a tap on the subject, 0 for one against it. `frame` is the
+    /// source frame they were tapped on.
+    ///
+    /// **The first tap sets the base frame**, exactly as the first stroke does,
+    /// so a brush seeded by a prompt alone has somewhere to propagate from.
+    ///
+    /// The taps are read by the segmentation model only where the effect's seed
+    /// row says Segment; stored on a brush seeded by its strokes they change
+    /// nothing and cost nothing, which is what makes the row a switch rather
+    /// than a mode the document has to be converted between.
+    ///
+    /// **A tap on any other frame is refused**, because the model is only ever
+    /// asked about the base frame (docs/impl/addons.md §6.2). Stored anywhere
+    /// else it would be hashed into every frame's name on that side of the
+    /// base, retiring cached mattes while changing no picture at all.
+    #[frb(sync)]
+    pub fn roto_add_prompt(
+        &mut self,
+        points: Vec<f32>,
+        labels: Vec<u8>,
+        frame: i64,
+    ) -> Result<(), BridgeError> {
+        if self.effect.effect.match_name != ROTO_BRUSH {
+            return Err(BridgeError::InvalidEffect);
+        }
+        let prompt = prompt_of(&points, &labels, frame)?;
+        let block = self.roto_block_mut();
+        if block.base_frame.is_some_and(|base| base != frame) {
+            return Err(BridgeError::InvalidParam);
+        }
+        block.base_frame.get_or_insert(frame);
+        block.prompts.push(prompt);
+        Ok(())
+    }
+
     /// Move the base frame — the frame propagation runs outward from — on the
     /// staged copy.
     ///
     /// A real edit and not a preference: every cached matte depends on it, so
     /// moving it retires the whole run, which is exactly what a user asking for
     /// the shot to be re-decided from somewhere else means.
+    ///
+    /// The taps the new base can never read go with it, in this same staged
+    /// edit so one undo brings them back: the model is only ever asked about
+    /// the base frame, and a tap stranded on the old one would keep renaming
+    /// mattes without changing a picture (docs/impl/addons.md §6.2).
     #[frb(sync)]
     pub fn roto_set_base_frame(&mut self, frame: Option<i64>) -> Result<(), BridgeError> {
         if self.effect.effect.match_name != ROTO_BRUSH {
             return Err(BridgeError::InvalidEffect);
         }
-        self.roto_block_mut().base_frame = frame;
+        let block = self.roto_block_mut();
+        block.base_frame = frame;
+        block.prompts.retain(|p| Some(p.frame) == frame);
         Ok(())
     }
 
@@ -226,6 +296,40 @@ impl BridgeEffectInstance {
             .unwrap_or_default()
     }
 
+    /// Every segmentation prompt this instance holds, for the overlay to draw
+    /// as rings over the picture.
+    ///
+    /// Read beside [`Self::roto_strokes`] and on the same terms: once a frame
+    /// and once a document revision, never per rebuild.
+    #[frb(sync)]
+    pub fn roto_prompts(&self) -> Vec<BridgeRotoPrompt> {
+        self.roto_block()
+            .map(|block| {
+                block
+                    .prompts
+                    .iter()
+                    .map(|p| BridgeRotoPrompt {
+                        id: p.id,
+                        points: p.points.iter().flat_map(|at| [at.0, at.1]).collect(),
+                        labels: p.labels.clone(),
+                        frame: p.frame,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// The frame the propagation runs outward from, or `None` on a brush
+    /// nothing has been drawn or tapped on yet.
+    ///
+    /// The Viewer needs it to know whether the frame on screen is the one a tap
+    /// may seed: a prompt is only ever read on the base frame, so a tap
+    /// anywhere else is the ordinary dab of a stroke it has always been.
+    #[frb(sync)]
+    pub fn roto_base_frame(&self) -> Option<i64> {
+        self.roto_block().and_then(|block| block.base_frame)
+    }
+
     #[frb(ignore)]
     fn roto_block(&self) -> Option<&RotoBlock> {
         self.effect.roto.as_ref()
@@ -246,6 +350,18 @@ pub struct BridgeRotoStroke {
     pub points: Vec<f32>,
     pub radius: f32,
     pub kind: BridgeRotoStrokeKind,
+    pub frame: i64,
+}
+
+/// One stored prompt, as the overlay draws it.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeRotoPrompt {
+    pub id: Uuid,
+    /// `[x0, y0, x1, y1, …]` in source raster pixels, as a stroke's are.
+    pub points: Vec<f32>,
+    /// One byte a point: 1 for a tap on the subject, 0 for one against it.
+    pub labels: Vec<u8>,
     pub frame: i64,
 }
 
@@ -298,6 +414,11 @@ pub enum BridgeRotoFailure {
     NoFrames,
     /// The base frame's strokes do not describe a subject.
     NoSeeds,
+    /// The seed row asks for a segmentation model and this machine has not got
+    /// one. The Addons page is where that is mended.
+    ModelMissing,
+    /// The model is installed and would not open or would not run.
+    ModelFailed,
 }
 
 impl BridgeRotoFailure {
@@ -311,6 +432,8 @@ impl BridgeRotoFailure {
             F::Unreadable => BridgeRotoFailure::Unreadable,
             F::NoFrames => BridgeRotoFailure::NoFrames,
             F::NoSeeds => BridgeRotoFailure::NoSeeds,
+            F::ModelMissing => BridgeRotoFailure::ModelMissing,
+            F::ModelFailed => BridgeRotoFailure::ModelFailed,
         }
     }
 }
@@ -343,6 +466,13 @@ pub struct BridgeRotoStatus {
     pub base_frame: Option<i64>,
     /// How many strokes the instance holds.
     pub strokes: u32,
+    /// How many segmentation prompts it holds, which is what the card counts
+    /// when the seed row says Segment.
+    pub prompts: u32,
+    /// Whether the seed row says Segment. The taps are only what the base
+    /// frame is cut from where it does, so this is what decides which idle
+    /// sentence the card reads - the engine's question, not the view's.
+    pub segments: bool,
 }
 
 /// The Roto brush `effect` on `layer`, as its status row draws it.
@@ -401,6 +531,8 @@ pub fn roto_status(layer: LayerReference, effect: Uuid) -> Result<BridgeRotoStat
         clip_frames: run.as_ref().map_or(0, |r| r.clip_frames as u32),
         base_frame: block.base_frame,
         strokes: block.strokes.len() as u32,
+        prompts: block.prompts.len() as u32,
+        segments: lumit_core::roto::RotoSettings::of(fx).segments(),
     })
 }
 
@@ -654,8 +786,39 @@ pub fn roto_solve_frame(
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 mod tests {
-    use super::{boundary_of, MAX_BOUNDARY_POINTS};
+    use super::{boundary_of, prompt_of, MAX_BOUNDARY_POINTS};
+    use crate::api::BridgeError;
+
+    /// A tap the model could not read is refused at the door rather than
+    /// stored, because a prompt nobody can ask about is a prompt that would
+    /// silently do nothing (docs/impl/addons.md §11 test 10).
+    #[test]
+    fn a_prompt_is_refused_unless_every_tap_can_be_read() {
+        let good = prompt_of(&[10.0, 20.0, 30.0, 40.0], &[1, 0], 7).expect("two taps");
+        assert_eq!(good.points, vec![(10.0, 20.0), (30.0, 40.0)]);
+        assert_eq!(good.labels, vec![1, 0]);
+        assert_eq!(good.frame, 7);
+
+        for (points, labels) in [
+            (vec![], vec![]),
+            (vec![1.0], vec![1]),
+            (vec![1.0, f32::NAN], vec![1]),
+            (vec![f32::INFINITY, 2.0], vec![1]),
+            (vec![1.0, 2.0], vec![]),
+            (vec![1.0, 2.0], vec![1, 1]),
+            (vec![1.0, 2.0], vec![2]),
+        ] {
+            assert!(
+                matches!(
+                    prompt_of(&points, &labels, 0),
+                    Err(BridgeError::InvalidParam)
+                ),
+                "{points:?} with {labels:?} was stored"
+            );
+        }
+    }
 
     /// A filled square in the middle of a small plane: the edge is the ring of
     /// pixels where the answer changes, and nothing inside or outside it.

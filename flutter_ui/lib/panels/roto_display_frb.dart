@@ -16,12 +16,15 @@
 // (`ParamKind::Action`), drawn by the ordinary parameter row; the scribbling is
 // the Viewer's (`panels/viewer_roto.dart`).
 
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/roto.dart';
 import 'package:uuid/uuid.dart';
 
 import '../l10n/strings.dart';
+import '../shell/settings_window_frb.dart';
 import '../widgets/controls.dart';
 import 'camera_track_display_frb.dart' show TrackSpanBar;
 import 'status_poller.dart';
@@ -41,6 +44,8 @@ String rotoFailureSentence(BridgeRotoFailure failure) => switch (failure) {
       BridgeRotoFailure.unreadable => l10n.rotoFailedUnreadable,
       BridgeRotoFailure.noFrames => l10n.rotoFailedNoFrames,
       BridgeRotoFailure.noSeeds => l10n.rotoFailedNoSeeds,
+      BridgeRotoFailure.modelMissing => l10n.rotoFailedModelMissing,
+      BridgeRotoFailure.modelFailed => l10n.rotoFailedModelFailed,
     };
 
 /// The sentence for one reading of the propagation.
@@ -53,9 +58,15 @@ String rotoStatusSentence(BridgeRotoStatus? status) {
   switch (status.stage) {
     case BridgeRotoStage.idle:
       // Nothing has been asked for yet. What is worth saying is whether there
-      // is anything to ask *with*.
-      return status.baseFrame == null
-          ? l10n.rotoNoStrokes
+      // is anything to ask *with*, and where the base frame is seeded by taps
+      // rather than scribbles, how many of them there are, because a tap leaves
+      // a ring on the picture and nothing on this card otherwise.
+      // Whether the taps are what the base frame is cut from is the seed row's
+      // answer and the engine's to give: a brush put back to Strokes still
+      // holds its taps, and they decide nothing there.
+      if (status.baseFrame == null) return l10n.rotoNoStrokes;
+      return status.segments && status.prompts > 0
+          ? l10n.rotoReadyFromTaps(status.prompts, status.baseFrame!)
           : l10n.rotoReadyToPropagate(status.baseFrame!);
     case BridgeRotoStage.queued:
       return l10n.rotoQueued;
@@ -216,11 +227,31 @@ class _RotoDisplayFrbState extends State<RotoDisplayFrb>
               analysed: rotoCoveredFrames(status),
               total: status.clipFrames,
             ),
-          Text(
-            rotoStatusSentence(status),
-            key: const ValueKey('fx-roto-status'),
-            style: t.small.copyWith(color: t.textMuted),
-            overflow: TextOverflow.ellipsis,
+          Row(
+            children: [
+              Flexible(
+                child: Text(
+                  rotoStatusSentence(status),
+                  key: const ValueKey('fx-roto-status'),
+                  style: t.small.copyWith(color: t.textMuted),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              // The one refusal with somewhere to go: the seed row asked for a
+              // model and this machine has no addon for it, which is a button
+              // press away from being mended.
+              if (status?.failure == BridgeRotoFailure.modelMissing) ...[
+                const SizedBox(width: 6),
+                HouseButton(
+                  key: const ValueKey('fx-roto-open-addons'),
+                  small: true,
+                  frameless: true,
+                  onPressed: () => unawaited(showSettingsWindowFrb(context,
+                      initialPage: SettingsPage.addons)),
+                  child: Text(l10n.openAddons, style: t.small),
+                ),
+              ],
+            ],
           ),
           // The frame the propagation runs outward from, and the one gesture
           // that moves it. Offered only once there is something to move: before

@@ -67,6 +67,7 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'dialog_frame.dart';
 import 'export_queue_frb.dart';
+import 'settings_window_frb.dart';
 import 'status_line_frb.dart';
 
 /// The frame the drawing gives this dialog.
@@ -379,6 +380,10 @@ class _ExportDialogState extends State<_ExportDialog> {
   bool _openFolder = false;
   bool _makeANoise = false;
   String? _refused;
+
+  /// Whether [_refused] is the addon one, which is the only refusal with
+  /// somewhere to send the reader: the Addons page.
+  bool _refusedForAddon = false;
 
   /// The output size: a fraction of the comp's, or the pixels typed into the
   /// Resize row when it is ticked.
@@ -755,6 +760,16 @@ class _ExportDialogState extends State<_ExportDialog> {
           summary: _refused ?? (_check.isNotEmpty ? _check : _summary),
           keyPrefix: 'export',
           actions: [
+            // Only beside the one refusal that has somewhere to go: the page
+            // where the missing addon is installed.
+            if (_refusedForAddon)
+              HouseButton(
+                key: const ValueKey('export-open-addons'),
+                onPressed: () => unawaited(showSettingsWindowFrb(context,
+                    initialPage: SettingsPage.addons)),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Text(l10n.openAddons),
+              ),
             HouseButton(
               key: const ValueKey('export-add-to-queue'),
               onPressed: _canQueue ? () => _queue(start: false) : null,
@@ -2331,11 +2346,26 @@ class _ExportDialogState extends State<_ExportDialog> {
   void _queue({required bool start}) {
     final path = _path;
     if (path == null) return;
-    setState(() => _refused = null);
+    setState(() {
+      _refused = null;
+      _refusedForAddon = false;
+    });
     try {
       widget.comp.queueExport(spec: _spec, path: path, start: start);
     } catch (error) {
-      setState(() => _refused = '$error');
+      // Which refusal this is, is read off the engine rather than off the
+      // error: a `BridgeError` reaches Dart as an opaque handle with nothing
+      // readable on it. The pre-flight turns an export away for one reason a
+      // person can act on, a layer whose Flow engine names a model this machine
+      // cannot run (docs/impl/addons.md §6.3), so the question put back to the
+      // engine is the one the pre-flight asked, over this composition. Asking
+      // the machine instead would call every blank path and every lost comp an
+      // addon problem, on the usual machine with no addons installed.
+      final addon = widget.comp.addonNeeded();
+      setState(() {
+        _refusedForAddon = addon;
+        _refused = addon ? l10n.exportAddonMissing : '$error';
+      });
       return;
     }
     // Wake the status line, which polls only while an export is live.

@@ -49,6 +49,15 @@ pub struct MatteDraw {
     /// ops in `fx` (as for a layer's own `colour_tables`). Empty unless the
     /// source mode is `EffectsAndMasks` and the matte source has a LUT.
     pub colour_tables: Vec<Option<crate::colour::TableRequest>>,
+    /// The matte source's own baked pictures, 1:1 with the matching ops in
+    /// `fx` exactly as a layer's own are, and filled for the same reason
+    /// [`DofInputDraw::roto_mattes`] is: without them the source layer's stack
+    /// runs with every carriage empty, so a track matte whose source wears a
+    /// Roto brush or a Depth gates the consumer with its plain footage
+    /// (docs/impl/addons.md §6.1 and §13).
+    pub roto_mattes: Vec<Option<RotoMatteDraw>>,
+    /// The matte source's own planes, for [`Self::roto_mattes`]'s reason.
+    pub planes: Vec<Option<PlaneDraw>>,
     /// Set when the matte source is a **Precomp**: the nested comp's
     /// own draw list, realised recursively exactly as a Precomp layer's
     /// picture is — `rgba` is then empty and `tex_w`/`tex_h` are the nested
@@ -78,6 +87,29 @@ pub struct RotoMatteDraw {
     pub gray: std::sync::Arc<Vec<u8>>,
 }
 
+/// One planes-tier effect's plane for one frame, as the draw carries it
+/// (docs/impl/addons.md §6.1): the analysis's bytes at the **model's** own
+/// raster, shared rather than copied (the store hands out an `Arc` and this is
+/// that same allocation).
+#[derive(Clone)]
+pub struct PlaneDraw {
+    /// The effect instance the plane belongs to, and the source frame it was
+    /// made for. Not read by the draw itself: it is what the realiser
+    /// remembers an uploaded texture under, so a plane that has not changed is
+    /// not re-uploaded on every repaint.
+    pub instance: uuid::Uuid,
+    pub source_frame: i64,
+    /// The name of the run these bytes came out of
+    /// ([`crate::planes::content`]). Part of the memo's own name, because a
+    /// second analysis of the same instance and frame is genuinely different
+    /// bytes and the memo would otherwise hand back the first one's texture.
+    pub content: u64,
+    pub width: u32,
+    pub height: u32,
+    pub kind: crate::planes::PlaneKind,
+    pub data: std::sync::Arc<Vec<u8>>,
+}
+
 /// A depth-of-field depth input packaged for the compositor (docs/impl/
 /// layer-input.md §2): the referenced layer's **source** pixels, ready for
 /// [`crate::fxops::render_layer_input`] to resample into the consuming layer's
@@ -102,6 +134,17 @@ pub struct DofInputDraw {
     /// `fx`. Empty unless the depth source is `EffectsAndMasks` and the depth
     /// layer has a LUT.
     pub colour_tables: Vec<Option<crate::colour::TableRequest>>,
+    /// The referenced layer's own baked pictures, 1:1 with the matching ops in
+    /// `fx` exactly as a layer's own are. Non-empty only when the consumer
+    /// reads it through Effects and masks and the layer wears such an effect.
+    ///
+    /// Here because a referenced layer's stack used to run with every side
+    /// carriage empty, so a Roto brush or a Depth on the layer somebody pointed
+    /// a Matte row at rendered as a passthrough and the consumer read the plain
+    /// footage (docs/impl/addons.md §13).
+    pub roto_mattes: Vec<Option<RotoMatteDraw>>,
+    /// The referenced layer's own planes, for [`Self::roto_mattes`]'s reason.
+    pub planes: Vec<Option<PlaneDraw>>,
     /// Set when the referenced layer is a **Precomp**: the nested
     /// comp's own draw list, realised recursively exactly as a Precomp
     /// layer's picture is — `rgba` is then empty and `tex_w`/`tex_h` are the
@@ -460,6 +503,22 @@ pub struct CompLayerDraw {
     /// into the working raster happens on the card, where every other
     /// differently-sized input is fitted.
     pub roto_mattes: Vec<Option<RotoMatteDraw>>,
+    /// **Every planes-tier effect's plane for this frame**
+    /// (docs/impl/addons.md §6.1): one slot per enabled such op that resolves
+    /// to an op at all, in stack order - the same one-predicate, one-order rule
+    /// [`Self::roto_mattes`] follows, with its own counter in `run_ops` because
+    /// its predicate is a different one again.
+    ///
+    /// `None` is the honest passthrough and is what a frame **outside the
+    /// analysed span** gets, along with a frame before any Analyse and a
+    /// machine with no model pack installed.
+    ///
+    /// At the **model's** own raster, which is neither the source's nor this
+    /// layer's working one: the model answered at a few hundred pixels on the
+    /// long side and produced nothing finer, so the resample into the working
+    /// raster happens on the card where every other differently-sized input is
+    /// fitted.
+    pub planes: Vec<Option<PlaneDraw>>,
     /// **Every points producer's birth schedule** (points-stream.md §3.3): one
     /// per op whose effect declares a `Points` output — Particulate alone in
     /// v1 — 1:1 and in stack order with them, the same one-predicate, one-order

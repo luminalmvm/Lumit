@@ -57,12 +57,16 @@ a retime lands between two source frames:
 | **Nearest** | Repeat the closer frame. Sharp, but it stutters. |
 | **Blend** | Crossfade the two frames. Smooth, but it ghosts. |
 
-The third answer is **Flow**, which measures the motion between the two frames and
-synthesises the one in between. It is the **Flow** switch in the layer's switch cluster
-rather than an entry in that dropdown. Turning it on reveals a **Flow** group in the
-Effect Controls panel: measurement resolution, input rate, vector detail, smoothness, how
-occlusions are handled, what to fall back to, a guard for on-screen overlays, and a switch
-to force it on where it would otherwise stand down.
+The third answer is **Flow**, which synthesises the frame in between. It is the **Flow**
+switch in the layer's switch cluster rather than an entry in that dropdown. Turning it on
+reveals a **Flow** group in the Effect Controls panel: engine, measurement resolution,
+input rate, vector detail, smoothness, how occlusions are handled, what to fall back to, a
+guard for on-screen overlays, and a switch to force it on where it would otherwise stand
+down.
+
+**Engine** is Lumit's own optical flow or the RIFE model pack installed from
+**Settings ▸ Addons**. A machine without the pack previews with the built-in engine and
+says so on the row, and an export of that layer is **refused**.
 
 Turning Flow off returns the layer to Nearest and keeps the group's settings.
 

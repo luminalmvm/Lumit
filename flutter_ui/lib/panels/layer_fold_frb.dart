@@ -484,10 +484,11 @@ final class FoldFlowRow extends LayerFoldRow {
 
 /// The controls of the Flow group, in the order they are shown.
 ///
-/// Resolution first because it is the one that costs money, then the rate (what
-/// frames flow works between), then how hard it looks, then what it does where
-/// it cannot see.
+/// Engine first because it decides which of them mean anything, then resolution
+/// because it is the one that costs money, then the rate (what frames flow works
+/// between), then how hard it looks, then what it does where it cannot see.
 enum FlowRowKind {
+  engine,
   resolution,
   inputRate,
   detail,
@@ -500,6 +501,7 @@ enum FlowRowKind {
   /// The row's shown name — a getter rather than a stored constant so each
   /// read speaks the current language.
   String get label => switch (this) {
+        engine => l10n.flowEngine,
         resolution => l10n.flowResolution,
         inputRate => l10n.flowInputRate,
         detail => l10n.flowVectorDetail,

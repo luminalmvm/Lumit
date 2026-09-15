@@ -63,25 +63,14 @@ use crate::sidecar;
 // What a propagation is asked for
 // ---------------------------------------------------------------------------
 
-/// One frame of a clip as **encoded RGBA8** at the source's own raster —
-/// everything a propagation reads.
-///
-/// A trait for [`LumaFrames`](crate::track::LumaFrames)'s reason: the engine
-/// tests feed a synthetic shot with a matte they wrote down, since asking them
-/// to encode a video first would be measuring ffmpeg. Whichever it is, it is
-/// opened on the propagation thread and never on the caller's.
-pub trait RotoFrames {
-    /// `(frames, width, height, frames per second)`.
-    fn info(&self) -> (usize, u32, u32, f64);
-    /// Frame `n` as row-major RGBA8, `width · height · 4` long. `None` ends the
-    /// run early — a clip that stops decoding part-way is propagated as far as
-    /// it went, which is the same honesty a partial track has.
-    fn rgba(&mut self, n: usize) -> Option<Vec<u8>>;
-}
+/// Everything a propagation reads, shared with the planes tier since both read
+/// a clip the same way ([`crate::frames`]). Named from here so nothing that
+/// spoke of a roto frame before has to learn a second name for it.
+pub use crate::frames::RotoFrames;
 
 /// What names one propagation's file: the media's own content, and everything
 /// [`lumit_core::roto::key_hash`] covers (the tier version, the settings, the
-/// base frame and the whole stroke table).
+/// base frame, the whole stroke table and the whole prompt table).
 ///
 /// Two halves rather than one hash, because the note asks for a name whose
 /// **media prefix** can be enumerated: a re-propagation after a correction has a
@@ -129,12 +118,17 @@ pub struct RotoJob {
     /// which is [`RotoFailure::Offline`], refused before a thread is spawned.
     pub key: Option<RotoKey>,
     pub settings: RotoSettings,
-    /// The strokes and the base frame, copied off the document at the moment
-    /// the button was pressed. A run is of a stroke table, not of a live
+    /// The strokes, the prompts and the base frame, copied off the document at
+    /// the moment the button was pressed. A run is of one table, not of a live
     /// document that may move under it.
     pub block: RotoBlock,
     /// Opens the frames, **on the worker thread**.
     pub open: Box<dyn FnOnce() -> Option<Box<dyn RotoFrames>> + Send>,
+    /// Opens the segmentation model, on that same thread and only where the
+    /// base frame actually asks for one, so a brush seeded by its strokes
+    /// never waits on a graph compile, and a prompted brush drops the model as
+    /// soon as the base frame is cut.
+    pub model: Box<dyn FnOnce() -> Result<Box<dyn RotoModel>, RotoFailure> + Send>,
     /// `false` asks only for a cache hit: the warm pass a project open makes,
     /// which must never start propagating a shot nobody asked about.
     pub propagate: bool,
@@ -199,6 +193,111 @@ pub enum RotoFailure {
     /// it.
     #[error("the base frame's strokes do not describe a subject")]
     NoSeeds,
+    /// The seed row asks for a segmentation model and this machine has not got
+    /// one: no runtime, or no pack (docs/impl/addons.md §6.2).
+    #[error("the segmentation model this brush asks for is not installed")]
+    ModelMissing,
+    /// The model is installed and would not open or would not run. Its own
+    /// words are dropped here: a reason crosses the bridge, never a sentence.
+    #[error("the segmentation model would not run here")]
+    ModelFailed,
+}
+
+impl RotoFailure {
+    /// The Roto brush's reading of what the model crate answered.
+    ///
+    /// The detail a library wrote is dropped on purpose: this enum is what the
+    /// bridge hands the interface, and a sentence from ONNX Runtime is not
+    /// something a reason can carry (§9).
+    fn of(e: &lumit_ml::MlError) -> Self {
+        use lumit_ml::MlError as E;
+        match e {
+            E::RuntimeMissing
+            | E::RuntimeFailed(_)
+            | E::RuntimeInUse
+            | E::PackMissing(_)
+            | E::NotInstalled => RotoFailure::ModelMissing,
+            E::PackUnreadable
+            | E::Invalid(_)
+            | E::Busy
+            | E::ModelFailed(_)
+            | E::ShapeMismatch
+            | E::Cancelled => RotoFailure::ModelFailed,
+        }
+    }
+}
+
+/// A segmentation model, as the base frame's seeding uses one.
+///
+/// A trait and not the concrete type, so the whole seeding path (the prompt,
+/// the seeds, the strokes stamped over them, the solve, the record) is tested
+/// on every machine with a model the test wrote down, and none of it waits on a
+/// runtime nobody installed on a CI runner. The real one is [`open_segment`].
+///
+/// The frame is read once and kept inside the model for the length of the run,
+/// because the encoder is nearly the whole cost and a second ask about the same
+/// frame should pay the decoder alone (docs/impl/addons.md §6.2).
+pub trait RotoModel {
+    /// Read the base frame of RGBA bytes, and hold on to what it read.
+    fn embed(&mut self, rgba: &[u8], width: u32, height: u32) -> Result<(), RotoFailure>;
+    /// What the taps point at, as a coverage per pixel of the frame just read.
+    fn mask(&mut self, points: &[(f32, f32)], labels: &[u8]) -> Result<Vec<f32>, RotoFailure>;
+    /// What made this matte, for the record's provenance (§7): the provider
+    /// first, then the pack and the runtime.
+    fn made_with(&self) -> String;
+}
+
+/// The segmentation model, wrapped so this file never names `lumit_ml` twice.
+struct SegmentModel {
+    model: lumit_ml::Segment,
+    /// The base frame as the encoder described it, kept for the run.
+    frame: Option<lumit_ml::segment::Embedding>,
+}
+
+impl RotoModel for SegmentModel {
+    fn embed(&mut self, rgba: &[u8], width: u32, height: u32) -> Result<(), RotoFailure> {
+        self.frame = Some(
+            self.model
+                .embed(rgba, width, height)
+                .map_err(|e| RotoFailure::of(&e))?,
+        );
+        Ok(())
+    }
+
+    fn mask(&mut self, points: &[(f32, f32)], labels: &[u8]) -> Result<Vec<f32>, RotoFailure> {
+        let frame = self.frame.as_ref().ok_or(RotoFailure::ModelFailed)?;
+        self.model
+            .mask(frame, points, labels)
+            .map_err(|e| RotoFailure::of(&e))
+    }
+
+    fn made_with(&self) -> String {
+        // The pack and its hash as well as the provider, because §7's point is
+        // that a matte can be asked later which pack seeded it, and an updated
+        // pack under the same id answers that only by its hash.
+        let runtime = match lumit_ml::runtime::status() {
+            lumit_ml::RuntimeStatus::Loaded { version, .. } => version,
+            _ => String::new(),
+        };
+        let hash: String = self
+            .model
+            .identity()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+        format!(
+            "{}; {}; {hash}; ONNX Runtime {runtime}",
+            self.model.provider(),
+            self.model.pack()
+        )
+    }
+}
+
+/// Open the installed segmentation pack, on the thread that will run it.
+fn open_segment() -> Result<Box<dyn RotoModel>, RotoFailure> {
+    lumit_ml::Segment::open()
+        .map(|model| Box::new(SegmentModel { model, frame: None }) as Box<dyn RotoModel>)
+        .map_err(|e| RotoFailure::of(&e))
 }
 
 /// What happened when a propagation was asked for.
@@ -244,6 +343,11 @@ pub struct RotoRun {
     /// passthrough — never a held neighbouring matte.
     pub first_frame: i64,
     pub last_frame: i64,
+    /// What seeded the base frame, when a model did: the provider, the pack
+    /// and its hash, and the runtime version (docs/impl/addons.md §7). Empty
+    /// for a run seeded by its strokes, which is every run before this
+    /// existed.
+    pub made_with: String,
     /// Ascending by frame, so a lookup is a binary search.
     records: Vec<FrameRecord>,
     /// The last few frames decompressed, so scrubbing one region does not
@@ -391,7 +495,11 @@ fn expand(record: &FrameRecord, width: u32, height: u32) -> Vec<u8> {
 
 /// The inverse: crop a full-raster gray8 plane to its non-empty box and
 /// compress it.
-fn shrink(plane: &[u8], width: u32, height: u32) -> ([u32; 4], Vec<u8>) {
+///
+/// Shared with the planes tier's matte arm ([`crate::planes`]), which keeps its
+/// coverage exactly the way this one does and for the same reason: a matte is
+/// mostly a subject in a box with nothing around it.
+pub(crate) fn shrink(plane: &[u8], width: u32, height: u32) -> ([u32; 4], Vec<u8>) {
     let (w, h) = (width as usize, height as usize);
     let (mut x0, mut y0, mut x1, mut y1) = (w, h, 0usize, 0usize);
     for y in 0..h {
@@ -428,7 +536,10 @@ fn shrink(plane: &[u8], width: u32, height: u32) -> ([u32; 4], Vec<u8>) {
 /// Bump when the record's meaning changes. Old files then hash to a different
 /// name and are simply never asked for — the disposal the frame cache's
 /// algorithm version performs.
-const FORMAT_VERSION: u16 = 1;
+///
+/// Version 2 is the one whose record says what seeded the base frame
+/// (docs/impl/addons.md §7).
+const FORMAT_VERSION: u16 = 2;
 
 /// `LUMROT\0` — read before anything is deserialised, so a file that is not one
 /// of ours is refused rather than fed to a decoder.
@@ -444,6 +555,9 @@ struct Record {
     height: u32,
     fps: f64,
     clip_frames: u64,
+    /// What seeded the base frame, when a model did (§7). Empty otherwise, and
+    /// the reason this tier's version is 2.
+    made_with: String,
     frames: Vec<FrameRecord>,
 }
 
@@ -462,6 +576,7 @@ fn encode(key: RotoKey, run: &RotoRun) -> Option<Vec<u8>> {
         height: run.height,
         fps: run.fps,
         clip_frames: run.clip_frames as u64,
+        made_with: run.made_with.clone(),
         frames: run.records.clone(),
     })
     .ok()?;
@@ -625,6 +740,7 @@ fn record_to_run(record: Record) -> Option<RotoRun> {
         clip_frames: usize::try_from(record.clip_frames).unwrap_or(usize::MAX),
         first_frame: first,
         last_frame: last,
+        made_with: record.made_with,
         records: record.frames,
         warm: Mutex::new(Vec::new()),
     })
@@ -642,10 +758,11 @@ fn write_sidecar(dir: &Path, key: RotoKey, run: &RotoRun) {
 }
 
 /// Every frame any **other** run of the same media can lend this one, by chain
-/// hash. The whole of prefix reuse: a frame whose contributing strokes did not
-/// change keeps its chain hash, and a matte filed under that hash is that
-/// frame's answer whichever run made it.
-fn lendable(dir: &Path, key: RotoKey) -> HashMap<[u8; 32], FrameRecord> {
+/// hash, each beside the provenance of the file it came out of. The whole of
+/// prefix reuse: a frame whose contributing strokes did not change keeps its
+/// chain hash, and a matte filed under that hash is that frame's answer
+/// whichever run made it.
+fn lendable(dir: &Path, key: RotoKey) -> HashMap<[u8; 32], (FrameRecord, Arc<str>)> {
     let mut out = HashMap::new();
     let prefix = key.prefix();
     let Ok(entries) = std::fs::read_dir(dir) else {
@@ -677,8 +794,13 @@ fn lendable(dir: &Path, key: RotoKey) -> HashMap<[u8; 32], FrameRecord> {
         let Some(record) = decode(&bytes, None) else {
             continue;
         };
+        // The file's provenance rides with every frame it lends, because a run
+        // that lends its base frame never opens a model and so has nothing else
+        // to say what seeded it (docs/impl/addons.md §7).
+        let made: Arc<str> = Arc::from(record.made_with.as_str());
         for frame in record.frames {
-            out.entry(frame.chain).or_insert(frame);
+            out.entry(frame.chain)
+                .or_insert_with(|| (frame, Arc::clone(&made)));
         }
     }
     out
@@ -828,6 +950,7 @@ pub fn run_from_planes(
         clip_frames,
         first_frame: records.first()?.frame,
         last_frame: records.last()?.frame,
+        made_with: String::new(),
         records,
         warm: Mutex::new(Vec::new()),
     })
@@ -981,6 +1104,26 @@ fn run(job: RotoJob, cancel: &AtomicBool) {
 // The work
 // ---------------------------------------------------------------------------
 
+/// Every tap deciding frame `frame`, gathered into one question: the points in
+/// document order and a label each.
+///
+/// One question rather than one per prompt, because that is how the model is
+/// asked: a second tap **refines** the first rather than proposing a second
+/// subject, and running the decoder twice would throw the first answer away. A
+/// prompt whose labels do not match its points reads the missing ones as taps
+/// on the subject, which is the tasteful default a bad file gets (docs/14 §4).
+fn prompt_at(block: &RotoBlock, frame: i64) -> (Vec<(f32, f32)>, Vec<u8>) {
+    let mut points = Vec::new();
+    let mut labels = Vec::new();
+    for prompt in block.contributing_prompts(frame) {
+        for (at, point) in prompt.points.iter().enumerate() {
+            points.push(*point);
+            labels.push(prompt.labels.get(at).copied().unwrap_or(1));
+        }
+    }
+    (points, labels)
+}
+
 /// The document's stroke, as the arithmetic crate wants it. Two types for one
 /// idea, because `lumit-core` sits below `lumit-roto` and may not depend on it
 /// (docs/05 §1.1) — the split the Camera track's density table already takes.
@@ -1080,22 +1223,44 @@ fn propagate(
 
     // The base frame first: both directions start from its answer.
     let base_chain = chain_hash(&job.block, job.settings, base).ok_or(RotoFailure::NoBaseFrame)?;
+    let mut made_with = String::new();
     let base_plane = match lend.get(&base_chain) {
-        Some(record) => {
+        Some((record, from)) => {
             reused += 1;
+            // Carried off the file the base frame came out of. A resume, or a
+            // correction on a later frame, lends the base rather than cutting
+            // it again, and without this the record of which pack seeded the
+            // matte would be blanked on the first such press.
+            made_with = from.to_string();
             expand(record, width, height)
         }
         None => {
             let rgba = frames.rgba(base as usize).ok_or(RotoFailure::NoFrames)?;
-            to_rgb(&rgba, &mut rgb);
             let strokes: Vec<RotoStroke> = job
                 .block
                 .contributing(base)
                 .into_iter()
                 .map(to_engine)
                 .collect();
-            let base_field =
-                base_seeds(width, height, &strokes).map_err(|_| RotoFailure::NoSeeds)?;
+            // The prompt, when the seed row asks for one: the model proposes
+            // the subject and the strokes are stamped over its answer, so the
+            // user still outranks the machine per pixel, the rule the warped
+            // seeds already follow (docs/impl/addons.md §6.2).
+            let taps = prompt_at(&job.block, base);
+            let base_field = if job.settings.segments() && !taps.0.is_empty() {
+                let mut model = (job.model)()?;
+                model.embed(&rgba, width, height)?;
+                let mask = model.mask(&taps.0, &taps.1)?;
+                made_with = model.made_with();
+                let mut field = Seeds::new(width, height).map_err(|_| RotoFailure::NoFrames)?;
+                lumit_roto::mask_seeds(&mask, width, height, &mut field)
+                    .map_err(|_| RotoFailure::NoSeeds)?;
+                field.stamp_all(&strokes);
+                field
+            } else {
+                base_seeds(width, height, &strokes).map_err(|_| RotoFailure::NoSeeds)?
+            };
+            to_rgb(&rgba, &mut rgb);
             let frame = FrameRgb::new(&rgb, width, height).map_err(|_| RotoFailure::NoFrames)?;
             solver
                 .solve(frame, &base_field, &mut matte)
@@ -1141,7 +1306,7 @@ fn propagate(
             let Some(chain) = chain_hash(&job.block, job.settings, next) else {
                 break;
             };
-            if let Some(record) = lend.get(&chain) {
+            if let Some((record, _)) = lend.get(&chain) {
                 // **Copied, not re-solved.** No decode, no flow, no sweep —
                 // which is what makes a correction at frame 200 cost a hundred
                 // solves rather than three hundred.
@@ -1253,6 +1418,7 @@ fn propagate(
             clip_frames: count,
             first_frame,
             last_frame,
+            made_with,
             records,
             warm: Mutex::new(Vec::new()),
         },
@@ -1333,13 +1499,23 @@ pub fn job_for(
     propagate: bool,
 ) -> Option<RotoJob> {
     let block = fx.roto.clone().unwrap_or_default();
-    let settings = RotoSettings::of(fx);
+    let mut settings = RotoSettings::of(fx);
+    // Which pack would seed this run, taken here rather than in the document,
+    // because it is a fact about the machine (docs/impl/addons.md §7). It
+    // reaches both hashes through `RotoSettings::feed`, and that is the whole
+    // fence round `lendable`, which reads every sidecar of the same media and
+    // trusts the chain hash alone: without it a run seeded by one pack would
+    // lend its frames to a run seeded by another.
+    if settings.segments() {
+        settings.identity = lumit_ml::segment::installed_identity().unwrap_or_default();
+    }
     Some(RotoJob {
         instance: fx.id,
         key: Some(RotoKey::new(fingerprint, &block, settings)),
         settings,
         block,
         open: Box::new(move || MediaRgba::open(&path).map(|f| Box::new(f) as Box<dyn RotoFrames>)),
+        model: Box::new(open_segment),
         propagate,
         stop_after: None,
     })

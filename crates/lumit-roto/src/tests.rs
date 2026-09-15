@@ -3,8 +3,8 @@
 //! assertion rather than a look.
 
 use crate::{
-    base_seeds, warp_and_seed, FlowField, FrameRgb, RotoError, RotoSettings, RotoSolver,
-    RotoStroke, Seed, Seeds, StrokeKind,
+    base_seeds, mask_seeds, warp_and_seed, FlowField, FrameRgb, RotoError, RotoSettings,
+    RotoSolver, RotoStroke, Seed, Seeds, StrokeKind,
 };
 
 const SUBJECT: [f32; 3] = [0.85, 0.55, 0.20];
@@ -840,6 +840,63 @@ fn warped_seeds_are_eroded_and_low_confidence_seeds_nothing() {
     // Well outside is background, eroded from the square by the same two.
     assert_eq!(seeds.at(0), Seed::Background);
     assert_eq!(seeds.at((9 * w + 15) as usize), Seed::None);
+}
+
+/// A mask a model made seeds the pixels it is sure about, eroded by the same
+/// two pixels, and seeds nothing at all through the band where it is unsure,
+/// which is where the solve has to read the frame's own colours
+/// (docs/impl/addons.md §6.2). The mask is written down by hand so every
+/// assertion is about one pixel.
+#[test]
+fn a_masks_confident_interiors_seed_and_its_soft_edge_does_not() {
+    let (w, h) = (32u32, 32u32);
+    let n = (w * h) as usize;
+    // A square the model is sure about, with a two-pixel band of doubt round
+    // it: the values there sit between the two thresholds.
+    let mut mask = vec![0.0f32; n];
+    for y in 8..24 {
+        for x in 8..24 {
+            mask[(y * w + x) as usize] = 0.5;
+        }
+    }
+    for y in 10..22 {
+        for x in 10..22 {
+            mask[(y * w + x) as usize] = 1.0;
+        }
+    }
+    let mut seeds = Seeds::new(w, h).unwrap();
+    mask_seeds(&mask, w, h, &mut seeds).unwrap();
+
+    // Two pixels in from the sure square's edge is where foreground starts.
+    assert_eq!(seeds.at((15 * w + 12) as usize), Seed::Foreground);
+    assert_eq!(seeds.at((15 * w + 10) as usize), Seed::None);
+    // The band of doubt seeds neither side.
+    assert_eq!(seeds.at((15 * w + 9) as usize), Seed::None);
+    // Well outside it is background, eroded away from the band by the same two.
+    assert_eq!(seeds.at(0), Seed::Background);
+    assert_eq!(seeds.at((15 * w + 6) as usize), Seed::None);
+    let (fg, bg) = seeds.counts();
+    assert!(
+        fg > 0 && bg > 0,
+        "{fg} foreground and {bg} background seeds"
+    );
+
+    // A number that is not one seeds nothing rather than picking a side.
+    let mut wild = vec![f32::NAN; n];
+    wild[0] = 1.0;
+    mask_seeds(&wild, w, h, &mut seeds).unwrap();
+    assert_eq!(seeds.counts(), (0, 0), "an eroded lone seed is no seed");
+
+    // The trust boundary: a mask that is not this frame's is refused.
+    assert!(matches!(
+        mask_seeds(&mask[..n - 1], w, h, &mut seeds),
+        Err(RotoError::PlaneSize { .. })
+    ));
+    let mut other = Seeds::new(w, h / 2).unwrap();
+    assert!(matches!(
+        mask_seeds(&mask, w, h, &mut other),
+        Err(RotoError::SizeMismatch { .. })
+    ));
 }
 
 #[test]

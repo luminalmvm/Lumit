@@ -1,0 +1,53 @@
+[package]
+name = "lumit-ml"
+version.workspace = true
+edition = "2021"
+license = "GPL-3.0-only"
+# Never goes to crates.io: these crates are the application, and they
+# reference each other by path (docs/05-ARCHITECTURE.md).
+publish = false
+
+[dependencies]
+# The addons folder, and nothing else from it. One answer about where a pack
+# lives, shared by the engine and the bridge (docs/impl/addons.md §4).
+lumit-project = { path = "../lumit-project" }
+# ONNX Runtime through its safe Rust wrapper. `load-dynamic` is the whole
+# point: the library is an addon the user installs, so nothing links against it
+# at build time and no default feature is allowed to fetch one. `api-24` asks
+# the library for the 1.24 API, which is the last one the DirectML build of
+# ONNX Runtime shipped (§3).
+ort = { version = "2.0.0-rc.13", default-features = false, features = [
+    "std",
+    "load-dynamic",
+    "api-24",
+] }
+# The manifest is read from JSON and written back unchanged, so it derives
+# both ways rather than being parsed by hand.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+# Unpacking a download. Deflate only, the same pin `lumit-project` reads `.lum`
+# files with, so the addon installer adds no compression codec to the graph.
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+# DirectX 12 hardware on Windows. The execution provider is a feature of the
+# same crate, so it rides a per-target table the way `lumit-gpu` carries
+# `windows`, `ash` and `metal`, and the code that names it is cfg-gated too.
+[target.'cfg(windows)'.dependencies]
+ort = { version = "2.0.0-rc.13", default-features = false, features = [
+    "directml",
+] }
+
+# The same, for Apple silicon and Intel Macs.
+[target.'cfg(target_os = "macos")'.dependencies]
+ort = { version = "2.0.0-rc.13", default-features = false, features = [
+    "coreml",
+] }
+
+[dev-dependencies]
+# Every test that writes a pack writes it into a folder of its own, never the
+# user's.
+tempfile = "3"
+
+[lints]
+workspace = true

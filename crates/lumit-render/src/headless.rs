@@ -1625,6 +1625,14 @@ impl HeadlessRenderer {
             .map_err(|e| format!("headless preview: {e}"))
     }
 
+    /// Fail a frame rather than stand the built-in engine in when a layer's
+    /// model engine will not paint. Set on the renderer an export writes
+    /// through: preview substitutes and says so on the row, and a file never
+    /// carries the substitution (docs/08 §3.1, docs/impl/addons.md §6.3).
+    pub fn refuse_substitution(&mut self) {
+        self.pool.refuse_substitution();
+    }
+
     /// How many comp frames the interactive path has actually decoded. A live
     /// value drag must not move this — that is the whole promise of
     /// [`Self::render_preview`], and the preview tests assert it here.

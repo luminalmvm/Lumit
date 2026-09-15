@@ -12293,7 +12293,7 @@ fn every_effect_carries_a_matte_row() {
             );
             continue;
         }
-        // **Three image effects opt out** (the owner's rule for mattes), and
+        // **Five image effects opt out** (the owner's rule for mattes), and
         // each has its own reason.
         //
         // The **Matte key**: a keyer's subject is the picture it keys, and a
@@ -12313,9 +12313,24 @@ fn every_effect_carries_a_matte_row() {
         // over a coverage, and the honest place to say "not there" is another
         // stroke.
         //
+        // **Depth**: the third of that family. What it draws is a reading of
+        // the picture underneath - how far away every pixel is, as a model saw
+        // it - and a matte over a reading would gate a measurement, which is
+        // not a thing a measurement has an answer to. Where a reading is wanted
+        // in part of the frame, the effect that consumes it takes the matte.
+        //
+        // **Remove background**: Set matte's answer and the Roto brush's, on
+        // the tier Depth is on. What it applies IS the coverage a model made of
+        // this frame, so a second picture saying how much of it happens here
+        // would be a coverage over a coverage, and the honest way to keep part
+        // of the background is a mask on the layer.
+        //
         // Anything else that wants to opt out is argued for here, in these
         // words, before it may.
-        if matches!(s.match_name, "matte_key" | "set_matte" | "roto_brush") {
+        if matches!(
+            s.match_name,
+            "matte_key" | "set_matte" | "roto_brush" | "depth" | "remove_background"
+        ) {
             assert_eq!(
                 s.matte,
                 MatteRole::None,
@@ -13872,6 +13887,81 @@ fn a_button_is_a_row_with_no_value() {
         ids.is_empty() && ops.is_empty(),
         "a handle resolved to an op"
     );
+}
+
+/// **A button is a row with no value, on an effect that does draw one.**
+///
+/// The Camera track proves the three promises on a handle that resolves to no
+/// op at all. The planes tier is the other half of the claim: both its effects
+/// draw pixels, so each resolves to a real op with a real bag, and the two
+/// buttons must still be absent from it - otherwise pressing Analyse would
+/// rename every cached frame on the layer, which is precisely the thing the
+/// analysis exists to avoid (docs/impl/addons.md §13).
+#[test]
+fn a_button_on_a_drawing_effect_is_still_not_in_the_bag() {
+    use crate::fx::effects::{depth::Depth, remove_background::RemoveBackground};
+
+    for (name, analyse, cancel, view) in [
+        ("depth", Depth::ANALYSE, Depth::CANCEL, Depth::VIEW),
+        (
+            "remove_background",
+            RemoveBackground::ANALYSE,
+            RemoveBackground::CANCEL,
+            RemoveBackground::VIEW,
+        ),
+    ] {
+        let def = BUILTIN_DEFS.get(name).expect("declared");
+        let s = def.schema();
+        let buttons: Vec<&str> = s
+            .params
+            .iter()
+            .filter(|p| p.kind == ParamKind::Action)
+            .map(|p| p.id)
+            .collect();
+        assert_eq!(
+            buttons,
+            ["analyse", "cancel"],
+            "{name}: the two the note names"
+        );
+        assert!(def.is_image_op(), "{name} draws the plane it analysed");
+
+        let e = instantiate(name).expect("instantiates");
+        for id in &buttons {
+            assert!(
+                e.param(id).is_none(),
+                "{name}: {id} was written into the instance"
+            );
+        }
+        let before = e.params.len();
+        let mut list = vec![e.clone()];
+        crate::fx::backfill_builtin_params(&mut list);
+        assert_eq!(
+            list[0].params.len(),
+            before,
+            "{name}: the backfill grew a button"
+        );
+
+        let (_, ops) = super::resolve_stack_temporal_named(
+            std::slice::from_ref(&e),
+            super::ResolvedDrivers::NONE,
+            0.0,
+            0.0,
+            1000.0,
+            1.0,
+            &MarkerContext::NONE,
+            Arc::new(ExpressionContext::detached()),
+        );
+        let op = ops.get(0).expect("it resolves to an op");
+        assert!(
+            op.params.get(analyse).is_none() && op.params.get(cancel).is_none(),
+            "{name}: a button reached the arena"
+        );
+        assert_eq!(
+            op.params.choice(view, 9),
+            0,
+            "{name}: and the rows that are values did reach it"
+        );
+    }
 }
 
 /// The Camera track is a handle: it registers, it files under Utility, it

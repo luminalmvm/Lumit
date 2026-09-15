@@ -5,6 +5,10 @@
 //! `lumit-flow`: that crate pulls wgpu in, and this one is CPU arithmetic with
 //! no graphics device anywhere near it — the stance `lumit-track` takes for the
 //! same reason. Whoever owns the flow engine hands the numbers over.
+//!
+//! [`mask_seeds`] is the same arithmetic for a mask a segmentation model made
+//! (docs/impl/addons.md §6.2), and it arrives the same way: a borrowed slice of
+//! coverage, with nothing that opens a model anywhere near this crate either.
 
 use crate::{check_plane, RotoError, Seed, Seeds};
 
@@ -117,6 +121,47 @@ pub fn warp_and_seed(
             } else if a < WARP_BG {
                 out.set(i, Seed::Background);
             }
+        }
+    }
+    out.erode(ERODE_PX);
+    Ok(())
+}
+
+/// Derive a frame's seeds from a mask somebody else worked out for it.
+///
+/// The same two thresholds and the same two-pixel erosion
+/// [`warp_and_seed`] uses, with the flow lookup gone: coverage above 0.9 seeds
+/// foreground, below 0.1 seeds background, and everything between the two seeds
+/// nothing, because that band is exactly where the mask is unsure and where the
+/// solve has to decide from the frame's own colours.
+///
+/// The erosion is as load-bearing here as it is for a warped matte: a model's
+/// boundary is a couple of pixels out as often as a flow field's is, and a seed
+/// planted on the wrong side of an edge is an error the geodesic walk carries
+/// across the whole region.
+///
+/// The mask arrives as a **borrowed plain slice**, like the flow does and for
+/// the same reason: whoever ran the model owns it, and nothing that opens one
+/// comes anywhere near this crate.
+///
+/// The frame's own strokes are stamped on top afterwards by the caller, which
+/// is how the user outranks the machine.
+pub fn mask_seeds(mask: &[f32], width: u32, height: u32, out: &mut Seeds) -> Result<(), RotoError> {
+    check_plane(mask.len(), 1, width, height)?;
+    if out.width() != width || out.height() != height {
+        return Err(RotoError::SizeMismatch {
+            a_width: width,
+            a_height: height,
+            b_width: out.width(),
+            b_height: out.height(),
+        });
+    }
+    out.clear();
+    for (i, coverage) in mask.iter().enumerate() {
+        if *coverage > WARP_FG {
+            out.set(i, Seed::Foreground);
+        } else if *coverage < WARP_BG {
+            out.set(i, Seed::Background);
         }
     }
     out.erode(ERODE_PX);

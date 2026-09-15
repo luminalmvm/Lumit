@@ -1049,9 +1049,16 @@ subject out of a shot, one scribble at a time
   rest of the clip in the surface tone — the status line beneath it, and the **base frame** with
   one button that moves it to the frame on screen. The status is **polled twice a second while a
   propagation is moving and not otherwise**, the Camera track's arrangement.
+- **Seed from** decides what the base frame starts from. On **Strokes**, the scribbles alone,
+  which is every brush until somebody says otherwise. On **Segment**, a tap with the Roto brush
+  tool on the base frame is a **prompt** a segmentation model reads, Alt makes the tap a
+  negative one, and a drag still lays a stroke; the overlay draws the taps as small rings in
+  the success and error tones, and the card counts them beside the strokes. The model is an
+  addon: with none installed the status line says so and sends the reader to the Addons page
+  ([docs/impl/addons.md](impl/addons.md) §6.2).
 - Not built: a scribble that adjusts its own width by dragging, per-stroke deletion from the
-  overlay, and the neural seed proposal
-  ([docs/impl/roto.md](impl/roto.md) §9).
+  overlay, a prompt on any frame but the base, and the model proposing the matte on every
+  frame rather than seeding the first ([docs/impl/roto.md](impl/roto.md) §9).
 
 ### 2.4 Motion paths
 
@@ -3184,6 +3191,13 @@ travel in the `.lum` and are marked below:
   the UI — the main menu excluded — and reduced motion follows OS or override),
   **Autosave** (interval, copies kept), **Plugins** (search paths, disabled list,
   per-plugin overrides).
+- **Addons**: the optional downloads ([12-PLUGINS.md](12-PLUGINS.md) §6). What is
+  installed, each row carrying its licence, its size and what it does with Remove on the
+  right, then the catalogue's own rows, each with Install or Update; the model runtime's
+  own row, since no pack runs until it is there; a button that asks the official catalogue
+  what else exists, one that installs a pack from a file, and one that opens the folder
+  they are kept in. Machine-local like the files themselves: nothing about an addon
+  travels in the `.lum`.
 
 **The window.** It opens from **Window → Settings…** or **Ctrl/Cmd+comma** — a
 sidebar of pages, each a stack of named sections, each section a card of rows carrying what
@@ -3191,13 +3205,17 @@ the setting is, a line saying what it does, and its control on the right. Its pa
 **General** (reset workspace, version and build), **Appearance** (colour scheme with an
 eight-swatch preview beside it, the theme shelf — Duplicate, Rename…, Delete, Import… and
 Export… — corners,
-interface motion, and the Scopes and Viewer toggles — themed scope colours, themed surround,
+interface motion, UI scale, tooltips, whether the Effect controls panel repeats the
+layer's Source, Transform and Retime rows, off by default since the Timeline's fold-out
+already shows them, and the Scopes and Viewer toggles, themed scope colours, themed surround,
 and whether the Viewer smooths the picture when it is zoomed past 1:1, all three off by
 default: a magnified pixel is a square, because looking at the pixels is what zooming in is
-for), **Interface** (UI scale, tooltips, and whether the Effect controls panel
-repeats the layer's Source, Transform and Retime rows — off by default, since the Timeline's
-fold-out already shows them), and **Performance** (playback mode, quality tier and reset,
-and the RAM and VRAM frame-cache budgets with their readouts and Clear buttons). The two
+for), **Timeline**, **Viewer**, **Audio**, **Autosave**, **Export**, **Addons**
+(§6 of [12-PLUGINS.md](12-PLUGINS.md)), **Preview and cache** (playback mode, quality tier
+and reset, and the RAM and VRAM frame-cache budgets with their readouts and Clear buttons) and
+**Shortcuts**, which is the Keymap group under the name the sidebar gives it. The
+**Colour** and **Plugins** groups above have no page yet: they are work still to do, not
+pages hiding under another name. The two
 budgets are **typed and draggable numbers capped at what the machine has** — installed RAM
 and the adapter's dedicated video memory, asked of the engine — rather than a pick from a
 fixed list of sizes.

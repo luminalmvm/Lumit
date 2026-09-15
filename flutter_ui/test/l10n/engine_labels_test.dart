@@ -170,6 +170,33 @@ Set<String> _badgeReasonKeys() {
   return keys;
 }
 
+/// Every word a model pack's task can arrive as (`impl fmt::Display for Task`
+/// in `crates/lumit-ml/src/manifest.rs`).
+///
+/// Read out of the Rust source the way the badge reasons are, and for the same
+/// reason: nothing ties a task there to a word in `engine_labels.dart`, and a
+/// fifth task added in the engine would reach the Addons page as the raw word
+/// the manifest wrote, inside a translated window.
+Set<String> _addonTaskWords() {
+  final source = File('../crates/lumit-ml/src/manifest.rs');
+  expect(source.existsSync(), isTrue,
+      reason: 'run this from flutter_ui/, beside the crates/ tree');
+  final body = RegExp(r'impl fmt::Display for Task \{(.*?)\n\}', dotAll: true)
+      .firstMatch(source.readAsStringSync())
+      ?.group(1);
+  expect(body, isNotNull,
+      reason: "Task's Display has moved or been renamed");
+
+  final words = <String>{
+    for (final m in RegExp(r'Task::\w+ => "([a-z]+)"').allMatches(body!))
+      m.group(1)!,
+  };
+  expect(words.length, greaterThan(3),
+      reason: 'the enum declares more tasks than this, so the scrape has '
+          'stopped matching the source');
+  return words;
+}
+
 void main() {
   test('every import report reason has a sentence to be translated', () {
     final missing = _importReasonKeys().where((k) => !hasImportReason(k)).toList()
@@ -267,5 +294,25 @@ void main() {
   test('a known label resolves through the table', () {
     expect(hasEngineLabel('Gaussian blur'), isTrue);
     expect(engineLabel('Gaussian blur'), 'Gaussian blur');
+  });
+
+  test('every task a model pack can declare has a word to be translated', () {
+    final missing = _addonTaskWords().where((w) => addonTask(w) == w).toList()
+      ..sort();
+    expect(
+      missing,
+      isEmpty,
+      reason: 'these are arms of lumit_ml::manifest::Task with no case in '
+          "addonTask() in lib/l10n/engine_labels.dart. Add each one's word "
+          'there and the matching key to lib/l10n/app_en.arb, or a pack ships '
+          'its task in English inside a translated window.',
+    );
+  });
+
+  test('a task with no word comes back as it arrived', () {
+    // What a catalogue written for a newer Lumit would send, and the reason
+    // the fall-through is deliberate rather than a hole.
+    expect(addonTask('not_a_real_task'), 'not_a_real_task');
+    expect(addonTask('depth'), isNot('depth'));
   });
 }

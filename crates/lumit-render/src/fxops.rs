@@ -255,6 +255,11 @@ fn intermediate_bytes(w: u32, h: u32) -> usize {
 /// the playhead. Settable through [`FxCache::set_budget`].
 pub const FX_CACHE_DEFAULT_BUDGET: usize = 256 * 1024 * 1024;
 
+/// How many uploaded planes are held at once. A handful covers every layer on
+/// screen at one moment, which is what the memo is for; a scrub past that many
+/// starts again rather than holding a shot's worth of textures.
+const PLANE_TEXTURES: usize = 8;
+
 /// The **per-effect intermediate cache** (docs/06 §5.1): every
 /// effect's output, kept on the card under the content name of *everything
 /// that went into it* — the layer's source, the raster, and each op up to and
@@ -284,6 +289,20 @@ pub struct FxCache {
     /// in between — so the planner's lookup takes a handle, and the handle
     /// lives until the next frame's plan drops it.
     pins: std::collections::HashMap<u128, Tex>,
+    /// The planes tier's uploaded textures, by (effect instance, source
+    /// frame, run) (docs/impl/addons.md §6.1).
+    ///
+    /// Here rather than in the planes store, which is process-wide and knows
+    /// nothing of a device, and here rather than beside the LUT cache, which
+    /// would be a second borrowed field threaded through every constructor of
+    /// a realiser for the same lifetime this one already has. A depth plane
+    /// does not move while it is being watched, so without this the whole
+    /// plane is re-uploaded per frame per layer - which is the fault the Roto
+    /// brush's own upload still carries a note about.
+    ///
+    /// Small and short: the few planes on screen at once, dropped with the
+    /// cache.
+    planes: std::collections::HashMap<(uuid::Uuid, i64, u64), Tex>,
     /// Test hooks: how many kernels [`run_ops`] actually ran against this
     /// cache, and how many ops it skipped because their output was held.
     runs: u64,
@@ -306,6 +325,7 @@ impl FxCache {
             lru: lumit_cache::ByteLru::new(budget_bytes),
             keep: false,
             pins: std::collections::HashMap::new(),
+            planes: std::collections::HashMap::new(),
             runs: 0,
             hits: 0,
             nested_made: 0,
@@ -323,6 +343,35 @@ impl FxCache {
     /// with the frame, and these are kept so a *later* frame can read them.
     pub fn account_against(&mut self, ledger: std::sync::Arc<lumit_budget::Ledger>) {
         self.lru.account_against(ledger, lumit_budget::Tier::Vram);
+    }
+
+    /// One planes-tier plane's uploaded texture, made once and then handed
+    /// back, by the (instance, source frame, run) it was made for.
+    ///
+    /// `make` runs only on a miss, so the upload is paid once however many
+    /// frames are drawn through the same plane. The **run** is in the name as
+    /// well as the frame because a second Analyse of the same instance is
+    /// genuinely different bytes under the same instance and frame, and
+    /// without it the viewer would be handed the first analysis's texture
+    /// until a scrub pushed it out. The map is emptied whenever it grows past
+    /// a handful of entries: a scrub walks frames, and every plane it passes
+    /// would otherwise be held for the life of the cache.
+    pub fn plane(
+        &mut self,
+        instance: uuid::Uuid,
+        frame: i64,
+        content: u64,
+        make: impl FnOnce() -> Tex,
+    ) -> Tex {
+        if let Some(held) = self.planes.get(&(instance, frame, content)) {
+            return held.clone();
+        }
+        if self.planes.len() >= PLANE_TEXTURES {
+            self.planes.clear();
+        }
+        let made = make();
+        self.planes.insert((instance, frame, content), made.clone());
+        made
     }
 
     /// The finished texture of a nested comp's frame, by the name the realiser
@@ -378,6 +427,9 @@ impl FxCache {
     pub fn clear(&mut self) {
         self.lru.clear();
         self.pins.clear();
+        // The planes as well: a user who asked for an empty cache meant all of
+        // it, and these are textures on the card like any other.
+        self.planes.clear();
     }
 
     /// **The second rung of the ladder** (docs/13 §4), for the card this store
@@ -531,6 +583,37 @@ pub fn render_layer_input(
     )
 }
 
+/// The pictures a **background analysis** baked, carried into the op walk
+/// beside the numbers in the bag.
+///
+/// One list per tier, each 1:1 and in stack order with the ops of that tier,
+/// each with its own counter inside [`run_ops`] because each is enumerated by
+/// its own predicate. `None` in a slot is the effect's documented passthrough -
+/// outside the analysed span there is nothing, and holding a neighbour's answer
+/// would be a wrong answer wearing a right one's face.
+///
+/// One struct rather than a parameter apiece, and one entry point rather than a
+/// wrapper per tier: the note this replaces asked for exactly that the moment a
+/// second such list wanted the same treatment, and the planes tier is it.
+#[derive(Default, Clone, Copy)]
+pub struct Side<'a> {
+    /// One slot per `roto_brush` op, holding the matte its propagation filed
+    /// for this layer's source frame.
+    pub roto: &'a [Option<Tex>],
+    /// One slot per planes-tier op (docs/impl/addons.md §6.1), holding the
+    /// plane its analysis filed for this layer's source frame.
+    pub planes: &'a [Option<Tex>],
+}
+
+impl Side<'static> {
+    /// No carriages at all: what every stack with no such effect on it
+    /// passes.
+    pub const NONE: Side<'static> = Side {
+        roto: &[],
+        planes: &[],
+    };
+}
+
 /// Run `ops` over `tex` in order, returning the final texture (the input
 /// unchanged when `ops` is empty). `w`/`h` are the texture's raster size.
 /// `neighbours` are the layer's decoded neighbour frames keyed by offset
@@ -576,16 +659,16 @@ pub fn render_layer_input(
 /// path, so one shared index would hand a path to whichever effect happened to
 /// sit above. An empty polyline is the effect's documented no-op.
 ///
+/// `side` is the [`Side`] carriages - the baked pictures a background analysis
+/// filed, which nothing in the bag can name. Empty on every stack that carries
+/// no such effect, which is nearly all of them.
+///
 /// `cache` is the per-effect intermediate cache and the content name
 /// of `tex` — the layer's source as the draw builder named it. `None` (no
 /// store, or an input nothing can name yet: an adjustment layer's composite, a
 /// nested comp, a text or shape layer) walks the stack exactly as before. With
 /// both, the walk starts after the longest run of ops whose outputs are held,
 /// and files each output it makes when the cache is taking them.
-/// `roto_mattes` is the parallel **roto carriage** (docs/impl/roto.md §5): one
-/// slot per `roto_brush` op, in stack order, holding the matte its propagation
-/// filed for this layer's source frame - or `None`, which is the effect's
-/// passthrough, and what a frame outside the propagated span gets.
 ///
 /// `graphs` is the parallel **node graph carriage** (docs/impl/
 /// node-graph-comp.md §2.4): one closure per enabled `node_graph` op, in stack
@@ -610,7 +693,7 @@ pub fn run_ops(
     mattes: &[LayerInput],
     mask_paths: &[lumit_core::mask::MaskPolyline],
     points_schedules: &[lumit_core::fx::points::PointsSchedule],
-    roto_mattes: &[Option<Tex>],
+    side: &Side<'_>,
     graphs: &[&dyn Fn(Tex, u32, u32) -> Tex],
     mut timings: Option<&mut Vec<f32>>,
     cache: Option<(&std::cell::RefCell<FxCache>, u128)>,
@@ -646,6 +729,7 @@ pub fn run_ops(
                 mattes,
                 mask_paths,
                 points_schedules,
+                side,
             )
         },
     );
@@ -754,6 +838,10 @@ pub fn run_ops(
     // closure per `node_graph` op, which is the enumeration `build.rs`'s
     // `graph_fx_for` fills by.
     let mut graph_i = 0usize;
+    // The planes carriage's own counter, for the same reason again: one slot
+    // per op whose effect asks a model for a plane, which is what
+    // `build.rs`'s `planes_for` fills by.
+    let mut plane_i = 0usize;
     for (i, resolved) in ops.iter().enumerate() {
         let role = resolved.def.schema().matte;
         let paths_n = resolved.def.schema().mask_path_count();
@@ -789,7 +877,7 @@ pub fn run_ops(
             None
         };
         let roto = if resolved.def.schema().match_name == lumit_core::roto::ROTO_BRUSH {
-            let slot = roto_mattes.get(roto_i).and_then(|o| o.as_ref());
+            let slot = side.roto.get(roto_i).and_then(|o| o.as_ref());
             roto_i += 1;
             Some(slot)
         } else {
@@ -799,6 +887,18 @@ pub fn run_ops(
             let slot = graphs.get(graph_i).copied();
             graph_i += 1;
             slot
+        } else {
+            None
+        };
+        // The task comes back with the slot because the two effects on this
+        // tier draw their plane differently: one is a reading of the picture
+        // and the other is a coverage of it.
+        let plane = if let Some(task) =
+            lumit_core::planes::task_of_name(resolved.def.schema().match_name)
+        {
+            let slot = side.planes.get(plane_i).and_then(|o| o.as_ref());
+            plane_i += 1;
+            Some((task, slot))
         } else {
             None
         };
@@ -814,7 +914,7 @@ pub fn run_ops(
                 Some(AuxKind::LensFile) => flare_i += 1,
                 _ => {}
             }
-            // `roto_i` and `graph_i` were advanced above with the other per-op
+            // `roto_i`, `graph_i` and `plane_i` were advanced above with the other per-op
             // slot reads, so nothing more is owed here.
             if let Some(into) = timings.as_mut() {
                 into.push(0.0);
@@ -1048,6 +1148,79 @@ pub fn run_ops(
             };
         }
 
+        // **The planes tier** (docs/impl/addons.md §6.1). Neither effect has an
+        // entry in the GPU table, for the Roto brush's reason: what each draws
+        // is the plane its analysis filed, and both of the passes that takes are
+        // already written for a matte nobody picked.
+        //
+        // An **empty slot passes through**, running no pass at all: outside the
+        // analysed span, before any Analyse, and wherever the pack is not
+        // installed, there is no plane, and drawing a neighbour's would be a
+        // wrong answer wearing a right one's face.
+        if let Some((task, Some(plane))) = plane {
+            // `matte_prepare` is the pass that turns a plane into an opaque grey
+            // picture of one channel, inverted if asked. It is run even with
+            // Invert off for a reason of this tier's own: a plane is uploaded
+            // with its own number in the alpha as well as the colour, so that a
+            // consumer can read it either way, and a *picture* has to be opaque.
+            // It is also what keeps the carriage's own texture out of the walk's
+            // recycling, which would hand a memoised plane back to the pool.
+            //
+            // `fit_centred` hands its argument straight back when the size
+            // already matches, which it does on every ordinary frame: the plane
+            // arrived resampled to the working raster. It is here for the op
+            // that grew the raster under it.
+            match task {
+                // **Depth**: nearer is brighter, because the plane was quantised
+                // that way; Invert turns it over; Source view leaves the layer
+                // alone so it can be looked at while the plane rides to whatever
+                // is reading it.
+                lumit_core::planes::PlaneTask::Depth => {
+                    let view = resolved
+                        .params
+                        .choice(lumit_core::fx::effects::depth::VIEW_ID, 0);
+                    if view == 0 {
+                        let plane = lumit_gpu::fx::fit_centred(ctx, plane.clone(), w, h);
+                        let invert = resolved
+                            .params
+                            .bool(lumit_core::fx::effects::depth::INVERT_ID, false);
+                        tex = fx.matte_prepare(ctx, &plane, w, h, 0, invert);
+                    }
+                }
+                // **Remove background**: Composite view multiplies the coverage
+                // into the layer's own alpha, leaving the colour alone, which is
+                // the Roto brush's pass exactly; Matte view draws the coverage
+                // itself as a grey picture, which is how a matte is judged.
+                // Invert keeps the background and cuts the subject away instead.
+                lumit_core::planes::PlaneTask::Matte => {
+                    use lumit_core::fx::effects::remove_background as rb;
+                    let plane = lumit_gpu::fx::fit_centred(ctx, plane.clone(), w, h);
+                    let invert = resolved.params.bool(rb::INVERT_ID, false);
+                    tex = if resolved.params.choice(rb::VIEW_ID, 0) == 1 {
+                        fx.matte_prepare(ctx, &plane, w, h, 0, invert)
+                    } else {
+                        fx.set_matte(
+                            ctx,
+                            &tex,
+                            w,
+                            h,
+                            Some(&plane),
+                            &lumit_gpu::fx::SetMatteOp {
+                                channel: 0,
+                                // Intersect with the layer's own alpha rather
+                                // than replace it: a matte says which of *this*
+                                // picture to keep, and a layer that was already
+                                // partly transparent stays so.
+                                combine: true,
+                                invert,
+                                mix: 1.0,
+                            },
+                        )
+                    };
+                }
+            }
+        }
+
         // The generic strength semantic, one implementation for every
         // effect that has not claimed the matte for itself: after the effect's
         // own Mix (inside its kernel, or the blend pass above), dissolve back
@@ -1169,9 +1342,9 @@ pub fn run_ops(
 /// the raster, the flare substitution count and ops `0..=k`, with
 /// each op's parameters and the identity of whatever rides beside it. `None`
 /// from the first op that binds a picture nobody named — another layer (a
-/// plate or a matte texture), the neighbour frames, the flow field — through
-/// to the end: the v1 rule is that such an op breaks the chain rather than
-/// being named by a guess.
+/// plate or a matte texture), the neighbour frames, the flow field, a carriage
+/// a background analysis filed through to the end: the v1 rule is that such
+/// an op breaks the chain rather than being named by a guess.
 /// [`LayerInput::ThisLayer`] and [`LayerInput::Absent`] are functions of the
 /// chain itself, so they do not break it.
 #[allow(clippy::too_many_arguments)]
@@ -1187,6 +1360,7 @@ fn op_keys(
     mattes: &[LayerInput],
     mask_paths: &[lumit_core::mask::MaskPolyline],
     points_schedules: &[lumit_core::fx::points::PointsSchedule],
+    side: &Side<'_>,
 ) -> Vec<Option<u128>> {
     let mut h = blake3::Hasher::new();
     h.update(b"fxcache/1/");
@@ -1196,6 +1370,7 @@ fn op_keys(
     h.update(&flare_substitutions.to_le_bytes());
     let (mut lut_i, mut dof_i, mut flare_i, mut matte_i, mut path_i) = (0, 0, 0, 0, 0);
     let mut sched_i = 0usize;
+    let (mut roto_i, mut plane_i) = (0usize, 0usize);
     let mut broken = false;
     ops.iter()
         .map(|resolved| {
@@ -1275,6 +1450,26 @@ fn op_keys(
             // under a name that omits it.
             if schema.match_name == lumit_core::comp_graph::NODE_GRAPH {
                 broken = true;
+            }
+            // The two carriages that ride beside the bag, on the same
+            // predicates the walk counts them by. A matte a propagation filed
+            // and a plane an analysis filed are both pictures nobody named, and
+            // neither is the Analyse press that made them, so an output filed
+            // before a run landed would be handed back after it and the viewer
+            // would go on showing the unread picture. An empty slot names
+            // itself: with nothing bound the effect is a passthrough, which is
+            // exactly what the held output holds.
+            if schema.match_name == lumit_core::roto::ROTO_BRUSH {
+                if matches!(side.roto.get(roto_i), Some(Some(_))) {
+                    broken = true;
+                }
+                roto_i += 1;
+            }
+            if lumit_core::planes::task_of_name(schema.match_name).is_some() {
+                if matches!(side.planes.get(plane_i), Some(Some(_))) {
+                    broken = true;
+                }
+                plane_i += 1;
             }
             match crate::gpufx::gpu_effect(schema.match_name).map(|g| g.aux()) {
                 Some(AuxKind::Lut) => {
@@ -1533,7 +1728,7 @@ mod tests {
             &[],
             &[],
             &[],
-            &[],
+            &Side::NONE,
             &[],
             None,
             Some((cache, key)),
@@ -1577,7 +1772,7 @@ mod tests {
             &[],
             &[],
             &[],
-            &[],
+            &Side::NONE,
             &[],
             None,
             Some((cache, key)),
@@ -1819,7 +2014,7 @@ mod tests {
             &[],
             &[],
             &[],
-            &[],
+            &Side::NONE,
             &[],
             None,
             Some((&warm, 7)),
@@ -2099,7 +2294,7 @@ mod tests {
             &[],
             &[],
             &[],
-            &[],
+            &Side::NONE,
             &[],
             None,
             None,
@@ -2162,7 +2357,7 @@ mod tests {
                 &[LayerInput::Texture(source(&ctx)), LayerInput::Absent],
                 &[],
                 &[],
-                &[],
+                &Side::NONE,
                 &[],
                 None,
                 Some((&cache, 7)),
@@ -2193,7 +2388,7 @@ mod tests {
                 &[LayerInput::Absent, LayerInput::Texture(source(&ctx))],
                 &[],
                 &[],
-                &[],
+                &Side::NONE,
                 &[],
                 None,
                 Some((&cache, 7)),
@@ -2224,13 +2419,79 @@ mod tests {
                 &[],
                 &[],
                 &[],
-                &[],
+                &Side::NONE,
                 &[],
                 None,
                 Some((&cache, 7)),
             );
         }
         assert_eq!(cache.borrow().counts(), (4, 0));
+        assert_eq!(cache.borrow().stats().2, 0);
+    }
+
+    /// **A plane a model's analysis filed breaks the chain too**
+    /// (docs/impl/addons.md §13's "the frame key is the easiest thing to
+    /// forget"). Nothing in the bag names it, and neither does the Analyse
+    /// button that made it, so an output filed before a run landed must not be
+    /// handed back after it: the user would press Analyse, watch the run
+    /// finish, and go on looking at the unread picture.
+    #[test]
+    fn a_bound_plane_breaks_the_chain() {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let fx = ctx.fx();
+        // Depth carries two buttons, two choices and a toggle and no float row
+        // at all, so the helper's parameter matches nothing and sets nothing.
+        let ops = stack(&[("depth", "", 0.0), ("exposure", "stops", 1.0)]);
+
+        // Nothing analysed yet: the effect is a passthrough and both ops are
+        // named, which is the common case and must stay cacheable.
+        let cache = warm_cache();
+        for _ in 0..2 {
+            run(fx, &ctx, &ops, &cache, 7);
+        }
+        assert_eq!(
+            cache.borrow().counts(),
+            (2, 2),
+            "with no plane the stack names itself"
+        );
+
+        // The analysis lands: from the Depth op on, nothing is named.
+        let cache = warm_cache();
+        let planes = [Some(source(&ctx))];
+        let side = Side {
+            roto: &[],
+            planes: &planes,
+        };
+        for _ in 0..2 {
+            run_ops(
+                fx,
+                &ctx,
+                source(&ctx),
+                W,
+                H,
+                &ops,
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+                &side,
+                &[],
+                None,
+                Some((&cache, 7)),
+            );
+        }
+        assert_eq!(
+            cache.borrow().counts(),
+            (4, 0),
+            "an output made before the analysis was served after it"
+        );
         assert_eq!(cache.borrow().stats().2, 0);
     }
 
@@ -2272,7 +2533,7 @@ mod tests {
                 &[],
                 &[],
                 &[],
-                &[],
+                &Side::NONE,
                 &[],
                 None,
                 Some((&cache, 7)),
@@ -2488,7 +2749,7 @@ mod tests {
             &[],
             &[],
             &[],
-            &[],
+            &Side::NONE,
             &[],
             None,
             None,

@@ -168,6 +168,8 @@ These three words are **not interchangeable**.
 | **OFX** | The OpenFX standard; Lumit is an OFX host, which is how Twixtor, RSMB, Sapphire et al. run. |
 | **CLAP** | The CLever Audio Plug-in standard (MIT, C ABI); Lumit's first audio plugin host. See [12-PLUGINS.md](12-PLUGINS.md) §4a. |
 | **VST3** | Steinberg's plugin standard, hosted under its GPLv3 licence branch. VST2 is not hosted. |
+| **Addon** | A large optional download installed from Settings, never shipped inside the application: the model runtime, and the model packs that run on it. An addon adds analysis, never generation, and Lumit works fully without every one of them. See [12-PLUGINS.md](12-PLUGINS.md) §6. |
+| **Model pack** | One addon holding one analysis model: its weights, the manifest naming the task it does and the tensors it speaks, its licence, and the hash it was verified against. A pack is installed and removed on its own; the runtime is the one addon every pack needs. |
 | **Preset** | A saved, shareable configuration of effects/properties/animations, importable per layer. |
 
 ## 9. Words we do not use

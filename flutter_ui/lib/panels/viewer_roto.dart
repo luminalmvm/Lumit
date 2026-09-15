@@ -33,6 +33,13 @@
 // the stroke rides inside the new instance, so effect and stroke land as one op
 // and one undo step.
 //
+// **A tap is a tap or a prompt, and the effect's own Seed from row decides
+// which.** On Strokes it is the dab it has always been. On Segment, and on the
+// frame the shot is decided from, it is a point handed to a segmentation model
+// instead: tap the subject, hold `Alt` and tap what is behind it, and the model
+// proposes the cut-out that the scribbles then correct. A drag is a scribble
+// either way.
+//
 // **Release shows the frame it touched.** Committing a stroke asks the engine
 // to solve that one frame's matte now — the same job Propagate runs, stopped
 // at the scribbled frame — and a small poll waits for it to land so the
@@ -66,6 +73,13 @@ import 'viewer_tool_cursor.dart';
 /// Result and Matte are pictures the stack draws, and Boundary is the one that
 /// keeps the picture and asks the overlay to draw the edge over it.
 const int rotoViewBoundary = 2;
+
+/// The Roto brush's `seed` choice, by index, which is what
+/// `roto_brush::SEED_SEGMENT` names. **Strokes** is 0 and is what every
+/// project reads on a machine with no addon; **Segment** hands the base frame
+/// and the taps made on it to a segmentation model, which is what turns a tap
+/// from a dab into a prompt.
+const int rotoSeedSegment = 1;
 
 /// Which kind of stroke a gesture lays down: the tool in hand, and whether
 /// `Alt` is held.
@@ -101,8 +115,9 @@ Color rotoStrokeColour(BridgeRotoStrokeKind kind, LumitTheme t) =>
 /// The Roto brush the selected layer carries, as the overlay needs it.
 ///
 /// Built from the read model by the Viewer, so finding it costs no
-/// bridge call: which instance to write to, and which picture it is drawing.
-typedef RotoTarget = ({UuidValue effect, int view});
+/// bridge call: which instance to write to, which picture it is drawing, and
+/// what its base frame is seeded from.
+typedef RotoTarget = ({UuidValue effect, int view, int seed});
 
 /// The Roto tools over the picture.
 class ViewerRotoLayer extends StatefulWidget {
@@ -187,10 +202,12 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
   /// say — a layer that is not footage, or media that will not probe.
   int? _sourceFrame;
 
-  /// Every stroke this brush holds, and the propagated matte's edge at this
-  /// frame. Both held against [_asked], so a rebuild draws them again and asks
-  /// nothing.
+  /// Every stroke and every prompt this brush holds, the frame it propagates
+  /// outward from, and the propagated matte's edge at this frame. All held
+  /// against [_asked], so a rebuild draws them again and asks nothing.
   List<BridgeRotoStroke> _strokes = const [];
+  List<BridgeRotoPrompt> _prompts = const [];
+  int? _baseFrame;
   Float32List _boundary = Float32List(0);
 
   /// What the last read was for.
@@ -253,9 +270,14 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
     if (_asked == next) return;
     _asked = next;
     if (box == null) {
-      if (_strokes.isNotEmpty || _boundary.isNotEmpty || _sourceFrame != null) {
+      if (_strokes.isNotEmpty ||
+          _prompts.isNotEmpty ||
+          _boundary.isNotEmpty ||
+          _sourceFrame != null) {
         setState(() {
           _strokes = const [];
+          _prompts = const [];
+          _baseFrame = null;
           _boundary = Float32List(0);
           _sourceFrame = null;
         });
@@ -264,6 +286,8 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
     }
     int? frame;
     var strokes = const <BridgeRotoStroke>[];
+    var prompts = const <BridgeRotoPrompt>[];
+    int? base;
     var boundary = Float32List(0);
     try {
       // Asked whether or not the layer carries a brush yet: the first scribble
@@ -272,12 +296,18 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
       frame = (widget.sourceFrameOf ?? _sourceFrameFromEngine)(
           box.layer, widget.playheadFrame);
       if (brush != null) {
-        strokes = box.layer
-                .getEffects()
-                .where((e) => e.id() == brush.effect)
-                .firstOrNull
-                ?.rotoStrokes() ??
-            const [];
+        // One walk of the stack, three readings off the instance it finds: the
+        // strokes and the prompts the overlay draws, and the base frame, which
+        // is what says whether a tap here may seed the model at all.
+        final instance = box.layer
+            .getEffects()
+            .where((e) => e.id() == brush.effect)
+            .firstOrNull;
+        if (instance != null) {
+          strokes = instance.rotoStrokes();
+          prompts = instance.rotoPrompts();
+          base = instance.rotoBaseFrame();
+        }
         // Only in the Boundary view: the edge is a scan of the whole matte,
         // and running it for a picture nobody is showing would be work for
         // nothing.
@@ -294,8 +324,28 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
     setState(() {
       _sourceFrame = frame;
       _strokes = strokes;
+      _prompts = prompts;
+      _baseFrame = base;
       _boundary = boundary;
     });
+  }
+
+  /// Whether a tap on the picture seeds the model instead of laying a one-point
+  /// stroke (docs/impl/addons.md §6.2).
+  ///
+  /// Three things have to hold. The seed row has to say **Segment**, because a
+  /// brush seeded by its strokes has nothing to read the taps with. The tool in
+  /// hand has to be the brush: Refine edge paints the band where the edge may
+  /// be soft, which is not a claim about what the subject is. And the frame on
+  /// screen has to be the base frame, or there has to be no base yet, because
+  /// that is the only frame the model is asked about. A tap anywhere else is
+  /// the correction dab it has always been.
+  bool get _tapSeedsTheModel {
+    final brush = widget.target;
+    if (brush == null || brush.seed != rotoSeedSegment) return false;
+    if (widget.tool != ToolMode.rotoBrush) return false;
+    final base = _baseFrame;
+    return base == null || base == _sourceFrame;
   }
 
   @override
@@ -316,7 +366,9 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
           onPointerDown: (event) => _downAt = event.localPosition,
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTapUp: (d) => _commit([d.localPosition]),
+            onTapUp: (d) => _tapSeedsTheModel
+                ? _prompt(d.localPosition)
+                : _commit([d.localPosition]),
             onPanStart: _onPanStart,
             onPanUpdate: _onPanUpdate,
             onPanEnd: (_) => _onPanEnd(),
@@ -328,6 +380,7 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
                     painter: RotoOverlayPainter(
                       map: box?.map,
                       strokes: _strokes,
+                      prompts: _prompts,
                       sourceFrame: _sourceFrame,
                       boundary: _boundary,
                       foreground: t.success,
@@ -471,6 +524,50 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
     }
   }
 
+  /// One tap, one prompt for the segmentation model (docs/impl/addons.md §6.2).
+  ///
+  /// The same commit a scribble makes and the same conversion: the tap goes
+  /// back through `LayerBox.map` into the file's own pixels, so what the model
+  /// is asked about is a place on the picture as the file holds it. `Alt` makes
+  /// the tap a negative one, which is the same modifier that claims the
+  /// background for a stroke and says the same thing.
+  ///
+  /// A second tap refines the first rather than proposing a second subject:
+  /// every prompt on the base frame is handed to the decoder together.
+  void _prompt(Offset screenPoint) {
+    final box = _target;
+    if (box == null) {
+      widget.state.postNotice(l10n.rotoSelectALayer);
+      return;
+    }
+    final frame = _sourceFrame;
+    if (frame == null) {
+      widget.state.postNotice(l10n.rotoNoSourceFrame);
+      return;
+    }
+    final brush = widget.target;
+    if (brush == null) return;
+    final at = box.map.layerOf(screenPoint);
+    final subject = !HardwareKeyboard.instance.isAltPressed;
+    try {
+      final staged = box.layer.getEffects();
+      final instance =
+          staged.where((e) => e.id() == brush.effect).firstOrNull;
+      if (instance == null) return;
+      instance.rotoAddPrompt(
+        points: Float32List.fromList([at.dx, at.dy]),
+        labels: Uint8List.fromList([subject ? 1 : 0]),
+        frame: frame,
+      );
+      box.layer.setEffects(effects: staged);
+      widget.onChanged();
+      _solveNow(box.layer, brush.effect, frame);
+    } catch (_) {
+      // The layer or the effect went away under the tap, or the point landed
+      // somewhere the engine would not read. Neither is worth a dialogue.
+    }
+  }
+
   /// Ask for the scribbled frame's own matte, now (docs/impl/roto.md
   /// §6 step 1) — the same job Propagate runs, stopped at this frame.
   ///
@@ -559,8 +656,12 @@ class _ScribblePainter extends CustomPainter {
       old.width != width;
 }
 
-/// The scribbles on this frame and — in the Boundary view — the propagated
-/// matte's edge.
+/// How wide a prompt's ring is drawn, in screen pixels. Big enough to find and
+/// small enough to see what is under it.
+const double _promptRadius = 5;
+
+/// The scribbles and the taps on this frame and, in the Boundary view, the
+/// propagated matte's edge.
 ///
 /// Every colour arrives from the theme struct; nothing here chooses one.
 class RotoOverlayPainter extends CustomPainter {
@@ -571,6 +672,11 @@ class RotoOverlayPainter extends CustomPainter {
   /// file is on screen — only that frame's strokes are drawn, because a stroke
   /// is a claim about one frame.
   final List<BridgeRotoStroke> strokes;
+
+  /// Every segmentation prompt the brush holds, on the same terms: taps in
+  /// source pixels, and only this frame's are drawn.
+  final List<BridgeRotoPrompt> prompts;
+
   final int? sourceFrame;
 
   /// The matte's edge at this frame, `[x0, y0, …]` in source pixels. Empty in
@@ -586,6 +692,7 @@ class RotoOverlayPainter extends CustomPainter {
   const RotoOverlayPainter({
     required this.map,
     required this.strokes,
+    this.prompts = const [],
     required this.sourceFrame,
     required this.boundary,
     required this.foreground,
@@ -607,6 +714,41 @@ class RotoOverlayPainter extends CustomPainter {
     if (m == null) return;
     _paintBoundary(canvas, m);
     _paintStrokes(canvas, m);
+    _paintPrompts(canvas, m);
+  }
+
+  /// The taps that seed the model: a small ring each, green for the subject and
+  /// red for what is against it, the same two roles a stroke's colours carry,
+  /// so a tap and a scribble that make the same claim look alike.
+  ///
+  /// Rings rather than dots, and at a fixed size on screen rather than in the
+  /// file's pixels, because a tap has no width: it names one place and says
+  /// which side of the edge it is on, and it has to stay findable however far
+  /// the picture is zoomed out.
+  void _paintPrompts(Canvas canvas, ViewerLayerMap m) {
+    for (final p in prompts) {
+      if (p.frame != sourceFrame) continue;
+      for (var i = 0; i + 1 < p.points.length; i += 2) {
+        final at = m.toScreen(p.points[i], p.points[i + 1]);
+        final subject = (i ~/ 2) < p.labels.length && p.labels[i ~/ 2] != 0;
+        canvas.drawCircle(
+          at,
+          _promptRadius,
+          Paint()
+            ..color = outline
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 3,
+        );
+        canvas.drawCircle(
+          at,
+          _promptRadius,
+          Paint()
+            ..color = subject ? foreground : background
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.5,
+        );
+      }
+    }
   }
 
   /// The strokes already in the document, at their stored width, faded — they
@@ -665,6 +807,7 @@ class RotoOverlayPainter extends CustomPainter {
   bool shouldRepaint(RotoOverlayPainter old) =>
       old.map != map ||
       !identical(old.strokes, strokes) ||
+      !identical(old.prompts, prompts) ||
       old.sourceFrame != sourceFrame ||
       !identical(old.boundary, boundary) ||
       old.foreground != foreground ||

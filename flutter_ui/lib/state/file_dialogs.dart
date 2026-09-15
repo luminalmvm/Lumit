@@ -238,6 +238,18 @@ Future<String?> pickAeBundle() =>
 Future<String?> pickFolder() =>
     getDirectoryPath(confirmButtonText: l10n.chooseConfirm);
 
+/// An addon's own description file, the `addon.json` that names what the pack
+/// is and which files belong to it (docs/impl/addons.md §4).
+XTypeGroup _addonGroup() =>
+    XTypeGroup(label: l10n.fileTypeAddon, extensions: const ['json']);
+
+/// Pick the `addon.json` of a pack to install from disk, with the files it
+/// names sitting beside it. Null when cancelled.
+Future<String?> pickAddonManifest() async {
+  final file = await openFile(acceptedTypeGroups: [_addonGroup()]);
+  return file?.path;
+}
+
 /// Choose where to write a keymap, or null when cancelled.
 Future<String?> pickKeymapSaveLocation() async {
   final location = await getSaveLocation(

@@ -23,8 +23,9 @@ trait FlowBackend {
    (research: Flowframes), so this is a known-good ceiling. It synthesises frames directly
    (no explicit flow field), so it slots in at the *synthesis* level (§3) rather than as a
    FlowField producer; motion blur keeps using `dis` vectors. Keep it optional: model
-   download, licence (RIFE is MIT), non-determinism across GPU/EP versions — export
-   determinism rules mean the project stores which backend rendered.
+   download, licence (RIFE is MIT), non-determinism across GPU/EP versions. The frame
+   key carries the engine and the pack hash, and the sidecars carry provenance
+   ([addons.md](addons.md) §7).
 
 Do not implement Farnebäck (too smeary), Horn–Schunck (too slow at quality), or RAFT-class
 training pipelines (research project). DIS is the studied sweet spot: OpenCV's

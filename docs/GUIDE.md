@@ -379,6 +379,7 @@ One job per crate.
 | `lumit-colour` | OCIO colour management, implemented natively: config parsing, transforms, the deterministic bake |
 | `lumit-track` | The 2D tracking substrate: feature detection, affine KLT tracks, planar tracks, the camera solve and bundle adjustment |
 | `lumit-roto` | The roto brush's arithmetic: seeding, geodesic segmentation, the edge refine, carrying a matte along a flow field |
+| `lumit-ml` | The addons a user installs: reading a pack's manifest, putting the download in place, loading the model runtime, picking an execution provider and running one model over a frame |
 | `lumit-import` | After Effects import: reading a capture bundle into a document, with a report of what changed |
 | `lumit-keymap` | Shortcuts: chords, contexts, bindings, clash detection, no windowing code |
 | `lumit-ingress` | One budget every reader of untrusted input spends: bytes, items, recursion depth and work, plus checked raster arithmetic and capped file reads. Depends on nothing, so the crates that depend on nothing else can still use it |
@@ -432,7 +433,7 @@ Threads have fixed roles (`docs/05-ARCHITECTURE.md` section 2):
 | Worker pool | `cores - 3` threads, at least 2. Evaluation jobs come in two classes, interactive and background, and interactive pre-empts at job boundaries |
 | Decode | One per active media stream, never on the pool, because a long-GOP seek would stall it |
 | IO | The disk cache, the journal and export files |
-| Analysis | Camera tracking, one at a time, since it's a decode that runs for minutes |
+| Analysis | Camera tracking and the model analyses a pack feeds, one at a time, since each is a decode that runs for minutes |
 | Audio pair | The cpal callback, which only reads a lock-free ring buffer, and an audio-render thread that fills it ahead of time |
 | GPU-submit | The only thread that submits to the wgpu queue |
 

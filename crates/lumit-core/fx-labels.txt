@@ -79,6 +79,7 @@ Bend
 Bevel and emboss
 Bevel style
 Bezier warp
+BiRefNet
 Black and white
 Blades
 Blend
@@ -155,6 +156,7 @@ Combine
 Combine with existing alpha
 Completion
 Complexity
+Composite
 Composite on original
 Compositing
 Compressor
@@ -194,6 +196,7 @@ Deep yellow
 Delay
 Density
 Depth
+Depth Anything V2 Small
 Depth channel
 Depth map
 Depth of field
@@ -319,6 +322,7 @@ Fractal noise
 Fractal type
 Frame rate
 Frequency
+Full body
 Full off
 Full on
 Gain
@@ -506,6 +510,7 @@ Mirror
 Mirror edges
 Mix
 Mode
+Model
 Mono below
 Monochrome
 Mood lighting
@@ -596,6 +601,7 @@ Points layer
 Points sample
 Polar coordinates
 Polar to rectangular
+Portrait
 Position
 Position x
 Position y
@@ -641,6 +647,7 @@ Relief
 Reload channels
 Remainder
 Remap
+Remove background
 Remove edge leak
 Render
 Rendered
@@ -664,6 +671,7 @@ Right trim
 Rim brightness
 Ripple
 Rise
+Robust Video Matting
 Roll speed
 Room size
 Rotation
@@ -699,6 +707,8 @@ Screen softness
 Scribble
 Second input
 Seed
+Seed from
+Segment
 Segment length
 Segments
 Sensitivity
@@ -793,6 +803,7 @@ Stroke
 Stroke colour
 Stroke emboss
 Stroke width
+Strokes
 Style
 Stylise
 Sub influence

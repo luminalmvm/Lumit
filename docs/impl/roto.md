@@ -282,15 +282,20 @@ test pins it byte-for-byte. Across machines the mattes agree to the flow's cross
 tolerance, and — the property that matters — **once cached, the matte is the input**:
 export reads the cached plane, so an export is stable across driver updates until the
 user re-propagates, and the project can record nothing weaker than "these bytes". The
-`rife` backend and any future model never feed roto propagation (§0's non-determinism);
-the flow settings the effect carries name the deterministic engine only.
+`rife` backend never feeds roto propagation (§0's non-determinism); the flow settings the
+effect carries name the deterministic engine only. One model does reach the seeding, and
+only where the seed row names it (§9): the pack's own hash and the provider are in the
+chain hash, so a matte seeded by one pack is never lent to a run seeded by another, and
+the record says which pack seeded it.
 
 **Refusals, each a named error and never a fault:** `Offline` (no resolved media
 fingerprint — nothing to key a cache with), `FlowUnavailable` (no GPU flow on this
 device: the CPU oracle at ~2 s a pair would misrepresent a minutes-long job as hung, and
 mixing backends breaks the byte-identical rebuild claim — the honest answer is the
 refusal, the same stance as the texture door's documented passthrough), `Busy` (one
-propagation at a time), `NoBaseFrame` (Propagate pressed before any stroke). Cancellation
+propagation at a time), `NoBaseFrame` (Propagate pressed before any stroke),
+`ModelMissing` and `ModelFailed` (the seed row asks for a segmentation model this machine
+has not got, or has and cannot run, §9). Cancellation
 between frames, writing nothing partial *within* a frame and keeping whole frames (§6).
 No panics, allocations budgeted per run (the planes are reused across frames), no lock
 across the flow dispatch.
@@ -307,6 +312,29 @@ with the platform execution provider, **non-deterministic across GPU/EP versions
 therefore recorded** — the sidecar key gains the backend and model hash, and the "cached
 matte is the input" property of §8 is what keeps exports stable anyway. A future decision
 entry owns the choice of model; this note only guarantees the seam stays where it is.
+
+**What was built, and how far it goes** ([addons.md](addons.md) §6.2). SAM 2 seeds the
+**base frame** from a prompt, and nothing else moved: the warp, the solve, the refine
+band, the sidecar and the tools are the ones §3 describes. The prompt is document state,
+`prompts: Vec<RotoPrompt>` on the block beside the strokes, each a few taps in source
+raster pixels with a label saying whether the tap is on the subject or against it, and it
+goes through `between()` exactly as a stroke does, so §1's purity sentence holds and a
+prompt spoils precisely the frames a stroke in its place would. A `seed` row on the effect
+chooses between `Strokes` and `Segment`, and with `Segment` chosen the propagation opens
+the pack on its own thread, encodes the base frame once, runs the decoder over the taps,
+thresholds the coverage into seeds the way a warped matte is thresholded, stamps the
+user's strokes over them, and drops the model. A tap is made with the Roto brush tool on
+the base frame and nowhere else, `Alt` claiming one against the subject, and it travels
+down `roto_add_prompt` through the same comp→layer conversion a stroke's points take; the
+overlay rings this frame's taps in the two tones a foreground and a background stroke
+already wear (07 §2.3.7). §9's "the sidecar key gains the backend and
+model hash" is `RotoSettings::feed`: the pack's identity is in both hashes whenever the
+row says `Segment`, and in neither when it says `Strokes`, so installing a pack renames
+nothing on a brush that never asked for one.
+
+What is **not** built: a prompt on any frame but the base, which is a decision for another
+note, and a model proposing the matte on every frame, which is what the paragraph above
+describes and remains the growth path.
 
 ## 10. Test plan (implement with each package)
 

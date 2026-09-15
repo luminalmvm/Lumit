@@ -415,6 +415,10 @@
   "@fxColumns": {
     "description": "Effect controls — a control on Card wipe: how many cards across the frame."
   },
+  "fxComposite": "Composite",
+  "@fxComposite": {
+    "description": "Effect controls - an option on Remove background's View row: the layer with its background cut away."
+  },
   "fxCompositeOnOriginal": "Composite on original",
   "@fxCompositeOnOriginal": {
     "description": "Effect controls — a switch on Beam, Lightning, Radio waves and Vegas: keep the layer under what is drawn, or draw on nothing."
@@ -811,6 +815,10 @@
   "@fxPolarToRectangular": {
     "description": "Effect controls — a Conversion option on Polar coordinates."
   },
+  "fxPortrait": "Portrait",
+  "@fxPortrait": {
+    "description": "Effect controls - an option on Remove background's Detail row: head and shoulders, most of the frame."
+  },
   "fxPosition": "Position",
   "@fxPosition": {
     "description": "A Stroke layer style's Position parameter: which side of the layer's edge the thickness is spent on."
@@ -966,6 +974,10 @@
   "fxStroke": "Stroke",
   "@fxStroke": {
     "description": "Effect name — walks a brush along a mask’s path."
+  },
+  "fxStrokes": "Strokes",
+  "@fxStrokes": {
+    "description": "Effect controls - the Roto brush's Seed from option that reads the scribbles alone, which is the default."
   },
   "fxStrokeColour": "Stroke colour",
   "@fxStrokeColour": {
@@ -1722,6 +1734,14 @@
   "@rotoFailedFlowUnavailable": {
     "description": "Roto brush status line when Propagate was refused: the graphics card cannot measure motion, and the slow fallback would take hours."
   },
+  "rotoFailedModelFailed": "The segmentation model would not run here",
+  "@rotoFailedModelFailed": {
+    "description": "Roto brush status line when the propagation was refused: the segmentation addon is installed and the model would not open or would not read the frame."
+  },
+  "rotoFailedModelMissing": "The segmentation model is not installed",
+  "@rotoFailedModelMissing": {
+    "description": "Roto brush status line when the propagation was refused: the seed row asks for a segmentation model and this machine has no addon for it."
+  },
   "rotoFailedNoBaseFrame": "Stroke the subject on a frame first",
   "@rotoFailedNoBaseFrame": {
     "description": "Roto brush status line when Propagate was refused: nothing has been drawn, so there is no frame to propagate from."
@@ -1761,6 +1781,18 @@
   "rotoQueued": "Waiting to start",
   "@rotoQueued": {
     "description": "Roto brush status line: the propagation has been accepted but has not begun."
+  },
+  "rotoReadyFromTaps": "{prompts, plural, =1{Based on frame {frame}, one tap} other{Based on frame {frame}, {prompts} taps}}",
+  "@rotoReadyFromTaps": {
+    "description": "Roto brush status line before Propagate has been pressed, on a brush whose Seed from row asks a segmentation model to read the taps made on the base frame. {prompts} counts those taps and {frame} is the source frame they were made on.",
+    "placeholders": {
+      "prompts": {
+        "type": "int"
+      },
+      "frame": {
+        "type": "int"
+      }
+    }
   },
   "rotoReadyToPropagate": "Based on frame {frame}",
   "@rotoReadyToPropagate": {
@@ -2305,7 +2337,11 @@
   },
   "fxDepth": "Depth",
   "@fxDepth": {
-    "description": "Effect controls — a control on Particulate: how far the emitter reaches through the layer's own plane, so particles are born at a spread of depths rather than all on it. Also how far the cycle travels on Chorus, Phaser, Tremolo, Vibrato and Wah."
+    "description": "Effect controls - the name of the effect that reads how far away every pixel is, and its View option showing that reading. Also a control on Particulate: how far the emitter reaches through the layer's own plane, so particles are born at a spread of depths rather than all on it. And how far the cycle travels on Chorus, Phaser, Tremolo, Vibrato and Wah."
+  },
+  "fxDepthAnythingV2Small": "Depth Anything V2 Small",
+  "@fxDepthAnythingV2Small": {
+    "description": "Effect controls - an option on the Depth effect's Model row. The name of a model pack, so it stays as it is in every language."
   },
   "fxDepthChannel": "Depth channel",
   "@fxDepthChannel": {
@@ -2923,6 +2959,10 @@
   "@fxMode": {
     "description": "Effect controls — a control on Flash. Also whether Chorus flanges, and whether Wah follows the playing."
   },
+  "fxModel": "Model",
+  "@fxModel": {
+    "description": "Effect controls - a control on Depth and on Remove background: which trained model reads the frames. The models themselves are addons installed from Settings."
+  },
   "fxMotionBlur": "Motion blur",
   "@fxMotionBlur": {
     "description": "Effect name in the Add effect menu and the Effect controls panel — the optical-flow motion blur that smears each pixel along the motion in footage. Also the Motion blur group and checkbox on Shake."
@@ -3087,6 +3127,10 @@
   "@fxRedBlur": {
     "description": "Effect controls — a control on Channel blur."
   },
+  "fxRemoveBackground": "Remove background",
+  "@fxRemoveBackground": {
+    "description": "Effect controls - the name of the effect that cuts the subject out of what is behind them."
+  },
   "fxRemoveEdgeLeak": "Remove edge leak",
   "@fxRemoveEdgeLeak": {
     "description": "Effect controls — a control on Depth of field."
@@ -3134,6 +3178,10 @@
   "fxRimBrightness": "Rim brightness",
   "@fxRimBrightness": {
     "description": "Effect controls — a control on Depth of field."
+  },
+  "fxRobustVideoMatting": "Robust Video Matting",
+  "@fxRobustVideoMatting": {
+    "description": "Effect controls - an option on Remove background's Model row. The name of a model pack, so it stays as it is in every language."
   },
   "fxRollSpeed": "Roll speed",
   "@fxRollSpeed": {
@@ -3282,6 +3330,10 @@
   "fxFullOn": "Full on",
   "@fxFullOn": {
     "description": "Effect controls — an option on Set channels' four channel pickers: the channel is 1 everywhere."
+  },
+  "fxFullBody": "Full body",
+  "@fxFullBody": {
+    "description": "Effect controls - an option on Remove background's Detail row: a whole person at a distance."
   },
   "fxFullOff": "Full off",
   "@fxFullOff": {
@@ -8502,6 +8554,10 @@
   "@fxWaveWidth": {
     "description": "Effect controls — a control on Ripple and on Wave warp."
   },
+  "fxBiRefNet": "BiRefNet",
+  "@fxBiRefNet": {
+    "description": "Effect controls - an option on Remove background's Model row. The name of a model family, so it stays as it is in every language."
+  },
   "fxBlackAndWhite": "Black and white",
   "@fxBlackAndWhite": {
     "description": "Effect name in the Add effect menu — six weights, one grey."
@@ -8597,6 +8653,14 @@
   "fxPreserveLuminosity": "Preserve luminosity",
   "@fxPreserveLuminosity": {
     "description": "Effect controls — a control on Photo filter: keep the exposure and change only the colour."
+  },
+  "fxSeedFrom": "Seed from",
+  "@fxSeedFrom": {
+    "description": "Effect controls - the Roto brush row saying what the base frame's matte starts from, the strokes or a segmentation model."
+  },
+  "fxSegment": "Segment",
+  "@fxSegment": {
+    "description": "Effect controls - the Roto brush's Seed from option that reads the taps with a segmentation model."
   },
   "fxSegments": "Segments",
   "@fxSegments": {
@@ -11662,6 +11726,10 @@
   "@badgeUnknownEffect": {
     "description": "Calm badge at the top of an effect's card in the Effect controls panel, for an effect saved by another or newer version of Lumit. The effect is kept exactly as it was saved and is not lost."
   },
+  "badgeAddonMissing": "This effect needs an addon that is not installed",
+  "@badgeAddonMissing": {
+    "description": "Calm badge at the top of an effect's card in the Effect controls panel, when the effect asks a trained model for a reading and the machine has not got the model. The layer still composites, showing the picture unchanged, and the addon to install is named beneath it."
+  },
   "badgeShaderFailed": "This shader did not compile",
   "@badgeShaderFailed": {
     "description": "Calm badge at the top of a Custom shader's card in the Effect controls panel, when the WGSL the user wrote or loaded will not compile. The layer still composites, showing the picture unchanged, and the compiler's own message appears beneath it with its line numbers counted from the user's own text."
@@ -12859,5 +12927,325 @@
   "fxConsoleNodeGraphs": "Node graphs",
   "@fxConsoleNodeGraphs": {
     "description": "The FX console popover: the category kicker worn by the project's node graph compositions, each of which applies to the selected layers as an effect."
+  },
+  "settingsPageAddons": "Addons",
+  "@settingsPageAddons": {
+    "description": "Settings window: name of a page in the sidebar, the optional downloads that add a model runtime and model packs."
+  },
+  "settingsGroupAddonRuntime": "Runtime",
+  "@settingsGroupAddonRuntime": {
+    "description": "Settings window, Addons: the heading over the one row about the library every model pack needs to run."
+  },
+  "settingsGroupAddonsInstalled": "Installed",
+  "@settingsGroupAddonsInstalled": {
+    "description": "Settings window, Addons: the heading over the model packs that are on this machine."
+  },
+  "settingsGroupAddonsAvailable": "Available",
+  "@settingsGroupAddonsAvailable": {
+    "description": "Settings window, Addons: the heading over the catalogue, the model packs that can be fetched."
+  },
+  "settingsAddonsRuntime": "Model runtime",
+  "@settingsAddonsRuntime": {
+    "description": "Settings window, Addons: the name of the runtime row, used until the installed runtime names itself."
+  },
+  "settingsAddonsStateMissing": "Not installed.",
+  "@settingsAddonsStateMissing": {
+    "description": "Settings window, Addons: the line under the runtime row when nothing is installed. A statement, not a complaint."
+  },
+  "settingsAddonsStatePresent": "Installed, and nothing has asked for it yet.",
+  "@settingsAddonsStatePresent": {
+    "description": "Settings window, Addons: the line under the runtime row when the files are there but the library has not been loaded since Lumit started."
+  },
+  "settingsAddonsStateLoaded": "Loaded, running on {provider}, version {version}.",
+  "@settingsAddonsStateLoaded": {
+    "description": "Settings window, Addons: the line under the runtime row once the library has loaded. The provider is the accelerator it runs on, such as DirectML, CoreML or CPU.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      },
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsAddonsStateFailed": "It is installed and would not load.",
+  "@settingsAddonsStateFailed": {
+    "description": "Settings window, Addons: the line under the runtime row when loading failed. The library's own words follow it, untranslated."
+  },
+  "settingsAddonsInstall": "Install",
+  "@settingsAddonsInstall": {
+    "description": "Settings window, Addons: the button that fetches an addon and puts it in place."
+  },
+  "settingsAddonsUpdate": "Update",
+  "@settingsAddonsUpdate": {
+    "description": "Settings window, Addons: the button on a row whose addon is installed at another version."
+  },
+  "settingsAddonsRemove": "Remove",
+  "@settingsAddonsRemove": {
+    "description": "Settings window, Addons: the button that deletes an installed addon from this machine."
+  },
+  "settingsAddonsLoad": "Load now",
+  "@settingsAddonsLoad": {
+    "description": "Settings window, Addons: the button that loads the runtime straight away, to see whether it works on this machine."
+  },
+  "settingsAddonsNeedsRuntime": "Needs the runtime",
+  "@settingsAddonsNeedsRuntime": {
+    "description": "Settings window, Addons: what a model pack's button reads while the runtime it needs is not installed. The button cannot be pressed."
+  },
+  "settingsAddonsBroken": "Files are missing",
+  "@settingsAddonsBroken": {
+    "description": "Settings window, Addons: shown beside an installed pack whose files are gone or the wrong size, so it will not run."
+  },
+  "settingsAddonsCatalogue": "Catalogue",
+  "@settingsAddonsCatalogue": {
+    "description": "Settings window, Addons: the name of the row whose button reads the list of addons Lumit publishes."
+  },
+  "settingsAddonsCheck": "Check for addons",
+  "@settingsAddonsCheck": {
+    "description": "Settings window, Addons: the button that fetches the list of addons. Nothing is fetched until it is pressed."
+  },
+  "settingsAddonsNotChecked": "Nothing has been asked for yet.",
+  "@settingsAddonsNotChecked": {
+    "description": "Settings window, Addons: the line under the catalogue row before the list has been fetched."
+  },
+  "settingsAddonsAllInstalled": "Everything the catalogue offers is installed.",
+  "@settingsAddonsAllInstalled": {
+    "description": "Settings window, Addons: the line under the catalogue row when there is nothing left to fetch."
+  },
+  "settingsAddonsNoneInstalled": "No addons are installed.",
+  "@settingsAddonsNoneInstalled": {
+    "description": "Settings window, Addons: stands in for the installed list when it is empty. Lumit works fully without any of them."
+  },
+  "settingsAddonsInstallFromFile": "Install from file",
+  "@settingsAddonsInstallFromFile": {
+    "description": "Settings window, Addons: the name of the row that installs a pack from disk rather than from the catalogue."
+  },
+  "settingsAddonsFolder": "Where they are kept",
+  "@settingsAddonsFolder": {
+    "description": "Settings window, Addons: the name of the row whose button opens the folder the addons are installed in. The path is shown under it."
+  },
+  "settingsAddonsShow": "Show",
+  "@settingsAddonsShow": {
+    "description": "Settings window, Addons: the button that opens the addons folder in the file manager."
+  },
+  "settingsAddonsPackDetail": "{licence}, {size}, {task}",
+  "@settingsAddonsPackDetail": {
+    "description": "Settings window, Addons: the line under an installed pack. The licence is a short name such as MIT, the size is a number of megabytes, and the task is what the pack does.",
+    "placeholders": {
+      "licence": {
+        "type": "String"
+      },
+      "size": {
+        "type": "String"
+      },
+      "task": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsAddonsOfferDetail": "{licence}, {size}",
+  "@settingsAddonsOfferDetail": {
+    "description": "Settings window, Addons: the line under a pack the catalogue offers. The licence is a short name such as MIT and the size is what the download weighs.",
+    "placeholders": {
+      "licence": {
+        "type": "String"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsAddonsOfferTerms": "{licence}, {size}. {notes}",
+  "@settingsAddonsOfferTerms": {
+    "description": "Settings window, Addons: the line under a pack the catalogue offers terms for, most often a training set whose terms differ from the code's. The notes are the catalogue's own sentence and are not translated.",
+    "placeholders": {
+      "licence": {
+        "type": "String"
+      },
+      "size": {
+        "type": "String"
+      },
+      "notes": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsAddonsLicence": "Licence",
+  "@settingsAddonsLicence": {
+    "description": "Settings window, Addons: the button on a row that opens the addon's licence in the machine's own browser."
+  },
+  "settingsAddonsFailedNetwork": "Lumit could not reach the download.",
+  "@settingsAddonsFailedNetwork": {
+    "description": "Settings window, Addons: the line under the catalogue row when the fetch did not finish. Calm: a machine with no network is not an error."
+  },
+  "settingsAddonsFailedCatalogue": "The list of addons could not be read.",
+  "@settingsAddonsFailedCatalogue": {
+    "description": "Settings window, Addons: the line under the catalogue row when what came back is not a list this build understands."
+  },
+  "settingsAddonsFailedManifest": "That addon description could not be read.",
+  "@settingsAddonsFailedManifest": {
+    "description": "Settings window, Addons: shown when the addon.json the user picked is unreadable, or the files it names are not beside it."
+  },
+  "settingsAddonsFailedUnsupported": "This addon has nothing for this machine.",
+  "@settingsAddonsFailedUnsupported": {
+    "description": "Settings window, Addons: shown when an addon is published for other platforms only."
+  },
+  "settingsAddonsFailedIncomplete": "The download did not arrive whole.",
+  "@settingsAddonsFailedIncomplete": {
+    "description": "Settings window, Addons: shown when a fetched file is not the length the catalogue published. Nothing is installed."
+  },
+  "settingsAddonsFailedChecksum": "The download is not the file that was published.",
+  "@settingsAddonsFailedChecksum": {
+    "description": "Settings window, Addons: shown when a fetched file's digest is not the published one. Nothing is installed."
+  },
+  "settingsAddonsFailedBusy": "Another addon is installing.",
+  "@settingsAddonsFailedBusy": {
+    "description": "Settings window, Addons: shown when a second install is asked for while one is running. One at a time."
+  },
+  "settingsAddonsFailedRefused": "That addon could not be installed.",
+  "@settingsAddonsFailedRefused": {
+    "description": "Settings window, Addons: shown when the engine turned the install down, or there is nowhere on this machine to keep it."
+  },
+  "settingsAddonsFailedRemove": "That addon could not be removed. A runtime that has loaded stays open until Lumit is restarted.",
+  "@settingsAddonsFailedRemove": {
+    "description": "Settings window, Addons: shown when an addon's folder could not be deleted, which is what happens while the model runtime it holds is in use."
+  },
+  "addonTaskSynthesis": "Frame synthesis",
+  "@addonTaskSynthesis": {
+    "description": "Settings window, Addons: what a model pack does, shown on its row. This one invents the frame between two real ones."
+  },
+  "addonTaskDepth": "Depth",
+  "@addonTaskDepth": {
+    "description": "Settings window, Addons: what a model pack does, shown on its row. This one guesses how far away every pixel is."
+  },
+  "addonTaskMatte": "Matte",
+  "@addonTaskMatte": {
+    "description": "Settings window, Addons: what a model pack does, shown on its row. This one cuts the subject out of its background."
+  },
+  "addonTaskSegmentation": "Segmentation",
+  "@addonTaskSegmentation": {
+    "description": "Settings window, Addons: what a model pack does, shown on its row. This one traces the thing you clicked on."
+  },
+  "fileTypeAddon": "Addon description",
+  "@fileTypeAddon": {
+    "description": "File dialogue: the name of the addon.json file type, when picking a pack to install from disk."
+  },
+  "flowEngine": "Engine",
+  "@flowEngine": {
+    "description": "Flow group: the name of the option saying which engine paints the invented frame."
+  },
+  "flowEngineBuiltIn": "Built in",
+  "@flowEngineBuiltIn": {
+    "description": "A choice of the Flow group's Engine option: the optical flow Lumit ships with."
+  },
+  "flowEngineRife": "RIFE",
+  "@flowEngineRife": {
+    "description": "A choice of the Flow group's Engine option: the RIFE model pack, installed from the Addons page. A product name, so it is not translated."
+  },
+  "flowEngineNotInstalled": "RIFE is not installed, using the built-in engine",
+  "@flowEngineNotInstalled": {
+    "description": "Flow group, the line under the Engine row: the layer asks for the RIFE model and this machine has neither the pack nor the library that runs one. A statement, not a complaint."
+  },
+  "flowEngineFailed": "RIFE would not run here, using the built-in engine",
+  "@flowEngineFailed": {
+    "description": "Flow group, the line under the Engine row: the RIFE pack is installed and would not open or would not run."
+  },
+  "flowEngineFloatSource": "RIFE cannot read scene-linear footage, using the built-in engine",
+  "@flowEngineFloatSource": {
+    "description": "Flow group, the line under the Engine row: the layer's source is scene-linear float, which the model was not trained on."
+  },
+  "openAddons": "Open addons",
+  "@openAddons": {
+    "description": "The button beside a line about a missing addon, on the Flow group's Engine row, on the Roto brush's status row when the seed row asks for a segmentation model, and in the export dialogue. It opens the Addons page in Settings."
+  },
+  "exportAddonMissing": "An addon this project needs is not installed",
+  "@exportAddonMissing": {
+    "description": "Export dialogue footer, in place of the summary: a layer asks for a model engine this machine cannot run, so the export is refused rather than written with something else."
+  },
+  "planeNotAnalysed": "Not analysed yet",
+  "@planeNotAnalysed": {
+    "description": "Status line on the Depth and Remove background effects, before Analyse has been pressed. Nothing has been read and nothing is claimed."
+  },
+  "planeQueued": "Waiting to start",
+  "@planeQueued": {
+    "description": "Status line on the Depth and Remove background effects: the analysis has been accepted but has not begun."
+  },
+  "planeReading": "Frame {done} of {total}",
+  "@planeReading": {
+    "description": "Status line on the Depth and Remove background effects while the model is reading the shot. Both numbers are frame counts.",
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "planeSpanWhole": "The whole shot, {frames} frames",
+  "@planeSpanWhole": {
+    "description": "Status line on the Depth and Remove background effects: the reading covers every frame of the clip. {frames} is a frame count.",
+    "placeholders": {
+      "frames": {
+        "type": "int"
+      }
+    }
+  },
+  "planeSpanPartial": "Frames {first} to {last}",
+  "@planeSpanPartial": {
+    "description": "Status line on the Depth and Remove background effects: the reading covers part of the clip, and outside that span the effect does nothing. Both numbers are source frame indices.",
+    "placeholders": {
+      "first": {
+        "type": "int"
+      },
+      "last": {
+        "type": "int"
+      }
+    }
+  },
+  "planeNoDepth": "No depth yet",
+  "@planeNoDepth": {
+    "description": "Depth effect status line when an analysis ended without reading a single frame, which is what a Cancel before the first frame leaves behind."
+  },
+  "planeNoMatte": "No matte yet",
+  "@planeNoMatte": {
+    "description": "Remove background status line when an analysis ended without reading a single frame, which is what a Cancel before the first frame leaves behind."
+  },
+  "planeProvider": "Read by {provider}",
+  "@planeProvider": {
+    "description": "Status line on the Depth and Remove background effects, under the reading, naming what ran the model: DirectML, CoreML or CPU. The names are not translated. A run that fell back to the processor is a hundred times slower, so it is never left unsaid.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "planeFailedRuntimeMissing": "The model runtime is not installed",
+  "@planeFailedRuntimeMissing": {
+    "description": "Status line on an effect that reads a shot with a trained model, when the analysis was refused: the library every model needs is missing. It is installed from the Addons page in Settings."
+  },
+  "planeFailedPackMissing": "The model this effect asks for is not installed",
+  "@planeFailedPackMissing": {
+    "description": "Status line on an effect that reads a shot with a trained model, when the analysis was refused: the runtime is there and the model pack the effect's Model row names is not installed. Another pack may be installed for the same job; it is not a substitute."
+  },
+  "planeFailedModelFailed": "The model would not run here",
+  "@planeFailedModelFailed": {
+    "description": "Status line on an effect that reads a shot with a trained model, when the analysis was refused: the pack would not open, or the model turned the run down on this machine."
+  },
+  "planeFailedBusy": "Another analysis is already running",
+  "@planeFailedBusy": {
+    "description": "Status line on an effect that reads a shot with a trained model, when the analysis was refused: only one model job runs at a time, because two on one graphics card halve each other."
+  },
+  "planeFailedUnreadable": "The media could not be read",
+  "@planeFailedUnreadable": {
+    "description": "Status line on an effect that reads a shot with a trained model, when the analysis was refused: the file would not open, or carries no video."
+  },
+  "planeFailedNoFrames": "There are no frames to read",
+  "@planeFailedNoFrames": {
+    "description": "Status line on an effect that reads a shot with a trained model, when the analysis was refused: the file opened but holds no pictures."
+  },
+  "planeFailedCancelled": "Analysis stopped",
+  "@planeFailedCancelled": {
+    "description": "Status line on an effect that reads a shot with a trained model, when the analysis stopped before it had read anything to keep."
   }
 }

@@ -103,7 +103,7 @@ mod tests;
 
 pub use solve::RotoSolver;
 pub use stroke::{base_seeds, RotoStroke, Seed, Seeds, StrokeKind};
-pub use warp::{warp_and_seed, FlowField};
+pub use warp::{mask_seeds, warp_and_seed, FlowField};
 
 /// Everything this crate refuses, each a named error and never a fault
 /// (14-ENGINEERING-RULES §4).
