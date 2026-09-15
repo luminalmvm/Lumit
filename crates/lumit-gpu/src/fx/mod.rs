@@ -287,6 +287,10 @@ pub struct FxEngine {
     shake_mb: wgpu::ComputePipeline,
     glow_bright: wgpu::ComputePipeline,
     glow_combine: wgpu::ComputePipeline,
+    /// The three passes of a glow's exponential halo, see `fx_glow_exp.wgsl`.
+    glow_exp_down: wgpu::ComputePipeline,
+    glow_exp_conv: wgpu::ComputePipeline,
+    glow_exp_up: wgpu::ComputePipeline,
     block_glitch: wgpu::ComputePipeline,
     scanlines: wgpu::ComputePipeline,
     echo_accumulate: wgpu::ComputePipeline,

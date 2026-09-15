@@ -4,7 +4,8 @@
 // light above the threshold (soft knee, all four premultiplied channels
 // alike — the halo carries alpha so glow spreads over transparency like
 // light); the host then blurs that leftover with the shared gaussian
-// (fx_blur.wgsl, Repeat edges), and `glow_combine` adds the halo back:
+// (fx_blur.wgsl, Repeat edges), or with Falloff up builds the halo in
+// fx_glow_exp.wgsl instead, and `glow_combine` adds the halo back:
 // out = input + intensity · tint · halo, alpha saturating at 1, highlights
 // never clipped (§2.1). Intensity 0 short-circuits to the bit-exact
 // identity, exactly like the CPU reference's early return.

@@ -336,8 +336,7 @@ fn wgsl_matted_glow_seeds_only_inside_the_matte_and_spills_past_it() {
     let matte_tex = upload_linear_f32(&ctx, &matte, w, h);
     let op = GlowOp {
         radius_px: 6.0,
-        octaves: 1,
-        falloff: 0.0,
+        octaves: None,
         fringe: None,
         threshold: 0.8,
         knee: 0.5,
@@ -2440,8 +2439,7 @@ fn wgsl_glow_matches_the_cpu_oracle() {
         let tex = upload_linear_f32(&ctx, &img, w, h);
         let op = GlowOp {
             radius_px: radius,
-            octaves: 1,
-            falloff: 0.0,
+            octaves: None,
             fringe: None,
             threshold,
             knee,
@@ -2467,18 +2465,30 @@ fn wgsl_glow_matches_the_cpu_oracle() {
     }
 }
 
-/// The §1.6 oracle for the glow's **Exponential** stack and its **Chromatic
-/// aberration** (docs/08 §3.3). The octaves fold themselves into the running
-/// mean through the blur kernel's own Mix, so what this proves is that the
-/// weights the host walks are the weights the CPU reference walks, octave for
-/// octave. The fringe is the ordinary directional split, spent on the halo
-/// before the recombine, at whatever angle it was given. The tolerance is looser than the single gaussian's for the
-/// reason the stack exists: five octaves are five more roundings through an
-/// fp16 texture, where the reference stays in f32 throughout (measured worst
-/// on NVIDIA: 5.6e-3, on the steepest falloff, the case that leans hardest on
-/// the tightest octave).
+/// A glow's exponentials as `lumit-render` hands them over, restated here
+/// because this crate only sees `lumit-core` in its tests.
+fn glow_octave_ops(radius_px: f32, falloff: f32, w: u32, h: u32) -> Option<[GlowOctaveOp; 5]> {
+    use lumit_core::fx::cpu::{glow_grid, glow_octaves, GLOW_REACH};
+    (falloff > 0.0).then(|| {
+        glow_octaves(radius_px, falloff, w, h).map(|o| GlowOctaveOp {
+            step: o.step,
+            grid: [glow_grid(w, o.step), glow_grid(h, o.step)],
+            lambda: o.lambda,
+            reach: GLOW_REACH * o.lambda,
+            taps: o.taps,
+            weight: o.weight,
+        })
+    })
+}
+
+/// The §1.6 oracle for the glow's **Falloff** and its **Chromatic aberration**
+/// (docs/08 §3.3). Falloff runs every exponential through its tent, its
+/// convolution and its Catmull-Rom on the way back up, on grids from full size
+/// down to one texel. The fringe is the ordinary directional split, spent on
+/// the halo before the recombine. Looser than the gaussian's bound because the
+/// halo rounds through fp16 textures five times over.
 #[test]
-fn wgsl_glow_octaves_and_fringe_match_the_cpu_oracle() {
+fn wgsl_glow_falloff_and_fringe_match_the_cpu_oracle() {
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
@@ -2490,18 +2500,19 @@ fn wgsl_glow_octaves_and_fringe_match_the_cpu_oracle() {
     // columns normalised would show up as the wrong colour rather than as
     // nothing.
     let tints = [[1.0, 0.2, 0.0], [0.1, 1.0, 0.1], [0.0, 0.3, 1.0]];
-    for (name, octaves, falloff, chromatic_px, angle, wavelength, samples) in [
-        ("octaves", 5u32, 2.0f32, 0.0f32, 0.0f32, false, 16),
-        ("steep", 5, 16.0, 0.0, 0.0, false, 16),
-        ("fringe", 1, 0.0, 3.0, 0.0, false, 16),
-        ("fringe-angled", 1, 0.0, 3.0, 35.0, false, 16),
-        ("both", 5, 4.0, 3.0, 120.0, false, 16),
-        ("wavelength", 1, 0.0, 3.0, 0.0, true, 16),
-        ("wavelength-few", 5, 2.0, 4.0, -60.0, true, 5),
+    for (name, radius_px, falloff, chromatic_px, angle, wavelength, samples) in [
+        ("falloff", 8.0f32, 1.0f32, 0.0f32, 0.0f32, false, 16),
+        ("steep", 8.0, 16.0, 0.0, 0.0, false, 16),
+        ("tiny", 2.0, 1.0, 0.0, 0.0, false, 16),
+        ("huge", 400.0, 2.0, 0.0, 0.0, false, 16),
+        ("fringe", 8.0, 0.0, 3.0, 0.0, false, 16),
+        ("fringe-angled", 8.0, 0.0, 3.0, 35.0, false, 16),
+        ("both", 8.0, 4.0, 3.0, 120.0, false, 16),
+        ("wavelength", 8.0, 0.0, 3.0, 0.0, true, 16),
+        ("wavelength-few", 8.0, 2.0, 4.0, -60.0, true, 5),
     ] {
         let halo = lumit_core::fx::cpu::GlowHalo {
-            radius_px: 8.0,
-            octaves,
+            radius_px,
             falloff,
             chromatic_px,
             fringe_angle_deg: angle,
@@ -2544,8 +2555,7 @@ fn wgsl_glow_octaves_and_fringe_match_the_cpu_oracle() {
         });
         let op = GlowOp {
             radius_px: halo.radius_px,
-            octaves,
-            falloff,
+            octaves: glow_octave_ops(radius_px, falloff, w, h),
             fringe,
             threshold: 0.8,
             knee: 0.5,

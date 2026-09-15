@@ -428,6 +428,7 @@ impl FxEngine {
         let transform_mod = module(include_str!("../fx_transform.wgsl"), "fx-transform");
         let shake_mb_mod = module(include_str!("../fx_shake_mb.wgsl"), "fx-shake-mb");
         let glow_mod = module(include_str!("../fx_glow.wgsl"), "fx-glow");
+        let glow_exp_mod = module(include_str!("../fx_glow_exp.wgsl"), "fx-glow-exp");
         let block_glitch_mod = module(include_str!("../fx_block_glitch.wgsl"), "fx-block-glitch");
         let scanlines_mod = module(include_str!("../fx_scanlines.wgsl"), "fx-scanlines");
         let echo_mod = module(include_str!("../fx_echo.wgsl"), "fx-echo");
@@ -558,6 +559,9 @@ impl FxEngine {
         let shake_mb = pipeline(&shake_mb_mod, "fx-shake-mb", "shake_mb");
         let glow_bright = pipeline(&glow_mod, "fx-glow-bright", "glow_bright");
         let glow_combine = pipeline(&glow_mod, "fx-glow", "glow_combine");
+        let glow_exp_down = pipeline(&glow_exp_mod, "fx-glow-exp-down", "glow_exp_down");
+        let glow_exp_conv = pipeline(&glow_exp_mod, "fx-glow-exp-conv", "glow_exp_conv");
+        let glow_exp_up = pipeline(&glow_exp_mod, "fx-glow-exp-up", "glow_exp_up");
         let block_glitch = pipeline(&block_glitch_mod, "fx-block-glitch", "block_glitch");
         let scanlines = pipeline(&scanlines_mod, "fx-scanlines", "scanlines");
         let echo_accumulate = pipeline(&echo_mod, "fx-echo-accumulate", "echo_accumulate");
@@ -790,6 +794,9 @@ impl FxEngine {
             shake_mb,
             glow_bright,
             glow_combine,
+            glow_exp_down,
+            glow_exp_conv,
+            glow_exp_up,
             block_glitch,
             scanlines,
             echo_accumulate,

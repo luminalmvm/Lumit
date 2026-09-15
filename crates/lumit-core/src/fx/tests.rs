@@ -4043,8 +4043,7 @@ fn glow_instantiates_resolves_and_pins_the_one_sided_threshold() {
     assert_eq!(e.float_at("radius", 0.0), Some(24.0));
     assert_eq!(e.float_at("intensity", 0.0), Some(1.0));
     assert_eq!(e.colour_at("tint", 0.0), Some([1.0; 4]));
-    // A fresh instance is the single gaussian with no fringe: the halo's
-    // shape is the picture, so the octaves arrive only when asked for.
+    // A fresh instance is the gaussian with no fringe.
     assert_eq!(e.float_at("falloff", 0.0), Some(0.0));
     assert_eq!(e.float_at("chromatic", 0.0), Some(0.0));
     assert_eq!(e.float_at("chromatic_angle", 0.0), Some(0.0));
@@ -4056,8 +4055,6 @@ fn glow_instantiates_resolves_and_pins_the_one_sided_threshold() {
         (
             cpu::GlowHalo {
                 radius_px: 12.0,
-                // Falloff 0 packs one octave: the stack is never dispatched.
-                octaves: 1,
                 falloff: 0.0,
                 chromatic_px: 0.0,
                 fringe_angle_deg: 0.0,
@@ -4074,8 +4071,8 @@ fn glow_instantiates_resolves_and_pins_the_one_sided_threshold() {
             1.0
         )
     );
-    // Any Falloff above zero picks the octave stack up, and the fringe is a
-    // fraction of the *scaled* radius, so it follows the halo it sits on into a
+    // Falloff rides through as set, and the fringe is a fraction of the
+    // *scaled* radius, so it follows the halo it sits on into a
     // preview. The angle rides through untouched.
     let mut on = instantiate("glow").unwrap();
     for p in &mut on.params {
@@ -4093,7 +4090,6 @@ fn glow_instantiates_resolves_and_pins_the_one_sided_threshold() {
         g.packed().0,
         cpu::GlowHalo {
             radius_px: 12.0,
-            octaves: effects::glow::OCTAVES,
             falloff: 2.0,
             chromatic_px: 6.0,
             fringe_angle_deg: 30.0,
@@ -4210,20 +4206,17 @@ fn cpu_glow_blooms_spreads_alpha_and_keeps_neutral_exact() {
 }
 
 /// **Falloff** (docs/08 §3.3): one bright pixel on black, so the halo is the
-/// profile and both shapes can be read off the row through it. The stack keeps
-/// the light near the source and lets a little of it travel, which is the whole
-/// difference between a bloom that reads as light and one that reads as grey
-/// mush. Falloff steers how hard it does that, and **zero is the plain gaussian
-/// to the byte** even with the octaves dispatched, which is what lets one slider
-/// carry the whole range.
+/// profile. Above zero it has to be round, fall away at a steady rate, and
+/// carry on past the Radius. The gaussian it replaces stops dead at the
+/// Radius in a square, which is what a bright glow showed.
 #[test]
-fn cpu_glow_octaves_gather_the_halo_into_a_core() {
-    let (w, h) = (65u32, 9u32);
+fn cpu_glow_falloff_is_round_exponential_and_has_no_edge() {
+    let (w, h) = (129u32, 129u32);
     let at = |x: u32, y: u32| ((y * w + x) * 4) as usize;
     let mut img = vec![0.0f32; (w * h * 4) as usize];
-    let mid = at(32, 4);
-    img[mid..mid + 4].copy_from_slice(&[8.0, 8.0, 8.0, 1.0]);
-    let bloom = |octaves: u32, falloff: f32| {
+    let mid = at(64, 64);
+    img[mid..mid + 4].copy_from_slice(&[100.0, 100.0, 100.0, 1.0]);
+    let bloom = |falloff: f32| {
         let mut out = img.clone();
         cpu::glow_shaped(
             &mut out,
@@ -4231,7 +4224,6 @@ fn cpu_glow_octaves_gather_the_halo_into_a_core() {
             h,
             &cpu::GlowHalo {
                 radius_px: 16.0,
-                octaves,
                 falloff,
                 chromatic_px: 0.0,
                 fringe_angle_deg: 0.0,
@@ -4239,7 +4231,7 @@ fn cpu_glow_octaves_gather_the_halo_into_a_core() {
                 fringe_wavelength: false,
                 fringe_samples: 16,
             },
-            1.0,
+            0.0,
             0.0,
             1.0,
             [1.0; 4],
@@ -4249,40 +4241,74 @@ fn cpu_glow_octaves_gather_the_halo_into_a_core() {
         out
     };
 
-    // One octave is the single gaussian this effect shipped with, to the byte.
-    let flat = bloom(1, 0.0);
+    // Zero is the gaussian this effect shipped with, and it ends at the Radius.
+    let gaussian = bloom(0.0);
     let mut plain = img.clone();
-    cpu::glow(&mut plain, w, h, 16.0, 1.0, 0.0, 1.0, [1.0; 4], 1.0, &[]);
-    assert_eq!(flat, plain, "one octave is the gaussian bloom unchanged");
-
-    // And so is the full stack at Falloff 0: every tighter octave weighs
-    // nothing, so the widest keeps all of the light. The pack skips the passes,
-    // but the arithmetic agrees with it rather than merely rounding to it.
+    cpu::glow(&mut plain, w, h, 16.0, 0.0, 0.0, 1.0, [1.0; 4], 1.0, &[]);
+    assert_eq!(gaussian, plain, "falloff 0 is the gaussian bloom unchanged");
     assert_eq!(
-        bloom(effects::glow::OCTAVES, 0.0),
-        plain,
-        "falloff 0 is the plain gaussian even with the stack dispatched"
+        gaussian[at(99, 64)],
+        0.0,
+        "the gaussian stops at its Radius"
     );
 
-    // Two pixels out the stack is the brighter of the two. Twelve out, still
-    // inside the gaussian's own kernel, it is the fainter.
-    let stacked = bloom(effects::glow::OCTAVES, 2.0);
+    // A 3-4-5 triangle puts a point on the axis and one off it at the same
+    // distance, so a square halo shows up as two different values.
+    let exp = bloom(1e-3);
+    for (r, off) in [(20.0f32, (12, 16)), (35.0, (21, 28))] {
+        let axis = exp[at(64 + r as u32, 64)];
+        let diagonal = exp[at(64 + off.0, 64 + off.1)];
+        assert!(
+            (axis / diagonal - 1.0).abs() < 0.1,
+            "round at {r} px: {axis} on the axis, {diagonal} off it"
+        );
+    }
+    // It falls by the same factor every pixel, at the core's decay length.
+    let (near, far) = (exp[at(84, 64)], exp[at(99, 64)]);
+    assert!(far > 0.0, "the light carries on past twice the Radius");
+    let lambda = 16.0 * cpu::GLOW_CORE;
+    let measured = 15.0 / (near / far).ln();
     assert!(
-        stacked[at(34, 4)] > flat[at(34, 4)],
-        "the core gathers light"
+        (measured / lambda - 1.0).abs() < 0.1,
+        "decay length {measured}, expected {lambda}"
     );
-    assert!(stacked[at(44, 4)] < flat[at(44, 4)], "the reach thins out");
 
-    // A steeper Falloff pulls harder on both ends of that.
-    let steep = bloom(effects::glow::OCTAVES, 16.0);
+    // A higher Falloff sends more of the light further out.
+    let wide = bloom(2.0);
     assert!(
-        steep[at(44, 4)] < stacked[at(44, 4)],
-        "falloff 16 reaches less far than falloff 2"
+        wide[at(124, 64)] > 4.0 * exp[at(124, 64)],
+        "falloff 2 reaches further"
     );
-    assert!(
-        steep[at(33, 4)] > stacked[at(33, 4)],
-        "and holds more of the light against the source"
-    );
+}
+
+/// The exponentials behind Falloff: each twice as wide as the last, their
+/// shares adding up to one, and nothing strange at the ends of either slider.
+#[test]
+fn glow_octaves_share_the_light_and_stay_finite() {
+    let o = cpu::glow_octaves(16.0, 1.0, 64, 64);
+    let total: f32 = o.iter().map(|o| o.weight).sum();
+    assert!((total - 1.0).abs() < 1e-6);
+    for pair in o.windows(2) {
+        let (a, b) = (pair[0].step * pair[0].lambda, pair[1].step * pair[1].lambda);
+        assert!((b / a - 2.0).abs() < 1e-4, "each is twice as wide");
+        assert!(
+            (pair[1].weight / pair[0].weight - 0.5).abs() < 1e-4,
+            "falloff 1 halves"
+        );
+    }
+    // An endless Falloff shares the light evenly rather than going NaN.
+    for o in cpu::glow_octaves(16.0, f32::INFINITY, 64, 64) {
+        assert!((o.weight - 0.2).abs() < 1e-6);
+    }
+    // No Radius is a single tap, and a huge one stops growing the grid step or
+    // the convolution at twice the picture.
+    for o in cpu::glow_octaves(0.0, 1.0, 64, 64) {
+        assert!(o.step == 1.0 && o.taps == 1 && o.lambda > 0.0);
+    }
+    for o in cpu::glow_octaves(1e9, 1.0, 64, 64) {
+        assert!(o.step == 128.0 && o.taps == cpu::GLOW_REACH as i32);
+        assert_eq!(cpu::glow_grid(64, o.step), 1);
+    }
 }
 
 /// **Chromatic aberration** (docs/08 §3.3): the fringe is spent on the halo
@@ -4307,7 +4333,6 @@ fn cpu_glow_fringe_colours_the_halo_and_leaves_the_picture() {
             h,
             &cpu::GlowHalo {
                 radius_px: 6.0,
-                octaves: 1,
                 falloff: 0.0,
                 chromatic_px,
                 fringe_angle_deg: angle,

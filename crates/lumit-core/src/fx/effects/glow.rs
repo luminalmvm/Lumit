@@ -1,6 +1,7 @@
 //! Glow (docs/08 §3.3): exposure-aware bloom in scene-linear light. A
-//! bright-pass with a soft knee, a gaussian on the leftover light (one, or a
-//! stack of octaves under Exponential), and an additive recombine.
+//! bright-pass with a soft knee, a halo made from the leftover light (a
+//! gaussian, or round exponentials once Falloff is up), and an additive
+//! recombine.
 
 use crate::fx::{
     cpu, normalise_tint_columns, EffectDef, EffectMetadata, EffectSchema, ParamGroup, Params,
@@ -90,16 +91,11 @@ pub struct Glow {
     )]
     pub radius: f32,
 
-    /// How much brighter each octave of the halo is than the wider one above
-    /// it, and so how hard the bloom gathers into a core: octave `i` weighs
-    /// `falloff^i` before the stack is normalised.
-    ///
-    /// **Zero is the single gaussian, to the byte.** The widest octave keeps
-    /// all of the weight and the tighter ones take none, so the stack is never
-    /// even dispatched and a glow changes shape only when it is asked to. One
-    /// weighs every octave alike, two is the bloom that reads as light, and
-    /// higher gathers it tighter still. Open above the slider, because a very
-    /// hard core is a look.
+    /// The shape of the halo's light. **Zero is the gaussian, to the byte.**
+    /// Above zero the halo is built from round exponentials instead, which
+    /// fall away from a bright core and never stop at a hard edge, and higher
+    /// sends more of the light further out (see `cpu::glow_octaves`). Open
+    /// above the slider, though past 8 it changes little.
     #[slider(min = 0.0, max = 8.0, default = 0.0, hard_min = 0.0, unit = Raw)]
     pub falloff: f32,
 
@@ -190,13 +186,6 @@ pub struct Glow {
     pub mix: f32,
 }
 
-/// How many gaussians a shaped halo is stacked from. Five reaches a sixteenth
-/// of the Radius, which is a bright core on any halo wide enough to want one,
-/// and it is a constant rather than a control because the octave count is the
-/// shape's making and not a dial anyone should have to read about. Fixed, so a
-/// half-resolution preview stacks what the full render will.
-pub const OCTAVES: u32 = 5;
-
 impl Glow {
     /// The halo's shape, threshold, knee, intensity, tint and mix, clamped
     /// exactly as the old resolve arm clamped them (docs/impl/effect-registry.md
@@ -218,9 +207,6 @@ impl Glow {
         (
             cpu::GlowHalo {
                 radius_px,
-                // Zero weighs every tighter octave at nothing, so the stack is
-                // the widest gaussian alone: skip it and take that gaussian.
-                octaves: if falloff > 0.0 { OCTAVES } else { 1 },
                 falloff,
                 chromatic_px: radius_px * (self.chromatic / 100.0).clamp(0.0, 1.0),
                 // Classic normalises per channel, so only the misaligned

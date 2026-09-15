@@ -3232,8 +3232,7 @@ impl GpuEffect for Glow {
             aux.matte(),
             &lumit_gpu::fx::GlowOp {
                 radius_px: halo.radius_px,
-                octaves: halo.octaves,
-                falloff: halo.falloff,
+                octaves: glow_octave_ops(halo.radius_px, halo.falloff, w, h),
                 fringe,
                 threshold,
                 knee,
@@ -3243,6 +3242,28 @@ impl GpuEffect for Glow {
             },
         )
     }
+}
+
+/// A glow's exponentials in the shape the GPU takes them, or None for the
+/// gaussian. The GPU crate doesn't see `lumit-core`, so the numbers are
+/// worked out here, once, from the same function the CPU reference reads.
+fn glow_octave_ops(
+    radius_px: f32,
+    falloff: f32,
+    w: u32,
+    h: u32,
+) -> Option<[lumit_gpu::fx::GlowOctaveOp; 5]> {
+    use lumit_core::fx::cpu::{glow_grid, glow_octaves, GLOW_REACH};
+    (falloff > 0.0).then(|| {
+        glow_octaves(radius_px, falloff, w, h).map(|o| lumit_gpu::fx::GlowOctaveOp {
+            step: o.step,
+            grid: [glow_grid(w, o.step), glow_grid(h, o.step)],
+            lambda: o.lambda,
+            reach: GLOW_REACH * o.lambda,
+            taps: o.taps,
+            weight: o.weight,
+        })
+    })
 }
 
 struct BlockGlitch;

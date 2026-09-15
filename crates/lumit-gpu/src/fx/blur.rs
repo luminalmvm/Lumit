@@ -252,15 +252,11 @@ pub enum GlowFringe {
 /// (bit-exact passthrough, matching the CPU reference's short-circuit).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GlowOp {
-    /// The halo gaussian's half-width, raster pixels.
+    /// The gaussian's half-width, raster pixels.
     pub radius_px: f32,
-    /// How many gaussians the halo is summed from (Exponential): 1 is the
-    /// single gaussian this effect shipped with, to the byte. Octave `i` is
-    /// blurred at `radius ÷ 2ⁱ`.
-    pub octaves: u32,
-    /// The weight each octave takes from the wider one above it: octave `i`
-    /// weighs `falloff^i` before the stack is normalised. Ignored at one octave.
-    pub falloff: f32,
+    /// The round exponentials the halo is built from once Falloff is above 0,
+    /// or None for the gaussian this effect shipped with, to the byte.
+    pub octaves: Option<[GlowOctaveOp; 5]>,
     /// The fringe left on the finished halo, or None for no pass at all.
     pub fringe: Option<GlowFringe>,
     /// Linear-light bright threshold, ≥ 0 (unbounded above).
@@ -289,6 +285,38 @@ pub(super) struct GlowParams {
     /// Was Invert; the seam applies it once instead. Always 0.
     pub(super) _pad0: f32,
     pub(super) _pad: [f32; 2],
+}
+
+/// One exponential of a glow's halo. Mirrors `lumit_core::fx::cpu::GlowOctave`,
+/// with the grid size and the fade distance already worked out host-side so
+/// both paths use the same numbers.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GlowOctaveOp {
+    /// Full-size pixels a texel of its grid.
+    pub step: f32,
+    /// The grid's size, `cpu::glow_grid` of the picture's.
+    pub grid: [u32; 2],
+    /// Decay length, grid texels.
+    pub lambda: f32,
+    /// Where it has faded to nothing, grid texels: `GLOW_REACH × lambda`.
+    pub reach: f32,
+    /// How many texels out the convolution reads.
+    pub taps: i32,
+    /// Its share of the halo's light.
+    pub weight: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct GlowExpParams {
+    step: f32,
+    lambda: f32,
+    weight: f32,
+    axis: u32,
+    first: u32,
+    taps: i32,
+    reach: f32,
+    _pad: f32,
 }
 
 impl FxEngine {
@@ -655,13 +683,8 @@ impl FxEngine {
     /// alpha saturating at 1. Intensity 0 short-circuits inside the combine
     /// kernel to the bit-exact identity.
     ///
-    /// **Exponential** (`octaves > 1`) stacks tighter gaussians under that one,
-    /// each half the width of the one above and weighted `2^(falloff·i)`, so the
-    /// halo falls away from a bright core the way light does instead of
-    /// spreading evenly. It needs no kernel of its own: the blur's own Mix
-    /// lerps each octave into the running mean as it lands, which is
-    /// `cpu::glow_shaped`'s weighted average written the other way up. Two more
-    /// passes an octave, and only when the toggle is on.
+    /// **Falloff** above 0 skips the gaussian and builds the halo from round
+    /// exponentials instead, see `fx_glow_exp.wgsl`.
     ///
     /// **Chromatic aberration** is the ordinary directional fringe run on the
     /// finished halo, before the recombine, so the bloom breaks into colour and
@@ -677,8 +700,6 @@ impl FxEngine {
         op: &GlowOp,
     ) -> wgpu::Texture {
         let bright = work_texture(ctx, w, h, "fx-glow-bright");
-        let tmp = work_texture(ctx, w, h, "fx-glow-tmp");
-        let blurred = work_texture(ctx, w, h, "fx-glow-blur");
         let out = work_texture(ctx, w, h, "fx-glow-out");
         let params = GlowParams {
             tint: op.tint,
@@ -708,60 +729,35 @@ impl FxEngine {
             h,
             bytemuck::bytes_of(&params),
         );
-        // One octave of halo: the shared separable gaussian over the bright
-        // pass, its vertical half lerping the result onto `over` at weight `t`.
-        // The first octave passes t = 1 and `over == tmp`, which is the dispatch
-        // pair this effect has always made, byte for byte. The rest fold
-        // themselves into the running mean as they land, so the stack needs no
-        // kernel of its own.
-        let octave = |radius: f32, over: &wgpu::Texture, into: &wgpu::Texture, t: f32| {
-            let sigma = (radius * 0.5).max(1e-3);
-            let pass = |dir: [f32; 2],
-                        pass_src: &wgpu::Texture,
-                        pass_orig: &wgpu::Texture,
-                        dst: &wgpu::Texture,
-                        mix_amt: f32| {
+        let halo = if let Some(octaves) = &op.octaves {
+            self.glow_exponential(ctx, &bright, w, h, octaves)
+        } else {
+            let tmp = work_texture(ctx, w, h, "fx-glow-tmp");
+            let blurred = work_texture(ctx, w, h, "fx-glow-blur");
+            let sigma = (op.radius_px * 0.5).max(1e-3);
+            for (dir, pass_src, dst) in [([1.0, 0.0], &bright, &tmp), ([0.0, 1.0], &tmp, &blurred)]
+            {
                 self.dispatch(
                     ctx,
                     &self.blur,
                     pass_src,
-                    pass_orig,
+                    pass_src,
                     dst,
                     w,
                     h,
                     bytemuck::bytes_of(&BlurParams {
                         dir,
-                        radius,
+                        radius: op.radius_px,
                         sigma,
                         edge: 1, // Repeat, always (see the CPU reference)
-                        mix_amt,
+                        mix_amt: 1.0,
                         matte_on: 0.0,
                         _pad0: 0.0,
                     }),
                 );
-            };
-            pass([1.0, 0.0], &bright, &bright, &tmp, 1.0);
-            pass([0.0, 1.0], &tmp, over, into, t);
-        };
-        octave(op.radius_px, &tmp, &blurred, 1.0);
-        let mut halo = blurred;
-        if op.octaves > 1 {
-            // The weight ratio between one octave and the next, applied as a
-            // running product rather than `falloff^i`. The CPU reference walks
-            // it the same way, so the two agree on every octave's weight to the
-            // last bit rather than to an epsilon.
-            let ratio = op.falloff;
-            let mut alt = work_texture(ctx, w, h, "fx-glow-octave");
-            let (mut radius, mut wi, mut weight) = (op.radius_px, 1.0f32, 1.0f32);
-            for _ in 1..op.octaves {
-                radius *= 0.5;
-                wi *= ratio;
-                let t = wi / (weight + wi);
-                weight += wi;
-                octave(radius, &halo, &alt, t);
-                std::mem::swap(&mut halo, &mut alt);
             }
-        }
+            blurred
+        };
         // The fringe rides on the halo alone, before the recombine.
         let halo = match &op.fringe {
             Some(GlowFringe::Classic(f)) => self.rgb_split(ctx, &halo, w, h, None, f),
@@ -779,6 +775,87 @@ impl FxEngine {
             bytemuck::bytes_of(&params),
         );
         out
+    }
+
+    /// The halo for a Falloff above 0: each exponential is shrunk onto its
+    /// own grid, convolved there, and added back up at full size. The CPU
+    /// reference is `cpu::glow_exponential`.
+    fn glow_exponential(
+        &self,
+        ctx: &GpuContext,
+        bright: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        octaves: &[GlowOctaveOp],
+    ) -> wgpu::Texture {
+        let mut halo = work_texture(ctx, w, h, "fx-glow-halo");
+        let mut spare = work_texture(ctx, w, h, "fx-glow-halo");
+        for (i, o) in octaves.iter().enumerate() {
+            let [cw, ch] = o.grid;
+            let params = |axis: u32| GlowExpParams {
+                step: o.step,
+                lambda: o.lambda,
+                weight: o.weight,
+                axis,
+                first: u32::from(i == 0),
+                taps: o.taps,
+                reach: o.reach,
+                _pad: 0.0,
+            };
+            let (across, across_p) = (work_texture(ctx, cw, h, "fx-glow-across"), params(0));
+            let (coarse, coarse_p) = (work_texture(ctx, cw, ch, "fx-glow-coarse"), params(1));
+            let lit = work_texture(ctx, cw, ch, "fx-glow-lit");
+            let down = &self.glow_exp_down;
+            self.dispatch(
+                ctx,
+                down,
+                bright,
+                bright,
+                &across,
+                cw,
+                h,
+                bytemuck::bytes_of(&across_p),
+            );
+            self.dispatch(
+                ctx,
+                down,
+                &across,
+                &across,
+                &coarse,
+                cw,
+                ch,
+                bytemuck::bytes_of(&coarse_p),
+            );
+            let conv = &self.glow_exp_conv;
+            self.dispatch(
+                ctx,
+                conv,
+                &coarse,
+                &coarse,
+                &lit,
+                cw,
+                ch,
+                bytemuck::bytes_of(&across_p),
+            );
+            let up = &self.glow_exp_up;
+            self.dispatch(
+                ctx,
+                up,
+                &lit,
+                &halo,
+                &spare,
+                w,
+                h,
+                bytemuck::bytes_of(&across_p),
+            );
+            std::mem::swap(&mut halo, &mut spare);
+            // Nothing recorded after this reads them, so a later pass can.
+            ctx.recycle(across);
+            ctx.recycle(coarse);
+            ctx.recycle(lit);
+        }
+        ctx.recycle(spare);
+        halo
     }
 }
 
