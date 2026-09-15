@@ -2,6 +2,7 @@ use std::{error::Error, fmt};
 
 use lumit_core::OpError;
 
+pub mod addons;
 pub mod assets;
 pub mod audio;
 // Always compiled, feature or no feature: the generated Dart is one shape
@@ -23,6 +24,7 @@ pub mod graph;
 pub mod import;
 pub mod keymap;
 pub mod layer;
+pub mod planes;
 pub mod project;
 pub mod project_item;
 pub mod retime;
@@ -120,6 +122,15 @@ pub enum BridgeError {
     /// time is deliberate: two disk-bound jobs share one drive and
     /// halve each other.
     AnalysisBusy,
+    /// An addon was asked to install while another one is installing. One at a
+    /// time, and never a queue (docs/impl/addons.md §9).
+    AddonBusy,
+    /// An `addon.json` this build will not take. Carries the engine's own
+    /// sentence saying which rule it broke, which is the one thing the Addons
+    /// page can show about a refused install.
+    AddonInvalid(String),
+    /// A document or a command needs an addon that is not installed.
+    AddonMissing,
     /// Convert to keyframes was asked of a camera with no solve link to bake,
     /// or one whose link resolves nowhere.
     NotLinked,
@@ -258,6 +269,9 @@ impl fmt::Display for BridgeError {
                 write!(f, "That layer has no words to convert")
             }
             BridgeError::AnalysisBusy => write!(f, "Another analysis is already running"),
+            BridgeError::AddonBusy => write!(f, "Another addon is installing"),
+            BridgeError::AddonInvalid(why) => write!(f, "{why}"),
+            BridgeError::AddonMissing => write!(f, "That addon is not installed"),
             BridgeError::NotLinked => write!(f, "That camera has no solve to bake"),
             BridgeError::NoSolve => write!(f, "Nothing has been solved at those points"),
             BridgeError::NotSequence => write!(f, "That is not a sequence layer"),

@@ -135,6 +135,60 @@ pub trait SourceStamper {
     fn mix_fingerprint(&self, _doc: &Arc<Document>, _comp: &Composition) -> Option<u64> {
         None
     }
+
+    /// What the installed frame-synthesis model is, for a layer whose Flow
+    /// engine names one (docs/impl/addons.md §6.3, §7).
+    ///
+    /// A frame painted by a model is painted with something the document does
+    /// not contain, so the document alone cannot name it: two machines with
+    /// two different packs, or one machine before and after an update, make
+    /// different pictures out of the same project. The host answers with the
+    /// pack's identity and this crate folds it in without ever learning what a
+    /// pack is.
+    ///
+    /// The default answers `None`, which is also what a host with nothing
+    /// installed answers: the layer previews with the built-in engine, and the
+    /// key says exactly that.
+    fn synthesis_identity(&self) -> Option<[u8; 32]> {
+        None
+    }
+
+    /// What a planes-tier `task` is read by on this machine, and what the
+    /// effect instance `instance` has been analysed to (docs/impl/addons.md
+    /// §6.1, §7).
+    ///
+    /// The synthesis pack's reason, one tier along: which pack read the frames
+    /// is a fact about the machine and not about the document, so the document
+    /// alone cannot name a picture drawn through a plane. An analysis landing
+    /// is the same kind of fact, and it changes the picture without touching a
+    /// row of the document, so the host folds that in here as well. The host
+    /// answers and this crate folds it in without ever learning what a pack is.
+    ///
+    /// The default answers `None`, for a host that has no such tier at all.
+    fn planes_identity(
+        &self,
+        _task: lumit_core::planes::PlaneTask,
+        _instance: Uuid,
+    ) -> Option<[u8; 32]> {
+        None
+    }
+
+    /// What a Roto brush whose seed row asks for a segmentation model is cut
+    /// by on this machine, and what its run holds at `frame`
+    /// (docs/impl/addons.md §6.2, §7).
+    ///
+    /// The planes tier's reason again, one tier along. The pack that read the
+    /// base frame is a fact about the machine, so replacing it would otherwise
+    /// leave every frame already banked with the old matte in it named exactly
+    /// as before, and served forever; and the propagation landing changes the
+    /// picture without touching a row of the document.
+    ///
+    /// Asked only of a brush whose row says Segment, so a brush seeded by its
+    /// scribbles is named exactly as it was before this existed. The default
+    /// answers `None`, for a host with no such tier at all.
+    fn roto_identity(&self, _instance: Uuid, _frame: i64) -> Option<[u8; 32]> {
+        None
+    }
 }
 
 /// The content-hash key for `comp` rendered at time `t` — or None when some
@@ -1600,7 +1654,8 @@ fn feed_source(
             h.update(b"footage/");
             h.update(identity.as_bytes());
             h.update(&frame.to_le_bytes());
-            feed_roto(h, layer, frame);
+            feed_roto(h, layer, frame, stamper);
+            feed_planes(h, layer, frame, stamper);
             // A non-Nearest interpolation policy synthesises different
             // in-between pixels (blend/flow), so it is content. Nearest
             // shows exactly the stamped frame — pixel-identical to no retime —
@@ -1627,7 +1682,7 @@ fn feed_source(
                     // the synthesised picture — including the conform rate,
                     // which synthesises from different source frames at the
                     // same source time.
-                    feed_interp(h, interpolation, lt);
+                    feed_interp(h, interpolation, lt, stamper);
                     feed_f64(h, source_time);
                 }
             }
@@ -1794,7 +1849,8 @@ fn feed_source(
                     h.update(b"seq-footage/");
                     h.update(identity.as_bytes());
                     h.update(&frame.to_le_bytes());
-                    feed_roto(h, layer, frame);
+                    feed_roto(h, layer, frame, stamper);
+                    feed_planes(h, layer, frame, stamper);
                     {
                         // Gated exactly as the Footage case: flow that cannot
                         // help keys as the Nearest it renders as. The
@@ -1807,7 +1863,7 @@ fn feed_source(
                             // params — conform rate included — ride along, read
                             // at the clip's layer-local time like the footage
                             // case.
-                            feed_interp(h, interpolation, lt);
+                            feed_interp(h, interpolation, lt, stamper);
                             feed_f64(h, st);
                         }
                     }
@@ -1946,7 +2002,18 @@ fn flow_effective_at<'a>(
 ///
 /// Emits nothing for a layer with no stroked Roto brush on it, which is every
 /// layer of every project written before this existed.
-fn feed_roto(h: &mut blake3::Hasher, layer: &lumit_core::model::Layer, frame: u64) {
+///
+/// A brush whose seed row says **Segment** is cut by something the document
+/// does not contain, so it carries one more term, from the host: which pack
+/// read the base frame, and what the run holds at this frame
+/// (docs/impl/addons.md §7). Asked of that brush alone, so no project seeded
+/// by its scribbles renames a single cached frame.
+fn feed_roto(
+    h: &mut blake3::Hasher,
+    layer: &lumit_core::model::Layer,
+    frame: u64,
+    stamper: &dyn SourceStamper,
+) {
     if !layer.switches.fx {
         return;
     }
@@ -1955,12 +2022,61 @@ fn feed_roto(h: &mut blake3::Hasher, layer: &lumit_core::model::Layer, frame: u6
         if let Some(chain) = lumit_core::roto::frame_stamp(fx, frame) {
             h.update(b"roto/");
             h.update(&chain);
+            if lumit_core::roto::RotoSettings::of(fx).segments() {
+                if let Some(identity) = stamper.roto_identity(fx.id, frame) {
+                    h.update(&identity);
+                }
+            }
+        }
+    }
+}
+
+/// The **planes tier's per-frame stamp** (docs/impl/addons.md §6.1), beside
+/// [`feed_roto`] and for its reason.
+///
+/// A frame drawn through a plane of depth is drawn with a picture the document
+/// does not contain, so a key made from the rows alone would name two different
+/// pictures the same. Two things decide the plane and both go in: the rows the
+/// analysis reads, from the document alone
+/// ([`lumit_core::planes::frame_stamp`]), and which pack read the frames, from
+/// the host, because that is a fact about the machine. A pack installed or
+/// updated therefore renames exactly the frames drawn through it and nothing
+/// else.
+///
+/// Emits nothing for a layer with no such effect, which is every layer of every
+/// project written before this existed.
+fn feed_planes(
+    h: &mut blake3::Hasher,
+    layer: &lumit_core::model::Layer,
+    frame: u64,
+    stamper: &dyn SourceStamper,
+) {
+    if !layer.switches.fx {
+        return;
+    }
+    let frame = i64::try_from(frame).unwrap_or(i64::MAX);
+    for fx in lumit_core::planes::analyses(&layer.effects) {
+        let (Some(task), Some(stamp)) = (
+            lumit_core::planes::task_of(fx),
+            lumit_core::planes::frame_stamp(fx, frame),
+        ) else {
+            continue;
+        };
+        h.update(b"planes/");
+        h.update(&stamp);
+        if let Some(identity) = stamper.planes_identity(task, fx.id) {
+            h.update(&identity);
         }
     }
 }
 
 /// Callers hash the sub-frame `source_time` *after* this.
-fn feed_interp(h: &mut blake3::Hasher, i: &lumit_core::retime::Interpolation, lt: f64) {
+fn feed_interp(
+    h: &mut blake3::Hasher,
+    i: &lumit_core::retime::Interpolation,
+    lt: f64,
+    stamper: &dyn SourceStamper,
+) {
     use lumit_core::retime::Interpolation;
     match i {
         Interpolation::Nearest => {
@@ -1982,7 +2098,21 @@ fn feed_interp(h: &mut blake3::Hasher, i: &lumit_core::retime::Interpolation, lt
                 p.fallback.code() as u8,
                 u8::from(p.hud_guard),
                 u8::from(p.always),
+                // Which engine paints the frame, which is the algorithm
+                // version byte docs/04 §11.7 asks for: two engines never share
+                // a comp frame name.
+                p.engine.code() as u8,
             ]);
+            // And, for a model engine, which model. The pack is not in the
+            // document, so it comes from the host; nothing installed folds
+            // nothing, which is honest because that layer previews with the
+            // built-in engine (docs/impl/addons.md §6.3).
+            if p.engine == lumit_core::retime::FlowEngineChoice::Rife {
+                if let Some(identity) = stamper.synthesis_identity() {
+                    h.update(b"synth/");
+                    h.update(&identity);
+                }
+            }
             feed_f64(h, p.smoothness);
             if let Some(fps) = p.input_fps_at(lt) {
                 h.update(b"conform");
@@ -4116,6 +4246,13 @@ mod tests {
                 hud_guard: false,
                 ..FlowParams::default()
             },
+            // The engine that paints the frame is the biggest knob of all:
+            // the built-in one and a model pack agree about nothing but the
+            // endpoints (docs/impl/addons.md §6.3).
+            FlowParams {
+                engine: lumit_core::retime::FlowEngineChoice::Rife,
+                ..FlowParams::default()
+            },
         ];
         for p in knobs {
             assert_ne!(
@@ -4124,6 +4261,62 @@ mod tests {
                 "a flow parameter that changes the picture must change the key: {p:?}"
             );
         }
+    }
+
+    /// Which model painted the frame is part of its name, and only where a
+    /// model paints it (docs/impl/addons.md §7).
+    ///
+    /// A pack is not in the document, so two machines with different packs, or
+    /// one machine before and after an update, would otherwise agree on the
+    /// name of two different pictures. The built-in engine must not move when
+    /// a pack is installed, or installing one would retire every cached frame
+    /// in the project for nothing.
+    #[test]
+    fn the_model_that_painted_a_frame_is_part_of_its_name() {
+        use lumit_core::retime::{FlowEngineChoice, FlowParams, Interpolation};
+
+        /// A host with a synthesis pack installed, answering its identity.
+        struct Installed([u8; 32]);
+        impl SourceStamper for Installed {
+            fn stamp(&self, item: Uuid, lt: f64, native: bool) -> Option<(String, u64)> {
+                StubStamper.stamp(item, lt, native)
+            }
+            fn synthesis_identity(&self) -> Option<[u8; 32]> {
+                Some(self.0)
+            }
+        }
+
+        let doc = Arc::new(Document::new());
+        let item = Uuid::now_v7();
+        let comp = |engine: FlowEngineChoice| {
+            let mut l = text_layer("", 0.0, 10.0, 0.0);
+            l.kind = LayerKind::Footage { item };
+            l.interpolation = Interpolation::Flow(FlowParams {
+                engine,
+                ..FlowParams::default()
+            });
+            comp_with(vec![l])
+        };
+        let at = |c: &Composition, stamper: &dyn SourceStamper| {
+            comp_frame_key(&doc, c, 1.0, Quality::default(), stamper).unwrap()
+        };
+
+        let rife = comp(FlowEngineChoice::Rife);
+        let one = at(&rife, &Installed([1u8; 32]));
+        let two = at(&rife, &Installed([2u8; 32]));
+        let none = at(&rife, &StubStamper);
+        assert_ne!(one, two, "two packs paint two pictures");
+        assert_ne!(
+            one, none,
+            "and a machine with no pack previews with the built-in engine"
+        );
+
+        let dis = comp(FlowEngineChoice::Dis);
+        assert_eq!(
+            at(&dis, &Installed([1u8; 32])),
+            at(&dis, &StubStamper),
+            "installing a pack must not retire a built-in engine's frames"
+        );
     }
 
     /// Two comp times whose retimed source lands in the *same* integer source

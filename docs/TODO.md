@@ -720,6 +720,9 @@ controls have landed. What is left:
     and the measurement programme ran through them
     (docs/impl/optical-flow.md §4.5–§4.7, §5.5). A learned synthesiser emits no
     flow field, so Motion blur and Datamosh need DIS vectors regardless.
+    The road to it is designed: docs/impl/addons.md AD2 puts RIFE behind the Flow
+    group's engine row as an optional model pack, with the pack's hash in the
+    frame key and nothing dropping back to the built-in engine in silence.
 4. **A second matching cost is measured out, not open.** Census scoring cost
     game capture 0.0073 against a 0.005 allowance; choosing census
     or SSD per patch from the Hessian trace recovered most of it

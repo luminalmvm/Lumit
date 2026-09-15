@@ -736,6 +736,44 @@ pub fn roto_cache_dir() -> Option<PathBuf> {
     Some(dirs.cache_dir().join("roto"))
 }
 
+/// Depth and matte sidecar directory (docs/10-FILE-FORMAT.md §3,
+/// docs/impl/addons.md §6.1): where a model's planes are parked so a
+/// reopened project re-analyses none of them.
+///
+/// Global and keyed like [`track_cache_dir`] and [`roto_cache_dir`], and
+/// rebuildable and deletable at any time the same way: throwing it away costs
+/// an Analyse and nothing else.
+pub fn planes_cache_dir() -> Option<PathBuf> {
+    let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
+    Some(dirs.cache_dir().join("planes"))
+}
+
+/// Where installed addons live (docs/impl/addons.md §4): the model runtime
+/// and the model packs, each in a folder named by its id, holding an
+/// `addon.json` and the files it names.
+///
+/// The **local** app-data area, and this is the first thing in the workspace
+/// to use it. Not the cache, because docs/10 §3 promises deleting the cache at
+/// any moment is safe and that Lumit rebuilds it on demand, and a download of
+/// a few hundred megabytes from someone else's release page is not something
+/// Lumit can rebuild. Not the roaming app-data area either, which is where
+/// the preset library and the export defaults go, because a roaming profile
+/// would try to copy these to a network share at logoff.
+///
+/// | | |
+/// |---|---|
+/// | Windows | `%LOCALAPPDATA%\Lumit\Lumit\data\addons\` |
+/// | macOS | `~/Library/Application Support/dev.Lumit.Lumit/addons/` |
+/// | Linux | `$XDG_DATA_HOME/lumit/addons/` (default `~/.local/share/lumit`) |
+///
+/// Nothing here is per project and nothing here goes in a `.lum`. `None` only
+/// when the platform has no home directory; the Addons page then says so
+/// rather than failing.
+pub fn addons_dir() -> Option<PathBuf> {
+    let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
+    Some(dirs.data_local_dir().join("addons"))
+}
+
 /// Media frame-index cache directory (docs/10-FILE-FORMAT.md §3) — global,
 /// keyed by content fingerprint, so shared across projects and machines-safe.
 pub fn media_index_dir() -> Option<PathBuf> {

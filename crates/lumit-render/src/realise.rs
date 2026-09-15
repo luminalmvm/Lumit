@@ -266,6 +266,77 @@ impl Realiser<'_> {
             .collect()
     }
 
+    /// One planes-tier plane as a texture at the working raster `(w, h)`.
+    ///
+    /// Two steps, and they are memoised differently on purpose. The **upload**
+    /// is per (instance, source frame), because the bytes do not move while a
+    /// plane is being watched. The **resample** is per frame, because the
+    /// working raster moves with the preview tier, and it goes through
+    /// [`crate::fxops::render_layer_input`] - the one helper the preview and
+    /// export paths both stretch a picture to a working raster with, so a plane
+    /// lands on the same pixel grid in the viewport and the file.
+    ///
+    /// A plane is at the **model's** own raster, a few hundred pixels on the
+    /// long side, so this is a real resample and not the crop-and-pad
+    /// `fit_centred` does: a sixteen-pixel plane centred in a frame would be a
+    /// small square of depth in a sea of nothing.
+    fn plane_texture(&self, p: &crate::draw::PlaneDraw, w: u32, h: u32) -> wgpu::Texture {
+        let uploaded = self.upload_plane(p);
+        crate::fxops::render_layer_input(
+            self.compositor,
+            &self.ctx,
+            w,
+            h,
+            &uploaded,
+            p.width as f32,
+            p.height as f32,
+        )
+    }
+
+    /// One planes-tier plane uploaded at its own raster, once per (instance,
+    /// source frame) and handed back on every later frame drawn through it
+    /// (docs/impl/addons.md §6.1).
+    ///
+    /// Grey into all four channels, the same shape a roto matte takes and for
+    /// the same reason: `set_matte` reads the luminance of whichever channel it
+    /// is told to, so the plane reads correctly whichever way it is asked. The
+    /// numbers are a reading and not colour, so no transfer function is applied
+    /// to them.
+    fn upload_plane(&self, p: &crate::draw::PlaneDraw) -> wgpu::Texture {
+        self.fx_cache
+            .borrow_mut()
+            .plane(p.instance, p.source_frame, p.content, || {
+                let n = (p.width as usize) * (p.height as usize);
+                let mut halfs = Vec::with_capacity(n * 4);
+                match p.kind {
+                    crate::planes::PlaneKind::Depth => {
+                        for i in 0..n {
+                            let low = p.data.get(i * 2).copied().unwrap_or(0);
+                            let high = p.data.get(i * 2 + 1).copied().unwrap_or(0);
+                            let v =
+                                f32::from(u16::from_le_bytes([low, high])) / f32::from(u16::MAX);
+                            let bits = lumit_gpu::fx::f16_bits(v);
+                            halfs.extend_from_slice(&[bits, bits, bits, bits]);
+                        }
+                    }
+                    crate::planes::PlaneKind::Matte => {
+                        // The same 256-entry table `upload_roto_matte` builds:
+                        // a gray8 byte straight to the fp16 bits the texture
+                        // holds, with no full-plane f32 temporary in between.
+                        let mut table = [0u16; 256];
+                        for (v, bits) in table.iter_mut().enumerate() {
+                            *bits = lumit_gpu::fx::f16_bits(v as f32 / 255.0);
+                        }
+                        for i in 0..n {
+                            let bits = table[usize::from(p.data.get(i).copied().unwrap_or(0))];
+                            halfs.extend_from_slice(&[bits, bits, bits, bits]);
+                        }
+                    }
+                }
+                lumit_gpu::fx::upload_linear_f16(&self.ctx, &halfs, p.width, p.height)
+            })
+    }
+
     /// Render a layer's layer-input slots (docs/impl/layer-input.md §2) — the
     /// depth passes of its `dof` effects, the matte sources of its Lens
     /// flares. Each [`LayerInputDraw::Layer`] (the referenced layer's source
@@ -314,6 +385,30 @@ impl Realiser<'_> {
                     linear
                 } else {
                     let tables = self.load_tables(&d.colour_tables);
+                    // The referenced layer's **own** baked pictures. Without
+                    // these its stack ran with every carriage empty, so a Roto
+                    // brush or a Depth on the layer somebody pointed a Matte
+                    // row at rendered as a passthrough and the consumer read
+                    // the plain footage instead (docs/impl/addons.md §13). The
+                    // carriage is filled by the same predicate and the same
+                    // (instance, source frame) lookup the layer's own is.
+                    let roto: Vec<Option<wgpu::Texture>> = d
+                        .roto_mattes
+                        .iter()
+                        .map(|slot| slot.as_ref().map(|m| upload_roto_matte(&self.ctx, m)))
+                        .collect();
+                    let planes: Vec<Option<wgpu::Texture>> = d
+                        .planes
+                        .iter()
+                        .map(|slot| {
+                            slot.as_ref()
+                                .map(|p| self.plane_texture(p, d.tex_w, d.tex_h))
+                        })
+                        .collect();
+                    let side = crate::fxops::Side {
+                        roto: &roto,
+                        planes: &planes,
+                    };
                     crate::fxops::run_ops(
                         self.fx,
                         &self.ctx,
@@ -335,7 +430,7 @@ impl Realiser<'_> {
                         // boundary, and an unscheduled op passes its picture
                         // through.
                         &[],
-                        &[],
+                        &side,
                         &[],
                         // A matte's own stack is part of the effect that reads
                         // it, not a row of its own: its cost is inside that
@@ -595,7 +690,7 @@ impl Realiser<'_> {
                         // steps rather than left as an op.
                         &[],
                         &[],
-                        &[],
+                        &crate::fxops::Side::NONE,
                         &[],
                         None,
                         // Nothing names a box's picture in v1, so every step
@@ -952,7 +1047,7 @@ impl Realiser<'_> {
                 // An adjustment layer has no source frames, so nothing was
                 // ever propagated through it: a Roto brush there passes
                 // through.
-                &[],
+                &crate::fxops::Side::NONE,
                 &graphs,
                 fx_ms.as_mut(),
                 // The composite below carries no name in v1.
@@ -1257,6 +1352,27 @@ impl Realiser<'_> {
             linear
         } else {
             let tables = self.load_tables(&m.colour_tables);
+            // The matte source's **own** baked pictures, uploaded exactly as
+            // the layer-input path uploads a referenced layer's. Without them
+            // a track matte whose source wears a Roto brush or a Depth gated
+            // the consumer with the source's plain footage.
+            let roto: Vec<Option<wgpu::Texture>> = m
+                .roto_mattes
+                .iter()
+                .map(|slot| slot.as_ref().map(|r| upload_roto_matte(&self.ctx, r)))
+                .collect();
+            let planes: Vec<Option<wgpu::Texture>> = m
+                .planes
+                .iter()
+                .map(|slot| {
+                    slot.as_ref()
+                        .map(|p| self.plane_texture(p, m.tex_w, m.tex_h))
+                })
+                .collect();
+            let side = crate::fxops::Side {
+                roto: &roto,
+                planes: &planes,
+            };
             crate::fxops::run_ops(
                 self.fx,
                 &self.ctx,
@@ -1274,7 +1390,7 @@ impl Realiser<'_> {
                 // mask path, and carries no birth schedule, in v1.
                 &[],
                 &[],
-                &[],
+                &side,
                 &[],
                 // A matte's own stack is part of the layer it
                 // gates, not a row of its own.
@@ -1551,11 +1667,14 @@ impl Realiser<'_> {
                     }
                     _ => l.fx.clone(),
                 };
-                // The propagated mattes, uploaded once each at the source's
-                // own raster. `fit_centred` inside the walk takes them
-                // to the working raster, which is where every differently-sized
-                // input is fitted. Empty on every layer with no Roto brush,
-                // which costs nothing at all.
+                // The baked pictures a background analysis filed. A roto matte
+                // is uploaded at its own raster and `fit_centred` inside the
+                // walk takes it to the working one; a plane is resampled to
+                // the working raster here instead, by `plane_texture`, because
+                // it is at the model's own few-hundred-pixel raster and a
+                // crop-and-pad would leave a small square of depth in a sea of
+                // nothing. Empty on every layer with no such effect, which
+                // costs nothing at all.
                 let roto_mattes: Vec<Option<wgpu::Texture>> = l
                     .roto_mattes
                     .iter()
@@ -1569,6 +1688,15 @@ impl Realiser<'_> {
                 let plans = self.graph_closures(l, w);
                 let graphs: Vec<&dyn Fn(wgpu::Texture, u32, u32) -> wgpu::Texture> =
                     plans.iter().map(|f| &**f).collect();
+                let planes: Vec<Option<wgpu::Texture>> = l
+                    .planes
+                    .iter()
+                    .map(|slot| slot.as_ref().map(|p| self.plane_texture(p, w, h)))
+                    .collect();
+                let side = crate::fxops::Side {
+                    roto: &roto_mattes,
+                    planes: &planes,
+                };
                 crate::fxops::run_ops(
                     self.fx,
                     &self.ctx,
@@ -1584,7 +1712,7 @@ impl Realiser<'_> {
                     &mattes,
                     &l.mask_paths,
                     &l.points_schedules,
-                    &roto_mattes,
+                    &side,
                     &graphs,
                     fx_ms.as_mut(),
                     // The per-effect cache, for a source the builder
@@ -2043,6 +2171,7 @@ mod tests {
             mattes: Vec::new(),
             mask_paths: Vec::new(),
             roto_mattes: Vec::new(),
+            planes: Vec::new(),
             points_schedules: Vec::new(),
             flare_lens_files: Vec::new(),
             fx_ref_width: None,

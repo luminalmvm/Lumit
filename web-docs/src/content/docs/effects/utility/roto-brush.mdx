@@ -25,6 +25,7 @@ For a tutorial, see [Cutting out a subject](/tutorials/roto-brush/).
 | --- | --- | --- | --- | --- |
 | **Propagate** | Button | - | - | - |
 | **Cancel** | Button | - | - | - |
+| **Seed from** | Dropdown | Strokes · Segment | Strokes | - |
 | **Matte mode** | Dropdown | Matte · Matte inverted | Matte | - |
 | **View** | Dropdown | Result · Matte · Boundary | Result | - |
 | **Refine radius** | Slider | 0 to 64; up to 256 | 8 | - |
@@ -39,6 +40,10 @@ For a tutorial, see [Cutting out a subject](/tutorials/roto-brush/).
   runs at a time.
 - **Cancel**: stops the job and keeps the frames already solved; a later Propagate
   resumes from them.
+- **Seed from**: what the base frame's matte starts from. On **Strokes**, the scribbles
+  alone. On **Segment**, a tap with the Roto brush tool on the base frame is a prompt a
+  segmentation model reads; **Alt** makes the tap a negative one, and a drag still lays a
+  stroke.
 - **Matte mode**: keep the subject, or drop it.
 - **View**: the cut-out picture, the matte itself, or the picture with the matte's
   edge drawn over it.
@@ -53,6 +58,10 @@ For a tutorial, see [Cutting out a subject](/tutorials/roto-brush/).
 
 Frames the propagation has not reached render untouched — the effect never holds a
 neighbouring frame's matte over them.
+
+**Seed from** set to **Segment** asks for a segmentation model, which is an addon
+installed from **Settings ▸ Addons**. Without it the propagation is **refused** and the
+status line says so.
 
 ## Related
 

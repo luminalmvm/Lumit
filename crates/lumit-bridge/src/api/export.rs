@@ -327,6 +327,14 @@ impl CompositionReference {
             let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
             state.store.snapshot()
         };
+        // A layer or clip whose Flow engine names a model this machine cannot
+        // run stops the export here, before a single frame is written: preview
+        // may stand the built-in engine in and say so, but a file is a thing
+        // the user keeps, and docs/08 §3.1 says an export never silently
+        // downgrades (docs/impl/addons.md §6.3).
+        if !lumit_render::addon_needs(&document).is_empty() {
+            return Err(BridgeError::AddonMissing);
+        }
 
         let reply = crate::export::start_export_with_document(document, self.id, &spec, &path);
         reply_ok(&reply).then_some(()).ok_or_else(|| {
@@ -613,9 +621,40 @@ impl CompositionReference {
             let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
             state.store.snapshot()
         };
+        // The same pre-flight `start_export` runs, and for the same reason: the
+        // document is snapshotted above, so an item that names a model this
+        // machine cannot run is an item that will fail whenever the queue
+        // reaches it. Refusing here says so while the person who pressed the
+        // button is still looking at the dialogue (docs/impl/addons.md §6.3).
+        if !lumit_render::addon_needs(&document).is_empty() {
+            return Err(BridgeError::AddonMissing);
+        }
         let comp_name = self.get_settings()?.name;
         crate::export::queue_add(document, self.id, comp_name, &spec, &path, start)
             .map_err(BridgeError::ExportFailed)
+    }
+
+    /// Whether this composition names an addon this machine has not got, which
+    /// is the one refusal the export pre-flight makes that a person can act on.
+    ///
+    /// The dialogue asks after a refusal, to tell that one from the encoder's:
+    /// a `BridgeError` reaches Dart as a handle with nothing readable on it.
+    /// Asked of the document, not of the machine, because the machine's answer
+    /// is a different question: a machine with no addons at all is the usual
+    /// one, and it refuses nothing until a layer asks for a model (§6.3).
+    #[frb(sync)]
+    #[must_use]
+    pub fn addon_needed(&self) -> bool {
+        let document = {
+            let Ok(state) = self.project() else {
+                return false;
+            };
+            let Ok(state) = state.read() else {
+                return false;
+            };
+            state.store.snapshot()
+        };
+        !lumit_render::addon_needs(&document).is_empty()
     }
 }
 

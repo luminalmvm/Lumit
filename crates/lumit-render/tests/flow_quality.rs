@@ -213,6 +213,24 @@ fn variants() -> Vec<(&'static str, FlowSettings)> {
         .collect()
 }
 
+/// The installed synthesis pack, or `None` on a machine without one.
+///
+/// `LUMIT_ML_RUNTIME_DIR` is honoured the way the `lumit-ml` tests honour it,
+/// so the harness runs against a runtime sitting in a scratch folder rather
+/// than only against one installed as an addon.
+fn open_rife() -> Option<lumit_ml::Synthesis> {
+    if let Some(dir) = std::env::var_os("LUMIT_ML_RUNTIME_DIR") {
+        let _ = lumit_ml::runtime::load(std::path::Path::new(&dir));
+    }
+    match lumit_ml::Synthesis::open() {
+        Ok(model) => Some(model),
+        Err(why) => {
+            eprintln!("no model engine in this run: {why}");
+            None
+        }
+    }
+}
+
 #[test]
 #[ignore = "harness: set LUMIT_FLOW_CLIPS to ;-separated clip paths"]
 fn score_flow_against_its_baselines_on_real_clips() {
@@ -269,8 +287,14 @@ fn score_flow_against_its_baselines_on_real_clips() {
         } else {
             lumit_flow::FlowEngine::new_auto()
         };
+        // The model engine, judged on the same triplets as every other arm
+        // (docs/impl/addons.md §11 test 9). `None` wherever the runtime or the
+        // pack is not installed, and then the row simply does not print: this
+        // harness is run by hand on a machine that has them.
+        let mut rife = open_rife();
         let mut nearest = Vec::new();
         let mut blended = Vec::new();
+        let mut rifes: Vec<Score> = Vec::new();
         let mut flows: Vec<Vec<Score>> = (0..variants().len()).map(|_| Vec::new()).collect();
         let (mut w, mut h) = (0usize, 0usize);
         let mut identical = 0usize;
@@ -330,6 +354,12 @@ fn score_flow_against_its_baselines_on_real_clips() {
                 let got = engine.interpolate_at(&a.rgba, &b.rgba, w, h, 0.5, set);
                 flows[vi].push(Score::of(&got, &mid.rgba, w, h));
             }
+            if let Some(model) = rife.as_mut() {
+                match model.synthesise(&a.rgba, &b.rgba, w, h, 0.5) {
+                    Ok(got) => rifes.push(Score::of(&got, &mid.rgba, w, h)),
+                    Err(why) => eprintln!("rife: {why}"),
+                }
+            }
         }
 
         if nearest.is_empty() {
@@ -362,6 +392,15 @@ fn score_flow_against_its_baselines_on_real_clips() {
                 "  {label:<22} {fp:>8.2} {fs:>8.4} {fw:>9.4}   {:>+8.2} {:>+9.4}",
                 fp - bp,
                 fw - bw
+            );
+        }
+        if !rifes.is_empty() {
+            let (rp, rs, rw) = mean(&rifes);
+            println!(
+                "  {:<22} {rp:>8.2} {rs:>8.4} {rw:>9.4}   {:>+8.2} {:>+9.4}",
+                "rife (model)",
+                rp - bp,
+                rw - bw
             );
         }
         println!(

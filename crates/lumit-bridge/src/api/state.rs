@@ -851,6 +851,11 @@ pub(crate) fn adopt(
     // nothing, so a reopened project's subjects are cut before the first
     // repaint rather than after the next Propagate.
     let mattes = lumit_render::roto::warm_jobs(&doc);
+    // And every plane its analysed layers already have on disk, the same way
+    // again. A warm pass opens no model at all: it reads the sidecar and stops,
+    // so a reopened project's depth is there before the first repaint and
+    // nothing on the machine is asked to compile a graph for it.
+    let planes = lumit_render::planes::warm_jobs(&doc);
 
     let journal = journal_for(&doc);
     let store = DocumentStore::new(doc);
@@ -914,6 +919,8 @@ pub(crate) fn adopt(
     lumit_render::track::warm(solves);
     lumit_render::roto::clear();
     lumit_render::roto::warm(mattes);
+    lumit_render::planes::clear();
+    lumit_render::planes::warm(planes);
 
     // After the clear, so this project's requests are not the ones
     // cancelled, and outside the registry lock.

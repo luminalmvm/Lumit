@@ -130,8 +130,9 @@ the file's is what answers on a machine that has never seen the project.
 ## 3. The sidecar cache folder
 
 All derived data lives outside the project. **v1 status:** the rendered-frame cache, the
-media index, the camera-solve sidecar and the roto-matte sidecar are built; `proxies/`, `peaks/`, and `flow/` are
-planned ([TODO.md](TODO.md)). What exists today:
+media index, the camera-solve sidecar, the roto-matte sidecar and the planes sidecar (the
+depth and matte planes a model pack answers, [impl/addons.md](impl/addons.md) §6.1) are
+built; `proxies/`, `peaks/` and `flow/` are planned ([TODO.md](TODO.md)). What exists today:
 
 ```
 <global cache root>/
@@ -142,6 +143,7 @@ planned ([TODO.md](TODO.md)). What exists today:
 ├── media-index/       # frame indexes for exact long-GOP seeking, shared across projects
 ├── track/             # camera solves, shared across projects — see below
 ├── roto/              # propagated roto mattes, shared across projects — see below
+├── planes/            # depth and matte planes from a model pack - see below
 └── <project-uuid>/journal/ops.jsonl # the crash-recovery journal (§4)
 
 <project>.lum-cache/   # the same frame cache, when the user asks for it beside the project
@@ -199,26 +201,71 @@ assumed.
 **`roto/` — the roto-matte sidecar.** One file per propagation run, named
 `<media>-<run>.lrot`, where `<media>` is sixteen bytes of blake3 over the media's fingerprint
 and `<run>` sixteen bytes of blake3 over the tier's format version, the Roto brush's
-propagation settings, its base frame and its whole stroke table. Two halves rather than one
-hash for a reason the tier depends on: after a correction stroke the run hash changes, and the
-new run has to be able to **find the old file** to copy frames out of, which the shared media
+propagation settings, its base frame, its whole stroke table and its whole prompt table. Two
+halves rather than one hash for a reason the tier depends on: after a correction stroke the
+run hash changes, and the new run has to **find the old file** to copy frames out of, which
+the shared media
 prefix is what makes cheap. The file is a seven-byte magic (`LUMROT `), a little-endian `u16`
 version, then a bincode record of that key, the source raster, the media's frame rate, the
-clip's own frame count, and one record per propagated frame: the frame index, that frame's
-**chain hash**, the matte's bounding box, and gray8 inside that box, LZ4-compressed. A matte is
-mostly long runs of 0 and 255, so a 1080p frame lands in tens of kilobytes where the raw plane
-is two megabytes, and a 600-frame shot in tens of megabytes. The refusal rules are `track/`'s
+clip's own frame count, what seeded the base frame when a model did (the provider, the pack
+and its hash, and the runtime version, [impl/addons.md](impl/addons.md) §7), and one record per
+propagated frame: the frame index, that frame's **chain hash**, the matte's bounding box, and
+gray8 inside that box, LZ4-compressed. A matte is mostly long runs of 0 and 255, so a 1080p
+frame lands in tens of kilobytes where the raw plane is two megabytes, and a 600-frame shot
+in tens of megabytes. The refusal rules are `track/`'s
 exactly: wrong magic, a version **newer than this build**, a body that will not parse, or a
 stored key that is not the one asked for, is ignored and re-propagated.
 
 The **chain hash** is what makes this tier different from `track/`, and it is the whole of the
-invalidation rule. It covers the settings, the base frame, and exactly the strokes drawn
-between the base and that frame on that frame's side — [impl/roto.md](impl/roto.md) §1's purity
-sentence — so a correction on frame 200 of a shot based at frame 0 changes the hash of frames
+invalidation rule. It covers the settings, the base frame, and exactly the strokes and prompts
+made between the base and that frame on that frame's side, [impl/roto.md](impl/roto.md) §1's
+purity sentence, so a correction on frame 200 of a shot based at 0 changes the hash of frames
 200 onward and of nothing else. A re-propagation reads every `.lrot` sharing the media prefix
 and **copies** each frame whose chain hash it already has, so the correction loop costs the
 frames it spoiled rather than the whole shot. Deterministic like every other tier, so a rebuild
 is byte-identical to what was deleted — asserted by a test, not assumed.
+
+**`planes/` - the model-analysis sidecar** ([impl/addons.md](impl/addons.md) §6.1). One file
+per analysis run, named `<media>-<run>.lpln` in `roto/`'s two halves and for its reason: the
+shared media prefix is what lets a run under new settings find what an earlier one left
+beside it. `<run>` covers the tier's format version, the task, which architecture the effect
+named, the **pack's own hash and the provider that ran it** (§7 of the note: an answer
+made under one backend is never served for another), and the rows of the effect that change
+the answer rather than the look. The file is a seven-byte magic (`LUMPLN\0`), a little-endian
+`u16` version, then a bincode record of that key, the media's frame rate, the clip's own
+frame count, a **provenance line** saying what made these planes, and one record per frame:
+the frame index, what kind of plane it is, the plane's own raster, the box the stored bytes
+cover, and those bytes, LZ4-compressed. A depth plane is a `u16` a pixel, nearer larger, and
+its box is the whole plane, because nought there is the furthest thing in the frame rather
+than nothing at all; a matte is gray8 and its box is the subject, because everything around
+it is nought. A depth plane's raster is the **model's**, a few hundred pixels on the long
+side, because the model produced nothing finer and growing it here would be inventing detail
+and then storing it; a matte's is the frame's own, which is where a matte model answers.
+The refusal rules are `track/`'s exactly.
+
+Unlike every other tier here, a rebuild is **not** byte-identical: a trained model on one
+graphics card and the same model on another differ in the low bits, which is the whole
+reason the pack's hash and the provider are in the name and the reason a model never runs
+inside a render. Once a plane is cached it is an input like any other, so an export is
+stable across a driver update until the user presses Analyse again
+([14-ENGINEERING-RULES.md](14-ENGINEERING-RULES.md) §3). Deleting the tier is safe and costs
+one Analyse.
+
+**The addons folder, which is not a cache.** The model runtime and the model packs a user
+installs ([12-PLUGINS.md](12-PLUGINS.md) §6) sit outside every folder above, under the
+platform's local **data** directory rather than its cache directory:
+`%LOCALAPPDATA%\Lumit\Lumit\data\addons` on Windows,
+`~/Library/Application Support/dev.Lumit.Lumit/addons` on macOS and
+`$XDG_DATA_HOME/lumit/addons` on Linux. It holds downloads, each verified against the hash
+its manifest carries before the engine is allowed to open it, and **Lumit never deletes
+any of it**: not on a clear-cache action, not under a size budget, not when the last
+project naming a pack is closed. The delete-at-any-time promise below does not reach this
+folder, and that is the whole reason it is not under the cache root: a download is not
+rebuildable on demand. It is hundreds of megabytes from somebody else's server, and the
+machine may be offline when it is next wanted. Removing an addon is a button on the Addons
+page and nothing else does it. Nothing here is per project and nothing here is named by a
+`.lum`; the folder is its own registry, and [impl/addons.md](impl/addons.md) §4 is the
+layout.
 
 Rules, binding:
 - The global cache root defaults under the user's local app-data and is configurable with a

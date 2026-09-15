@@ -58,12 +58,17 @@ pub mod draw;
 pub mod export;
 pub mod export_defaults;
 pub mod export_presets;
+/// How a baked per-frame analysis reads a clip, shared by the tiers that do.
+pub mod frames;
 pub mod fxops;
 /// The GPU dispatch table for migrated effects (docs/impl/effect-registry.md §2.5).
 pub mod gpufx;
 pub mod headless;
 pub mod media_index;
 pub mod plan;
+/// The planes tier: a model's depth or coverage, baked once and read per frame
+/// (docs/impl/addons.md §6.1).
+pub mod planes;
 pub mod profile;
 pub mod proxy;
 pub mod puppet;
@@ -78,7 +83,10 @@ pub use build::{
     patch_layer_prop, render_below_at,
 };
 pub use cache::{CacheTier, CachedCompFrame, NestedKeyer, NestedKeys};
-pub use decode::{CompFrame, CompJob, CompLayerPixels, PreviewEngine, PreviewResult};
+pub use decode::{
+    addon_needs, synthesis_refusal, CompFrame, CompJob, CompLayerPixels, Need, PreviewEngine,
+    PreviewResult, SynthesisRefusal,
+};
 pub use draw::{
     AccumulationBelow, CompLayerDraw, DrawSource, GraphDraw, GraphStep, LayerInputDraw, MatteDraw,
     TemporalBelow,

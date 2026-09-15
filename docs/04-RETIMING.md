@@ -684,8 +684,10 @@ Expressions ([12-PLUGINS.md](12-PLUGINS.md) §scripting) observe:
 Retime resolves during the cheap metadata pass: for each requested output frame it
 emits a **sample request tuple** — for Nearest `(footage id, interp settings, frame index)`;
 for Blend `(…, frameA, frameB, phase)` with phase quantised to 1/1024; for Flow
-`(…, frameA, frameB, phase, flow params, algorithm version)`. Motion blur multiplies
-requests by shutter sub-samples.
+`(…, frameA, frameB, phase, flow params, algorithm version)`, the algorithm version being
+the code the Flow group's Engine row writes, with the model pack's own identity beside it
+whenever that engine is a model ([impl/addons.md](impl/addons.md) §6.3). Motion blur
+multiplies requests by shutter sub-samples.
 
 Cache entries are keyed by content hash of the resolved tuple, never by timeline position or
 by a hash of the whole curve. Consequences (MUST):

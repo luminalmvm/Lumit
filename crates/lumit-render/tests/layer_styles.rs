@@ -426,7 +426,7 @@ fn cpu_and_gpu_agree_on_every_shipped_style() {
             &[],
             &[],
             &[],
-            &[],
+            &lumit_render::fxops::Side::NONE,
             &[],
             None,
             None,

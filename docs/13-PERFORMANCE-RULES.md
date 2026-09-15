@@ -64,6 +64,8 @@ All figures are 95th percentile unless stated; measured by the harness in §7.
 | B15 | Puppet warp of a **fully covered** 1080p layer, single-threaded (≈ 40 ns a pixel warped) | ≤ 120 ms | ≤ 300 ms |
 | B16 | Puppet mesh build at natural 1080p, fully covered, default density | ≤ 100 ms | ≤ 250 ms |
 | B17 | Puppet per-frame solve at the 1500-vertex cap, factorisation held | ≤ 12 ms | ≤ 30 ms |
+| B18 | A planes analysis at 1080p on the reference GPU, warm model, one frame, measured by an `--ignored` test and printed rather than gated. Depth and Robust Video Matting; BiRefNet reads a whole 1024 square whatever the frame is and is a long analysis by choice ([impl/addons.md](impl/addons.md) §8) | ≤ 60 ms | not measured |
+| B19 | A synthesised in-between frame at 1080p from a model pack, warm model, measured by an `--ignored` test and printed rather than gated | ≤ 60 ms | not measured |
 
 ### 2.1 Document-scale budgets (the "thousands of layers" mandate)
 

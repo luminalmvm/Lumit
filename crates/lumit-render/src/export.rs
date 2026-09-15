@@ -2472,6 +2472,11 @@ fn run(
     // Viewer's GPU work.
     let mut renderer =
         crate::headless::HeadlessRenderer::new().map_err(|e| format!("export renderer: {e}"))?;
+    // A layer whose model engine will not paint stops the run here rather than
+    // being drawn with the built-in engine and written to the file under the
+    // model's name. The pre-flight turns away everything the document alone can
+    // show; this is the rest of it (docs/08 §3.1, docs/impl/addons.md §6.3).
+    renderer.refuse_substitution();
     // The project's colour config, before anything is written: the refusal has
     // to happen with the config in hand, and it has to happen before a file
     // exists rather than halfway through one.

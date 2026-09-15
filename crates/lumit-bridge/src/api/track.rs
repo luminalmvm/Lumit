@@ -422,6 +422,11 @@ pub fn fire_effect_action(
             _ => Err(BridgeError::InvalidParam),
         };
     }
+    // And the planes tier's two, on the one predicate `lumit_core::planes`
+    // owns rather than a list of names here (docs/impl/addons.md §6.1).
+    if lumit_core::planes::task_of(fx).is_some() {
+        return crate::api::planes::press(&layer, fx, &param);
+    }
     if matches!(fx.effect.namespace, EffectNamespace::Ofx) {
         return press_plugin(layer, effect, param, frame.unwrap_or(0));
     }

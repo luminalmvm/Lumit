@@ -7,7 +7,29 @@ import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `from_core`, `live_flow_params`, `onto`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`
+
+/// What the Flow group's engine row has to say about the model engine
+/// (docs/impl/addons.md §6.3).
+enum BridgeFlowEngineState {
+  /// The chosen engine is the one painting. Nothing to say.
+  ready,
+
+  /// No model runtime is installed, so no pack can run.
+  runtimeMissing,
+
+  /// The runtime is installed and no synthesis pack is.
+  packMissing,
+
+  /// The pack is installed and would not open or would not run. The row
+  /// says so; the library's own sentence stays on this side.
+  failed,
+
+  /// The layer's source is scene-linear float, which the model was not
+  /// trained on, so the built-in engine painted the frame.
+  floatSource,
+  ;
+}
 
 /// A footage layer's Flow group (docs/08 §3.1), flat for the bridge.
 ///
@@ -16,6 +38,12 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 /// eight settings edited one at a time would need eight round trips and eight
 /// undo steps to do what one does.
 class BridgeFlowParams {
+  /// 0 the built-in engine, 1 RIFE, which one paints the in-between frame
+  /// (docs/impl/addons.md §6.3). RIFE is an addon the user installs, and a
+  /// machine without it previews with the built-in engine and says so on the
+  /// row; see [`flow_engine_state`].
+  final int engine;
+
   /// 0 native, 1 half, 2 quarter — the size flow is *measured* at,
   /// independent of the preview quality tier.
   final int resolution;
@@ -40,6 +68,7 @@ class BridgeFlowParams {
   final bool always;
 
   const BridgeFlowParams({
+    required this.engine,
     required this.resolution,
     required this.detail,
     required this.smoothness,
@@ -51,6 +80,7 @@ class BridgeFlowParams {
 
   @override
   int get hashCode =>
+      engine.hashCode ^
       resolution.hashCode ^
       detail.hashCode ^
       smoothness.hashCode ^
@@ -64,6 +94,7 @@ class BridgeFlowParams {
       identical(this, other) ||
       other is BridgeFlowParams &&
           runtimeType == other.runtimeType &&
+          engine == other.engine &&
           resolution == other.resolution &&
           detail == other.detail &&
           smoothness == other.smoothness &&

@@ -99,6 +99,59 @@ impl lumit_eval::SourceStamper for Stamper<'_> {
         Some(crate::audio_tap::mix_fingerprint(doc, comp))
     }
 
+    /// Which synthesis pack a layer on the model engine is painted by
+    /// (docs/impl/addons.md §7). Asked once per frame named, so the answer is
+    /// worked out once and remembered until the addons folder changes: a walk
+    /// of that folder here, or the manifest copy the reading used to make,
+    /// would be a directory read and twenty allocations inside the render loop.
+    fn synthesis_identity(&self) -> Option<[u8; 32]> {
+        lumit_ml::synthesis::installed_identity()
+    }
+
+    /// Which pack a layer's planes-tier analysis is read by, and what that
+    /// instance's analysis actually holds (docs/impl/addons.md §7). The pack is
+    /// remembered the same way and for the same reason as the synthesis pack's:
+    /// the frame key asks this on every frame it names.
+    ///
+    /// The run's own name is folded in because an analysis landing moves
+    /// nothing else in a frame's name: the document is untouched and the
+    /// installed pack is the one it always was, so every frame banked before
+    /// the run would be served back with no depth in it, forever (§13). That
+    /// is also why this answers rather than declining when no pack is
+    /// installed: the first run to land has to rename the frames it changes,
+    /// and dropping it has to name them back.
+    fn planes_identity(
+        &self,
+        task: lumit_core::planes::PlaneTask,
+        instance: Uuid,
+    ) -> Option<[u8; 32]> {
+        let mut out =
+            lumit_ml::store::installed_identity(crate::planes::ml_task(task)).unwrap_or_default();
+        let run = crate::planes::content(instance).unwrap_or(0);
+        for (slot, byte) in out.iter_mut().zip(run.to_le_bytes()) {
+            *slot ^= byte;
+        }
+        Some(out)
+    }
+
+    /// Which pack cuts a prompted Roto brush's base frame, and what its run
+    /// holds at this frame (docs/impl/addons.md §7). The planes tier's answer
+    /// in every respect, one tier along, and asked only of a brush whose seed
+    /// row says Segment.
+    ///
+    /// The frame's own stored chain hash rather than the whole run's content,
+    /// because that is what this tier already files a matte under: a
+    /// re-propagation after a correction renames exactly the frames whose
+    /// matte moved, and leaves the ones it copied where they were.
+    fn roto_identity(&self, instance: Uuid, frame: i64) -> Option<[u8; 32]> {
+        let mut out = lumit_ml::segment::installed_identity().unwrap_or_default();
+        let run = crate::roto::stored_chain(instance, frame).unwrap_or_default();
+        for (slot, byte) in out.iter_mut().zip(run) {
+            *slot ^= byte;
+        }
+        Some(out)
+    }
+
     fn stamp(&self, item: Uuid, lt: f64, native: bool) -> Option<(String, u64)> {
         // The same proxy resolution point the decode planner goes through
         // (`crate::source::effective_media`), and for the reason the key
