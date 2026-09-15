@@ -2951,10 +2951,13 @@ impl LayerReference {
     /// the graph editor commits when a handle is dragged, and what a lane drag
     /// of several keys at once needs.
     ///
-    /// `keys` must name every key the mask has, in order; their `value` is
+    /// `keys` names every key the mask has, in order; their `value` is
     /// ignored, because a path key holds a shape rather than a number. Refused
     /// as a whole if the times are not strictly ascending: the evaluator walks
     /// the list assuming they are, and a half-applied reorder is not a mask.
+    ///
+    /// A shorter list is a delete. Each key it names is found by its time, and
+    /// the rest go. Deleting the last key leaves the shape that key held.
     #[frb(sync)]
     pub fn set_mask_path_keys(
         &self,
@@ -2968,15 +2971,24 @@ impl LayerReference {
             .iter()
             .position(|m| m.id == id)
             .ok_or(BridgeError::NoSuchMask)?;
-        if keys.len() != masks[at].path_keys.len() {
+        let count = masks[at].path_keys.len();
+        if keys.len() > count {
             return Ok(false);
         }
         let mut written = Vec::with_capacity(keys.len());
-        for (key, existing) in keys.iter().zip(masks[at].path_keys.iter()) {
+        for (i, key) in keys.iter().enumerate() {
             let time = Rational::new(key.time.num, key.time.den)
                 .map_err(|_| BridgeError::InvalidKeyframes)?
                 .checked_sub(offset)
                 .map_err(|_| BridgeError::InvalidKeyframes)?;
+            let existing = if keys.len() == count {
+                &masks[at].path_keys[i]
+            } else {
+                match masks[at].path_keys.iter().find(|k| k.time == time) {
+                    Some(k) => k,
+                    None => return Ok(false),
+                }
+            };
             if written
                 .last()
                 .is_some_and(|p: &lumit_core::mask::PathKeyframe| time <= p.time)
@@ -2989,6 +3001,11 @@ impl LayerReference {
                 interp_in: key.interp_in.write(),
                 interp_out: key.interp_out.write(),
             });
+        }
+        if written.is_empty() {
+            if let Some(last) = masks[at].path_keys.last() {
+                masks[at].path = last.path.clone();
+            }
         }
         masks[at].path_keys = written;
         self.commit_masks(masks)?;
