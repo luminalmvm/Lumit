@@ -65,6 +65,11 @@ cc = "1"
 lumit-ofx-testplug = { path = "../lumit-ofx-testplug" }
 tempfile = "3"
 
+# A plugin whose exports live in a DLL beside it, built by `cargo test`.
+[[example]]
+name = "needs_side_dll"
+crate-type = ["cdylib"]
+
 # The plugin hosts cannot inherit the workspace's `unsafe_code = "deny"`:
 # the OFX API is a C ABI of raw pointers and function tables, which is unsafe
 # by construction (docs/14 §7 permits it here and requires the SAFETY comments

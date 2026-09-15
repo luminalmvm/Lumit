@@ -165,12 +165,10 @@ hand-written `BUILTINS` literal are all deleted, and with them the migration-onl
 
 - **Dynamic parameters** - derived from a custom shader's uniforms or a node graph's exposed
     inputs; then **spare parameters**, the user's own sliders for expressions to read. The
-    rules are settled (§4 of the note). The Node graph effect's derived rows are the first of
-    these, built with NG1; the panel affordances for adopting a row and removing one are
-    what remains.
-- **Bridge and panel**: `list_parameters` and the Effect Controls read the schema, so they
-    follow for free - except for dynamic parameters, which are per *instance* rather than per
-    effect and need a bridge call that takes an instance id.
+    rules are settled (§4 of the note) and the bridge carries them (custom-shader.md CS2:
+    `parameter_sync`, `sync_parameters`, `remove_unused_parameters`). What remains is the
+    panel row that presses them, the Sync and Remove affordances of CS3, and then spare
+    parameters.
 
 - **Rescale a derived spatial value, or stop deriving one.** Not a migration step - an open
     defect the migration uncovered. Scanlines' `derived.roll_px` is
@@ -1059,14 +1057,17 @@ reaching disk).
 
 **What the performance harness still cannot measure** (`crates/lumit-bench`
 drives the reference comp headless through B3, B4, B5, B6, B7 and B11, and the job
-`performance gates (ratio vs baseline)` gates the ratio to a checked-in baseline). Five
+`performance gates (ratio vs baseline)` gates the ratio to a checked-in baseline). Three
 budgets are outside its reach and remain manual release checks, each needing its own
 instrumentation:
 
-- **B1 and B2 — UI frame time and input acknowledgement.** They belong to the Flutter
-    thread, which no engine-side harness has. Wants frame timing recorded in the app
-    (`SchedulerBinding`'s frame callbacks) and a way to drive an interaction from a test,
-    so "8 ms during a drag" becomes a number rather than a feeling.
+- **B1 and B2: measured now, gated in part.** `flutter_ui/integration_test/ui_budget_test.dart`
+    runs the app on a real window over a 200-layer comp, drives the ui-performance note's
+    gesture list, and reads every `FrameTiming`: build p95 and worst per gesture, frames to
+    acknowledgement per press. B2 is asserted everywhere (a frame count). B1's 8.3 ms is
+    asserted only under `LUMIT_REFERENCE_HW=1`; the Linux job records the table (debug
+    build, Xvfb, software GL) and gates nothing else. Still owed: a runner that sets the
+    switch, and a maximised-window profile run as part of a release rather than by hand.
 - **B8 — export throughput.** The encoder is not in the harness. A timed export of the
     same reference comp at the YouTube 1080p60 preset is the measurement; it needs hardware
     encode present to mean anything, which no runner has.

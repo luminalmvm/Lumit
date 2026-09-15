@@ -790,7 +790,9 @@ fn a_graphs_inputs_reach_it_from_the_host_and_from_the_graph_above() {
             "amount",
             EffectValue::Float(lumit_core::anim::Property::fixed(0.0)),
         );
-        let wiggle = effect("wiggle", &[("amount", 3.0), ("frequency", 4.0)]);
+        let mut wiggle = effect("wiggle", &[("amount", 3.0), ("frequency", 4.0)]);
+        // The id seeds the wobble, and about 3% of random ids stay white on every frame.
+        wiggle.id = Uuid::from_u128(3);
         let wiggle_id = wiggle.id;
         let target = host.effects[0].id;
         host.graph = lumit_core::graph::LayerGraph {

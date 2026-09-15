@@ -13,8 +13,8 @@ import 'package:uuid/uuid.dart';
 import 'roto.dart';
 part 'effect.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `animation_at`, `badge_of`, `bridge_param`, `bridge_shader_ty`, `bridge_unit`, `catalogue`, `clamp_animation`, `core_unit`, `derived_params_of`, `document_for`, `fill_derived`, `hard_bounds`, `hidden_rows_of`, `is_audio_effect`, `is_audio_match_name`, `param`, `plugin_category_key`, `presets_in`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `sample_at`, `scan_audio_plugins`, `seconds_of`, `shader_error`, `validated`, `with_live_inputs`, `write_at`, `write_at`, `write`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `animation_at`, `animation_of`, `badge_of`, `bridge_derived_param`, `bridge_param`, `bridge_shader_ty`, `bridge_unit`, `catalogue`, `clamp_animation`, `core_unit`, `derived_params_of`, `document_for`, `drop_stale_offers`, `fill_derived`, `hard_bounds`, `hidden_rows_of`, `is_audio_effect`, `is_audio_match_name`, `param`, `plugin_category_key`, `presets_in`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `sample_at`, `scan_audio_plugins`, `seconds_of`, `shader_error`, `validated`, `with_live_inputs`, `write_at`, `write_at`, `write`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `get_effects`, `new`
 
 /// Every built-in **effect**, in schema order — the Add-effect menu's source of
@@ -327,6 +327,32 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// effect has no pair for is unlinked, never an error.
   bool pairLinked({required String stem});
 
+  /// What Sync and Remove would do to this instance, as it stands on this
+  /// handle (docs/impl/custom-shader.md §1.5): the derived rows the document
+  /// has not adopted, and the stored rows nothing names any more.
+  ///
+  /// Read on the gesture that draws the affordance, never per rebuild. The
+  /// answer is about the **document**, not this copy: a row
+  /// [`fill_derived`] put here at construction is still `new` until
+  /// [`Self::sync_parameters`] says otherwise, and a source staged by
+  /// [`Self::set_shader_source`] on this same handle counts as the instance's
+  /// state, so the editor can ask what Apply will leave behind.
+  ///
+  /// An effect this build does not know answers nothing either way: with no
+  /// declaration to hold the stored rows against, none of them is unused.
+  BridgeParamSync parameterSync();
+
+  /// **Remove unused parameters** (registry §4 rule 1): take away every
+  /// stored row that neither the declaration nor the derivation names, on
+  /// the **staged** copy, keyframes and expression and all.
+  /// `LayerReference::set_effects` is the commit — one op, one undo step,
+  /// which is also the way back.
+  ///
+  /// Deliberate by construction: it is the only road that removes a row, it
+  /// runs on nobody's read, and [`Self::parameter_sync`] says beforehand
+  /// what each removal will break. Answers the ids removed, in stored order.
+  List<String> removeUnusedParameters();
+
   /// Add one segmentation prompt to this Roto brush, on the **staged** copy.
   ///
   /// `points` are `[x0, y0, x1, y1, …]` in **source raster pixels**, as a
@@ -517,6 +543,18 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// instance with no source at all, because an effect the user has not filled
   /// in yet is a passthrough rather than a failure.
   BridgeShaderStatus shaderStatus();
+
+  /// **Sync parameters** (registry §4 rule 2): adopt every row this
+  /// instance's state derives and the document lacks, at its default, on
+  /// the **staged** copy. `LayerReference::set_effects` is the commit, so the
+  /// adoption is one `SetLayerEffects` and one undo step, and it is the
+  /// user's act: nothing here runs on a read or on a render.
+  ///
+  /// Answers the ids adopted, in derived order — what the affordance
+  /// reports. Empty when there was nothing to adopt, so a caller can skip a
+  /// commit that would undo to itself. Rows the document already holds are
+  /// untouched: their values are the document's, not the source's defaults.
+  List<String> syncParameters();
 }
 
 /// An **automatic** bezier side ([`SideInterp::Auto`]): its speed is computed
@@ -1047,16 +1085,30 @@ class BridgeParamInfo {
   /// than with its id and the panel never has to guess.
   final BridgeUnit unit;
 
+  /// Whether this row comes from the **instance** rather than from the
+  /// effect's declaration (docs/impl/effect-registry.md §4): a Custom
+  /// shader's uniform, a Node graph's Input. False for every row
+  /// [`list_parameters`] answers, since a match name can only ever say what
+  /// the effect declares. The panel draws the two the same; the flag is for
+  /// the one row that sits between them, the Sync affordance
+  /// (docs/impl/custom-shader.md §1.5).
+  final bool derived;
+
   const BridgeParamInfo({
     required this.id,
     required this.label,
     required this.kind,
     required this.unit,
+    required this.derived,
   });
 
   @override
   int get hashCode =>
-      id.hashCode ^ label.hashCode ^ kind.hashCode ^ unit.hashCode;
+      id.hashCode ^
+      label.hashCode ^
+      kind.hashCode ^
+      unit.hashCode ^
+      derived.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1066,7 +1118,8 @@ class BridgeParamInfo {
           id == other.id &&
           label == other.label &&
           kind == other.kind &&
-          unit == other.unit;
+          unit == other.unit &&
+          derived == other.derived;
 }
 
 @freezed
@@ -1222,6 +1275,41 @@ class BridgeParamPair {
           stem == other.stem &&
           x == other.x &&
           y == other.y;
+}
+
+/// What the Sync and Remove affordances would do to one instance
+/// (docs/impl/custom-shader.md §1.5, docs/impl/effect-registry.md §4), read
+/// before either is pressed so the row can name its counts and the removal
+/// can say what it will break.
+class BridgeParamSync {
+  /// Rows the instance's own state derives that the document does not
+  /// carry, in derived order: what [`BridgeEffectInstance::sync_parameters`]
+  /// adds.
+  final List<String> adds;
+
+  /// Rows the document carries that neither the declaration nor the
+  /// derivation names any more, in stored order: what
+  /// [`BridgeEffectInstance::remove_unused_parameters`] removes.
+  final List<BridgeUnusedParam> removes;
+
+  const BridgeParamSync({
+    required this.adds,
+    required this.removes,
+  });
+
+  static Future<BridgeParamSync> default_() =>
+      BridgeLib.instance.api.crateApiEffectBridgeParamSyncDefault();
+
+  @override
+  int get hashCode => adds.hashCode ^ removes.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeParamSync &&
+          runtimeType == other.runtimeType &&
+          adds == other.adds &&
+          removes == other.removes;
 }
 
 /// One parameter's current value, as [`BridgeEffectInstance::get_info`]
@@ -1605,4 +1693,40 @@ enum BridgeUnit {
   /// Comp-rate frames.
   frames,
   ;
+}
+
+/// One stored row nothing declares any more, and what removing it would cost.
+///
+/// Rule 1 (registry §4): nothing is removed behind the user's back, and the
+/// action that does remove it says what it will break first. What it can
+/// break is what the row itself holds: keyframes and an expression. An
+/// expression **elsewhere** that reads this id by name is not walked — that
+/// is a whole-document search for a sentence, and the expression degrades to
+/// its own missing-name rule rather than to a crash.
+class BridgeUnusedParam {
+  final String id;
+
+  /// Whether any of its channels carries keyframes.
+  final bool keyframed;
+
+  /// Whether any of its channels is driven by an expression.
+  final bool expression;
+
+  const BridgeUnusedParam({
+    required this.id,
+    required this.keyframed,
+    required this.expression,
+  });
+
+  @override
+  int get hashCode => id.hashCode ^ keyframed.hashCode ^ expression.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeUnusedParam &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          keyframed == other.keyframed &&
+          expression == other.expression;
 }

@@ -259,8 +259,8 @@ graph. A copy rather than a document lookup because `derived` has no document in
 the shader's road is the one every reader already walks. The copy is refreshed on the clones
 the bridge hands out (`get_effects` refreshes it from the live graph before it fills the
 derived rows), so a row added inside the graph appears the next time the stack is read and
-lands in the document with the user's next edit, which is docs/08 §3.95's rule: offered, never
-adopted behind anybody's back. A row for an Input the graph no longer has stays as an ordinary
+lands in the document when the user writes to it or presses Sync (custom-shader.md §1.5),
+which is docs/08 §3.95's rule: offered, never adopted behind anybody's back. A row for an Input the graph no longer has stays as an ordinary
 parameter the graph ignores. The renderer never reads the copy; it lowers the graph from the
 document and reads the instance's parameters by the Inputs' ids.
 
