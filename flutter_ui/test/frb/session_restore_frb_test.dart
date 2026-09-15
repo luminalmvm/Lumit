@@ -42,8 +42,12 @@ void main() {
     final titles = project.newComposition(name: 'Titles');
     final layer = scene.addSolidLayer();
 
-    project.save(path: path);
-    await settleFrb(tester, until: () => File(path).existsSync());
+    var saved = false;
+    // Waited on by the save finishing, not by the file turning up: a file
+    // exists from the moment it is created, which is before it holds a
+    // project, and a slow machine would open the half-written one.
+    project.save(path: path).then((_) => saved = true);
+    await settleFrb(tester, until: () => saved);
     expect(File(path).existsSync(), isTrue, reason: 'nothing to reopen');
 
     // Where the user got to: both comps open, Scene fronted, playhead at 12,
@@ -107,8 +111,9 @@ void main() {
     final scene = project.newComposition(name: 'Scene');
     final titles = project.newComposition(name: 'Titles');
 
-    project.save(path: path);
-    await settleFrb(tester, until: () => File(path).existsSync());
+    var saved = false;
+    project.save(path: path).then((_) => saved = true);
+    await settleFrb(tester, until: () => saved);
 
     ui.setSelectedComp(scene);
     ui.playheadFrame.value = 40;
@@ -175,8 +180,9 @@ void main() {
     final state = LumitState()..newProject();
     final ui = LumitUiState(state, workspace: workspace);
     state.project!.newComposition(name: 'Scene');
-    state.project!.save(path: path);
-    await settleFrb(tester, until: () => File(path).existsSync());
+    var saved = false;
+    state.project!.save(path: path).then((_) => saved = true);
+    await settleFrb(tester, until: () => saved);
 
     // A session written by an older sitting, naming a comp and a layer that
     // the saved document does not contain.
@@ -219,8 +225,10 @@ void main() {
 
     // Not awaited: the save is an async frb call whose continuation only lands
     // on the real event-loop turns settleFrb provides.
-    saveProjectFrb(authorState, authorUi, picker: () async => path);
-    await settleFrb(tester, until: () => File(path).existsSync());
+    var saved = false;
+    saveProjectFrb(authorState, authorUi, picker: () async => path)
+        .then((_) => saved = true);
+    await settleFrb(tester, until: () => saved);
     expect(File(path).existsSync(), isTrue);
 
     // Somebody else's machine: their own arrangement, and no record of this
