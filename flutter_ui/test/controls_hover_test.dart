@@ -85,39 +85,69 @@ void main() {
   });
 
   group('The active control', () {
-    BoxDecoration decorationOf(WidgetTester tester) =>
+    BoxDecoration decorationOf(WidgetTester tester) => tester
+        .widget<AnimatedContainer>(
+          find.descendant(
+            of: find.byType(HouseButton),
+            matching: find.byType(AnimatedContainer),
+          ),
+        )
+        .decoration! as BoxDecoration;
+
+    Color labelOf(WidgetTester tester) => tester
+        .widget<DefaultTextStyle>(
+          find
+              .descendant(
+                of: find.byType(HouseButton),
+                matching: find.byType(DefaultTextStyle),
+              )
+              .first,
+        )
+        .style
+        .color!;
+
+    AnimatedContainer containerOf(WidgetTester tester) =>
         tester.widget<AnimatedContainer>(
           find.descendant(
             of: find.byType(HouseButton),
             matching: find.byType(AnimatedContainer),
           ),
-        ).decoration! as BoxDecoration;
+        );
 
-    Color labelOf(WidgetTester tester) =>
-        tester.widget<DefaultTextStyle>(
-          find.descendant(
-            of: find.byType(HouseButton),
-            matching: find.byType(DefaultTextStyle),
-          ).first,
-        ).style.color!;
+    /// The label's centre is the button's centre, both ways, to half a pixel:
+    /// a filled pill whose word rides high reads as a mistake on every
+    /// shape.
+    void expectCentred(WidgetTester tester, String why) {
+      final button = tester.getRect(find.byType(HouseButton));
+      final label = tester.getRect(find.text('Mask'));
+      expect(label.center.dx, closeTo(button.center.dx, 0.5), reason: why);
+      expect(label.center.dy, closeTo(button.center.dy, 0.5), reason: why);
+    }
 
-    /// Round's loudest cue: which one is in force reads from the fill, and the
-    /// label flips to the far end of the ramp so it survives the accent.
-    testWidgets('under Round it is the filled accent pill', (tester) async {
-      final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.round);
+    /// Lantern's loudest cue: which one is in force reads from the fill, a
+    /// stadium of accent with the label kept in `text_primary` on it, stood
+    /// off the button's edge by the pill inset on every side.
+    testWidgets('under Lantern it is the filled accent pill', (tester) async {
+      final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.lantern);
       await tester.pumpWidget(host(
         HouseButton(active: true, onPressed: () {}, child: const Text('Mask')),
         theme: t,
       ));
       await tester.pump();
 
-      expect(decorationOf(tester).color, t.accent);
-      expect(labelOf(tester), t.surface0);
+      final d = decorationOf(tester);
+      expect(d.color, t.accent);
+      expect(d.borderRadius,
+          BorderRadius.circular(ShapeTokens.stadium - t.tokens.pillInset));
+      expect(labelOf(tester), t.textPrimary);
+      expect(containerOf(tester).foregroundDecoration, isNull);
+      expect(containerOf(tester).margin, EdgeInsets.all(t.tokens.pillInset));
+      expectCentred(tester, 'Lantern');
     });
 
-    /// Sharp does not take the fill: the armed tint, not a filled pill.
-    testWidgets('under Sharp it stays the tint', (tester) async {
-      final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.sharp);
+    /// Studio does not take the fill: the armed tint in an accent outline.
+    testWidgets('under Studio it stays the tint', (tester) async {
+      final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio);
       await tester.pumpWidget(host(
         HouseButton(active: true, onPressed: () {}, child: const Text('Mask')),
         theme: t,
@@ -127,13 +157,68 @@ void main() {
       final d = decorationOf(tester);
       expect(d.color, isNot(t.accent), reason: 'a tint, not the accent itself');
       expect(d.color!.a, lessThan(0.5));
+      expect(d.border, Border.all(color: t.accent, width: 1));
+      expect(d.borderRadius, BorderRadius.circular(2));
       expect(labelOf(tester), t.textPrimary, reason: 'the label does not flip');
+      expect(containerOf(tester).foregroundDecoration, isNull);
+      // Studio has no pill inset, so the fill is the button's own box and the
+      // button is still its label plus 3 of padding and 1 of edge each way.
+      final button = tester.getRect(find.byType(HouseButton));
+      expect(tester.getRect(find.byType(DecoratedBox).first), button,
+          reason: 'the fill is not inset');
+      expect(button.height,
+          closeTo(tester.getRect(find.text('Mask')).height + 8, 0.01));
+      expectCentred(tester, 'Studio');
     });
+
+    /// Desk keeps the tint and marks the leading edge with a 2px accent
+    /// index instead of an outline, painted over the box so it insets nothing.
+    testWidgets('under Desk it is the tint with a leading index',
+        (tester) async {
+      final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.desk);
+      await tester.pumpWidget(host(
+        HouseButton(active: true, onPressed: () {}, child: const Text('Mask')),
+        theme: t,
+      ));
+      await tester.pump();
+
+      final d = decorationOf(tester);
+      expect(d.color, isNot(t.accent), reason: 'a tint, not the accent itself');
+      expect(d.color!.a, lessThan(0.5));
+      expect(d.border, Border.all(color: const Color(0x00000000), width: 1),
+          reason: 'no outline: the index says it');
+      final index = containerOf(tester).foregroundDecoration as BoxDecoration;
+      expect(index.border, Border(left: BorderSide(color: t.accent, width: 2)));
+      expect(labelOf(tester), t.textPrimary, reason: 'the label does not flip');
+      expectCentred(tester, 'Desk');
+    });
+
+    /// The filled action's word: the far end of the ramp under Studio and
+    /// Desk, `text_primary` under Lantern.
+    for (final (shape, ink) in [
+      (ThemeShape.studio, (LumitTheme t) => t.surface0),
+      (ThemeShape.desk, (LumitTheme t) => t.surface0),
+      (ThemeShape.lantern, (LumitTheme t) => t.textPrimary),
+    ]) {
+      testWidgets('the primary label under ${shape.name}', (tester) async {
+        final t = LumitTheme.forScheme(LumitColorScheme.dark, shape);
+        await tester.pumpWidget(host(
+          HouseButton(
+              primary: true, onPressed: () {}, child: const Text('Export')),
+          theme: t,
+        ));
+        await tester.pump();
+
+        expect(decorationOf(tester).color, t.accent);
+        expect(labelOf(tester), ink(t));
+        expect(accentInk(t), ink(t));
+      });
+    }
 
     /// The state must not blink off under the pointer — hovering the active
     /// one lifts it rather than replacing it with the hover fill.
     testWidgets('hovering an active control keeps it accent', (tester) async {
-      final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.round);
+      final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.lantern);
       await tester.pumpWidget(host(
         HouseButton(active: true, onPressed: () {}, child: const Text('Mask')),
         theme: t,

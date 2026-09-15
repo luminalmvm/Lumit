@@ -16,6 +16,26 @@ import '../../theme/theme.dart';
 /// mouse. Excluding the trackpad here costs nothing that a user wants — a
 /// *click*-drag on a trackpad is an ordinary pointer drag and is unaffected —
 /// and hands two-finger scrolling back to the scrollable underneath.
+/// A well's edge. Under Desk a well is an engraved recess: dark on the top
+/// and left where the light does not reach, pale below and right; a lit edge
+/// (focus, a scrub) is drawn all round in its own colour. Elsewhere a plain
+/// ring.
+Border wellBorder(LumitTheme t, Color edge, {bool lit = false}) =>
+    t.shape == ThemeShape.desk && !lit
+        ? Border(
+            top: BorderSide(color: t.hairlineStrong),
+            left: BorderSide(color: t.hairlineStrong),
+            right: BorderSide(color: t.surface3),
+            bottom: BorderSide(color: t.surface3),
+          )
+        : Border.all(color: edge, width: 1);
+
+/// A well's corners: none under Desk, whose engraved edge is one-sided and so
+/// cannot carry a radius; the shape's wellRadius elsewhere.
+BorderRadius? wellCorners(LumitTheme t) => t.shape == ThemeShape.desk
+    ? null
+    : BorderRadius.circular(t.tokens.wellRadius);
+
 const Set<PointerDeviceKind> dragDevices = {
   PointerDeviceKind.mouse,
   PointerDeviceKind.touch,

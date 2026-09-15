@@ -19,6 +19,15 @@
 // The right-hand end carries what the shell has nowhere else to put: the
 // workspace strip §1.4 asks for.
 //
+// **Two positions.** Settings, Interface, Toolbar position is Top or Left
+// (docs/design-alt/15-DESIGN-LANTERN.md §12B.1). Top is this strip. Left puts
+// the thirteen tools and the magnet on [LumitToolRailFrb], a 44px column down
+// the window's left edge, and the top line takes the tool options and the
+// workspace strip ([LumitTopLineToolsFrb]): a rail has no room for a number
+// field or six words, and a strip kept above the dock for those two alone
+// would add a row to the column the rail already adds. Every key, flyout and
+// chord stays in one widget tree.
+//
 // **The magnet is back**. It sat here once, was taken off when nothing
 // in the application read it — a toggle that changes nothing is worse
 // than a missing one — and returns now that the Viewer's layer drags reach for
@@ -53,6 +62,27 @@ const double toolBarHeight = 30;
 const double _toolButtonWidth = 44;
 const double _toolButtonHeight = 28;
 
+/// How wide the rail is when the toolbar stands on the left: the full 44 the
+/// strip gives up down the page.
+const double toolRailWidth = 44;
+
+/// The strip's height under [shape]. Studio keeps its 30; Desk draws it at 32
+/// on the module; Lantern's is a 44 band in the room with 32 pills on it.
+double toolBarHeightFor(ThemeShape shape) => switch (shape) {
+      ThemeShape.studio => toolBarHeight,
+      ThemeShape.desk => 32,
+      ThemeShape.lantern => 44,
+    };
+
+/// Lantern's pills: the tool and options pills on the strip, and the workspace
+/// pill, which is shorter because it also rides the 40 band under Left.
+const double _lanternPill = 32;
+const double _workspacePill = 28;
+
+/// The last of the simple pointer tools. The rail draws a seam after it, and
+/// so does the strip once it is grouped into pills.
+const ToolGroup _seamAfter = ToolGroup.razor;
+
 /// The tool groups in the order the strip lists them: the pointer tools first,
 /// then the ones that draw, then the ones that paint, then the camera — After
 /// Effects' own grouping, which is the order the audience already knows.
@@ -83,65 +113,284 @@ class LumitToolBarFrb extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final ui = context.watch<LumitUiState>();
+    // Lantern groups the row into three pills standing in the room; Studio
+    // and Desk keep the flat strip, welded under the menu bar by a hairline.
+    final pills = t.tokens.roomed;
     return Container(
-      height: toolBarHeight,
+      height: toolBarHeightFor(t.shape),
       decoration: BoxDecoration(
-        color: t.surface2,
-        border: Border(bottom: BorderSide(color: t.hairline)),
+        color: pills
+            ? t.room
+            : t.shape == ThemeShape.desk
+                ? t.surface1
+                : t.surface2,
+        border: pills ? null : Border(bottom: BorderSide(color: t.hairline)),
       ),
       child: ListenableBuilder(
         listenable: ui.tools,
-        builder: (context, _) => Row(
-          children: [
-            const SizedBox(width: 4),
-            // The tools and their options take the whole left-hand end, so the
-            // workspace strip is held against the *right* edge where docs/07
-            // §1.4 puts it. Expanded rather than letting the two scroll views
-            // size themselves: a loose Flexible only takes the width it needs,
-            // which left the workspace buttons sitting immediately beside the
-            // last tool with the free space stranded past them.
-            Expanded(
-              child: Row(
-                children: [
-                  // Scrolls rather than overflowing: a narrow window has less
-                  // width than thirteen tools want, and an overflow stripe is
-                  // not a design. Flexible so the options beside it get their
-                  // share of the room instead of being squeezed to nothing.
-                  Flexible(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          for (final group in toolBarOrder)
-                            _ToolButton(group: group, tools: ui.tools),
-                        ],
-                      ),
-                    ),
+        builder: (context, _) {
+          final options = _toolOptions(t, ui.tools, height: _lanternPill);
+          // The tool pill keeps the magnet at its end; the flat strip keeps
+          // the magnet after the options, where it has always stood.
+          final tools = Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Scrolls rather than overflowing: a narrow window has less
+              // width than thirteen tools want, and an overflow stripe is
+              // not a design. Flexible so the options beside it get their
+              // share of the room instead of being squeezed to nothing.
+              Flexible(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (final group in toolBarOrder) ...[
+                        _ToolButton(group: group, tools: ui.tools),
+                        if (pills && group == _seamAfter)
+                          const _ToolBarDivider(),
+                      ],
+                    ],
                   ),
-                  // The armed tool's own options, when it has any:
-                  // After Effects puts them here, and the strip is empty for
-                  // the tools that draw nothing.
-                  if (toolOptionsFor(ui.tools.tool) != ToolOptions.none) ...[
-                    const _ToolBarDivider(),
+                ),
+              ),
+              if (pills) ...[
+                const _ToolBarDivider(),
+                _SnapButton(tools: ui.tools),
+              ],
+            ],
+          );
+          return Row(
+            children: [
+              const SizedBox(width: 4),
+              // The tools and their options take the whole left-hand end, so
+              // the workspace strip is held against the *right* edge where
+              // docs/07 §1.4 puts it. Expanded rather than letting the two
+              // scroll views size themselves: a loose Flexible only takes the
+              // width it needs, which left the workspace buttons sitting
+              // immediately beside the last tool with the free space stranded
+              // past them.
+              Expanded(
+                child: Row(
+                  children: [
                     Flexible(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: _ToolOptions(
-                          tools: ui.tools,
-                          shows: toolOptionsFor(ui.tools.tool),
-                        ),
-                      ),
-                    ),
+                        child: _pill(t, 'tool-pill', tools,
+                            height: _lanternPill)),
+                    if (options != null) ...[
+                      _gap(pills),
+                      Flexible(child: options),
+                    ],
                   ],
+                ),
+              ),
+              if (!pills) ...[
+                const _ToolBarDivider(),
+                _SnapButton(tools: ui.tools),
+              ],
+              _gap(pills),
+              _workspaces(t),
+              const SizedBox(width: 6),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// What the top line carries while the tools stand on the rail: the armed
+/// tool's options after a seam, and the workspace strip at the right end. The
+/// strip above the dock is not mounted then, so the rail adds a column without
+/// the strip still taking its row.
+class LumitTopLineToolsFrb extends StatelessWidget {
+  const LumitTopLineToolsFrb({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final ui = context.watch<LumitUiState>();
+    final pills = t.tokens.roomed;
+    return ListenableBuilder(
+      listenable: ui.tools,
+      builder: (context, _) {
+        final options = _toolOptions(t, ui.tools, height: _workspacePill);
+        // The workspaces take their own width at the right end, where
+        // docs/07 §1.4 puts them, and the options take what is left. The
+        // strip only scrolls once the half is too narrow for it, not by a
+        // share of the width; the 22 is the gaps and the end inset.
+        return LayoutBuilder(
+          builder: (context, c) => Row(
+            children: [
+              // The options stand right-aligned beside the workspaces, so
+              // the two groups read as one block at the line's end.
+              if (options != null) ...[
+                _gap(pills),
+                Expanded(
+                  child:
+                      Align(alignment: Alignment.centerRight, child: options),
+                ),
+              ] else
+                const Spacer(),
+              _gap(pills),
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: c.maxWidth - 22),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: _workspaces(t),
+                ),
+              ),
+              const SizedBox(width: 6),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// What stands between two groups on the row: air between pills, a hairline
+/// on the flat strip.
+Widget _gap(bool pills) =>
+    pills ? const SizedBox(width: 8) : const _ToolBarDivider();
+
+/// The armed tool's own options, when it has any: After Effects puts them
+/// beside the tools, and the strip is empty for the tools that draw nothing.
+/// The Lantern pill stays on the row saying so, so the row keeps its shape as
+/// the tools are cycled.
+Widget? _toolOptions(LumitTheme t, ToolsState tools,
+    {required double height}) {
+  final shows = toolOptionsFor(tools.tool);
+  if (shows == ToolOptions.none && !t.tokens.roomed) return null;
+  // The word is centred on the pill's height, as the workspace strip's are
+  // on theirs; a bare Text takes the top of the box it is given. The width
+  // stays the content's, so the flat strip's row is laid out as it was.
+  return _pill(
+    t,
+    'tool-options-pill',
+    Align(
+      alignment: Alignment.centerLeft,
+      widthFactor: 1,
+      child: shows == ToolOptions.none
+          ? Text(
+              l10n.toolNoOptions,
+              key: const ValueKey('tool-no-options'),
+              style: t.body.copyWith(color: t.textMuted),
+              maxLines: 1,
+              overflow: TextOverflow.clip,
+            )
+          : SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // The mockup's hint word before the controls, under
+                  // Lantern.
+                  if (t.tokens.roomed) ...[
+                    Text(
+                      l10n.toolOptions,
+                      key: const ValueKey('tool-options-hint'),
+                      style:
+                          t.body.copyWith(fontSize: 12, color: t.textMuted),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  _ToolOptions(tools: tools, shows: shows),
                 ],
               ),
             ),
-            const _ToolBarDivider(),
-            _SnapButton(tools: ui.tools),
-            const _ToolBarDivider(),
-            const _WorkspaceStrip(),
-            const SizedBox(width: 6),
-          ],
+    ),
+    height: height,
+    padding: const EdgeInsets.symmetric(horizontal: 8),
+  );
+}
+
+/// The workspace strip, as a 28 pill under Lantern whose padding is the inset
+/// the fronted capsule keeps from its edge on every side.
+Widget _workspaces(LumitTheme t) => _pill(
+      t,
+      'workspace-pill',
+      const _WorkspaceStrip(),
+      height: _workspacePill,
+      padding: EdgeInsets.all(t.tokens.pillInset),
+    );
+
+/// A capsule on the room colour, under Lantern; [child] untouched otherwise.
+/// The fill is surface1 with the card's own shadow, so the three read as the
+/// same kind of object as the panes below them.
+Widget _pill(
+  LumitTheme t,
+  String key,
+  Widget child, {
+  double? height,
+  EdgeInsets padding = const EdgeInsets.symmetric(horizontal: 4),
+}) {
+  if (!t.tokens.roomed) return child;
+  return Container(
+    key: ValueKey<String>(key),
+    height: height,
+    padding: padding,
+    decoration: BoxDecoration(
+      color: t.surface1,
+      borderRadius: BorderRadius.circular(ShapeTokens.stadium),
+      boxShadow: t.tokens.cardShadow,
+    ),
+    child: child,
+  );
+}
+
+/// The toolbar as a rail (docs/design-alt/15-DESIGN-DESK.md §12B.1): the
+/// thirteen groups in a 44px column, a seam after the six pointer tools, and
+/// the magnet at the foot. The shell mounts it beside the dock while the
+/// position is Left, and the top line takes the options and the workspaces.
+class LumitToolRailFrb extends StatelessWidget {
+  const LumitToolRailFrb({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final ui = context.watch<LumitUiState>();
+    final pills = t.tokens.roomed;
+    return Container(
+      width: toolRailWidth,
+      decoration: BoxDecoration(
+        color: pills
+            ? t.room
+            : t.shape == ThemeShape.desk
+                ? t.surface1
+                : t.surface2,
+        border: pills ? null : Border(right: BorderSide(color: t.hairline)),
+      ),
+      // Under Lantern the pill stands level with the cards' top and bottom;
+      // the rail itself stays flush to the window edge.
+      padding: EdgeInsets.symmetric(vertical: t.tokens.windowInset),
+      child: ListenableBuilder(
+        listenable: ui.tools,
+        builder: (context, _) => _pill(
+          t,
+          'tool-pill',
+          Column(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      for (final group in toolBarOrder) ...[
+                        _ToolButton(
+                          group: group,
+                          tools: ui.tools,
+                          rail: true,
+                        ),
+                        if (group == _seamAfter)
+                          const _ToolBarDivider(vertical: true),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              const _ToolBarDivider(vertical: true),
+              _SnapButton(tools: ui.tools),
+              const SizedBox(height: 6),
+            ],
+          ),
         ),
       ),
     );
@@ -481,16 +730,20 @@ class _Swatch extends StatelessWidget {
   }
 }
 
+/// A hairline seam on the strip, turned on its side for the rail.
 class _ToolBarDivider extends StatelessWidget {
-  const _ToolBarDivider();
+  final bool vertical;
+  const _ToolBarDivider({this.vertical = false});
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     return Container(
-      width: 1,
-      height: 20,
-      margin: const EdgeInsets.symmetric(horizontal: 6),
+      width: vertical ? 20 : 1,
+      height: vertical ? 1 : 20,
+      margin: vertical
+          ? const EdgeInsets.symmetric(vertical: 6)
+          : const EdgeInsets.symmetric(horizontal: 6),
       color: t.hairline,
     );
   }
@@ -502,7 +755,14 @@ class _ToolButton extends StatefulWidget {
   final ToolGroup group;
   final ToolsState tools;
 
-  const _ToolButton({required this.group, required this.tools});
+  /// Standing on the rail: a taller cell, and the flyout opens to the right.
+  final bool rail;
+
+  const _ToolButton({
+    required this.group,
+    required this.tools,
+    this.rail = false,
+  });
 
   @override
   State<_ToolButton> createState() => _ToolButtonState();
@@ -525,14 +785,49 @@ class _ToolButtonState extends State<_ToolButton> {
 
     // 15-DESIGN §5's icon states, exactly: secondary at rest, primary on hover,
     // accent when this is the tool in your hand — and muted for a group that
-    // cannot be armed at all.
+    // cannot be armed at all. Lantern fills the armed button with the accent
+    // instead, so its glyph takes the colour a primary button's label does.
+    final filled = t.tokens.roomed;
+    final desk = t.shape == ThemeShape.desk;
     final colour = !enabled
         ? t.textDisabled
         : active
-            ? t.accent
+            ? (filled ? t.surface0 : t.accent)
             : _hover
                 ? t.textPrimary
                 : t.textSecondary;
+    // Studio tints the armed button; Desk gives it no fill and a 2px accent
+    // index on the bar's outer edge, the top of a strip button and the left
+    // of a rail one. Lantern leaves the cell bare and fills a disc inside it,
+    // drawn below, so the cell's own fill is never used there.
+    final Color? fill = filled
+        ? null
+        : active
+            ? (desk ? null : t.accent.withValues(alpha: 0.16))
+            : _hover
+                ? t.surface4
+                : null;
+    // Lantern's disc: the pill's 32 less the inset either side, so on the
+    // strip it sits 3 in from the pill's edge, and the rail draws the same one.
+    final disc = _lanternPill - 2 * t.tokens.pillInset;
+    final index = BorderSide(color: t.accent, width: 2);
+    final decoration = desk
+        ? BoxDecoration(
+            color: fill,
+            border: active
+                ? (widget.rail ? Border(left: index) : Border(top: index))
+                : null,
+          )
+        : BoxDecoration(
+            color: fill,
+            borderRadius: BorderRadius.circular(t.tokens.actionRadius),
+          );
+    // The rail's cell: the full 44 on Desk's module, 36 in Lantern's pill.
+    final height = !widget.rail
+        ? _toolButtonHeight
+        : desk
+            ? toolRailWidth
+            : 36.0;
 
     return LumitTooltip(
       message: _tooltip(context, member, members.length > 1),
@@ -555,17 +850,26 @@ class _ToolButtonState extends State<_ToolButton> {
             key: ValueKey<String>('tool-${widget.group.name}'),
             duration: animationDuration(scope.animationLevel),
             width: _toolButtonWidth,
-            height: _toolButtonHeight,
-            decoration: BoxDecoration(
-              color: active
-                  ? t.accent.withValues(alpha: 0.16)
-                  : _hover
-                      ? t.surface4
-                      : null,
-              borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-            ),
+            height: height,
+            decoration: decoration,
             child: Stack(
               children: [
+                if (filled)
+                  Center(
+                    child: Container(
+                      key: ValueKey<String>('tool-disc-${widget.group.name}'),
+                      width: disc,
+                      height: disc,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: active
+                            ? t.accent
+                            : _hover
+                                ? t.surface4
+                                : null,
+                      ),
+                    ),
+                  ),
                 Center(
                     child:
                         lumitIcon(member.icon, size: iconSize, color: colour)),
@@ -606,7 +910,9 @@ class _ToolButtonState extends State<_ToolButton> {
   void _openFlyout(BuildContext context) {
     final box = context.findRenderObject();
     if (box is! RenderBox) return;
-    final origin = box.localToGlobal(Offset(0, box.size.height));
+    // Under the button on the strip, to the right of it on the rail.
+    final origin = box.localToGlobal(
+        widget.rail ? Offset(box.size.width, 0) : Offset(0, box.size.height));
     final tools = widget.tools;
     showLumitPopup<ToolMode>(
       context: context,
@@ -707,14 +1013,8 @@ class _WorkspaceStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
     final ui = context.watch<LumitUiState>();
     final active = ui.workspace.activePreset;
-    // Round's filled pill (§12.1): five names, one in force, which is
-    // exactly the segmented option the cue is about, and the fill replaces the
-    // tick. Sharp keeps the underline: passing `active` there would give the
-    // word a fill it has never had.
-    final round = t.shape == ThemeShape.round;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -723,7 +1023,6 @@ class _WorkspaceStrip extends StatelessWidget {
             key: ValueKey<String>('workspace-${preset.name}'),
             label: preset.title,
             active: preset == active,
-            round: round,
             onPressed: () => ui.workspace.applyWorkspacePreset(preset),
           ),
         // The user's own, after the presets and in the same order the chords
@@ -734,7 +1033,6 @@ class _WorkspaceStrip extends StatelessWidget {
             key: ValueKey<String>('workspace-user-${saved.name}'),
             label: saved.name,
             active: saved.name == ui.workspace.activeUserWorkspace,
-            round: round,
             onPressed: () => ui.workspace.applyUserWorkspace(saved.name),
           ),
       ],
@@ -745,12 +1043,14 @@ class _WorkspaceStrip extends StatelessWidget {
 /// One name on the workspace strip — a shipped preset or one of the user's
 /// own, drawn identically because they are the same kind of thing.
 ///
-/// Mono-caps kickers with an **accent tick under the one in force** (docs/15
-/// §12A.1, §3.1 — the workspace tabs are what "the active tab tick" means).
-/// The word itself stays grey: the tick is the state, so the strip reads as
-/// names with one underlined rather than as one coloured word. Under Round the
-/// filled pill (§12.1) carries the state instead, and there is no tick
-/// to draw under a fill.
+/// Studio: mono-caps kickers with an **accent tick under the one in force**
+/// (docs/15 §12A.1, §3.1: the workspace tabs are what "the active tab tick"
+/// means). The word itself stays grey: the tick is the state, so the strip
+/// reads as names with one underlined rather than as one coloured word.
+/// Desk: lowercase words in the body face, the fronted one over a 2px accent
+/// rule, the top line of its mockup. Lantern: the fronted name is the
+/// accent-filled capsule of a segmented pill, and there is no tick to draw
+/// under a fill.
 ///
 /// The padding is what fits the name into the strip, and the strip is 14px
 /// shorter than it was: at 12 above and below, 24px of padding in a
@@ -759,42 +1059,80 @@ class _WorkspaceStrip extends StatelessWidget {
 class _StripEntry extends StatelessWidget {
   final String label;
   final bool active;
-  final bool round;
   final VoidCallback onPressed;
 
   const _StripEntry({
     super.key,
     required this.label,
     required this.active,
-    required this.round,
     required this.onPressed,
   });
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return LumitTooltip(
-      message: l10n.tipPanelLayout,
-      child: HouseButton(
-        frameless: true,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        active: round && active,
-        onPressed: onPressed,
-        child: Container(
-          padding: const EdgeInsets.only(bottom: 2),
-          decoration: active && !round
-              ? BoxDecoration(
-                  border: Border(bottom: BorderSide(color: t.accent)))
-              : null,
-          child: Text(
-            label.toUpperCase(),
-            style: active
-                ? (round ? t.kicker.copyWith(color: t.surface0) : t.kickerOn)
-                : t.kicker,
+    final Widget button = switch (t.shape) {
+      // The capsule is the pill's 28 less the inset either side. Height 1.0
+      // gives the line its font size and no leading, so the button centring
+      // the box centres the word to the pixel.
+      ThemeShape.lantern => SizedBox(
+          height: _workspacePill - 2 * t.tokens.pillInset,
+          child: HouseButton(
+            frameless: true,
+            active: active,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            onPressed: onPressed,
+            // The word's optical centre sits above its box's, so it is
+            // nudged down by a pixel and a half to look centred.
+            child: Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: Text(
+                label,
+                style: t.body.copyWith(
+                  fontSize: 12,
+                  height: 1.0,
+                  color: active ? accentInk(t) : t.textMuted,
+                ),
+              ),
+            ),
           ),
         ),
-      ),
-    );
+      ThemeShape.desk => HouseButton(
+          frameless: true,
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
+          onPressed: onPressed,
+          child: Container(
+            padding: const EdgeInsets.only(bottom: 2),
+            decoration: active
+                ? BoxDecoration(
+                    border: Border(
+                        bottom: BorderSide(color: t.accent, width: 2)))
+                : null,
+            child: Text(
+              t.kickerCase(label),
+              style: t.body
+                  .copyWith(color: active ? t.textPrimary : t.textMuted),
+            ),
+          ),
+        ),
+      ThemeShape.studio => HouseButton(
+          frameless: true,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          onPressed: onPressed,
+          child: Container(
+            padding: const EdgeInsets.only(bottom: 2),
+            decoration: active
+                ? BoxDecoration(
+                    border: Border(bottom: BorderSide(color: t.accent)))
+                : null,
+            child: Text(
+              t.kickerCase(label),
+              style: active ? t.kickerOn : t.kicker,
+            ),
+          ),
+        ),
+    };
+    return LumitTooltip(message: l10n.tipPanelLayout, child: button);
   }
 }
 

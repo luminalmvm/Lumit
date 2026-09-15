@@ -1,6 +1,8 @@
 // The pressable controls: the house button and the three little state marks
 // (checkbox, toggle, radio), which share one keyboard-activation shortcut set.
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -17,7 +19,6 @@ const Map<ShortcutActivator, Intent> _activateShortcuts = {
   SingleActivator(LogicalKeyboardKey.space, includeRepeats: false):
       ActivateIntent(),
 };
-
 
 /// The house button, in the three faces docs/15-DESIGN.md gives it:
 ///
@@ -56,13 +57,12 @@ class HouseButton extends StatefulWidget {
 
   /// The chosen one of a set — a tab, a mode chip, a segmented option.
   ///
-  /// Under Round this is the **filled accent pill**: `accent` fill and the
-  /// label in `surface0`, the far end of the ramp from the text, which is the
-  /// dark label on a dark scheme and the light one on a light scheme without
-  /// either being spelled out twice. Under Sharp it stays the accent *tint* the
-  /// tool bar already arms a tool with — the state contrast is the shape's
-  /// difference, not a colour change (Sharp's geometry and treatment are
-  /// untouched).
+  /// Each shape says it its own way. Lantern fills the pill with the accent
+  /// and puts the label in `text_primary` on it. Desk keeps the accent tint
+  /// and adds a 2px accent index on the leading edge, the mark on a switch.
+  /// Studio stays the accent tint the tool bar already arms a tool with, in
+  /// an accent outline. Whatever the shape, the fill stands off the button's
+  /// edge by `ShapeTokens.pillInset` on every side.
   ///
   /// [primary] is a different thing: that is what `Enter` would press, this is
   /// which of several is currently in force.
@@ -108,6 +108,8 @@ class _HouseButtonState extends State<HouseButton> {
     Color? label;
     // The label's own style, for the one face that sets it: mono capitals.
     TextStyle? labelStyle;
+    // Desk's 2px accent index on the leading edge of the control in force.
+    var index = false;
     if (!enabled) {
       fill = widget.frameless ? null : t.surface2;
       // A dead primary drops the accent but keeps the shape of its word: the
@@ -118,17 +120,23 @@ class _HouseButtonState extends State<HouseButton> {
       // what `Enter` presses must be findable at a glance whatever the pointer
       // is doing, so hover lifts the fill rather than replacing it.
       fill = _hover || _down ? t.accentHover : t.accent;
-      label = t.surface0;
-      labelStyle = t.kicker.copyWith(color: t.surface0);
+      label = accentInk(t);
+      labelStyle = t.kicker.copyWith(color: label);
     } else if (widget.active) {
       // Ahead of hover and press: which one is in force must not blink off
       // under the pointer. Hover lifts it to `accentHover` instead.
-      final round = t.shape == ThemeShape.round;
-      fill = round
-          ? (_hover || _down ? t.accentHover : t.accent)
-          : t.accent.withValues(alpha: _hover || _down ? 0.24 : 0.16);
-      edge = round ? null : t.accent;
-      if (round) label = t.surface0;
+      final lifted = _hover || _down;
+      switch (t.shape) {
+        case ThemeShape.studio:
+          fill = t.accent.withValues(alpha: lifted ? 0.24 : 0.16);
+          edge = t.accent;
+        case ThemeShape.desk:
+          fill = t.accent.withValues(alpha: lifted ? 0.24 : 0.16);
+          index = true;
+        case ThemeShape.lantern:
+          fill = lifted ? t.accentHover : t.accent;
+          label = accentInk(t);
+      }
     } else if (_down) {
       fill = t.hairlineStrong;
       edge = t.hairlineStrong;
@@ -148,10 +156,36 @@ class _HouseButtonState extends State<HouseButton> {
               ? null
               : t.hairlineStrong;
     }
+    // Desk: a button is a flat plate with a shade line under it, and a
+    // dropdown an underlined word; nothing is boxed.
+    final plate = t.shape == ThemeShape.desk &&
+        enabled &&
+        !widget.primary &&
+        !widget.active &&
+        !widget.frameless;
+    if (plate && !_hover && !_down) {
+      fill = widget.dropdown ? null : t.surface2;
+      edge = _focused ? t.accent : t.hairlineStrong;
+    }
     final pad = widget.padding ??
         (widget.small
             ? const EdgeInsets.symmetric(horizontal: 5, vertical: 2)
             : const EdgeInsets.symmetric(horizontal: 8, vertical: 3));
+    // The fill of the one in force stands off the button's own edge by the
+    // shape's pill inset, the same margin the whole way round, so a filled
+    // segment never sits flush with the pill it is in. The inset is taken out
+    // of the padding, so the label and the button's size do not move when the
+    // state flips; Studio and Desk have an inset of 0 and draw as before.
+    final inset = widget.active && enabled ? t.tokens.pillInset : 0.0;
+    final margin = EdgeInsets.all(inset);
+    final innerPad =
+        (pad - margin).clamp(EdgeInsets.zero, EdgeInsetsGeometry.infinity);
+    // Every face here is an action's, a stadium under Lantern: a dropdown's
+    // closed face is a button, and only its list keeps the control corner.
+    // An inset fill takes the outer radius minus the inset, so a stadium stays
+    // a stadium and a rounded corner keeps its margin at the corner too.
+    final radius = BorderRadius.circular(
+        math.max(0, t.tokens.actionRadius - inset).toDouble());
     // Keyboard-reachable (docs/15 §9): Tab lands here in reading order,
     // Enter/Space press it, and the accent edge is the focus ring (§6.5).
     return FocusableActionDetector(
@@ -179,17 +213,29 @@ class _HouseButtonState extends State<HouseButton> {
         onTap: widget.onPressed,
         child: AnimatedContainer(
           duration: animationDuration(scope.animationLevel),
-          padding: pad,
+          margin: margin,
+          padding: innerPad,
           decoration: BoxDecoration(
             color: fill,
-            borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+            // A one-sided border cannot carry a radius, and Desk's is nought.
+            borderRadius: plate ? null : radius,
             // Always a border, transparent when there is nothing to show. A
             // BoxDecoration's border insets its child, so appearing on hover
             // grew the control by 2 px each way and nudged everything beside
             // it — the whole row visibly shifting as the pointer crossed it.
-            border:
-                Border.all(color: edge ?? const Color(0x00000000), width: 1),
+            border: plate
+                ? Border(
+                    bottom: BorderSide(
+                        color: edge ?? const Color(0x00000000), width: 1))
+                : Border.all(
+                    color: edge ?? const Color(0x00000000), width: 1),
           ),
+          // The index is painted over the box, so it insets nothing and the
+          // control in force is the same size as its neighbours.
+          foregroundDecoration: index
+              ? BoxDecoration(
+                  border: Border(left: BorderSide(color: t.accent, width: 2)))
+              : null,
           child: DefaultTextStyle(
             // A dropdown's closed face reads in the secondary text colour —
             // the mockups' own (§12A.6); bright primary at 11px reads bold.
@@ -199,7 +245,7 @@ class _HouseButtonState extends State<HouseButton> {
                         ? (widget.dropdown ? t.body : t.bodyPrimary)
                         : t.bodyPrimary.copyWith(color: label)))
                 : (labelStyle ?? t.body.copyWith(color: t.textDisabled)),
-            child: _centred(_capitalised(widget.child, widget.primary)),
+            child: _centred(_capitalised(t, widget.child, widget.primary)),
           ),
         ),
       ),
@@ -238,17 +284,26 @@ Widget _centred(Widget label) => Align(
       child: label,
     );
 
-/// The primary button's label in capitals, when it is a plain word.
+/// The primary button's label cased for the shape, when it is a plain word.
 ///
-/// Flutter has no text transform, and the capitals are a *style* rather than
-/// part of the phrase — the arb file keeps one sentence-case key, translated
-/// once — so the upper-casing happens here on the way to the screen. A child
+/// Flutter has no text transform, and the case is a *style* rather than part
+/// of the phrase, so the arb file keeps one sentence-case key, translated
+/// once, and [LumitTheme.kickerCase] sets it on the way to the screen. A child
 /// that is anything but a bare [Text] (an icon, a row) is handed back
 /// untouched.
-Widget _capitalised(Widget child, bool on) =>
+Widget _capitalised(LumitTheme t, Widget child, bool on) =>
     on && child is Text && child.data != null
-        ? Text(child.data!.toUpperCase(), style: child.style)
+        ? Text(t.kickerCase(child.data!), style: child.style)
         : child;
+
+/// The word on an accent fill. Studio and Desk put it at the far end of the
+/// ramp from the text, `surface_0`; Lantern keeps `text_primary`, which its
+/// document measures at 4.63 to 1 against the 3.73 of `surface_0`.
+Color accentInk(LumitTheme t) => switch (t.shape) {
+      ThemeShape.studio => t.surface0,
+      ThemeShape.desk => t.surface0,
+      ThemeShape.lantern => t.textPrimary,
+    };
 
 /// A 14 px themed checkbox.
 ///
@@ -294,7 +349,9 @@ class _HouseCheckboxState extends State<HouseCheckbox> {
           width: 9,
           height: 9,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(1),
+            // Half a well's corner, as the box is half a well's height: 1
+            // under Studio and Desk, 3.5 under Lantern.
+            borderRadius: BorderRadius.circular(t.tokens.wellRadius / 2),
             border: Border.all(
                 color: onChanged == null
                     ? t.textDisabled

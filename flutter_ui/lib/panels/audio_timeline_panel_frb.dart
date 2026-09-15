@@ -1171,7 +1171,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
         readoutPadding.horizontal +
         2;
     return Container(
-      height: TimelineNavigator.band + t.density.timelineChromeRow,
+      height: t.density.navigatorBand + t.density.timelineChromeRow,
       color: t.surface1,
       padding: const EdgeInsets.only(left: 10, right: 8),
       child: LayoutBuilder(
@@ -1327,7 +1327,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
                         builder: (context, _) => CustomPaint(
                           painter: RowDividerPainter(
                             step: t.density.laneRow,
-                            colour: t.hairline,
+                            colour: rowSeamColour(t),
                             phase: -((positionOf(_vOutline)?.pixels ?? 0) %
                                 t.density.laneRow),
                             // A track is one row of the table, several lane
@@ -1911,6 +1911,8 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
             onZoomLive: (z) => _setZoom(z, fly: false),
             onZoomDragStart: _zoomDragStart,
             onZoomDragEnd: _zoomDragEnd,
+            perFrame: axis.perFrame,
+            fps: fps,
           ),
         ],
       );
@@ -2068,7 +2070,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
                                   builder: (context, _) => CustomPaint(
                                     painter: RowDividerPainter(
                                       step: t.density.laneRow,
-                                      colour: t.hairline,
+                                      colour: rowSeamColour(t),
                                       // A track is one row of the table,
                                       // several lane rows tall, so the seams
                                       // that would fall inside its wave are

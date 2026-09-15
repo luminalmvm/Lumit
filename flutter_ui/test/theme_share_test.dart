@@ -96,10 +96,10 @@ void main() {
       // loss forward tolerance exists to prevent. What matters is that it
       // changes nothing: `applyTokens` names the tokens it knows and never
       // consults a key it does not.
-      final built = read.theme!.build(ThemeShape.sharp);
+      final built = read.theme!.build(ThemeShape.studio);
       final base = LumitColorScheme.dark.build().copyWith(
-            shape: ThemeShape.sharp,
-            tokens: ShapeTokens.of(ThemeShape.sharp),
+            shape: ThemeShape.studio,
+            tokens: ShapeTokens.of(ThemeShape.studio),
           );
       expect(built.accent, const Color(0xff112233),
           reason: 'the colour this build knows is taken from the file');

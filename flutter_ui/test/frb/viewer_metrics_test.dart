@@ -30,7 +30,7 @@ void main() {
   setUpAll(initEngineForTests);
 
   group('Viewer metrics (frb)', () {
-    final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.sharp);
+    final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio);
 
     ({LumitState state, LumitUiState uiState, LayerReference layer})
         withLayer() {
@@ -51,7 +51,8 @@ void main() {
     /// about the room a row has.
     Future<void> mount(WidgetTester tester, dynamic p,
         {ViewerBars bars = ViewerBars.split,
-        Size size = const Size(900, 520)}) async {
+        Size size = const Size(900, 520),
+        ThemeShape shape = ThemeShape.studio}) async {
       await tester.binding.setSurfaceSize(size);
       addTearDown(() => tester.binding.setSurfaceSize(null));
       (p.uiState as LumitUiState).workspace.interface.viewerBars = bars;
@@ -60,6 +61,7 @@ void main() {
         state: p.state as LumitState,
         uiState: p.uiState as LumitUiState,
         size: size,
+        shape: shape,
       ));
       await tester.pump();
     }
@@ -344,6 +346,92 @@ void main() {
       expect(find.byKey(const ValueKey('viewer-header')), findsNothing);
       expect(rectOf(tester, 'viewer-bar').top, closeTo(stage.bottom, 0.5),
           reason: 'gathered at the bottom, under the picture');
+
+      // The deck: the ways of looking above the picture, and everything
+      // about playing in a strip of its own under it.
+      await mount(tester, p, bars: ViewerBars.deck);
+      stage = rectOf(tester, 'viewer-stage');
+      expect(find.byKey(const ValueKey('viewer-header')), findsNothing,
+          reason: 'deck: the upper bar carries the header\'s pickers');
+      expect(rectOf(tester, 'viewer-bar').bottom, closeTo(stage.top, 0.5),
+          reason: 'the ways of looking are above the picture');
+      expect(rectOf(tester, 'viewer-deck').top, closeTo(stage.bottom, 0.5),
+          reason: 'and the deck is under it');
+      expect(barKeys(tester), isNot(contains('viewer-play')),
+          reason: 'the transport has left the bar');
+      expect(barKeys(tester), isNot(contains('viewer-resolution')),
+          reason:
+              'the deck owns the quality answer, so the bar drops its menu');
+      expect(deckKeys(tester),
+          containsAll(['viewer-preview-mode', 'viewer-quality']),
+          reason: 'as two pickers of its own');
+      expect(
+          deckKeys(tester),
+          containsAllInOrder([
+            'viewer-quality',
+            'viewer-loop',
+            'viewer-mute',
+            'viewer-cache-ready',
+          ]),
+          reason: 'the loop mode and the mute stand between quality and cache');
+      expect(
+          deckKeys(tester).take(6),
+          [
+            'viewer-home',
+            'viewer-step-back',
+            'viewer-play',
+            'viewer-step-forward',
+            'viewer-end',
+            'viewer-timecode',
+          ],
+          reason: 'the deck starts with the transport and its clock');
+      expect(find.byKey(const ValueKey('viewer-transport-pill')), findsNothing,
+          reason: 'Studio draws the transport bare');
+
+      await mount(tester, p, bars: ViewerBars.deck, shape: ThemeShape.lantern);
+      expect(
+          find.byKey(const ValueKey('viewer-transport-pill')), findsOneWidget,
+          reason: 'Lantern gathers the five marks into one pill');
+      // The play capsule keeps the pill's inset above and below, and the
+      // same inset from its own box either side, so it stands in the pill
+      // the way every other filled state stands in its.
+      final inset = LumitTheme.forScheme(
+              LumitColorScheme.dark, ThemeShape.lantern)
+          .tokens
+          .pillInset;
+      final pill = rectOf(tester, 'viewer-transport-pill');
+      final box = rectOf(tester, 'viewer-play-capsule');
+      final capsule = tester.getRect(find
+          .descendant(
+            of: find.byKey(const ValueKey('viewer-play-capsule')),
+            matching: find.byType(DecoratedBox),
+          )
+          .first);
+      expect(inset, 3);
+      expect(capsule.top, pill.top + inset);
+      expect(capsule.bottom, pill.bottom - inset);
+      expect(capsule.left, box.left + inset);
+      expect(capsule.right, box.right - inset);
+    });
+
+    /// **A narrow deck keeps its transport.** Below the width the deck wants
+    /// it slides sideways rather than shedding, so the five marks, which
+    /// lead the row, are always the part on screen.
+    testWidgets('a narrow deck keeps the five transport marks', (tester) async {
+      final p = withLayer();
+      for (final width in [400.0, 280.0]) {
+        await mount(tester, p, bars: ViewerBars.deck, size: Size(width, 520));
+        for (final mark in [
+          'viewer-home',
+          'viewer-step-back',
+          'viewer-play',
+          'viewer-step-forward',
+          'viewer-end',
+        ]) {
+          expect(find.byKey(ValueKey<String>(mark)), findsOneWidget,
+              reason: 'at $width wide the deck keeps $mark');
+        }
+      }
     });
 
     /// **The channel's face is the answer's own colour** (§5, owner review):

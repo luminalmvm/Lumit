@@ -34,6 +34,7 @@ import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/drag_escape.dart';
+import 'timeline_metrics_frb.dart' show TimelineMode;
 import 'timeline_snap.dart';
 
 /// The Timeline's **panel header strip** (§12A.1, §12A.6: 22 tall): the panel's
@@ -43,6 +44,14 @@ import 'timeline_snap.dart';
 /// Clicking a tab fronts it; its × closes the tab (docs/07 §4: one tab per
 /// *open* comp — the comp itself stays in the project, and fronting it from the
 /// Project panel opens it again).
+/// A composition tab under Studio and Desk: the height of a project row,
+/// centred in the strip, so the tab is a chip and not the strip itself.
+const double compTabHeight = 18;
+
+/// Lantern's timeline header line: the 22 tab pill and a 3px margin either
+/// side, no taller.
+const double lanternTimelineLine = 28;
+
 class CompTabsFrb extends StatelessWidget {
   final LumitState state;
   final LumitUiState uiState;
@@ -56,43 +65,33 @@ class CompTabsFrb extends StatelessWidget {
   /// wearing this strip says otherwise, as the Audio timeline does.
   final String? title;
 
+  /// Which view is up and how to ask for another. Lantern draws the Layers
+  /// and Graph pair on this line rather than on the chrome row under it; a
+  /// panel with no views to switch passes neither.
+  final TimelineMode? mode;
+  final ValueChanged<TimelineMode>? onMode;
+
   const CompTabsFrb({
     super.key,
     required this.state,
     required this.uiState,
     required this.onExport,
     this.title,
+    this.mode,
+    this.onMode,
   });
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    // Served from LumitState's cached walk: the item tree is only
-    // re-read when the engine says it changed shape. Filtered to the tabs the
-    // user has opened, so a deleted comp's tab also simply stops matching.
+    if (t.shape == ThemeShape.lantern) return _lanternLine(context, t);
     final selected = uiState.selectedComp?.internalid;
-    // In the tab strip's own order, not the project's: the strip is dragged
-    // into whatever order suits the work, and `openComps` is where that order
-    // lives (and what the session writes down).
-    final byId = {
-      for (final entry in state.comps()) entry.$1.internalid: entry
-    };
-    final comps = [
-      for (final id in uiState.openComps)
-        if (byId[id] != null) byId[id]!,
-    ];
-    // A fronted comp always joins `openComps`, so this only catches a comp
-    // fronted from somewhere that has not been through `setSelectedComp` yet.
-    if (selected != null &&
-        !uiState.openComps.contains(selected) &&
-        byId[selected] != null) {
-      comps.add(byId[selected]!);
-    }
+    final comps = _openComps(selected);
     if (comps.isEmpty) return const SizedBox.shrink();
 
     return Container(
-      height: 22,
-      color: t.surface2,
+      height: t.density.headerStrip,
+      color: t.surface1,
       child: Row(
         children: [
           // The panel's own name, ahead of the tabs (§12A.1). A kicker like
@@ -100,7 +99,7 @@ class CompTabsFrb extends StatelessWidget {
           // the container these tabs belong to rather than one of them.
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Text((title ?? l10n.panelTimeline).toUpperCase(),
+            child: Text(t.kickerCase(title ?? l10n.panelTimeline),
                 style: t.kickerOn),
           ),
           Expanded(child: _strip(context, t, comps, selected)),
@@ -115,10 +114,119 @@ class CompTabsFrb extends StatelessWidget {
               primary: true,
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
               onPressed: onExport,
-              // `primary` sets the label's own style — kicker in `surface_0`
-              // on the accent fill (§7.1) — so only the capitals are ours.
-              child: Text(l10n.exportAction.toUpperCase()),
+              // `primary` sets the label's own style, kicker in `surface_0` on
+              // the accent fill (§7.1), and cases the word for the shape.
+              child: Text(l10n.exportAction),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The open comps in the strip's own order. Served from LumitState's cached
+  /// walk: the item tree is only re-read when the engine says it changed
+  /// shape. Filtered to the tabs the user has opened, so a deleted comp's tab
+  /// also simply stops matching.
+  List<(CompositionReference, String)> _openComps(UuidValue? selected) {
+    // In the tab strip's own order, not the project's: the strip is dragged
+    // into whatever order suits the work, and `openComps` is where that order
+    // lives (and what the workspace writes down).
+    final byId = {
+      for (final entry in state.comps()) entry.$1.internalid: entry
+    };
+    final comps = [
+      for (final id in uiState.openComps)
+        if (byId[id] != null) byId[id]!,
+    ];
+    // A fronted comp always joins `openComps`, so this only catches a comp
+    // fronted from somewhere that has not been through `setSelectedComp` yet.
+    if (selected != null &&
+        !uiState.openComps.contains(selected) &&
+        byId[selected] != null) {
+      comps.add(byId[selected]!);
+    }
+    return comps;
+  }
+
+  /// Lantern's one header line: the comp tabs as a segmented pill at the
+  /// left, the title and its dot centred, the Layers / Graph pill and the
+  /// filled Export at the right.
+  Widget _lanternLine(BuildContext context, LumitTheme t) {
+    final selected = uiState.selectedComp?.internalid;
+    final comps = _openComps(selected);
+    if (comps.isEmpty) return const SizedBox.shrink();
+    final mode = this.mode;
+    final onMode = this.onMode;
+    return Container(
+      height: lanternTimelineLine,
+      color: t.surface1,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: Stack(
+        alignment: Alignment.centerLeft,
+        children: [
+          // Behind the controls, so the words centre on the line itself.
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Center(
+                child: Text(t.kickerCase(title ?? l10n.panelTimeline),
+                    key: const ValueKey('tl-title'), style: t.kickerOn),
+              ),
+            ),
+          ),
+          Row(
+            children: [
+              Container(
+                width: 6,
+                height: 6,
+                decoration:
+                    BoxDecoration(color: t.accent, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 6),
+              Segment(
+                key: const ValueKey('tl-comp-tabs'),
+                children: _tabs(context, t, comps, selected),
+              ),
+              const Spacer(),
+              if (mode != null && onMode != null) ...[
+                Segment(children: [
+                  for (final (keyName, label, tip, which) in [
+                    (
+                      'tl-view-lanes',
+                      l10n.timelineModeLayers,
+                      l10n.tipLaneView,
+                      TimelineMode.layers
+                    ),
+                    (
+                      'tl-graph',
+                      l10n.timelineModeGraph,
+                      l10n.tipGraphView,
+                      TimelineMode.graph
+                    ),
+                  ])
+                    LumitTooltip(
+                      message: tip,
+                      child: SegmentOption(
+                        key: ValueKey<String>(keyName),
+                        active: mode == which,
+                        onTap: () => onMode(which),
+                        child: Text(t.kickerCase(label),
+                            style: mode == which ? t.kickerOn : t.kicker),
+                      ),
+                    ),
+                ]),
+                const SizedBox(width: 6),
+              ],
+              HouseButton(
+                key: const ValueKey('tl-export'),
+                small: true,
+                primary: true,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                onPressed: onExport,
+                child: Text(l10n.exportAction),
+              ),
+            ],
           ),
         ],
       ),
@@ -134,7 +242,18 @@ class CompTabsFrb extends StatelessWidget {
   ) {
     return ListView(
       scrollDirection: Axis.horizontal,
-      children: [
+      children: _tabs(context, t, comps, selected),
+    );
+  }
+
+  /// One draggable tab per open comp, in strip order.
+  List<Widget> _tabs(
+    BuildContext context,
+    LumitTheme t,
+    List<(CompositionReference, String)> comps,
+    UuidValue? selected,
+  ) {
+    return [
         for (var i = 0; i < comps.length; i++)
           DragTarget<UuidValue>(
             onWillAcceptWithDetails: (d) => d.data != comps[i].$1.internalid,
@@ -143,7 +262,7 @@ class CompTabsFrb extends StatelessWidget {
             builder: (context, candidate, _) => Draggable<UuidValue>(
               data: comps[i].$1.internalid,
               feedback: Container(
-                height: 22,
+                height: t.density.headerStrip,
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 color: t.surface2,
                 child: Center(child: Text(comps[i].$2, style: t.small)),
@@ -173,7 +292,60 @@ class CompTabsFrb extends StatelessWidget {
               ),
             ),
           ),
-      ],
+    ];
+  }
+}
+
+/// Lantern's segmented pill: a well track with the options inside it, the
+/// one in force filled a step lighter and inset by the pill margin.
+class Segment extends StatelessWidget {
+  final List<Widget> children;
+  const Segment({super.key, required this.children});
+
+  /// The track's height on the header line.
+  static const double height = 22;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return Container(
+      height: height,
+      padding: EdgeInsets.all(t.tokens.pillInset),
+      decoration: BoxDecoration(
+        color: t.surface0,
+        borderRadius: BorderRadius.circular(ShapeTokens.stadium),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: children),
+    );
+  }
+}
+
+/// One option in a [Segment].
+class SegmentOption extends StatelessWidget {
+  final bool active;
+  final VoidCallback onTap;
+  final Widget child;
+  const SegmentOption(
+      {super.key,
+      required this.active,
+      required this.onTap,
+      required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: active ? t.surface2 : null,
+          borderRadius: BorderRadius.circular(ShapeTokens.stadium),
+        ),
+        child: child,
+      ),
     );
   }
 }
@@ -413,18 +585,16 @@ class _CompTabState extends State<_CompTab> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    final round = t.shape == ThemeShape.round;
+    // The fronted tab is a filled capsule where actions are capsules: a
+    // surface2 pill inside Lantern's segment. Desk draws a word over a 2px
+    // accent rule and fills nothing.
+    final round = t.tokens.actionRadius == ShapeTokens.stadium;
+    final desk = t.shape == ThemeShape.desk;
     final name = widget.name;
     final active = widget.active;
     final dropping = widget.dropping;
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hover = true),
-      onExit: (_) => setState(() => _hover = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onTap,
-        onSecondaryTapUp: (d) => widget.onMenu(d.globalPosition),
-        child: Container(
+    final tab = Container(
+          height: round ? null : compTabHeight,
           padding: const EdgeInsets.only(left: 10, right: 10),
           // **The pointer says the tab is a control**. A tab that is
           // not the open one answered a hover with nothing at all, so there
@@ -437,17 +607,17 @@ class _CompTabState extends State<_CompTab> {
               ? BoxDecoration(
                   border: Border.all(color: t.hairlineStrong, width: 1),
                   borderRadius: round
-                      ? BorderRadius.circular(t.tokens.controlRadius)
+                      ? BorderRadius.circular(t.tokens.actionRadius)
                       : null,
                 )
               : null,
           decoration: BoxDecoration(
-            // Round fills the fronted tab with the accent (§12.1); Sharp
-            // seats the fronted tab in the panel's own surface, so the tab and
-            // the comp under it read as one thing.
+            // Round fills the fronted tab with surface2 inside its segment;
+            // Studio seats it in the panel's own surface, so the tab and the
+            // comp under it read as one thing; Desk fills nothing.
             color: dropping
                 ? t.accent.withValues(alpha: 0.18)
-                : (active ? (round ? t.accent : t.surface1) : null),
+                : (active && !desk ? (round ? t.surface2 : t.surface1) : null),
             // **No accent tick, and no seams** (§12A.1): the seated surface
             // colour alone marks the open composition, exactly as the mockup
             // draws it — it computes no border on any tab. The accent's "active
@@ -459,13 +629,13 @@ class _CompTabState extends State<_CompTab> {
             // border would be two pixels narrower than the same tab in Round,
             // and every tab would shift the moment the shape changed.
             border: round
-                ? Border.all(color: t.accent.withValues(alpha: 0), width: 2)
+                ? null
                 : Border.symmetric(
                     vertical:
                         BorderSide(color: t.hairline.withValues(alpha: 0)),
                   ),
             borderRadius:
-                round ? BorderRadius.circular(t.tokens.controlRadius) : null,
+                round ? BorderRadius.circular(t.tokens.actionRadius) : null,
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -476,11 +646,9 @@ class _CompTabState extends State<_CompTab> {
                 // tells the fronted tab from the rest.
                 child: Text(
                   name,
-                  style: !active
-                      ? t.body.copyWith(color: t.textMuted)
-                      : round
-                          ? t.bodyPrimary.copyWith(color: t.surface0)
-                          : t.bodyPrimary,
+                  style: active
+                      ? t.bodyPrimary
+                      : t.body.copyWith(color: t.textMuted),
                 ),
               ),
               const SizedBox(width: 8),
@@ -490,19 +658,40 @@ class _CompTabState extends State<_CompTab> {
                 onTap: widget.onClose,
                 child: SizedBox(
                   width: 12,
-                  height: 22,
+                  height: round ? null : compTabHeight,
                   child: Center(
-                    // Muted, unless it is sitting on Round's filled accent —
-                    // where muted grey is barely there. Same flip as the label.
                     child: Text('×',
-                        style: t.body.copyWith(
-                            color: round && active ? t.surface0 : t.textMuted)),
+                        style: t.body.copyWith(color: t.textMuted)),
                   ),
                 ),
               ),
             ],
           ),
-        ),
+        );
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        onSecondaryTapUp: (d) => widget.onMenu(d.globalPosition),
+        child: !desk
+            ? tab
+            : Stack(
+                children: [
+                  tab,
+                  // The fronted tab's 2px accent rule, inset to the word.
+                  if (active)
+                    Positioned(
+                      key: const ValueKey('tl-tab-rule'),
+                      left: 10,
+                      right: 10,
+                      bottom: 0,
+                      height: 2,
+                      child: IgnorePointer(child: ColoredBox(color: t.accent)),
+                    ),
+                ],
+              ),
       ),
     );
   }
@@ -1070,6 +1259,9 @@ class TimelineCacheBar extends StatefulWidget {
   /// (§12A.6), over the work-area band's own row rather than as a strip of its
   /// own below it: the mockup draws the cached segments on the band, and a
   /// separate strip cut the band three pixels short of the lanes.
+  ///
+  /// The widget itself draws at `density.cacheBar`, which Desk and Lantern
+  /// set to 4; this number is the Studio literal the tests measure against.
   static const double height = 3;
 
   const TimelineCacheBar({
@@ -1138,7 +1330,7 @@ class _TimelineCacheBarState extends State<TimelineCacheBar> {
       _readScale = scale;
     }
     return SizedBox(
-      height: TimelineCacheBar.height,
+      height: t.density.cacheBar,
       child: CustomPaint(
         key: const ValueKey('tl-cache-bar'),
         painter: _CacheBarPainter(
@@ -1146,6 +1338,7 @@ class _TimelineCacheBarState extends State<TimelineCacheBar> {
           axis: widget.axis,
           held: t.success,
           onDisk: t.cacheDisk,
+          rounded: t.shape == ThemeShape.lantern,
         ),
       ),
     );
@@ -1198,6 +1391,34 @@ class TimelineAxis implements CacheBarAxis {
   /// How many frames a *travel* of [dx] pixels is worth. Not [frameAtExact]:
   /// a distance has no origin, so the padding must not be taken off it.
   double framesOfPx(double dx) => perFrame <= 0 ? 0 : dx / perFrame;
+}
+
+/// What the ruler's painters need to know about the shape they stand under,
+/// worked out once in the ruler's build and handed down: a painter has no
+/// context of its own, so the shape reaches it as a value it can compare.
+class RulerStyle {
+  final ThemeShape shape;
+
+  /// The cache stripe's height on the floor.
+  final double cacheBar;
+
+  const RulerStyle({required this.shape, required this.cacheBar});
+
+  RulerStyle.of(LumitTheme t)
+      : this(shape: t.shape, cacheBar: t.density.cacheBar);
+
+  /// Desk's engraved scale: three tick heights on the upper half, no band.
+  bool get engraved => shape == ThemeShape.desk;
+
+  /// Lantern's round grammar: a capsule band, dot markers, rounded cache runs.
+  bool get round => shape == ThemeShape.lantern;
+
+  @override
+  bool operator ==(Object other) =>
+      other is RulerStyle && other.shape == shape && other.cacheBar == cacheBar;
+
+  @override
+  int get hashCode => Object.hash(shape, cacheBar);
 }
 
 /// The time ruler: the time labels and ticks, the work area, the markers, and
@@ -1477,6 +1698,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
     final axis = widget.axis;
     final work = _work;
     final markers = markersOf(comp);
+    final style = RulerStyle.of(t);
 
     return GestureDetector(
       key: const ValueKey('tl-ruler'),
@@ -1544,6 +1766,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
                   painter: _RulerTicksPainter(
                     axis: axis,
                     fps: widget.fps,
+                    style: style,
                     tick: t.hairlineStrong,
                     minorTick: t.hairline,
                     // Mono at 9, per §7.1: a clock is a number, and the
@@ -1573,8 +1796,19 @@ class _TimelineRulerState extends State<TimelineRuler> {
               child: IgnorePointer(
                 child: Container(
                   key: const ValueKey('tl-work-area'),
-                  decoration:
-                      workAreaBand(t, fillAlpha: workAreaRulerFillAlpha),
+                  // Desk paints no band here: the ground dimming outside the
+                  // work area says it, and the widget stays so its gestures
+                  // and keys do. Lantern draws it as an accent-soft capsule.
+                  decoration: style.engraved
+                      ? const BoxDecoration()
+                      : style.round
+                          ? BoxDecoration(
+                              color: t.accent
+                                  .withValues(alpha: workAreaSoftFillAlpha),
+                              borderRadius:
+                                  BorderRadius.circular(ShapeTokens.stadium),
+                            )
+                          : workAreaBand(t, fillAlpha: workAreaRulerFillAlpha),
                 ),
               ),
             ),
@@ -1589,7 +1823,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
                 left: 0,
                 right: 0,
                 top: widget.height / 2,
-                bottom: TimelineCacheBar.height,
+                bottom: t.density.cacheBar,
                 child: IgnorePointer(
                   child: CustomPaint(
                     key: const ValueKey('tl-beat-bars'),
@@ -1711,13 +1945,18 @@ class _TimelineRulerState extends State<TimelineRuler> {
                         padding:
                             const EdgeInsets.only(top: workAreaHandleTopInset),
                         child: Center(
+                          // Lantern's handle is a 6 by 18 round accent pill;
+                          // the other shapes draw the tab the full height
+                          // under the clock.
                           child: SizedBox(
-                            width: workAreaHandleTabWidth,
+                            width: style.round ? 6 : workAreaHandleTabWidth,
+                            height: style.round ? 18 : null,
                             child: DecoratedBox(
                               decoration: BoxDecoration(
                                 color: workAreaHandleColour(t),
-                                borderRadius:
-                                    BorderRadius.circular(workAreaHandleRadius),
+                                borderRadius: BorderRadius.circular(style.round
+                                    ? ShapeTokens.stadium
+                                    : workAreaHandleRadius),
                               ),
                               child: const SizedBox.expand(),
                             ),
@@ -1744,7 +1983,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
                   width:
                       axis.xOf(_markerFrame(marker) + marker.durationFrames!) -
                           axis.xOf(_markerFrame(marker)),
-                  bottom: TimelineCacheBar.height,
+                  bottom: t.density.cacheBar,
                   height: MarkerFlag.spanHeight,
                   child: IgnorePointer(
                     child: ColoredBox(
@@ -1774,7 +2013,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
                 // Standing **on the cache bar** at the ruler's floor (§12A.1):
                 // markers and the band share the lower row, and a flag lifted
                 // off the edge read as floating over the lanes below.
-                bottom: TimelineCacheBar.height,
+                bottom: t.density.cacheBar,
                 child: MouseRegion(
                   cursor: SystemMouseCursors.click,
                   child: GestureDetector(
@@ -1850,7 +2089,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
                 left: 0,
                 right: 0,
                 bottom: 0,
-                height: TimelineCacheBar.height,
+                height: t.density.cacheBar,
                 child: IgnorePointer(child: widget.cache!),
               ),
           ],
@@ -1934,7 +2173,13 @@ class _MarkerFlagState extends State<MarkerFlag> {
       width: MarkerFlag.width,
       height: MarkerFlag.height,
       child: CustomPaint(
-        painter: _MarkerFlagPainter(fill: _lift(widget.fill, t.textPrimary)),
+        painter: _MarkerFlagPainter(
+          fill: _lift(widget.fill, t.textPrimary),
+          // Lantern's marker is a dot: a triangle stands on a bar, and that
+          // ruler has none. The footprint stays 8, so the point-on-frame
+          // placement and the keys hold.
+          dot: t.shape == ThemeShape.lantern,
+        ),
       ),
     );
     return MouseRegion(
@@ -1962,10 +2207,11 @@ class _MarkerFlagState extends State<MarkerFlag> {
               decoration: BoxDecoration(
                 color: _lift(widget.pill, t.textPrimary),
                 // Square where the triangle meets it, rounded away from it.
-                borderRadius: const BorderRadius.only(
-                  topRight: Radius.circular(2),
-                  bottomRight: Radius.circular(2),
-                  topLeft: Radius.circular(2),
+                // Lantern's pill beside its dot is a capsule.
+                borderRadius: BorderRadius.only(
+                  topRight: Radius.circular(markerPillRadius(t)),
+                  bottomRight: Radius.circular(markerPillRadius(t)),
+                  topLeft: Radius.circular(markerPillRadius(t)),
                 ),
               ),
               child: Text(
@@ -1986,14 +2232,20 @@ class _MarkerFlagState extends State<MarkerFlag> {
 
 class _MarkerFlagPainter extends CustomPainter {
   final Color fill;
+  final bool dot;
 
-  const _MarkerFlagPainter({required this.fill});
+  const _MarkerFlagPainter({required this.fill, this.dot = false});
 
   @override
   void paint(Canvas canvas, Size size) {
     // Base on the floor, point up: the shape *stands on* the cache bar and
     // aims at the time it marks.
     final base = size.height;
+    if (dot) {
+      canvas.drawCircle(Offset(size.width / 2, base - size.width / 2),
+          size.width / 2, Paint()..color = fill);
+      return;
+    }
     canvas.drawPath(
       Path()
         ..moveTo(0, base)
@@ -2005,7 +2257,8 @@ class _MarkerFlagPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_MarkerFlagPainter old) => old.fill != fill;
+  bool shouldRepaint(_MarkerFlagPainter old) =>
+      old.fill != fill || old.dot != dot;
 }
 
 /// A detected beat on the ruler: a small tick standing on the cache
@@ -2303,7 +2556,8 @@ int? markerFrameFrb(CompositionReference comp, String label) {
 class PlayheadMarker extends StatelessWidget {
   const PlayheadMarker({super.key});
 
-  /// Half the head's width — how far left of the frame the marker starts.
+  /// Half the head's width under Studio, how far left of the frame the
+  /// marker starts. The other shapes answer through [halfWidthFor].
   static const double halfWidth = 5;
 
   /// How tall the head is — the mockup's own 6. It sits at the very
@@ -2311,22 +2565,50 @@ class PlayheadMarker extends StatelessWidget {
   /// would sit over it.
   static const double headHeight = 6;
 
+  /// Half the head's width per shape: Studio's 10 wide, Desk's 11 by 8 and
+  /// Lantern's 12px round pin. A caller positions the marker at
+  /// `xOf(frame) - halfWidthFor(shape)` so the stem lands on the frame.
+  static double halfWidthFor(ThemeShape shape) => switch (shape) {
+        ThemeShape.studio => halfWidth,
+        ThemeShape.desk => 5,
+        ThemeShape.lantern => 6,
+      };
+
+  /// The head's height per shape.
+  static double headHeightFor(ThemeShape shape) => switch (shape) {
+        ThemeShape.studio => headHeight,
+        ThemeShape.desk => 10,
+        ThemeShape.lantern => 12,
+      };
+
+  /// The stem's thickness: Lantern's pin is 2, the others a hairline.
+  static double stemFor(ThemeShape shape) =>
+      shape == ThemeShape.lantern ? 2 : 1;
+
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    final width = halfWidthFor(t.shape) * 2;
     return IgnorePointer(
       child: SizedBox(
-        // Ten across, so the 1px stem lands on the frame rather than half a
+        // An even width, so the stem lands on the frame rather than half a
         // pixel past it.
-        width: halfWidth * 2,
+        width: width,
         child: Column(
           children: [
             CustomPaint(
-              size: const Size(halfWidth * 2, headHeight),
-              painter: _PlayheadHeadPainter(head: t.accent, notch: t.surface0),
+              size: Size(width, headHeightFor(t.shape)),
+              painter: _PlayheadHeadPainter(
+                head: t.accent,
+                notch: t.surface0,
+                // Lantern rings its round head in the lane ground.
+                ring: t.surface1,
+                shape: t.shape,
+              ),
             ),
             Expanded(
-              child: SizedBox(width: 1, child: ColoredBox(color: t.accent)),
+              child: SizedBox(
+                  width: stemFor(t.shape), child: ColoredBox(color: t.accent)),
             ),
           ],
         ),
@@ -2366,22 +2648,26 @@ class PlayheadOverlay extends StatelessWidget {
   final double Function(int frame) xOf;
 
   @override
-  Widget build(BuildContext context) => Positioned(
-        left: 0,
-        top: 0,
-        bottom: 0,
-        child: RepaintBoundary(
-          key: const ValueKey('tl-playhead-layer'),
-          child: ValueListenableBuilder<int>(
-            valueListenable: playhead,
-            builder: (context, frame, child) => Transform.translate(
-              offset: Offset(xOf(frame) - PlayheadMarker.halfWidth, 0),
-              child: child,
-            ),
-            child: const PlayheadMarker(),
+  Widget build(BuildContext context) {
+    final half =
+        PlayheadMarker.halfWidthFor(ThemeScope.of(context).theme.shape);
+    return Positioned(
+      left: 0,
+      top: 0,
+      bottom: 0,
+      child: RepaintBoundary(
+        key: const ValueKey('tl-playhead-layer'),
+        child: ValueListenableBuilder<int>(
+          valueListenable: playhead,
+          builder: (context, frame, child) => Transform.translate(
+            offset: Offset(xOf(frame) - half, 0),
+            child: child,
           ),
+          child: const PlayheadMarker(),
         ),
-      );
+      ),
+    );
+  }
 }
 
 /// The playhead's head: a downward triangle with the hairline carried up into
@@ -2390,11 +2676,42 @@ class _PlayheadHeadPainter extends CustomPainter {
   final Color head;
   final Color notch;
 
-  const _PlayheadHeadPainter({required this.head, required this.notch});
+  /// The ring round Lantern's pin head.
+  final Color ring;
+  final ThemeShape shape;
+
+  const _PlayheadHeadPainter({
+    required this.head,
+    required this.notch,
+    required this.ring,
+    required this.shape,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
     final mid = size.width / 2;
+    if (shape == ThemeShape.desk) {
+      // A needle's knob: a round signal head with a notch of the ground
+      // through it, the way a meter's needle is pinned.
+      final centre = Offset(mid, size.height / 2);
+      canvas.drawCircle(centre, mid, Paint()..color = head);
+      canvas.drawCircle(centre, 1.5, Paint()..color = notch);
+      return;
+    }
+    if (shape == ThemeShape.lantern) {
+      // A round accent head with a 2px ring of the lane ground inside its
+      // edge, so it reads over any ruler ground.
+      final centre = Offset(mid, size.height / 2);
+      canvas.drawCircle(centre, mid, Paint()..color = head);
+      canvas.drawCircle(
+          centre,
+          mid - 1.5,
+          Paint()
+            ..color = ring
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.5);
+      return;
+    }
     canvas.drawPath(
       Path()
         ..moveTo(0, 0)
@@ -2416,7 +2733,10 @@ class _PlayheadHeadPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_PlayheadHeadPainter old) =>
-      old.head != head || old.notch != notch;
+      old.head != head ||
+      old.notch != notch ||
+      old.ring != ring ||
+      old.shape != shape;
 }
 
 /// The ruler's left edge in global coordinates — a drag reports globally, and
@@ -2447,6 +2767,19 @@ double rulerLabelStepSeconds({required double pixelsPerSecond}) {
     if (step * pixelsPerSecond >= 80) return step;
   }
   return nice.last;
+}
+
+/// The finest tick Desk's engraved scale draws at this zoom, in seconds: four
+/// frames when they stand 30px apart, else one second when seconds do, else
+/// the labelled step. The dial's reading says this in frames.
+double engravedTickSeconds(
+    {required double pixelsPerSecond, required double fps}) {
+  const minPixels = 30.0;
+  if (fps <= 0 || pixelsPerSecond <= 0) return 0;
+  final fourFrames = 4 / fps;
+  if (fourFrames * pixelsPerSecond >= minPixels) return fourFrames;
+  if (pixelsPerSecond >= minPixels) return 1;
+  return rulerLabelStepSeconds(pixelsPerSecond: pixelsPerSecond);
 }
 
 /// The minor-tick step for a ruler, in seconds: the finest division that still
@@ -2524,7 +2857,15 @@ Color workAreaEdgeColour(LumitTheme t) => t.animated.withValues(alpha: 0.5);
 /// read as smudges rather than as the two things you take hold of. There is no
 /// hover step, because there is nowhere above solid to go; the pointer already
 /// says the handle is live by turning into the resize cursor.
-Color workAreaHandleColour(LumitTheme t) => t.animated;
+Color workAreaHandleColour(LumitTheme t) => switch (t.shape) {
+      ThemeShape.studio => t.animated,
+      // Desk's tab is a hairline_strong mark, the band being unpainted.
+      ThemeShape.desk => t.hairlineStrong,
+      ThemeShape.lantern => t.accent,
+    };
+
+/// How strong Lantern's accent-soft band fills.
+const double workAreaSoftFillAlpha = 0.18;
 
 /// How wide the drawn tab is, inside the [_workHandleWidth] it grabs across.
 /// Narrow, because it is a mark on an edge rather than a bar of its own —
@@ -2555,6 +2896,29 @@ const double workAreaHandleTopInset = 18;
 TextStyle markerLabelStyle(LumitTheme t) =>
     t.mono.copyWith(fontSize: 8, color: t.textPrimary, height: 1);
 
+/// The corner of a marker's label pill: a capsule under Lantern, 2 elsewhere.
+double markerPillRadius(LumitTheme t) =>
+    t.shape == ThemeShape.lantern ? ShapeTokens.stadium : 2;
+
+/// The fill under a selected row, both halves of the table: Lantern's
+/// accent_soft, the theme's own selection fill under the other shapes.
+Color rowSelectionFill(LumitTheme t) => switch (t.shape) {
+      ThemeShape.lantern => t.accent.withValues(alpha: accentSoftAlpha),
+      // One selection everywhere under Desk: the signal at 14 percent
+      // (docs/design-alt/15-DESIGN-DESK.md 6.5).
+      ThemeShape.desk => t.accent.withValues(alpha: 0.14),
+      ThemeShape.studio => t.selectionFill,
+    };
+
+/// How strong Lantern's accent_soft is (docs/design-alt/15-DESIGN-LANTERN.md).
+const double accentSoftAlpha = 0.26;
+
+/// Desk's bar: the layer hue mixed this far into the row's band.
+const double deskBarMix = 0.30;
+
+/// Lantern's bar: the layer hue at this strength.
+const double lanternBarAlpha = 0.55;
+
 /// The band's fill over the ruler's surface, and over the lane ground. Two
 /// values because the two grounds are not the same value; one band either way.
 /// Both are the mockup's own alphas.
@@ -2571,11 +2935,28 @@ const double workAreaLaneFillAlpha = 0.04;
 /// recoloured layer recolours its bar and its clips in any theme.
 const double clipFillAlpha = 0.38;
 
-/// A bar's corner radius under Sharp: **none**, as the mockup draws it. Round
-/// keeps its stadium ends (§12.1) — that is the shape's whole difference —
-/// and this is the other end of the same choice. It was 2, which rounded
-/// nothing visibly and softened every bar end by a pixel.
+/// A bar's corner radius on a flush pane: **none**, as the mockup draws it.
+/// It was 2, which rounded nothing visibly and softened every bar end by a
+/// pixel.
 const double sharpClipRadius = 0;
+
+/// The corner a layer bar or clip wears: the shape's content radius, except
+/// that Studio draws square ends on purpose, whatever its token says.
+double clipRadius(LumitTheme t) => switch (t.shape) {
+      ThemeShape.desk || ThemeShape.lantern => t.tokens.contentRadius,
+      ThemeShape.studio => sharpClipRadius,
+    };
+
+/// The rule between two rows of the table: Lantern draws none, the row pitch
+/// carries a gap instead, so its seams paint clear.
+Color rowSeamColour(LumitTheme t) => t.shape == ThemeShape.lantern
+    ? t.hairline.withValues(alpha: 0)
+    : t.hairline;
+
+/// The ground a row leaves above and below what it draws. Lantern's 28 pitch
+/// draws 26 of row with a pixel clear at each edge; the other shapes fill
+/// the pitch and rule it.
+double laneRowGap(LumitTheme t) => t.shape == ThemeShape.lantern ? 1 : 0;
 
 /// A bar's own height inside a lane row (§12A.6's table). A plain
 /// constant, because it is one of the rows the table gives the same height
@@ -2589,6 +2970,15 @@ const double clipBarHeight = 16;
 /// and half of one is a real distance the compositor resolves — the bar is
 /// centred either way, which is the claim §12A.6 makes about it.
 double clipBarInsetFor(DensityTokens d) => (d.laneRow - clipBarHeight) / 2;
+
+/// The bar's height under the shape: Lantern draws 18 in its 28 row, the
+/// others the table's 16.
+double clipBarHeightOf(LumitTheme t) =>
+    t.shape == ThemeShape.lantern ? 18 : clipBarHeight;
+
+/// The ground above the bar under the shape, so it stays centred in the row.
+double clipBarInsetOf(LumitTheme t) =>
+    (t.density.laneRow - clipBarHeightOf(t)) / 2;
 
 /// The same fill on a selected bar. Brighter as well as lighter, so selection
 /// beats every label colour in the palette (§6.1).
@@ -2665,13 +3055,47 @@ class _RulerTicksPainter extends CustomPainter {
   final Color minorTick;
   final TextStyle label;
 
+  /// Which shape's scale to draw.
+  final RulerStyle style;
+
   const _RulerTicksPainter({
     required this.axis,
     required this.fps,
     required this.tick,
     required this.minorTick,
     required this.label,
+    required this.style,
   });
+
+  /// Desk's engraved scale: a tick every four frames at 4, every second at 8
+  /// and every labelled step at 14, all rising from the waist into the upper
+  /// half, and none drawn closer than 30px to its neighbour.
+  void _paintEngraved(Canvas canvas, Size size, double mid, double seconds,
+      double pxPerSec, double step, Paint paint, Paint quiet) {
+    final fourFrames = 4 / fps;
+    final finest = engravedTickSeconds(pixelsPerSecond: pxPerSec, fps: fps);
+    if (finest <= fourFrames && fourFrames < 1) {
+      for (var s = 0.0; s <= seconds; s += fourFrames) {
+        final x = axis.xOf(s * fps);
+        canvas.drawLine(Offset(x, mid - 4), Offset(x, mid), quiet);
+      }
+    }
+    if (finest <= 1 && step > 1) {
+      for (var s = 0.0; s <= seconds; s += 1) {
+        final x = axis.xOf(s * fps);
+        canvas.drawLine(Offset(x, mid - 8), Offset(x, mid), quiet);
+      }
+    }
+    for (var s = 0.0; s <= seconds; s += step) {
+      final x = axis.xOf(s * fps);
+      canvas.drawLine(Offset(x, mid - 14), Offset(x, mid), paint);
+      final text = TextPainter(
+        text: TextSpan(text: rulerLabelOf(s), style: label),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      text.paint(canvas, Offset(x + 4, 4));
+    }
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -2690,6 +3114,10 @@ class _RulerTicksPainter extends CustomPainter {
     final paint = Paint()
       ..color = tick
       ..strokeWidth = 1;
+    if (style.engraved) {
+      _paintEngraved(canvas, size, mid, seconds, pxPerSec, step, paint, quiet);
+      return;
+    }
 
     // Minor ticks between the labels, subdividing further the more room the
     // zoom gives them — down to one tick per frame (§12A.1).
@@ -2724,6 +3152,7 @@ class _RulerTicksPainter extends CustomPainter {
   @override
   bool shouldRepaint(_RulerTicksPainter old) =>
       old.fps != fps ||
+      old.style != style ||
       old.tick != tick ||
       old.minorTick != minorTick ||
       old.axis.frames != axis.frames ||
@@ -2809,11 +3238,15 @@ class _CacheBarPainter extends CustomPainter {
   final Color held;
   final Color onDisk;
 
+  /// Lantern: each run a rounded rect with a 2px gap before the next.
+  final bool rounded;
+
   const _CacheBarPainter({
     required this.tiers,
     required this.axis,
     required this.held,
     required this.onDisk,
+    this.rounded = false,
   });
 
   @override
@@ -2841,10 +3274,20 @@ class _CacheBarPainter extends CustomPainter {
       // Coarser sits shorter, against the bar's floor, so the tier reads
       // without relying on the shade alone (docs/15 §6.3).
       final top = size.height * (1 - cacheTierHeight(cacheDivisorOf(byte)));
-      canvas.drawRect(
-          Rect.fromLTRB(
-              left, top, max(right, min(left + 1, size.width)), size.height),
-          paint);
+      final rect = Rect.fromLTRB(
+          left, top, max(right, min(left + 1, size.width)), size.height);
+      if (rounded) {
+        // The gap is taken off the run's end, so a run of a frame or two
+        // keeps a width to be seen at.
+        final end = rect.width > 3 ? rect.right - 2 : rect.right;
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(
+                Rect.fromLTRB(rect.left, rect.top, end, rect.bottom),
+                Radius.circular(size.height / 2)),
+            paint);
+      } else {
+        canvas.drawRect(rect, paint);
+      }
     }
   }
 
@@ -2859,7 +3302,8 @@ class _CacheBarPainter extends CustomPainter {
       old.axis.frames != axis.frames ||
       old.axis.xOf(axis.frames) != axis.xOf(axis.frames) ||
       old.held != held ||
-      old.onDisk != onDisk;
+      old.onDisk != onDisk ||
+      old.rounded != rounded;
 }
 
 /// The Timeline's two-tone ground: the work area at one value, and a

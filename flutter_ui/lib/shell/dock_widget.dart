@@ -210,7 +210,8 @@ class _DockWidgetState extends State<DockWidget> {
     return ValueListenableBuilder<PaneId?>(
       valueListenable: widget.maximised,
       builder: (context, maximised, _) => Container(
-        color: t.surface0,
+        // Cards stand on the room; flush panes sit on the canvas.
+        color: t.tokens.roomed ? t.room : t.surface0,
         padding: EdgeInsets.all(t.tokens.windowInset),
         // One pane filling the window, when one has been asked for and is
         // still in the arrangement. A pane closed while it was maximised
@@ -220,9 +221,29 @@ class _DockWidgetState extends State<DockWidget> {
                 pane: maximised,
                 activePanel: widget.activePanel,
                 drag: _drag,
+                header: _bareTitle(t, maximised.panel),
                 child: widget.buildPanel(context, maximised),
               )
             : _buildNode(context, widget.root),
+      ),
+    );
+  }
+
+  /// The title line a pane standing alone wears. Studio draws none, and
+  /// neither does a panel that draws a header of its own.
+  Widget? _bareTitle(LumitTheme t, Panel panel) {
+    if (t.shape == ThemeShape.studio) return null;
+    // These three draw a header line of their own.
+    if (panel == Panel.viewer ||
+        panel == Panel.timeline ||
+        panel == Panel.audioTimeline) {
+      return null;
+    }
+    return _TitleLine(
+      child: Text(
+        t.kickerCase(panel.title),
+        key: const ValueKey('pane-title'),
+        style: t.tokens.titleCentred ? t.kickerOn : t.kicker,
       ),
     );
   }
@@ -232,6 +253,7 @@ class _DockWidgetState extends State<DockWidget> {
             pane: pane.id,
             activePanel: widget.activePanel,
             drag: _drag,
+            header: _bareTitle(ThemeScope.of(context).theme, pane.id.panel),
             child: widget.buildPanel(context, pane.id),
           ),
         DockTabs() => _TabGroup(
@@ -501,8 +523,8 @@ class _GhostLayer extends StatelessWidget {
           return Positioned(
             left: at.dx + 10,
             top: at.dy + 8,
-            child:
-                IgnorePointer(child: _GhostPill(title: pane.panel.title, theme: t)),
+            child: IgnorePointer(
+                child: _GhostPill(title: pane.panel.title, theme: t)),
           );
         },
       );
@@ -524,33 +546,25 @@ class _GhostPill extends StatelessWidget {
         border: Border.all(color: theme.accent, width: 1),
         boxShadow: theme.floatShadow,
       ),
-      child: Text(title.toUpperCase(), style: theme.kickerOn),
+      child: Text(theme.kickerCase(title), style: theme.kickerOn),
     );
   }
 }
 
-/// The panel header's live-mark under Round (§12.1): a small accent dot before
-/// the panel's name in its tab.
+/// The 6px accent dot at the left corner of a card's title line.
 ///
 /// **Decorative and static.** It never blinks, never fills and never means
-/// anything — it is not a status light, and no state may be routed through it.
-/// Its diameter comes off the type scale (a third of the title's own size)
-/// rather than a pixel count, so it stays a dot beside the word at every UI
-/// scale instead of becoming a bead at one and a blob at another.
+/// anything. It is not a status light, and no state may be routed through it.
 class _HeaderDot extends StatelessWidget {
-  final TextStyle text;
   final Color colour;
-  const _HeaderDot({required this.text, required this.colour});
+  const _HeaderDot({required this.colour});
 
   @override
-  Widget build(BuildContext context) {
-    final size = (text.fontSize ?? 11) / 3;
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(color: colour, shape: BoxShape.circle),
-    );
-  }
+  Widget build(BuildContext context) => Container(
+        width: 6,
+        height: 6,
+        decoration: BoxDecoration(color: colour, shape: BoxShape.circle),
+      );
 }
 
 class _Divider extends StatefulWidget {
@@ -575,10 +589,14 @@ class _DividerState extends State<_Divider> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    // Sharp: hairline-toned gap, brighter on hover/drag. Round: canvas-toned
-    // gap, hairline on hover, accent while dragging (dock.rs::resize_stroke).
-    final sharp = t.shape == ThemeShape.sharp;
-    final idle = sharp ? t.surface2 : t.surface0;
+    // Flush panes (Studio and Desk): hairline-toned gap, brighter on hover
+    // and drag. Cards: the room shows between them with no hairline, a
+    // hairline on hover, accent while dragging (dock.rs::resize_stroke).
+    final sharp = !t.tokens.roomed;
+    // Desk's seams are the chassis showing between plates: the ground.
+    final idle = sharp
+        ? (t.shape == ThemeShape.desk ? t.surface0 : t.surface2)
+        : t.room;
     final colour = _dragging
         ? (sharp ? t.textPrimary : t.accent)
         : _hover
@@ -634,13 +652,61 @@ class _DividerState extends State<_Divider> {
   }
 }
 
-/// The header strip every tab group wears: 22 px of `surface2` under Sharp
-/// (docs/15-DESIGN.md §2.1 — "faint surfaces: tab bars, bottom bars, panel
-/// headers"), with the pane body on `surface1` below it. Round keeps the canvas
-/// showing between its cards instead, so its strip stays `surface0`.
-const double _headerStripHeight = 22;
+/// The title line a pane wears: a tab group's strip of tabs, or a bare pane's
+/// own name. Studio and Desk draw it as a strip of `surface2` above the body
+/// (docs/15-DESIGN.md §2.1, "faint surfaces: tab bars, bottom bars, panel
+/// headers"), the words at the left. Lantern draws it inside the card on
+/// `surface1`, with the accent dot at the left corner and the words centred.
+class _TitleLine extends StatelessWidget {
+  final Widget child;
+  const _TitleLine({required this.child});
 
-/// A tab group: the 22 px header strip of pill tabs plus the active pane's body.
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final roomed = t.tokens.roomed;
+    final dot = t.tokens.headerDot;
+    return Container(
+      key: const ValueKey('pane-title-line'),
+      height: t.density.headerStrip,
+      color: roomed ? t.surface1 : t.surface2,
+      padding: EdgeInsets.symmetric(horizontal: roomed ? 12 : 0),
+      child: Row(
+        children: [
+          if (dot) ...[
+            _HeaderDot(colour: t.accent),
+            const SizedBox(width: 8),
+          ],
+          Expanded(
+            child: t.tokens.titleCentred
+                ? Center(child: child)
+                : Align(alignment: Alignment.centerLeft, child: child),
+          ),
+          // The dot's own width again, so the words centre on the line rather
+          // than on what is left of it.
+          if (dot) const SizedBox(width: 14),
+        ],
+      ),
+    );
+  }
+}
+
+/// The card a roomed pane stands in: `surface1`, the card radius and shadow,
+/// clipped. A flush shape hands the child back as it is.
+Widget _card(LumitTheme t, Widget child) => !t.tokens.roomed
+    ? child
+    : Container(
+        decoration: BoxDecoration(
+          color: t.surface1,
+          borderRadius: BorderRadius.circular(t.tokens.cardRadius),
+          boxShadow: t.tokens.cardShadow,
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: child,
+      );
+
+/// A tab group: the title line of tabs plus the active pane's body. Under
+/// Lantern the whole group is one card and the tabs sit on its title line.
 class _TabGroup extends StatelessWidget {
   final DockTabs tabs;
   final PanelBuilder buildPanel;
@@ -663,61 +729,55 @@ class _TabGroup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    final barColour = t.shape == ThemeShape.sharp ? t.surface2 : t.surface0;
-
     final active = tabs.children[tabs.active];
 
-    return Column(
-      children: [
-        Container(
-          height: _headerStripHeight,
-          color: barColour,
-          child: Row(
-            children: [
-              // The pill strip scrolls when the group is narrower than its
-              // tabs, as egui_tiles' tab bar does.
-              Expanded(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      for (var i = 0; i < tabs.children.length; i++)
-                        _TabPill(
-                          pane: tabs.children[i].id,
-                          title: tabs.children[i].panel.title,
-                          active: i == tabs.active,
-                          drag: drag,
-                          onClose: onClose,
-                          onPressed: () {
-                            tabs.active = i;
-                            onChanged();
-                          },
-                        ),
-                    ],
-                  ),
-                ),
+    return _card(
+      t,
+      Column(
+        children: [
+          // The pill strip scrolls when the group is narrower than its
+          // tabs, as egui_tiles' tab bar does.
+          _TitleLine(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (var i = 0; i < tabs.children.length; i++)
+                    _TabPill(
+                      pane: tabs.children[i].id,
+                      title: tabs.children[i].panel.title,
+                      active: i == tabs.active,
+                      drag: drag,
+                      onClose: onClose,
+                      onPressed: () {
+                        tabs.active = i;
+                        onChanged();
+                      },
+                    ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-        // Two requirements meet here, each once lost to the other. Panel
-        // state — scroll offsets, twirl-downs — survives a tab switch, so a
-        // hidden tab's subtree stays MOUNTED (the TF round 5 fix, pinned by
-        // dock_panel_state_test). And a hidden tab is never BUILT (Airyzz's
-        // "dont build invisible panels", restored after a merge overwrote
-        // it): not at all before it is first shown, and not again while
-        // hidden — _KeepAlivePane returns the same built instance, and an
-        // identical child short-circuits Flutter's rebuild, so the dock
-        // rebuilding sixty times a second never reaches a hidden panel.
-        Expanded(
-          child: Stack(
-            children: [
-              for (final tab in tabs.children)
-                _paneBody(context, tab.id, identical(tab, active)),
-            ],
+          // Two requirements meet here, each once lost to the other. Panel
+          // state, scroll offsets, twirl-downs, survives a tab switch, so a
+          // hidden tab's subtree stays MOUNTED (the TF round 5 fix, pinned by
+          // dock_panel_state_test). And a hidden tab is never BUILT (Airyzz's
+          // "dont build invisible panels", restored after a merge overwrote
+          // it): not at all before it is first shown, and not again while
+          // hidden, _KeepAlivePane returns the same built instance, and an
+          // identical child short-circuits Flutter's rebuild, so the dock
+          // rebuilding sixty times a second never reaches a hidden panel.
+          Expanded(
+            child: Stack(
+              children: [
+                for (final tab in tabs.children)
+                  _paneBody(context, tab.id, identical(tab, active)),
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -732,6 +792,7 @@ class _TabGroup extends StatelessWidget {
           pane: pane,
           activePanel: activePanel,
           drag: drag,
+          inCard: true,
           child: buildPanel(context, pane),
         ),
       ),
@@ -796,22 +857,47 @@ class _TabPillState extends State<_TabPill> {
   bool _hover = false;
 
   @override
+  void initState() {
+    super.initState();
+    _reveal();
+  }
+
+  @override
+  void didUpdateWidget(_TabPill old) {
+    super.didUpdateWidget(old);
+    if (widget.active && !old.active) _reveal();
+  }
+
+  /// The fronted tab brings itself into view, so a strip narrower than its
+  /// tabs never hides the one that is open.
+  void _reveal() {
+    if (!widget.active) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Scrollable.ensureVisible(context, alignment: 0.5);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    final round = t.shape == ThemeShape.round;
+    // A filled pill marks the fronted tab only where actions are capsules.
+    final round = t.tokens.actionRadius == ShapeTokens.stadium;
+    // Desk draws the mockup's tab: a bare lowercase word on the 24 line, the
+    // fronted one over a 2px accent rule, no fill and no box on hover.
+    final ruled = t.shape == ThemeShape.desk;
     final Color fill;
     final Color textColour;
     if (widget.active) {
-      // Round keeps its filled accent pill (§12.1). **Sharp draws no box at
-      // all**: the mockups' `.kick.on` is bare text on the strip's own grey —
-      // transparent fill, no border — and which tab is fronted reads from the
-      // word brightening to `text_primary` alone. It had worn an accent
-      // outline, which spends the accent on a resting state and makes the
-      // strip's one lit tab look like a control to press.
-      fill = round ? t.accent : const Color(0x00000000);
-      textColour = round ? t.surface0 : t.textPrimary;
+      // Lantern fills the fronted pill with `surface2`. **The flush shapes
+      // draw no box at all**: the mockups' `.kick.on` is bare text on the
+      // strip's own grey, transparent fill, no border, and which tab is
+      // fronted reads from the word brightening to `text_primary` alone. It
+      // had worn an accent outline, which spends the accent on a resting
+      // state and makes the strip's one lit tab look like a control to press.
+      fill = round ? t.surface2 : const Color(0x00000000);
+      textColour = t.textPrimary;
     } else if (_hover) {
-      fill = t.surface3;
+      fill = ruled ? const Color(0x00000000) : t.surface3;
       textColour = t.textPrimary;
     } else {
       fill = const Color(0x00000000);
@@ -821,8 +907,9 @@ class _TabPillState extends State<_TabPill> {
     // border insets its child, so letting one appear would shrink the pill by
     // 2 px and shuffle every tab beside it as the pointer crossed the strip.
     final border = Border.all(
-      color:
-          _hover && !widget.active ? t.hairlineStrong : const Color(0x00000000),
+      color: _hover && !widget.active && !ruled
+          ? t.hairlineStrong
+          : const Color(0x00000000),
       width: 1,
     );
     // A panel's name is a container label, so it is a kicker (§7.1): one size,
@@ -832,36 +919,42 @@ class _TabPillState extends State<_TabPill> {
     // front tab changed.
     final style =
         (widget.active ? t.kickerOn : t.kicker).copyWith(color: textColour);
-    final label = Text(widget.title.toUpperCase(), style: style);
+    final label = Text(t.kickerCase(widget.title), style: style);
+    // The fill stands off the tab's slot by the shape's pill inset on every
+    // side, its corner the outer one less the inset, so the margin is the
+    // same the whole way round. Desk's rule spans the word alone, so the word
+    // takes the mockup's 10 of air as margin rather than padding, and the
+    // box under the rule is the word's own.
     final pill = Container(
-      margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      key: ValueKey<String>('dock-tab-fill-${widget.pane.panel.name}'),
+      margin: round
+          ? EdgeInsets.all(t.tokens.pillInset)
+          : ruled
+              ? const EdgeInsets.symmetric(horizontal: 10)
+              : const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
+      padding:
+          ruled ? EdgeInsets.zero : const EdgeInsets.symmetric(horizontal: 8),
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: fill,
-        borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+        borderRadius: BorderRadius.circular(round
+            ? t.tokens.actionRadius - t.tokens.pillInset
+            : t.tokens.actionRadius),
         border: border,
       ),
-      child: round
-          ? Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Accent, except on the pill that is itself filled with the
-                // accent — the label flips there for the same reason, and an
-                // accent dot on an accent field is not a dot. It is the same
-                // mark either way; nothing about it reports state.
-                _HeaderDot(
-                    text: style, colour: widget.active ? textColour : t.accent),
-                const SizedBox(width: 5),
-                label,
-              ],
-            )
-          : label,
+      // Painted over the box, so the rule insets nothing and the fronted word
+      // sits on the same line as its neighbours.
+      foregroundDecoration: ruled && widget.active
+          ? BoxDecoration(
+              border: Border(bottom: BorderSide(color: t.accent, width: 2)))
+          : null,
+      child: label,
     );
     return _DragSource(
       pane: widget.pane,
       drag: widget.drag,
       child: MouseRegion(
+        key: ValueKey<String>('dock-tab-${widget.pane.panel.name}'),
         cursor: SystemMouseCursors.click,
         onEnter: (_) => setState(() => _hover = true),
         onExit: (_) => setState(() => _hover = false),
@@ -943,17 +1036,45 @@ class _PaneChrome extends StatelessWidget {
   final _DragController drag;
   final Widget child;
 
+  /// The title line drawn above the body, for a pane standing alone.
+  final Widget? header;
+
+  /// Whether a tab group's card already wraps this pane, so it draws no card
+  /// of its own and its accent boundary rounds only the bottom corners.
+  final bool inCard;
+
   const _PaneChrome({
     required this.pane,
     required this.activePanel,
     required this.drag,
     required this.child,
+    this.header,
+    this.inCard = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    final round = t.shape == ThemeShape.round;
+    final round = t.tokens.roomed && !inCard;
+    final onRoom = round && pane.panel == Panel.viewer;
+    final corner = Radius.circular(t.tokens.cardRadius);
+    final edgeRadius = round
+        ? BorderRadius.all(corner)
+        : t.tokens.roomed
+            ? BorderRadius.vertical(bottom: corner)
+            : null;
+    final body = Stack(
+      children: [
+        // **Nothing paints outside its pane**, step 5 of the
+        // degradation ladder: below the panel's declared minimum the
+        // content keeps that width and slides. Wrapped here rather
+        // than in each panel so a panel that has not thought about
+        // narrow widths still cannot overflow, and so there is one
+        // place to read the rule.
+        PanelFloor(minWidth: panelMinWidth(pane.panel), child: child),
+        Positioned.fill(child: _DropPreview(pane: pane, drag: drag)),
+      ],
+    );
     return ValueListenableBuilder<PaneId?>(
       valueListenable: activePanel,
       builder: (context, active, _) => Listener(
@@ -965,10 +1086,10 @@ class _PaneChrome extends StatelessWidget {
           child: Container(
             key: drag.paneKey(pane),
             decoration: BoxDecoration(
-              color: t.surface1,
+              color: onRoom ? t.room : t.surface1,
               borderRadius:
                   round ? BorderRadius.circular(t.tokens.cardRadius) : null,
-              boxShadow: round ? t.tokens.cardShadow : null,
+              boxShadow: round && !onRoom ? t.tokens.cardShadow : null,
             ),
             // The accent boundary paints over the content's edge, like the
             // egui overlay stroke at Order::Middle. It is ALWAYS supplied — an
@@ -985,23 +1106,13 @@ class _PaneChrome extends StatelessWidget {
                     active == pane ? t.accent : t.accent.withValues(alpha: 0),
                 width: 1,
               ),
-              borderRadius:
-                  round ? BorderRadius.circular(t.tokens.cardRadius) : null,
+              borderRadius: edgeRadius,
             ),
             padding: round ? EdgeInsets.all(t.tokens.cardPadding) : null,
             clipBehavior: round ? Clip.antiAlias : Clip.none,
-            child: Stack(
-              children: [
-                // **Nothing paints outside its pane**, step 5 of the
-                // degradation ladder: below the panel's declared minimum the
-                // content keeps that width and slides. Wrapped here rather
-                // than in each panel so a panel that has not thought about
-                // narrow widths still cannot overflow — and so there is one
-                // place to read the rule.
-                PanelFloor(minWidth: panelMinWidth(pane.panel), child: child),
-                Positioned.fill(child: _DropPreview(pane: pane, drag: drag)),
-              ],
-            ),
+            child: header == null
+                ? body
+                : Column(children: [header!, Expanded(child: body)]),
           ),
         ),
       ),

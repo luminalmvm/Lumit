@@ -1710,6 +1710,74 @@ void main() {
           reason: 'the nearest tagged folder wins over the one above it');
     });
 
+    /// **The filter square actually paints**, under every shape. Its four
+    /// quarters are childless boxes flexed inside a row, and a row gives a
+    /// childless box a height of zero unless it is told to stretch: the
+    /// square was there for the pointer and the tests, and blank on screen.
+    for (final shape in ThemeShape.values) {
+      testWidgets('the filter square paints its quarters under $shape',
+          (tester) async {
+        final p = freshProject();
+        p.state.project!.importFootage(path: 'C:/clips/shot.mov');
+        await tester.pumpWidget(hostPanel(
+          child: const ProjectPanelFrb(),
+          state: p.state,
+          uiState: p.uiState,
+          shape: shape,
+        ));
+        await settleFrb(tester, minRounds: 6);
+
+        final t = LumitTheme.forScheme(LumitColorScheme.dark, shape);
+        final square = find.byKey(const ValueKey('project-label-filter'));
+        final well = tester.getRect(find.byKey(const ValueKey('project-search')));
+        final rect = tester.getRect(square);
+        expect(rect.size, const Size(projectFilterSquare, projectFilterSquare));
+        expect(well.contains(rect.topLeft) && well.contains(rect.bottomRight),
+            isTrue,
+            reason: 'the square stands inside the well');
+        expect(rect.left - well.left, lessThan(well.width / 2),
+            reason: 'and at its left');
+
+        // Four quarters, each a real 5 by 5 box in a palette hue, none of
+        // them the well's own fill.
+        final quarters =
+            find.descendant(of: square, matching: find.byType(ColoredBox));
+        expect(quarters, findsNWidgets(4));
+        final hues = <Color>{};
+        for (final quarter in quarters.evaluate()) {
+          final box = find.byWidget(quarter.widget);
+          expect(tester.getSize(box),
+              const Size(projectFilterSquare / 2, projectFilterSquare / 2),
+              reason: 'a quarter that has no height paints nothing');
+          final colour = (quarter.widget as ColoredBox).color;
+          expect(colour, isNot(t.surface2));
+          expect(colour.a, 1.0);
+          hues.add(colour);
+        }
+        expect(hues.length, 4, reason: 'four different hues');
+
+        // A held colour is worn whole, and the tap opens the picker.
+        await pickFilterColour(tester, 4);
+        expect(find.descendant(of: square, matching: find.byType(ColoredBox)),
+            findsNothing);
+        expect(
+            tester
+                .widget<Container>(find.descendant(
+                    of: square, matching: find.byType(Container)))
+                .decoration,
+            isA<BoxDecoration>()
+                .having((d) => d.color, 'color', t.labelColour(4)));
+        await tester.tap(square);
+        await tester.pumpAndSettle();
+        for (var i = 0; i < LumitTheme.labelCount; i++) {
+          expect(find.byKey(ValueKey<String>('project-filter-chip-$i')),
+              findsOneWidget);
+        }
+        await tester.tap(find.byKey(const ValueKey('project-filter-chip-0')));
+        await tester.pumpAndSettle();
+      });
+    }
+
     testWidgets('the preview card states the codec and the sound it found',
         (tester) async {
       final p = freshProject();

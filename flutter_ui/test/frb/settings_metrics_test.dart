@@ -26,7 +26,7 @@ void main() {
   setUpAll(initEngineForTests);
 
   group('Settings metrics (frb)', () {
-    final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.sharp);
+    final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio);
 
     /// Open the window the way the application does, in a view large enough to
     /// hold it at the size it asks for.

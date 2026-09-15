@@ -66,6 +66,8 @@ enum Cmd {
     Swap(Arc<MixPlan>),
     Play,
     Pause,
+    /// The monitor mute: silence at the device, the mix and clock untouched.
+    Mute(bool),
     Seek(f64),
     Unload,
 }
@@ -109,6 +111,9 @@ struct AudioState {
     /// The transport intent (Dart's play/pause), applied to a fresh load when
     /// it installs.
     playing: bool,
+    /// The monitor mute, kept here so it outlives the engine: a changed
+    /// output opens a fresh stream, and a muted user must not get sound back.
+    muted: bool,
     /// Where a fresh load should start, in seconds — set by `audio_play` when
     /// the wanted comp is not loaded yet.
     pending_start: Option<f64>,
@@ -149,6 +154,7 @@ impl AudioState {
             loaded_comp: None,
             loaded_sig: None,
             playing: false,
+            muted: false,
             pending_start: None,
             worker_busy: false,
             wanted_preview: None,
@@ -458,6 +464,7 @@ fn ensure_device() -> Option<(Sender<Cmd>, u32, u64)> {
                 Cmd::Swap(plan) => engine.swap_plan(plan),
                 Cmd::Play => engine.play(),
                 Cmd::Pause => engine.pause(),
+                Cmd::Mute(m) => engine.set_muted(m),
                 Cmd::Seek(s) => engine.seek_seconds(s),
                 Cmd::Unload => engine.unload(),
             }
@@ -477,6 +484,10 @@ fn ensure_device() -> Option<(Sender<Cmd>, u32, u64)> {
                 meters,
                 rate,
             };
+            // A fresh stream starts unmuted: carry the mute over to it.
+            if st.muted {
+                let _ = tx.send(Cmd::Mute(true));
+            }
             Some((tx, rate, generation))
         }
         _ => {
@@ -816,6 +827,18 @@ pub(crate) fn pause() {
     let mut st = lock();
     st.playing = false;
     send(&st, Cmd::Pause);
+}
+
+/// The monitor mute. Remembered before any engine exists and re-applied to
+/// every stream opened after, so it survives a change of output.
+pub(crate) fn set_muted(muted: bool) {
+    let mut st = lock();
+    st.muted = muted;
+    send(&st, Cmd::Mute(muted));
+}
+
+pub(crate) fn muted() -> bool {
+    lock().muted
 }
 
 /// Start the sound again where it stopped, with no re-bake and no seek — the
@@ -1204,6 +1227,17 @@ mod tests {
             "playing without a loaded mix is impossible"
         );
         let _ = loaded;
+    }
+
+    /// The mute is state of this module, not of an engine, so it holds on a
+    /// machine with no sound device and is there for the first stream opened.
+    #[test]
+    fn mute_is_remembered_before_any_engine_exists() {
+        let _held = state_tests();
+        set_muted(true);
+        assert!(muted(), "muted with no engine to mute");
+        set_muted(false);
+        assert!(!muted(), "and unmuted again");
     }
 
     /// Choosing an output closes the open stream and forgets what was loaded,

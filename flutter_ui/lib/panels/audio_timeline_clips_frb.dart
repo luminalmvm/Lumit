@@ -767,10 +767,13 @@ class _AudioClipStripState extends State<AudioClipStrip> {
           // own treatment, and a picked clip is the same colour held stronger.
           color: label.withValues(
               alpha: picked ? clipFillSelectedAlpha : clipFillAlpha),
-          border: Border.all(color: picked ? t.textPrimary : t.surface0),
-          borderRadius: BorderRadius.circular(t.shape == ThemeShape.round
-              ? t.tokens.controlRadius
-              : sharpClipRadius),
+          // Desk marks a picked clip with its accent outline, the other
+          // shapes with the foreground.
+          border: Border.all(
+              color: picked
+                  ? (t.shape == ThemeShape.desk ? t.accent : t.textPrimary)
+                  : t.surface0),
+          borderRadius: BorderRadius.circular(clipRadius(t)),
         ),
         clipBehavior: Clip.hardEdge,
         child: Stack(children: [

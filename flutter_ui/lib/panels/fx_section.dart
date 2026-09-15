@@ -116,6 +116,10 @@ const double fxEnableHitHeight = fxHeadingHeight - 4;
 /// beside a heading's capitals without becoming a different control.
 const double fxEnableMarkScale = 11 / 9;
 
+/// The width of [HouseToggle]'s own box, focus ring included: what Lantern's
+/// heading scales down to fit the 18px enable slot.
+const double fxEnableToggleWidth = 26;
+
 /// What a click-then-drag across the enable switches is setting them **to**
 /// (item 6.2). Carried as a drag payload rather than in a shared variable so
 /// the switches the pointer passes over are found the way every other
@@ -187,11 +191,23 @@ Widget fxEnableSwitch({
             width: fxEnableHitWidth,
             height: fxEnableHitHeight,
             child: Center(
-              child: fxEnableMark(
-                key: ValueKey<String>('fx-enabled-$id'),
-                on: on,
-                onChanged: onChanged,
-              ),
+              // Lantern's heading carries a switch rather than a tick. It is
+              // the house toggle scaled into the same 18px slot, so the fixed
+              // columns under the heading do not move between shapes.
+              child: ThemeScope.of(context).theme.shape == ThemeShape.lantern
+                  ? Transform.scale(
+                      scale: fxEnableHitWidth / fxEnableToggleWidth,
+                      child: HouseToggle(
+                        key: ValueKey<String>('fx-enabled-$id'),
+                        value: on,
+                        onChanged: onChanged,
+                      ),
+                    )
+                  : fxEnableMark(
+                      key: ValueKey<String>('fx-enabled-$id'),
+                      on: on,
+                      onChanged: onChanged,
+                    ),
             ),
           ),
         ),
@@ -451,7 +467,7 @@ class FxSection extends StatelessWidget {
                               onDone: onRenamed!,
                               onCancel: onRenameCancelled ?? () {},
                             )
-                          : Text(title.toUpperCase(),
+                          : Text(t.kickerCase(title),
                               // Bypassed, the name drops to muted with the fill.
                               style: enabled ? t.kickerOn : t.kicker,
                               overflow: TextOverflow.ellipsis),
@@ -598,7 +614,7 @@ Widget fxGroupHeaderRow(
           SizedBox(
             width: fxLabelColumnWidth,
             child: Text(
-              label.toUpperCase(),
+              t.kickerCase(label),
               style: open ? t.kickerOn : t.kicker,
               overflow: TextOverflow.ellipsis,
             ),

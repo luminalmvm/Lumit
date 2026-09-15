@@ -4,9 +4,10 @@
 // no-hex-outside-theme rule.
 //
 // In plain terms: every colour, radius, gap and shadow the interface uses is a
-// named token here, in the same seven colour schemes the Rust frontend ships.
-// The numbers are carried over digit-for-digit so the two frontends can be
-// compared side by side.
+// named token here: the seven colour schemes the Rust frontend ships, the
+// twelve paired ones and Desk's two rooms added since, and the three shapes.
+// The numbers the Rust frontend has are carried over digit-for-digit so the
+// two can be compared.
 
 import 'package:flutter/material.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
@@ -16,8 +17,30 @@ Color _rgb(int r, int g, int b) => Color.fromARGB(0xff, r, g, b);
 /// Light vs dark colour family.
 enum ThemeMode2 { dark, light }
 
-/// Sharp (edge-to-edge, hairline) or Round (floating card) geometry.
-enum ThemeShape { sharp, round }
+/// The three arrangements the chrome can be laid out in. A shape names an
+/// arrangement; a scheme names a palette, and the two are chosen apart.
+enum ThemeShape {
+  /// Panels meeting flush, hairlines between them: the default.
+  studio,
+
+  /// The same flush panels on a four-pixel module, with lowercase labels.
+  desk,
+
+  /// Panes as cards standing in a room, with a gap and a shadow round each.
+  lantern,
+}
+
+/// How a container label is cased before it is drawn.
+enum LabelCase {
+  /// Every letter a capital.
+  caps,
+
+  /// Every letter small.
+  lower,
+
+  /// Left as the string was written.
+  sentence,
+}
 
 /// How much UI-chrome motion to show.
 enum AnimationLevel { all, minimal, none }
@@ -38,7 +61,33 @@ enum LumitColorScheme {
   gruvboxDark,
   gruvboxLight,
   catppuccinMocha,
-  catppuccinLatte;
+  catppuccinLatte,
+  mallowDark,
+  mallowLight,
+  glacierDark,
+  glacierLight,
+  hearthDark,
+  hearthLight,
+  chalkDark,
+  chalkLight,
+  vellumDark,
+  vellumLight,
+  neonDark,
+  neonLight,
+  canopyDark,
+  canopyLight,
+  slateDark,
+  slateLight,
+  nocturneDark,
+  nocturneLight,
+  tavernDark,
+  tavernLight,
+  arcaneDark,
+  arcaneLight,
+  giltDark,
+  giltLight,
+  greyRoom,
+  graphite;
 
   /// Sentence-case display name for menus and settings.
   String get label => switch (this) {
@@ -49,12 +98,51 @@ enum LumitColorScheme {
         LumitColorScheme.gruvboxLight => 'Gruvbox light',
         LumitColorScheme.catppuccinMocha => 'Catppuccin Mocha',
         LumitColorScheme.catppuccinLatte => 'Catppuccin Latte',
+        LumitColorScheme.mallowDark => 'Mallow dark',
+        LumitColorScheme.mallowLight => 'Mallow light',
+        LumitColorScheme.glacierDark => 'Glacier dark',
+        LumitColorScheme.glacierLight => 'Glacier light',
+        LumitColorScheme.hearthDark => 'Hearth dark',
+        LumitColorScheme.hearthLight => 'Hearth light',
+        LumitColorScheme.chalkDark => 'Chalk dark',
+        LumitColorScheme.chalkLight => 'Chalk light',
+        LumitColorScheme.vellumDark => 'Vellum dark',
+        LumitColorScheme.vellumLight => 'Vellum light',
+        LumitColorScheme.neonDark => 'Neon dark',
+        LumitColorScheme.neonLight => 'Neon light',
+        LumitColorScheme.canopyDark => 'Canopy dark',
+        LumitColorScheme.canopyLight => 'Canopy light',
+        LumitColorScheme.slateDark => 'Slate dark',
+        LumitColorScheme.slateLight => 'Slate light',
+        LumitColorScheme.nocturneDark => 'Nocturne dark',
+        LumitColorScheme.nocturneLight => 'Nocturne light',
+        LumitColorScheme.tavernDark => 'Tavern dark',
+        LumitColorScheme.tavernLight => 'Tavern light',
+        LumitColorScheme.arcaneDark => 'Arcane dark',
+        LumitColorScheme.arcaneLight => 'Arcane light',
+        LumitColorScheme.giltDark => 'Gilt dark',
+        LumitColorScheme.giltLight => 'Gilt light',
+        LumitColorScheme.greyRoom => 'Grey room',
+        LumitColorScheme.graphite => 'Graphite',
       };
 
   ThemeMode2 get mode => switch (this) {
         LumitColorScheme.light ||
         LumitColorScheme.gruvboxLight ||
-        LumitColorScheme.catppuccinLatte =>
+        LumitColorScheme.catppuccinLatte ||
+        LumitColorScheme.mallowLight ||
+        LumitColorScheme.glacierLight ||
+        LumitColorScheme.hearthLight ||
+        LumitColorScheme.chalkLight ||
+        LumitColorScheme.vellumLight ||
+        LumitColorScheme.neonLight ||
+        LumitColorScheme.canopyLight ||
+        LumitColorScheme.slateLight ||
+        LumitColorScheme.nocturneLight ||
+        LumitColorScheme.tavernLight ||
+        LumitColorScheme.arcaneLight ||
+        LumitColorScheme.giltLight ||
+        LumitColorScheme.greyRoom =>
           ThemeMode2.light,
         _ => ThemeMode2.dark,
       };
@@ -67,26 +155,44 @@ enum LumitColorScheme {
         LumitColorScheme.gruvboxLight => LumitTheme.gruvboxLight(),
         LumitColorScheme.catppuccinMocha => LumitTheme.catppuccinMocha(),
         LumitColorScheme.catppuccinLatte => LumitTheme.catppuccinLatte(),
+        LumitColorScheme.mallowDark => LumitTheme.mallowDark(),
+        LumitColorScheme.mallowLight => LumitTheme.mallowLight(),
+        LumitColorScheme.glacierDark => LumitTheme.glacierDark(),
+        LumitColorScheme.glacierLight => LumitTheme.glacierLight(),
+        LumitColorScheme.hearthDark => LumitTheme.hearthDark(),
+        LumitColorScheme.hearthLight => LumitTheme.hearthLight(),
+        LumitColorScheme.chalkDark => LumitTheme.chalkDark(),
+        LumitColorScheme.chalkLight => LumitTheme.chalkLight(),
+        LumitColorScheme.vellumDark => LumitTheme.vellumDark(),
+        LumitColorScheme.vellumLight => LumitTheme.vellumLight(),
+        LumitColorScheme.neonDark => LumitTheme.neonDark(),
+        LumitColorScheme.neonLight => LumitTheme.neonLight(),
+        LumitColorScheme.canopyDark => LumitTheme.canopyDark(),
+        LumitColorScheme.canopyLight => LumitTheme.canopyLight(),
+        LumitColorScheme.slateDark => LumitTheme.slateDark(),
+        LumitColorScheme.slateLight => LumitTheme.slateLight(),
+        LumitColorScheme.nocturneDark => LumitTheme.nocturneDark(),
+        LumitColorScheme.nocturneLight => LumitTheme.nocturneLight(),
+        LumitColorScheme.tavernDark => LumitTheme.tavernDark(),
+        LumitColorScheme.tavernLight => LumitTheme.tavernLight(),
+        LumitColorScheme.arcaneDark => LumitTheme.arcaneDark(),
+        LumitColorScheme.arcaneLight => LumitTheme.arcaneLight(),
+        LumitColorScheme.giltDark => LumitTheme.giltDark(),
+        LumitColorScheme.giltLight => LumitTheme.giltLight(),
+        LumitColorScheme.greyRoom => LumitTheme.greyRoom(),
+        LumitColorScheme.graphite => LumitTheme.graphite(),
       };
 }
 
-/// Shape-dependent chrome geometry. `sharp` reproduces the egui frontend's
-/// original numbers exactly; `round` is the floating-card system.
+/// Shape-dependent chrome geometry. `studio` reproduces the egui frontend's
+/// original numbers exactly; `desk` keeps them on a tighter float; `lantern`
+/// is the card-in-a-room system (docs/design-alt/15-DESIGN-LANTERN.md §12).
 class ShapeTokens {
-  /// A control's corner radius — button, chip, tab, dropdown, value box.
-  ///
-  /// Under Round this is [stadium] rather than a number (§12.1): every control
-  /// is a full capsule, and a capsule's radius is half the control's **own**
-  /// height, which a token cannot know. It does not have to: a rounded
-  /// rectangle scales its radii down to fit the box it is drawn into, so a
-  /// radius larger than any control is tall *is* the capsule, at whatever
-  /// height the control turns out to be. That is why this stays one number
-  /// instead of growing a flag — every existing
-  /// `BorderRadius.circular(tokens.controlRadius)` is already correct under
-  /// both shapes, with nothing to change and nothing to forget.
+  /// A control's corner radius: button, chip, tab, dropdown, value box.
   ///
   /// It is a **corner radius only**. Never use it as a length (a padding, a
-  /// height, an inset): under Round it is not one.
+  /// height, an inset). Where a control is a capsule the shape says so
+  /// through [actionRadius], which may be [stadium] rather than a number.
   final double controlRadius;
   final double floatRadius;
   final double cardRadius;
@@ -95,6 +201,52 @@ class ShapeTokens {
   final double windowInset;
   final List<BoxShadow> cardShadow;
 
+  /// How a container label is cased before it is drawn.
+  final LabelCase labelCase;
+
+  /// Whether a panel title sits centred on its strip with a dot at the corner.
+  final bool titleCentred;
+
+  /// Whether a panel header carries the small accent dot before its title.
+  final bool headerDot;
+
+  /// The stroke an icon is drawn with, in logical pixels.
+  final double strokeWeight;
+
+  /// The corner of a band inside a pane: a stage, a lane area, an effect's rows.
+  final double sectionRadius;
+
+  /// The corner of an action: buttons, chips, badges and active segments,
+  /// which may be [stadium].
+  final double actionRadius;
+
+  /// The corner of a well: value boxes and text fields.
+  final double wellRadius;
+
+  /// The corner of content on a lane: layer bars and clips.
+  final double contentRadius;
+
+  /// Whether panes are cards standing on a room colour rather than flush tiles.
+  final bool roomed;
+
+  /// The margin between a pill and the filled state drawn inside it, on every
+  /// side. The inner corner radius is the outer minus this, so the margin
+  /// stays the same the whole way round.
+  final double pillInset;
+
+  /// The face for words, and the face for text that is machine output (a
+  /// path, an expression, the boot log). Desk sets one face for everything
+  /// and keeps its mono cut for the machine's text only.
+  final String sansFamily;
+  final String monoFamily;
+
+  /// Whether numbers stand in the sans with tabular figures, the way Desk
+  /// sets timecode and values, rather than in the mono face.
+  final bool tabularNumbers;
+
+  /// The kicker's tracking in logical pixels at its 9px: 1.08 for the caps
+  /// label (+0.12em), 0.36 for Desk's lowercase one (+0.04em).
+  final double kickerTracking;
   const ShapeTokens({
     required this.controlRadius,
     required this.floatRadius,
@@ -103,9 +255,29 @@ class ShapeTokens {
     required this.tileGap,
     required this.windowInset,
     required this.cardShadow,
+    required this.labelCase,
+    required this.titleCentred,
+    required this.headerDot,
+    required this.strokeWeight,
+    required this.sectionRadius,
+    required this.actionRadius,
+    required this.wellRadius,
+    required this.contentRadius,
+    required this.roomed,
+    this.pillInset = 0,
+    this.sansFamily = LumitTheme.fontFamily,
+    this.monoFamily = LumitTheme.monoFontFamily,
+    this.tabularNumbers = false,
+    this.kickerTracking = 1.08,
   });
 
-  static const sharp = ShapeTokens(
+  /// The value a capsule radius carries: bigger than any control is tall, so
+  /// the corner clamps to half the height and draws a stadium. A rounded
+  /// rectangle scales its radii down to fit its own box, which is why one
+  /// number serves every height.
+  static const double stadium = 1000;
+
+  static const studio = ShapeTokens(
     // The mockups draw 2 on almost every control (measured from the
     // computed-style manifests); 4 was the original guess.
     controlRadius: 2,
@@ -115,30 +287,84 @@ class ShapeTokens {
     tileGap: 1.0,
     windowInset: 0.0,
     cardShadow: [],
+    labelCase: LabelCase.caps,
+    titleCentred: false,
+    headerDot: false,
+    strokeWeight: 1.5,
+    sectionRadius: 2,
+    actionRadius: 2,
+    wellRadius: 2,
+    contentRadius: 2,
+    roomed: false,
+    pillInset: 0,
   );
 
-  /// The value [controlRadius] carries under Round: bigger than any control is
-  /// tall, so the corner clamps to half the height and draws a stadium.
-  static const double stadium = 1000;
+  static const desk = ShapeTokens(
+    // Square everywhere: an instrument's plates and wells have no radius,
+    // and the panels sit as plates in a 4px chassis of the ground.
+    controlRadius: 0,
+    floatRadius: 0,
+    cardRadius: 0,
+    cardPadding: 0,
+    tileGap: 4.0,
+    windowInset: 4.0,
+    cardShadow: [],
+    labelCase: LabelCase.lower,
+    titleCentred: false,
+    headerDot: false,
+    strokeWeight: 1.25,
+    sectionRadius: 0,
+    actionRadius: 0,
+    wellRadius: 0,
+    contentRadius: 0,
+    roomed: false,
+    pillInset: 0,
+    // One face, tabular figures, and a lowercase label at +0.04em
+    // (docs/design-alt/15-DESIGN-DESK.md 7.2).
+    sansFamily: 'IBM Plex Sans',
+    monoFamily: 'IBM Plex Mono',
+    tabularNumbers: true,
+    kickerTracking: 0.36,
+  );
 
-  static const round = ShapeTokens(
-    controlRadius: stadium,
-    floatRadius: 16,
-    cardRadius: 18,
-    cardPadding: 10,
-    tileGap: 12.0,
-    windowInset: 12.0,
+  static const lantern = ShapeTokens(
+    controlRadius: 7,
+    floatRadius: 12,
+    cardRadius: 16,
+    cardPadding: 0,
+    tileGap: 10.0,
+    windowInset: 10.0,
     cardShadow: [
+      // Wide and faint, so the shadow fades round the corner instead of
+      // stopping where the straight edge does.
       BoxShadow(
-        offset: Offset(0, 4),
-        blurRadius: 16,
-        color: Color(0x30000000),
+        offset: Offset(0, 3),
+        blurRadius: 12,
+        color: Color(0x1A000000),
+      ),
+      BoxShadow(
+        offset: Offset(0, 1),
+        blurRadius: 2,
+        color: Color(0x10000000),
       ),
     ],
+    labelCase: LabelCase.caps,
+    titleCentred: true,
+    headerDot: true,
+    strokeWeight: 1.5,
+    sectionRadius: 12,
+    actionRadius: stadium,
+    wellRadius: 7,
+    contentRadius: 3,
+    roomed: true,
+    pillInset: 3,
   );
 
-  static ShapeTokens of(ThemeShape shape) =>
-      shape == ThemeShape.sharp ? sharp : round;
+  static ShapeTokens of(ThemeShape shape) => switch (shape) {
+        ThemeShape.studio => studio,
+        ThemeShape.desk => desk,
+        ThemeShape.lantern => lantern,
+      };
 }
 
 /// **How much room a row gets** (docs/15-DESIGN.md §12A.6).
@@ -209,6 +435,22 @@ class DensityTokens {
   /// A property or effect-parameter row in the Effect controls.
   final double propertyRow;
 
+  /// A panel's title strip, and the Viewer's two bars.
+  final double headerStrip;
+
+  /// The cache stripe on the ruler's floor.
+  final double cacheBar;
+
+  /// The time navigator strip above the ruler.
+  final double navigatorBand;
+
+  /// The gutter scrollbar's thickness.
+  final double scrollbar;
+
+  /// The top line's height: the menu bar under Studio and Desk, the room's
+  /// own band under Lantern.
+  final double menuBar;
+
   const DensityTokens({
     required this.laneRow,
     required this.secondaryRow,
@@ -218,6 +460,11 @@ class DensityTokens {
     required this.inRowPicker,
     required this.dropdownFace,
     required this.propertyRow,
+    required this.headerStrip,
+    required this.cacheBar,
+    required this.navigatorBand,
+    required this.scrollbar,
+    required this.menuBar,
   });
 
   /// The Timeline ruler, which is **derived and not declared**: the lane side
@@ -242,6 +489,11 @@ class DensityTokens {
     inRowPicker: 18,
     dropdownFace: 20,
     propertyRow: 27,
+    headerStrip: 22,
+    cacheBar: 3,
+    navigatorBand: 12,
+    scrollbar: 7,
+    menuBar: 26,
   );
 
   /// A pixel or two off each row, for more visible at once. What the app drew
@@ -256,9 +508,96 @@ class DensityTokens {
     inRowPicker: 16,
     dropdownFace: 18,
     propertyRow: 26,
+    headerStrip: 22,
+    cacheBar: 3,
+    navigatorBand: 12,
+    scrollbar: 7,
+    menuBar: 26,
   );
 
   static DensityTokens of(bool isCompact) => isCompact ? compact : regular;
+
+  /// Desk's module: every row a multiple of four
+  /// (docs/design-alt/15-DESIGN-DESK.md §7.1).
+  static const deskRegular = DensityTokens(
+    laneRow: 24,
+    secondaryRow: 20,
+    timelineChromeRow: 24,
+    timelineHeaderRow: 24,
+    timelineChromeControl: 20,
+    inRowPicker: 16,
+    dropdownFace: 20,
+    propertyRow: 28,
+    headerStrip: 24,
+    cacheBar: 4,
+    navigatorBand: 16,
+    scrollbar: 8,
+    menuBar: 28,
+  );
+
+  /// Desk compact: the row and the property row each drop one module, and
+  /// nothing else moves.
+  static const deskCompact = DensityTokens(
+    laneRow: 20,
+    secondaryRow: 20,
+    timelineChromeRow: 24,
+    timelineHeaderRow: 24,
+    timelineChromeControl: 20,
+    inRowPicker: 16,
+    dropdownFace: 20,
+    propertyRow: 24,
+    headerStrip: 24,
+    cacheBar: 4,
+    navigatorBand: 16,
+    scrollbar: 8,
+    menuBar: 28,
+  );
+
+  /// Lantern's rows: the surveyed set with a 28 row pitch (26 drawn and a 2px
+  /// gap) and a 36 card title line. The band is 40 rather than the 44 the
+  /// document draws (docs/design-alt/15-DESIGN-LANTERN.md 12B.2), so the band
+  /// and the 44 tool strip under it fit inside 84 together.
+  static const lanternRegular = DensityTokens(
+    laneRow: 28,
+    secondaryRow: 19,
+    timelineChromeRow: 24,
+    timelineHeaderRow: 23,
+    timelineChromeControl: 20,
+    inRowPicker: 18,
+    dropdownFace: 20,
+    propertyRow: 27,
+    headerStrip: 36,
+    cacheBar: 4,
+    navigatorBand: 12,
+    scrollbar: 7,
+    menuBar: 40,
+  );
+
+  /// Lantern compact: the surveyed compact set under the same row pitch and
+  /// card title line.
+  static const lanternCompact = DensityTokens(
+    laneRow: 28,
+    secondaryRow: 18,
+    timelineChromeRow: 18,
+    timelineHeaderRow: 18,
+    timelineChromeControl: null,
+    inRowPicker: 16,
+    dropdownFace: 18,
+    propertyRow: 26,
+    headerStrip: 36,
+    cacheBar: 4,
+    navigatorBand: 12,
+    scrollbar: 7,
+    menuBar: 40,
+  );
+
+  /// The pair a shape draws on.
+  static DensityTokens forShape(ThemeShape shape, bool isCompact) =>
+      switch (shape) {
+        ThemeShape.studio => of(isCompact),
+        ThemeShape.desk => isCompact ? deskCompact : deskRegular,
+        ThemeShape.lantern => isCompact ? lanternCompact : lanternRegular,
+      };
 }
 
 /// Per-layer-type identity colours (docs/15-DESIGN.md §6.1).
@@ -488,16 +827,21 @@ class LumitTheme {
   /// pale scrim over pale panels would say nothing.
   final Color scrim;
 
+  /// The ground panes stand on when the shape is roomed. A light neutral for
+  /// a dark scheme, so the cards read as objects lit inside a room; a light
+  /// scheme's own canvas otherwise. Studio and Desk never draw it.
+  final Color room;
+
   /// The three Timeline tokens default from the mode rather than being spelled
   /// out by every scheme: they are a *relationship* to the surface ramp (a
   /// shade beyond `surface1`, a fill that out-contrasts it, a grey that reads
-  /// against it), and seven schemes restating that relationship would be seven
-  /// chances to get it wrong. A custom theme, or any scheme that wants its own,
-  /// passes them explicitly.
+  /// against it), and every scheme restating that relationship would be one
+  /// more chance to get it wrong. A custom theme, or any scheme that wants its
+  /// own, passes them explicitly.
   LumitTheme({
     required this.mode,
-    this.shape = ThemeShape.sharp,
-    this.tokens = ShapeTokens.sharp,
+    this.shape = ThemeShape.studio,
+    this.tokens = ShapeTokens.studio,
     this.density = DensityTokens.regular,
     required this.surface0,
     required this.surface1,
@@ -525,13 +869,34 @@ class LumitTheme {
     Color? selectionFill,
     Color? marker,
     Color? scrim,
+    Color? room,
     WaveformColours? waveform,
   })  : timelineOutOfRange =
             timelineOutOfRange ?? defaultOutOfRange(mode, surface1),
         selectionFill = selectionFill ?? defaultSelectionFill(mode, surface2),
         marker = marker ?? defaultMarker(mode),
         scrim = scrim ?? defaultScrim(mode),
+        room = room ?? defaultRoom(mode, surface0),
         waveform = waveform ?? defaultWaveform(mode);
+
+  /// The room a dark scheme's cards stand in: the light neutral the Lantern
+  /// drawing calls the day room. A light scheme already is a room, so its own
+  /// canvas serves.
+  static Color defaultRoom(ThemeMode2 mode, Color surface0) =>
+      mode == ThemeMode2.dark ? dayRoom : nightRoom;
+
+  /// The two rooms Lantern's cards can stand in: a light neutral the dark
+  /// schemes get by default, and a near-black the light schemes get, so the
+  /// cards are always the other way round from the room.
+  static Color get dayRoom => _rgb(0xd9, 0xd9, 0xd6);
+  static Color get nightRoom => _rgb(0x0b, 0x0c, 0x0e);
+
+  /// Words that stand on the room itself (the menus of Lantern's top band)
+  /// take their ink from the room, not from the scheme: dark on a light
+  /// room, light on a dark one.
+  Color get roomInk => room.computeLuminance() > 0.35
+      ? _rgb(0x1a, 0x1d, 0x20)
+      : _rgb(0xee, 0xf1, 0xf2);
 
   /// The ground outside the work area: a step *away* from the surface ramp's
   /// direction — darker under a dark scheme, and darker again under a light
@@ -654,12 +1019,14 @@ class LumitTheme {
     DensityTokens? density,
     Color? accent,
     Color? accentHover,
+    Color? room,
   }) =>
       LumitTheme(
         mode: mode,
         shape: shape ?? this.shape,
         tokens: tokens ?? this.tokens,
         density: density ?? this.density,
+        room: room ?? this.room,
         surface0: surface0,
         surface1: surface1,
         surface2: surface2,
@@ -967,6 +1334,998 @@ class LumitTheme {
         ),
       );
 
+  /// Mallow dark.
+  factory LumitTheme.mallowDark() => LumitTheme(
+        mode: ThemeMode2.dark,
+        surface0: _rgb(0x1c, 0x19, 0x20),
+        surface1: _rgb(0x26, 0x21, 0x29),
+        surface2: _rgb(0x2f, 0x29, 0x33),
+        surface3: _rgb(0x38, 0x31, 0x40),
+        surface4: _rgb(0x44, 0x3b, 0x4d),
+        viewerSurround: _rgb(0x1c, 0x1c, 0x1c),
+        textPrimary: _rgb(0xf2, 0xec, 0xf2),
+        textSecondary: _rgb(0xd6, 0xcc, 0xd8),
+        textMuted: _rgb(0xa9, 0x9b, 0xb1),
+        textDisabled: _rgb(0x7c, 0x6d, 0x84),
+        hairline: _rgb(0x36, 0x2f, 0x3c),
+        hairlineStrong: _rgb(0x82, 0x74, 0x8b),
+        accent: _rgb(0xbd, 0xa3, 0xf2),
+        accentHover: _rgb(0xcf, 0xb5, 0xff),
+        animated: _rgb(0xd8, 0xb0, 0x71),
+        success: _rgb(0x74, 0xc0, 0x9a),
+        warning: _rgb(0xf8, 0xd1, 0x98),
+        error: _rgb(0xc8, 0x67, 0x92),
+        cacheDisk: _rgb(0x6e, 0xb3, 0xde),
+        curve: [
+          _rgb(0x72, 0xd5, 0xe1),
+          _rgb(0xbd, 0xcd, 0x95),
+          _rgb(0xec, 0xa8, 0xc6),
+          _rgb(0xdf, 0xcb, 0x94),
+        ],
+        layer: LayerColours(
+          footage: _rgb(0x6a, 0x8b, 0x9a),
+          sequence: _rgb(0x6f, 0x70, 0x88),
+          precomp: _rgb(0x6f, 0x57, 0x68),
+          solid: _rgb(0x4d, 0x4a, 0x50),
+          text: _rgb(0xbb, 0xb0, 0x97),
+          camera: _rgb(0xae, 0x97, 0x85),
+        ),
+      );
+
+  /// Mallow light.
+  factory LumitTheme.mallowLight() => LumitTheme(
+        mode: ThemeMode2.light,
+        surface0: _rgb(0xeb, 0xe4, 0xec),
+        surface1: _rgb(0xfb, 0xf8, 0xfb),
+        surface2: _rgb(0xf3, 0xee, 0xf4),
+        surface3: _rgb(0xfd, 0xfb, 0xfd),
+        surface4: _rgb(0xe6, 0xdd, 0xe8),
+        viewerSurround: _rgb(0xa8, 0xa8, 0xa8),
+        textPrimary: _rgb(0x2b, 0x24, 0x30),
+        textSecondary: _rgb(0x4d, 0x43, 0x54),
+        textMuted: _rgb(0x76, 0x6a, 0x7d),
+        textDisabled: _rgb(0x93, 0x86, 0x9a),
+        hairline: _rgb(0xdd, 0xd4, 0xde),
+        hairlineStrong: _rgb(0x8f, 0x83, 0x97),
+        accent: _rgb(0x7e, 0x59, 0xab),
+        accentHover: _rgb(0x6c, 0x47, 0x99),
+        animated: _rgb(0x9a, 0x6f, 0x27),
+        success: _rgb(0x2e, 0x80, 0x5c),
+        warning: _rgb(0xb4, 0x82, 0x37),
+        error: _rgb(0x9c, 0x30, 0x66),
+        cacheDisk: _rgb(0x2a, 0x79, 0xa1),
+        curve: [
+          _rgb(0x02, 0x84, 0x8f),
+          _rgb(0x6a, 0x7e, 0x40),
+          _rgb(0xa5, 0x5a, 0x7d),
+          _rgb(0x8d, 0x7b, 0x3d),
+        ],
+        layer: LayerColours(
+          footage: _rgb(0x5b, 0x82, 0x92),
+          sequence: _rgb(0x64, 0x66, 0x81),
+          precomp: _rgb(0x67, 0x4d, 0x60),
+          solid: _rgb(0x44, 0x41, 0x47),
+          text: _rgb(0xb1, 0xa5, 0x89),
+          camera: _rgb(0xa6, 0x8c, 0x77),
+        ),
+      );
+
+  /// Glacier dark.
+  factory LumitTheme.glacierDark() => LumitTheme(
+        mode: ThemeMode2.dark,
+        surface0: _rgb(0x0c, 0x10, 0x14),
+        surface1: _rgb(0x12, 0x18, 0x1e),
+        surface2: _rgb(0x18, 0x20, 0x27),
+        surface3: _rgb(0x1e, 0x28, 0x30),
+        surface4: _rgb(0x28, 0x34, 0x3e),
+        viewerSurround: _rgb(0x1c, 0x1c, 0x1c),
+        textPrimary: _rgb(0xe9, 0xf0, 0xf5),
+        textSecondary: _rgb(0xbc, 0xca, 0xd4),
+        textMuted: _rgb(0x83, 0x97, 0xa5),
+        textDisabled: _rgb(0x5d, 0x6e, 0x7a),
+        hairline: _rgb(0x22, 0x2c, 0x35),
+        hairlineStrong: _rgb(0x5d, 0x72, 0x80),
+        accent: _rgb(0x54, 0xca, 0xe4),
+        accentHover: _rgb(0x66, 0xdc, 0xf6),
+        animated: _rgb(0xdf, 0xb5, 0x6a),
+        success: _rgb(0x4f, 0xb9, 0x85),
+        warning: _rgb(0xf7, 0xd4, 0x6a),
+        error: _rgb(0xd1, 0x56, 0x8b),
+        cacheDisk: _rgb(0x56, 0x9c, 0xd4),
+        curve: [
+          _rgb(0x62, 0xd8, 0xdb),
+          _rgb(0xaf, 0xd1, 0x95),
+          _rgb(0xec, 0xa7, 0xd2),
+          _rgb(0xdb, 0xcc, 0x94),
+        ],
+        layer: LayerColours(
+          footage: _rgb(0x6c, 0x8c, 0x92),
+          sequence: _rgb(0x65, 0x73, 0x86),
+          precomp: _rgb(0x60, 0x5c, 0x6f),
+          solid: _rgb(0x45, 0x4c, 0x51),
+          text: _rgb(0xb8, 0xb0, 0x9b),
+          camera: _rgb(0xae, 0x96, 0x8a),
+        ),
+      );
+
+  /// Glacier light.
+  factory LumitTheme.glacierLight() => LumitTheme(
+        mode: ThemeMode2.light,
+        surface0: _rgb(0xe3, 0xe8, 0xec),
+        surface1: _rgb(0xf7, 0xf9, 0xfb),
+        surface2: _rgb(0xee, 0xf2, 0xf5),
+        surface3: _rgb(0xfb, 0xfc, 0xfd),
+        surface4: _rgb(0xd9, 0xe0, 0xe6),
+        viewerSurround: _rgb(0xa8, 0xa8, 0xa8),
+        textPrimary: _rgb(0x16, 0x20, 0x2a),
+        textSecondary: _rgb(0x3a, 0x49, 0x54),
+        textMuted: _rgb(0x60, 0x72, 0x80),
+        textDisabled: _rgb(0x7d, 0x8c, 0x98),
+        hairline: _rgb(0xd2, 0xda, 0xe0),
+        hairlineStrong: _rgb(0x7c, 0x8a, 0x96),
+        accent: _rgb(0x00, 0x75, 0xc9),
+        accentHover: _rgb(0x00, 0x63, 0xb7),
+        animated: _rgb(0xa1, 0x74, 0x23),
+        success: _rgb(0x00, 0x83, 0x53),
+        warning: _rgb(0xab, 0x87, 0x20),
+        error: _rgb(0xa7, 0x1f, 0x63),
+        cacheDisk: _rgb(0x1e, 0x73, 0xa8),
+        curve: [
+          _rgb(0x00, 0x7f, 0x82),
+          _rgb(0x5b, 0x81, 0x41),
+          _rgb(0xa4, 0x59, 0x8a),
+          _rgb(0x89, 0x7c, 0x3d),
+        ],
+        layer: LayerColours(
+          footage: _rgb(0x5c, 0x82, 0x89),
+          sequence: _rgb(0x58, 0x6a, 0x7f),
+          precomp: _rgb(0x57, 0x52, 0x68),
+          solid: _rgb(0x3c, 0x43, 0x47),
+          text: _rgb(0xae, 0xa5, 0x8d),
+          camera: _rgb(0xa6, 0x8b, 0x7d),
+        ),
+      );
+
+  /// Hearth dark.
+  factory LumitTheme.hearthDark() => LumitTheme(
+        mode: ThemeMode2.dark,
+        surface0: _rgb(0x1a, 0x15, 0x12),
+        surface1: _rgb(0x24, 0x1d, 0x18),
+        surface2: _rgb(0x2d, 0x25, 0x1f),
+        surface3: _rgb(0x37, 0x2e, 0x27),
+        surface4: _rgb(0x44, 0x39, 0x30),
+        viewerSurround: _rgb(0x1c, 0x1c, 0x1c),
+        textPrimary: _rgb(0xf3, 0xeb, 0xe2),
+        textSecondary: _rgb(0xd9, 0xcc, 0xbe),
+        textMuted: _rgb(0xa9, 0x98, 0x89),
+        textDisabled: _rgb(0x7d, 0x6e, 0x62),
+        hairline: _rgb(0x34, 0x29, 0x1f),
+        hairlineStrong: _rgb(0x82, 0x72, 0x5f),
+        accent: _rgb(0xe4, 0x81, 0x58),
+        accentHover: _rgb(0xf6, 0x93, 0x6a),
+        animated: _rgb(0xd2, 0xb2, 0x6c),
+        success: _rgb(0x76, 0xb3, 0x86),
+        warning: _rgb(0xf0, 0xc6, 0x75),
+        error: _rgb(0xc2, 0x59, 0x80),
+        cacheDisk: _rgb(0x49, 0xa6, 0xc4),
+        curve: [
+          _rgb(0x73, 0xd0, 0xc9),
+          _rgb(0xb7, 0xc8, 0x90),
+          _rgb(0xe9, 0xa2, 0xbc),
+          _rgb(0xd5, 0xc6, 0x8f),
+        ],
+        layer: LayerColours(
+          footage: _rgb(0x66, 0x8d, 0x92),
+          sequence: _rgb(0x6c, 0x71, 0x89),
+          precomp: _rgb(0x72, 0x57, 0x64),
+          solid: _rgb(0x50, 0x4a, 0x46),
+          text: _rgb(0xbd, 0xaf, 0x97),
+          camera: _rgb(0xb2, 0x95, 0x88),
+        ),
+      );
+
+  /// Hearth light.
+  factory LumitTheme.hearthLight() => LumitTheme(
+        mode: ThemeMode2.light,
+        surface0: _rgb(0xec, 0xe5, 0xdc),
+        surface1: _rgb(0xfb, 0xf7, 0xf1),
+        surface2: _rgb(0xf3, 0xed, 0xe5),
+        surface3: _rgb(0xfd, 0xfa, 0xf6),
+        surface4: _rgb(0xe4, 0xdb, 0xcf),
+        viewerSurround: _rgb(0xa8, 0xa8, 0xa8),
+        textPrimary: _rgb(0x2a, 0x22, 0x1c),
+        textSecondary: _rgb(0x4e, 0x43, 0x3a),
+        textMuted: _rgb(0x78, 0x6a, 0x5e),
+        textDisabled: _rgb(0x97, 0x8a, 0x7e),
+        hairline: _rgb(0xdf, 0xd5, 0xc9),
+        hairlineStrong: _rgb(0x8e, 0x80, 0x71),
+        accent: _rgb(0xaa, 0x42, 0x20),
+        accentHover: _rgb(0x98, 0x30, 0x0e),
+        animated: _rgb(0x97, 0x70, 0x26),
+        success: _rgb(0x3f, 0x7f, 0x52),
+        warning: _rgb(0xb4, 0x83, 0x2e),
+        error: _rgb(0x9e, 0x2e, 0x5e),
+        cacheDisk: _rgb(0x00, 0x77, 0x93),
+        curve: [
+          _rgb(0x00, 0x80, 0x7a),
+          _rgb(0x6a, 0x7e, 0x40),
+          _rgb(0xa8, 0x59, 0x78),
+          _rgb(0x89, 0x7c, 0x3d),
+        ],
+        layer: LayerColours(
+          footage: _rgb(0x56, 0x83, 0x89),
+          sequence: _rgb(0x61, 0x67, 0x81),
+          precomp: _rgb(0x6a, 0x4c, 0x5c),
+          solid: _rgb(0x47, 0x41, 0x3d),
+          text: _rgb(0xb4, 0xa4, 0x89),
+          camera: _rgb(0xaa, 0x8a, 0x7c),
+        ),
+      );
+
+  /// Chalk dark.
+  factory LumitTheme.chalkDark() => LumitTheme(
+        mode: ThemeMode2.dark,
+        surface0: _rgb(0x06, 0x06, 0x06),
+        surface1: _rgb(0x0e, 0x0e, 0x0e),
+        surface2: _rgb(0x18, 0x18, 0x18),
+        surface3: _rgb(0x22, 0x22, 0x22),
+        surface4: _rgb(0x2e, 0x2e, 0x2e),
+        viewerSurround: _rgb(0x1c, 0x1c, 0x1c),
+        textPrimary: _rgb(0xf8, 0xf8, 0xf8),
+        textSecondary: _rgb(0xe2, 0xe2, 0xe2),
+        textMuted: _rgb(0xb4, 0xb4, 0xb4),
+        textDisabled: _rgb(0x8c, 0x8c, 0x8c),
+        hairline: _rgb(0x34, 0x34, 0x34),
+        hairlineStrong: _rgb(0x8c, 0x8c, 0x8c),
+        accent: _rgb(0x7d, 0xc1, 0xfe),
+        accentHover: _rgb(0x8f, 0xd3, 0xff),
+        animated: _rgb(0xe9, 0xc2, 0x68),
+        success: _rgb(0x1c, 0xbc, 0x81),
+        warning: _rgb(0xfb, 0xe3, 0x5f),
+        error: _rgb(0xcf, 0x4a, 0x8f),
+        cacheDisk: _rgb(0x5a, 0xb7, 0xd4),
+        curve: [
+          _rgb(0x6f, 0xe3, 0xe6),
+          _rgb(0xba, 0xdc, 0xa0),
+          _rgb(0xf7, 0xb1, 0xdd),
+          _rgb(0xe6, 0xd7, 0x9f),
+        ],
+        layer: LayerColours(
+          footage: _rgb(0x6c, 0x8c, 0x92),
+          sequence: _rgb(0x60, 0x6e, 0x81),
+          precomp: _rgb(0x56, 0x52, 0x65),
+          solid: _rgb(0x3e, 0x3e, 0x3e),
+          text: _rgb(0xc3, 0xbb, 0xa5),
+          camera: _rgb(0xb4, 0x9c, 0x8f),
+        ),
+      );
+
+  /// Chalk light.
+  factory LumitTheme.chalkLight() => LumitTheme(
+        mode: ThemeMode2.light,
+        surface0: _rgb(0xe6, 0xe6, 0xe6),
+        surface1: _rgb(0xff, 0xff, 0xff),
+        surface2: _rgb(0xf2, 0xf2, 0xf2),
+        surface3: _rgb(0xff, 0xff, 0xff),
+        surface4: _rgb(0xda, 0xda, 0xda),
+        viewerSurround: _rgb(0xa8, 0xa8, 0xa8),
+        textPrimary: _rgb(0x0a, 0x0a, 0x0a),
+        textSecondary: _rgb(0x26, 0x26, 0x26),
+        textMuted: _rgb(0x4a, 0x4a, 0x4a),
+        textDisabled: _rgb(0x6a, 0x6a, 0x6a),
+        hairline: _rgb(0xc8, 0xc8, 0xc8),
+        hairlineStrong: _rgb(0x6e, 0x6e, 0x6e),
+        accent: _rgb(0x00, 0x4e, 0xa1),
+        accentHover: _rgb(0x00, 0x3c, 0x8f),
+        animated: _rgb(0x93, 0x6b, 0x00),
+        success: _rgb(0x00, 0x80, 0x55),
+        warning: _rgb(0xa3, 0x8a, 0x00),
+        error: _rgb(0xa3, 0x0c, 0x68),
+        cacheDisk: _rgb(0x00, 0x72, 0x8b),
+        curve: [
+          _rgb(0x01, 0x7a, 0x7c),
+          _rgb(0x52, 0x7d, 0x36),
+          _rgb(0xa3, 0x50, 0x87),
+          _rgb(0x84, 0x77, 0x30),
+        ],
+        layer: LayerColours(
+          footage: _rgb(0x5c, 0x82, 0x89),
+          sequence: _rgb(0x53, 0x65, 0x7a),
+          precomp: _rgb(0x4d, 0x48, 0x5e),
+          solid: _rgb(0x35, 0x35, 0x35),
+          text: _rgb(0xb9, 0xb0, 0x97),
+          camera: _rgb(0xac, 0x90, 0x82),
+        ),
+      );
+
+  /// Vellum dark.
+  factory LumitTheme.vellumDark() => LumitTheme(
+        mode: ThemeMode2.dark,
+        surface0: _rgb(0x1e, 0x1d, 0x1b),
+        surface1: _rgb(0x28, 0x27, 0x25),
+        surface2: _rgb(0x32, 0x30, 0x2d),
+        surface3: _rgb(0x3b, 0x39, 0x36),
+        surface4: _rgb(0x47, 0x44, 0x3f),
+        viewerSurround: _rgb(0x1c, 0x1c, 0x1c),
+        textPrimary: _rgb(0xed, 0xe8, 0xdf),
+        textSecondary: _rgb(0xcf, 0xc8, 0xbc),
+        textMuted: _rgb(0xa4, 0x9d, 0x90),
+        textDisabled: _rgb(0x7b, 0x75, 0x69),
+        hairline: _rgb(0x38, 0x36, 0x32),
+        hairlineStrong: _rgb(0x82, 0x79, 0x6d),
+        accent: _rgb(0x54, 0xaa, 0xd4),
+        accentHover: _rgb(0x66, 0xbc, 0xe6),
+        animated: _rgb(0xcc, 0xac, 0x77),
+        success: _rgb(0x7e, 0xb1, 0x91),
+        warning: _rgb(0xe8, 0xc8, 0x8d),
+        error: _rgb(0xb6, 0x6a, 0x87),
+        cacheDisk: _rgb(0x64, 0xa5, 0xb4),
+        curve: [
+          _rgb(0x84, 0xc7, 0xc8),
+          _rgb(0xb5, 0xc0, 0x98),
+          _rgb(0xd5, 0xa3, 0xb8),
+          _rgb(0xcc, 0xc1, 0x98),
+        ],
+        layer: LayerColours(
+          footage: _rgb(0x71, 0x8a, 0x92),
+          sequence: _rgb(0x6c, 0x72, 0x82),
+          precomp: _rgb(0x6b, 0x59, 0x64),
+          solid: _rgb(0x4f, 0x4b, 0x45),
+          text: _rgb(0xb8, 0xb0, 0x9e),
+          camera: _rgb(0xaa, 0x98, 0x8c),
+        ),
+      );
+
+  /// Vellum light.
+  factory LumitTheme.vellumLight() => LumitTheme(
+        mode: ThemeMode2.light,
+        surface0: _rgb(0xe9, 0xe3, 0xd8),
+        surface1: _rgb(0xfa, 0xf6, 0xee),
+        surface2: _rgb(0xf2, 0xec, 0xdf),
+        surface3: _rgb(0xfc, 0xf9, 0xf3),
+        surface4: _rgb(0xe0, 0xd9, 0xcc),
+        viewerSurround: _rgb(0xa8, 0xa8, 0xa8),
+        textPrimary: _rgb(0x2c, 0x2a, 0x25),
+        textSecondary: _rgb(0x4b, 0x48, 0x3f),
+        textMuted: _rgb(0x71, 0x6b, 0x60),
+        textDisabled: _rgb(0x8f, 0x88, 0x79),
+        hairline: _rgb(0xd9, 0xd1, 0xc3),
+        hairlineStrong: _rgb(0x8a, 0x83, 0x75),
+        accent: _rgb(0x13, 0x67, 0xa5),
+        accentHover: _rgb(0x01, 0x55, 0x93),
+        animated: _rgb(0x96, 0x71, 0x2e),
+        success: _rgb(0x44, 0x7e, 0x5c),
+        warning: _rgb(0xac, 0x85, 0x39),
+        error: _rgb(0x8b, 0x37, 0x5b),
+        cacheDisk: _rgb(0x28, 0x77, 0x86),
+        curve: [
+          _rgb(0x15, 0x7e, 0x81),
+          _rgb(0x6e, 0x7d, 0x4d),
+          _rgb(0x9b, 0x60, 0x7b),
+          _rgb(0x87, 0x7c, 0x4c),
+        ],
+        layer: LayerColours(
+          footage: _rgb(0x63, 0x81, 0x8a),
+          sequence: _rgb(0x61, 0x68, 0x7b),
+          precomp: _rgb(0x64, 0x4f, 0x5b),
+          solid: _rgb(0x46, 0x41, 0x3c),
+          text: _rgb(0xaf, 0xa5, 0x90),
+          camera: _rgb(0xa2, 0x8c, 0x7f),
+        ),
+      );
+
+  /// Neon dark.
+  factory LumitTheme.neonDark() => LumitTheme(
+        mode: ThemeMode2.dark,
+        surface0: _rgb(0x1a, 0x1a, 0x1f),
+        surface1: _rgb(0x22, 0x22, 0x28),
+        surface2: _rgb(0x2a, 0x2b, 0x30),
+        surface3: _rgb(0x33, 0x33, 0x39),
+        surface4: _rgb(0x3e, 0x3e, 0x44),
+        viewerSurround: _rgb(0x1c, 0x1c, 0x1c),
+        textPrimary: _rgb(0xed, 0xed, 0xf5),
+        textSecondary: _rgb(0xce, 0xce, 0xd6),
+        textMuted: _rgb(0xa0, 0xa0, 0xa7),
+        textDisabled: _rgb(0x71, 0x71, 0x78),
+        hairline: _rgb(0x30, 0x31, 0x3a),
+        hairlineStrong: _rgb(0x78, 0x79, 0x83),
+        accent: _rgb(0xff, 0x62, 0xdf),
+        accentHover: _rgb(0xff, 0x74, 0xf1),
+        animated: _rgb(0x23, 0xe7, 0xf3),
+        success: _rgb(0x52, 0xce, 0x60),
+        warning: _rgb(0xed, 0xe9, 0x2d),
+        error: _rgb(0xf2, 0x2c, 0x73),
+        cacheDisk: _rgb(0x63, 0x8e, 0xf0),
+        curve: [
+          _rgb(0x09, 0xdd, 0xdb),
+          _rgb(0xa1, 0xd5, 0x7d),
+          _rgb(0xff, 0x9e, 0xca),
+          _rgb(0xeb, 0xd0, 0x7a),
+        ],
+        layer: LayerColours(
+          footage: _rgb(0x4b, 0x96, 0xa0),
+          sequence: _rgb(0x48, 0x82, 0x6f),
+          precomp: _rgb(0x7c, 0x57, 0x77),
+          solid: _rgb(0x51, 0x4f, 0x55),
+          text: _rgb(0xbf, 0xb7, 0x8a),
+          camera: _rgb(0xc2, 0x98, 0x7c),
+        ),
+      );
+
+  /// Neon light.
+  factory LumitTheme.neonLight() => LumitTheme(
+        mode: ThemeMode2.light,
+        surface0: _rgb(0xe5, 0xe5, 0xec),
+        surface1: _rgb(0xf9, 0xf9, 0xfc),
+        surface2: _rgb(0xef, 0xef, 0xf4),
+        surface3: _rgb(0xfc, 0xfc, 0xfe),
+        surface4: _rgb(0xdf, 0xdf, 0xe7),
+        viewerSurround: _rgb(0xa8, 0xa8, 0xa8),
+        textPrimary: _rgb(0x24, 0x25, 0x33),
+        textSecondary: _rgb(0x45, 0x46, 0x55),
+        textMuted: _rgb(0x6c, 0x6d, 0x7e),
+        textDisabled: _rgb(0x88, 0x89, 0x9a),
+        hairline: _rgb(0xd6, 0xd6, 0xe2),
+        hairlineStrong: _rgb(0x85, 0x85, 0x90),
+        accent: _rgb(0xc0, 0x00, 0xa4),
+        accentHover: _rgb(0xae, 0x00, 0x92),
+        animated: _rgb(0xa5, 0x62, 0x00),
+        success: _rgb(0x00, 0x87, 0x29),
+        warning: _rgb(0x9f, 0x8f, 0x00),
+        error: _rgb(0xab, 0x00, 0x4a),
+        cacheDisk: _rgb(0x25, 0x6a, 0xcf),
+        curve: [
+          _rgb(0x02, 0x85, 0x84),
+          _rgb(0x51, 0x8a, 0x2c),
+          _rgb(0xc3, 0x3e, 0x85),
+          _rgb(0x97, 0x80, 0x11),
+        ],
+        layer: LayerColours(
+          footage: _rgb(0x28, 0x82, 0x8c),
+          sequence: _rgb(0x2e, 0x6e, 0x5b),
+          precomp: _rgb(0x6a, 0x43, 0x65),
+          solid: _rgb(0x3e, 0x3d, 0x43),
+          text: _rgb(0xa9, 0xa1, 0x72),
+          camera: _rgb(0xae, 0x82, 0x65),
+        ),
+      );
+
+  /// Canopy dark.
+  factory LumitTheme.canopyDark() => LumitTheme(
+        mode: ThemeMode2.dark,
+        surface0: _rgb(0x16, 0x1c, 0x17),
+        surface1: _rgb(0x1e, 0x24, 0x1f),
+        surface2: _rgb(0x26, 0x2d, 0x27),
+        surface3: _rgb(0x2e, 0x35, 0x30),
+        surface4: _rgb(0x39, 0x41, 0x3b),
+        viewerSurround: _rgb(0x1c, 0x1c, 0x1c),
+        textPrimary: _rgb(0xe8, 0xf0, 0xea),
+        textSecondary: _rgb(0xc9, 0xd1, 0xcb),
+        textMuted: _rgb(0x9b, 0xa2, 0x9d),
+        textDisabled: _rgb(0x6d, 0x74, 0x6e),
+        hairline: _rgb(0x2a, 0x34, 0x2c),
+        hairlineStrong: _rgb(0x71, 0x7c, 0x73),
+        accent: _rgb(0xc2, 0xce, 0x75),
+        accentHover: _rgb(0xd4, 0xe0, 0x87),
+        animated: _rgb(0xe3, 0xbb, 0x77),
+        success: _rgb(0x57, 0xab, 0x86),
+        warning: _rgb(0xf8, 0xd3, 0x77),
+        error: _rgb(0xca, 0x56, 0x61),
+        cacheDisk: _rgb(0x45, 0xa0, 0xc1),
+        curve: [
+          _rgb(0x6e, 0xd0, 0xd3),
+          _rgb(0xad, 0xca, 0x96),
+          _rgb(0xec, 0xa8, 0xc6),
+          _rgb(0xdb, 0xcc, 0x94),
+        ],
+        layer: LayerColours(
+          footage: _rgb(0x66, 0x8d, 0x94),
+          sequence: _rgb(0x64, 0x73, 0x89),
+          precomp: _rgb(0x70, 0x57, 0x66),
+          solid: _rgb(0x47, 0x4d, 0x48),
+          text: _rgb(0xbd, 0xaf, 0x97),
+          camera: _rgb(0xb2, 0x95, 0x88),
+        ),
+      );
+
+  /// Canopy light.
+  factory LumitTheme.canopyLight() => LumitTheme(
+        mode: ThemeMode2.light,
+        surface0: _rgb(0xe1, 0xe7, 0xe0),
+        surface1: _rgb(0xf8, 0xfa, 0xf8),
+        surface2: _rgb(0xed, 0xf0, 0xec),
+        surface3: _rgb(0xfb, 0xfd, 0xfb),
+        surface4: _rgb(0xdc, 0xe1, 0xdb),
+        viewerSurround: _rgb(0xa8, 0xa8, 0xa8),
+        textPrimary: _rgb(0x20, 0x28, 0x1e),
+        textSecondary: _rgb(0x40, 0x49, 0x3f),
+        textMuted: _rgb(0x67, 0x71, 0x65),
+        textDisabled: _rgb(0x83, 0x8d, 0x81),
+        hairline: _rgb(0xd1, 0xd9, 0xd0),
+        hairlineStrong: _rgb(0x81, 0x88, 0x7f),
+        accent: _rgb(0x55, 0x65, 0x00),
+        accentHover: _rgb(0x43, 0x53, 0x00),
+        animated: _rgb(0x9a, 0x6f, 0x27),
+        success: _rgb(0x1d, 0x84, 0x5e),
+        warning: _rgb(0xb0, 0x88, 0x29),
+        error: _rgb(0xa3, 0x2e, 0x3f),
+        cacheDisk: _rgb(0x00, 0x77, 0x95),
+        curve: [
+          _rgb(0x00, 0x7f, 0x82),
+          _rgb(0x5f, 0x80, 0x47),
+          _rgb(0xa5, 0x5a, 0x7d),
+          _rgb(0x89, 0x7c, 0x3d),
+        ],
+        layer: LayerColours(
+          footage: _rgb(0x56, 0x83, 0x8b),
+          sequence: _rgb(0x58, 0x69, 0x82),
+          precomp: _rgb(0x69, 0x4c, 0x5e),
+          solid: _rgb(0x3e, 0x44, 0x3f),
+          text: _rgb(0xb4, 0xa4, 0x89),
+          camera: _rgb(0xaa, 0x8a, 0x7c),
+        ),
+      );
+
+  /// Slate dark.
+  factory LumitTheme.slateDark() => LumitTheme(
+        mode: ThemeMode2.dark,
+        surface0: _rgb(0x1a, 0x1a, 0x1a),
+        surface1: _rgb(0x23, 0x23, 0x23),
+        surface2: _rgb(0x2b, 0x2b, 0x2b),
+        surface3: _rgb(0x34, 0x34, 0x34),
+        surface4: _rgb(0x3f, 0x3f, 0x3f),
+        viewerSurround: _rgb(0x1c, 0x1c, 0x1c),
+        textPrimary: _rgb(0xee, 0xee, 0xee),
+        textSecondary: _rgb(0xcf, 0xcf, 0xcf),
+        textMuted: _rgb(0xa0, 0xa0, 0xa0),
+        textDisabled: _rgb(0x72, 0x72, 0x72),
+        hairline: _rgb(0x31, 0x31, 0x31),
+        hairlineStrong: _rgb(0x79, 0x79, 0x79),
+        accent: _rgb(0x33, 0xbe, 0xef),
+        accentHover: _rgb(0x45, 0xd0, 0xff),
+        animated: _rgb(0xe3, 0xbc, 0x6f),
+        success: _rgb(0x54, 0xb8, 0x82),
+        warning: _rgb(0xf5, 0xd4, 0x77),
+        error: _rgb(0xd2, 0x55, 0x86),
+        cacheDisk: _rgb(0x66, 0x9b, 0xca),
+        curve: [
+          _rgb(0x62, 0xd8, 0xdb),
+          _rgb(0xaf, 0xd1, 0x95),
+          _rgb(0xec, 0xa7, 0xd2),
+          _rgb(0xdb, 0xcc, 0x94),
+        ],
+        layer: LayerColours(
+          footage: _rgb(0x6c, 0x8c, 0x93),
+          sequence: _rgb(0x67, 0x73, 0x86),
+          precomp: _rgb(0x64, 0x5b, 0x6d),
+          solid: _rgb(0x4b, 0x4b, 0x4b),
+          text: _rgb(0xb8, 0xb0, 0x9b),
+          camera: _rgb(0xad, 0x97, 0x89),
+        ),
+      );
+
+  /// Slate light.
+  factory LumitTheme.slateLight() => LumitTheme(
+        mode: ThemeMode2.light,
+        surface0: _rgb(0xe5, 0xe5, 0xe5),
+        surface1: _rgb(0xf9, 0xf9, 0xf9),
+        surface2: _rgb(0xef, 0xef, 0xef),
+        surface3: _rgb(0xfc, 0xfc, 0xfc),
+        surface4: _rgb(0xdf, 0xdf, 0xdf),
+        viewerSurround: _rgb(0xa8, 0xa8, 0xa8),
+        textPrimary: _rgb(0x26, 0x26, 0x26),
+        textSecondary: _rgb(0x47, 0x47, 0x47),
+        textMuted: _rgb(0x6e, 0x6e, 0x6e),
+        textDisabled: _rgb(0x8a, 0x8a, 0x8a),
+        hairline: _rgb(0xd7, 0xd7, 0xd7),
+        hairlineStrong: _rgb(0x86, 0x86, 0x86),
+        accent: _rgb(0x00, 0x6d, 0xa9),
+        accentHover: _rgb(0x00, 0x5b, 0x97),
+        animated: _rgb(0x9b, 0x6f, 0x22),
+        success: _rgb(0x0f, 0x83, 0x51),
+        warning: _rgb(0xad, 0x89, 0x28),
+        error: _rgb(0xa8, 0x1e, 0x5f),
+        cacheDisk: _rgb(0x39, 0x71, 0x9e),
+        curve: [
+          _rgb(0x00, 0x7f, 0x82),
+          _rgb(0x5b, 0x81, 0x41),
+          _rgb(0xa4, 0x59, 0x8a),
+          _rgb(0x89, 0x7c, 0x3d),
+        ],
+        layer: LayerColours(
+          footage: _rgb(0x5d, 0x82, 0x8b),
+          sequence: _rgb(0x5b, 0x69, 0x7f),
+          precomp: _rgb(0x5b, 0x51, 0x66),
+          solid: _rgb(0x42, 0x42, 0x42),
+          text: _rgb(0xae, 0xa5, 0x8d),
+          camera: _rgb(0xa5, 0x8c, 0x7c),
+        ),
+      );
+
+  /// Nocturne dark.
+  factory LumitTheme.nocturneDark() => LumitTheme(
+        mode: ThemeMode2.dark,
+        surface0: _rgb(0x19, 0x1a, 0x24),
+        surface1: _rgb(0x22, 0x22, 0x2d),
+        surface2: _rgb(0x2a, 0x2a, 0x36),
+        surface3: _rgb(0x33, 0x33, 0x3e),
+        surface4: _rgb(0x3e, 0x3e, 0x4a),
+        viewerSurround: _rgb(0x1c, 0x1c, 0x1c),
+        textPrimary: _rgb(0xed, 0xed, 0xf7),
+        textSecondary: _rgb(0xce, 0xce, 0xd7),
+        textMuted: _rgb(0xa0, 0xa0, 0xa9),
+        textDisabled: _rgb(0x71, 0x71, 0x7a),
+        hairline: _rgb(0x30, 0x30, 0x3f),
+        hairlineStrong: _rgb(0x78, 0x78, 0x89),
+        accent: _rgb(0xff, 0x95, 0x60),
+        accentHover: _rgb(0xff, 0xa7, 0x72),
+        animated: _rgb(0xd8, 0xcd, 0x89),
+        success: _rgb(0x5b, 0xb8, 0x83),
+        warning: _rgb(0xf6, 0xd7, 0x82),
+        error: _rgb(0xd3, 0x53, 0x8b),
+        cacheDisk: _rgb(0x4f, 0x9e, 0xca),
+        curve: [
+          _rgb(0x6e, 0xd0, 0xd3),
+          _rgb(0xad, 0xca, 0x96),
+          _rgb(0xe6, 0xa9, 0xcf),
+          _rgb(0xdb, 0xcc, 0x94),
+        ],
+        layer: LayerColours(
+          footage: _rgb(0x67, 0x8c, 0x95),
+          sequence: _rgb(0x60, 0x74, 0x89),
+          precomp: _rgb(0x6b, 0x58, 0x6b),
+          solid: _rgb(0x4a, 0x4b, 0x51),
+          text: _rgb(0xb9, 0xb0, 0x97),
+          camera: _rgb(0xb4, 0x94, 0x8c),
+        ),
+      );
+
+  /// Nocturne light.
+  factory LumitTheme.nocturneLight() => LumitTheme(
+        mode: ThemeMode2.light,
+        surface0: _rgb(0xe4, 0xe5, 0xee),
+        surface1: _rgb(0xf9, 0xf9, 0xfc),
+        surface2: _rgb(0xee, 0xef, 0xf5),
+        surface3: _rgb(0xfc, 0xfc, 0xfe),
+        surface4: _rgb(0xde, 0xdf, 0xe9),
+        viewerSurround: _rgb(0xa8, 0xa8, 0xa8),
+        textPrimary: _rgb(0x22, 0x25, 0x36),
+        textSecondary: _rgb(0x43, 0x46, 0x58),
+        textMuted: _rgb(0x6b, 0x6d, 0x81),
+        textDisabled: _rgb(0x87, 0x89, 0x9e),
+        hairline: _rgb(0xd5, 0xd6, 0xe5),
+        hairlineStrong: _rgb(0x84, 0x85, 0x93),
+        accent: _rgb(0xb5, 0x4d, 0x1b),
+        accentHover: _rgb(0xa3, 0x3b, 0x09),
+        animated: _rgb(0x92, 0x72, 0x29),
+        success: _rgb(0x21, 0x82, 0x4c),
+        warning: _rgb(0xaf, 0x88, 0x2e),
+        error: _rgb(0xa7, 0x1f, 0x63),
+        cacheDisk: _rgb(0x11, 0x75, 0x9f),
+        curve: [
+          _rgb(0x00, 0x7f, 0x82),
+          _rgb(0x5f, 0x80, 0x47),
+          _rgb(0x9f, 0x5c, 0x87),
+          _rgb(0x89, 0x7c, 0x3d),
+        ],
+        layer: LayerColours(
+          footage: _rgb(0x57, 0x83, 0x8d),
+          sequence: _rgb(0x52, 0x6b, 0x82),
+          precomp: _rgb(0x63, 0x4e, 0x64),
+          solid: _rgb(0x41, 0x42, 0x48),
+          text: _rgb(0xaf, 0xa5, 0x89),
+          camera: _rgb(0xad, 0x89, 0x7f),
+        ),
+      );
+
+  /// Tavern dark.
+  factory LumitTheme.tavernDark() => LumitTheme(
+        mode: ThemeMode2.dark,
+        surface0: _rgb(0x26, 0x17, 0x10),
+        surface1: _rgb(0x2f, 0x1f, 0x19),
+        surface2: _rgb(0x38, 0x27, 0x21),
+        surface3: _rgb(0x41, 0x30, 0x29),
+        surface4: _rgb(0x4d, 0x3b, 0x34),
+        viewerSurround: _rgb(0x1c, 0x1c, 0x1c),
+        textPrimary: _rgb(0xff, 0xe9, 0xe1),
+        textSecondary: _rgb(0xe1, 0xca, 0xc1),
+        textMuted: _rgb(0xb2, 0x9c, 0x93),
+        textDisabled: _rgb(0x82, 0x6e, 0x66),
+        hairline: _rgb(0x43, 0x2c, 0x23),
+        hairlineStrong: _rgb(0x90, 0x73, 0x68),
+        accent: _rgb(0xf7, 0x92, 0x45),
+        accentHover: _rgb(0xff, 0xa4, 0x57),
+        animated: _rgb(0xe9, 0xd0, 0x82),
+        success: _rgb(0x66, 0xb0, 0x7b),
+        warning: _rgb(0xf2, 0xd9, 0x7a),
+        error: _rgb(0xc2, 0x4d, 0x80),
+        cacheDisk: _rgb(0x45, 0xa0, 0xc1),
+        curve: [
+          _rgb(0x70, 0xd0, 0xce),
+          _rgb(0xb2, 0xc9, 0x93),
+          _rgb(0xe9, 0xa2, 0xbc),
+          _rgb(0xd5, 0xc6, 0x8f),
+        ],
+        layer: LayerColours(
+          footage: _rgb(0x66, 0x8d, 0x94),
+          sequence: _rgb(0x6f, 0x70, 0x88),
+          precomp: _rgb(0x73, 0x56, 0x63),
+          solid: _rgb(0x51, 0x4a, 0x47),
+          text: _rgb(0xb9, 0xb0, 0x97),
+          camera: _rgb(0xb5, 0x93, 0x8f),
+        ),
+      );
+
+  /// Tavern light.
+  factory LumitTheme.tavernLight() => LumitTheme(
+        mode: ThemeMode2.light,
+        surface0: _rgb(0xf4, 0xe3, 0xcf),
+        surface1: _rgb(0xfe, 0xf8, 0xf2),
+        surface2: _rgb(0xf9, 0xee, 0xe0),
+        surface3: _rgb(0xff, 0xfc, 0xf8),
+        surface4: _rgb(0xee, 0xdd, 0xc9),
+        viewerSurround: _rgb(0xa8, 0xa8, 0xa8),
+        textPrimary: _rgb(0x30, 0x24, 0x12),
+        textSecondary: _rgb(0x53, 0x44, 0x32),
+        textMuted: _rgb(0x7c, 0x6c, 0x57),
+        textDisabled: _rgb(0x99, 0x88, 0x72),
+        hairline: _rgb(0xe5, 0xd5, 0xc1),
+        hairlineStrong: _rgb(0x93, 0x84, 0x72),
+        accent: _rgb(0xad, 0x54, 0x0b),
+        accentHover: _rgb(0x9b, 0x42, 0x00),
+        animated: _rgb(0x95, 0x71, 0x25),
+        success: _rgb(0x32, 0x81, 0x4d),
+        warning: _rgb(0xb0, 0x88, 0x24),
+        error: _rgb(0x9f, 0x1d, 0x5e),
+        cacheDisk: _rgb(0x00, 0x77, 0x95),
+        curve: [
+          _rgb(0x00, 0x80, 0x7e),
+          _rgb(0x64, 0x7f, 0x43),
+          _rgb(0xa8, 0x59, 0x78),
+          _rgb(0x89, 0x7c, 0x3d),
+        ],
+        layer: LayerColours(
+          footage: _rgb(0x56, 0x83, 0x8b),
+          sequence: _rgb(0x64, 0x66, 0x81),
+          precomp: _rgb(0x6b, 0x4c, 0x5a),
+          solid: _rgb(0x48, 0x41, 0x3d),
+          text: _rgb(0xaf, 0xa5, 0x89),
+          camera: _rgb(0xae, 0x88, 0x83),
+        ),
+      );
+
+  /// Arcane dark.
+  factory LumitTheme.arcaneDark() => LumitTheme(
+        mode: ThemeMode2.dark,
+        surface0: _rgb(0x11, 0x1b, 0x28),
+        surface1: _rgb(0x19, 0x23, 0x30),
+        surface2: _rgb(0x21, 0x2c, 0x39),
+        surface3: _rgb(0x2a, 0x34, 0x42),
+        surface4: _rgb(0x35, 0x3f, 0x4e),
+        viewerSurround: _rgb(0x1c, 0x1c, 0x1c),
+        textPrimary: _rgb(0xea, 0xee, 0xf5),
+        textSecondary: _rgb(0xcb, 0xcf, 0xd6),
+        textMuted: _rgb(0x9d, 0xa1, 0xa7),
+        textDisabled: _rgb(0x6e, 0x72, 0x79),
+        hairline: _rgb(0x25, 0x32, 0x43),
+        hairlineStrong: _rgb(0x6d, 0x7b, 0x8e),
+        accent: _rgb(0xaf, 0xa6, 0xff),
+        accentHover: _rgb(0xc1, 0xb8, 0xff),
+        animated: _rgb(0x7d, 0xe1, 0xed),
+        success: _rgb(0x56, 0xb8, 0x8b),
+        warning: _rgb(0xf3, 0xd8, 0x86),
+        error: _rgb(0xd0, 0x55, 0x93),
+        cacheDisk: _rgb(0x50, 0x9f, 0xc5),
+        curve: [
+          _rgb(0x76, 0xd6, 0xd4),
+          _rgb(0xb2, 0xcf, 0x9b),
+          _rgb(0xea, 0xa8, 0xca),
+          _rgb(0xdb, 0xcc, 0x94),
+        ],
+        layer: LayerColours(
+          footage: _rgb(0x66, 0x8d, 0x8e),
+          sequence: _rgb(0x59, 0x76, 0x87),
+          precomp: _rgb(0x69, 0x59, 0x6d),
+          solid: _rgb(0x48, 0x4c, 0x51),
+          text: _rgb(0xb9, 0xb0, 0x97),
+          camera: _rgb(0xb0, 0x96, 0x86),
+        ),
+      );
+
+  /// Arcane light.
+  factory LumitTheme.arcaneLight() => LumitTheme(
+        mode: ThemeMode2.light,
+        surface0: _rgb(0xdf, 0xe6, 0xec),
+        surface1: _rgb(0xf7, 0xfa, 0xfc),
+        surface2: _rgb(0xeb, 0xf0, 0xf4),
+        surface3: _rgb(0xfb, 0xfc, 0xfe),
+        surface4: _rgb(0xd9, 0xe1, 0xe7),
+        viewerSurround: _rgb(0xa8, 0xa8, 0xa8),
+        textPrimary: _rgb(0x0b, 0x29, 0x38),
+        textSecondary: _rgb(0x2f, 0x4a, 0x5b),
+        textMuted: _rgb(0x57, 0x72, 0x84),
+        textDisabled: _rgb(0x73, 0x8e, 0xa1),
+        hairline: _rgb(0xca, 0xd9, 0xe5),
+        hairlineStrong: _rgb(0x7a, 0x88, 0x93),
+        accent: _rgb(0x60, 0x59, 0xc8),
+        accentHover: _rgb(0x4e, 0x47, 0xb6),
+        animated: _rgb(0x98, 0x77, 0x36),
+        success: _rgb(0x11, 0x82, 0x55),
+        warning: _rgb(0xa9, 0x8b, 0x31),
+        error: _rgb(0x9e, 0x1b, 0x66),
+        cacheDisk: _rgb(0x16, 0x75, 0x9a),
+        curve: [
+          _rgb(0x00, 0x80, 0x7e),
+          _rgb(0x5f, 0x80, 0x47),
+          _rgb(0xa3, 0x5b, 0x82),
+          _rgb(0x89, 0x7c, 0x3d),
+        ],
+        layer: LayerColours(
+          footage: _rgb(0x57, 0x84, 0x85),
+          sequence: _rgb(0x4b, 0x6c, 0x80),
+          precomp: _rgb(0x61, 0x4f, 0x65),
+          solid: _rgb(0x3f, 0x42, 0x48),
+          text: _rgb(0xaf, 0xa5, 0x89),
+          camera: _rgb(0xa8, 0x8b, 0x79),
+        ),
+      );
+
+  /// Gilt dark.
+  factory LumitTheme.giltDark() => LumitTheme(
+        mode: ThemeMode2.dark,
+        surface0: _rgb(0x20, 0x18, 0x1f),
+        surface1: _rgb(0x28, 0x20, 0x27),
+        surface2: _rgb(0x31, 0x29, 0x2f),
+        surface3: _rgb(0x39, 0x31, 0x38),
+        surface4: _rgb(0x45, 0x3c, 0x43),
+        viewerSurround: _rgb(0x1c, 0x1c, 0x1c),
+        textPrimary: _rgb(0xf6, 0xeb, 0xf4),
+        textSecondary: _rgb(0xd6, 0xcc, 0xd4),
+        textMuted: _rgb(0xa8, 0x9e, 0xa6),
+        textDisabled: _rgb(0x79, 0x6f, 0x77),
+        hairline: _rgb(0x39, 0x2e, 0x37),
+        hairlineStrong: _rgb(0x83, 0x76, 0x80),
+        accent: _rgb(0xf0, 0xa8, 0x40),
+        accentHover: _rgb(0xff, 0xba, 0x52),
+        animated: _rgb(0xe2, 0xca, 0x84),
+        success: _rgb(0x61, 0xab, 0x76),
+        warning: _rgb(0xef, 0xde, 0x7d),
+        error: _rgb(0xc1, 0x44, 0x74),
+        cacheDisk: _rgb(0x4a, 0xa0, 0xc3),
+        curve: [
+          _rgb(0x70, 0xd0, 0xce),
+          _rgb(0xb2, 0xc9, 0x93),
+          _rgb(0xe6, 0xa2, 0xc0),
+          _rgb(0xd5, 0xc6, 0x8f),
+        ],
+        layer: LayerColours(
+          footage: _rgb(0x69, 0x8c, 0x98),
+          sequence: _rgb(0x6f, 0x70, 0x88),
+          precomp: _rgb(0x72, 0x57, 0x64),
+          solid: _rgb(0x4f, 0x4a, 0x4e),
+          text: _rgb(0xb6, 0xb1, 0x97),
+          camera: _rgb(0xb3, 0x94, 0x8a),
+        ),
+      );
+
+  /// Gilt light.
+  factory LumitTheme.giltLight() => LumitTheme(
+        mode: ThemeMode2.light,
+        surface0: _rgb(0xed, 0xe4, 0xd6),
+        surface1: _rgb(0xfc, 0xf9, 0xf4),
+        surface2: _rgb(0xf5, 0xee, 0xe5),
+        surface3: _rgb(0xfe, 0xfc, 0xf8),
+        surface4: _rgb(0xe8, 0xdf, 0xd0),
+        viewerSurround: _rgb(0xa8, 0xa8, 0xa8),
+        textPrimary: _rgb(0x2c, 0x25, 0x18),
+        textSecondary: _rgb(0x4e, 0x46, 0x37),
+        textMuted: _rgb(0x76, 0x6d, 0x5e),
+        textDisabled: _rgb(0x93, 0x89, 0x79),
+        hairline: _rgb(0xe1, 0xd6, 0xc4),
+        hairlineStrong: _rgb(0x8f, 0x85, 0x75),
+        accent: _rgb(0xa1, 0x60, 0x00),
+        accentHover: _rgb(0x8f, 0x4e, 0x00),
+        animated: _rgb(0x93, 0x79, 0x2d),
+        success: _rgb(0x32, 0x81, 0x4d),
+        warning: _rgb(0xa8, 0x8c, 0x22),
+        error: _rgb(0xa3, 0x15, 0x57),
+        cacheDisk: _rgb(0x05, 0x76, 0x98),
+        curve: [
+          _rgb(0x00, 0x80, 0x7e),
+          _rgb(0x64, 0x7f, 0x43),
+          _rgb(0xa5, 0x5a, 0x7d),
+          _rgb(0x89, 0x7c, 0x3d),
+        ],
+        layer: LayerColours(
+          footage: _rgb(0x59, 0x82, 0x90),
+          sequence: _rgb(0x64, 0x66, 0x81),
+          precomp: _rgb(0x6a, 0x4c, 0x5c),
+          solid: _rgb(0x46, 0x40, 0x45),
+          text: _rgb(0xac, 0xa6, 0x89),
+          camera: _rgb(0xac, 0x89, 0x7d),
+        ),
+      );
+
+  /// Grey room, the lighter of Desk's two rooms
+  /// (docs/design-alt/15-DESIGN-DESK.md 2 and 3). One signal colour does the
+  /// accent's job and the animated one: the document dissolves amber into it.
+  /// The curve hues are the layer family read at the same lightness.
+  factory LumitTheme.greyRoom() => LumitTheme(
+        mode: ThemeMode2.light,
+        surface0: _rgb(0xde, 0xdc, 0xd8),
+        surface1: _rgb(0xec, 0xeb, 0xe7),
+        surface2: _rgb(0xe4, 0xe2, 0xde),
+        surface3: _rgb(0xf7, 0xf6, 0xf3),
+        surface4: _rgb(0xd2, 0xd0, 0xcb),
+        viewerSurround: _rgb(0x7f, 0x7f, 0x7f),
+        textPrimary: _rgb(0x1b, 0x1b, 0x1a),
+        textSecondary: _rgb(0x4c, 0x4c, 0x49),
+        textMuted: _rgb(0x69, 0x68, 0x64),
+        textDisabled: _rgb(0x84, 0x83, 0x80),
+        hairline: _rgb(0xcd, 0xcb, 0xc6),
+        hairlineStrong: _rgb(0xa9, 0xa7, 0xa1),
+        accent: _rgb(0xb8, 0x50, 0x0d),
+        accentHover: _shift(_rgb(0xb8, 0x50, 0x0d), 0x12),
+        animated: _rgb(0xb8, 0x50, 0x0d),
+        success: _rgb(0x2f, 0x6f, 0x4a),
+        warning: _rgb(0x8a, 0x5f, 0x04),
+        error: _rgb(0xa6, 0x33, 0x1e),
+        cacheDisk: _rgb(0x4a, 0x6b, 0x7d),
+        curve: [
+          _rgb(0x6f, 0x7f, 0x88),
+          _rgb(0x8a, 0x72, 0x84),
+          _rgb(0x8b, 0x85, 0x70),
+          _rgb(0x8a, 0x7c, 0x5c),
+        ],
+        layer: LayerColours(
+          footage: _rgb(0x6f, 0x7f, 0x88),
+          sequence: _rgb(0x6c, 0x7a, 0x94),
+          precomp: _rgb(0x8a, 0x72, 0x84),
+          solid: _rgb(0x7c, 0x7c, 0x78),
+          text: _rgb(0x8b, 0x85, 0x70),
+          camera: _rgb(0x8a, 0x7c, 0x5c),
+        ),
+      );
+
+  /// Graphite, the darker of Desk's two rooms. The same ramp as the grey room
+  /// at the other lightness, and the same one signal.
+  factory LumitTheme.graphite() => LumitTheme(
+        mode: ThemeMode2.dark,
+        surface0: _rgb(0x1c, 0x1c, 0x1b),
+        surface1: _rgb(0x26, 0x26, 0x25),
+        surface2: _rgb(0x2e, 0x2e, 0x2c),
+        surface3: _rgb(0x38, 0x38, 0x36),
+        surface4: _rgb(0x45, 0x45, 0x42),
+        viewerSurround: _rgb(0x7f, 0x7f, 0x7f),
+        textPrimary: _rgb(0xf0, 0xef, 0xeb),
+        textSecondary: _rgb(0xc4, 0xc2, 0xbc),
+        textMuted: _rgb(0x91, 0x8f, 0x89),
+        textDisabled: _rgb(0x78, 0x75, 0x6f),
+        hairline: _rgb(0x35, 0x35, 0x32),
+        hairlineStrong: _rgb(0x4e, 0x4e, 0x4a),
+        accent: _rgb(0xe8, 0x71, 0x2a),
+        accentHover: _shift(_rgb(0xe8, 0x71, 0x2a), 0x12),
+        animated: _rgb(0xe8, 0x71, 0x2a),
+        success: _rgb(0x5c, 0xb0, 0x83),
+        warning: _rgb(0xd2, 0xa2, 0x3f),
+        error: _rgb(0xe5, 0x83, 0x67),
+        cacheDisk: _rgb(0x5f, 0x81, 0x96),
+        curve: [
+          _rgb(0x77, 0x87, 0x8f),
+          _rgb(0x91, 0x7a, 0x8c),
+          _rgb(0x93, 0x8d, 0x78),
+          _rgb(0x92, 0x84, 0x63),
+        ],
+        layer: LayerColours(
+          footage: _rgb(0x77, 0x87, 0x8f),
+          sequence: _rgb(0x74, 0x83, 0x9d),
+          precomp: _rgb(0x91, 0x7a, 0x8c),
+          solid: _rgb(0x84, 0x84, 0x7f),
+          text: _rgb(0x93, 0x8d, 0x78),
+          camera: _rgb(0x92, 0x84, 0x63),
+        ),
+      );
+
   // --- Type scale (docs/15-DESIGN §density: 11 px body, 10 px small) -------
 
   static const String fontFamily = 'Hanken Grotesk';
@@ -985,16 +2344,21 @@ class LumitTheme {
     'monospace',
   ];
 
+  /// Tabular figures where the shape sets numbers in its sans.
+  List<FontFeature>? get _figures =>
+      tokens.tabularNumbers ? const [FontFeature.tabularFigures()] : null;
   TextStyle get heading => TextStyle(
-      fontFamily: fontFamily,
+      fontFamily: tokens.sansFamily,
       fontFamilyFallback: fontFamilyFallback,
+      fontFeatures: _figures,
       fontSize: 16,
       color: textPrimary,
       decoration: TextDecoration.none,
       fontWeight: FontWeight.w500);
   TextStyle get body => TextStyle(
-      fontFamily: fontFamily,
+      fontFamily: tokens.sansFamily,
       fontFamilyFallback: fontFamilyFallback,
+      fontFeatures: _figures,
       fontSize: 11,
       color: textSecondary,
       decoration: TextDecoration.none,
@@ -1006,8 +2370,9 @@ class LumitTheme {
   /// reads at regular weight.
   TextStyle get bodyStrong => body.copyWith(fontWeight: FontWeight.w500);
   TextStyle get small => TextStyle(
-      fontFamily: fontFamily,
+      fontFamily: tokens.sansFamily,
       fontFamilyFallback: fontFamilyFallback,
+      fontFeatures: _figures,
       fontSize: 10,
       color: textMuted,
       decoration: TextDecoration.none,
@@ -1031,8 +2396,11 @@ class LumitTheme {
   /// is handed, so the translated phrase in the arb file stays an ordinary
   /// sentence and no key has to be spelled twice.
   TextStyle get kicker => TextStyle(
-        fontFamily: monoFontFamily,
+        // Desk's label is its one sans, lowercase; the caps kicker is mono.
+        fontFamily:
+            tokens.tabularNumbers ? tokens.sansFamily : tokens.monoFamily,
         fontFamilyFallback: monoFontFamilyFallback,
+        fontFeatures: _figures,
         // 9px at +0.12em, regular weight — **the approved mockups' own
         // `.kick`** (their metrics are canonical), and the bottom of §7.1's
         // 9–11px / 0.08–0.12em band rather than its middle. It was 10px at
@@ -1043,7 +2411,7 @@ class LumitTheme {
         // 1.08 written out, not `9 * 0.12`: the product is 0.12000000000000001
         // in binary floating point, which lands a hair outside the band the
         // spec states and the primitives test checks.
-        letterSpacing: 1.08,
+        letterSpacing: tokens.kickerTracking,
         color: textMuted,
         decoration: TextDecoration.none,
         fontWeight: FontWeight.w400,
@@ -1054,9 +2422,18 @@ class LumitTheme {
   /// tracking, same weight, so nothing shifts by a pixel when the active one
   /// moves (§7.1 — state reads from colour, never from size or weight).
   TextStyle get kickerOn => kicker.copyWith(color: textPrimary);
+
+  /// A container label cased the way the shape wants it: Studio and Lantern
+  /// shout, Desk whispers.
+  String kickerCase(String s) => switch (tokens.labelCase) {
+        LabelCase.caps => s.toUpperCase(),
+        LabelCase.lower => s.toLowerCase(),
+        LabelCase.sentence => s,
+      };
   TextStyle get mono => TextStyle(
-      fontFamily: monoFontFamily,
+      fontFamily: tokens.monoFamily,
       fontFamilyFallback: monoFontFamilyFallback,
+      fontFeatures: _figures,
       fontSize: 12,
       color: textSecondary,
       decoration: TextDecoration.none);

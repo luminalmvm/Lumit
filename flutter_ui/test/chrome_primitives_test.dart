@@ -52,6 +52,16 @@ void main() {
       expect(t.kickerOn.letterSpacing, t.kicker.letterSpacing);
       expect(t.kickerOn.fontFamily, t.kicker.fontFamily);
     });
+
+    /// The case is the shape's: Desk whispers its labels, the others shout.
+    test('is lowercase under desk and capitals under studio and lantern', () {
+      const word = 'Project files';
+      String cased(ThemeShape shape) =>
+          LumitTheme.forScheme(LumitColorScheme.dark, shape).kickerCase(word);
+      expect(cased(ThemeShape.desk), 'project files');
+      expect(cased(ThemeShape.studio), 'PROJECT FILES');
+      expect(cased(ThemeShape.lantern), 'PROJECT FILES');
+    });
   });
 
   group('The value well (§2.1, §3.1)', () {
@@ -130,6 +140,33 @@ void main() {
       await tester.pump();
       expect(numberOf(tester).color, t.textPrimary,
           reason: 'the scrub left no trace behind');
+    });
+
+    /// The well's corner is the shape's well radius, not its control radius:
+    /// a value box is a thing to type in, not a thing to press.
+    testWidgets('wears the shape\'s well radius', (tester) async {
+      for (final shape in ThemeShape.values) {
+        final shaped = LumitTheme.forScheme(LumitColorScheme.dark, shape);
+        await tester.pumpWidget(Directionality(
+          textDirection: TextDirection.ltr,
+          child: ThemeScope(
+            theme: shaped,
+            animationLevel: AnimationLevel.none,
+            showTooltips: false,
+            child: Center(child: field()),
+          ),
+        ));
+        await tester.pump();
+
+        // Desk's well is an engraved recess with a one-sided edge, which
+        // cannot carry a radius, so its corners are none rather than nought.
+        expect(
+            wellOf(tester).borderRadius,
+            shape == ThemeShape.desk
+                ? isNull
+                : BorderRadius.circular(shaped.tokens.wellRadius),
+            reason: '$shape');
+      }
     });
   });
 
@@ -289,6 +326,84 @@ void main() {
       expect(boxOf('free-$face').height, closeTo(free.height + 8, 0.01),
           reason: '$face: an unconstrained button is still its label\'s own '
               'height');
+    }
+  });
+
+  /// **The label sits at the centre of its button under every shape**, both
+  /// ways, to half a pixel: free or given a height, plain, primary or the one
+  /// in force. Lantern's inset fill takes its margin out of the padding, so
+  /// nothing here may move the word, and under Studio the button is still its
+  /// label plus 3 of padding and 1 of edge each way.
+  testWidgets('a label is centred in its button under every shape',
+      (tester) async {
+    Widget cased(String key, Widget button, {double? height}) => SizedBox(
+          key: ValueKey<String>(key),
+          height: height,
+          child: button,
+        );
+    for (final shape in ThemeShape.values) {
+      final shaped = LumitTheme.forScheme(LumitColorScheme.dark, shape);
+      await tester.pumpWidget(Directionality(
+        textDirection: TextDirection.ltr,
+        child: ThemeScope(
+          theme: shaped,
+          animationLevel: AnimationLevel.none,
+          showTooltips: false,
+          child: Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                cased('free',
+                    HouseButton(onPressed: () {}, child: const Text('Cancel'))),
+                cased('boxed',
+                    HouseButton(onPressed: () {}, child: const Text('Cancel')),
+                    height: 24),
+                cased(
+                    'primary',
+                    HouseButton(
+                        primary: true,
+                        onPressed: () {},
+                        child: const Text('Export'))),
+                cased(
+                    'active',
+                    HouseButton(
+                        active: true,
+                        onPressed: () {},
+                        child: const Text('Mask'))),
+                cased(
+                    'active-boxed',
+                    HouseButton(
+                        active: true,
+                        onPressed: () {},
+                        child: const Text('Mask')),
+                    height: 36),
+              ],
+            ),
+          ),
+        ),
+      ));
+      await tester.pump();
+
+      for (final key in [
+        'free',
+        'boxed',
+        'primary',
+        'active',
+        'active-boxed'
+      ]) {
+        final box = tester.getRect(find.byKey(ValueKey<String>(key)));
+        final label = tester.getRect(find.descendant(
+            of: find.byKey(ValueKey<String>(key)),
+            matching: find.byType(Text)));
+        expect(label.center.dx, closeTo(box.center.dx, 0.5),
+            reason: '$shape: $key');
+        expect(label.center.dy, closeTo(box.center.dy, 0.5),
+            reason: '$shape: $key');
+        if (shape == ThemeShape.studio && !key.contains('boxed')) {
+          expect(box.height, closeTo(label.height + 8, 0.01),
+              reason: 'Studio: $key is still its label\'s own height');
+        }
+      }
     }
   });
 

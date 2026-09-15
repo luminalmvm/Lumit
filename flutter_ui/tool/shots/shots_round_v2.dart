@@ -99,14 +99,15 @@ Future<void> main() async {
 
   // The one difference from sweep 1: the shape the review is about. This is
   // the call Settings ▸ Appearance makes, against the sweep's throwaway store.
-  ui.workspace.setShape(ThemeShape.round);
+  ui.workspace.setShape(ThemeShape.lantern);
   // The layout preset the default layout already is, applied so the workspace
   // strip has an active member to show. Without it nothing in that strip is
   // current, and "which one is in force" cannot be judged from a picture of a
   // strip where none of them is.
   ui.workspace.applyWorkspacePreset(WorkspacePreset.edit);
 
-  runApp(shotRoot(LumitAppNew(state, ui)));
+  // The sweeps photograph the shell; the welcome screen has its own sweep.
+  runApp(shotRoot(LumitAppNew(state, ui, welcome: false)));
 
   await pause(2);
   await sizeWindow(1720, 1000);

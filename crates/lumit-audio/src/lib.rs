@@ -38,6 +38,10 @@ struct Shared {
     /// Frames consumed since load/seek — the clock.
     playhead: AtomicUsize,
     playing: AtomicBool,
+    /// The monitor mute: the device is handed silence while the mix, the
+    /// clock and the meters carry on as if it were heard. Not document data,
+    /// so it never saves into a project or silences an export.
+    muted: AtomicBool,
     /// What the mix is doing, published once per callback for the mixer's
     /// bars (docs/09 §3.1). Written only here; read by anyone holding the
     /// `Arc`, which is why it is beside the clock rather than inside the plan.
@@ -180,6 +184,7 @@ impl AudioEngine {
             plan: RwLock::new(None),
             playhead: AtomicUsize::new(0),
             playing: AtomicBool::new(false),
+            muted: AtomicBool::new(false),
             meters: Arc::new(meter::Meters::default()),
         });
         let cb = shared.clone();
@@ -248,6 +253,15 @@ impl AudioEngine {
 
     pub fn is_playing(&self) -> bool {
         self.shared.playing.load(Ordering::Relaxed)
+    }
+
+    /// Hand the device silence without stopping the mix or its clock.
+    pub fn set_muted(&self, muted: bool) {
+        self.shared.muted.store(muted, Ordering::Relaxed);
+    }
+
+    pub fn is_muted(&self) -> bool {
+        self.shared.muted.load(Ordering::Relaxed)
     }
 
     pub fn seek_seconds(&self, t: f64) {
@@ -346,6 +360,12 @@ fn fill(shared: &Shared, out: &mut [f32], channels: usize) {
     }
     shared.playhead.store(playhead, Ordering::Relaxed);
     shared.meters.publish(&acc);
+    // After the mix and the clock, so a mute changes what is heard and
+    // nothing else: playback paces on this clock, and the meters keep
+    // reading the mix.
+    if shared.muted.load(Ordering::Relaxed) {
+        out.fill(0.0);
+    }
 }
 
 #[cfg(test)]
@@ -431,6 +451,7 @@ mod tests {
             plan: RwLock::new(Some(plan_of(tone(1000)))),
             playhead: AtomicUsize::new(0),
             playing: AtomicBool::new(false),
+            muted: AtomicBool::new(false),
             meters: Arc::new(meter::Meters::default()),
         };
         let mut out = vec![1.0f32; 256 * 2];
@@ -456,6 +477,31 @@ mod tests {
         assert!(!shared.playing.load(Ordering::Relaxed));
     }
 
+    /// The monitor mute: the device gets silence, and the clock still moves
+    /// by the buffer, because playback paces on it.
+    #[test]
+    fn a_muted_callback_hands_the_device_silence_and_keeps_the_clock() {
+        let shared = Shared {
+            plan: RwLock::new(Some(plan_of(tone(1000)))),
+            playhead: AtomicUsize::new(0),
+            playing: AtomicBool::new(true),
+            muted: AtomicBool::new(true),
+            meters: Arc::new(meter::Meters::default()),
+        };
+        let mut out = vec![1.0f32; 256 * 2];
+        fill(&shared, &mut out, 2);
+        assert!(out.iter().all(|s| *s == 0.0), "muted: silence");
+        assert_eq!(
+            shared.playhead.load(Ordering::Relaxed),
+            256,
+            "the clock ran"
+        );
+        assert!(
+            shared.playing.load(Ordering::Relaxed),
+            "and it is still playing"
+        );
+    }
+
     /// Mono-device downmix path: channel 0 gets L, nothing panics.
     #[test]
     fn callback_handles_mono_output() {
@@ -463,6 +509,7 @@ mod tests {
             plan: RwLock::new(Some(plan_of(tone(100)))),
             playhead: AtomicUsize::new(0),
             playing: AtomicBool::new(true),
+            muted: AtomicBool::new(false),
             meters: Arc::new(meter::Meters::default()),
         };
         let mut out = vec![0.0f32; 64];
@@ -478,6 +525,7 @@ mod tests {
             plan: RwLock::new(Some(plan_of(tone(48_000)))),
             playhead: AtomicUsize::new(0),
             playing: AtomicBool::new(true),
+            muted: AtomicBool::new(false),
             meters: Arc::new(meter::Meters::default()),
         });
         let handle = ClockHandle {
@@ -505,6 +553,7 @@ mod tests {
             plan: RwLock::new(Some(plan_of(tone(1000)))),
             playhead: AtomicUsize::new(0),
             playing: AtomicBool::new(true),
+            muted: AtomicBool::new(false),
             meters: Arc::new(meter::Meters::default()),
         };
         let mut out = vec![0.0f32; 128 * 2];

@@ -147,15 +147,23 @@ void main() {
   /// because it is what the drawing draws; the other two gather the chrome
   /// into one strip. Stored by name, so a reordered enum cannot silently
   /// rearrange somebody's Viewer.
-  test("the Viewer's bars are split unless a settings file says otherwise", () {
-    expect(InterfaceSettings().viewerBars, ViewerBars.split);
+  test("the Viewer's bars are the style's choice unless a settings file says "
+      "otherwise", () {
+    expect(InterfaceSettings().viewerBars, ViewerBars.auto);
     expect(InterfaceSettings.fromJson(const {'ui_scale': 1.25}).viewerBars,
-        ViewerBars.split,
-        reason: "a file written before the field existed gets the drawing's");
+        ViewerBars.auto,
+        reason: "a file written before the field existed gets the style's");
+    final fresh = InterfaceSettings();
+    expect(fresh.viewerBarsFor(ThemeShape.studio), ViewerBars.split);
+    expect(fresh.viewerBarsFor(ThemeShape.desk), ViewerBars.deck);
+    expect(fresh.viewerBarsFor(ThemeShape.lantern), ViewerBars.deck);
+    expect((fresh..viewerBars = ViewerBars.top).viewerBarsFor(ThemeShape.desk),
+        ViewerBars.top,
+        reason: "a person's own pick holds whatever the style");
     expect(
         InterfaceSettings.fromJson(const {'viewer_bars': 'nonsense'})
             .viewerBars,
-        ViewerBars.split,
+        ViewerBars.auto,
         reason: 'and so does a name no build of Lumit ever wrote');
     for (final bars in ViewerBars.values) {
       final chosen = InterfaceSettings()..viewerBars = bars;
@@ -236,6 +244,9 @@ void main() {
       layerNamesOnBars: true,
       compact: true,
       viewerBars: ViewerBars.bottom,
+      toolBarPosition: ToolBarPosition.left,
+      rangeSliders: false,
+      room: LanternRoom.night,
     );
     final back = InterfaceSettings.fromJson(all.toJson());
     expect(back.language, 'de');
@@ -254,9 +265,84 @@ void main() {
     expect(back.layerNamesOnBars, isTrue);
     expect(back.compact, isTrue);
     expect(back.viewerBars, ViewerBars.bottom);
+    expect(back.toolBarPosition, ToolBarPosition.left);
+    expect(back.rangeSliders, isFalse);
+    expect(back.room, LanternRoom.night);
     // Every field is one of the above: a new one added without a line here is
     // a setting nothing checks survives the file.
-    expect(all.toJson().keys.length, 17);
+    expect(all.toJson().keys.length, 22);
+  });
+
+  /// Top is the strip every install has drawn, so a file written before the
+  /// toolbar could move keeps it, and so does a name no build ever wrote.
+  test("the toolbar stands where the style puts it unless a settings file "
+      "says otherwise", () {
+    expect(InterfaceSettings().toolBarPosition, ToolBarPosition.auto);
+    expect(
+        InterfaceSettings.fromJson(const {'ui_scale': 1.25}).toolBarPosition,
+        ToolBarPosition.auto,
+        reason: "a file written before the field existed gets the style's");
+    final fresh = InterfaceSettings();
+    expect(fresh.toolBarPositionFor(ThemeShape.desk), ToolBarPosition.left);
+    expect(fresh.toolBarPositionFor(ThemeShape.studio), ToolBarPosition.top);
+    expect(fresh.toolBarPositionFor(ThemeShape.lantern), ToolBarPosition.top);
+    expect(
+        (fresh..toolBarPosition = ToolBarPosition.top)
+            .toolBarPositionFor(ThemeShape.desk),
+        ToolBarPosition.top,
+        reason: "a person's own pick holds whatever the style");
+    expect(
+        InterfaceSettings.fromJson(const {'tool_bar_position': 'nonsense'})
+            .toolBarPosition,
+        ToolBarPosition.auto,
+        reason: 'and so does a name no build of Lumit ever wrote');
+    for (final position in ToolBarPosition.values) {
+      final chosen = InterfaceSettings()..toolBarPosition = position;
+      expect(chosen.toJson()['tool_bar_position'], position.name);
+      expect(InterfaceSettings.fromJson(chosen.toJson()).toolBarPosition,
+          position);
+    }
+  });
+
+  /// On is what every install draws today, so silence keeps the track.
+  test('range sliders stay on unless a settings file turns them off', () {
+    expect(InterfaceSettings().rangeSliders, isTrue);
+    expect(InterfaceSettings.fromJson(const {'ui_scale': 1.25}).rangeSliders,
+        isTrue,
+        reason: 'a file written before the field existed keeps its tracks');
+    final off = InterfaceSettings()..rangeSliders = false;
+    expect(InterfaceSettings.fromJson(off.toJson()).rangeSliders, isFalse);
+  });
+
+  /// Day is the room the drawing draws, so it is what silence and nonsense
+  /// both resolve to.
+  test("Lantern's room is the style's choice unless a settings file says "
+      "otherwise", () {
+    expect(InterfaceSettings().room, LanternRoom.auto);
+    expect(InterfaceSettings.fromJson(const {'ui_scale': 1.25}).room,
+        LanternRoom.auto,
+        reason: "a file written before the field existed gets the style's");
+    expect(
+        InterfaceSettings.fromJson(const {'lantern_room': 'nonsense'}).room,
+        LanternRoom.auto,
+        reason: 'and so does a name no build of Lumit ever wrote');
+    for (final room in LanternRoom.values) {
+      final chosen = InterfaceSettings()..room = room;
+      expect(chosen.toJson()['lantern_room'], room.name);
+      expect(InterfaceSettings.fromJson(chosen.toJson()).room, room);
+    }
+  });
+
+  /// The room colour is set on the built theme from the setting: night drops
+  /// it to the canvas, day keeps the theme's own light neutral. Studio and
+  /// Desk carry the colour and never draw it, so they are left alone.
+  test('the night room drops the theme room to the canvas', () {
+    final ws = Workspace()..themeShape = ThemeShape.lantern;
+    ws.recompose();
+    expect(ws.theme.room, LumitTheme.dark().room);
+    ws.interface.room = LanternRoom.night;
+    ws.recompose();
+    expect(ws.theme.room, ws.theme.surface0);
   });
 
   test('the Retime seconds preference round-trips', () {
@@ -454,10 +540,23 @@ void main() {
     expect(back.performance.playback, PlaybackMode.adaptive);
   });
 
+  test('the loop mode round-trips, and an absent key is the work-area loop',
+      () {
+    final ws = Workspace()..performance.loop = LoopMode.pingPong;
+    final back = Workspace()..applyJson(Map<String, dynamic>.from(ws.toJson()));
+    expect(back.performance.loop, LoopMode.pingPong);
+    final old = Workspace()
+      ..applyJson(const {
+        'version': 1,
+        'performance': {'playback': 'everyFrame'},
+      });
+    expect(old.performance.loop, LoopMode.workArea);
+  });
+
   test('workspace JSON round-trips appearance and settings', () {
     final ws = Workspace();
     ws.colorScheme = LumitColorScheme.gruvboxDark;
-    ws.themeShape = ThemeShape.round;
+    ws.themeShape = ThemeShape.lantern;
     ws.accentOverride = const Color(0xff804060);
     ws.animationLevel = AnimationLevel.minimal;
     ws.performance.playback = PlaybackMode.everyFrame;
@@ -468,13 +567,36 @@ void main() {
     final back = Workspace()..applyJson(Map<String, dynamic>.from(j));
     expect(back.colorScheme, LumitColorScheme.gruvboxDark);
     expect(back.lastProjectPath, 'C:/edit/last.lum');
-    expect(back.themeShape, ThemeShape.round);
+    expect(back.themeShape, ThemeShape.lantern);
     expect(back.animationLevel, AnimationLevel.minimal);
     expect(back.performance.playback, PlaybackMode.everyFrame);
     expect((back.accentOverride!.r * 255).round(), 0x80);
     // The rebuilt theme carries the override and the shape tokens.
-    expect(back.theme.tokens, ShapeTokens.round);
+    expect(back.theme.tokens, ShapeTokens.lantern);
     expect((back.theme.accent.r * 255).round(), 0x80);
+  });
+
+  test('every shape round-trips by name', () {
+    for (final shape in ThemeShape.values) {
+      final ws = Workspace()..themeShape = shape;
+      final back = Workspace()..applyJson(Map<String, dynamic>.from(ws.toJson()));
+      expect(back.themeShape, shape);
+      expect(back.theme.tokens, ShapeTokens.of(shape));
+    }
+  });
+
+  /// The shapes were Sharp and Round before they were Studio and Lantern, and
+  /// a settings file written then must still open on the arrangement it meant.
+  test('the old shape names load as the shapes that replaced them', () {
+    expect(
+        (Workspace()..applyJson(const {'theme_shape': 'sharp'})).themeShape,
+        ThemeShape.studio);
+    expect(
+        (Workspace()..applyJson(const {'theme_shape': 'round'})).themeShape,
+        ThemeShape.lantern);
+    expect(
+        (Workspace()..applyJson(const {'theme_shape': 'nonsense'})).themeShape,
+        ThemeShape.studio);
   });
 
   /// **The output device is settings, not project data** (docs/09 §3.1): a

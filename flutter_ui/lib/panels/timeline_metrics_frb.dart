@@ -36,7 +36,9 @@ const double numberCellWidth = 18;
 /// whatever [scrollGutterWidth] left after a 3px margin each side, which came
 /// out 6 — one pixel thinner than the bar along the bottom of the very same
 /// view, for no reason beyond the two being written in different units. The
-/// gutter keeps its width; the thumb is centred in it.
+/// gutter keeps its width; the thumb is centred in it. That is the Studio
+/// literal the tests measure against; the gutter itself reads
+/// `density.scrollbar`, which Desk sets to 8.
 const double scrollbarThickness = 7;
 
 /// Where something [size] across starts when it is centred in [extent] **on

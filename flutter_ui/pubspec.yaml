@@ -65,6 +65,17 @@ flutter:
           weight: 400
         - asset: assets/fonts/GeistMono-Medium.otf
           weight: 500
+    # Desk's one face (docs/design-alt/15-DESIGN-DESK.md 7.2): IBM Plex Sans
+    # with tabular figures for every number, and Plex Mono only for text
+    # that is machine output.
+    - family: IBM Plex Sans
+      fonts:
+        - asset: assets/fonts/IBMPlexSans-Regular.otf
+          weight: 400
+    - family: IBM Plex Mono
+      fonts:
+        - asset: assets/fonts/IBMPlexMono-Regular.otf
+          weight: 400
     # Inter is on its way out; panels still name it until the panels phase.
     - family: Inter
       fonts:

@@ -338,8 +338,12 @@ void main() {
         'appearance': [
           'settings-scheme',
           'settings-theme-swatches',
-          'settings-shape-sharp',
-          'settings-shape-round',
+          'settings-shape-studio',
+          'settings-shape-desk',
+          'settings-desk-room-grey',
+          'settings-desk-room-graphite',
+          'settings-shape-lantern',
+          'settings-lantern-room',
           'settings-customise',
           'settings-theme-duplicate',
           'settings-theme-rename',
@@ -354,6 +358,11 @@ void main() {
           'settings-themed-scopes',
           'settings-themed-surround',
           'settings-viewer-bars',
+          'settings-tool-bar-position',
+          'settings-range-sliders',
+          'settings-command-box',
+          'settings-icon-set',
+          'settings-icons-reload',
           'settings-multiwave',
           'settings-waveform-from-bottom',
         ],
@@ -426,6 +435,13 @@ void main() {
           }
           expect(finder, findsOneWidget,
               reason: '$control belongs to the ${page.key} page');
+          // The room rows only exist while their shape is in force, so the
+          // Desk and Lantern chips are pressed on the way past them.
+          if (control == 'settings-shape-desk' ||
+              control == 'settings-shape-lantern') {
+            await tester.tap(finder);
+            await tester.pumpAndSettle();
+          }
         }
       }
 
@@ -499,6 +515,18 @@ void main() {
       expect(p.uiState.scheme, LumitColorScheme.light);
       expect(p.uiState.theme.mode, isNot(ThemeMode2.dark),
           reason: 'the derived theme follows the choice');
+
+      // Desk's rooms are a row of their own: picking the shape leaves the
+      // scheme alone, and a room chip is the one tap that changes it.
+      await tester.tap(find.byKey(const ValueKey('settings-shape-desk')));
+      await tester.pumpAndSettle();
+      expect(p.uiState.scheme, LumitColorScheme.light,
+          reason: 'picking Desk never changes the scheme by itself');
+      await tester
+          .tap(find.byKey(const ValueKey('settings-desk-room-graphite')));
+      await tester.pumpAndSettle();
+      expect(p.uiState.scheme, LumitColorScheme.graphite);
+      expect(p.uiState.theme.accent, const Color(0xffe8712a));
     });
   }, skip: !engineAvailable);
 

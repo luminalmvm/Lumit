@@ -1748,11 +1748,16 @@ pub struct PlayRequest {
     pub view: u32,
     pub mode: BridgePlaybackMode,
     pub scale: f32,
+    /// Play the leg backwards, from `from` down to frame zero. The loop modes
+    /// are the frontend's: it restarts a leg at the far end, and a ping-pong
+    /// asks for every other leg reversed.
+    pub reverse: bool,
     /// The document the mix is to be built from, snapshotted where play was
     /// asked for rather than read on this thread — the mix must be of the comp
     /// as it was when the button was pressed. The sound itself is started here,
-    /// after the pre-roll ([`Playback::pre_roll_done`]).
-    pub audio: std::sync::Arc<lumit_core::Document>,
+    /// after the pre-roll ([`Playback::pre_roll_done`]). `None` on a reverse
+    /// leg, which has no sound.
+    pub audio: Option<std::sync::Arc<lumit_core::Document>>,
 }
 
 /// Playback in progress: what is being played, and where it has got to.
@@ -1788,6 +1793,13 @@ struct Playback {
     next: u64,
     /// The last frame of the composition — playback ends after it.
     last: u64,
+    /// Counting down rather than up. A reverse leg ends after frame zero.
+    reverse: bool,
+    /// True once the leg has given out its final frame, because `next` cannot
+    /// step below zero to say so.
+    ended: bool,
+    /// True once the pre-roll has been waited out and the clock baselined.
+    pre_rolled: bool,
     mode: BridgePlaybackMode,
     scale: f32,
     /// The composition's rate, for turning a clock reading into a frame.
@@ -1810,9 +1822,9 @@ struct Playback {
     /// Recent render costs, sizing the ring (`capacity()`).
     costs: crate::playback::CostWindow,
     /// The highest frame whose source decodes have been posted to the
-    /// decode-ahead thread this run. A watermark, not a set: playback frames
-    /// only move forward, so "post everything from here to there once" is the
-    /// whole bookkeeping.
+    /// decode-ahead thread this run (the lowest on a reverse leg). A
+    /// watermark, not a set: playback frames only move one way in a run, so
+    /// "post everything from here to there once" is the whole bookkeeping.
     prefetched_to: Option<u64>,
     /// The mix waiting for the sound to be started, once the picture has
     /// banked enough to start with it (the pre-roll,
@@ -1885,6 +1897,29 @@ impl Playback {
         }
     }
 
+    /// The frame the clock has reached. Counting up from `from` on the audio
+    /// clock, or down from it on the wall clock on a reverse leg, which has
+    /// no sound to follow.
+    fn clock_frame(&self) -> u64 {
+        if self.reverse {
+            let passed = (self.started.elapsed().as_secs_f64() * self.fps).floor() as u64;
+            self.from.saturating_sub(passed)
+        } else {
+            (self.elapsed_seconds() * self.fps).floor().max(0.0) as u64
+        }
+    }
+
+    /// Whether the clock has reached `frame`, in whichever direction the leg
+    /// runs.
+    fn clock_reached(&self, frame: u64) -> bool {
+        let clock = self.clock_frame();
+        if self.reverse {
+            frame >= clock
+        } else {
+            frame <= clock
+        }
+    }
+
     /// How many frames ahead of the clock to render — the ring's capacity,
     /// adapted from the measured p95 render cost (the impl note's pinned
     /// formula, [`crate::playback::lookahead_frames`]).
@@ -1942,10 +1977,7 @@ impl Playback {
                 _ => Some(0),
             },
             BridgePlaybackMode::Adaptive => {
-                let clock = self.elapsed_seconds();
-                queued
-                    .iter()
-                    .rposition(|&frame| frame as f64 / self.fps <= clock)
+                queued.iter().rposition(|&frame| self.clock_reached(frame))
             }
         }
     }
@@ -1963,8 +1995,15 @@ impl Playback {
                 (due > now).then(|| due - now)
             }
             BridgePlaybackMode::Adaptive => {
-                let due = front as f64 / self.fps;
-                let clock = self.elapsed_seconds();
+                // A reverse leg is due `from - front` periods after it started.
+                let (due, clock) = if self.reverse {
+                    (
+                        self.from.saturating_sub(front) as f64 / self.fps,
+                        self.started.elapsed().as_secs_f64(),
+                    )
+                } else {
+                    (front as f64 / self.fps, self.elapsed_seconds())
+                };
                 (due > clock).then(|| std::time::Duration::from_secs_f64(due - clock))
             }
         }
@@ -1982,26 +2021,42 @@ impl Playback {
     ///   *ahead* of the clock is fine now (that is what the ring is for);
     ///   how far ahead is [`Self::capacity`]'s business, not this one's.
     fn advance(&mut self) -> Option<u64> {
-        if self.next > self.last {
+        if !self.has_more() {
             return None;
         }
         let frame = match self.mode {
             BridgePlaybackMode::EveryFrame => self.next,
             BridgePlaybackMode::Adaptive => {
-                let wanted = (self.elapsed_seconds() * self.fps).floor().max(0.0) as u64;
-                // Never go backwards. A clock reading behind the frame just
-                // drawn — a resync, or a mix loading part-way through — would
-                // otherwise play a short stretch twice.
-                wanted.max(self.next)
+                let wanted = self.clock_frame();
+                // Never go against the leg. A clock reading behind the frame
+                // just drawn (a resync, or a mix loading part-way through)
+                // would otherwise play a short stretch twice.
+                if self.reverse {
+                    wanted.min(self.next)
+                } else {
+                    wanted.max(self.next)
+                }
             }
         };
-        self.skipped = frame.saturating_sub(self.next);
+        self.skipped = frame.abs_diff(self.next);
+        if self.reverse {
+            // Counting down never leaves the composition: the leg ends after
+            // frame zero, which `next` cannot step below to say.
+            self.ended = frame == 0;
+            self.next = frame.saturating_sub(1);
+            return Some(frame);
+        }
         if frame > self.last {
             self.next = frame;
             return None;
         }
         self.next = frame + 1;
         Some(frame)
+    }
+
+    /// Whether the leg has frames left to render.
+    fn has_more(&self) -> bool {
+        !self.ended && self.next <= self.last
     }
 
     /// What the last frame really cost, for the realtime controller.
@@ -2820,13 +2875,14 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
     // The pre-roll: the sound starts once the picture has something banked to
     // start alongside it (or the budget is spent), not at the press of play.
     if let Some(playback) = &mut state.playback {
-        if playback.pending_audio.is_some() && playback.pre_roll_done(playback.ring.len()) {
+        if !playback.pre_rolled && playback.pre_roll_done(playback.ring.len()) {
+            playback.pre_rolled = true;
             let document = playback.pending_audio.take();
             let start = playback.from as f64 / playback.fps;
             // The clock's baseline is now, not when the request arrived: the
             // pre-roll's own milliseconds are not playback time, and counting
             // them would have adaptive skip straight over the frames just
-            // banked.
+            // banked. A silent leg needs the baseline too.
             playback.started = std::time::Instant::now();
             start_audio(playback.comp.id, start, document);
         }
@@ -2866,7 +2922,10 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             // it, so a stop resumes filling from where the user actually is.
             state.last_shown = Some((playback.view, playback.comp.clone(), frame, playback.scale));
             state.fill_exhausted = false;
-            if matches!(playback.mode, BridgePlaybackMode::EveryFrame) {
+            // Not on a reverse leg: it has no sound, and a late picture would
+            // otherwise hold the mix so that eight on-time pictures start
+            // the forward mix again under a backward picture.
+            if matches!(playback.mode, BridgePlaybackMode::EveryFrame) && !playback.reverse {
                 chase_audio(playback, frame, since_present);
             }
             let present_started = std::time::Instant::now();
@@ -2891,7 +2950,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
 
     // Render ahead while the ring has room and frames remain.
     if playback.ring.len() < playback.capacity() {
-        if playback.next <= playback.last {
+        if playback.has_more() {
             let (document, revision) = {
                 let Ok(document) = state.project.state() else {
                     return;
@@ -2978,15 +3037,24 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                 // thread before this frame's render occupies the loop, so those
                 // decodes and this composite run at the same time. The watermark
                 // posts each frame once per run; an adaptive skip jumps it
-                // forward with the playhead.
-                let ahead_to = frame
-                    .saturating_add(crate::playback::PREFETCH_AHEAD)
-                    .min(playback.last);
-                let from = playback
-                    .prefetched_to
-                    .map_or(frame + 1, |posted| posted + 1)
-                    .max(frame + 1);
-                for future in from..=ahead_to {
+                // along with the playhead. A reverse leg walks down instead.
+                let coming: Vec<u64> = if playback.reverse {
+                    let stop = frame.saturating_sub(crate::playback::PREFETCH_AHEAD);
+                    let start = playback
+                        .prefetched_to
+                        .map_or(frame, |posted| posted.min(frame));
+                    (stop..start).rev().collect()
+                } else {
+                    let ahead_to = frame
+                        .saturating_add(crate::playback::PREFETCH_AHEAD)
+                        .min(playback.last);
+                    let from = playback
+                        .prefetched_to
+                        .map_or(frame + 1, |posted| posted + 1)
+                        .max(frame + 1);
+                    (from..=ahead_to).collect()
+                };
+                for &future in &coming {
                     let wants = state
                         .renderer
                         .prefetch_wants(&document, comp_id, future, quality);
@@ -3037,8 +3105,8 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                         }
                     }
                 }
-                if ahead_to >= from {
-                    playback.prefetched_to = Some(ahead_to);
+                if let Some(&edge) = coming.last() {
+                    playback.prefetched_to = Some(edge);
                 }
                 let started = std::time::Instant::now();
                 let rendered = prepare_frame(
@@ -3204,7 +3272,15 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
         .frame_at(lumit_core::time::CompTime(comp.duration.0));
     let last = frames.max(1).saturating_sub(1) as u64;
 
-    let from = if req.from >= last { 0 } else { req.from };
+    // A forward leg asked for at the end starts over; a reverse one starts
+    // at the end, and counts down from wherever it was asked for.
+    let from = if req.reverse {
+        req.from.min(last)
+    } else if req.from >= last {
+        0
+    } else {
+        req.from
+    };
 
     // Ask the disk tier for the first stretch NOW, before the first render
     // turn. The ring fills by rendering back-to-back at the start of a run, so
@@ -3224,9 +3300,14 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
     // retires the frames it made.
     state.renderer.sync_colour(&document);
     state.renderer.presync_items(&document, comp_id);
-    let ask_to = from.saturating_add(DISK_PRE_ASK).min(last);
+    // The stretch the leg is about to play, nearest first.
+    let asks: Vec<u64> = if req.reverse {
+        (from.saturating_sub(DISK_PRE_ASK)..=from).rev().collect()
+    } else {
+        (from..=from.saturating_add(DISK_PRE_ASK).min(last)).collect()
+    };
     let view = state.view_id();
-    for frame in from..=ask_to {
+    for frame in asks {
         let name =
             state
                 .names
@@ -3264,9 +3345,12 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
     state.playback = Some(Playback {
         comp: req.comp,
         view: req.view,
-        pending_audio: Some(req.audio),
+        pending_audio: req.audio,
         next: from,
         last,
+        reverse: req.reverse,
+        ended: false,
+        pre_rolled: false,
         mode: req.mode,
         scale: req.scale,
         fps: if fps > 0.0 { fps } else { 60.0 },
@@ -5573,6 +5657,9 @@ mod tests {
             view: 0,
             next: 0,
             last,
+            reverse: false,
+            ended: false,
+            pre_rolled: false,
             mode,
             scale: 1.0,
             fps: 60.0,
@@ -5661,6 +5748,48 @@ mod tests {
         assert_eq!(p.advance(), None, "past the last frame, playback is over");
     }
 
+    /// A reverse leg counts down from where it was asked for and ends after
+    /// frame zero, which `next` cannot step below to say on its own.
+    #[test]
+    fn a_reverse_run_counts_down_and_ends_after_frame_zero() {
+        let mut p = playback(BridgePlaybackMode::EveryFrame, 10);
+        p.reverse = true;
+        p.from = 3;
+        p.next = 3;
+        for expected in (0..=3).rev() {
+            assert_eq!(p.advance(), Some(expected), "counts down one at a time");
+        }
+        assert_eq!(p.advance(), None, "after frame zero, the leg is over");
+        assert!(!p.has_more(), "and it stays over");
+    }
+
+    /// The reverse half of `adaptive_playback_presents_frames_only_when_the_clock_reaches_them`:
+    /// the ring holds a descending run, and the newest entry the clock has
+    /// counted down to is the one shown.
+    #[test]
+    fn adaptive_reverse_presents_the_frame_the_clock_has_counted_down_to() {
+        let mut p = playback(BridgePlaybackMode::Adaptive, 100);
+        p.reverse = true;
+        p.from = 100;
+        p.next = 100;
+        assert_eq!(
+            p.present_choice(&[100, 99, 98]),
+            Some(0),
+            "frame 100 is due at the very start, and only frame 100"
+        );
+        p.started = std::time::Instant::now() - std::time::Duration::from_millis(500);
+        let chosen = p
+            .present_choice(&[72, 71, 70, 60])
+            .expect("plenty is due by now");
+        assert!(
+            (1..=2).contains(&chosen),
+            "the newest frame the clock has reached, not the oldest queued: {chosen}"
+        );
+        assert_eq!(p.present_choice(&[20, 19]), None, "the future can wait");
+        let wait = p.wait_until_present(&[20, 19]).expect("not due yet");
+        assert!(wait.as_secs_f64() <= 80.0 / 60.0);
+    }
+
     /// **The cached-playback regression, on the present side.** Every-frame is
     /// allowed to fall behind — a comp too heavy to render in realtime plays
     /// slow rather than dropping frames — but it must never run *ahead*. Once a
@@ -5746,6 +5875,24 @@ mod tests {
             frame >= 29,
             "half a second at 60 fps is about frame 30, not frame 0: got {frame}"
         );
+    }
+
+    /// The same skip, counting down: a reverse leg the clock has run ahead of
+    /// jumps to where the clock is rather than showing frames it has passed.
+    #[test]
+    fn adaptive_reverse_skips_frames_the_clock_has_passed() {
+        let mut p = playback(BridgePlaybackMode::Adaptive, 200);
+        p.reverse = true;
+        p.from = 100;
+        p.next = 100;
+        p.started = std::time::Instant::now() - std::time::Duration::from_millis(500);
+
+        let frame = p.advance().expect("still inside the composition");
+        assert!(
+            frame <= 71,
+            "half a second at 60 fps is about frame 70, not frame 100: got {frame}"
+        );
+        assert_eq!(p.skipped, 100 - frame, "the skip is counted");
     }
 
     /// **The always-Full regression.** The tier only ever saw what the worker

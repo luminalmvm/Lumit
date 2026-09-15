@@ -37,6 +37,9 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 
+import '../icons/icon_style.dart';
+import '../icons/lumit_icon.dart' as glyph;
+import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../panels/layer_fold_frb.dart' show RevealFilter;
@@ -50,6 +53,7 @@ import '../state/dock.dart';
 import '../state/external_links.dart';
 import '../state/file_dialogs.dart';
 import '../state/keymap.dart';
+import '../state/settings.dart' show ToolBarPosition;
 import '../state/viewer_view.dart';
 import '../state/workspace.dart' show UserWorkspace, Workspace;
 import '../theme/theme.dart';
@@ -71,6 +75,7 @@ import 'recovery_dialog_frb.dart';
 import 'project_settings_frb.dart';
 import 'settings_window_frb.dart';
 import 'theme_name_dialog.dart';
+import 'tool_bar_frb.dart' show LumitTopLineToolsFrb;
 import 'update_dialog_frb.dart';
 import 'workspace_shortcut_frb.dart';
 
@@ -340,6 +345,60 @@ class MenuEntry {
 /// that holds it; an open one costs what it always did, on a deliberate press.
 typedef MenuSection = ({String title, List<MenuEntry> Function() items});
 
+/// The search well at the right of the top line: a hint and the chord, and
+/// pressing it opens the same palette Ctrl+Shift+P does. A pill on the room
+/// under Lantern, a well elsewhere.
+class _CommandBox extends StatelessWidget {
+  final VoidCallback onPressed;
+  const _CommandBox({required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final pill = t.tokens.roomed;
+    return LumitTooltip(
+      message: l10n.menuCommandPalette,
+      child: GestureDetector(
+        key: const ValueKey('command-box'),
+        behavior: HitTestBehavior.opaque,
+        onTap: onPressed,
+        child: Container(
+          width: 220,
+          height: pill ? 28 : 20,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(
+            color: pill ? t.surface1 : t.surface0,
+            borderRadius: BorderRadius.circular(
+                pill ? t.tokens.actionRadius : t.tokens.wellRadius),
+            border: pill ? null : Border.all(color: t.hairline),
+            boxShadow: pill ? t.tokens.cardShadow : null,
+          ),
+          child: Row(
+            children: [
+              glyph.LumitIcon(
+                IconStyle.resolve('search', LumitIcons.search, t),
+                size: 12,
+                colour: t.textMuted,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  l10n.commandBoxHint,
+                  style: t.body.copyWith(color: t.textMuted),
+                  maxLines: 1,
+                  overflow: TextOverflow.clip,
+                ),
+              ),
+              Text('Ctrl+Shift+P',
+                  style: t.kicker.copyWith(color: t.textDisabled)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class LumitMenuBarFrb extends StatelessWidget {
   final LumitState app;
 
@@ -417,9 +476,41 @@ class LumitMenuBarFrb extends StatelessWidget {
       );
     }
 
+    final ui = context.read<LumitUiState>();
+    // Nine menu names do not fit a narrow window, and a menu you cannot
+    // reach is worse than one you have to scroll to, so the bar scrolls
+    // sideways rather than clipping its last headings away.
+    final headings = SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          const SizedBox(width: 4),
+          for (final menu in menus)
+            _MenuButton(title: menu.title, items: menu.items),
+          // Nothing to look at: it is here so `Ctrl+Shift+P` opens the same
+          // palette this bar builds, rather than the shell building a second
+          // one from a list that would drift out of step with these menus.
+          _RequestHotkey(
+            requests: ui.paletteRequest,
+            onRequested: () => _palette(context),
+          ),
+          // The same, for Ctrl+Space: the console's effects and comps come
+          // from this file for the same reason the palette's commands do.
+          _RequestHotkey(
+            requests: ui.consoleRequest,
+            onRequested: () => _console(context),
+          ),
+        ],
+      ),
+    );
+    // Lantern's band stands in the room with no hairline; Desk's top line is
+    // on its own surface, the mockup's; Studio keeps its band of chrome.
+    final roomed = t.tokens.roomed;
+    final onRail = ui.workspace.interface.toolBarPositionFor(ui.theme.shape) ==
+        ToolBarPosition.left;
     return Container(
-      height: 26,
-      // **Load-bearing.** The scroll view below shrink-wraps to the width of
+      height: t.density.menuBar,
+      // **Load-bearing.** The scroll view above shrink-wraps to the width of
       // its Row, so without this the bar is only as wide as its nine headings
       // — and the Column above it, centring by default, puts that stub in the
       // middle of the window with the backdrop showing either side. The bar is
@@ -428,32 +519,46 @@ class LumitMenuBarFrb extends StatelessWidget {
       // The same hairline the toolbar draws under itself, so the two bars read
       // as two bands of chrome rather than one 52px slab of surface2.
       decoration: BoxDecoration(
-        color: t.surface2,
-        border: Border(bottom: BorderSide(color: t.hairline)),
+        color: roomed
+            ? t.room
+            : t.shape == ThemeShape.desk
+                ? t.surface1
+                : t.surface2,
+        border: roomed ? null : Border(bottom: BorderSide(color: t.hairline)),
       ),
-      // Nine menu names do not fit a narrow window, and a menu you cannot
-      // reach is worse than one you have to scroll to — so the bar scrolls
-      // sideways rather than clipping its last headings away.
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
+      // With the tools on the rail this line also carries the tool options
+      // and the workspace strip. The headings take the width they need and
+      // the rest is the tools half's, so the workspaces end at the edge with
+      // the options taking what is left between. The headings scroll only
+      // once they would take more than half the line, which no window they
+      // fit is narrow enough for.
+      child: LayoutBuilder(
+        builder: (context, c) => Row(
           children: [
-            const SizedBox(width: 4),
-            for (final menu in menus)
-              _MenuButton(title: menu.title, items: menu.items),
-            // Nothing to look at: it is here so `Ctrl+Shift+P` opens the same
-            // palette this bar builds, rather than the shell building a second
-            // one from a list that would drift out of step with these menus.
-            _RequestHotkey(
-              requests: context.read<LumitUiState>().paletteRequest,
-              onRequested: () => _palette(context),
+            Expanded(
+              child: onRail
+                  ? LayoutBuilder(
+                      builder: (context, c) => Row(
+                        children: [
+                          ConstrainedBox(
+                            constraints:
+                                BoxConstraints(maxWidth: c.maxWidth / 2),
+                            child: headings,
+                          ),
+                          const Expanded(child: LumitTopLineToolsFrb()),
+                        ],
+                      ),
+                    )
+                  : headings,
             ),
-            // The same, for Ctrl+Space: the console's effects and comps come
-            // from this file for the same reason the palette's commands do.
-            _RequestHotkey(
-              requests: context.read<LumitUiState>().consoleRequest,
-              onRequested: () => _console(context),
-            ),
+            // The command box at the line's end, in every style and position,
+            // unless the person has switched it off or the window is too
+            // narrow to hold the menus and the box at once (the chord still
+            // opens the palette).
+            if (ui.workspace.interface.commandBox && c.maxWidth >= 1000) ...[
+              _CommandBox(onPressed: () => _palette(context)),
+              const SizedBox(width: 6),
+            ],
           ],
         ),
       ),
@@ -710,673 +815,678 @@ List<MenuSection> lumitMenus(
     (
       title: l10n.menuFile,
       items: () => [
-        MenuEntry(l10n.menuNew, app.newProject, action: 'file.new'),
-        MenuEntry(
-            l10n.menuOpenProject, () => openProjectFrb(app, picker: openPicker),
-            action: 'file.open'),
-        MenuEntry.submenu(l10n.menuOpenRecent, [
-          if (ui.workspace.recentProjects.isEmpty)
-            MenuEntry(l10n.menuNothingYet, null)
-          else
-            for (final path in ui.workspace.recentProjects)
-              MenuEntry(path, () => app.openProject(path)),
-        ]),
-        MenuEntry.divider(),
-        // Closing a project puts an empty one in its place, because the shell
-        // always has a document: the engine's `close` is what `newProject`
-        // already does to the one it replaces, so this is the same road the
-        // application takes at launch, walked deliberately.
-        MenuEntry(l10n.menuCloseProject,
-            project == null ? null : app.newProject),
-        // Save is only meaningful once there is a project; without a path it
-        // behaves as Save as, which is what the engine's empty-path refusal
-        // makes us handle explicitly.
-        MenuEntry(
-            l10n.menuSave,
-            project == null
-                ? null
-                : () => saveProjectFrb(app, ui, picker: savePicker),
-            action: 'file.save'),
-        MenuEntry(
-            l10n.menuSaveAs,
-            project == null
-                ? null
-                : () => saveProjectFrb(app, ui,
-                    forcePicker: true, picker: savePicker),
-            action: 'file.save.as'),
-        MenuEntry.divider(),
-        // Import footage stands in the menu proper (owner, 2026-08-25,
-        // superseding the one-Import-home grouping of 2026-08-21): it is the
-        // everyday act, and a submenu hop for it earned its promotion.
-        MenuEntry(
-            l10n.menuImportFootage,
-            project == null
-                ? null
-                : () => importFootageFrb(app, picker: footagePicker),
-            action: 'file.import'),
-        // The After Effects route keeps the submenu. The Bridge-bundle entry
-        // is gone (owner, repeatedly): the .aep front door is the import; the
-        // bundle format itself remains supported for anything that already
-        // produced one, just not offered here.
-        MenuEntry.submenu(l10n.menuImport, [
-          // Not gated on a project: an import *replaces* whatever is loaded,
-          // the way opening a `.lum` does, so it is offered with none.
-          MenuEntry(
-              l10n.menuImportAe,
-              () => importAeBundleFrb(context, app,
-                  picker: aeProjectPicker ?? pickAeProject)),
-        ]),
-        MenuEntry(
-            l10n.menuExport, comp == null ? null : () => exportFrb(context),
-            action: 'file.export'),
-        MenuEntry.divider(),
-        // The project's own settings, kept apart from Settings because Settings
-        // is this machine's and these travel in the `.lum`.
-        MenuEntry(
-            l10n.menuProjectSettings,
-            project == null
-                ? null
-                : () => showProjectSettingsFrb(context, project),
-            action: 'project.settings'),
-        MenuEntry.divider(),
-        // Not in the specified list, and kept: recovering work beside a project
-        // is the one command whose absence costs a day's work.
-        MenuEntry(l10n.menuRecover,
-            projectPath == null ? null : () => _recover(context, app)),
-      ]
+            MenuEntry(l10n.menuNew, app.newProject, action: 'file.new'),
+            MenuEntry(l10n.menuOpenProject,
+                () => openProjectFrb(app, picker: openPicker),
+                action: 'file.open'),
+            MenuEntry.submenu(l10n.menuOpenRecent, [
+              if (ui.workspace.recentProjects.isEmpty)
+                MenuEntry(l10n.menuNothingYet, null)
+              else
+                for (final path in ui.workspace.recentProjects)
+                  MenuEntry(path, () => app.openProject(path)),
+            ]),
+            MenuEntry.divider(),
+            // Closing a project puts an empty one in its place, because the shell
+            // always has a document: the engine's `close` is what `newProject`
+            // already does to the one it replaces, so this is the same road the
+            // application takes at launch, walked deliberately.
+            MenuEntry(
+                l10n.menuCloseProject, project == null ? null : app.newProject),
+            // Save is only meaningful once there is a project; without a path it
+            // behaves as Save as, which is what the engine's empty-path refusal
+            // makes us handle explicitly.
+            MenuEntry(
+                l10n.menuSave,
+                project == null
+                    ? null
+                    : () => saveProjectFrb(app, ui, picker: savePicker),
+                action: 'file.save'),
+            MenuEntry(
+                l10n.menuSaveAs,
+                project == null
+                    ? null
+                    : () => saveProjectFrb(app, ui,
+                        forcePicker: true, picker: savePicker),
+                action: 'file.save.as'),
+            MenuEntry.divider(),
+            // Import footage stands in the menu proper (owner, 2026-08-25,
+            // superseding the one-Import-home grouping of 2026-08-21): it is the
+            // everyday act, and a submenu hop for it earned its promotion.
+            MenuEntry(
+                l10n.menuImportFootage,
+                project == null
+                    ? null
+                    : () => importFootageFrb(app, picker: footagePicker),
+                action: 'file.import'),
+            // The After Effects route keeps the submenu. The Bridge-bundle entry
+            // is gone (owner, repeatedly): the .aep front door is the import; the
+            // bundle format itself remains supported for anything that already
+            // produced one, just not offered here.
+            MenuEntry.submenu(l10n.menuImport, [
+              // Not gated on a project: an import *replaces* whatever is loaded,
+              // the way opening a `.lum` does, so it is offered with none.
+              MenuEntry(
+                  l10n.menuImportAe,
+                  () => importAeBundleFrb(context, app,
+                      picker: aeProjectPicker ?? pickAeProject)),
+            ]),
+            MenuEntry(
+                l10n.menuExport, comp == null ? null : () => exportFrb(context),
+                action: 'file.export'),
+            MenuEntry.divider(),
+            // The project's own settings, kept apart from Settings because Settings
+            // is this machine's and these travel in the `.lum`.
+            MenuEntry(
+                l10n.menuProjectSettings,
+                project == null
+                    ? null
+                    : () => showProjectSettingsFrb(context, project),
+                action: 'project.settings'),
+            MenuEntry.divider(),
+            // Not in the specified list, and kept: recovering work beside a project
+            // is the one command whose absence costs a day's work.
+            MenuEntry(l10n.menuRecover,
+                projectPath == null ? null : () => _recover(context, app)),
+          ]
     ),
     (
       title: l10n.menuEdit,
       items: () => [
-        MenuEntry(l10n.menuUndo,
-            (history?.canUndo ?? false) ? () => undoFrb(app) : null,
-            action: 'edit.undo'),
-        MenuEntry(l10n.menuRedo,
-            (history?.canRedo ?? false) ? () => redoFrb(app) : null,
-            action: 'edit.redo'),
-        // The journal as a list you can read and click. Undo and redo above it
-        // walk the same list one step at a time.
-        MenuEntry(l10n.menuHistory,
-            project == null ? null : () => showHistoryFrb(context, app)),
-        MenuEntry.divider(),
-        // Copy takes the finest thing that is selected: the keyframes a panel
-        // has claimed, else the picked effects, else the selected layer whole
-        // — transform, keyframes, masks, paint, effects and switches — as the
-        // document text the engine hands back. Cut is that plus the delete, so
-        // the two can never disagree about what "the selection" was.
-        MenuEntry(l10n.menuCut,
-            _somethingSelected(ui) ? () => cutSelectionFrb(app, ui) : null,
-            action: 'edit.cut'),
-        MenuEntry(l10n.menuCopy,
-            _somethingSelected(ui) ? () => copySelectionFrb(ui) : null,
-            action: 'edit.copy'),
-        // Paste puts a layer at the playhead — or at the time it was copied
-        // from, for the person rebuilding a moment in a second comp (Settings →
-        // Interface). An effect always lands with its first keyframe at the
-        // playhead, whichever way that setting is: what is being placed is an
-        // animation rather than a position.
-        MenuEntry(l10n.menuPaste, _pasteAction(app, ui, comp, layer),
-            action: 'edit.paste'),
-        MenuEntry(
-            l10n.delete,
-            layers.isEmpty
-                ? null
-                : () {
-                    for (final l in layers) {
-                      l.delete();
-                    }
-                    ui.clearSelection();
-                    app.notifyDocumentChanged();
-                  },
-            action: 'edit.delete.selection'),
-        MenuEntry.divider(),
-        MenuEntry(l10n.menuDuplicate, onLayer((l) {
-          l.duplicate();
-          app.notifyDocumentChanged();
-        }), action: 'layer.duplicate'),
-        MenuEntry(l10n.menuSplitLayer, onComp((c) => _splitAtPlayhead(ui)),
-            action: 'layer.split'),
-        MenuEntry(l10n.menuSelectAll,
-            comp == null ? null : () => ui.setSelection(comp.getLayers()),
-            action: 'edit.select.all'),
-        MenuEntry(l10n.menuDeselectAll, ui.clearSelection,
-            action: 'edit.deselect.all'),
-        MenuEntry.divider(),
-        // Windows and Linux keep Preferences under Edit, which is where every
-        // application those users know puts it. macOS moves this same row into
-        // the application menu (see [platformMenusFor]), which is where every
-        // application *those* users know puts it.
-        MenuEntry(l10n.menuSettings, () => showSettingsWindowFrb(context),
-            action: 'app.settings'),
-      ]
+            MenuEntry(l10n.menuUndo,
+                (history?.canUndo ?? false) ? () => undoFrb(app) : null,
+                action: 'edit.undo'),
+            MenuEntry(l10n.menuRedo,
+                (history?.canRedo ?? false) ? () => redoFrb(app) : null,
+                action: 'edit.redo'),
+            // The journal as a list you can read and click. Undo and redo above it
+            // walk the same list one step at a time.
+            MenuEntry(l10n.menuHistory,
+                project == null ? null : () => showHistoryFrb(context, app)),
+            MenuEntry.divider(),
+            // Copy takes the finest thing that is selected: the keyframes a panel
+            // has claimed, else the picked effects, else the selected layer whole
+            // — transform, keyframes, masks, paint, effects and switches — as the
+            // document text the engine hands back. Cut is that plus the delete, so
+            // the two can never disagree about what "the selection" was.
+            MenuEntry(l10n.menuCut,
+                _somethingSelected(ui) ? () => cutSelectionFrb(app, ui) : null,
+                action: 'edit.cut'),
+            MenuEntry(l10n.menuCopy,
+                _somethingSelected(ui) ? () => copySelectionFrb(ui) : null,
+                action: 'edit.copy'),
+            // Paste puts a layer at the playhead — or at the time it was copied
+            // from, for the person rebuilding a moment in a second comp (Settings →
+            // Interface). An effect always lands with its first keyframe at the
+            // playhead, whichever way that setting is: what is being placed is an
+            // animation rather than a position.
+            MenuEntry(l10n.menuPaste, _pasteAction(app, ui, comp, layer),
+                action: 'edit.paste'),
+            MenuEntry(
+                l10n.delete,
+                layers.isEmpty
+                    ? null
+                    : () {
+                        for (final l in layers) {
+                          l.delete();
+                        }
+                        ui.clearSelection();
+                        app.notifyDocumentChanged();
+                      },
+                action: 'edit.delete.selection'),
+            MenuEntry.divider(),
+            MenuEntry(l10n.menuDuplicate, onLayer((l) {
+              l.duplicate();
+              app.notifyDocumentChanged();
+            }), action: 'layer.duplicate'),
+            MenuEntry(l10n.menuSplitLayer, onComp((c) => _splitAtPlayhead(ui)),
+                action: 'layer.split'),
+            MenuEntry(l10n.menuSelectAll,
+                comp == null ? null : () => ui.setSelection(comp.getLayers()),
+                action: 'edit.select.all'),
+            MenuEntry(l10n.menuDeselectAll, ui.clearSelection,
+                action: 'edit.deselect.all'),
+            MenuEntry.divider(),
+            // Windows and Linux keep Preferences under Edit, which is where every
+            // application those users know puts it. macOS moves this same row into
+            // the application menu (see [platformMenusFor]), which is where every
+            // application *those* users know puts it.
+            MenuEntry(l10n.menuSettings, () => showSettingsWindowFrb(context),
+                action: 'app.settings'),
+          ]
     ),
     (
       title: l10n.menuComposition,
       items: () => [
-        MenuEntry(l10n.newComposition,
-            project == null ? null : () => newCompositionFrb(context, app),
-            action: 'comp.new'),
-        MenuEntry.divider(),
-        MenuEntry(l10n.compositionSettingsEllipsis,
-            comp == null ? null : () => _compSettings(context, app),
-            action: 'comp.settings'),
-        // Make the comp be the stretch you marked, and the frame be the
-        // rectangle you swept. Each is greyed until there is one: a comp with
-        // no work area is already its own work area, and with no region there
-        // is no rectangle to crop to.
-        MenuEntry(l10n.menuTrimCompToWorkArea, _trimAction(app, comp)),
-        MenuEntry(
-            l10n.menuCropCompToRegion,
-            comp == null || ui.regionOfInterest == null
-                ? null
-                : () {
-                    comp.cropToRegion(region: ui.regionOfInterest!);
-                    // The comp *is* the region now, so the region has nothing
-                    // left to say; leaving it set would window the new frame
-                    // down to a corner of what was just cropped.
-                    ui.setRegionOfInterest(null);
-                    app.notifyDocumentChanged();
-                  }),
-        MenuEntry.divider(),
-        // "Export", never "render", for anything the user sees (glossary §9).
-        // Adding to the queue is what the export dialog does, so this opens
-        // it rather than queueing something nobody has said where to write.
-        MenuEntry(l10n.menuAddToExportQueue,
-            comp == null ? null : () => exportFrb(context),
-            action: 'export.queue.add'),
-        MenuEntry.divider(),
-        // Comp-level markers, including the beat pass, which makes them
-        // (docs/09 §10) — the layer's own markers are Layer ▸ Markers.
-        MenuEntry(l10n.menuAddMarkerAtPlayhead,
-            onComp((c) => _markerAtPlayhead(ui, c)),
-            action: 'marker.add'),
-        // Beat detection reads the whole comp's audio and can take seconds, so
-        // it runs off-thread; a comp with nothing sounding in it refuses, and
-        // says so on the status line rather than by leaving the Timeline
-        // exactly as it was.
-        MenuEntry(
-            l10n.menuDetectBeats,
-            onComp((c) => c
-                .detectBeats(options: BridgeBeatOptions.standard())
-                .then((found) {
-              app.postNotice(found.placed == 0
-                  ? l10n.beatsNoneFound
-                  : beatsFoundNotice(found));
-            }, onError: (_) => app.postNotice(l10n.beatsNoSound)))),
-        MenuEntry(
-            l10n.menuClearBeatMarkers, onComp((c) => c.clearBeatMarkers())),
-      ]
+            MenuEntry(l10n.newComposition,
+                project == null ? null : () => newCompositionFrb(context, app),
+                action: 'comp.new'),
+            MenuEntry.divider(),
+            MenuEntry(l10n.compositionSettingsEllipsis,
+                comp == null ? null : () => _compSettings(context, app),
+                action: 'comp.settings'),
+            // Make the comp be the stretch you marked, and the frame be the
+            // rectangle you swept. Each is greyed until there is one: a comp with
+            // no work area is already its own work area, and with no region there
+            // is no rectangle to crop to.
+            MenuEntry(l10n.menuTrimCompToWorkArea, _trimAction(app, comp)),
+            MenuEntry(
+                l10n.menuCropCompToRegion,
+                comp == null || ui.regionOfInterest == null
+                    ? null
+                    : () {
+                        comp.cropToRegion(region: ui.regionOfInterest!);
+                        // The comp *is* the region now, so the region has nothing
+                        // left to say; leaving it set would window the new frame
+                        // down to a corner of what was just cropped.
+                        ui.setRegionOfInterest(null);
+                        app.notifyDocumentChanged();
+                      }),
+            MenuEntry.divider(),
+            // "Export", never "render", for anything the user sees (glossary §9).
+            // Adding to the queue is what the export dialog does, so this opens
+            // it rather than queueing something nobody has said where to write.
+            MenuEntry(l10n.menuAddToExportQueue,
+                comp == null ? null : () => exportFrb(context),
+                action: 'export.queue.add'),
+            MenuEntry.divider(),
+            // Comp-level markers, including the beat pass, which makes them
+            // (docs/09 §10) — the layer's own markers are Layer ▸ Markers.
+            MenuEntry(l10n.menuAddMarkerAtPlayhead,
+                onComp((c) => _markerAtPlayhead(ui, c)),
+                action: 'marker.add'),
+            // Beat detection reads the whole comp's audio and can take seconds, so
+            // it runs off-thread; a comp with nothing sounding in it refuses, and
+            // says so on the status line rather than by leaving the Timeline
+            // exactly as it was.
+            MenuEntry(
+                l10n.menuDetectBeats,
+                onComp((c) => c
+                        .detectBeats(options: BridgeBeatOptions.standard())
+                        .then((found) {
+                      app.postNotice(found.placed == 0
+                          ? l10n.beatsNoneFound
+                          : beatsFoundNotice(found));
+                    }, onError: (_) => app.postNotice(l10n.beatsNoSound)))),
+            MenuEntry(
+                l10n.menuClearBeatMarkers, onComp((c) => c.clearBeatMarkers())),
+          ]
     ),
     (
       title: l10n.menuLayer,
       items: () => [
-        // A new layer lands directly above the selected one, the way After
-        // Effects does it, and at the top of the stack when nothing is
-        // selected ([newLayerRow]).
-        MenuEntry.submenu(l10n.menuNew, [
-          MenuEntry(
-              l10n.menuSolid, onComp((c) => c.addSolidLayer(row: row(c))),
-              action: 'layer.new.solid'),
-          MenuEntry(l10n.menuText, onComp((c) => c.addTextLayer(row: row(c))),
-              action: 'layer.new.text'),
-          MenuEntry(
-              l10n.menuCamera, onComp((c) => c.addCameraLayer(row: row(c))),
-              action: 'layer.new.camera'),
-          // The three light kinds are their own rows rather than one row and
-          // a dropdown: which kind you want is known before you make it, and
-          // an area light is a different thing to reach for than a point.
-          MenuEntry(l10n.menuPointLight,
-              onComp((c) => c.addLightLayer(kind: 0, row: row(c))),
-              action: 'layer.new.light.point'),
-          MenuEntry(l10n.menuSpotLight,
-              onComp((c) => c.addLightLayer(kind: 1, row: row(c)))),
-          MenuEntry(l10n.menuAreaLight,
-              onComp((c) => c.addLightLayer(kind: 2, row: row(c)))),
-          MenuEntry(l10n.menuAdjustment,
-              onComp((c) => c.addAdjustmentLayer(row: row(c))),
-              action: 'layer.new.adjustment'),
-          MenuEntry(l10n.menuNull, onComp((c) => c.addNullLayer(row: row(c))),
-              action: 'layer.new.null'),
-          MenuEntry(l10n.menuSequence,
-              onComp((c) => c.addSequenceLayer(row: row(c)))),
-        ]),
-        // What the layer *is*, as opposed to what it is doing: its name, and a
-        // Solid's own size and colour (the shared dialogue pattern).
-        MenuEntry(
-            l10n.menuLayerSettings,
-            onLayer((l) async {
+            // A new layer lands directly above the selected one, the way After
+            // Effects does it, and at the top of the stack when nothing is
+            // selected ([newLayerRow]).
+            MenuEntry.submenu(l10n.menuNew, [
+              MenuEntry(
+                  l10n.menuSolid, onComp((c) => c.addSolidLayer(row: row(c))),
+                  action: 'layer.new.solid'),
+              MenuEntry(
+                  l10n.menuText, onComp((c) => c.addTextLayer(row: row(c))),
+                  action: 'layer.new.text'),
+              MenuEntry(
+                  l10n.menuCamera, onComp((c) => c.addCameraLayer(row: row(c))),
+                  action: 'layer.new.camera'),
+              // The three light kinds are their own rows rather than one row and
+              // a dropdown: which kind you want is known before you make it, and
+              // an area light is a different thing to reach for than a point.
+              MenuEntry(l10n.menuPointLight,
+                  onComp((c) => c.addLightLayer(kind: 0, row: row(c))),
+                  action: 'layer.new.light.point'),
+              MenuEntry(l10n.menuSpotLight,
+                  onComp((c) => c.addLightLayer(kind: 1, row: row(c)))),
+              MenuEntry(l10n.menuAreaLight,
+                  onComp((c) => c.addLightLayer(kind: 2, row: row(c)))),
+              MenuEntry(l10n.menuAdjustment,
+                  onComp((c) => c.addAdjustmentLayer(row: row(c))),
+                  action: 'layer.new.adjustment'),
+              MenuEntry(
+                  l10n.menuNull, onComp((c) => c.addNullLayer(row: row(c))),
+                  action: 'layer.new.null'),
+              MenuEntry(l10n.menuSequence,
+                  onComp((c) => c.addSequenceLayer(row: row(c)))),
+            ]),
+            // What the layer *is*, as opposed to what it is doing: its name, and a
+            // Solid's own size and colour (the shared dialogue pattern).
+            MenuEntry(l10n.menuLayerSettings, onLayer((l) async {
               if (await showLayerSettingsFrb(context: context, layer: l)) {
                 app.notifyDocumentChanged();
               }
             })),
-        MenuEntry.divider(),
-        MenuEntry.submenu(l10n.menuMask, maskRows(context, app, ui)),
-        MenuEntry.submenu(
-            l10n.menuMaskAndShapePath, maskAndShapePathRows(app, ui)),
-        MenuEntry.submenu(l10n.menuTransform, transformRows(app, ui)),
-        // Audio ▸ — what to do with the *sound* of a layer that has some.
-        // Detach puts it on a row of its own, muting the picture's row, so it
-        // can be cut and ridden in the audio surfaces without the picture
-        // coming along. Greyed on a layer that is already nothing but sound; a
-        // layer that turns out to make none refuses when pressed and says so
-        // in the status line, because the answer costs a probe of the media
-        // and a menu cannot wait for one.
-        MenuEntry.submenu(l10n.menuAudio, [
-          MenuEntry(
-            l10n.menuDetachAudio,
-            _detachable(layer)
-                ? onLayer((l) async {
-                    try {
-                      await l.detachAudio();
-                      app.notifyDocumentChanged();
-                    } catch (_) {
-                      app.postNotice(l10n.detachAudioNoSound);
-                    }
-                  })
-                : null,
-          ),
-        ]),
-        // The selected layer's Retime. In the menu as well as on the keyboard
-        // (a command whose only route is a chord has no route the day
-        // something intercepts the chord). The command names what it will do,
-        // so a layer that already has one offers to take it away. Greyed out
-        // on a Sequence layer: its clips carry the retiming and are ramped in
-        // the sequence view, so there is nothing here for the command to
-        // switch on. Said with a disabled row rather than an error after the
-        // click.
-        MenuEntry(_retimeLabel(layer),
-            _retimeable(layer) ? onLayer((l) => app.toggleRetime(l)) : null,
-            action: 'layer.retime.enable'),
-        // In and out of the clip-editing surface, for anyone — the Vegas
-        // preference decides what an *import* becomes, never what a layer is
-        // allowed to be. Offered here and on a layer's right-click. Coming
-        // back out is offered whenever going in is, because a user who tries
-        // it has to be able to change their mind.
-        MenuEntry(
-            _sequenced(layer)
-                ? l10n.menuConvertToFootageLayer
-                : l10n.menuConvertToSequenceLayer,
-            _convertible(layer)
-                ? onLayer((l) {
-                    try {
-                      if (_sequenced(layer)) {
-                        l.convertFromSequenced();
-                      } else {
-                        l.convertToSequenced();
-                      }
-                      app.notifyDocumentChanged();
-                    } catch (_) {
-                      // A row of several clips refuses, and says so through the
-                      // status line rather than taking the interface down.
-                    }
-                  })
-                : null,
-            action: 'layer.sequence.convert'),
-        flowRow(app, ui),
-        threeDRow(app, ui),
-        MenuEntry.submenu(l10n.menuMarkers, markerRows(app, ui)),
-        MenuEntry.divider(),
-        MenuEntry.todo(l10n.menuPreserveTransparency),
-        MenuEntry.submenu(l10n.menuBlendingMode, blendRows(app, ui)),
-        blendStepRow(app, ui, by: 1),
-        blendStepRow(app, ui, by: -1),
-        MenuEntry.submenu(l10n.menuTrackMatte, matteRows(app, ui)),
-        MenuEntry.submenu(l10n.menuLayerStyles, styleRows(app, ui)),
-        MenuEntry.divider(),
-        MenuEntry.todo(l10n.menuReveal),
-        // Create ▸ — what a layer can be turned *into*, keeping the layer it
-        // was. Both rows are live only on a Type layer, said by greying out
-        // rather than by an error after the click; the copy lands directly
-        // above the original, where a duplicate goes.
-        MenuEntry.submenu(l10n.menuCreate, [
-          MenuEntry(
-              l10n.menuCreateShapesFromText,
-              _typed(layer)
-                  ? onLayer((l) {
-                      try {
-                        l.createShapesFromText(
-                            frame: ui.playheadFrame.value);
+            MenuEntry.divider(),
+            MenuEntry.submenu(l10n.menuMask, maskRows(context, app, ui)),
+            MenuEntry.submenu(
+                l10n.menuMaskAndShapePath, maskAndShapePathRows(app, ui)),
+            MenuEntry.submenu(l10n.menuTransform, transformRows(app, ui)),
+            // Audio ▸ — what to do with the *sound* of a layer that has some.
+            // Detach puts it on a row of its own, muting the picture's row, so it
+            // can be cut and ridden in the audio surfaces without the picture
+            // coming along. Greyed on a layer that is already nothing but sound; a
+            // layer that turns out to make none refuses when pressed and says so
+            // in the status line, because the answer costs a probe of the media
+            // and a menu cannot wait for one.
+            MenuEntry.submenu(l10n.menuAudio, [
+              MenuEntry(
+                l10n.menuDetachAudio,
+                _detachable(layer)
+                    ? onLayer((l) async {
+                        try {
+                          await l.detachAudio();
+                          app.notifyDocumentChanged();
+                        } catch (_) {
+                          app.postNotice(l10n.detachAudioNoSound);
+                        }
+                      })
+                    : null,
+              ),
+            ]),
+            // The selected layer's Retime. In the menu as well as on the keyboard
+            // (a command whose only route is a chord has no route the day
+            // something intercepts the chord). The command names what it will do,
+            // so a layer that already has one offers to take it away. Greyed out
+            // on a Sequence layer: its clips carry the retiming and are ramped in
+            // the sequence view, so there is nothing here for the command to
+            // switch on. Said with a disabled row rather than an error after the
+            // click.
+            MenuEntry(_retimeLabel(layer),
+                _retimeable(layer) ? onLayer((l) => app.toggleRetime(l)) : null,
+                action: 'layer.retime.enable'),
+            // In and out of the clip-editing surface, for anyone — the Vegas
+            // preference decides what an *import* becomes, never what a layer is
+            // allowed to be. Offered here and on a layer's right-click. Coming
+            // back out is offered whenever going in is, because a user who tries
+            // it has to be able to change their mind.
+            MenuEntry(
+                _sequenced(layer)
+                    ? l10n.menuConvertToFootageLayer
+                    : l10n.menuConvertToSequenceLayer,
+                _convertible(layer)
+                    ? onLayer((l) {
+                        try {
+                          if (_sequenced(layer)) {
+                            l.convertFromSequenced();
+                          } else {
+                            l.convertToSequenced();
+                          }
+                          app.notifyDocumentChanged();
+                        } catch (_) {
+                          // A row of several clips refuses, and says so through the
+                          // status line rather than taking the interface down.
+                        }
+                      })
+                    : null,
+                action: 'layer.sequence.convert'),
+            flowRow(app, ui),
+            threeDRow(app, ui),
+            MenuEntry.submenu(l10n.menuMarkers, markerRows(app, ui)),
+            MenuEntry.divider(),
+            MenuEntry.todo(l10n.menuPreserveTransparency),
+            MenuEntry.submenu(l10n.menuBlendingMode, blendRows(app, ui)),
+            blendStepRow(app, ui, by: 1),
+            blendStepRow(app, ui, by: -1),
+            MenuEntry.submenu(l10n.menuTrackMatte, matteRows(app, ui)),
+            MenuEntry.submenu(l10n.menuLayerStyles, styleRows(app, ui)),
+            MenuEntry.divider(),
+            MenuEntry.todo(l10n.menuReveal),
+            // Create ▸ — what a layer can be turned *into*, keeping the layer it
+            // was. Both rows are live only on a Type layer, said by greying out
+            // rather than by an error after the click; the copy lands directly
+            // above the original, where a duplicate goes.
+            MenuEntry.submenu(l10n.menuCreate, [
+              MenuEntry(
+                  l10n.menuCreateShapesFromText,
+                  _typed(layer)
+                      ? onLayer((l) {
+                          try {
+                            l.createShapesFromText(
+                                frame: ui.playheadFrame.value);
+                            app.notifyDocumentChanged();
+                          } catch (_) {
+                            // A line with no ink has no art to make, and says so
+                            // through the status line rather than taking the
+                            // interface down.
+                          }
+                        })
+                      : null),
+              MenuEntry(
+                  l10n.menuCreatePointsFromText,
+                  _typed(layer)
+                      ? onLayer((l) {
+                          try {
+                            l.createPointsFromText();
+                            app.notifyDocumentChanged();
+                          } catch (_) {}
+                        })
+                      : null),
+            ]),
+            MenuEntry.divider(),
+            cameraSettingsRow(context, app, ui),
+            MenuEntry.todo(l10n.menuAutoOutline),
+            // Pre-compose… is live only with a comp open and something selected in
+            // it — the menu says so by greying out rather than by failing.
+            MenuEntry(
+                l10n.menuPreCompose,
+                comp == null || layers.isEmpty
+                    ? null
+                    : () => showPrecomposeDialogFrb(
+                          context: context,
+                          comp: comp,
+                          selectedLayers: layers,
+                          ui: ui,
+                          workspace: ui.workspace,
+                        ),
+                action: 'layer.precompose'),
+            // The light fold beside the heavy one. Group is live with something
+            // selected; Ungroup only while the selection is actually in a group,
+            // so the row greys out rather than doing nothing when pressed. Both go
+            // through the shell's own command, which is the one implementation the
+            // keyboard reaches too.
+            MenuEntry.divider(),
+            MenuEntry(
+                l10n.menuGroupLayers,
+                comp == null || layers.isEmpty
+                    ? null
+                    : () {
+                        groupSelectedLayers(
+                          comp: comp,
+                          layerIds: [for (final l in layers) l.internallayerId],
+                          name: l10n.groupDefaultName,
+                        );
                         app.notifyDocumentChanged();
-                      } catch (_) {
-                        // A line with no ink has no art to make, and says so
-                        // through the status line rather than taking the
-                        // interface down.
-                      }
-                    })
-                  : null),
-          MenuEntry(
-              l10n.menuCreatePointsFromText,
-              _typed(layer)
-                  ? onLayer((l) {
-                      try {
-                        l.createPointsFromText();
+                      },
+                action: 'layer.group'),
+            MenuEntry(
+                l10n.menuUngroup,
+                comp == null ||
+                        !ui.model.groups.any(
+                            (g) => g.members.any(ui.selectedLayerIds.contains))
+                    ? null
+                    : () {
+                        ungroupSelection(
+                          comp: comp,
+                          layerIds: ui.selectedLayerIds,
+                        );
                         app.notifyDocumentChanged();
-                      } catch (_) {}
-                    })
-                  : null),
-        ]),
-        MenuEntry.divider(),
-        cameraSettingsRow(context, app, ui),
-        MenuEntry.todo(l10n.menuAutoOutline),
-        // Pre-compose… is live only with a comp open and something selected in
-        // it — the menu says so by greying out rather than by failing.
-        MenuEntry(
-            l10n.menuPreCompose,
-            comp == null || layers.isEmpty
-                ? null
-                : () => showPrecomposeDialogFrb(
-                      context: context,
-                      comp: comp,
-                      selectedLayers: layers,
-                      ui: ui,
-                      workspace: ui.workspace,
-                    ),
-            action: 'layer.precompose'),
-        // The light fold beside the heavy one. Group is live with something
-        // selected; Ungroup only while the selection is actually in a group,
-        // so the row greys out rather than doing nothing when pressed. Both go
-        // through the shell's own command, which is the one implementation the
-        // keyboard reaches too.
-        MenuEntry.divider(),
-        MenuEntry(
-            l10n.menuGroupLayers,
-            comp == null || layers.isEmpty
-                ? null
-                : () {
-                    groupSelectedLayers(
-                      comp: comp,
-                      layerIds: [for (final l in layers) l.internallayerId],
-                      name: l10n.groupDefaultName,
-                    );
-                    app.notifyDocumentChanged();
-                  },
-            action: 'layer.group'),
-        MenuEntry(
-            l10n.menuUngroup,
-            comp == null ||
-                    !ui.model.groups
-                        .any((g) => g.members.any(ui.selectedLayerIds.contains))
-                ? null
-                : () {
-                    ungroupSelection(
-                      comp: comp,
-                      layerIds: ui.selectedLayerIds,
-                    );
-                    app.notifyDocumentChanged();
-                  },
-            action: 'layer.ungroup'),
-      ]
+                      },
+                action: 'layer.ungroup'),
+          ]
     ),
     (title: l10n.menuEffect, items: () => _effectMenu(app, layers)),
     (
       title: l10n.menuAnimation,
       items: () => [
-        saveAnimationPresetRow(ui),
-        applyAnimationPresetRow(app, ui),
-        MenuEntry.divider(),
-        // The four keyframe commands act on the property rows the Timeline has
-        // picked, and on the keys those rows carry **under the playhead**: the
-        // key selection itself is the panel's and is never published, so a
-        // menu claiming to act on it would be guessing.
-        setKeyframeRow(app, ui),
-        toggleHoldRow(app, ui),
-        keyframeInterpolationRow(context, app, ui),
-        keyframeSpeedRow(context, app, ui),
-        MenuEntry.divider(),
-        animateTextRow(app, ui),
-        // A text animator carries exactly one range selector and it arrives
-        // with the animator, so there is nothing for this to add until more
-        // than one selector exists to have.
-        MenuEntry.todo(l10n.menuAddTextSelector),
-        MenuEntry.divider(),
-        addExpressionRow(context, app, ui),
-        MenuEntry.submenu(l10n.menuSeparateDimensions, axisModeRows(app, ui)),
-        trackCameraRow(app, ui),
-        MenuEntry.todo(l10n.menuTrackMotion),
-        MenuEntry.divider(),
-        // The Reveal family: `U`'s own machinery under the menu's words, each
-        // row a wider rule than the one above it. They act on the selection,
-        // or on the whole composition when nothing is selected — which is why
-        // they are live whenever a comp is open, and greyed rather than absent
-        // when none is.
-        for (final reveal in const [
-          (RevealFilter.keyframed, 'reveal.animated'),
-          (RevealFilter.animated, null),
-          (RevealFilter.modified, null),
-        ])
-          MenuEntry(
-            switch (reveal.$1) {
-              RevealFilter.keyframed => l10n.menuRevealPropertiesWithKeyframes,
-              RevealFilter.animated => l10n.menuRevealPropertiesWithAnimation,
-              RevealFilter.modified => l10n.menuRevealAllModifiedProperties,
-            },
-            comp == null ? null : () => ui.requestRevealFilter(reveal.$1),
-            action: reveal.$2,
-          ),
-      ]
+            saveAnimationPresetRow(ui),
+            applyAnimationPresetRow(app, ui),
+            MenuEntry.divider(),
+            // The four keyframe commands act on the property rows the Timeline has
+            // picked, and on the keys those rows carry **under the playhead**: the
+            // key selection itself is the panel's and is never published, so a
+            // menu claiming to act on it would be guessing.
+            setKeyframeRow(app, ui),
+            toggleHoldRow(app, ui),
+            keyframeInterpolationRow(context, app, ui),
+            keyframeSpeedRow(context, app, ui),
+            MenuEntry.divider(),
+            animateTextRow(app, ui),
+            // A text animator carries exactly one range selector and it arrives
+            // with the animator, so there is nothing for this to add until more
+            // than one selector exists to have.
+            MenuEntry.todo(l10n.menuAddTextSelector),
+            MenuEntry.divider(),
+            addExpressionRow(context, app, ui),
+            MenuEntry.submenu(
+                l10n.menuSeparateDimensions, axisModeRows(app, ui)),
+            trackCameraRow(app, ui),
+            MenuEntry.todo(l10n.menuTrackMotion),
+            MenuEntry.divider(),
+            // The Reveal family: `U`'s own machinery under the menu's words, each
+            // row a wider rule than the one above it. They act on the selection,
+            // or on the whole composition when nothing is selected — which is why
+            // they are live whenever a comp is open, and greyed rather than absent
+            // when none is.
+            for (final reveal in const [
+              (RevealFilter.keyframed, 'reveal.animated'),
+              (RevealFilter.animated, null),
+              (RevealFilter.modified, null),
+            ])
+              MenuEntry(
+                switch (reveal.$1) {
+                  RevealFilter.keyframed =>
+                    l10n.menuRevealPropertiesWithKeyframes,
+                  RevealFilter.animated =>
+                    l10n.menuRevealPropertiesWithAnimation,
+                  RevealFilter.modified => l10n.menuRevealAllModifiedProperties,
+                },
+                comp == null ? null : () => ui.requestRevealFilter(reveal.$1),
+                action: reveal.$2,
+              ),
+          ]
     ),
     (
       title: l10n.menuView,
       items: () => [
-        // Magnification: the same three jumps the Viewer's own keyboard makes
-        // (docs/07 §2.2). Greyed with no composition fronted, because there is
-        // no picture in the panel to magnify.
-        for (final zoom in ViewerZoomCommand.values)
-          MenuEntry(
-            zoom.title,
-            comp == null ? null : () => ui.requestViewerZoom(zoom),
-            action: zoom.action,
-          ),
-        MenuEntry.divider(),
-        // Preview resolution (§2.2 item 2): how many pixels the engine is
-        // asked for, ticked so the menu says which one is in force.
-        MenuEntry.submenu(l10n.menuResolution, [
-          for (final resolution in PreviewResolution.values)
-            MenuEntry.option(
-              resolution.title,
-              () => ui.setPreviewResolution(resolution),
-              // Only three of the five have a chord of their own (§15);
-              // Auto and Third are menu and bar only.
-              action: resolution.action,
-              checked: () => ui.previewResolution == resolution,
+            // Magnification: the same three jumps the Viewer's own keyboard makes
+            // (docs/07 §2.2). Greyed with no composition fronted, because there is
+            // no picture in the panel to magnify.
+            for (final zoom in ViewerZoomCommand.values)
+              MenuEntry(
+                zoom.title,
+                comp == null ? null : () => ui.requestViewerZoom(zoom),
+                action: zoom.action,
+              ),
+            MenuEntry.divider(),
+            // Preview resolution (§2.2 item 2): how many pixels the engine is
+            // asked for, ticked so the menu says which one is in force.
+            MenuEntry.submenu(l10n.menuResolution, [
+              for (final resolution in PreviewResolution.values)
+                MenuEntry.option(
+                  resolution.title,
+                  () => ui.setPreviewResolution(resolution),
+                  // Only three of the five have a chord of their own (§15);
+                  // Auto and Third are menu and bar only.
+                  action: resolution.action,
+                  checked: () => ui.previewResolution == resolution,
+                ),
+            ]),
+            MenuEntry.divider(),
+            // The marks over the picture (docs/07 §2.2 items 5–6). All three are
+            // the Viewer's own view menu under other names, so they are toggles:
+            // turning the rulers on to drag a guide out and ticking Snap to grid
+            // is two ticks, not two trips to the View menu.
+            //
+            // Show grid carries no chord: `Ctrl+'` belongs to the *transparency*
+            // grid (§15's table), which is a different grid and a different
+            // question, and a row advertising a key that does something else is
+            // worse than a row with no key at all.
+            MenuEntry.toggle(
+              l10n.menuShowGrid,
+              () => ui.setViewerOverlays(grid: !ui.viewerOverlays.grid),
+              checked: () => ui.viewerOverlays.grid,
             ),
-        ]),
-        MenuEntry.divider(),
-        // The marks over the picture (docs/07 §2.2 items 5–6). All three are
-        // the Viewer's own view menu under other names, so they are toggles:
-        // turning the rulers on to drag a guide out and ticking Snap to grid
-        // is two ticks, not two trips to the View menu.
-        //
-        // Show grid carries no chord: `Ctrl+'` belongs to the *transparency*
-        // grid (§15's table), which is a different grid and a different
-        // question, and a row advertising a key that does something else is
-        // worse than a row with no key at all.
-        MenuEntry.toggle(
-          l10n.menuShowGrid,
-          () => ui.setViewerOverlays(grid: !ui.viewerOverlays.grid),
-          checked: () => ui.viewerOverlays.grid,
-        ),
-        MenuEntry.toggle(
-          l10n.menuShowRuler,
-          () => ui.setViewerOverlays(rulers: !ui.viewerOverlays.rulers),
-          action: 'viewer.rulers.toggle',
-          checked: () => ui.viewerOverlays.rulers,
-        ),
-        // The layer-controls switch: the wireframes, the handles and the hover
-        // highlight, on and off together. The bar's own view menu carries the
-        // same switch under its own name — they are one switch until the full
-        // wireframe display mode of §2.2 item 5 gives this row something of
-        // its own to turn on.
-        MenuEntry(l10n.menuShowWireframe,
-            () => ui.setViewerLayerControls(!ui.viewerLayerControls),
-            checked: ui.viewerLayerControls),
-        // Whether the grid's own lines are things a dragged layer lands on,
-        // over and above the guides. The magnet on the toolbar is what decides
-        // whether *any* of it engages; this says what is in the list.
-        MenuEntry.toggle(
-          l10n.menuSnapToGrid,
-          () => ui.tools.snapToGrid = !ui.tools.snapToGrid,
-          checked: () => ui.tools.snapToGrid,
-        ),
-        MenuEntry.divider(),
-        // Several views in one Viewer panel (docs/07 §2, and After Effects'
-        // own view-layout menu). Option rows: picking one runs it and leaves
-        // the menu open, so two layouts can be compared without reopening it.
-        MenuEntry.submenu(l10n.menuViewLayout, [
-          MenuEntry.option(
-            l10n.menuOneView,
-            () => ui.setViewerLayout(ViewLayout.one),
-            action: 'viewer.layout.one',
-            checked: () => ui.currentViewerLayout == ViewLayout.one,
-          ),
-          MenuEntry.option(
-            l10n.menuTwoViewsAcross,
-            () => ui.setViewerLayout(ViewLayout.twoAcross),
-            action: 'viewer.layout.two',
-            checked: () => ui.currentViewerLayout == ViewLayout.twoAcross,
-          ),
-          MenuEntry.option(
-            l10n.menuTwoViewsDown,
-            () => ui.setViewerLayout(ViewLayout.twoDown),
-            checked: () => ui.currentViewerLayout == ViewLayout.twoDown,
-          ),
-          MenuEntry.option(
-            l10n.menuFourViews,
-            () => ui.setViewerLayout(ViewLayout.four),
-            action: 'viewer.layout.four',
-            checked: () => ui.currentViewerLayout == ViewLayout.four,
-          ),
-        ]),
-        MenuEntry.submenu(l10n.menuCompare, [
-          MenuEntry.option(
-            l10n.menuCompareOff,
-            () => ui.setCompareMode(CompareMode.none),
-            checked: () => ui.currentCompare == CompareMode.none,
-          ),
-          MenuEntry.option(
-            l10n.menuCompareWipe,
-            () => ui.setCompareMode(CompareMode.wipe),
-            action: 'viewer.compare',
-            checked: () => ui.currentCompare == CompareMode.wipe,
-          ),
-          MenuEntry.option(
-            l10n.menuCompareSplit,
-            () => ui.setCompareMode(CompareMode.split),
-            checked: () => ui.currentCompare == CompareMode.split,
-          ),
-        ]),
-        // The way of looking, shared or each view's own.
-        MenuEntry.toggle(
-          l10n.menuShareViewOptions,
-          () => ui.setShareViewOptions(!ui.views.shareViewOptions),
-          checked: () => ui.views.shareViewOptions,
-        ),
-        MenuEntry.divider(),
-        // The active view's own two switches, and the way out of the panels.
-        MenuEntry.toggle(
-          l10n.menuLockView,
-          () {
-            final view = ui.views.active;
-            if (view != null) ui.setViewLocked(view.id, !view.locked);
-          },
-          action: 'viewer.lock.toggle',
-          checked: () => ui.views.active?.locked ?? false,
-        ),
-        MenuEntry.toggle(
-          l10n.menuAlwaysPreviewThisView,
-          ui.toggleAlwaysPreview,
-          action: 'viewer.preview.always',
-          checked: () =>
-              ui.views.alwaysPreviewId != null &&
-              ui.views.alwaysPreviewId == ui.views.activeId,
-        ),
-        MenuEntry.toggle(
-          l10n.menuCinema,
-          ui.toggleCinema,
-          action: 'viewer.cinema',
-          checked: () => ui.maximisedPane.value != null,
-        ),
-      ]
+            MenuEntry.toggle(
+              l10n.menuShowRuler,
+              () => ui.setViewerOverlays(rulers: !ui.viewerOverlays.rulers),
+              action: 'viewer.rulers.toggle',
+              checked: () => ui.viewerOverlays.rulers,
+            ),
+            // The layer-controls switch: the wireframes, the handles and the hover
+            // highlight, on and off together. The bar's own view menu carries the
+            // same switch under its own name — they are one switch until the full
+            // wireframe display mode of §2.2 item 5 gives this row something of
+            // its own to turn on.
+            MenuEntry(l10n.menuShowWireframe,
+                () => ui.setViewerLayerControls(!ui.viewerLayerControls),
+                checked: ui.viewerLayerControls),
+            // Whether the grid's own lines are things a dragged layer lands on,
+            // over and above the guides. The magnet on the toolbar is what decides
+            // whether *any* of it engages; this says what is in the list.
+            MenuEntry.toggle(
+              l10n.menuSnapToGrid,
+              () => ui.tools.snapToGrid = !ui.tools.snapToGrid,
+              checked: () => ui.tools.snapToGrid,
+            ),
+            MenuEntry.divider(),
+            // Several views in one Viewer panel (docs/07 §2, and After Effects'
+            // own view-layout menu). Option rows: picking one runs it and leaves
+            // the menu open, so two layouts can be compared without reopening it.
+            MenuEntry.submenu(l10n.menuViewLayout, [
+              MenuEntry.option(
+                l10n.menuOneView,
+                () => ui.setViewerLayout(ViewLayout.one),
+                action: 'viewer.layout.one',
+                checked: () => ui.currentViewerLayout == ViewLayout.one,
+              ),
+              MenuEntry.option(
+                l10n.menuTwoViewsAcross,
+                () => ui.setViewerLayout(ViewLayout.twoAcross),
+                action: 'viewer.layout.two',
+                checked: () => ui.currentViewerLayout == ViewLayout.twoAcross,
+              ),
+              MenuEntry.option(
+                l10n.menuTwoViewsDown,
+                () => ui.setViewerLayout(ViewLayout.twoDown),
+                checked: () => ui.currentViewerLayout == ViewLayout.twoDown,
+              ),
+              MenuEntry.option(
+                l10n.menuFourViews,
+                () => ui.setViewerLayout(ViewLayout.four),
+                action: 'viewer.layout.four',
+                checked: () => ui.currentViewerLayout == ViewLayout.four,
+              ),
+            ]),
+            MenuEntry.submenu(l10n.menuCompare, [
+              MenuEntry.option(
+                l10n.menuCompareOff,
+                () => ui.setCompareMode(CompareMode.none),
+                checked: () => ui.currentCompare == CompareMode.none,
+              ),
+              MenuEntry.option(
+                l10n.menuCompareWipe,
+                () => ui.setCompareMode(CompareMode.wipe),
+                action: 'viewer.compare',
+                checked: () => ui.currentCompare == CompareMode.wipe,
+              ),
+              MenuEntry.option(
+                l10n.menuCompareSplit,
+                () => ui.setCompareMode(CompareMode.split),
+                checked: () => ui.currentCompare == CompareMode.split,
+              ),
+            ]),
+            // The way of looking, shared or each view's own.
+            MenuEntry.toggle(
+              l10n.menuShareViewOptions,
+              () => ui.setShareViewOptions(!ui.views.shareViewOptions),
+              checked: () => ui.views.shareViewOptions,
+            ),
+            MenuEntry.divider(),
+            // The active view's own two switches, and the way out of the panels.
+            MenuEntry.toggle(
+              l10n.menuLockView,
+              () {
+                final view = ui.views.active;
+                if (view != null) ui.setViewLocked(view.id, !view.locked);
+              },
+              action: 'viewer.lock.toggle',
+              checked: () => ui.views.active?.locked ?? false,
+            ),
+            MenuEntry.toggle(
+              l10n.menuAlwaysPreviewThisView,
+              ui.toggleAlwaysPreview,
+              action: 'viewer.preview.always',
+              checked: () =>
+                  ui.views.alwaysPreviewId != null &&
+                  ui.views.alwaysPreviewId == ui.views.activeId,
+            ),
+            MenuEntry.toggle(
+              l10n.menuCinema,
+              ui.toggleCinema,
+              action: 'viewer.cinema',
+              checked: () => ui.maximisedPane.value != null,
+            ),
+          ]
     ),
     (
       title: l10n.menuWindow,
       items: () => [
-        MenuEntry.submenu(l10n.menuWorkspace, [
-          for (final preset in WorkspacePreset.values)
-            MenuEntry(
-                preset.title, () => ui.workspace.applyWorkspacePreset(preset),
-                checked: ui.workspace.activePreset == preset),
-          // The user's own, under the presets, in the strip's own order.
-          if (ui.workspace.userWorkspaces.isNotEmpty) MenuEntry.divider(),
-          for (final saved in ui.workspace.userWorkspaces)
-            MenuEntry(
-                saved.name, () => ui.workspace.applyUserWorkspace(saved.name),
-                checked: ui.workspace.activeUserWorkspace == saved.name),
-          MenuEntry.divider(),
-          ..._userWorkspaceRows(context, app, ui),
-          MenuEntry.divider(),
-          MenuEntry(l10n.menuResetWorkspace, ui.resetLayout),
-        ]),
-        // A chord for the arrangement on screen: the engine's nine
-        // `workspace.switch.N` actions count *slots* on the strip, so what is
-        // bound is the position rather than the name — which is what the
-        // dialogue says, and what makes the key reach the same place next
-        // launch.
-        MenuEntry(l10n.menuAssignWorkspaceShortcut,
-            assignWorkspaceShortcutAction(context, app, ui)),
-        MenuEntry.divider(),
-        // Every panel, ticked when it is in the arrangement. Toggling one adds
-        // or drops its pane and persists the layout, so a panel you closed stays
-        // closed across a restart — and the menu stays open while you do it,
-        // because turning three panels on is three ticks, not three trips to
-        // the Window menu.
-        for (final panel in Panel.values)
-          MenuEntry.toggle(
-            panel.title,
-            () {
-              setPanelVisible(ui.split, panel, !panelVisible(ui.split, panel));
-              ui.workspace.touch();
-            },
-            checked: () => panelVisible(ui.split, panel),
-          ),
-        MenuEntry.divider(),
-        // Another Viewer panel, beside the one being worked in. The Viewer is
-        // the one panel that can be in the arrangement more than once
-        // (docs/impl/multi-viewer.md §3.1); everything else is a tick above.
-        MenuEntry(l10n.menuNewViewer, ui.addViewerPanel, action: 'viewer.new'),
-        MenuEntry.divider(),
-        MenuEntry(
-            l10n.menuExportQueue, () => showExportQueueFrb(context: context)),
-        MenuEntry(l10n.menuCommandPalette, palette, action: 'palette.open'),
-      ]
+            MenuEntry.submenu(l10n.menuWorkspace, [
+              for (final preset in WorkspacePreset.values)
+                MenuEntry(preset.title,
+                    () => ui.workspace.applyWorkspacePreset(preset),
+                    checked: ui.workspace.activePreset == preset),
+              // The user's own, under the presets, in the strip's own order.
+              if (ui.workspace.userWorkspaces.isNotEmpty) MenuEntry.divider(),
+              for (final saved in ui.workspace.userWorkspaces)
+                MenuEntry(saved.name,
+                    () => ui.workspace.applyUserWorkspace(saved.name),
+                    checked: ui.workspace.activeUserWorkspace == saved.name),
+              MenuEntry.divider(),
+              ..._userWorkspaceRows(context, app, ui),
+              MenuEntry.divider(),
+              MenuEntry(l10n.menuResetWorkspace, ui.resetLayout),
+            ]),
+            // A chord for the arrangement on screen: the engine's nine
+            // `workspace.switch.N` actions count *slots* on the strip, so what is
+            // bound is the position rather than the name — which is what the
+            // dialogue says, and what makes the key reach the same place next
+            // launch.
+            MenuEntry(l10n.menuAssignWorkspaceShortcut,
+                assignWorkspaceShortcutAction(context, app, ui)),
+            MenuEntry.divider(),
+            // Every panel, ticked when it is in the arrangement. Toggling one adds
+            // or drops its pane and persists the layout, so a panel you closed stays
+            // closed across a restart — and the menu stays open while you do it,
+            // because turning three panels on is three ticks, not three trips to
+            // the Window menu.
+            for (final panel in Panel.values)
+              MenuEntry.toggle(
+                panel.title,
+                () {
+                  setPanelVisible(
+                      ui.split, panel, !panelVisible(ui.split, panel));
+                  ui.workspace.touch();
+                },
+                checked: () => panelVisible(ui.split, panel),
+              ),
+            MenuEntry.divider(),
+            // Another Viewer panel, beside the one being worked in. The Viewer is
+            // the one panel that can be in the arrangement more than once
+            // (docs/impl/multi-viewer.md §3.1); everything else is a tick above.
+            MenuEntry(l10n.menuNewViewer, ui.addViewerPanel,
+                action: 'viewer.new'),
+            MenuEntry.divider(),
+            MenuEntry(l10n.menuExportQueue,
+                () => showExportQueueFrb(context: context)),
+            MenuEntry(l10n.menuCommandPalette, palette, action: 'palette.open'),
+          ]
     ),
     (
       title: l10n.menuHelp,
       items: () => [
-        MenuEntry(l10n.menuAboutLumit, () => showAboutWindowFrb(context)),
-        MenuEntry.live(
-          ui.updates,
-          () => updateMenuEntry(context, app, ui, savePicker: savePicker),
-        ),
-        MenuEntry.divider(),
-        // The documentation, in whatever the user reads the web with. Both are
-        // pages on docs.lumitlab.com rather than one of them being the
-        // marketing site: "online guides" is where you are taught, and that is
-        // the walkthrough, not the download page.
-        MenuEntry(l10n.menuLumitHelp, () => _openLink(app, lumitDocsUrl)),
-        MenuEntry(
-            l10n.menuLumitOnlineGuides, () => _openLink(app, lumitGuidesUrl)),
-        MenuEntry.divider(),
-        MenuEntry.toggle(
-          l10n.menuEnableDebugPanel,
-          () {
-            setPanelVisible(
-                ui.split, Panel.debug, !panelVisible(ui.split, Panel.debug));
-            ui.workspace.touch();
-          },
-          checked: () => panelVisible(ui.split, Panel.debug),
-        ),
-      ]
+            MenuEntry(l10n.menuAboutLumit, () => showAboutWindowFrb(context)),
+            MenuEntry.live(
+              ui.updates,
+              () => updateMenuEntry(context, app, ui, savePicker: savePicker),
+            ),
+            MenuEntry.divider(),
+            // The documentation, in whatever the user reads the web with. Both are
+            // pages on docs.lumitlab.com rather than one of them being the
+            // marketing site: "online guides" is where you are taught, and that is
+            // the walkthrough, not the download page.
+            MenuEntry(l10n.menuLumitHelp, () => _openLink(app, lumitDocsUrl)),
+            MenuEntry(l10n.menuLumitOnlineGuides,
+                () => _openLink(app, lumitGuidesUrl)),
+            MenuEntry.divider(),
+            MenuEntry.toggle(
+              l10n.menuEnableDebugPanel,
+              () {
+                setPanelVisible(ui.split, Panel.debug,
+                    !panelVisible(ui.split, Panel.debug));
+                ui.workspace.touch();
+              },
+              checked: () => panelVisible(ui.split, Panel.debug),
+            ),
+          ]
     ),
   ];
 }
@@ -2072,12 +2182,14 @@ VoidCallback? _closeHeading;
 
 class _MenuButton extends StatelessWidget {
   final String title;
+
   /// Built when the menu opens, not when the bar does — see [MenuSection].
   final List<MenuEntry> Function() items;
   const _MenuButton({required this.title, required this.items});
 
   @override
   Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
     return MouseRegion(
       // Only once a menu is already open: hovering the bar with nothing open
       // must not start dropping menus at a passing pointer.
@@ -2089,7 +2201,16 @@ class _MenuButton extends StatelessWidget {
         frameless: true,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         onPressed: () => _open(context),
-        child: Text(title),
+        // Desk's top line reads its menus as lowercase words a size up from
+        // the body, its mockup's; the other shapes keep the sentence-case word.
+        child: switch (t.shape) {
+          ThemeShape.desk =>
+            Text(t.kickerCase(title), style: t.body.copyWith(fontSize: 12)),
+          // On the room, so the ink is the room's and not the scheme's.
+          ThemeShape.lantern =>
+            Text(title, style: t.bodyPrimary.copyWith(color: t.roomInk)),
+          ThemeShape.studio => Text(title),
+        },
       ),
     );
   }

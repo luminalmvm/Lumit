@@ -201,7 +201,7 @@ void main() {
       await mount(tester, p);
       await enter(tester, p.layer);
 
-      final theme = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.sharp);
+      final theme = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio);
       final colours = [
         for (final c in tester.widgetList<Container>(find.descendant(
             of: find.byKey(const ValueKey<String>('shader-node-1')),

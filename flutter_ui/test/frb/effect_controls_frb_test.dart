@@ -88,6 +88,7 @@ void main() {
       // exactly as a user would.
       bool transform = true,
       DensityTokens density = DensityTokens.regular,
+      ThemeShape shape = ThemeShape.studio,
     }) async {
       p.uiState.workspace.interface.transformInEffectControls = transform;
       await tester.pumpWidget(hostPanel(
@@ -95,6 +96,7 @@ void main() {
         state: p.state,
         uiState: p.uiState,
         density: density,
+        shape: shape,
       ));
       await tester.pump();
     }
@@ -422,6 +424,49 @@ void main() {
           reason: 'no handle was used after it had been handed to Rust');
       expect(radius(), greaterThan(before),
           reason: 'the drag reached the document');
+    });
+
+    testWidgets('a row reset puts the parameter back', (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'blur');
+      final before = p.layer.getEffects().single.getValue(id: 'radius');
+      await mount(tester, p, transform: false);
+
+      final id = p.layer.getEffects().single.id();
+      await tester.drag(
+        find.byKey(ValueKey<String>('fx-float-$id-radius')),
+        const Offset(60, 0),
+      );
+      await tester.pumpAndSettle();
+      expect(p.layer.getEffects().single.getValue(id: 'radius'),
+          isNot(before),
+          reason: 'the drag moved the value off its default');
+
+      await tester.tap(find.byKey(ValueKey<String>('fx-reset-$id-radius')));
+      await tester.pump();
+
+      expect(p.layer.getEffects().single.getValue(id: 'radius'), before,
+          reason: 'the row\'s own arrow writes the schema default back');
+    });
+
+    testWidgets('under lantern the enable switch is a toggle',
+        (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'blur');
+      await mount(tester, p, shape: ThemeShape.lantern);
+
+      final id = p.layer.getEffects().single.id();
+      final hit = find.byKey(ValueKey<String>('fx-enabled-hit-$id'));
+      expect(
+          find.descendant(of: hit, matching: find.byType(HouseToggle)),
+          findsOneWidget);
+      expect(find.descendant(of: hit, matching: find.byType(HouseCheckbox)),
+          findsNothing);
+
+      await tester.tap(find.byKey(ValueKey<String>('fx-enabled-$id')));
+      await tester.pump();
+      expect(p.layer.getEffects().single.enabled(), isFalse,
+          reason: 'the toggle bypasses the effect as the tick does');
     });
 
     testWidgets('the enable switch, reorder and remove all reach the document',
@@ -1683,7 +1728,7 @@ void main() {
       /// playhead.
       testWidgets('the stopwatch is muted at rest and animated when keyed',
           (tester) async {
-        final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.sharp);
+        final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio);
 
         final id = await mountBlur(tester, withLayer(), animated: false);
         expect(glyphIn(tester, 'kf-stopwatch-$id-radius').colour, t.textMuted);
@@ -1698,7 +1743,7 @@ void main() {
       });
 
       testWidgets('a keyed value rests animated in its well', (tester) async {
-        final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.sharp);
+        final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio);
         final id = await mountBlur(tester, withLayer(), animated: true);
         final number = tester.widget<Text>(find.descendant(
           of: find.byKey(ValueKey<String>('fx-float-$id-radius')),

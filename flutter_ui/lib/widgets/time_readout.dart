@@ -331,17 +331,21 @@ class _TimeReadoutState extends State<TimeReadout>
                 : _hovered
                     ? t.surface2
                     : null,
-            borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+            borderRadius: widget.well
+                ? wellCorners(t)
+                : BorderRadius.circular(t.tokens.wellRadius),
             border: widget.well
-                ? Border.all(
-                    color: _editing
+                ? wellBorder(
+                    t,
+                    _editing
                         // The one focus ring that is `animated` rather than
                         // `accent`: it means "you are about to change a
                         // value" (§3.1, §6.5).
                         ? t.animated
                         : _hovered
                             ? t.hairlineStrong
-                            : t.hairline)
+                            : t.hairline,
+                    lit: _editing || _hovered)
                 : null,
           ),
           child: inner,

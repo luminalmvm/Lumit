@@ -59,7 +59,7 @@ class HintPill extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
       decoration: BoxDecoration(
         color: t.surface4,
-        borderRadius: BorderRadius.circular(2),
+        borderRadius: BorderRadius.circular(t.tokens.actionRadius),
       ),
       child: Text(
         text,

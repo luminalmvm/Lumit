@@ -42,24 +42,27 @@ import 'package:lumit_flutter/widgets/controls.dart';
 /// report) and never committed.
 const fixtures = 'C:/tmp/lumit-shots';
 
-/// The shape every sweep stages in — `LUMIT_SHOTS_SHAPE=round` picks Round,
-/// which is what Settings ▸ Appearance ▸ Shape sets. The manual is
+/// The shape every sweep stages in: `LUMIT_SHOTS_SHAPE=lantern` picks
+/// Lantern, which is what Settings ▸ Appearance ▸ Shape sets. The manual is
 /// shot in the look it documents, so this is set once for a whole pass rather
 /// than sweep by sweep.
 final shotShape = ThemeShape.values
         .asNameMap()[Platform.environment['LUMIT_SHOTS_SHAPE'] ?? ''] ??
-    ThemeShape.sharp;
+    ThemeShape.studio;
+
+final _shotTokens = ShapeTokens.of(shotShape);
 
 /// How far above a docked panel's content its tab strip starts, in logical
-/// pixels: the 26px strip itself, plus the pane card's padding under Round
-/// (`dock_widget.dart`, `tokens.cardPadding` and its 1px boundary).
-final dockTabInset = shotShape == ThemeShape.round ? 37.0 : 26.0;
+/// pixels: the 26px strip itself, plus the pane card's padding and its 1px
+/// boundary where panes are cards (`dock_widget.dart`).
+final dockTabInset =
+    _shotTokens.roomed ? 27.0 + _shotTokens.cardPadding : 26.0;
 
-/// How far outside a docked panel's content its pane card runs. Under Round the
-/// rounded edge and its shadow are part of what a panel looks like, so a crop
-/// taken at the content's own box cuts the design off; under Sharp the content
-/// *is* the pane and there is nothing outside it.
-final paneCardInset = shotShape == ThemeShape.round ? 13.0 : 0.0;
+/// How far outside a docked panel's content its pane card runs. Where panes
+/// are cards the rounded edge and its shadow are part of what a panel looks
+/// like, so a crop taken at the content's own box cuts the design off; on a
+/// flush pane the content *is* the pane and there is nothing outside it.
+final paneCardInset = _shotTokens.roomed ? 15.0 : 0.0;
 
 /// `flutter run` starts the built exe from `build/windows/x64/runner/Debug`,
 /// not from `flutter_ui`, so every path here is worked out from the executable

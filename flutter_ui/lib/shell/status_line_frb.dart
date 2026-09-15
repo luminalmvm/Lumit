@@ -209,14 +209,17 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final state = Provider.of<LumitState>(context);
+    // Flush shapes weld a 20px strip under the dock. Lantern stands each
+    // readout in a bubble of its own on the room, in the same order.
+    final roomed = t.tokens.roomed;
     return Container(
-      height: 20,
-      color: t.surface1,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      height: roomed ? 32 : 20,
+      color: roomed ? t.room : t.surface1,
+      padding: EdgeInsets.symmetric(horizontal: roomed ? 10 : 8),
       child: Row(
         key: const ValueKey('status-line'),
         children: [
-          _savedState(t, state),
+          _bubble(t, _savedState(t, state)),
           _divider(t),
           // Deliberately NOT const: a const child is skipped by the tick's
           // rebuild, which froze the meter at whatever it first read. Three
@@ -227,11 +230,14 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
           // the last one should be cut off quietly. A plain Row would report an
           // overflow instead, which is a striped warning across the strip.
           Flexible(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              physics: const NeverScrollableScrollPhysics(),
-              // ignore: prefer_const_constructors
-              child: CacheMeterFrb(),
+            child: _bubble(
+              t,
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                physics: const NeverScrollableScrollPhysics(),
+                // ignore: prefer_const_constructors
+                child: CacheMeterFrb(),
+              ),
             ),
           ),
           _divider(t),
@@ -239,21 +245,24 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
           // are here: it governs the whole session and it costs something to
           // have on. It began life as a glyph in the Timeline's column
           // header, which is where nobody found it.
-          const RenderTimingsToggle(),
+          _bubble(t, const RenderTimingsToggle()),
           _divider(t),
           Expanded(
             child: Row(
               children: [
                 Flexible(child: _notice(t, state)),
                 const Spacer(),
-                ..._proxySection(t),
-                ..._exportSection(t),
+                ..._job(t, _proxySection(t)),
+                ..._job(t, _exportSection(t)),
                 if (_outputPeakDb case final db?) ...[
                   const SizedBox(width: 8),
-                  Text(
-                    l10n.statusOutputPeak(db.toStringAsFixed(1)),
-                    key: const ValueKey('status-output-peak'),
-                    style: t.small.copyWith(color: t.textMuted),
+                  _bubble(
+                    t,
+                    Text(
+                      l10n.statusOutputPeak(db.toStringAsFixed(1)),
+                      key: const ValueKey('status-output-peak'),
+                      style: t.small.copyWith(color: t.textMuted),
+                    ),
                   ),
                 ],
               ],
@@ -264,12 +273,46 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
     );
   }
 
-  Widget _divider(LumitTheme t) => Container(
-        width: 1,
-        height: 12,
-        margin: const EdgeInsets.symmetric(horizontal: 8),
-        color: t.hairline,
-      );
+  /// A hairline between readouts on a flush strip; nothing between bubbles,
+  /// which space themselves.
+  Widget _divider(LumitTheme t) => t.tokens.roomed
+      ? const SizedBox.shrink()
+      : Container(
+          width: 1,
+          height: 12,
+          margin: const EdgeInsets.symmetric(horizontal: 8),
+          color: t.hairline,
+        );
+
+  /// One readout in its own bubble on the room, with 8px to the next. A flush
+  /// strip hands the child back as it is. The keyed box sits inside a plain
+  /// one so bubbles side by side never share a key.
+  Widget _bubble(LumitTheme t, Widget child) => !t.tokens.roomed
+      ? child
+      : Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: Container(
+            key: const ValueKey('status-bubble'),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+            decoration: BoxDecoration(
+              color: t.surface1,
+              borderRadius: BorderRadius.circular(t.tokens.actionRadius),
+              boxShadow: t.floatShadow,
+            ),
+            child: child,
+          ),
+        );
+
+  /// A background job's parts, which spread along a flush strip and share one
+  /// bubble on the room.
+  List<Widget> _job(LumitTheme t, List<Widget> parts) {
+    if (parts.isEmpty || !t.tokens.roomed) return parts;
+    return [
+      Flexible(
+        child: _bubble(t, Row(mainAxisSize: MainAxisSize.min, children: parts)),
+      ),
+    ];
+  }
 
   /// Saved / unsaved, at the far left. Being unsaved is a fact, not a fault,
   /// so it reads in the ordinary text colour — the muted tint is for the
@@ -297,27 +340,31 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
       valueListenable: state.notice,
       builder: (context, notice, _) {
         if (notice == null) return const SizedBox.shrink();
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Flexible(
-              child: Text(
-                notice.message,
-                key: const ValueKey('status-notice'),
-                style:
-                    notice.error ? t.small.copyWith(color: t.warning) : t.small,
-                overflow: TextOverflow.ellipsis,
+        return _bubble(
+          t,
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  notice.message,
+                  key: const ValueKey('status-notice'),
+                  style: notice.error
+                      ? t.small.copyWith(color: t.warning)
+                      : t.small,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-            ),
-            const SizedBox(width: 4),
-            HouseButton(
-              key: const ValueKey('status-notice-close'),
-              small: true,
-              frameless: true,
-              onPressed: () => state.notice.value = null,
-              child: Text('×', style: t.small.copyWith(color: t.textMuted)),
-            ),
-          ],
+              const SizedBox(width: 4),
+              HouseButton(
+                key: const ValueKey('status-notice-close'),
+                small: true,
+                frameless: true,
+                onPressed: () => state.notice.value = null,
+                child: Text('×', style: t.small.copyWith(color: t.textMuted)),
+              ),
+            ],
+          ),
         );
       },
     );

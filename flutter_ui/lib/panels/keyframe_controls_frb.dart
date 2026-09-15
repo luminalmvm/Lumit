@@ -351,8 +351,26 @@ class KeyframeControlsFrb extends StatelessWidget {
         // The one place the stopwatch has colour of its own: `animated` says
         // the property is keyed (§3.1's closed job list), never the accent,
         // which the redesign spends on the filled action and the playhead.
-        child: LumitIcon(LumitIcons.stopwatch,
-            size: iconSize, colour: _animated ? t.animated : t.textMuted),
+        // Desk draws the switch as a square, filled when the value is
+        // keyed and outlined when it is not (15-DESIGN-DESK.md 3.2).
+        child: t.shape == ThemeShape.desk
+            ? SizedBox(
+                width: iconSize,
+                height: iconSize,
+                child: Center(
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: _animated ? t.accent : null,
+                      border: Border.all(
+                          color: _animated ? t.accent : t.textMuted),
+                    ),
+                  ),
+                ),
+              )
+            : LumitIcon(LumitIcons.stopwatch,
+                size: iconSize, colour: _animated ? t.animated : t.textMuted),
         onPressed: () => _toggleAnimated(playhead.value),
       ),
     );

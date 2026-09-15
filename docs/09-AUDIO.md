@@ -77,7 +77,10 @@ first output there is — the choice is *kept*, not rewritten, so plugging the d
 uses it again, and the frontend is told a fallback happened so it can say so. A machine
 with no output at all is the calm terminal no-device state of §3.1: no sound, no error,
 the picture on its own clock. Changing the device closes the open stream (a cpal stream
-cannot be moved), so sound stops until the next play.
+cannot be moved), so sound stops until the next play. **The monitor mute**
+(`audio_set_muted`) silences what the device is handed and nothing else: the clock runs,
+the meters read the mix, the project and the export are untouched, and the mute is
+carried over to a fresh stream when the device changes.
 
 **What the mix is doing** is read off that same callback. Once per buffer — about
 ten milliseconds — it publishes, for every **mixer strip** and for the master, the loudest

@@ -15,6 +15,7 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 
 import '../l10n/strings.dart';
 import '../theme/custom_theme.dart';
+import '../icons/icon_style.dart';
 import '../theme/theme.dart';
 import 'dock.dart';
 import 'settings.dart';
@@ -181,8 +182,7 @@ class SavedSession {
         'guides': {
           for (final e in guides.entries)
             e.key: [
-              for (final g in e.value)
-                {'at': g.at, 'vertical': g.vertical},
+              for (final g in e.value) {'at': g.at, 'vertical': g.vertical},
             ],
         },
         'comp_views': {
@@ -247,7 +247,8 @@ class SavedSession {
         viewerOverlays: _overlaysFromJson(j['viewer_overlays']),
         guides: _guidesFromJson(j['guides']),
         compViews: _compViewsFromJson(j['comp_views']),
-        viewerViews: j['viewer_views'] is List ? j['viewer_views'] as List : const [],
+        viewerViews:
+            j['viewer_views'] is List ? j['viewer_views'] as List : const [],
         viewerLayout: j['viewer_layout'] is Map
             ? (j['viewer_layout'] as Map).cast<String, dynamic>()
             : null,
@@ -506,7 +507,7 @@ class WindowPlacement {
 class Workspace extends ChangeNotifier {
   DockSplit dock = defaultLayout();
   LumitColorScheme colorScheme = LumitColorScheme.dark;
-  ThemeShape themeShape = ThemeShape.sharp;
+  ThemeShape themeShape = ThemeShape.studio;
   Color? accentOverride;
   AnimationLevel animationLevel = AnimationLevel.all;
 
@@ -682,6 +683,14 @@ class Workspace extends ChangeNotifier {
     save();
   }
 
+  /// What playback does at the end of the work area (docs/07 §9). Through
+  /// [settingsChanged] rather than a bare save, because the deck draws the
+  /// mode and must redraw it.
+  void setLoopMode(LoopMode mode) {
+    performance.loop = mode;
+    settingsChanged();
+  }
+
   /// The output the user chose to hear Lumit through, by the engine's own id,
   /// or null to follow whatever the machine plays through (docs/09 §3.1).
   ///
@@ -765,9 +774,17 @@ class Workspace extends ChangeNotifier {
     // Density rides on every theme this method can build, preview included:
     // it is a setting about rows rather than about colours, so no colour
     // choice — a scheme, a custom theme, a live preview — gets to lose it.
-    final density = DensityTokens.of(interface.compact);
+    final density = DensityTokens.forShape(themeShape, interface.compact);
+    // The icon weight and the person's own icons ride with the theme: set
+    // here so every glyph reads them on its next build.
+    IconStyle.weight = IconStyle.weightOf(interface.iconSet);
+    if (IconStyle.folder == null) {
+      IconStyle.folder =
+          '${storeFile().parent.path}${Platform.pathSeparator}icons';
+      IconStyle.reload();
+    }
     if (_preview != null) {
-      _theme = _preview!.copyWith(density: density);
+      _theme = _withRoom(_preview!.copyWith(density: density));
       notifyListeners();
       return;
     }
@@ -776,16 +793,25 @@ class Workspace extends ChangeNotifier {
       // A custom theme carries its own accent among its colours, so the
       // accent override does not apply on top — it would silently overwrite
       // a choice the user made in the editor.
-      _theme = custom.build(themeShape).copyWith(density: density);
+      _theme = _withRoom(custom.build(themeShape).copyWith(density: density));
     } else {
-      _theme = LumitTheme.forScheme(
+      _theme = _withRoom(LumitTheme.forScheme(
         colorScheme,
         themeShape,
         accentOverride: accentOverride,
-      ).copyWith(density: density);
+      ).copyWith(density: density));
     }
     notifyListeners();
   }
+
+  /// The room Lantern's cards stand in, from the setting: the theme's own
+  /// light neutral by day, the canvas by night. Studio and Desk are never
+  /// roomed, so the colour is carried and never drawn.
+  LumitTheme _withRoom(LumitTheme t) => switch (interface.room) {
+        LanternRoom.auto => t,
+        LanternRoom.day => t.copyWith(room: LumitTheme.dayRoom),
+        LanternRoom.night => t.copyWith(room: LumitTheme.nightRoom),
+      };
 
   /// One entry in the theme picker: a built-in scheme, or one of the user's.
   List<ThemeChoice> get themeChoices => [
@@ -1404,8 +1430,14 @@ class Workspace extends ChangeNotifier {
     }
     colorScheme = LumitColorScheme.values.asNameMap()[j['color_scheme']] ??
         LumitColorScheme.dark;
+    // The shapes were once called Sharp and Round, and a settings file written
+    // then still says so. Sharp is Studio unchanged; Round is what Lantern
+    // replaced, so the old name lands on the new arrangement.
+    const oldShapeNames = {'sharp': 'studio', 'round': 'lantern'};
+    final shapeName = j['theme_shape'];
     themeShape =
-        ThemeShape.values.asNameMap()[j['theme_shape']] ?? ThemeShape.sharp;
+        ThemeShape.values.asNameMap()[oldShapeNames[shapeName] ?? shapeName] ??
+            ThemeShape.studio;
     final acc = j['accent_override'];
     accentOverride = acc is List && acc.length == 3
         ? Color.fromARGB(0xff, acc[0] as int, acc[1] as int, acc[2] as int)

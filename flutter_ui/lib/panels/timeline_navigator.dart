@@ -28,7 +28,7 @@
 // under it like every band in the panel, and a window edged with the same drawn
 // tabs the work-area handles use — a step stronger under the pointer.
 
-import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/foundation.dart' show ValueListenable, listEquals;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
@@ -135,9 +135,20 @@ class TimelineNavigator extends StatefulWidget {
     required this.playhead,
     required this.onWindow,
     this.onWindowEnd,
+    this.height,
+    this.bars,
   });
 
   final double trailing;
+
+  /// The band this strip stands in, or null for the density's navigator band.
+  /// Lantern's minimap under the lanes asks for its own 10.
+  final double? height;
+
+  /// The layer bars to draw compressed under the window, as (in, out) frames,
+  /// or null for the plain navigator that draws only the view. Given, the strip
+  /// is the minimap and keys itself `tl-minimap`.
+  final List<(int, int)>? bars;
 
   /// The composition's length. A comp of no frames draws an empty track.
   final int frames;
@@ -157,15 +168,12 @@ class TimelineNavigator extends StatefulWidget {
   /// for the length of it.
   final VoidCallback? onWindowEnd;
 
-  /// The bar's own height. Slim on purpose: it is a readout with a grip, not a
-  /// band of content, and the ruler under it is what carries the clock.
-  static const double height = 11;
+  /// Studio's band: the strip's own 11 plus the hairline it closes with. The
+  /// strip itself stands at `density.navigatorBand`, which Desk sets to 16;
+  /// this number is the Studio literal the tests measure against.
+  static const double band = 12;
 
-  /// The whole band the strip occupies — its own height plus the hairline it
-  /// closes with. What anything measuring down the panel has to allow for.
-  static const double band = height + 1;
-
-  /// How near an end of the window counts as taking hold of that end — the
+  /// How near an end of the window counts as taking hold of that end, the
   /// work-area handle's own reach, so the two grips feel the same.
   static const double handleGrab = 10;
 
@@ -261,7 +269,7 @@ class _TimelineNavigatorState extends State<TimelineNavigator> {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     return SizedBox(
-      height: TimelineNavigator.band,
+      height: widget.height ?? t.density.navigatorBand,
       child: Column(
         children: [
           Expanded(
@@ -299,7 +307,7 @@ class _TimelineNavigatorState extends State<TimelineNavigator> {
           if (_hover != null) setState(() => _hover = null);
         },
         child: GestureDetector(
-          key: const ValueKey('tl-navigator'),
+          key: ValueKey(widget.bars == null ? 'tl-navigator' : 'tl-minimap'),
           behavior: HitTestBehavior.opaque,
           // The trackpad is excluded the way every other editing recogniser in
           // the panel excludes it: a two-finger scroll is the panel's to pan
@@ -341,7 +349,13 @@ class _TimelineNavigatorState extends State<TimelineNavigator> {
                     end: window.end,
                     playhead: widget.playhead.value.toDouble(),
                     ground: t.timelineOutOfRange,
-                    fill: t.surface2,
+                    // The minimap's window is a step lighter, so it reads
+                    // over the bars it covers.
+                    fill: widget.bars == null
+                        ? t.surface2
+                        : t.surface4.withValues(alpha: 0.5),
+                    bars: widget.bars,
+                    bar: t.textMuted,
                     edge: t.hairline,
                     handle: t.hairlineStrong,
                     handleLit: t.textMuted,
@@ -374,12 +388,17 @@ class _NavigatorPainter extends CustomPainter {
     required this.handleLit,
     required this.accent,
     required this.lit,
+    this.bars,
+    required this.bar,
   });
 
   final TimelineAxis axis;
   final double start, end, playhead;
-  final Color ground, fill, edge, handle, handleLit, accent;
+  final Color ground, fill, edge, handle, handleLit, accent, bar;
   final NavigatorGrab? lit;
+
+  /// The minimap's bars, or null on the plain navigator.
+  final List<(int, int)>? bars;
 
   /// The tab at each end of the window: narrow, full height, rounded — the
   /// work-area handle's shape at this band's scale.
@@ -388,6 +407,26 @@ class _NavigatorPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     canvas.drawRect(Offset.zero & size, Paint()..color = ground);
+
+    // The whole composition's bars, one thin line each, stacked down the
+    // strip in layer order and squeezed to fit it.
+    final bars = this.bars;
+    if (bars != null && bars.isNotEmpty) {
+      final pitch = (size.height - 2) / bars.length;
+      final thick = pitch.clamp(1.0, 2.0);
+      final paint = Paint()..color = bar.withValues(alpha: 0.6);
+      for (var i = 0; i < bars.length; i++) {
+        final (inFrame, outFrame) = bars[i];
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTRB(axis.xOf(inFrame), 1 + i * pitch, axis.xOf(outFrame),
+                1 + i * pitch + thick),
+            const Radius.circular(1),
+          ),
+          paint,
+        );
+      }
+    }
 
     final x0 = axis.xOf(start);
     final x1 = axis.xOf(end);
@@ -439,5 +478,7 @@ class _NavigatorPainter extends CustomPainter {
       old.edge != edge ||
       old.handle != handle ||
       old.handleLit != handleLit ||
-      old.accent != accent;
+      old.accent != accent ||
+      old.bar != bar ||
+      !listEquals(old.bars, bars);
 }

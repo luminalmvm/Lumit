@@ -52,13 +52,21 @@
 /// by the pictures jumped in steps of however many frames each render cost.
 /// Counting on from the last picture at the comp's rate is what fills the
 /// gaps, and every picture that arrives re-anchors the count so it never drifts.
+///
+/// A `reverse` leg counts down instead, and `end` is then the frame the leg
+/// runs down to.
 int clockFrame({
   required int anchorFrame,
   required int sinceAnchorMicros,
   required double fps,
   required int end,
+  bool reverse = false,
 }) {
   final ahead = (sinceAnchorMicros * fps / 1e6).floor();
+  if (reverse) {
+    return (anchorFrame - ahead)
+        .clamp(end > anchorFrame ? anchorFrame : end, anchorFrame);
+  }
   return (anchorFrame + ahead)
       .clamp(anchorFrame, end < anchorFrame ? anchorFrame : end);
 }

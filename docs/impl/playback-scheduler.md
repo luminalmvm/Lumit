@@ -141,6 +141,28 @@ for more than one frame. Tests: `the_fill_order_is_forward_biased_and_complete`
 (playback.rs), `the_fill_keeps_going_into_memory_once_the_card_is_full`
 (worker_thread.rs).
 
+### 5.2 The loop
+
+The worker plays **one leg**. A forward leg runs from the frame it is given to the
+composition's last frame; a reverse leg (`play(..., reverse: true)`) counts down from
+that frame and ends after frame zero. In both directions the frame given is shown first,
+and the leg ends with `PlaybackEnded`. The work area is the frontend's: the loop modes
+(docs/07 §9) are `LumitUiState._arrived` watching the frames come back and restarting a
+leg at the span's other end, exactly as it already stopped a forward leg at the
+work-area end. Ping-pong turns at end minus one and start plus one so the turn frame is
+shown once.
+
+A reverse leg has **no sound and no audio chase**: `play` pauses the running mix and hands
+the worker no audio, the clock is the wall clock counting down, and the every-frame
+mode's wait-for-the-picture does not apply. The pre-roll still runs, keyed on
+`Playback::pre_rolled` rather than on a pending mix, so a reverse leg gets the same
+clock baseline a forward leg does. Tests:
+`a_reverse_run_counts_down_and_ends_after_frame_zero`,
+`adaptive_reverse_presents_the_frame_the_clock_has_counted_down_to` and
+`adaptive_reverse_skips_frames_the_clock_has_passed` (worker_thread.rs);
+`play once stops at the work-area end and returns the playhead` and
+`ping-pong turns round at the work-area end` (viewer_panel_frb_test.dart).
+
 ## 6. Test plan
 
 1. Cancellation latency: start a deliberately slow 4 s render, bump epoch — all workers

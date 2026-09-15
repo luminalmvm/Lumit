@@ -5,6 +5,8 @@
 // Split out of viewer_panel_frb.dart. The sizes and the mark it is
 // drawn with are viewer_strips.dart's, shared with the header strip.
 
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -84,6 +86,10 @@ class ViewerBar extends StatelessWidget {
   /// header carries them.
   final List<Widget> leading;
 
+  /// Whether the transport and its clock stand on this bar. Off when the
+  /// deck under the picture carries them instead.
+  final bool transport;
+
   const ViewerBar({
     super.key,
     required this.channel,
@@ -109,6 +115,7 @@ class ViewerBar extends StatelessWidget {
     required this.onSnapshotHold,
     required this.detached,
     this.leading = const [],
+    this.transport = true,
   });
 
   @override
@@ -116,14 +123,14 @@ class ViewerBar extends StatelessWidget {
     final t = ThemeScope.of(context).theme;
     return Container(
       key: const ValueKey('viewer-bar'),
-      height: viewerStripHeight,
+      height: viewerStripHeightFor(t),
       decoration: viewerStripDecoration(t, detached),
       // The drawing's 10 either end, measured to the first *glyph* and to the
       // last word: the left one allows for the mark's own transparent edge,
       // the right one has nothing to allow for because a reading is text.
-      padding: const EdgeInsets.only(
-        left: viewerStripPadding - viewerMarkEdge,
-        right: viewerStripPadding,
+      padding: EdgeInsets.only(
+        left: viewerStripPaddingFor(t) - viewerMarkEdge,
+        right: viewerStripPaddingFor(t),
       ),
       // A Viewer docked narrow has less width than this bar wants, and an
       // overflow stripe is not a design: below the width the drawing needs,
@@ -132,7 +139,10 @@ class ViewerBar extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final width = constraints.maxWidth;
-          final loose = width >= _barMinimum;
+          // Desk's round keys are wider than the bare marks, so its bar
+          // needs more room before it can spread.
+          final loose = width >=
+              _barMinimum + (t.shape == ThemeShape.desk ? 60 : 0);
           // The rungs, in the order the owner ruled them (see [_barMinimum]).
           final keepsReading = width >= _barKeepsReading;
           final keepsLooking = width >= _barKeepsLooking;
@@ -172,10 +182,21 @@ class ViewerBar extends StatelessWidget {
                   // implementation that can drift from the first.
                   _LookingOverflow(marks: () => _looking(context, t)),
               ]),
-              if (!loose) const SizedBox(width: 24),
-              Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: _transport(t, clock: keepsClock)),
+              if (!loose && transport) const SizedBox(width: 24),
+              if (transport)
+                Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: viewerTransportMarks(
+                      t,
+                      playing: playing,
+                      frame: frame,
+                      settings: settings,
+                      comp: comp,
+                      onPlayPause: onPlayPause,
+                      onSeek: onSeek,
+                      detached: detached,
+                      clock: keepsClock,
+                    )),
               if (!loose && keepsReading) const SizedBox(width: 24),
               // The reading takes the room the two gaps are not using, and
               // sheds parts of itself before it elides — the ladder is in
@@ -309,95 +330,143 @@ class ViewerBar extends StatelessWidget {
           onHold: onSnapshotHold,
         ),
       ];
-
-  /// The five transport buttons and the clock, one instrument at one spacing.
-  ///
-  /// Round gathers them into a pill (§12.1); Sharp is handed the very
-  /// same widgets with nothing wrapped round them.
-  ///
-  /// [clock] is the ladder's last step but one: on the narrowest bar the five
-  /// buttons stand alone (see [_barMinimum]).
-  List<Widget> _transport(LumitTheme t, {bool clock = true}) {
-    final buttons = <Widget>[
-      viewerBarMark(
-        key: const ValueKey('viewer-home'),
-        icon: LumitIcon.toStart,
-        colour: t.textMuted,
-        onPressed: () => onSeek(0),
-        tip: l10n.tipTransportStart,
-      ),
-      viewerBarGapBox(viewerTransportGap),
-      viewerBarMark(
-        key: const ValueKey('viewer-step-back'),
-        icon: LumitIcon.previousFrame,
-        colour: t.textMuted,
-        onPressed: () => onSeek(frame - 1),
-        tip: l10n.tipTransportPrevious,
-      ),
-      viewerBarGapBox(viewerTransportGap),
-      // The one lit mark on the bar: the control the eye goes to without
-      // looking for it (the drawing's own `.ico.on`).
-      viewerBarMark(
-        key: const ValueKey('viewer-play'),
-        icon: playing ? LumitIcon.pause : LumitIcon.play,
-        colour: t.textPrimary,
-        onPressed: onPlayPause,
-        tip: playing ? l10n.tipTransportPause : l10n.tipTransportPlay,
-      ),
-      viewerBarGapBox(viewerTransportGap),
-      viewerBarMark(
-        key: const ValueKey('viewer-step-forward'),
-        icon: LumitIcon.nextFrame,
-        colour: t.textMuted,
-        onPressed: () => onSeek(frame + 1),
-        tip: l10n.tipTransportNext,
-      ),
-      viewerBarGapBox(viewerTransportGap),
-      viewerBarMark(
-        key: const ValueKey('viewer-end'),
-        icon: LumitIcon.toEnd,
-        colour: t.textMuted,
-        onPressed: () => onSeek(comp.durationFrames() - 1),
-        tip: l10n.tipTransportEnd,
-      ),
-    ];
-    return [
-      if (detached)
-        Container(
-          key: const ValueKey('viewer-transport-pill'),
-          padding: const EdgeInsets.symmetric(horizontal: 2),
-          decoration: BoxDecoration(
-            color: t.surface3,
-            borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-          ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: buttons),
-        )
-      else
-        ...buttons,
-      // One edge to allow for rather than two: the clock is text, and text
-      // carries no button edge of its own.
-      if (clock) SizedBox(width: viewerTransportGap - viewerMarkEdge),
-      // The clock, in a slot wide enough for the longest time this comp can
-      // show, and clickable to type one (docs/07 §2.2 item 11). A time past
-      // either end of the composition lands on that end.
-      if (clock)
-        TimeReadout(
-          key: const ValueKey('viewer-timecode'),
-          frame: frame,
-          format: (f) => timecodeOf(f, settings),
-          widthChars: timecodeChars(settings.fpsNum, settings.fpsDen),
-          style: t.mono
-              .copyWith(fontSize: viewerTimecodeSize, color: t.textPrimary),
-          parse: (text) =>
-              framesOfTimecode(text, settings.fpsNum, settings.fpsDen),
-          onCommit: onSeek,
-          minFrame: 0,
-          maxFrame: _lastFrameOf(settings),
-          tooltip: l10n.tipFrameOnScreen,
-        ),
-    ];
-  }
 }
+
+/// The five transport buttons and the clock, one instrument at one spacing.
+///
+/// A top-level builder rather than a method of the bar, because the deck
+/// under the picture draws the same five marks. Lantern gathers them into a
+/// pill when [detached]; the other shapes are handed the very same widgets
+/// with nothing wrapped round them.
+///
+/// [clock] is the ladder's last step but one: on the narrowest bar the five
+/// buttons stand alone (see [_barMinimum]). [clockSize] is the clock's own
+/// type size, 11 on the bar and larger on the deck. [playFilled] draws the
+/// play mark as a 34 wide accent capsule, the deck's centre under Lantern.
+List<Widget> viewerTransportMarks(
+  LumitTheme t, {
+  required bool playing,
+  required int frame,
+  required BridgeCompSettings settings,
+  required CompositionReference comp,
+  required VoidCallback onPlayPause,
+  required ValueChanged<int> onSeek,
+  required bool detached,
+  bool clock = true,
+  double clockSize = viewerTimecodeSize,
+  bool playFilled = false,
+}) {
+  // The one lit mark on the bar: the control the eye goes to without
+  // looking for it (the drawing's own `.ico.on`).
+  final play = viewerBarMark(
+    key: const ValueKey('viewer-play'),
+    icon: playing ? LumitIcon.pause : LumitIcon.play,
+    colour: playFilled ? t.surface0 : t.textPrimary,
+    onPressed: onPlayPause,
+    tip: playing ? l10n.tipTransportPause : l10n.tipTransportPlay,
+  );
+  final buttons = <Widget>[
+    viewerBarMark(
+      key: const ValueKey('viewer-home'),
+      icon: LumitIcon.toStart,
+      colour: t.textMuted,
+      onPressed: () => onSeek(0),
+      tip: l10n.tipTransportStart,
+    ),
+    viewerBarGapBox(viewerTransportGap),
+    viewerBarMark(
+      key: const ValueKey('viewer-step-back'),
+      icon: LumitIcon.previousFrame,
+      colour: t.textMuted,
+      onPressed: () => onSeek(frame - 1),
+      tip: l10n.tipTransportPrevious,
+    ),
+    viewerBarGapBox(viewerTransportGap),
+    if (playFilled)
+      // The glyph on the accent is the ground colour, as on every filled
+      // action; the capsule is the deck's one solid piece of colour. It keeps
+      // the pill's inset on every side, its corner the outer one less the
+      // inset, the same concentric rule as every other filled state.
+      Container(
+        key: const ValueKey('viewer-play-capsule'),
+        // Desk's play is a round key like its neighbours, only in the
+        // signal; the other shapes draw the capsule.
+        width: t.shape == ThemeShape.desk
+            ? viewerDeskKey
+            : viewerPlayCapsuleWidth,
+        height: t.shape == ThemeShape.desk ? viewerDeskKey : null,
+        margin: EdgeInsets.all(t.tokens.pillInset),
+        alignment: Alignment.center,
+        decoration: t.shape == ThemeShape.desk
+            ? BoxDecoration(shape: BoxShape.circle, color: t.accent)
+            : BoxDecoration(
+                color: t.accent,
+                borderRadius: BorderRadius.circular(
+                    math.max(0, t.tokens.actionRadius - t.tokens.pillInset)),
+              ),
+        child: play,
+      )
+    else
+      play,
+    viewerBarGapBox(viewerTransportGap),
+    viewerBarMark(
+      key: const ValueKey('viewer-step-forward'),
+      icon: LumitIcon.nextFrame,
+      colour: t.textMuted,
+      onPressed: () => onSeek(frame + 1),
+      tip: l10n.tipTransportNext,
+    ),
+    viewerBarGapBox(viewerTransportGap),
+    viewerBarMark(
+      key: const ValueKey('viewer-end'),
+      icon: LumitIcon.toEnd,
+      colour: t.textMuted,
+      onPressed: () => onSeek(durationFramesOf(settings) - 1),
+      tip: l10n.tipTransportEnd,
+    ),
+  ];
+  return [
+    if (detached)
+      // A step up from the strip it stands on, so the pill reads as a pill.
+      // Fixed at 26 rather than the deck's full height, so it sits in the
+      // deck with air above and below.
+      Container(
+        key: const ValueKey('viewer-transport-pill'),
+        height: viewerTransportPillHeight,
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        decoration: BoxDecoration(
+          color: t.surface3,
+          borderRadius: BorderRadius.circular(t.tokens.actionRadius),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: buttons),
+      )
+    else
+      ...buttons,
+    // One edge to allow for rather than two: the clock is text, and text
+    // carries no button edge of its own.
+    if (clock) SizedBox(width: viewerTransportGap - viewerMarkEdge),
+    // The clock, in a slot wide enough for the longest time this comp can
+    // show, and clickable to type one (docs/07 §2.2 item 11). A time past
+    // either end of the composition lands on that end.
+    if (clock)
+      TimeReadout(
+        key: const ValueKey('viewer-timecode'),
+        frame: frame,
+        format: (f) => timecodeOf(f, settings),
+        widthChars: timecodeChars(settings.fpsNum, settings.fpsDen),
+        style: t.mono.copyWith(fontSize: clockSize, color: t.textPrimary),
+        parse: (text) =>
+            framesOfTimecode(text, settings.fpsNum, settings.fpsDen),
+        onCommit: onSeek,
+        minFrame: 0,
+        maxFrame: _lastFrameOf(settings),
+        tooltip: l10n.tipFrameOnScreen,
+      ),
+  ];
+}
+
+/// The width of the deck's accent play capsule under Lantern (12B.4).
+const double viewerPlayCapsuleWidth = 34;
 
 /// **The bar's shedding ladder, and what is left at the end of it** (§12A.6
 /// and the owner's ruling on the order).
@@ -653,8 +722,7 @@ class _ViewPicker extends StatelessWidget {
               child: lumitIcon(
                 LumitIcon.camera,
                 size: viewerBarIconSize,
-                color:
-                    view == ViewerView.activeCamera ? t.textMuted : t.accent,
+                color: view == ViewerView.activeCamera ? t.textMuted : t.accent,
               ),
             ),
           ),
@@ -851,15 +919,20 @@ class _SnapshotShowButton extends StatelessWidget {
 String timecodeOf(int frame, BridgeCompSettings settings) =>
     timecodeOfRate(frame, settings.fpsNum, settings.fpsDen);
 
-/// The last frame of a comp, from its settings alone.
+/// The length of a comp in frames, from its settings alone.
 ///
 /// Worked out here rather than asked of the engine: this is read while the bar
 /// is being built, and the bar is built for every frame of playback.
 /// Whole-integer arithmetic, so a long comp at 29.97 cannot drift the way a
 /// double would.
-int _lastFrameOf(BridgeCompSettings settings) {
+int durationFramesOf(BridgeCompSettings settings) {
   final den = settings.duration.den.toInt() * settings.fpsDen;
   if (den <= 0) return 0;
-  final frames = settings.duration.num.toInt() * settings.fpsNum ~/ den;
+  return settings.duration.num.toInt() * settings.fpsNum ~/ den;
+}
+
+/// The last frame of a comp, on the same terms.
+int _lastFrameOf(BridgeCompSettings settings) {
+  final frames = durationFramesOf(settings);
   return frames > 0 ? frames - 1 : 0;
 }

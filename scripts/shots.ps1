@@ -33,8 +33,8 @@
     with the full list rather than guessed at.
 
 .PARAMETER Shape
-    The theme shape to photograph in: sharp (the default) or round. The manual is
-    shot in the look it documents, so this is set once for a whole pass.
+    The style to photograph in: studio (the default), desk or lantern. The manual
+    is shot in the look it documents, so this is set once for a whole pass.
 
 .PARAMETER Out
     Write the pictures somewhere else - useful for reviewing a pass before it
@@ -57,8 +57,8 @@ param(
     [Parameter(Mandatory = $true)]
     [ValidatePattern('^[A-Za-z0-9_]+$')]
     [string]$Sweep,
-    [ValidateSet('sharp', 'round')]
-    [string]$Shape = 'sharp',
+    [ValidateSet('studio', 'desk', 'lantern')]
+    [string]$Shape = 'studio',
     [string]$Out,
     [switch]$NoCrop
 )

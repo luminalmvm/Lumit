@@ -35,8 +35,8 @@ void main() {
               OverlayEntry(
                 builder: (context) => DockWidget(
                   root: root,
-                  buildPanel: (context, pane) =>
-                      SizedBox(key: ValueKey<String>('pane-${pane.panel.name}')),
+                  buildPanel: (context, pane) => SizedBox(
+                      key: ValueKey<String>('pane-${pane.panel.name}')),
                   onLayoutChanged: onLayoutChanged,
                   activePanel: ValueNotifier<PaneId?>(null),
                   maximised: ValueNotifier<PaneId?>(null),
@@ -49,7 +49,7 @@ void main() {
 
   /// Right-click the tab pill whose label reads [title].
   Future<void> rightClickTab(WidgetTester tester, String title) async {
-    final at = tester.getCenter(find.text(title.toUpperCase()));
+    final at = tester.getCenter(find.text(LumitTheme.dark().kickerCase(title)));
     final gesture = await tester.startGesture(at, buttons: kSecondaryButton);
     await gesture.up();
     await tester.pump();

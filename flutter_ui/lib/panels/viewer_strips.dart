@@ -31,6 +31,19 @@ const List<double?> _zoomSteps = [null, 0.25, 0.5, 1.0, 2.0, 4.0];
 /// bottom bar (§12A.6): 22, whichever density is set.
 const double viewerStripHeight = 22;
 
+/// The strip's height under the shape: Lantern's detached strips are pills
+/// that hold 20px picker faces, so they stand at 28 and the faces sit 4 in
+/// from every edge, the inner corner the outer one less that 4 (the same
+/// concentric rule as every filled state). The flat shapes keep the 22.
+double viewerStripHeightFor(LumitTheme t) =>
+    t.tokens.roomed ? viewerStripHeight + 6 : viewerStripHeight;
+
+/// The room either end of a strip under the shape: the concentric inset on
+/// a Lantern pill, the drawing's 10 elsewhere.
+double viewerStripPaddingFor(LumitTheme t) => t.tokens.roomed
+    ? (viewerStripHeightFor(t) - t.density.dropdownFace) / 2
+    : viewerStripPadding;
+
 /// The room either end of both strips — the drawing's `padding: 0 10px`.
 const double viewerStripPadding = 10;
 
@@ -80,28 +93,50 @@ Widget viewerBarMark({
         frameless: true,
         padding: EdgeInsets.zero,
         onPressed: onPressed,
-        child: SizedBox(
-          width: viewerBarIconSize,
-          height: viewerStripHeight - 2 * viewerMarkEdge,
-          child: Center(
-            child: lumitIcon(icon, size: viewerBarIconSize, color: colour),
-          ),
+        child: Builder(
+          builder: (context) {
+            final t = ThemeScope.of(context).theme;
+            // Desk draws the deck's marks as round keys on the plate.
+            final key = t.shape == ThemeShape.desk;
+            return Container(
+              width: key ? viewerDeskKey : viewerBarIconSize,
+              height: key ? viewerDeskKey : viewerStripHeight - 2 * viewerMarkEdge,
+              decoration: key
+                  ? BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: t.surface2,
+                      border: Border.all(color: t.hairlineStrong),
+                    )
+                  : null,
+              child: Center(
+                child: lumitIcon(icon, size: viewerBarIconSize, color: colour),
+              ),
+            );
+          },
         ),
       ),
     );
+
+/// The diameter of a round key on Desk's deck.
+const double viewerDeskKey = 24;
 
 /// The room between two marks' boxes that leaves [glyphGap] between the glyphs
 /// themselves — the number the drawing states.
 Widget viewerBarGapBox(double glyphGap) =>
     SizedBox(width: glyphGap - 2 * viewerMarkEdge);
 
+/// The transport pill's height when it stands detached in the deck.
+const double viewerTransportPillHeight = 26;
+
 /// The strip's own ground: `surface_2` welded to the panel edge under Sharp,
 /// and a tile of its own — rounded, outlined, shadowed — under Round.
 BoxDecoration viewerStripDecoration(LumitTheme t, bool detached) =>
     BoxDecoration(
       color: t.surface2,
+      // A detached strip is a pill like every other on the room, so its
+      // ends are semicircles, not the float radius's uneven corners.
       borderRadius:
-          detached ? BorderRadius.circular(t.tokens.floatRadius) : null,
+          detached ? BorderRadius.circular(t.tokens.actionRadius) : null,
       border: detached ? Border.all(color: t.hairline) : null,
       boxShadow: detached ? t.tokens.cardShadow : null,
     );
@@ -147,9 +182,9 @@ class ViewerHeader extends StatelessWidget {
     final t = ThemeScope.of(context).theme;
     return Container(
       key: const ValueKey('viewer-header'),
-      height: viewerStripHeight,
+      height: viewerStripHeightFor(t),
       decoration: viewerStripDecoration(t, detached),
-      padding: const EdgeInsets.symmetric(horizontal: viewerStripPadding),
+      padding: EdgeInsets.symmetric(horizontal: viewerStripPaddingFor(t)),
       // The header strip narrows exactly as the bottom bar does (§12A.6's
       // ladder): the panel's name ellipsises first, and below the width the
       // three pickers themselves need, the strip slides sideways rather than
@@ -161,8 +196,22 @@ class ViewerHeader extends StatelessWidget {
           // The panel's name, a kicker like every other container label
           // (§7.1), and lit because this is the container rather than one of
           // several tabs in it.
-          final title = Text(l10n.panelViewer.toUpperCase(),
+          final word = Text(t.kickerCase(l10n.panelViewer),
               style: t.kickerOn, maxLines: 1, overflow: TextOverflow.ellipsis);
+          // Lantern puts a small accent dot before the title; the other
+          // shapes draw the word alone.
+          final title = t.tokens.headerDot
+              ? Row(mainAxisSize: MainAxisSize.min, children: [
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration:
+                        BoxDecoration(color: t.accent, shape: BoxShape.circle),
+                  ),
+                  const SizedBox(width: 6),
+                  word,
+                ])
+              : word;
           final pickers = viewerPickers(
             zoom: zoom,
             shownScale: shownScale,
@@ -172,6 +221,18 @@ class ViewerHeader extends StatelessWidget {
             onZoom: onZoom,
           );
           if (constraints.maxWidth >= _headerMinimum) {
+            // Lantern centres the title on the strip, with the pickers still
+            // at the right; the pickers sit over it only on a strip too
+            // narrow for both, which is under the minimum and slides.
+            if (t.tokens.titleCentred) {
+              return Stack(children: [
+                Center(child: title),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Row(mainAxisSize: MainAxisSize.min, children: pickers),
+                ),
+              ]);
+            }
             // The title is not flexible here: it and the `Spacer` would then
             // share the free space between them, and the pickers would stop
             // at the strip's right-hand *padding*. Above the minimum there is
@@ -228,6 +289,8 @@ List<Widget> viewerPickers({
   required bool showToneMap,
   required VoidCallback onToneMap,
   required ValueChanged<double?> onZoom,
+  // False under the deck, whose own two pickers answer the quality question.
+  bool quality = true,
 }) =>
     [
       // The picture's scale. The face hugs its own label: "Fit" and "400%"
@@ -248,8 +311,10 @@ List<Widget> viewerPickers({
         onChanged: (i) => onZoom(_zoomSteps[i]),
       ),
       const SizedBox(width: viewerHeaderGap),
-      const _QualityDropdown(key: ValueKey('viewer-resolution')),
-      const SizedBox(width: viewerHeaderGap),
+      if (quality) ...[
+        const _QualityDropdown(key: ValueKey('viewer-resolution')),
+        const SizedBox(width: viewerHeaderGap),
+      ],
       _ColourDropdown(
         key: const ValueKey('viewer-colour'),
         look: look,

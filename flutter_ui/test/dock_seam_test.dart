@@ -79,20 +79,85 @@ Color _at(ByteData bytes, int rowStride, int x, int y) {
 }
 
 void main() {
-  final theme = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.sharp);
+  final studio = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio);
 
   // Wide enough that every pane in these arrangements clears its own minimum:
   // the Graph's floor rose to 480 with the snap magnet, and two panes
   // that do not fit are drawn at their minimums and slid sideways (§12A.6's
   // ladder, step 5) - which overlaps them, and leaves no seam to photograph.
   Future<void> mount(WidgetTester tester, DockSplit root,
-      {Size size = const Size(1400, 600)}) async {
+      {Size size = const Size(1400, 600), LumitTheme? theme}) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(_harness(root, theme));
+    await tester.pumpWidget(_harness(root, theme ?? studio));
     await tester.pump();
   }
+
+  /// The seam's columns between the two panes, one row through the middle.
+  Future<List<Color>> seamColumns(WidgetTester tester) async {
+    final left = tester.getRect(find.byKey(const ValueKey('pane-graph')));
+    final right = tester.getRect(find.byKey(const ValueKey('pane-viewer')));
+    final (bytes, stride) = await _pixels(tester);
+    final y = left.center.dy.round();
+    return [
+      for (var x = left.right.ceil() + 1; x < right.left.floor() - 1; x++)
+        _at(bytes, stride, x, y),
+    ];
+  }
+
+  final sideBySide = DockSplit(
+    DockAxis.horizontal,
+    [DockPane(Panel.graph), DockPane(Panel.viewer)],
+    [0.5, 0.5],
+  );
+
+  testWidgets('under Lantern the seam is the room', (tester) async {
+    // The card shadows are turned off for the photograph: they fall across
+    // the whole ten-pixel gap, and the question here is what the dock paints
+    // under them.
+    final lantern =
+        LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.lantern);
+    final l = lantern.tokens;
+    final shadowless = lantern.copyWith(
+      tokens: ShapeTokens(
+        controlRadius: l.controlRadius,
+        floatRadius: l.floatRadius,
+        cardRadius: l.cardRadius,
+        cardPadding: l.cardPadding,
+        tileGap: l.tileGap,
+        windowInset: l.windowInset,
+        cardShadow: const [],
+        labelCase: l.labelCase,
+        titleCentred: l.titleCentred,
+        headerDot: l.headerDot,
+        strokeWeight: l.strokeWeight,
+        sectionRadius: l.sectionRadius,
+        actionRadius: l.actionRadius,
+        wellRadius: l.wellRadius,
+        contentRadius: l.contentRadius,
+        roomed: l.roomed,
+      ),
+    );
+    await mount(tester, sideBySide, theme: shadowless);
+    final columns = await seamColumns(tester);
+    expect(columns.length, greaterThan(1), reason: 'the seam was sampled');
+    for (final pixel in columns) {
+      expect(pixel, shadowless.room,
+          reason: 'no hairline between cards: the room shows through');
+    }
+  });
+
+  testWidgets('under Desk the seam is the chassis, surface0',
+      (tester) async {
+    final desk = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.desk);
+    await mount(tester, sideBySide, theme: desk);
+    final columns = await seamColumns(tester);
+    expect(columns.length, greaterThan(1), reason: 'the seam was sampled');
+    for (final pixel in columns) {
+      expect(pixel, desk.surface0);
+    }
+  });
 
   testWidgets('a horizontal seam is the dock ground for its whole width',
       (tester) async {
@@ -120,10 +185,10 @@ void main() {
       final pixel = _at(bytes, stride, x, y);
       expect(pixel, isNot(_paneA), reason: 'x=$x is not the left pane');
       expect(pixel, isNot(_paneB), reason: 'x=$x is not the right pane');
-      expect(pixel, theme.surface2,
+      expect(pixel, studio.surface2,
           reason: 'x=$x is the dock ground, not whatever sits behind it');
     }
-    expect(right.left - left.right, greaterThan(theme.tokens.tileGap),
+    expect(right.left - left.right, greaterThan(studio.tokens.tileGap),
         reason: 'the seam is wider than the token: the hit padding is layout');
   });
 
@@ -147,7 +212,7 @@ void main() {
     var sampled = 0;
     for (var y = top.bottom.ceil() + 1; y < bottom.top.floor() - 1; y++) {
       sampled++;
-      expect(_at(bytes, stride, x, y), theme.surface2,
+      expect(_at(bytes, stride, x, y), studio.surface2,
           reason: 'y=$y is the dock ground, not the pane behind it');
     }
     expect(sampled, greaterThan(1), reason: 'the seam was actually sampled');

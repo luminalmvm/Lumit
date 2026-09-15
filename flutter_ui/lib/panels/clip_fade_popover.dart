@@ -210,7 +210,7 @@ class _ClipFadePopoverState extends State<_ClipFadePopover> {
             padding: const EdgeInsets.symmetric(horizontal: 10),
             child: Align(
               alignment: Alignment.centerLeft,
-              child: Text(l10n.clipFadeShapeTitle.toUpperCase(),
+              child: Text(t.kickerCase(l10n.clipFadeShapeTitle),
                   style: t.kickerOn),
             ),
           ),

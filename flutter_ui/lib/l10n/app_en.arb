@@ -272,14 +272,6 @@
   "@copySequenceShape": {
     "description": "Context-menu item: copy the speed curve of a Sequence layer."
   },
-  "cornersRound": "Round",
-  "@cornersRound": {
-    "description": "Settings window: the rounded choice for the Corners setting."
-  },
-  "cornersSharp": "Sharp",
-  "@cornersSharp": {
-    "description": "Settings window: the square-cornered choice for the Corners setting."
-  },
   "couldNotAddShapeLayer": "Could not add a shape layer",
   "@couldNotAddShapeLayer": {
     "description": "Notice when making a shape layer failed."
@@ -1697,6 +1689,14 @@
   "@puppetPinStarch": {
     "description": "The name a new starch pin is given, and the word its Timeline row is headed with."
   },
+  "roomDay": "Day",
+  "@roomDay": {
+    "description": "Settings window, Appearance: the light room for the Lantern shape's cards."
+  },
+  "roomNight": "Night",
+  "@roomNight": {
+    "description": "Settings window, Appearance: the dark room for the Lantern shape's cards."
+  },
   "rotoAddTheEffect": "Add a Roto brush to this layer to stroke on it",
   "@rotoAddTheEffect": {
     "description": "Status-area line when the Refine edge tool is used on a layer that carries no Roto brush effect. (The Roto brush tool itself adds the effect with the first stroke.)"
@@ -1826,6 +1826,79 @@
   "selectALayerToPin": "Select a layer to pin",
   "@selectALayerToPin": {
     "description": "Status line when a puppet tool is used with no layer selected."
+  },
+  "settingsCommandBox": "Command box in the top line",
+  "@settingsCommandBox": {
+    "description": "Settings window, Appearance: the switch that shows or hides the search box at the right of the top line which opens the command palette."
+  },
+  "commandBoxHint": "Command or effect",
+  "@commandBoxHint": {
+    "description": "The hint inside the top line's command box before anything is typed: it opens the palette, which finds commands and effects."
+  },
+  "settingsIconSet": "Icon set",
+  "@settingsIconSet": {
+    "description": "Settings window, Appearance: the dropdown choosing how heavily the icons are drawn."
+  },
+  "iconSetRegular": "Regular",
+  "@iconSetRegular": {
+    "description": "Icon set option: the icons as drawn, a 1.5 pixel line."
+  },
+  "iconSetEngraved": "Engraved",
+  "@iconSetEngraved": {
+    "description": "Icon set option: thin cut lines, 1.25 pixels, the Desk style's own."
+  },
+  "iconSetBold": "Bold",
+  "@iconSetBold": {
+    "description": "Icon set option: heavy lines, 2 pixels."
+  },
+  "settingsIconsFolder": "Custom icons",
+  "@settingsIconsFolder": {
+    "description": "Settings window, Appearance: the row showing the folder a person's own icon files are read from, with a reload button."
+  },
+  "reloadIcons": "Reload icons",
+  "@reloadIcons": {
+    "description": "Button in the custom icons row: reads the folder again so new or changed SVG files show up."
+  },
+  "iconsReplaced": "{count} replaced",
+  "@iconsReplaced": {
+    "description": "Beside the custom icons row: how many of the set's icons the folder currently replaces.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "styleChoice": "Style's choice",
+  "@styleChoice": {
+    "description": "Settings window, Appearance: the option in the Viewer bars and Toolbar position dropdowns that leaves the arrangement to the chosen interface style."
+  },
+  "settingsDeskRooms": "Rooms drawn for Desk",
+  "@settingsDeskRooms": {
+    "description": "Settings window, Appearance: the name of the row offering the two colour schemes drawn for the Desk shape, Grey room and Graphite."
+  },
+  "settingsRangeSliders": "Range sliders",
+  "@settingsRangeSliders": {
+    "description": "Settings window: the name of the switch that draws a track beside a ranged parameter's number."
+  },
+  "settingsRoom": "Room",
+  "@settingsRoom": {
+    "description": "Settings window, Appearance: the name of the row choosing which room the Lantern shape's cards stand in."
+  },
+  "settingsToolBarPosition": "Toolbar position",
+  "@settingsToolBarPosition": {
+    "description": "Settings window: the name of the row choosing whether the toolbar is a strip across the top or a rail down the left."
+  },
+  "shapeDesk": "Desk",
+  "@shapeDesk": {
+    "description": "Settings window: the Desk choice for the Shape setting, flush panels on a four-pixel module."
+  },
+  "shapeLantern": "Lantern",
+  "@shapeLantern": {
+    "description": "Settings window: the Lantern choice for the Shape setting, cards standing in a room."
+  },
+  "shapeStudio": "Studio",
+  "@shapeStudio": {
+    "description": "Settings window: the Studio choice for the Shape setting, the default flush arrangement."
   },
   "spectralRange": "0–12 kHz",
   "@spectralRange": {
@@ -6635,6 +6708,10 @@
   "@tipHideShy": {
     "description": "Tooltip on the shy filter when it is off. One or two words."
   },
+  "tipResetParameter": "Reset",
+  "@tipResetParameter": {
+    "description": "Tooltip on the arrow at the end of a property row that puts the parameter back to its default."
+  },
   "tipSoundMixFold": "Hide layers",
   "@tipSoundMixFold": {
     "description": "Tooltip on the Sound mix row's twirl while the audio layers are shown in the stack: pressing it hides them behind the row again. Short."
@@ -6922,6 +6999,10 @@
   "@tipValueGraph": {
     "description": "Tooltip: show value against time. One or two words."
   },
+  "tipViewerCacheReady": "Cache ready",
+  "@tipViewerCacheReady": {
+    "description": "Tooltip on the Viewer deck's small meter showing how much of the work area is cached. One or two words."
+  },
   "tipViewerChannel": "Channel view",
   "@tipViewerChannel": {
     "description": "Tooltip on the Viewer bar's channel dropdown, which shows a tinted mark and no words, so this is the only name it has. It chooses whether the picture is shown in full colour or as one channel on its own."
@@ -7124,6 +7205,14 @@
   "@tokenMarkerHelp": {
     "description": "Theme editor: the sentence under the \"Marker\" colour, saying where it is used."
   },
+  "tokenRoom": "Room",
+  "@tokenRoom": {
+    "description": "Theme editor: the name of one editable colour."
+  },
+  "tokenRoomHelp": "The ground the panes stand on when the shape is Lantern; the other shapes never draw it.",
+  "@tokenRoomHelp": {
+    "description": "Theme editor: the sentence under the \"Room\" colour, saying where it is used."
+  },
   "tokenSelectionfill": "Selected row",
   "@tokenSelectionfill": {
     "description": "Theme editor: the name of one editable colour."
@@ -7263,6 +7352,14 @@
   "toolAnchor": "Anchor point",
   "@toolAnchor": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
+  },
+  "toolBarLeft": "Left",
+  "@toolBarLeft": {
+    "description": "Settings window: the toolbar as a rail down the left edge of the window."
+  },
+  "toolBarTop": "Top",
+  "@toolBarTop": {
+    "description": "Settings window: the toolbar as a strip across the top of the window."
   },
   "toolBrush": "Brush",
   "@toolBrush": {
@@ -7455,6 +7552,14 @@
   "strokeEnd": "End",
   "@strokeEnd": {
     "description": "Timeline row under a paint stroke: how far along the stroke's own length the mark ends, as a percentage."
+  },
+  "toolNoOptions": "No options",
+  "@toolNoOptions": {
+    "description": "Toolbar options strip, muted label shown while the armed tool has no options of its own."
+  },
+  "toolOptions": "Tool options",
+  "@toolOptions": {
+    "description": "Toolbar options pill under Lantern, the muted hint word before the armed tool's controls."
   },
   "toolPuppetDensity": "Density",
   "@toolPuppetDensity": {
@@ -8038,6 +8143,10 @@
   "viewerBarsBottom": "One bar, at the bottom",
   "@viewerBarsBottom": {
     "description": "Settings window, Appearance: one of the three arrangements of the Viewer's chrome. Everything the Viewer offers on one strip under the picture."
+  },
+  "viewerBarsDeck": "Deck",
+  "@viewerBarsDeck": {
+    "description": "Settings window, Appearance: one of the arrangements of the Viewer's chrome. The ways of looking above the picture and a fixed transport deck under it."
   },
   "viewerBarsSplit": "Split, top and bottom",
   "@viewerBarsSplit": {
@@ -9665,7 +9774,7 @@
   },
   "settingsShape": "Shape",
   "@settingsShape": {
-    "description": "Settings window, Appearance: the name of the row choosing between square and rounded corners throughout the interface."
+    "description": "Settings window, Appearance: the name of the row choosing the interface style, Studio, Desk or Lantern."
   },
   "settingsStyle": "Style",
   "@settingsStyle": {
@@ -9687,6 +9796,22 @@
   "@tipTransportEnd": {
     "description": "Tooltip on the Viewer transport's last button, an icon with no words: it takes the playhead to the composition's last frame."
   },
+  "tipTransportLoopOnce": "Play once",
+  "@tipTransportLoopOnce": {
+    "description": "Tooltip on the Viewer deck's loop-mode mark while playback stops at the end of the work area. One or two words."
+  },
+  "tipTransportLoopPingPong": "Ping-pong",
+  "@tipTransportLoopPingPong": {
+    "description": "Tooltip on the Viewer deck's loop-mode mark while playback runs the work area backwards and forwards in turn. One or two words."
+  },
+  "tipTransportLoopWorkArea": "Loop",
+  "@tipTransportLoopWorkArea": {
+    "description": "Tooltip on the Viewer deck's loop-mode mark while playback starts the work area again from its beginning. One or two words."
+  },
+  "tipTransportMute": "Mute",
+  "@tipTransportMute": {
+    "description": "Tooltip on the Viewer deck's speaker mark while sound plays: pressing it silences the output."
+  },
   "tipTransportNext": "Next frame",
   "@tipTransportNext": {
     "description": "Tooltip on the Viewer transport's step-forward button, an icon with no words: it moves the playhead on by one frame."
@@ -9706,6 +9831,10 @@
   "tipTransportStart": "To start",
   "@tipTransportStart": {
     "description": "Tooltip on the Viewer transport's first button, an icon with no words: it takes the playhead to the composition's first frame."
+  },
+  "tipTransportUnmute": "Unmute",
+  "@tipTransportUnmute": {
+    "description": "Tooltip on the Viewer deck's speaker mark while the output is silenced: pressing it lets sound play again."
   },
   "viewerColourToneMap": "Tone mapping",
   "@viewerColourToneMap": {
@@ -12668,5 +12797,14 @@
   "fxWet": "Wet",
   "@fxWet": {
     "description": "Effect controls: how much of the treated sound is heard, on every audio effect that keeps some of the untreated sound beside it."
+  },
+  "timelineTickReadout": "1 tick = {frames} f",
+  "@timelineTickReadout": {
+    "description": "Timeline: the zoom dial's reading in the lane bottom bar, how many frames one ruler tick spans.",
+    "placeholders": {
+      "frames": {
+        "type": "String"
+      }
+    }
   }
 }

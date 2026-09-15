@@ -268,7 +268,7 @@ void main() {
       p.uiState.model.refresh();
       await mount(tester, p);
 
-      final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.sharp);
+      final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio);
       await open(tester, 'Layer', under: 'Mask');
       expect(tester.widget<Text>(find.text('Subtract')).style?.color,
           t.textDisabled);
@@ -288,7 +288,7 @@ void main() {
       p.uiState.model.refresh();
       await mount(tester, p);
 
-      final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.sharp);
+      final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio);
       await open(tester, 'Layer');
       expect(
           tester.widget<Text>(find.text('Flow')).style?.color, t.textDisabled,
@@ -393,7 +393,7 @@ void main() {
       p.uiState.model.refresh();
       await mount(tester, p);
 
-      final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.sharp);
+      final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio);
       await open(tester, 'Animation');
       for (final row in ['Keyframe interpolation…', 'Keyframe speed…']) {
         expect(tester.widget<Text>(find.text(row)).style?.color, t.textDisabled,
@@ -520,7 +520,7 @@ void main() {
       p.uiState.model.refresh();
       await mount(tester, p);
 
-      final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.sharp);
+      final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio);
       await open(tester, 'Animation');
       expect(tester.widget<Text>(find.text('Animate text')).style?.color,
           t.textDisabled);
@@ -740,7 +740,7 @@ void main() {
       testWidgets('both rows grey with nothing selected', (tester) async {
         final p = withComp();
         await mount(tester, p);
-        final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.sharp);
+        final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio);
 
         await open(tester, 'Animation');
         for (final row in [

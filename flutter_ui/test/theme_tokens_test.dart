@@ -26,7 +26,7 @@ void main() {
         'accent', 'accentHover', 'animated', 'success', 'warning', 'error',
         'cacheDisk',
         'marker',
-        'timelineOutOfRange', 'selectionFill',
+        'timelineOutOfRange', 'selectionFill', 'room',
         'curve0', 'curve1', 'curve2', 'curve3',
         'waveformRest', 'waveformLow', 'waveformMid', 'waveformHigh',
         'layerFootage', 'layerSequence', 'layerPrecomp',
@@ -217,7 +217,7 @@ void main() {
         name: 'Barely',
         mode: ThemeMode2.light,
         colours: {'accent': const Color(0xff00ff00)},
-      ).build(ThemeShape.sharp);
+      ).build(ThemeShape.studio);
       expect(theme.accent, const Color(0xff00ff00));
       expect(theme.mode, ThemeMode2.light);
       expect(theme.surface0, LumitTheme.light().surface0,
@@ -248,10 +248,20 @@ void main() {
     }
 
     test('every scheme carries one that reads on its own panel', () {
+      // Desk's two rooms are the one exception to the second check: their
+      // document dissolves amber into the signal, so keyed and in hand share
+      // it and the keyframe's shape says the rest
+      // (docs/design-alt/15-DESIGN-DESK.md 3.2).
+      const oneSignal = {LumitColorScheme.greyRoom, LumitColorScheme.graphite};
       for (final scheme in LumitColorScheme.values) {
         final t = scheme.build();
         expect(contrast(t.animated, t.surface1), greaterThanOrEqualTo(3.0),
             reason: '${scheme.name} draws keyframes it cannot show');
+        if (oneSignal.contains(scheme)) {
+          expect(t.animated, t.accent,
+              reason: '${scheme.name} has one signal, not two');
+          continue;
+        }
         expect(t.animated, isNot(t.accent),
             reason: '${scheme.name} would say "keyed" and "in hand" alike');
       }
@@ -274,7 +284,7 @@ void main() {
       );
       final read = readThemeFile(encodeThemeFile(older));
       expect(read.refusal, isNull);
-      expect(read.theme!.build(ThemeShape.sharp).animated,
+      expect(read.theme!.build(ThemeShape.studio).animated,
           LumitTheme.dark().animated);
     });
 

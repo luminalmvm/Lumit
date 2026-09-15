@@ -5,6 +5,9 @@ household Aizome system; since the 2026-08-23 redesign it **stands on its own** 
 household system is lineage, not a constraint. Panel inventory, docking behaviour, and
 interaction flows live in [07-UI-SPEC.md](07-UI-SPEC.md); this document owns colour, type,
 density, motion, and voice. Terminology follows [01-GLOSSARY.md](01-GLOSSARY.md) exactly.
+Three shapes ship, **Studio**, **Desk** and **Lantern** (§12), over thirty-one named colour
+schemes (§11.1). The studies under [design-alt/](design-alt/README.md) are where the two newer
+shapes were drawn; they are this document's history, and nothing in them binds code.
 
 RFC-2119 keywords (MUST, SHOULD, MAY) are used with their usual force.
 
@@ -145,7 +148,7 @@ ramp while keeping the same roles.
 | `hairline` | `#26292c` (≈ `text_primary` @ 11%) | Default 1px borders between panels, rows, cards; the dock's 1px tile gaps |
 | `hairline_strong` | `#3c4145` (≈ `text_primary` @ 22%) | Dividers that must be found, Null layer outlines; doubles as the pressed widget fill |
 
-Hairlines are the *only* default elevation between panels **under the Sharp shape**.
+Hairlines are the *only* default elevation between panels **under Studio and Desk**.
 Interactive widgets are **borderless** (the rerun grammar): idle, hovered and pressed
 are *fill* steps, never stroke changes. Under the three-greys rule (§2.1) the idle
 step is quiet — a widget at rest sits on its panel's own surface (or `surface_2` where a
@@ -157,10 +160,10 @@ filled action without adding a fourth grey — the exception is buttons only, an
 resting outline, not a stroke that changes with hover or press.
 `shadow_float` (black @ 50%, offset 0/15, blur 50 — rerun's float shadow) is permitted solely
 on: modal dialogs, menus/popovers, panels while being drag-undocked, and drag ghosts (clips or
-assets in flight) — **under Sharp**. The Round shape (§7.3) is a deliberate exception:
-ordinary docked panes there are floating cards with their own small shadow (`ShapeTokens::
-ROUND.card_shadow`, distinct from and smaller than `shadow_float`), so "docked" no longer
-implies "no shadow" once Round is picked.
+assets in flight), **under Studio and Desk**. Lantern (§7.3, §12) is a deliberate
+exception: ordinary docked panes there are cards standing in a room with their own small
+shadow (`ShapeTokens.lantern.cardShadow`, distinct from and smaller than `shadow_float`), so
+"docked" no longer implies "no shadow" once Lantern is picked.
 
 ## 3. Saturated colour
 
@@ -594,7 +597,7 @@ chrome sits above 13px except dialog body emphasis**:
 | Size | Face | Use |
 |---|---|---|
 | 9–11px (**9 shipped**, +0.12em, regular) | Geist Mono, caps, `text_muted` | **Kickers — every container label**: panel titles, properties section headers, column headers, tab labels, dialog titles, attribution. The shipped value is the approved mockups' own `.kick` |
-| 9px | Geist Mono, caps, +0.12em, `surface_0` on the `accent` fill | **The filled primary action's label** — the one filled button a surface is allowed (§3.1, §12A.4). A kicker in every respect but its colour, which the fill under it decides |
+| 9px | Geist Mono, caps, +0.12em, on the `accent` fill: `surface_0` under Studio and Desk, `text_primary` under Lantern | **The filled primary action's label**, the one filled button a surface is allowed (§3.1, §12A.4). A kicker in every respect but its colour, which the fill under it decides. Studio and Desk put the label at the far end of the ramp from the text; Lantern keeps `text_primary`, which measures 4.63 to 1 on spruce against the 3.73 of `surface_0` ([design-alt/15-DESIGN-LANTERN.md](design-alt/15-DESIGN-LANTERN.md) §3.1). The same ink is the active pill's label under Lantern (§12.1), read off `accentInk` |
 | 10px | Hanken Grotesk | Secondary notes and hints (`small`); field captions — never for anything the user has to act on; **layer bar labels** and the labels of the in-row pickers beside them (matte, blend, parent), both the approved mockups' own size |
 | 11px | Hanken Grotesk | Panel body copy, property names, menus, buttons |
 | 11px | Geist Mono | **Property values in wells, timecode fields, frame numbers, speed percentages** — the approved mockups compute every `.well` and every timecode at 11. It had been recorded here as 13, a size the mockups use nowhere |
@@ -621,7 +624,9 @@ mono while focused.
   **The tool strip keeps this across and not down**: its buttons are 44px wide, which
   is the axis the row is read and aimed along, in a strip 30px tall. The strip runs the full
   width of the window, so a 44px band of mostly empty chrome is height taken from the panels
-  underneath for nothing; the 16px icon (§5) still has room around it.
+  underneath for nothing; the 16px icon (§5) still has room around it. **Under Toolbar
+  position Left** (07 §1.7) the tools stand on a 44px rail and get the full 44 by 44 back,
+  at the cost of 44px of width instead of 30px of height.
 - Dense-surface controls (Timeline rows, clips, keyframes, curve handles, property lanes,
   cache bar): ≥24px visual extent on the smaller axis, with hit-slop extending the
   interactive region to ≥32px. Keyframes render at 9px but hit-test at 32px with
@@ -640,13 +645,14 @@ mono while focused.
 ### 7.3 Spacing
 
 Household spacing scale (4/8/12/16/24/32…) with the dense end doing the work: 4px within
-control clusters, 8px between clusters, 12px panel padding, 16px dialog padding. **Under the
-Sharp shape**, panels butt together separated by a single `hairline`; there are no gaps
-between docked panels. **Under Round**, this is the point of the shape: a real gap
-(`ShapeTokens::ROUND.tile_gap`, painted as the canvas colour) opens between every pane and
-from the window edge (`window_inset`), and each pane becomes its own rounded card
-(`card_radius`/`card_padding`) — see the new Round subsection after §11. Spacing itself (this
-section's 4/8/12/16px scale) does not vary by shape; only radius, gap, inset and shadow do.
+control clusters, 8px between clusters, 12px panel padding, 16px dialog padding. **Under
+Studio and Desk**, panels butt together separated by a single `hairline`; there are no gaps
+between docked panels. **Under Lantern**, this is the point of the shape: a real gap
+(`ShapeTokens.lantern.tileGap`, 10, painted in the room colour) opens between every pane and
+from the window edge (`windowInset`, 10), and each pane becomes its own card
+(`cardRadius` 16) with a shadow; §12 has the whole table. Spacing itself (this section's
+4/8/12/16px scale) does not vary by shape; only radius, gap, inset and shadow do, and Desk's
+row heights, which sit on a four-pixel module (§12A.6).
 
 ## 8. Motion
 
@@ -780,75 +786,169 @@ banned outright. `curve[0..3]` and `layer.*` draw four/six further distinct, mut
 each palette rather than reusing `accent`, `success`, `warning` or `error` again, matching how
 §6.1/§6.2 keep those families visually separate from the semantic roles.
 
-## 12. The Round shape
+**Twelve further pairs ship beside those seven**, each a dark scheme and a light one built
+from one palette, so the picker offers thirty-one schemes in all. Every pair is a full token
+set on the same roles, built the way the four community palettes are; none is a re-tint. Each
+pair's family is the mode its two halves belong to (`LumitColorScheme.mode`), and a pair's
+`animated` stays an amber quieter than its accent, as §3.1 requires, except where noted:
 
-**Sharp is the redesign's reference shape**: the 2026-08-23 redesign is designed,
-mocked up and landed under Sharp, and Round is revisited against the finished Sharp shell
-afterwards rather than co-designed with it.
+| Pair | Dark | Light | What the pair is |
+|---|---|---|---|
+| **Mallow** | `mallowDark` | `mallowLight` | A plum-tinted ramp with a lavender accent |
+| **Glacier** | `glacierDark` | `glacierLight` | A cold blue-black ramp with a cyan accent |
+| **Hearth** | `hearthDark` | `hearthLight` | A warm brown ramp with a clay accent |
+| **Chalk** | `chalkDark` | `chalkLight` | The highest contrast of the set: near-black and near-white neutrals, a blue accent |
+| **Vellum** | `vellumDark` | `vellumLight` | Paper-warm neutrals with a blue accent |
+| **Neon** | `neonDark` | `neonLight` | A cool neutral ramp with a magenta accent; its dark half takes a cyan `animated` |
+| **Canopy** | `canopyDark` | `canopyLight` | A green-tinted ramp with a lime accent |
+| **Slate** | `slateDark` | `slateLight` | A pure grey ramp with a cyan accent |
+| **Nocturne** | `nocturneDark` | `nocturneLight` | An indigo ramp with an orange accent |
+| **Tavern** | `tavernDark` | `tavernLight` | A deep brown ramp with an amber accent |
+| **Arcane** | `arcaneDark` | `arcaneLight` | A navy ramp with a lavender accent; its dark half takes a cyan `animated` |
+| **Gilt** | `giltDark` | `giltLight` | A plum ramp with a gold accent |
 
-The Figma-UI3-inspired alternative to this document's default Sharp system: panels float as
-rounded, softly-shadowed cards with a real gap between them and from the window edge, rather
-than butting edge-to-edge behind a hairline (§7.3, §2.3). Explicitly not glassmorphism or
-neumorphism — flat fills, no blur, no inset/outset bevel; the shadow is the only elevation cue
-Round adds. Every geometry number Sharp vs Round differs on lives in one place
-(`ShapeTokens`, on `Theme`): control/float radii (larger under Round, so a button doesn't look
-unfinished inside a rounded card), the docked-pane card's own radius/padding, the inter-pane
-gap width, the window-edge inset, and the card's shadow. Colours are unaffected by shape —
-Round on Dark and Round on Light both exist, independent of `ThemeMode`. Every panel, the
-Viewer included, cards identically; there is no exemption (an earlier option — keeping the
-Viewer flush as a deliberate exception — was considered and rejected: consistency won, and
-the "no top bit" rule is specifically about the tab bar, not panel margins, so it isn't
-affected either way). A stated, permanent limitation: stacked tab-bar containers (a group of
-panels sharing tabs) stay square-cornered under Round — the docking container offers no hook
-to round a tab bar's own container, and patching it for this alone isn't
-planned.
+**The neutral surfaces do not move.** For every one of the thirty-one, `viewer_surround`
+stays in the fixed neutral band §2.1 sets and the scopes draw `ScopeColours::STANDARD`: a
+named scheme changes chrome, never the grading-neutral surfaces. The two opt-ins above
+(themed scopes, themed surround) apply to these pairs exactly as to the rest, and both stay
+off by default. Lantern's room (§12) is the one token the pairs leave to the mode: a dark
+scheme's cards stand in the day room, a light scheme's own canvas is its room.
 
-### 12.1 Round v2 — the bubble commit
+**Two rooms drawn for Desk stand beside the twelve pairs**: **Grey room** (`greyRoom`, a
+light warm-neutral ramp with an orange signal) and **Graphite** (`graphite`, the same ramp
+dark), from [design-alt/15-DESIGN-DESK.md](design-alt/15-DESIGN-DESK.md) §2. They are
+schemes like any other and draw under every shape; Settings, Appearance offers them in a row
+of their own under the Shape chips, **Rooms drawn for Desk**, picked with one tap, and
+picking Desk never changes the scheme by itself. In both, `animated` equals the accent: the
+amber is answered by the signal, as that document's §3.2 asks.
 
-Round v1 rounded corners; v2 commits to the shape, on cues from a reference the owner
-picked (OUTLOUD's Lyrica editor) — cues, not a copy. All of it is `ShapeTokens` reads
-and shape-conditional widget geometry; colours, strings and Sharp are untouched.
+## 12. The three shapes: Studio, Desk and Lantern
 
-- **Stadium controls.** Under Round, a button, chip, tab, dropdown or timecode chip is a
-  full capsule: radius = half its own height (`control_radius` becomes the stadium
-  sentinel under Round rather than a number that approximates one). The transport's
-  buttons additionally sit together inside one pill container on the Viewer bar. Under
-  Round that whole bar is a tile of its own **below** the picture — parted from it by the
-  tile gap, with the canvas showing through, and never laid over the frame — while staying
-  inside the Viewer panel, so docking or moving the panel carries it; Sharp keeps the bar
-  welded to the panel's bottom edge.
-- **Bigger cards.** `card_radius` 14 → 18 and `float_radius` 12 → 16, so a menu is not
-  squarer than the card that spawned it.
-- **Filled-pill actives.** The active tab / mode chip / segmented option fills with
-  `accent` and its label flips to `surface0` — the far end of the ramp from the text,
-  which is the dark label on a dark scheme and the light one on a light scheme without
-  either being spelled out twice (Round on Light exists, §12). Inactive stays ghost.
-  This is the reference's loudest cue: state reads at a glance from fill, not from text
-  tint.
-- **Dot slider thumbs.** The thin track with a round thumb on it, which `HouseSlider`
-  already drew — under both shapes, and still does. Recorded as a cue the reference and
-  Lumit happened to agree on, not as a change: nothing shipped for it, and making it
-  Round-only would have taken the dot away from Sharp for no reason.
-- **Capsule bars.** Timeline layer bars and Sequence clips draw with stadium ends under
-  Round (at the bar's own height). Keyframe diamonds, the playhead and the rulers do
-  not change — they are marks, not surfaces.
-- **The header dot.** Each panel header carries a small accent dot under Round — the
-  reference's quiet live-mark. Decorative, never a status light; it does not blink,
-  fill or change colour.
-- **Under Sharp a panel's tab is bare text.** The header strip's tabs are kickers on the
-  strip's own grey — no fill, no outline, no tick — and the fronted one is marked by its
+**A shape names an arrangement; a scheme names a palette, and the two are chosen apart.**
+`ThemeShape` is `{ studio, desk, lantern }`, picked at Settings, Appearance, Shape. Every
+shape draws on every scheme, so Lantern on Chalk light and Desk on Tavern dark both exist.
+Colours are never a shape's to change: the one token a shape adds is Lantern's room, below.
+
+- **Studio** is the reference shape, formerly called Sharp: the 2026-08-23 redesign was
+  designed, mocked up and landed under it, and every rule in §12A is judged under Studio
+  first. Panels meet flush behind a hairline, labels are caps kickers, and nothing casts a
+  shadow that is not on §2.3's list.
+- **Desk** keeps Studio's flush panels and takes every row to a **four-pixel module**
+  (§12A.6): the row is 24, a secondary row 20, a property row 28, the ruler 48, the cache bar
+  4. Its labels are **lowercase** kickers (`LabelCase.lower`, through `LumitTheme.kickerCase`),
+  its icon stroke is 1.25, its floats are as square as its controls, and its own instruments
+  are a **rail** for the toolbar (07 §1.7, one setting away), a **deck** under the picture
+  (§12A.6, one setting away), an **engraved ruler** and a **dial** for the Timeline's zoom
+  (§12A.1). Desk adds no colour of its own: the filled action's label is `surface_0`, the
+  fronted segment wears the accent tint with a 2px accent index on its leading edge, and a
+  fronted tab wears the same index under its word.
+- **Lantern** replaces Round, which is retired. Panes are **cards standing in a room**: a
+  gap of 10 between them and from the window edge, a 16px corner, a shadow, and the pane's
+  own title line with a 6px accent dot at its left corner and the title centred as a caps
+  kicker. The room is the ground the cards stand on and is the one token Lantern adds.
+
+**`ShapeTokens`, every field, per shape.** Every geometry number the shapes differ on lives
+here, on `LumitTheme.tokens`, and nowhere else; a radius spelled out in widget code is a
+defect. A radius is a corner only, never a length.
+
+| Field | Studio | Desk | Lantern | What wears it |
+|---|---|---|---|---|
+| `controlRadius` | 2 | 2 | 7 | A button, chip, tab, dropdown, icon button |
+| `floatRadius` | 6 | 2 | 12 | Menus, popovers, flyouts |
+| `cardRadius` | 0 | 0 | 16 | The pane itself |
+| `cardPadding` | 0 | 0 | 0 | The card's inset; Lantern's title line does the work instead |
+| `tileGap` | 1 | 1 | 10 | Between docked panes |
+| `windowInset` | 0 | 0 | 10 | From the window edge |
+| `cardShadow` | none | none | 0/6 blur 18 black at 20%, over 0/1 blur 2 black at 14% | Every card |
+| `labelCase` | caps | lower | caps | How `kickerCase` sets a container label |
+| `titleCentred` | no | no | yes | A pane title centred on its strip |
+| `headerDot` | no | no | yes | The 6px accent dot before a title |
+| `strokeWeight` | 1.5 | 1.25 | 1.5 | The icon stroke |
+| `sectionRadius` | 2 | 2 | 12 | A band inside a pane: a stage, a lane area, an effect's rows |
+| `actionRadius` | 2 | 2 | stadium | An action, a chip, a badge, the fronted half of a segment |
+| `wellRadius` | 2 | 2 | 7 | A value box, a text well, the colour swatch, the time readout |
+| `contentRadius` | 2 | 2 | 3 | Content on a lane: a layer bar, a clip, a cache run |
+| `roomed` | no | no | yes | Whether panes are cards on a room colour |
+| `pillInset` | 0 | 0 | 3 | The margin between a pill and the filled state inside it, and the amount the inner corner is smaller by |
+
+Desk's radii are all nought (an instrument's plates and wells are square), its `tileGap` and
+`windowInset` are 4 (the panels are plates in a chassis of the ground), and its buttons,
+dropdowns and wells are drawn as plates, underlined words and engraved recesses
+(docs/design-alt/15-DESIGN-DESK.md section 12, as built).
+| `sansFamily` | Hanken Grotesk | IBM Plex Sans | Hanken Grotesk | The face for words |
+| `monoFamily` | Geist Mono | IBM Plex Mono | Geist Mono | The face for machine output, and for the caps kicker |
+| `tabularNumbers` | no | yes | no | Whether every text style carries tabular figures |
+| `kickerTracking` | 1.08 | 0.36 | 1.08 | The kicker's tracking in logical pixels at 9px (+0.12em, +0.04em) |
+
+`stadium` is a sentinel (1000): a rounded rectangle clamps its radii to half its own height,
+so one number draws a capsule at every height.
+
+**Lantern's four radii and the pill each mean one thing**, and mixing them is a defect
+rather than a matter of taste: 16 is the card, 12 a section inside it, 7 a field or a button
+you press, 3 a thing sitting on a lane, and the pill an action or the fronted half of a set.
+A capsule value box reads as a button and gets pressed instead of typed into; a rounded-rect
+action reads as a field and does not get pressed.
+
+**The room.** `LumitTheme.room` is the ground Lantern's cards stand on. A dark scheme's
+default room is the light neutral `#d9d9d6`, the day room; a light scheme's own `surface_0`
+is its room, because a light canvas already is one. Settings, Appearance, Room chooses
+**Day** (the default) or **Night**, which puts the room at the scheme's `surface_0` so the
+cards stand a step above the canvas and gain a hairline edge inside their shadow. The row
+is offered only while the shape is Lantern; Studio and Desk carry the token and never draw
+it. The toolbar under Lantern stands in the room too (07 §1.7).
+
+### 12.1 What Lantern draws, control by control
+
+All of it is `ShapeTokens` reads and shape-conditional widget geometry; colours, strings,
+Studio and Desk are untouched by any line here.
+
+- **Pill actions, rounded fields.** An action button, a chip, a badge and the fronted half
+  of a segment are full capsules (`actionRadius` = stadium). A value box, a dropdown and an
+  icon button are rounded rectangles at 7 (`controlRadius`, `wellRadius`). The transport's
+  buttons sit together inside one pill on the Viewer bar, and that bar is a tile of its own
+  **below** the picture, parted from it by the tile gap with the room showing through, and
+  never laid over the frame; it stays inside the Viewer panel, so docking or moving the
+  panel carries it. Studio and Desk keep the bar welded to the panel's bottom edge.
+- **Filled-pill actives, labelled in `text_primary`.** The active tab, mode chip or
+  segmented option fills with `accent`, and its label is `text_primary`, the same ink the
+  filled action wears under Lantern (§7.1). Inactive stays ghost. State reads at a glance
+  from fill, not from text tint.
+- **A tab group is one card.** Its tabs sit as pills on the card's own title line; the
+  fronted tab is `surface_2`-filled with a `text_primary` label and carries no dot. The
+  card's title line carries one 6px accent dot at its left corner instead, decorative and
+  never a status light: it does not blink, fill or change colour. The docking container
+  has the hook for this, so no tab group is square-cornered under Lantern.
+- **A pane standing alone** draws no strip under Studio; under Desk it carries a 24px line
+  with its name as a lowercase label at the left; under Lantern it carries the card title
+  line, 36 tall (§12A.6), with the dot and the name centred as the kicker in `text_primary`.
+  The Viewer and the Timeline draw a header of their own under every shape and get no dock
+  title line.
+- **Dot slider thumbs.** `HouseSlider` draws a thin track with a round thumb on it, under
+  every shape, and only while the Range sliders setting is on (§12A.3). Under Desk the track
+  is a 2px `hairline_strong` rail with a small round `text_secondary` thumb and no fill
+  behind the travelled part.
+- **Bars at `contentRadius`.** Timeline layer bars and Sequence clips draw with a 3px
+  corner under Lantern and a 2px one under Desk; Studio draws them square on purpose,
+  whatever its token says. Keyframe diamonds are marks, not surfaces, and do not change.
+  The ruler, the playhead, the markers and the cache runs do change per shape; §12A.1 says
+  how.
+- **Under Studio a panel's tab is bare text.** The header strip's tabs are kickers on the
+  strip's own grey, no fill, no outline, no tick, and the fronted one is marked by its
   word brightening to `text_primary` while the rest stay `text_muted`, exactly as the
   mockups compute them. It had worn an accent outline, which spends the accent on a
   resting state and makes the one lit tab read as a button to press. This is the same
   ruling the composition tabs already carry (§12A.1): §3.1's "active tab tick" means the
-  workspace tabs, and nothing else. Round is untouched — its filled accent pill
-  says the same thing with the fill.
+  workspace tabs, and nothing else. Desk marks the fronted tab with a 2px accent index
+  under the word; Lantern's filled pill says the same thing with the fill.
+- **The house toggle's on colour is `animated` under every shape**, and the enable switch
+  on an effect heading under Lantern is the house toggle scaled into the 18px enable slot,
+  so it is `animated` there too, not the accent.
 
-Rejected cues, with the reasons: uppercase panel titles *as display text* (since the
-redesign panel titles are mono-caps kickers, §7.1 — a typographic pattern, not the
-reference's shouted sans headers) and the reference's light shell around dark cards (the
-dark-first surround rules of §2 and the neutral Viewer pasteboard are binding — an inverted
-shell is a different theme, not a shape).
+Uppercase panel titles *as display text* stay rejected: a Lantern card title is a kicker
+(§7.1), a typographic pattern, not a shouted sans header. The light shell around dark cards,
+rejected when Round was drawn as a different theme rather than a shape, is what the room is:
+it is a shape, because the cards keep the scheme's own ramp and the neutral Viewer stage,
+and only the ground between them changes.
 
 ## 12A. The redesigned resting state: timeline, graph, properties, dialogs
 
@@ -856,8 +956,9 @@ The 2026-08-23 redesign fixed the resting layout of the main surfaces. A set of
 approved mockups governs the exact panel layouts; the rules below are the ones binding enough
 to write down. The mockup sources land in the repository under `docs/redesign/mockups/` with
 the implementation programme's first phase; until then the approved set is held by the owner.
-**Sharp is the redesign's reference shape**: every rule here is designed and
-judged under Sharp first, and Round (§12) is revisited once the Sharp redesign has landed.
+**Studio is the redesign's reference shape**: every rule here is designed and
+judged under Studio first, and holds under Desk and Lantern (§12) except where a rule below
+says plainly what those two draw instead.
 
 ### 12A.1 Timeline
 
@@ -965,7 +1066,11 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
   playhead head sit near its top and the markers stand on its floor, but nothing is ruled
   across its waist. A **labelled** tick crosses that waist and carries on the same
   distance below it — 7px each way — which is what ties the clock to the markers where the
-  seam used to hold them apart; minor ticks still hang above the waist only. The
+  seam used to hold them apart; minor ticks still hang above the waist only. That is the
+  ladder Studio and Lantern draw. **Desk draws an engraved scale instead**: a tick every
+  four frames at 4, one every second at 8 and a labelled one at 14, all rising from the
+  waist into the upper half, labels at the top left of their tick, and none drawn closer
+  than 30px to its neighbour. The
   **work-area highlight sits on the ruler's second row**, and its **two drag handles run
   the ruler's whole height** (reversing part of the earlier ruling): a wash over the clock
   makes the numbers harder to read and says nothing the lower row was not already saying,
@@ -976,15 +1081,22 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
   than as the two things you take hold of. There is no hover step; the resize cursor is what
   the pointer changes. The tab is **4px wide with a 1px corner** — a rectangle with its
   corners taken off, never a pill — and it **tops out below the clock's labels** rather than
-  at the ruler's top (the owner's ruling from desktop testing). What the handle
-  *grabs* is unchanged: the ruler's whole height either side of the edge is still the edge's
+  at the ruler's top (a ruling from desktop testing). **Desk paints no band on
+  the ruler** (the dimmed ground outside the work area says it, below) and its tabs are
+  `hairline_strong`; **Lantern draws an `accent`-soft capsule** on the ruler's floor with
+  two round accent handles, 6 by 18. What the handle
+  *grabs* is unchanged in all three: the ruler's whole height either side of the edge is still the edge's
   to catch — and a press inside that reach **does not scrub**, so taking hold of an edge no
   longer drags the playhead to the pointer. The **double-click that gives the whole comp back** is the one
   gesture the waist still divides — below it clears the work area, above it makes a
   marker — because a comp nobody has narrowed has a work area of the whole comp, and a
   band-wide double-click would leave nowhere on the ruler to make a marker. A marker is an upward triangle sitting on the cache bar, half
   inside its backdrop pill and half outside to its left; the pill starts at the triangle's
-  point. **A marker that carries a duration draws a bar** running from its own frame for
+  point. **Under Lantern the marker is an 8px dot** on the ruler's floor with the same
+  `surface_4` pill; the footprint stays 8, so a marker stands on its frame under every
+  shape. **The playhead's head is the shape's**: Studio's 10 by 6 triangle on a hairline
+  stem, Desk's 11 by 8, and Lantern's 12px round accent head on a 2px pin, ringed inside
+  its edge in the lane ground so it reads over any ruler. **A marker that carries a duration draws a bar** running from its own frame for
   that long, on the same floor the flag stands on and hushed under it: the flag is what is
   read and aimed at, and a span at full strength read as a second work-area band. The bar
   takes no gestures — a span has no editing control yet, and one that could be grabbed but
@@ -994,15 +1106,24 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
 - **The cache bar is drawn on the ruler's floor, coloured by resolution tier** (§6.3) —
   on the work-area band's own row, inside the ruler's height (§12A.6's table), not as a
   strip of its own beneath it. The band paints behind it; the marker flags stand on it.
+  It is **3 tall under Studio and 4 under Desk and Lantern** (`DensityTokens.cacheBar`),
+  and **Lantern draws each run as a rounded rect with a 2px gap** before the next; Studio
+  and Desk draw the runs butted.
 - **A few pixels of padding sit either side of the ruler** in every timeline mode, so a
   keyframe or work-area handle on the first or last frame stays visible and grabbable.
 - **The work area is one band** in `animated`, from the ruler's handles down through the
-  lanes, drawn behind the cache bar.
+  lanes, drawn behind the cache bar. That is Studio. **Under Desk the ruler carries no
+  band**: the lane ground outside the work area steps darker (`timeline_out_of_range`),
+  and the undimmed part is the work area. **Under Lantern the band is the `accent`**,
+  not `animated`, at 18% through the lanes and as the capsule on the ruler.
 - **Trimmed layers keep a faint outline of the full source extent**, showing how far each
   end can still be extended; clips inside a Sequence layer get the same per clip.
 - **Layer bars (and the clips inside a Sequence layer) fill desaturated with a solid
   leading edge**, so a lane full of layers reads organised rather than carnival, and each
-  bar's start still lands with a snap.
+  bar's start still lands with a snap. **Selected bars brighten that fill** under every
+  shape; **Desk adds a 1px `accent` outline** on the bar and **Lantern a 2px `accent` ring**
+  standing outside it, drawn behind the bar. The hit rect stays the bar's own rectangle in
+  all three, and the corner is `contentRadius` (§12.1).
 - **A bar carries no layer name unless the user asks for one.** The mockups write
   the name along every bar; on a real comp that is the outline's own column of names said
   a second time a few pixels to the right. `Settings ▸ Interface ▸ Panels ▸ Layer names on
@@ -1017,7 +1138,11 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
   first time); a tooltip carries the word either way.
 - **The zoom slider and the magnet lead the lane bottom bar in every view**: they
   are the one run it carries whatever the panel shows, so they sit at the left edge of the
-  lane area in Layers and in Graph alike.
+  lane area in Layers and in Graph alike. **Under Desk the zoom is a dial**: a disc with a
+  tick ring engraved round it and one index, turned by dragging round its centre over a
+  three-quarter turn, writing the same logarithmic position the slider does, with a
+  readout beside it saying what one tick of the engraved ruler is worth (`1 tick = 4 f`).
+  One control, drawn two ways.
 - **The lane bar carries nothing else**: the zoom, the magnet and the horizontal
   scrollbar. Each mode's own commands — the Layers keyframe strip, the graph's eases,
   tangents, lens pair and Auto fit — stand at the **outline's foot** instead, left of the
@@ -1130,7 +1255,17 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
   traversal), and the field's content arrives selected so typing replaces it outright.
   The hop cycles within the panel. This is a binding behaviour of every value field, not
   a styling note.
-- The stopwatch is **square under Sharp**.
+- The stopwatch is **square under Studio and Desk**.
+- **The range slider is a setting.** A Slider parameter, one whose whole meaning lives
+  inside a range, draws a track and thumb beside its number (07 §6) **only while Settings,
+  Appearance, Range sliders is on**; on is the default. Off, the number stands alone and
+  the row is as wide as every other row. It is machine-local and it binds every shape: a
+  person who types and scrubs never touches a track and pays for it on every ranged row,
+  and a person shaping a wipe wants it under the hand, so neither is the default for the
+  other and changing the shape never changes it.
+- **Every effect parameter row ends in a muted reset arrow** (key `fx-reset-<effect>-<param>`)
+  that writes the parameter's schema default as one op, exactly as the heading's Reset does
+  for the whole card. Action rows and the transform rows carry none. Drawn at every shape.
 - **Vector pairs are two equal wells with a link glyph between them.** **Shipped:** which
   parameters *are* a pair comes from the declaration (`list_pairs`), and which pairs are
   **chained** is remembered on the effect instance — empty means every pair separate, which
@@ -1409,6 +1544,22 @@ own reading at the far end. The setting that gathers everything into a single ba
 top or the bottom (Appearance → Viewer → Viewer bars), keeps each strip's own order
 within whichever arrangement is set ([07-UI-SPEC.md](07-UI-SPEC.md) §2.2).
 
+**The fourth arrangement is the deck.** Under Deck the ways of looking stand in the bar
+above the picture, and everything about *playing* stands in a strip under it: the five
+transport marks, the clock with the **frame count** beside it (`F48/250`), a **preview
+mode** picker and a **quality** picker as two separate dropdowns, the **cache-ready
+meter** (a 54 by 6 rounded meter with its figure, the share of the work area the cache
+holds), and the preview progress bar at the right. The upper bar drops its quality menu
+under Deck, because the deck owns both of that menu's answers. Loop mode and audio mute
+are not on the deck yet; they arrive with the engine step that carries them. **The deck's
+height is the header strip's** under Studio (22) and Lantern (36) and **a fixed 32 under
+Desk**, whose header strip is 24; **the clock is 15px** under Desk and Lantern, the one
+large number in the application, and stays the bar's 11 under Studio. Under Lantern the
+transport is one `surface_3` pill on the `surface_2` strip, with a 34px accent play
+capsule at its centre and the four marks either side; a `surface_2` pill would vanish
+against its ground. Below 620 the deck stops spreading and slides sideways; nothing is
+shed, and the transport, first on the row, is what a narrow deck keeps.
+
 **The bars' own measurements**, all the drawing's: glyphs at **14**, gaps of **8**
 between the marks and **10** inside the transport, **10** of padding either end of both
 strips, a seam of **1×12** in `hairline`, pickers of **18** with a 10px label standing
@@ -1461,6 +1612,34 @@ someone who would rather see four more layers than the air between them. Where t
 columns agree there is nothing to choose: that row measures the same either way, and it is
 a plain constant in the code rather than a token with two equal values.
 
+**The table below is Studio's.** Every row that varies by shape is a `DensityTokens`
+field, and `DensityTokens.forShape(shape, compact)` hands each shape its own pair: Studio's
+`regular` and `compact` are the two columns below; Desk's pair sits on the four-pixel
+module; Lantern's keeps the surveyed rows under a 28 row pitch (26 drawn and a 2px gap, so
+no seam is ruled between rows) and a 36 card title line. The panel title strip, the cache
+bar, the navigator band and the scrollbar are density tokens read per shape, no longer
+file-level statics. What the three shapes state:
+
+| Token | Studio | Studio compact | Desk | Desk compact | Lantern | Lantern compact |
+|---|---|---|---|---|---|---|
+| `laneRow` | 23 | 22 | 24 | 20 | 28 | 28 |
+| `secondaryRow` | 19 | 18 | 20 | 20 | 19 | 18 |
+| `timelineChromeRow` | 24 | 18 | 24 | 24 | 24 | 18 |
+| `timelineHeaderRow` | 23 | 18 | 24 | 24 | 23 | 18 |
+| `timelineChromeControl` | 20 | sizes itself | 20 | 20 | 20 | sizes itself |
+| `inRowPicker` | 18 | 16 | 16 | 16 | 18 | 16 |
+| `dropdownFace` | 20 | 18 | 20 | 20 | 20 | 18 |
+| `propertyRow` | 27 | 26 | 28 | 24 | 27 | 26 |
+| `headerStrip` | 22 | 22 | 24 | 24 | 36 | 36 |
+| `cacheBar` | 3 | 3 | 4 | 4 | 4 | 4 |
+| `navigatorBand` | 12 | 12 | 16 | 16 | 12 | 12 |
+| `scrollbar` | 7 | 7 | 8 | 8 | 7 | 7 |
+| `menuBar` | 26 | 26 | 28 | 28 | 40 | 40 |
+| ruler, derived: the two chrome rows | 47 | 36 | 48 | 48 | 47 | 36 |
+
+Desk's compact drops the row and the property row one module each and moves nothing else.
+Lantern's compact is the surveyed compact set under the same pitch and title line.
+
 | Element | Regular | Compact |
 |---|---|---|
 | Panel header strip (title and tabs, composition tabs, the Viewer's own) | 22 | 22 |
@@ -1471,7 +1650,7 @@ a plain constant in the code rather than a token with two equal values.
 | Timeline chrome row 2 — column headers, and the Keys and Graph filter rows | 23 | 18 |
 | A control standing in either Timeline chrome row — tab, search well, readout | 20 | (sizes itself) |
 | Outline and lane rows | 23 | 22 |
-| Clip bars within a lane row | 16 | 16 |
+| Clip bars within a lane row (18 under Lantern, in its 28 row) | 16 | 16 |
 | In-row pickers (the Timeline's matte, blend and parent cells), label at 10px | 18 | 16 |
 | Dropdown closed face elsewhere in a panel or a bar | 20 | 18 |
 | Property and effect-parameter rows | 27 | 26 |
@@ -1544,8 +1723,8 @@ Against the **11px** mark a property's own lane draws in both Layers and Keys), 
 above the ruler's waist **and 7 below it** (the tick crosses the waist now that
 nothing is drawn along it) against a minor tick's **4** above only, a Keys layer band
 draws its layer's bar behind the keys at **0.15** of the label colour, and under
-Sharp a bar's ends are **square** — the stadium ends are Round's, and are the whole of
-that shape's difference here.
+Studio a bar's ends are **square**; Desk's carry a 2px corner and Lantern's a 3px one
+(`contentRadius`, §12.1), and that is the whole of those shapes' difference here.
 
 **When width runs out, things give way in this order** — earlier steps must be exhausted
 before later ones, and nothing ever paints outside its box:

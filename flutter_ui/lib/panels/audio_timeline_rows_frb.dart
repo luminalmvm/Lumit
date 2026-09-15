@@ -515,7 +515,7 @@ class AudioTrackHeaderRow extends StatelessWidget {
             {AlignmentGeometry align = Alignment.centerLeft}) =>
         Align(
           alignment: align,
-          child: Text(text.toUpperCase(),
+          child: Text(t.kickerCase(text),
               style: t.kicker, maxLines: 1, overflow: TextOverflow.ellipsis),
         );
     return Container(

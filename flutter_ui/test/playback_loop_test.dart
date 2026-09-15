@@ -100,4 +100,36 @@ void clockFrameTests() {
       105,
     );
   });
+
+  test('a reverse leg counts down and holds at the far end', () {
+    // Ping-pong's backward leg: the same count, the other way.
+    expect(
+      clockFrame(
+          anchorFrame: 50,
+          sinceAnchorMicros: 100000,
+          fps: 25,
+          end: 40,
+          reverse: true),
+      48,
+    );
+    expect(
+      clockFrame(
+          anchorFrame: 42,
+          sinceAnchorMicros: 1000000,
+          fps: 25,
+          end: 40,
+          reverse: true),
+      40,
+    );
+    // Anchored below the far end, it stays where it is.
+    expect(
+      clockFrame(
+          anchorFrame: 35,
+          sinceAnchorMicros: 1000000,
+          fps: 25,
+          end: 40,
+          reverse: true),
+      35,
+    );
+  });
 }

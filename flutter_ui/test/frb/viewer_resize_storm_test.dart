@@ -97,7 +97,7 @@ void main() {
       ];
       for (final width in widths) {
         await tester.pumpWidget(
-          host(p, width: width, shape: ThemeShape.sharp),
+          host(p, width: width, shape: ThemeShape.studio),
         );
         await tester.pump(const Duration(milliseconds: 16));
         expect(tester.takeException(), isNull,

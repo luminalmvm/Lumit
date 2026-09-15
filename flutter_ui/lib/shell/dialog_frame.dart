@@ -56,9 +56,9 @@ const double dialogPadding = 14;
 const double dialogControlHeight = 22;
 
 /// A titled group: a hairline box with its kicker notched into the top edge,
-/// and the air between two of them.
+/// and the air between two of them. The box's corner is the shape's
+/// `sectionRadius`.
 const double dialogGroupGap = 10;
-const double dialogGroupRadius = 2;
 
 /// The factual mono lines — the footer's summary, a group's own reading.
 const double dialogMonoSize = 10;
@@ -123,67 +123,98 @@ class DialogFrame extends StatelessWidget {
 /// close mark. So the mark drifted inward by half of whatever the name did not
 /// need and only reached the corner when the name was long enough to fill its
 /// share. One flexible child cannot do that.
+///
+/// A shape whose titles sit centred (Lantern) puts the name and the subject
+/// in the middle of the strip with the header dot before them, and the close
+/// mark stays in its corner.
 Widget dialogTitleBar(
   LumitTheme t, {
   required String title,
   String subject = '',
   required VoidCallback onClose,
   required String keyPrefix,
-}) =>
-    Container(
-      key: ValueKey<String>('$keyPrefix-title-strip'),
-      height: dialogTitleStrip + 1,
-      decoration: BoxDecoration(
-        color: t.surface2,
-        border: Border(bottom: BorderSide(color: t.hairline)),
-      ),
-      // 14 either side, as the drawing computes it — the mark's own inset from
-      // the corner is the strip's, not a smaller one of its own.
-      padding: const EdgeInsets.symmetric(horizontal: dialogPadding),
-      child: Row(
-        children: [
-          Text(title.toUpperCase(), style: t.kickerOn),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.only(left: 10),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  subject,
-                  style: t.body.copyWith(color: t.textMuted),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ),
+}) {
+  final name = Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      if (t.tokens.headerDot)
+        Container(
+          key: ValueKey<String>('$keyPrefix-title-dot'),
+          width: 6,
+          height: 6,
+          margin: const EdgeInsets.only(right: 6),
+          decoration: BoxDecoration(color: t.accent, shape: BoxShape.circle),
+        ),
+      Text(t.kickerCase(title), style: t.kickerOn),
+    ],
+  );
+  final about = Padding(
+    padding: const EdgeInsets.only(left: 10),
+    child: Text(
+      subject,
+      style: t.body.copyWith(color: t.textMuted),
+      overflow: TextOverflow.ellipsis,
+    ),
+  );
+  final close = LumitTooltip(
+    message: l10n.close,
+    child: GestureDetector(
+      key: ValueKey<String>('$keyPrefix-close'),
+      behavior: HitTestBehavior.opaque,
+      onTap: onClose,
+      child: SizedBox(
+        // The mark is 12 wide at the drawing's inset; the extra 8 of
+        // target hangs to its *left*, into the strip rather than into
+        // the corner, so a comfortable click area costs the glyph no
+        // part of the position the drawing gives it.
+        width: dialogCloseGlyph + 8,
+        height: dialogTitleStrip,
+        child: Align(
+          alignment: Alignment.centerRight,
+          child: glyph.LumitIcon(
+            LumitIcons.close,
+            size: dialogCloseGlyph,
+            colour: t.textMuted,
+            semanticLabel: l10n.close,
           ),
-          LumitTooltip(
-            message: l10n.close,
-            child: GestureDetector(
-              key: ValueKey<String>('$keyPrefix-close'),
-              behavior: HitTestBehavior.opaque,
-              onTap: onClose,
-              child: SizedBox(
-                // The mark is 12 wide at the drawing's inset; the extra 8 of
-                // target hangs to its *left*, into the strip rather than into
-                // the corner, so a comfortable click area costs the glyph no
-                // part of the position the drawing gives it.
-                width: dialogCloseGlyph + 8,
-                height: dialogTitleStrip,
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: glyph.LumitIcon(
-                    LumitIcons.close,
-                    size: dialogCloseGlyph,
-                    colour: t.textMuted,
-                    semanticLabel: l10n.close,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
-    );
+    ),
+  );
+  return Container(
+    key: ValueKey<String>('$keyPrefix-title-strip'),
+    height: dialogTitleStrip + 1,
+    decoration: BoxDecoration(
+      color: t.surface2,
+      border: Border(bottom: BorderSide(color: t.hairline)),
+    ),
+    // 14 either side, as the drawing computes it: the mark's own inset from
+    // the corner is the strip's, not a smaller one of its own.
+    padding: const EdgeInsets.symmetric(horizontal: dialogPadding),
+    child: t.tokens.titleCentred
+        ? Stack(
+            alignment: Alignment.center,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  name,
+                  if (subject.isNotEmpty) Flexible(child: about),
+                ],
+              ),
+              Align(alignment: Alignment.centerRight, child: close),
+            ],
+          )
+        : Row(
+            children: [
+              name,
+              Expanded(
+                  child: Align(alignment: Alignment.centerLeft, child: about)),
+              close,
+            ],
+          ),
+  );
+}
 
 /// The page-tab row: kickers in a line, the one in force in the bright colour
 /// over an accent rule — §3.1's one job for the accent in a list of names.
@@ -223,7 +254,7 @@ Widget dialogTabs<T>(
                   ),
                 ),
                 child: Text(
-                  label.toUpperCase(),
+                  t.kickerCase(label),
                   style: page == current ? t.kickerOn : t.kicker,
                 ),
               ),
@@ -264,7 +295,7 @@ Widget dialogGroup(
           Container(
             decoration: BoxDecoration(
               border: Border.all(color: highlighted ? t.accent : t.hairline),
-              borderRadius: BorderRadius.circular(dialogGroupRadius),
+              borderRadius: BorderRadius.circular(t.tokens.sectionRadius),
             ),
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
             child: IgnorePointer(
@@ -284,7 +315,7 @@ Widget dialogGroup(
             child: Container(
               color: t.surface1,
               padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Text(title.toUpperCase(),
+              child: Text(t.kickerCase(title),
                   style: t.kicker.copyWith(
                       color: dimmed ? t.textDisabled : t.textSecondary)),
             ),

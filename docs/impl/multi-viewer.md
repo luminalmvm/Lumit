@@ -195,7 +195,7 @@ per Viewer today. Three calls carry the view id, because those three are what de
 a view is showing:
 
 - `CompositionReference::render_frame(frame, scale, mode, prefix, view)`
-- `CompositionReference::play(from, scale, mode, view)`
+- `CompositionReference::play(from, scale, mode, view, reverse)`
 - `CompositionReference::set_viewer_look(..., view)`
 
 and `sample_pixels` takes it too, so a dropper read names the picture it is reading.

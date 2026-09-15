@@ -25,7 +25,7 @@ void main() {
   setUpAll(initEngineForTests);
 
   group('Project panel metrics (frb)', () {
-    final theme = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.sharp);
+    final theme = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio);
 
     /// A project with a comp (filed under its auto-folder) and one clip.
     ({LumitState state, LumitUiState uiState, String compId}) withItems() {

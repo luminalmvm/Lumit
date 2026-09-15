@@ -420,6 +420,22 @@ void main() {
           reason: 'and never leaves the closed range');
     });
 
+    testWidgets('with range sliders off the number stands alone',
+        (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'linear_wipe');
+      p.uiState.workspace.interface.rangeSliders = false;
+      await mount(tester, p);
+      final id = p.layer.getEffects().single.id();
+
+      expect(find.byKey(ValueKey<String>('fx-slider-$id-completion')),
+          findsNothing,
+          reason: 'the setting takes the track away');
+      expect(find.byKey(ValueKey<String>('fx-float-$id-completion')),
+          findsOneWidget,
+          reason: 'and leaves the number, still typable and keyframable');
+    });
+
     /// The other half of "the kind is the control, not the storage":
     /// a closed range can still be driven by an expression, which means the
     /// number beside the track must offer the same menu entry the plain float

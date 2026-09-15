@@ -94,7 +94,7 @@ class _SelectedKey extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
             child: Row(
               children: [
-                Text(l10n.graphKeyKicker.toUpperCase(), style: t.kicker),
+                Text(t.kickerCase(l10n.graphKeyKicker), style: t.kicker),
                 const SizedBox(width: 8),
                 Text(l10n.graphKeyFrame(claim.frame),
                     style: t.mono.copyWith(fontSize: 10, color: t.textPrimary)),

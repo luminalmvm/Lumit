@@ -134,7 +134,7 @@ class TextAnimatorRowsFrb extends StatelessWidget {
     return [
       fxTwoColumnRow(
         context: context,
-        name: Text(a.name.toUpperCase(),
+        name: Text(t.kickerCase(a.name),
             style: t.kickerOn, overflow: TextOverflow.ellipsis),
         control: HouseButton(
           key: ValueKey<String>('text-animator-remove-$index'),
@@ -150,14 +150,29 @@ class TextAnimatorRowsFrb extends StatelessWidget {
       // The range: which letters this animator reaches, in per cent of the
       // words. Offset is the one a cascade is keyed on, which is why it is a
       // number of its own rather than something the two ends share.
-      _numberRow(context, l10n.textAnimatorRangeStart, 'range-start-$index',
-          [a.selector.start], -1000, 1000,
+      _numberRow(
+          context,
+          l10n.textAnimatorRangeStart,
+          'range-start-$index',
+          [a.selector.start],
+          -1000,
+          1000,
           (s) => putSelector(selectorWith(a.selector, start: s.first))),
-      _numberRow(context, l10n.textAnimatorRangeEnd, 'range-end-$index',
-          [a.selector.end], -1000, 1000,
+      _numberRow(
+          context,
+          l10n.textAnimatorRangeEnd,
+          'range-end-$index',
+          [a.selector.end],
+          -1000,
+          1000,
           (s) => putSelector(selectorWith(a.selector, end: s.first))),
-      _numberRow(context, l10n.textAnimatorRangeOffset, 'range-offset-$index',
-          [a.selector.offset], -1000, 1000,
+      _numberRow(
+          context,
+          l10n.textAnimatorRangeOffset,
+          'range-offset-$index',
+          [a.selector.offset],
+          -1000,
+          1000,
           (s) => putSelector(selectorWith(a.selector, offset: s.first))),
       _plainRow(
         context,
@@ -187,24 +202,43 @@ class TextAnimatorRowsFrb extends StatelessWidget {
           onChanged: (s) => putSelector(selectorWith(a.selector, shape: s)),
         ),
       ),
-      _numberRow(context, l10n.transformPosition, 'anim-position-$index',
-          [a.positionX, a.positionY], -100000, 100000,
+      _numberRow(
+          context,
+          l10n.transformPosition,
+          'anim-position-$index',
+          [a.positionX, a.positionY],
+          -100000,
+          100000,
           (s) => put(animatorWith(a, positionX: s[0], positionY: s[1]))),
-      _numberRow(context, l10n.transformRotation, 'anim-rotation-$index',
-          [a.rotation], -100000, 100000,
+      _numberRow(
+          context,
+          l10n.transformRotation,
+          'anim-rotation-$index',
+          [a.rotation],
+          -100000,
+          100000,
           (s) => put(animatorWith(a, rotation: s.first))),
-      _numberRow(context, l10n.transformScale, 'anim-scale-$index',
-          [a.scaleX, a.scaleY], -10000, 10000,
+      _numberRow(
+          context,
+          l10n.transformScale,
+          'anim-scale-$index',
+          [a.scaleX, a.scaleY],
+          -10000,
+          10000,
           (s) => put(animatorWith(a, scaleX: s[0], scaleY: s[1]))),
       _numberRow(context, l10n.transformOpacity, 'anim-opacity-$index',
-          [a.opacity], 0, 100,
-          (s) => put(animatorWith(a, opacity: s.first))),
+          [a.opacity], 0, 100, (s) => put(animatorWith(a, opacity: s.first))),
       // A fill **offset**, added to the layer's own colour in scene-linear —
       // so it can be negative, and so two animators tinting the same letter
       // add up. That is why it is three numbers rather than a swatch: a
       // colour picker has no way to say "a bit less red than the layer".
-      _numberRow(context, l10n.textAnimatorFillOffset, 'anim-fill-$index',
-          [a.fillR, a.fillG, a.fillB], -10, 10,
+      _numberRow(
+          context,
+          l10n.textAnimatorFillOffset,
+          'anim-fill-$index',
+          [a.fillR, a.fillG, a.fillB],
+          -10,
+          10,
           (s) => put(animatorWith(a, fillR: s[0], fillG: s[1], fillB: s[2]))),
     ];
   }
@@ -252,7 +286,8 @@ class TextAnimatorRowsFrb extends StatelessWidget {
     // interpolation living in the view.
     double shown(BridgeScalar s) => switch (s) {
           BridgeScalar_Static(:final field0) => field0,
-          BridgeScalar_Keyframed() || BridgeScalar_Expression() =>
+          BridgeScalar_Keyframed() ||
+          BridgeScalar_Expression() =>
             sampledScalar(s, timeOfFrame(comp, at)),
         };
     void commit(int axis, num value) => write([

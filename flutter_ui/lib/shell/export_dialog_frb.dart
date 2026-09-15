@@ -2040,7 +2040,7 @@ class _ExportDialogState extends State<_ExportDialog> {
         decoration: BoxDecoration(
           color: t.surface0,
           border: Border.all(color: t.hairline),
-          borderRadius: BorderRadius.circular(dialogGroupRadius),
+          borderRadius: BorderRadius.circular(t.tokens.sectionRadius),
         ),
         child: Text(
           text,
@@ -2069,18 +2069,16 @@ class _ExportDialogState extends State<_ExportDialog> {
         margin: const EdgeInsets.only(right: dialogTabGap),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(dialogGroupRadius),
+          borderRadius: BorderRadius.circular(t.tokens.sectionRadius),
           border: Border.all(
               color: on ? t.hairlineStrong : const Color(0x00000000)),
         ),
         child: Text(
-          switch (type) {
-            ExportOutputType.video => l10n.exportTypeVideo.toUpperCase(),
-            ExportOutputType.imageSequence =>
-              l10n.exportTypeImageSequence.toUpperCase(),
-            ExportOutputType.audioOnly =>
-              l10n.exportTypeAudioOnly.toUpperCase(),
-          },
+          t.kickerCase(switch (type) {
+            ExportOutputType.video => l10n.exportTypeVideo,
+            ExportOutputType.imageSequence => l10n.exportTypeImageSequence,
+            ExportOutputType.audioOnly => l10n.exportTypeAudioOnly,
+          }),
           style: on ? t.kickerOn : t.kicker,
         ),
       ),

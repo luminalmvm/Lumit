@@ -2273,6 +2273,11 @@ impl CompositionReference {
     ///
     /// `mode` comes from the frontend because it is a user *setting*, kept in the
     /// workspace file the frontend owns — stating it is not deciding anything.
+    ///
+    /// `reverse` plays the leg backwards from `from` to frame zero, silent:
+    /// the loop modes are the frontend's, and a ping-pong asks for every
+    /// other leg reversed. The frame given is shown first in both directions,
+    /// so a ping-pong turns at the end minus one.
     #[frb(sync)]
     pub fn play(
         &self,
@@ -2280,25 +2285,34 @@ impl CompositionReference {
         scale: f32,
         mode: BridgePlaybackMode,
         view: u32,
+        reverse: bool,
     ) -> Result<(), BridgeError> {
-        // The mix's document is snapshotted HERE — it must be the comp as it
-        // was when play was pressed — but the sound is started by the worker,
-        // once it has banked a frame or two to start alongside it (the
-        // pre-roll, docs/impl/playback-scheduler.md §5). Starting it here meant
-        // the sound ran while the first frame was still being composited, and
-        // adaptive playback then skipped to catch up: every press of play began
-        // with a jump.
-        let audio = {
-            let state = self.project()?;
-            let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
-            state.store.snapshot()
+        let audio = if reverse {
+            // The forward leg's mix is still running: stop it, and give the
+            // worker nothing to start.
+            crate::api::audio::audio_pause();
+            None
+        } else {
+            // The mix's document is snapshotted HERE, it must be the comp as it
+            // was when play was pressed, but the sound is started by the worker,
+            // once it has banked a frame or two to start alongside it (the
+            // pre-roll, docs/impl/playback-scheduler.md §5). Starting it here meant
+            // the sound ran while the first frame was still being composited, and
+            // adaptive playback then skipped to catch up: every press of play began
+            // with a jump.
+            let audio = {
+                let state = self.project()?;
+                let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
+                state.store.snapshot()
+            };
+            // Building the mix means decoding, which is slow and asynchronous, so it
+            // is kicked off HERE rather than after the pre-roll: the decode then
+            // overlaps the first renders instead of following them. Only the "now
+            // play" waits. A prepare of a mix already loaded is recognised by its
+            // signature and costs nothing.
+            self.audio_prepare()?;
+            Some(audio)
         };
-        // Building the mix means decoding, which is slow and asynchronous, so it
-        // is kicked off HERE rather than after the pre-roll: the decode then
-        // overlaps the first renders instead of following them. Only the "now
-        // play" waits. A prepare of a mix already loaded is recognised by its
-        // signature and costs nothing.
-        self.audio_prepare()?;
 
         self.dispatch(WorkerRequest::Play(
             crate::api::worker_thread::PlayRequest {
@@ -2306,6 +2320,7 @@ impl CompositionReference {
                 from,
                 mode,
                 scale,
+                reverse,
                 audio,
                 view,
             },

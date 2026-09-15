@@ -12,6 +12,15 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 /// Pause. The clock holds its position, so play resumes from here.
 void audioPause() => BridgeLib.instance.api.crateApiAudioAudioPause();
 
+/// The monitor mute: the device is handed silence while the mix, its clock
+/// and the meters carry on. Not document data, so it neither saves into the
+/// project nor silences an export, and it survives a change of output.
+void audioSetMuted({required bool muted}) =>
+    BridgeLib.instance.api.crateApiAudioAudioSetMuted(muted: muted);
+
+/// Whether the monitor is muted.
+bool audioMuted() => BridgeLib.instance.api.crateApiAudioAudioMuted();
+
 /// Move the clock to `secs` — a scrub. The play state is untouched, so
 /// scrubbing while playing keeps playing.
 void audioSeek({required double secs}) =>

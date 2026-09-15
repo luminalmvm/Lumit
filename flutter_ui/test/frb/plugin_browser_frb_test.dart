@@ -357,7 +357,7 @@ void main() {
       await tester.pumpWidget(Directionality(
         textDirection: TextDirection.ltr,
         child: ThemeScope(
-          theme: LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.sharp),
+          theme: LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio),
           animationLevel: AnimationLevel.none,
           showTooltips: false,
           child: Builder(

@@ -54,7 +54,8 @@ void main() {
     // because the scrolling claims need a viewport shorter than the stack.
     Future<void> mount(WidgetTester tester, dynamic p,
         {double height = 600,
-        DensityTokens density = DensityTokens.regular}) async {
+        DensityTokens density = DensityTokens.regular,
+        ThemeShape shape = ThemeShape.studio}) async {
       tester.view.physicalSize = Size(1280, height);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -64,6 +65,7 @@ void main() {
         uiState: p.uiState as LumitUiState,
         size: Size(1280, height),
         density: density,
+        shape: shape,
       ));
       await tester.pump();
     }
@@ -1578,6 +1580,63 @@ void main() {
       await wheel(tester, laneBar(tester, probe).center, -120);
       levelWherever('after scrolling again');
     });
+
+    /// The same table under each shape: every chrome row at the shape's own
+    /// density, the cache bar on the ruler's floor at its own height, and a
+    /// marker standing on it. The Studio claims above stay literal; this
+    /// group reads the tokens, so a shape that moves a number cannot move a
+    /// row away from its bar.
+    for (final shape in ThemeShape.values) {
+      testWidgets('the chrome rows stand at the density under $shape',
+          (tester) async {
+        final p = withComp();
+        final layer = p.comp.addAdjustmentLayer();
+        addMarkerFrb(p.comp, frame: 40, label: 'Chorus');
+        p.uiState.model.refresh();
+        final d = DensityTokens.forShape(shape, false);
+        await mount(tester, p, density: d, shape: shape);
+
+        final ruler = tester.getRect(find.byKey(const ValueKey('tl-ruler')));
+        final cache = tester.getRect(find.byType(TimelineCacheBar).first);
+        expect(ruler.height, closeTo(d.ruler, 0.5),
+            reason: 'the ruler band is the two chrome rows');
+        expect(cache.height, closeTo(d.cacheBar, 0.5),
+            reason: 'the cache bar is the density\'s');
+        expect(cache.bottom, closeTo(ruler.bottom, 0.5),
+            reason: 'and it sits on the ruler floor');
+        final flag = tester.getRect(find.byKey(
+            ValueKey<String>('tl-marker-${markersOf(p.comp).single.id}')));
+        expect(flag.bottom, closeTo(cache.top, 0.5),
+            reason: 'the marker stands on the cache bar');
+
+        final strip =
+            tester.getRect(find.byKey(const ValueKey('tl-navigator')));
+        final toolbar =
+            tester.getRect(find.byKey(const ValueKey('tl-toolbar')));
+        expect(strip.height, closeTo(d.navigatorBand - 1, 0.5),
+            reason: 'the navigator stands in its band, over its hairline');
+        expect(toolbar.height,
+            closeTo(d.timelineChromeRow + d.navigatorBand, 0.5),
+            reason: 'the toolbar row fills the band beside it');
+        expect(ruler.top - strip.top, closeTo(d.navigatorBand, 0.5));
+        expect(outlineRow(tester, layer).top - ruler.top,
+            closeTo(d.ruler, 0.5),
+            reason: 'the first row starts under the ruler');
+        expect(outlineRow(tester, layer).height, closeTo(d.laneRow, 0.5));
+        expect(laneBar(tester, layer).height, closeTo(d.laneRow, 0.5));
+        expect(tester.getRect(find.byType(CompTabsFrb)).height,
+            closeTo(
+                shape == ThemeShape.lantern ? lanternTimelineLine : d.headerStrip,
+                0.5),
+            reason: 'the panel header strip is the density\'s, or Lantern\'s '
+                'own 28 line');
+        expect(
+            tester
+                .getRect(find.byKey(const ValueKey('tl-lane-bottom-bar')))
+                .height,
+            closeTo(d.secondaryRow, 0.5));
+      });
+    }
   });
 }
 

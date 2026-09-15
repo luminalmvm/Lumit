@@ -180,7 +180,7 @@ Widget projectColumnHeader(
         children: [
           // Name is the flexible slot, and what it is left with is
           // [projectNameColumn] — see [ProjectColumns.laidOutWidth].
-          Expanded(child: Text(l10n.name.toUpperCase(), style: t.kicker)),
+          Expanded(child: Text(t.kickerCase(l10n.name), style: t.kicker)),
           ...cols.cells(
             seam: (before) => _ColumnSeam(
               key: ValueKey<String>(
@@ -192,10 +192,10 @@ Widget projectColumnHeader(
                   ? null
                   : (delta) => onResize(_leftOf(cols, before), delta),
             ),
-            items: l10n.projectColumnItems.toUpperCase(),
-            size: l10n.projectColumnSize.toUpperCase(),
-            fps: l10n.unitFps.toUpperCase(),
-            path: l10n.projectColumnPath.toUpperCase(),
+            items: t.kickerCase(l10n.projectColumnItems),
+            size: t.kickerCase(l10n.projectColumnSize),
+            fps: t.kickerCase(l10n.unitFps),
+            path: t.kickerCase(l10n.projectColumnPath),
             style: t.kicker,
             // The heading is as quiet as its column: Path is context, not a
             // fact about the item, and the mockup hushes both together.
@@ -260,11 +260,16 @@ Widget projectHueSquare(LumitTheme t, {required double size}) => ClipRRect(
       child: SizedBox(
         width: size,
         height: size,
+        // Stretched both ways: a childless box flexed in a row is as tall as
+        // the row lets it be, which with the default centring is nothing at
+        // all, and the square was blank on screen.
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             for (var row = 0; row < 2; row++)
               Expanded(
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     for (var col = 0; col < 2; col++)
                       Expanded(
@@ -487,7 +492,7 @@ Widget projectFooter(
                     if (labels) ...[
                       const SizedBox(width: _footerIconGap),
                       Text(
-                        l10n.projectFooterProxies.toUpperCase(),
+                        t.kickerCase(l10n.projectFooterProxies),
                         style: t.kicker.copyWith(
                             letterSpacing: _footerLabelTracking, color: ink),
                       ),
@@ -543,25 +548,34 @@ Widget _footerAction(
   // already the mockup's own is what a shed word leaves behind.
   required String? label,
   required VoidCallback onPressed,
-}) =>
-    GestureDetector(
-      key: key,
-      behavior: HitTestBehavior.opaque,
-      onTap: onPressed,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          lumitIcon(icon, size: projectFooterIconSize, color: t.textMuted),
-          if (label != null) ...[
-            const SizedBox(width: _footerIconGap),
-            Text(
-              label.toUpperCase(),
-              style: t.kicker.copyWith(letterSpacing: _footerLabelTracking),
-            ),
-          ],
-        ],
+}) {
+  final body = Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      lumitIcon(icon, size: projectFooterIconSize, color: t.textMuted),
+      if (label != null) ...[
+        const SizedBox(width: _footerIconGap),
+        Text(
+          t.kickerCase(label),
+          style: t.kicker.copyWith(letterSpacing: _footerLabelTracking),
+        ),
+      ],
+    ],
+  );
+  // Studio and Desk draw the bare glyph and word on the bar; Lantern's
+  // bottom line carries them as ghost pills, which is the house button's
+  // resting face under that shape.
+  return switch (t.shape) {
+    ThemeShape.studio || ThemeShape.desk => GestureDetector(
+        key: key,
+        behavior: HitTestBehavior.opaque,
+        onTap: onPressed,
+        child: body,
       ),
-    );
+    ThemeShape.lantern =>
+      HouseButton(key: key, small: true, onPressed: onPressed, child: body),
+  };
+}
 
 /// The picked item's readout (docs/07 §3.1): poster frame, name, and the
 /// item's own vital statistics. Always present at a fixed height, so the tree

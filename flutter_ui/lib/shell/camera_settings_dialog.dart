@@ -131,8 +131,7 @@ class _CameraSettingsBodyState extends State<_CameraSettingsBody> {
   /// The readings that follow the zoom, the film size and the aperture.
   void _recompute() {
     final zoom = _zoom ?? 0;
-    _lens = cameraLens(
-        zoom: zoom, filmMm: _filmMm, compW: widget.compWidth);
+    _lens = cameraLens(zoom: zoom, filmMm: _filmMm, compW: widget.compWidth);
     _fStop = cameraFStop(zoom: zoom, aperture: _aperture ?? 0);
   }
 
@@ -245,8 +244,8 @@ class _CameraSettingsBodyState extends State<_CameraSettingsBody> {
           _row(
               t,
               l10n.cameraFocusDistance,
-              _distanceRow(t, 'focus', _focus,
-                  (v) => setState(() => _focus = v))),
+              _distanceRow(
+                  t, 'focus', _focus, (v) => setState(() => _focus = v))),
           _row(t, l10n.cameraLockToZoom, _lockRow(t)),
           // A finer drag than the two distances above it: an aperture is a
           // fraction of their size, and the F-stop beside it swings on it.
@@ -299,8 +298,9 @@ class _CameraSettingsBodyState extends State<_CameraSettingsBody> {
         id: 'camera-preset',
         value: _preset,
         options: [null, ..._presets],
-        label: (mm) =>
-            mm == null ? l10n.custom : l10n.cameraPresetMm(mm.toStringAsFixed(0)),
+        label: (mm) => mm == null
+            ? l10n.custom
+            : l10n.cameraPresetMm(mm.toStringAsFixed(0)),
         // A preset is a focal length, so picking one is the focal-length well
         // being typed into - the zoom follows, and the angle of view with it.
         onChanged: (mm) {
@@ -458,8 +458,8 @@ class _CameraSettingsBodyState extends State<_CameraSettingsBody> {
             decimals: 1,
             speed: 0.1,
             fill: t.surface0,
-            onChanged: (v) => _setAperture(cameraApertureForFStop(
-                fStop: v.toDouble(), zoom: _zoom ?? 0)),
+            onChanged: (v) => _setAperture(
+                cameraApertureForFStop(fStop: v.toDouble(), zoom: _zoom ?? 0)),
           ),
         );
 
@@ -531,7 +531,7 @@ class _CameraSettingsBodyState extends State<_CameraSettingsBody> {
                     padding: const EdgeInsets.only(top: 8, bottom: 4),
                     child: Align(
                       alignment: Alignment.centerLeft,
-                      child: Text(title.toUpperCase(), style: t.kicker),
+                      child: Text(t.kickerCase(title), style: t.kicker),
                     ),
                   ),
                 ),

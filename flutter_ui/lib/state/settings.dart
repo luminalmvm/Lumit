@@ -7,6 +7,8 @@
 // same arrangement: the settings file ferries it, Rust decides what it does.
 
 import 'package:lumit_flutter/src/rust/api/cache.dart';
+import 'package:lumit_flutter/icons/icon_style.dart' show IconSet;
+import 'package:lumit_flutter/theme/theme.dart' show ThemeShape;
 
 /// Which of the two playback behaviours the Viewer uses (docs/13 §B5).
 ///
@@ -21,6 +23,19 @@ enum PlaybackMode {
   everyFrame,
 }
 
+/// What playback does when it reaches the end of the work area (docs/07 §9).
+/// The engine plays one leg at a time; which leg comes next is decided here.
+enum LoopMode {
+  /// Start again from the work area's beginning. The default.
+  workArea,
+
+  /// Stop at the work area's end.
+  once,
+
+  /// Run the work area backwards, then forwards again, and so on.
+  pingPong,
+}
+
 /// The Viewer's working preferences (Settings → Performance). The shared
 /// texture is the only frame transport, so there is no toggle for it.
 class PerformanceSettings {
@@ -28,6 +43,10 @@ class PerformanceSettings {
   /// the Viewer's own state so the choice survives a restart — it is a working
   /// preference, not a per-session toggle.
   PlaybackMode playback;
+
+  /// What playback does at the end of the work area. A working preference
+  /// like [playback], so it survives a restart.
+  LoopMode loop;
 
   /// The rendered-frame cache budget in bytes, as the user last set it.
   ///
@@ -73,6 +92,7 @@ class PerformanceSettings {
     // look at the picture. A preview that quietly softens itself reads as the
     // work being soft.
     this.playback = PlaybackMode.everyFrame,
+    this.loop = LoopMode.workArea,
     this.cacheBudgetBytes,
     this.vramBudgetBytes,
     this.diskBudgetBytes,
@@ -83,6 +103,7 @@ class PerformanceSettings {
 
   Map<String, dynamic> toJson() => {
         'playback': playback.name,
+        'loop': loop.name,
         if (cacheBudgetBytes != null) 'cache_budget_bytes': cacheBudgetBytes,
         if (vramBudgetBytes != null) 'vram_budget_bytes': vramBudgetBytes,
         if (diskBudgetBytes != null) 'disk_budget_bytes': diskBudgetBytes,
@@ -98,6 +119,12 @@ class PerformanceSettings {
         playback: PlaybackMode.values.firstWhere(
           (m) => m.name == j['playback'],
           orElse: () => PerformanceSettings().playback,
+        ),
+        // An absent key (a file written before loop modes existed) or an
+        // unknown name means the work-area loop, the default.
+        loop: LoopMode.values.firstWhere(
+          (m) => m.name == j['loop'],
+          orElse: () => PerformanceSettings().loop,
         ),
         // A value written by a build that stored something else entirely, or a
         // hand-edited file, must not stop the settings loading: anything that
@@ -136,6 +163,10 @@ BridgeCacheLocation cacheLocationFromName(String name) =>
 /// the bar below it. The other two gather the lot into one strip, for anyone
 /// who would rather spend 22 pixels once than twice.
 enum ViewerBars {
+  /// The style's own arrangement: split under Studio, the deck under Desk
+  /// and Lantern. What a fresh install has.
+  auto,
+
   /// The drawing's own: pickers above, everything else below.
   split,
 
@@ -144,6 +175,40 @@ enum ViewerBars {
 
   /// One strip, below the picture.
   bottom,
+
+  /// The ways of looking above the picture, and everything about playing in
+  /// a fixed deck under it.
+  deck,
+}
+
+/// Where the toolbar stands: a strip across the top, or a rail down the left.
+///
+/// The same toolbar either way, with every group in the same order. It is a
+/// fact about the person and their monitor rather than about a workspace, so
+/// switching workspace never moves the tools out from under the hand.
+enum ToolBarPosition {
+  /// The style's own place: the rail under Desk, the strip elsewhere. What a
+  /// fresh install has.
+  auto,
+
+  /// A strip under the menu bar, spanning the window.
+  top,
+
+  /// A rail down the left edge, buttons in a full-height column.
+  left,
+}
+
+/// Which room Lantern's cards stand in.
+enum LanternRoom {
+  /// The style's own room: light for a dark scheme, dark for a light one,
+  /// so the cards are always the other way round from the room.
+  auto,
+
+  /// A light neutral ground, the cards dark against it.
+  day,
+
+  /// The canvas colour, the cards a step above it.
+  night,
 }
 
 /// What the chrome says: a word, or the glyph that stands for it.
@@ -317,6 +382,45 @@ class InterfaceSettings {
   /// controls in the same order, on one row instead of two.
   ViewerBars viewerBars;
 
+  /// The arrangement in force under `shape`: the style's own while the
+  /// setting is the style's choice, the person's pick otherwise.
+  ViewerBars viewerBarsFor(ThemeShape shape) => switch (viewerBars) {
+        ViewerBars.auto =>
+          shape == ThemeShape.studio ? ViewerBars.split : ViewerBars.deck,
+        final bars => bars,
+      };
+
+  /// Where the toolbar stands under `shape`, by the same rule.
+  ToolBarPosition toolBarPositionFor(ThemeShape shape) =>
+      switch (toolBarPosition) {
+        ToolBarPosition.auto => shape == ThemeShape.desk
+            ? ToolBarPosition.left
+            : ToolBarPosition.top,
+        final position => position,
+      };
+
+  /// Where the toolbar stands. [ToolBarPosition.top] by default, which is the
+  /// strip every shape has always drawn; Left is the rail for anyone with
+  /// width to spare and height to keep.
+  ToolBarPosition toolBarPosition;
+
+  /// Whether a ranged parameter draws a track and thumb beside its number.
+  ///
+  /// On by default, because that is the row the spec draws and what every
+  /// install has today. Off, the number stands alone and every row is as wide
+  /// as the next, for anyone who types and scrubs and never touches a track.
+  bool rangeSliders;
+
+  /// Whether the top line carries the command box that opens the palette.
+  bool commandBox;
+
+  /// Which weight the icon set draws at, or the style's own.
+  IconSet iconSet;
+
+  /// Which room Lantern's cards stand in. Day by default, because the light
+  /// room is what the drawing draws. Read only while the shape is Lantern.
+  LanternRoom room;
+
   /// What the chrome says: words, or the icon set's glyphs.
   ///
   /// [ChromeLabels.icons] by default — see the enum for why that is not Words.
@@ -352,7 +456,12 @@ class InterfaceSettings {
     this.easingInPopup = false,
     this.layerNamesOnBars = false,
     this.compact = false,
-    this.viewerBars = ViewerBars.split,
+    this.viewerBars = ViewerBars.auto,
+    this.toolBarPosition = ToolBarPosition.auto,
+    this.rangeSliders = true,
+    this.commandBox = true,
+    this.iconSet = IconSet.styleChoice,
+    this.room = LanternRoom.auto,
   });
 
   Map<String, dynamic> toJson() => {
@@ -376,6 +485,11 @@ class InterfaceSettings {
         'layer_names_on_bars': layerNamesOnBars,
         'compact': compact,
         'viewer_bars': viewerBars.name,
+        'tool_bar_position': toolBarPosition.name,
+        'range_sliders': rangeSliders,
+        'command_box': commandBox,
+        'icon_set': iconSet.name,
+        'lantern_room': room.name,
       };
   factory InterfaceSettings.fromJson(Map<String, dynamic> j) =>
       InterfaceSettings(
@@ -454,7 +568,28 @@ class InterfaceSettings {
         // the split the drawing draws.
         viewerBars: ViewerBars.values.firstWhere(
           (b) => b.name == j['viewer_bars'],
-          orElse: () => ViewerBars.split,
+          orElse: () => ViewerBars.auto,
+        ),
+        // By name, for the same reason. An unknown name, or a file written
+        // before the toolbar could move, is the strip at the top.
+        toolBarPosition: ToolBarPosition.values.firstWhere(
+          (p) => p.name == j['tool_bar_position'],
+          orElse: () => ToolBarPosition.auto,
+        ),
+        // Absent means on: every install before the switch existed drew the
+        // track, and a settings file written then keeps it.
+        rangeSliders: j['range_sliders'] as bool? ?? true,
+        // Absent means shown, and a name no build wrote means the style's.
+        commandBox: j['command_box'] as bool? ?? true,
+        iconSet: IconSet.values.firstWhere(
+          (s) => s.name == j['icon_set'],
+          orElse: () => IconSet.styleChoice,
+        ),
+        // By name. An unknown name, or a file written before Lantern had a
+        // room, is the day room the drawing draws.
+        room: LanternRoom.values.firstWhere(
+          (r) => r.name == j['lantern_room'],
+          orElse: () => LanternRoom.auto,
         ),
       );
 }

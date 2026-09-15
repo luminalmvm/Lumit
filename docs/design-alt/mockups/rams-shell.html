@@ -765,8 +765,8 @@ body { margin: 0; background: var(--mount); color: var(--ink); font-family: var(
   function press(sel, active) {
     document.querySelectorAll(sel).forEach(function (b) { b.setAttribute('aria-pressed', String(b === active)); });
   }
-  document.querySelectorAll('[data-room]').forEach(function (b) {
-    b.addEventListener('click', function () { shell.dataset.room = b.dataset.room; press('[data-room]', b); });
+  document.querySelectorAll('.controls [data-room]').forEach(function (b) {
+    b.addEventListener('click', function () { shell.dataset.room = b.dataset.room; press('.controls [data-room]', b); });
   });
   document.querySelectorAll('[data-notes]').forEach(function (b) {
     b.addEventListener('click', function () { shell.classList.toggle('notes', b.dataset.notes === 'on'); press('[data-notes]', b); });

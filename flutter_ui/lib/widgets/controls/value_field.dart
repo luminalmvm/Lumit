@@ -506,7 +506,7 @@ class _DragValueFieldState extends State<DragValueField>
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: widget.bare ? null : widget.fill ?? t.surface0,
-            borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+            borderRadius: BorderRadius.circular(t.tokens.wellRadius),
             // `animated`, not `accent`: the focused value field is the one
             // focus that means "you are about to change a value" (§3.1). Drawn
             // at the resting face's own width so the edge does not move either.
@@ -649,11 +649,14 @@ class _DragValueFieldState extends State<DragValueField>
             // under the pointer, because then it would stop being a recess
             // (§2.1). Hover and scrub speak through the edge instead.
             color: widget.bare ? null : widget.fill ?? t.surface0,
-            borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-            border: Border.all(
-                color: widget.bare
-                    ? const Color(0x00000000)
-                    : _dragging
+            borderRadius: widget.bare
+                ? BorderRadius.circular(t.tokens.wellRadius)
+                : wellCorners(t),
+            border: widget.bare
+                ? Border.all(color: const Color(0x00000000), width: 1)
+                : wellBorder(
+                    t,
+                    _dragging
                         ? t.accent
                         // The one focus ring that is `animated` rather than
                         // `accent`: it means "you are about to change a value"
@@ -663,7 +666,8 @@ class _DragValueFieldState extends State<DragValueField>
                             : _hover
                                 ? t.hairlineStrong
                                 : t.hairline,
-                width: 1),
+                    lit: _dragging || _focused || _hover,
+                  ),
           ),
           child: Align(
             alignment: Alignment.centerRight,

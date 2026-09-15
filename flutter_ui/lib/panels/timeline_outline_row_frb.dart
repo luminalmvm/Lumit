@@ -26,8 +26,7 @@ import 'sequence_view_frb.dart';
 import 'timeline_timings.dart';
 import 'timeline_metrics_frb.dart';
 import 'timeline_outline_frb.dart';
-import 'transform_rows_frb.dart'
-    show hasThreeDSwitch, hasVisibilitySwitch;
+import 'transform_rows_frb.dart' show hasThreeDSwitch, hasVisibilitySwitch;
 
 /// The blend-mode names, fetched once per session: the list is static for the
 /// life of the process, and every outline row was re-fetching it per rebuild.
@@ -185,9 +184,8 @@ class _OutlineRowState extends State<OutlineRow> {
   int _stackIndex(int at) {
     if (at < 0 || at >= widget.layers.length) return at;
     final id = widget.layers[at].layer.internallayerId;
-    final all = Provider.of<LumitUiState>(context, listen: false)
-        .model
-        .heldLayers;
+    final all =
+        Provider.of<LumitUiState>(context, listen: false).model.heldLayers;
     final i = all.indexWhere((e) => e.layer.internallayerId == id);
     return i < 0 ? at : i;
   }
@@ -327,60 +325,68 @@ class _OutlineRowState extends State<OutlineRow> {
       Listener(onPointerDown: (_) => _claimed = true, child: child);
 
   Widget _rowBody(BuildContext context, LumitTheme t, BridgeLayerInfo info) {
+    // The pitch outside, the drawn row inside: Lantern leaves a pixel of
+    // ground at each edge of the row and rounds it, as the fold rows do.
     return Container(
-        key: ValueKey<String>('tl-rowbody-${layer.internallayerId}'),
         height: t.density.laneRow,
-        decoration: BoxDecoration(
-          // Selected is the brighter of the two states; a highlight (this
-          // layer's fold-out was last touched) is the same surface at half
-          // strength, so they read apart at a glance.
-          color: widget.selected
-              ? t.selectionFill
-              : widget.highlighted
-                  ? t.selectionFill.withValues(alpha: 0.45)
+        padding: EdgeInsets.symmetric(vertical: laneRowGap(t)),
+        child: Container(
+            key: ValueKey<String>('tl-rowbody-${layer.internallayerId}'),
+            decoration: BoxDecoration(
+              // Selected is the brighter of the two states; a highlight (this
+              // layer's fold-out was last touched) is the same surface at half
+              // strength, so they read apart at a glance.
+              color: widget.selected
+                  ? rowSelectionFill(t)
+                  : widget.highlighted
+                      ? rowSelectionFill(t).withValues(alpha: 0.45)
+                      : null,
+              // No seam of its own: the overlay draws the seams for the whole
+              // outline, and a border here drew a *second* line a fraction of a
+              // pixel from it, the overlay is phased by the scroll offset, which
+              // a trackpad leaves fractional, so the two lines pulled apart as the
+              // table scrolled and the outline's rows read a hair taller than the
+              // lanes beside them.
+              borderRadius: t.shape == ThemeShape.lantern
+                  ? BorderRadius.circular(t.tokens.controlRadius)
                   : null,
-          // No seam of its own: the overlay draws the seams for the whole
-          // outline, and a border here drew a *second* line a fraction of a
-          // pixel from it — the overlay is phased by the scroll offset, which
-          // a trackpad leaves fractional, so the two lines pulled apart as the
-          // table scrolled and the outline's rows read a hair taller than the
-          // lanes beside them.
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        child: Row(
-          children: [
-            // The cells come in the four column groups, in whatever order
-            // the header's drag has put them and at whatever width its seams
-            // have been dragged to (docs/07 §4.2).
-            for (var i = 0; i < widget.groupOrder.length; i++) ...[
-              if (i > 0) rowSeam,
-              SizedBox(
-                width: widget.widths[widget.groupOrder[i]],
-                // Only the identity group is the layer itself — its name and
-                // its number are what you click to choose it. The other three
-                // are controls: hiding a layer, or picking its blend mode, is
-                // not choosing it, and those cells have never selected.
-                child: switch (widget.groupOrder[i]) {
-                  TimelineGroup.identity => _identityCells(context, t, info),
-                  TimelineGroup.switches => _ownClick(_switchCells(context, t,
-                      info, widget.widths[TimelineGroup.switches] ?? 0)),
-                  TimelineGroup.render => _ownClick(_renderCells(
-                      context, info, widget.widths[TimelineGroup.render] ?? 0)),
-                  TimelineGroup.compose => _ownClick(_composeCells(context, t,
-                      info, widget.widths[TimelineGroup.compose] ?? 0)),
-                  TimelineGroup.parent => _ownClick(_parentCell(
-                      info, widget.widths[TimelineGroup.parent] ?? 0)),
-                  // What this layer's own picture cost in the last measured
-                  // frame (docs/13 §7.1). A readout, not a control: it neither
-                  // selects the layer nor claims the click.
-                  TimelineGroup.timings => TimingsCell(
-                      layerId: layer.internallayerId.toString(),
-                    ),
-                },
-              ),
-            ],
-          ],
-        ));
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Row(
+              children: [
+                // The cells come in the four column groups, in whatever order
+                // the header's drag has put them and at whatever width its seams
+                // have been dragged to (docs/07 §4.2).
+                for (var i = 0; i < widget.groupOrder.length; i++) ...[
+                  if (i > 0) rowSeam,
+                  SizedBox(
+                    width: widget.widths[widget.groupOrder[i]],
+                    // Only the identity group is the layer itself, its name and
+                    // its number are what you click to choose it. The other three
+                    // are controls: hiding a layer, or picking its blend mode, is
+                    // not choosing it, and those cells have never selected.
+                    child: switch (widget.groupOrder[i]) {
+                      TimelineGroup.identity =>
+                        _identityCells(context, t, info),
+                      TimelineGroup.switches => _ownClick(_switchCells(context,
+                          t, info, widget.widths[TimelineGroup.switches] ?? 0)),
+                      TimelineGroup.render => _ownClick(_renderCells(context,
+                          info, widget.widths[TimelineGroup.render] ?? 0)),
+                      TimelineGroup.compose => _ownClick(_composeCells(context,
+                          t, info, widget.widths[TimelineGroup.compose] ?? 0)),
+                      TimelineGroup.parent => _ownClick(_parentCell(
+                          info, widget.widths[TimelineGroup.parent] ?? 0)),
+                      // What this layer's own picture cost in the last measured
+                      // frame (docs/13 §7.1). A readout, not a control: it neither
+                      // selects the layer nor claims the click.
+                      TimelineGroup.timings => TimingsCell(
+                          layerId: layer.internallayerId.toString(),
+                        ),
+                    },
+                  ),
+                ],
+              ],
+            )));
   }
 
   /// Group 1: visibility · audio · solo · lock · shy. The first two swap
@@ -404,15 +410,16 @@ class _OutlineRowState extends State<OutlineRow> {
     final switches = info.switches;
     final blank = SizedBox(width: switchCellWidth, height: t.density.laneRow);
     Widget cell(SwitchCell which) => switch (which) {
-          SwitchCell.visible => hasVisibilitySwitch(info.kind,
-                  hasPicture: widget.hasPicture)
-              ? _switch(context, id, 'visible', null, switches.visible,
-                  BridgeLayerSwitch.visible,
-                  mark: LumitIcons.visible,
-                  offMark: LumitIcons.hidden,
-                  tip:
-                      switches.visible ? l10n.switchVisible : l10n.switchHidden)
-              : blank,
+          SwitchCell.visible =>
+            hasVisibilitySwitch(info.kind, hasPicture: widget.hasPicture)
+                ? _switch(context, id, 'visible', null, switches.visible,
+                    BridgeLayerSwitch.visible,
+                    mark: LumitIcons.visible,
+                    offMark: LumitIcons.hidden,
+                    tip: switches.visible
+                        ? l10n.switchVisible
+                        : l10n.switchHidden)
+                : blank,
           SwitchCell.audible => widget.hasAudio
               ? _switch(context, id, 'audible', null, switches.audible,
                   BridgeLayerSwitch.audible,
@@ -1106,7 +1113,9 @@ class _OutlineRowState extends State<OutlineRow> {
         try {
           widget.comp.setSwitchOnLayers(
             clicked: layer.internallayerId,
-            layers: [for (final target in targets) target.layer.internallayerId],
+            layers: [
+              for (final target in targets) target.layer.internallayerId
+            ],
             switch_: BridgeLayerSwitch.acceptsLights,
             on_: !lit,
           );

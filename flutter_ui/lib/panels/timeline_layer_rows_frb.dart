@@ -19,6 +19,7 @@ import '../l10n/strings.dart';
 import '../state/comp_time.dart';
 import '../state/drag_payloads.dart';
 import '../state/timeline_columns.dart';
+import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'placeholder.dart';
 import 'timeline_extras_frb.dart';
@@ -220,38 +221,46 @@ class FoldRow extends StatelessWidget {
             },
       child: Container(
         height: t.density.laneRow,
-        // Selected is the full surface; a row that merely *contains* the
-        // selection — the effect heading over a picked parameter — is the
-        // same at half strength, exactly as a layer row marks itself.
-        decoration: BoxDecoration(
-          color: selected
-              ? t.selectionFill
-              : contains
-                  ? t.selectionFill.withValues(alpha: 0.45)
-                  : null,
+        // The pitch outside, the drawn row inside: Lantern leaves a pixel of
+        // ground at each edge of the row and rounds it.
+        padding: EdgeInsets.symmetric(vertical: laneRowGap(t)),
+        child: Container(
+          // Selected is the full surface; a row that merely *contains* the
+          // selection, the effect heading over a picked parameter, is the
+          // same at half strength, exactly as a layer row marks itself.
+          decoration: BoxDecoration(
+            color: selected
+                ? rowSelectionFill(t)
+                : contains
+                    ? rowSelectionFill(t).withValues(alpha: 0.45)
+                    : null,
+            borderRadius: t.shape == ThemeShape.lantern
+                ? BorderRadius.circular(t.tokens.controlRadius)
+                : null,
+          ),
+          // **The trailing inset is the layer rows' own** (`outlineRowTrailing`).
+          // A fold row's value cells and its render-time reading sit in the
+          // columns the layer rows set, and both are laid out from the right,
+          // so a row that kept less space at its trailing end than a layer row
+          // pushed every one of them out of column. It kept a bare 4, which was
+          // the layer rows' padding before the redesign made it 8 and before the
+          // header's inset added the 2 on top; the effect headings' milliseconds
+          // stood 6px right of the layer totals they add up to.
+          padding: EdgeInsets.only(left: indent, right: outlineRowTrailing),
+          // A locked layer's rows are read-only, not hidden: the numbers
+          // are still the document's and the curves still draw, but nothing on the
+          // row can be touched. The engine refuses the edit anyway, this is what
+          // stops the interface offering a gesture that would only be refused.
+          //
+          // A *group* row is exempt: twirling one open is navigation, not editing,
+          // and a locked layer that could not be looked inside would be worse than
+          // one that can.
+          child: locked && row is! FoldGroupRow && row is! FoldWaveformRow
+              ? AbsorbPointer(
+                  child: Opacity(opacity: 0.5, child: _control(context)),
+                )
+              : _control(context),
         ),
-        // **The trailing inset is the layer rows' own** (`outlineRowTrailing`).
-        // A fold row's value cells and its render-time reading sit in the
-        // columns the layer rows set, and both are laid out from the right —
-        // so a row that kept less space at its trailing end than a layer row
-        // pushed every one of them out of column. It kept a bare 4, which was
-        // the layer rows' padding before the redesign made it 8 and before the
-        // header's inset added the 2 on top; the effect headings' milliseconds
-        // stood 6px right of the layer totals they add up to.
-        padding: EdgeInsets.only(left: indent, right: outlineRowTrailing),
-        // A locked layer's rows are read-only, not hidden: the numbers
-        // are still the document's and the curves still draw, but nothing on the
-        // row can be touched. The engine refuses the edit anyway — this is what
-        // stops the interface offering a gesture that would only be refused.
-        //
-        // A *group* row is exempt: twirling one open is navigation, not editing,
-        // and a locked layer that could not be looked inside would be worse than
-        // one that can.
-        child: locked && row is! FoldGroupRow && row is! FoldWaveformRow
-            ? AbsorbPointer(
-                child: Opacity(opacity: 0.5, child: _control(context)),
-              )
-            : _control(context),
       ),
     );
     return picks

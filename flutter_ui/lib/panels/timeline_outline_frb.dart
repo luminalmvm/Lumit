@@ -85,8 +85,8 @@ class GutterScrollbar extends StatelessWidget {
                     axis == Axis.horizontal ? (d) => dragBy(d.delta.dx) : null,
                 child: Container(
                   // The 3 is along the thumb's length only: its thickness is
-                  // set by the Positioned below, at [scrollbarThickness] in
-                  // both directions.
+                  // set by the Positioned below, at the density's scrollbar
+                  // in both directions.
                   margin: axis == Axis.horizontal
                       ? const EdgeInsets.symmetric(horizontal: 3)
                       : const EdgeInsets.symmetric(vertical: 3),
@@ -114,8 +114,8 @@ class GutterScrollbar extends StatelessWidget {
                         // a smear: half a pixel off centre is invisible, a
                         // soft edge is not.
                         left: wholePixelInset(
-                            constraints.maxWidth, scrollbarThickness),
-                        width: scrollbarThickness,
+                            constraints.maxWidth, t.density.scrollbar),
+                        width: t.density.scrollbar,
                         height: extent,
                         child: thumb)
                     : Positioned(
@@ -125,8 +125,8 @@ class GutterScrollbar extends StatelessWidget {
                         // grown from the bar's own height, which is how it
                         // came out 14 and read as a second toolbar.
                         top: wholePixelInset(
-                            constraints.maxHeight, scrollbarThickness),
-                        height: scrollbarThickness,
+                            constraints.maxHeight, t.density.scrollbar),
+                        height: t.density.scrollbar,
                         width: extent,
                         child: thumb),
               ],
@@ -387,7 +387,7 @@ class ColumnHeader extends StatelessWidget {
               alignment: Alignment.centerLeft,
               child: Padding(
                 padding: EdgeInsets.only(left: inset),
-                child: Text(text.toUpperCase(),
+                child: Text(t.kickerCase(text),
                     style: t.kicker,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis),
@@ -435,7 +435,7 @@ class ColumnHeader extends StatelessWidget {
               ),
             ),
             Expanded(
-              child: Text(l10n.columnLayer.toUpperCase(),
+              child: Text(t.kickerCase(l10n.columnLayer),
                   style: t.kicker,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis),
@@ -571,7 +571,7 @@ class KeyReadoutRow extends StatelessWidget {
       padding: const EdgeInsets.only(left: 10, right: 8),
       child: Row(
         children: [
-          Text(l10n.graphKeyKicker.toUpperCase(), style: t.kicker),
+          Text(t.kickerCase(l10n.graphKeyKicker), style: t.kicker),
           const SizedBox(width: 8),
           Text(l10n.graphKeyFrame(frame),
               style: t.mono.copyWith(fontSize: 10, color: t.textPrimary)),
@@ -583,7 +583,7 @@ class KeyReadoutRow extends StatelessWidget {
             Text(unit, style: t.mono.copyWith(fontSize: 9, color: t.textMuted)),
           ],
           const Spacer(),
-          Text(l10n.graphEaseIn.toUpperCase(), style: t.kicker),
+          Text(t.kickerCase(l10n.graphEaseIn), style: t.kicker),
           const SizedBox(width: 6),
           _well(
               'tl-graph-key-in',
@@ -593,7 +593,7 @@ class KeyReadoutRow extends StatelessWidget {
           Text(l10n.unitSymbolPercent,
               style: t.mono.copyWith(fontSize: 9, color: t.textMuted)),
           const SizedBox(width: 8),
-          Text(l10n.graphEaseOut.toUpperCase(), style: t.kicker),
+          Text(t.kickerCase(l10n.graphEaseOut), style: t.kicker),
           const SizedBox(width: 6),
           _well(
               'tl-graph-key-out',

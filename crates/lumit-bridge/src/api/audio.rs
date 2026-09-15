@@ -131,6 +131,28 @@ pub fn audio_pause() {
     crate::audio::pause();
 }
 
+/// The monitor mute: the device is handed silence while the mix, its clock
+/// and the meters carry on. Not document data, so it neither saves into the
+/// project nor silences an export, and it survives a change of output.
+#[frb(sync)]
+pub fn audio_set_muted(muted: bool) {
+    #[cfg(feature = "media")]
+    crate::audio::set_muted(muted);
+    #[cfg(not(feature = "media"))]
+    let _ = muted;
+}
+
+/// Whether the monitor is muted.
+#[frb(sync)]
+pub fn audio_muted() -> bool {
+    #[cfg(feature = "media")]
+    {
+        crate::audio::muted()
+    }
+    #[cfg(not(feature = "media"))]
+    false
+}
+
 /// Move the clock to `secs` — a scrub. The play state is untouched, so
 /// scrubbing while playing keeps playing.
 #[frb(sync)]

@@ -73,6 +73,7 @@ import '../theme/theme.dart';
 import '../widgets/colour_picker.dart';
 import 'viewer_bar.dart';
 import 'viewer_compare.dart';
+import 'viewer_deck.dart';
 import 'viewer_rulers.dart' show viewerRulerBand;
 import 'viewer_stage.dart';
 import 'viewer_strips.dart';
@@ -286,7 +287,8 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
   ///
   /// With *share view options* on, the options come from the active view
   /// instead, which is what the switch means.
-  ViewerSurface get _view => _uiOrNull?.views.optionsFor(widget.view) ?? widget.view;
+  ViewerSurface get _view =>
+      _uiOrNull?.views.optionsFor(widget.view) ?? widget.view;
 
   LumitUiState? get _uiOrNull => _boundUi;
 
@@ -301,7 +303,6 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
 
   ViewerChannel get _channel => _view.channel;
   set _channel(ViewerChannel c) => _view.channel = c;
-
 
   /// The composition this Viewer has already asked for a frame of — so
   /// fronting another one asks once, not on every rebuild.
@@ -622,13 +623,18 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
     final scope = ThemeScope.of(context);
     final t = scope.theme;
     _animationLevel = scope.animationLevel;
-    final round = t.shape == ThemeShape.round;
+    // Roomed panes part the bars from the picture and gather the transport
+    // into one pill; flush panes weld the bars on.
+    final round = t.tokens.roomed;
 
     // How the chrome is arranged round the picture, from the setting: the
     // drawing's split by default, or everything gathered into one strip at
     // whichever end is asked for.
-    final arrangement = ui.workspace.interface.viewerBars;
+    final arrangement = ui.workspace.interface.viewerBarsFor(t.shape);
     final split = arrangement == ViewerBars.split;
+    // The deck: the ways of looking above the picture, and everything about
+    // playing in a strip of its own under it.
+    final deck = arrangement == ViewerBars.deck;
 
     // The panel's own header strip: the Viewer's kicker, and the three
     // pickers the drawing puts at its right — the magnification, the preview
@@ -686,12 +692,13 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
             onSnapshotTake: _takeSnapshot,
             onSnapshotHold: _holdSnapshot,
             detached: round,
+            transport: !deck,
             // Gathered: the header's contents lead the one strip, in the
             // order the two strips read.
             leading: split
                 ? const []
                 : [
-                    Text(l10n.panelViewer.toUpperCase(), style: t.kickerOn),
+                    Text(t.kickerCase(l10n.panelViewer), style: t.kickerOn),
                     viewerBarGapBox(viewerBarGap),
                     ...viewerPickers(
                       zoom: _zoom,
@@ -700,6 +707,7 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
                       showToneMap: ui.workspace.interface.showToneMap,
                       onToneMap: ui.toggleViewerToneMap,
                       onZoom: goToNamedZoom,
+                      quality: !deck,
                     ),
                   ],
           ),
@@ -824,10 +832,33 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
     // the top or at the bottom.
     final above = <Widget>[
       if (header != null) header,
-      if (!split && arrangement == ViewerBars.top) bar
+      if (!split && (arrangement == ViewerBars.top || deck)) bar
     ];
     final below = <Widget>[
       if (split || arrangement == ViewerBars.bottom) bar,
+      // The deck listens to the same two notifiers as the bar: where the
+      // playhead is, and whether it is running.
+      if (deck)
+        ValueListenableBuilder<bool>(
+          valueListenable: ui.playing,
+          builder: (context, playing, _) => ValueListenableBuilder<int>(
+            valueListenable: ui.playheadFrame,
+            builder: (context, frame, _) => ValueListenableBuilder<bool>(
+              valueListenable: ui.audioMuted,
+              builder: (context, muted, _) => ViewerDeck(
+                playing: playing,
+                frame: frame,
+                settings: settings,
+                comp: comp,
+                onPlayPause: _togglePlay,
+                onSeek: (f) => _seek(comp, ui, f),
+                loop: ui.workspace.performance.loop,
+                muted: muted,
+                detached: round,
+              ),
+            ),
+          ),
+        ),
     ];
 
     if (!round) {
@@ -836,8 +867,10 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
         children: [...above, Expanded(child: stage), ...below],
       );
     }
+    // The room shows between the pills and the picture, the same ground that
+    // shows between panels; the pane draws no card of its own under Lantern.
     return ColoredBox(
-      color: t.surface0,
+      color: t.room,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -846,8 +879,12 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
             SizedBox(height: t.tokens.tileGap)
           ],
           Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(t.tokens.cardRadius),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(t.tokens.cardRadius),
+                boxShadow: round ? t.tokens.cardShadow : null,
+              ),
+              clipBehavior: Clip.antiAlias,
               child: stage,
             ),
           ),
@@ -1134,8 +1171,8 @@ class FootageStageFrb extends StatelessWidget {
                 // which is what the picture is asked for at. Reported after the
                 // frame, not during it: a render asked for from a layout would
                 // rebuild the tree it is measuring.
-                WidgetsBinding.instance.addPostFrameCallback((_) =>
-                    ui.reportViewerScale(drawn.width / facts.width));
+                WidgetsBinding.instance.addPostFrameCallback(
+                    (_) => ui.reportViewerScale(drawn.width / facts.width));
                 return Center(
                   child: SizedBox(
                     width: drawn.width,
@@ -1180,8 +1217,7 @@ class _FootagePicture extends StatelessWidget {
         valueListenable: uiState.textureOf(view.engineId),
         builder: (context, textureId, _) => textureId == null
             ? const SizedBox.expand()
-            : pictureChannelFilter(
-                view.channel, Texture(textureId: textureId)),
+            : pictureChannelFilter(view.channel, Texture(textureId: textureId)),
       );
 }
 

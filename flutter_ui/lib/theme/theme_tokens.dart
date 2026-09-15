@@ -75,12 +75,14 @@ LumitTheme _with(
   Color? timelineOutOfRange,
   Color? selectionFill,
   Color? marker,
+  Color? room,
   WaveformColours? waveform,
 }) =>
     LumitTheme(
       mode: t.mode,
       shape: t.shape,
       tokens: t.tokens,
+      room: room ?? t.room,
       surface0: surface0 ?? t.surface0,
       surface1: surface1 ?? t.surface1,
       surface2: surface2 ?? t.surface2,
@@ -212,6 +214,14 @@ List<ThemeToken> get themeTokens => [
         group: l10n.tokenGroupSurfaces,
         read: (t) => t.selectionFill,
         write: (t, c) => _with(t, selectionFill: c),
+      ),
+      ThemeToken(
+        key: 'room',
+        label: l10n.tokenRoom,
+        description: l10n.tokenRoomHelp,
+        group: l10n.tokenGroupSurfaces,
+        read: (t) => t.room,
+        write: (t, c) => _with(t, room: c),
       ),
 
       // --- Text ---------------------------------------------------------------

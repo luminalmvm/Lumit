@@ -9,8 +9,10 @@ import '../l10n/strings.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/smooth_zoom.dart';
+import 'timeline_extras_frb.dart';
 import 'timeline_metrics_frb.dart';
 import 'timeline_outline_frb.dart';
+import 'timeline_zoom_dial.dart';
 
 /// The two landscapes flanking the zoom slider. Painter-drawn, so the 16px
 /// floor — which is about an icon-set glyph's 1.5-unit stroke falling on less
@@ -54,12 +56,19 @@ class LaneBottomBar extends StatelessWidget {
   /// The drag's ends, so the panel can anchor once per gesture.
   final VoidCallback? onZoomDragStart;
   final VoidCallback? onZoomDragEnd;
+
   /// Whether the snap magnet is drawn, and its state. Null draws no magnet at
   /// all: the Audio timeline's bar is the zoom slider and the scrollbar, and
   /// its own gestures suspend the snap with Ctrl rather than with a button
   /// (docs/impl/audio-timeline.md §5).
   final bool? magnet;
   final VoidCallback? onToggleMagnet;
+
+  /// The lanes' pixels per frame and the comp's rate, for Desk's dial
+  /// reading: how many frames one ruler tick spans at this zoom. Zero draws
+  /// no reading.
+  final double perFrame;
+  final double fps;
 
   const LaneBottomBar({
     super.key,
@@ -72,7 +81,36 @@ class LaneBottomBar extends StatelessWidget {
     this.onZoomDragEnd,
     this.magnet,
     this.onToggleMagnet,
+    this.perFrame = 0,
+    this.fps = 0,
   });
+
+  /// Desk's zoom: the dial and, beside it, what one tick of the engraved
+  /// ruler is worth in frames.
+  List<Widget> _dial(LumitTheme t) {
+    final seconds =
+        engravedTickSeconds(pixelsPerSecond: perFrame * fps, fps: fps);
+    final frames = seconds <= 0 ? 0 : (seconds * fps).round().clamp(1, 1 << 30);
+    return [
+      LumitTooltip(
+        message: l10n.tipZoomPercent('${(zoom * 100).round()}'),
+        child: TimelineZoomDial(
+          value: zoomSliderPosition(zoom, maxZoom),
+          onChangeStart: onZoomDragStart,
+          onChangeEnd: onZoomDragEnd,
+          onChangeLive: (v) => onZoomLive(zoomForSliderPosition(v, maxZoom)),
+          onChanged: (v) => onZoom(zoomForSliderPosition(v, maxZoom)),
+        ),
+      ),
+      const SizedBox(width: 6),
+      if (frames > 0)
+        Text(
+          l10n.timelineTickReadout('$frames'),
+          key: const ValueKey('tl-zoom-readout'),
+          style: t.mono.copyWith(fontSize: 9, color: t.textMuted),
+        ),
+    ];
+  }
 
   /// The zoom slider between its two landscapes, and the magnet — the run this
   /// bar carries in **every** view, at the left edge of the lane area in every
@@ -144,57 +182,70 @@ class LaneBottomBar extends StatelessWidget {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  _zoomEnd(t, inward: false),
-                  const SizedBox(width: 4),
-                  LumitTooltip(
-                    message: l10n.tipZoomPercent('${(zoom * 100).round()}'),
-                    child: HouseSlider(
-                      key: const ValueKey('tl-zoom-slider'),
-                      // The slider runs on the *logarithm* of the zoom, so
-                      // equal travel buys equal ratio — the same reason the
-                      // flight interpolates that way. A linear one would spend
-                      // nine tenths of its length in the last few frames of a
-                      // long comp.
-                      value: zoomSliderPosition(zoom, maxZoom),
-                      min: 0,
-                      max: 1,
-                      width: 96,
-                      showValue: false,
-                      // Dragged, the zoom follows the finger with no flight;
-                      // tapped, it flies to where the track was clicked. The
-                      // drag's ends bracket the gesture so the panel anchors
-                      // once.
-                      onChangeStart: onZoomDragStart,
-                      onChangeEnd: onZoomDragEnd,
-                      onChangeLive: (v) =>
-                          onZoomLive(zoomForSliderPosition(v, maxZoom)),
-                      onChanged: (v) =>
-                          onZoom(zoomForSliderPosition(v, maxZoom)),
+                  // Desk turns the zoom on a dial; the other shapes slide it.
+                  if (t.shape == ThemeShape.desk)
+                    ..._dial(t)
+                  else ...[
+                    _zoomEnd(t, inward: false),
+                    const SizedBox(width: 4),
+                    LumitTooltip(
+                      message: l10n.tipZoomPercent('${(zoom * 100).round()}'),
+                      child: HouseSlider(
+                        key: const ValueKey('tl-zoom-slider'),
+                        // The slider runs on the *logarithm* of the zoom, so
+                        // equal travel buys equal ratio, the same reason the
+                        // flight interpolates that way. A linear one would spend
+                        // nine tenths of its length in the last few frames of a
+                        // long comp.
+                        value: zoomSliderPosition(zoom, maxZoom),
+                        min: 0,
+                        max: 1,
+                        width: 96,
+                        showValue: false,
+                        // Dragged, the zoom follows the finger with no flight;
+                        // tapped, it flies to where the track was clicked. The
+                        // drag's ends bracket the gesture so the panel anchors
+                        // once.
+                        onChangeStart: onZoomDragStart,
+                        onChangeEnd: onZoomDragEnd,
+                        onChangeLive: (v) =>
+                            onZoomLive(zoomForSliderPosition(v, maxZoom)),
+                        onChanged: (v) =>
+                            onZoom(zoomForSliderPosition(v, maxZoom)),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 4),
-                  _zoomEnd(t, inward: true),
+                    const SizedBox(width: 4),
+                    _zoomEnd(t, inward: true),
+                  ],
                   const SizedBox(width: 6),
                   if (magnet case final on?)
-                  LumitTooltip(
-                    message: on ? l10n.tipSnapOn : l10n.tipSnapOff,
-                    child: HouseButton(
-                      key: const ValueKey('tl-magnet'),
-                      small: true,
-                      // **No accent**: §3.1's list is closed — the one filled
-                      // button, the playhead, the workspace tick — and a snap
-                      // toggle is not on it. On reads the way every other
-                      // toggle in this chrome reads: the glyph at foreground
-                      // strength on the button's own face, off is frameless
-                      // and muted.
-                      frameless: !on,
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      onPressed: onToggleMagnet,
-                      child: lumitIcon(LumitIcon.magnet,
-                          size: iconSize,
-                          color: on ? t.textPrimary : t.textMuted),
+                    LumitTooltip(
+                      message: on ? l10n.tipSnapOn : l10n.tipSnapOff,
+                      // Lantern's magnet is a circle: the stadium radius on a
+                      // square button.
+                      child: SizedBox(
+                        width: t.shape == ThemeShape.lantern ? 18 : null,
+                        height: t.shape == ThemeShape.lantern ? 18 : null,
+                        child: HouseButton(
+                          key: const ValueKey('tl-magnet'),
+                          small: true,
+                          // **No accent**: §3.1's list is closed: the one filled
+                          // button, the playhead, the workspace tick, and a snap
+                          // toggle is not on it. On reads the way every other
+                          // toggle in this chrome reads: the glyph at foreground
+                          // strength on the button's own face, off is frameless
+                          // and muted.
+                          frameless: !on,
+                          padding: t.shape == ThemeShape.lantern
+                              ? EdgeInsets.zero
+                              : const EdgeInsets.symmetric(horizontal: 4),
+                          onPressed: onToggleMagnet,
+                          child: lumitIcon(LumitIcon.magnet,
+                              size: iconSize,
+                              color: on ? t.textPrimary : t.textMuted),
+                        ),
+                      ),
                     ),
-                  ),
                   const SizedBox(width: 12),
                 ],
               ),

@@ -63,7 +63,7 @@ Widget settingsSection(
                 settingsRowPadding, 12, settingsRowPadding, 4),
             child: Align(
               alignment: Alignment.centerLeft,
-              child: Text(title.toUpperCase(), style: t.kicker),
+              child: Text(t.kickerCase(title), style: t.kicker),
             ),
           ),
         ),

@@ -30,7 +30,7 @@ void main() {
   setUpAll(initEngineForTests);
 
   group('Graph panel metrics (frb)', () {
-    final theme = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.sharp);
+    final theme = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio);
 
     ({LumitState state, LumitUiState uiState, LayerReference layer})
         withBlur() {

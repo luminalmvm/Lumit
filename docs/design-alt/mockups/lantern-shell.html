@@ -1,29 +1,33 @@
 <title>Lumit Lantern</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400&family=Plus+Jakarta+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap">
 <style>
 /* ------------------------------------------------------------------
-   Lumit — Lantern.  docs/design-alt/mockups/lantern-shell.html
+   Lumit, Lantern.  docs/design-alt/mockups/lantern-shell.html
 
-   A from-scratch shell on the cues the canonical doc records from
-   OUTLOUD's Lyrica editor (15-DESIGN §12.1) — taken as a whole style
-   rather than a shape: dark cards floating in a light room, stadium
-   controls, a transport in one pill, filled-pill actives, the header
-   dot, capsule bars. Every function in 07-UI-SPEC.md is kept.
+   A from-scratch shell for docs/design-alt/15-DESIGN-LANTERN.md: Lumit's
+   own dark ramp arranged as cards floating in a light room, the spruce
+   accent spent on fills, and centred tracked card titles. Every function
+   in docs/07-UI-SPEC.md is kept. The page's own surround is the same
+   fixed neutral the other mockups use, so the rooms are judged against
+   one ground.
    ------------------------------------------------------------------ */
+
 :root {
   --mount: #3b3b3a; --mount-deep: #2e2e2d; --mount-line: #545452;
   --ink: #eceae6; --ink-2: #b3b1ac; --ink-3: #85837e; --hi: #e0a24a;
-  --page-sans: "Plus Jakarta Sans", system-ui, sans-serif;
-  --page-mono: "DM Mono", ui-monospace, monospace;
+  --page-sans: "IBM Plex Sans", system-ui, sans-serif;
+  --page-mono: "IBM Plex Mono", ui-monospace, monospace;
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--mount); color: var(--ink); font-family: var(--page-sans); -webkit-font-smoothing: antialiased; }
 .wrap { max-width: 1400px; margin: 0 auto; padding-inline: 20px; padding-block: 26px 60px; }
+
 .masthead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }
-.masthead h1 { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
+.masthead h1 { margin: 0; font-size: 19px; font-weight: 500; letter-spacing: -0.01em; }
 .masthead .sub { margin: 0; color: var(--ink-2); font-size: 13px; }
 .intro { margin: 12px 0 0; max-width: 70ch; color: var(--ink-2); font-size: 13.5px; line-height: 1.6; }
-.intro strong { color: var(--ink); font-weight: 600; }
+.intro strong { color: var(--ink); font-weight: 500; }
+
 .controls { display: flex; flex-wrap: wrap; gap: 10px 24px; align-items: flex-end; margin-top: 20px; padding-bottom: 12px; border-bottom: 1px solid var(--mount-line); }
 .group { display: flex; flex-direction: column; gap: 6px; }
 .glabel { font-family: var(--page-mono); font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
@@ -33,268 +37,366 @@ body { margin: 0; background: var(--mount); color: var(--ink); font-family: var(
 .seg button:hover { color: var(--ink); }
 .seg button[aria-pressed="true"] { color: #201f1d; background: var(--hi); border-color: var(--hi); }
 .seg button:focus-visible { outline: 2px solid var(--hi); outline-offset: 2px; }
+
 .stage { margin-top: 22px; }
 .viewport { overflow-x: auto; overflow-y: hidden; }
 .scaler { transform-origin: top left; width: 1360px; }
 
 /* ==================================================================
-   TOKENS — two rooms
+   TOKENS, two rooms. The cards do not change between them.
    ================================================================== */
-.shell { --f: "Plus Jakarta Sans", system-ui, sans-serif; --fn: "DM Mono", ui-monospace, monospace; }
+.shell {
+  --f: "Plus Jakarta Sans", system-ui, sans-serif;
+  --m: "DM Mono", ui-monospace, monospace;
+  --card-r: 16px; --sub-r: 12px; --row-r: 8px; --ctl-r: 7px; --tool-r: 9px; --bar-r: 3px;
+  /* Lumit's own dark ramp (docs/15-DESIGN.md 2.1), arranged as cards rather
+     than as panels butting on hairlines. Nothing here is a new colour: the
+     card is surface_1, a section is surface_2, a control is surface_3, a
+     pressed fill is surface_4, and a lane well is surface_0. */
+  --card: #131517; --card-2: #1a1d20; --well: #212528; --raised: #2b3034; --seg-on: #2b3034;
+  --sunk: #0b0c0e; --hair: #26292c; --hair-s: #3c4145;
+  --tp: #eef1f2; --ts: #c2c8cb; --tm: #8b9296; --td: #5e666b;
+  /* accent is spruce, 3.1. Its label is text_primary at 4.63 and not
+     surface_0 at 3.73, which is the one place this style parts from 7.1. */
+  --accent: #35785e; --accent-hover: #478a70; --accent-ink: #eef1f2; --accent-soft: rgba(53,120,94,.26);
+  --on: #5fcfae; --attn: #dd9a82; --fault: #d1729c; --animated: #d8a24a;
+  --surround: #121212; --marker: #c4c4c4;
+  --l-footage: #56707f; --l-sequence: #5a6a8c; --l-precomp: #7a5a74; --l-solid: #5c6165; --l-text: #8c8468; --l-camera: #806f4a; --l-audio: #46786d;
+  --cache-hot: #5fcfae; --cache-disk: #5f93b8; --wave: #5d8a96;
+}
 .shell[data-room="day"] {
-  --room: #e4e4ea; --room2: #d9d9e1;
-  --card: #1e1e25; --card2: #27272f; --well: #15151b; --float: #2d2d37; --raised: #35353f;
-  --surround: #7f7f7f;
-  --tp: #f3f3f7; --ts: #c3c3cd; --tm: #8d8d9a; --td: #5c5c69;
-  --hair: #33333d;
-  --accent: #6a5aeb; --accent-ink: #ffffff; --accent-soft: rgba(106,90,235,.22);
-  --on: #4fc48f; --attn: #e9b84a; --fault: #f26d8d;
-  --l-footage: #5fa3d6; --l-sequence: #7d8ee0; --l-precomp: #c17ad1; --l-solid: #9a9aa6; --l-text: #e5b56a; --l-camera: #d7c36a; --l-audio: #55c9b4;
-  --cache-hot: #4fc48f; --cache-disk: #5fa3d6; --wave: #55c9b4;
-  --room-ink: #23232b; --room-ink2: #6b6b78;
-  --shadow: 0 6px 18px rgba(20,20,30,.20), 0 1px 2px rgba(20,20,30,.12);
-  --float-shadow: 0 10px 30px rgba(0,0,0,.35);
+  /* the room is Lumit Light's own canvas (11), which is the one token a
+     card arrangement needs that the dark ramp has no name for */
+  --room: #d9d9d6; --room-2: #cdcdc9; --room-ink: #16181a; --room-ink-2: #6b7276; --room-line: #bebeb9;
+  --card-shadow: 0 6px 18px rgba(10,12,14,.20), 0 1px 2px rgba(10,12,14,.14);
+  --room-btn-shadow: 0 1px 2px rgba(10,12,14,.18);
 }
 .shell[data-room="night"] {
-  --room: #0f0f13; --room2: #17171c;
-  --card: #1c1c22; --card2: #25252c; --well: #121217; --float: #2b2b33; --raised: #33333c;
-  --surround: #7f7f7f;
-  --tp: #f3f3f7; --ts: #c3c3cd; --tm: #8d8d9a; --td: #5c5c69;
-  --hair: #30303a;
-  --accent: #7c6cff; --accent-ink: #ffffff; --accent-soft: rgba(124,108,255,.22);
-  --on: #4fc48f; --attn: #e9b84a; --fault: #f26d8d;
-  --l-footage: #5fa3d6; --l-sequence: #7d8ee0; --l-precomp: #c17ad1; --l-solid: #9a9aa6; --l-text: #e5b56a; --l-camera: #d7c36a; --l-audio: #55c9b4;
-  --cache-hot: #4fc48f; --cache-disk: #5fa3d6; --wave: #55c9b4;
-  --room-ink: #e9e9ef; --room-ink2: #8d8d9a;
-  --shadow: 0 6px 18px rgba(0,0,0,.45), 0 1px 2px rgba(0,0,0,.3);
-  --float-shadow: 0 10px 30px rgba(0,0,0,.55);
+  --room: #0b0c0e; --room-2: #131517; --room-ink: #eef1f2; --room-ink-2: #8b9296; --room-line: #26292c;
+  --card-shadow: 0 0 0 1px #26292c, 0 8px 24px rgba(0,0,0,.55);
+  --room-btn-shadow: 0 0 0 1px #26292c;
 }
 
 /* ==================================================================
-   THE SHELL 1360 × 820
+   THE SHELL  1360 x 820: a room with a band, a toolbar, the dock and
+   a bottom bar. The toolbar's position is a setting; the grid reflows.
    ================================================================== */
-.shell { width: 1360px; height: 820px; position: relative; background: var(--room); color: var(--ts); font-family: var(--f); font-size: 11px; font-variant-numeric: tabular-nums; display: grid; grid-template-rows: 44px 1fr; }
+.shell {
+  width: 1360px; height: 820px; position: relative; padding: 10px;
+  display: grid; gap: 8px 10px;
+  background: var(--room); color: var(--ts);
+  font-family: var(--f); font-size: 11px; font-variant-numeric: tabular-nums;
+}
 .shell, .shell * { box-sizing: border-box; }
-.num { font-family: var(--fn); font-variant-numeric: tabular-nums; }
-.g { width: 14px; height: 14px; flex: none; display: block; color: currentColor; }
+.shell[data-tools="top"] { grid-template-columns: 1fr; grid-template-rows: 44px 34px 1fr 34px; grid-template-areas: "band" "tools" "dock" "bbar"; }
+.shell[data-tools="left"] { grid-template-columns: 44px 1fr; grid-template-rows: 44px 1fr 34px; grid-template-areas: "band band" "tools dock" "bbar bbar"; }
+
+/* primitives */
+.mono { font-family: var(--m); }
+.hint { font-size: 9.5px; color: var(--tm); white-space: nowrap; }
+.g { width: 14px; height: 14px; flex: none; display: inline-block; color: currentColor; }
 .g svg { display: block; width: 100%; height: 100%; }
+.g12 { width: 12px; height: 12px; } .g16 { width: 16px; height: 16px; } .g10 { width: 10px; height: 10px; }
 .sp { flex: 1; }
-.dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+.seamv { width: 1px; height: 14px; background: var(--hair); flex: none; }
 
-/* pills */
-.pill { height: 24px; padding: 0 10px; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; background: var(--card2); color: var(--ts); font-size: 10.5px; white-space: nowrap; }
-.pill.on { background: var(--accent); color: var(--accent-ink); font-weight: 500; }
+/* capsules: actions, chips, the active half of a segmented pill */
+.pill { height: 24px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; background: var(--raised); color: var(--tp); font-size: 10.5px; font-weight: 500; white-space: nowrap; }
+.pill.lime { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .pill.ghost { background: transparent; color: var(--tm); }
-.pill .chev { width: 8px; height: 8px; }
-.segp { display: inline-flex; padding: 2px; border-radius: 999px; background: var(--well); gap: 2px; }
-.segp .pill { height: 20px; padding: 0 9px; background: transparent; color: var(--tm); }
-.segp .pill.on { background: var(--accent); color: var(--accent-ink); }
-.well { height: 22px; padding: 0 9px; display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; background: var(--well); color: var(--tp); font-family: var(--fn); font-size: 11px; white-space: nowrap; }
-.well .u { font-size: 9.5px; color: var(--tm); font-family: var(--f); }
-.well.ghost { color: var(--tm); font-family: var(--f); }
-.rbtn { width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: var(--ts); background: transparent; flex: none; }
-.rbtn.on { background: var(--accent); color: var(--accent-ink); }
-.switch { width: 26px; height: 14px; border-radius: 999px; background: var(--well); position: relative; flex: none; }
-.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--tm); }
-.switch.on { background: var(--accent); }
-.switch.on::after { left: 14px; background: #fff; }
+.spill { display: inline-flex; padding: 2px; border-radius: 999px; background: var(--well); gap: 1px; }
+.spill span { height: 20px; padding: 0 10px; display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; color: var(--tm); font-size: 10.5px; font-weight: 500; white-space: nowrap; }
+.spill span.on { background: var(--seg-on); color: var(--tp); }
+.spill.lime span.on { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+/* rounded rects: dropdowns, value fields, icon buttons */
+.dd { height: 22px; padding: 0 6px 0 8px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--ctl-r); background: var(--well); color: var(--tp); font-size: 10.5px; white-space: nowrap; }
+.dd .g { width: 10px; height: 10px; color: var(--tm); }
+.fld { height: 20px; min-width: 42px; padding: 0 6px; display: inline-flex; align-items: center; justify-content: flex-end; border-radius: var(--ctl-r); background: var(--well); color: var(--tp); font-family: var(--m); font-size: 10.5px; white-space: nowrap; }
+.ib { width: 22px; height: 22px; flex: none; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--ctl-r); background: var(--well); color: var(--ts); }
+.ib.on { background: var(--seg-on); color: var(--tp); }
+.ib.lime { background: var(--accent); color: var(--accent-ink); }
+.ib.off { color: var(--td); }
+/* the toggle switch */
+.tog { width: 26px; height: 14px; flex: none; border-radius: 999px; background: var(--raised); position: relative; }
+.tog::after { content: ""; position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--tm); }
+.tog.on { background: var(--accent); }
+.tog.on::after { left: 14px; background: #ffffff; }
+/* the slider */
+.slider { flex: 1; height: 3px; border-radius: 2px; background: var(--raised); position: relative; min-width: 30px; }
+.slider i { position: absolute; top: -3px; width: 9px; height: 9px; border-radius: 50%; background: var(--ts); margin-left: -4px; }
+/* icon row */
+.irow { display: inline-flex; gap: 2px; }
+.irow .ib { width: 18px; height: 18px; border-radius: 5px; background: transparent; color: var(--tm); }
+.irow .ib.on { background: var(--accent); color: var(--accent-ink); }
+/* stopwatch and navigator */
+.stopw { width: 10px; height: 10px; flex: none; border-radius: 50%; border: 1.5px solid var(--tm); }
+.stopw.on { background: var(--accent); border-color: var(--accent); }
+.nav { width: 20px; flex: none; display: inline-flex; justify-content: center; gap: 1px; color: var(--tm); font-size: 7px; }
+.nav b { color: var(--tp); font-weight: 400; }
+.reset { width: 12px; height: 12px; flex: none; color: var(--td); }
 
-/* ---------- top band (room) ---------- */
-.top { display: flex; align-items: center; gap: 12px; padding: 0 16px; color: var(--room-ink); }
-.mark { position: relative; width: 18px; height: 12px; display: block; margin-right: 4px; }
-.mark::before, .mark::after { content: ""; position: absolute; top: 1px; width: 9px; height: 9px; border-radius: 3px; transform: rotate(45deg); }
-.mark::before { left: 0; background: #4f8fc7; } .mark::after { left: 8px; background: #8b6bd6; }
-.mark b { position: absolute; left: 6px; top: 3px; width: 6px; height: 6px; border-radius: 2px; transform: rotate(45deg); background: #fff; z-index: 1; }
-.menus { display: flex; gap: 14px; font-size: 11.5px; }
-.menus span { color: var(--room-ink); opacity: .78; }
-.wsp { margin-left: 10px; display: inline-flex; padding: 3px; border-radius: 999px; background: var(--card); box-shadow: var(--shadow); gap: 2px; }
-.wsp .pill { height: 22px; padding: 0 11px; background: transparent; color: var(--tm); font-size: 11px; }
-.wsp .pill.on { background: var(--accent); color: var(--accent-ink); }
-.palette { margin-left: auto; height: 28px; padding: 0 12px; border-radius: 999px; background: var(--card); box-shadow: var(--shadow); display: inline-flex; align-items: center; gap: 8px; color: var(--tm); font-size: 11px; width: 240px; }
-.palette .k { margin-left: auto; font-family: var(--fn); font-size: 9px; color: var(--td); }
+/* ---------- top band, in the room ---------- */
+.band { grid-area: band; display: flex; align-items: center; gap: 16px; padding: 0 4px; position: relative; }
+.mark { display: flex; align-items: center; gap: 8px; color: var(--room-ink); font-weight: 600; font-size: 13px; }
+.mark i { position: relative; width: 20px; height: 14px; display: block; }
+.mark i::before, .mark i::after { content: ""; position: absolute; top: 2px; width: 10px; height: 10px; transform: rotate(45deg); border-radius: 2px; }
+.mark i::before { left: 1px; background: var(--room-ink); }
+.mark i::after { left: 9px; background: var(--accent); }
+.menus { display: flex; gap: 14px; }
+.menus span { font-size: 11px; color: var(--room-ink); }
+.band .spill.room { background: var(--card); box-shadow: var(--room-btn-shadow); margin-left: 8px; }
+.band .palette { margin-left: auto; width: 220px; height: 28px; padding: 0 12px; display: flex; align-items: center; gap: 8px; border-radius: 999px; background: var(--card); box-shadow: var(--room-btn-shadow); color: var(--tm); font-size: 10.5px; }
+.band .palette .k { margin-left: auto; font-family: var(--m); font-size: 9px; color: var(--td); }
 
-/* ---------- cards ---------- */
-.dock { display: grid; grid-template-columns: 320px 1fr 272px; grid-template-rows: 1fr 268px; gap: 12px; padding: 0 12px 40px; min-height: 0; }
-.card { background: var(--card); border-radius: 18px; box-shadow: var(--shadow); min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+/* ---------- toolbar: one element, two positions ---------- */
+.tools { grid-area: tools; display: flex; align-items: center; gap: 8px; position: relative; }
+/* the tools live in one pill, their options in a second, and the workspaces
+   in a third, so the row reads as three groups rather than eighteen buttons */
+.tgroup { display: flex; align-items: center; gap: 2px; padding: 2px; border-radius: 999px; background: var(--card); box-shadow: var(--room-btn-shadow); }
+.tb { width: 28px; height: 28px; flex: none; display: flex; align-items: center; justify-content: center; position: relative; border-radius: 999px; background: transparent; color: var(--ts); }
+.tb.armed { background: var(--accent); color: var(--accent-ink); }
+.tb.grp::after { content: ""; position: absolute; right: 4px; bottom: 4px; width: 0; height: 0; border-left: 4px solid transparent; border-bottom: 4px solid currentColor; opacity: .7; }
+.tools .tseam { flex: none; background: var(--room-line); }
+.tools .tgap { flex: 1; }
+.topts { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 999px; background: var(--card); box-shadow: var(--room-btn-shadow); color: var(--tm); }
+.topts .hint { color: var(--tm); }
+.topts .dis { opacity: .45; display: inline-flex; align-items: center; gap: 6px; }
+.topts .swatch { width: 18px; height: 18px; border-radius: 5px; background: var(--card); box-shadow: var(--room-btn-shadow); position: relative; }
+.topts .swatch::after { content: ""; position: absolute; inset: 4px; border-radius: 3px; background: var(--sw, #ececf1); }
+.topts .fld { background: var(--card); }
+.shell[data-tools="top"] .tools { flex-direction: row; }
+.shell[data-tools="top"] .tseam { width: 1px; height: 16px; margin: 0 4px; }
+.shell[data-tools="left"] .tools { flex-direction: column; align-items: center; gap: 8px; }
+.shell[data-tools="left"] .tgroup { flex-direction: column; }
+.shell[data-tools="left"] .tseam { height: 1px; width: 16px; margin: 4px 0; }
+.shell[data-tools="left"] .tgap { order: 1; flex: 1; }
+.shell[data-tools="left"] .topts { order: 2; flex-direction: column; height: auto; width: 36px; padding: 8px 0; gap: 6px; }
+.shell[data-tools="left"] .topts .hint { display: none; }
+.shell[data-tools="left"] .topts .dis { flex-direction: column; }
+/* the workspace pill rides the toolbar row when the toolbar is a strip, and
+   stays up in the band when it is a rail, because a 44 column has no room */
+.shell[data-tools="top"] .band .spill { display: none; }
+.shell[data-tools="left"] .tools .spill { display: none; }
+/* ranged parameters draw a track beside the number, or do not: a setting */
+.shell[data-sliders="off"] .slider { display: none; }
+
+/* ---------- the dock and its cards ---------- */
+.dock { grid-area: dock; display: grid; grid-template-columns: 290px 1fr 300px; grid-template-rows: 1fr 270px; gap: 10px; min-height: 0; min-width: 0; position: relative; }
+.card { background: var(--card); border-radius: var(--card-r); box-shadow: var(--card-shadow); display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; overflow: hidden; }
 .card--timeline { grid-column: 1 / -1; }
-.chead { height: 40px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 14px 0 16px; }
-.chead .title { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--tp); }
-.chead .title .hdot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
-.chead .sub { font-size: 10.5px; color: var(--tm); }
+.ct { height: 28px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 10px 0 22px; position: relative; }
+.ct .hd { position: absolute; left: 10px; top: 11px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.ct .ttl { position: absolute; left: 0; right: 0; top: 0; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--tm); pointer-events: none; }
+.ct .l, .ct .r { display: flex; align-items: center; gap: 6px; position: relative; z-index: 1; }
+.ct .r { margin-left: auto; }
+.ct .ib { width: 20px; height: 20px; background: transparent; color: var(--tm); }
 
 /* ---------- project ---------- */
-.specimen { flex: none; margin: 0 12px 8px; padding: 10px; border-radius: 12px; background: var(--card2); display: grid; grid-template-columns: 96px 1fr; gap: 12px; }
-.poster { width: 96px; height: 54px; border-radius: 8px; background: linear-gradient(160deg, #6c5f52, #2a2724 60%, #171513); }
-.meta { display: grid; grid-template-columns: auto 1fr; gap: 3px 8px; align-content: start; font-size: 10px; }
-.meta .k { color: var(--tm); }
+.specimen { flex: none; margin: 0 10px; padding: 6px 0 8px; display: grid; grid-template-columns: 92px 1fr; gap: 10px; border-bottom: 1px solid var(--hair); }
+.poster { width: 92px; height: 52px; border-radius: var(--ctl-r); background: linear-gradient(160deg, #6a4a7a, #1d2e56 55%, #0d1224); position: relative; overflow: hidden; }
+.poster::after { content: ""; position: absolute; left: 14px; top: 12px; width: 14px; height: 14px; border-radius: 50%; background: #ffd9a3; }
+.meta { display: grid; grid-template-columns: 34px 1fr; gap: 1px 6px; align-content: start; font-size: 9.5px; }
+.meta .hint { padding-top: 1px; }
 .meta .v { color: var(--ts); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.psearch { flex: none; padding: 0 12px 8px; display: flex; }
-.psearch .well { flex: 1; height: 26px; }
-.swatch { width: 10px; height: 10px; border-radius: 50%; flex: none; background: conic-gradient(#5fa3d6 0 25%, #e5b56a 0 50%, #c17ad1 0 75%, #55c9b4 0); }
-.cols, .prow { display: grid; grid-template-columns: 1fr 26px 42px 24px 42px; gap: 6px; padding: 0 12px 0 14px; align-items: center; }
-.cols { height: 20px; flex: none; color: var(--tm); font-size: 9.5px; }
-.cols span { text-align: right; } .cols span:first-child, .cols span:last-child { text-align: left; }
-.prows { flex: 1; overflow: hidden; padding: 0 6px; }
-.prow { height: 26px; border-radius: 10px; color: var(--ts); padding: 0 8px; }
-.prow.sel { background: var(--accent-soft); color: var(--tp); }
-.prow .nm { display: flex; align-items: center; gap: 7px; min-width: 0; }
-.prow .nm .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.prow .av { width: 18px; height: 18px; border-radius: 50%; flex: none; display: inline-flex; align-items: center; justify-content: center; background: var(--card2); }
-.prow .av .g { width: 11px; height: 11px; }
-.prow .n2 { font-family: var(--fn); font-size: 9.5px; color: var(--tm); text-align: right; }
+.psearch { height: 30px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 10px; }
+.psearch .dd { flex: 1; color: var(--tm); }
+.psearch .dd .g { color: var(--tm); }
+.swatchf { width: 12px; height: 12px; border-radius: 4px; flex: none; background: conic-gradient(var(--l-footage) 0 25%, var(--l-text) 0 50%, var(--l-precomp) 0 75%, var(--l-camera) 0); }
+.pcols, .prow { display: grid; grid-template-columns: 1fr 24px 38px 22px 46px; gap: 5px; padding: 0 6px; align-items: center; }
+.pcols { height: 18px; flex: none; margin: 0 4px; }
+.pcols .hint { text-align: right; }
+.pcols .hint:first-child, .pcols .hint:last-child { text-align: left; }
+.prows { flex: 1; overflow: hidden; padding: 0 4px; display: flex; flex-direction: column; gap: 2px; }
+.prow { height: 20px; flex: none; border-radius: var(--row-r); color: var(--ts); }
+.prow.sel { background: var(--raised); }
+.prow .nm { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.prow .nm .g { width: 12px; height: 12px; }
+.prow .nm .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; }
+.prow .nm.in { padding-left: 14px; }
+.prow .mono { font-size: 9.5px; color: var(--tm); text-align: right; }
 .prow .pth { font-size: 9.5px; color: var(--td); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.badge { height: 16px; padding: 0 6px; display: inline-flex; align-items: center; flex: none; font-size: 9px; border-radius: 999px; background: var(--card2); color: var(--tm); }
-.badge.use { color: var(--on); } .badge.miss { color: var(--attn); }
-.cfoot { height: 44px; flex: none; display: flex; align-items: center; gap: 4px; padding: 0 10px; }
-.cfoot .pill { padding: 0 8px; }
+.badge { height: 14px; padding: 0 5px; display: inline-flex; align-items: center; flex: none; font-size: 8.5px; font-weight: 600; border-radius: 999px; color: var(--accent-ink); }
+.badge.use { background: var(--on); } .badge.miss { background: var(--attn); }
+.pfoot { height: 30px; flex: none; display: flex; align-items: center; gap: 4px; padding: 0 10px; border-top: 1px solid var(--hair); }
+.pfoot .pill { height: 22px; padding: 0 9px; background: var(--well); font-weight: 500; font-size: 10px; }
 
 /* ---------- viewer ---------- */
-.vbar { height: 40px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 14px 0 16px; }
-.stagearea { flex: 1; margin: 0 12px; border-radius: 12px; background: var(--surround); position: relative; display: flex; align-items: center; justify-content: center; min-height: 0; overflow: hidden; padding-bottom: 52px; }
-.frame { width: 496px; height: 279px; position: relative; overflow: hidden; border-radius: 4px;
-  background: radial-gradient(120% 90% at 28% 12%, #ffd9a3 0%, #f0a35f 26%, #c2653f 52%, #5d3552 78%, #241c33 100%); }
-.frame .sun { position: absolute; left: 27%; top: 30%; width: 62px; height: 62px; border-radius: 50%; background: #fff3dd; opacity: .92; }
-.frame .hill { position: absolute; left: 0; right: 0; bottom: 0; height: 44%; background: #16121f; clip-path: polygon(0 62%, 13% 40%, 27% 56%, 41% 24%, 56% 49%, 72% 31%, 86% 52%, 100% 38%, 100% 100%, 0 100%); }
-.frame .hill2 { position: absolute; left: 0; right: 0; bottom: 0; height: 28%; background: #0c0a12; clip-path: polygon(0 74%, 18% 52%, 34% 70%, 52% 44%, 68% 66%, 84% 50%, 100% 68%, 100% 100%, 0 100%); }
-.frame .ttl { position: absolute; left: 40px; bottom: 46px; color: #f6f1e8; font-size: 24px; letter-spacing: .14em; text-transform: uppercase; font-weight: 500; }
-.selname { position: absolute; left: 14px; top: 10px; padding: 2px 8px; font-size: 9px; color: var(--accent-ink); background: var(--accent); border-radius: 999px; }
-.atchip { position: absolute; right: 14px; top: 10px; padding: 2px 8px; font-size: 9px; color: var(--tp); background: var(--float); border-radius: 999px; }
-.gizmo { position: absolute; inset: 34px 54px 50px 54px; border: 1px solid var(--accent); border-radius: 2px; }
-.gizmo i { position: absolute; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); border: 1.5px solid #fff; }
-.gizmo i:nth-child(1){left:-4px;top:-4px} .gizmo i:nth-child(2){right:-4px;top:-4px} .gizmo i:nth-child(3){left:-4px;bottom:-4px} .gizmo i:nth-child(4){right:-4px;bottom:-4px}
-.gizmo .anchor { position: absolute; left: 50%; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border: 1.5px solid var(--accent); border-radius: 50%; }
-.gizmo .rot { position: absolute; left: 50%; top: -18px; width: 1px; height: 18px; background: var(--accent); }
-/* the floating tool dock */
-.tooldock { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); display: flex; flex-direction: row; gap: 2px; padding: 4px; border-radius: 999px; background: var(--float); box-shadow: var(--float-shadow); z-index: 5; }
-.tooldock .rbtn { width: 30px; height: 30px; position: relative; }
-.tooldock .rbtn .g { width: 15px; height: 15px; }
-.tooldock .rbtn.grp::after { content: ""; position: absolute; right: 5px; bottom: 5px; width: 0; height: 0; border-left: 3px solid transparent; border-bottom: 3px solid var(--tm); }
-.tooldock .rbtn.off { color: var(--td); }
-.tooldock .seamh { width: 1px; margin: 8px 3px; background: var(--hair); }
-/* the deck */
-.deck { height: 56px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 12px; }
-.transport { display: inline-flex; align-items: center; gap: 6px; padding: 4px; border-radius: 999px; background: var(--card2); }
-.transport .rbtn { width: 26px; height: 26px; color: var(--tp); }
-.transport .rbtn .g { width: 14px; height: 14px; }
-.transport .play { width: 34px; height: 34px; background: var(--accent); color: var(--accent-ink); }
-.transport .play .g { width: 16px; height: 16px; }
-.clock { display: inline-flex; align-items: baseline; gap: 8px; padding: 0 12px; height: 32px; border-radius: 999px; background: var(--well); }
-.clock .t { font-family: var(--fn); font-size: 15px; color: var(--tp); font-weight: 500; }
-.clock .f { font-family: var(--fn); font-size: 10px; color: var(--tm); white-space: nowrap; }
-.ready { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; color: var(--tm); }
-.ready i { width: 54px; height: 6px; border-radius: 999px; background: var(--well); overflow: hidden; position: relative; }
-.ready i b { position: absolute; left: 0; top: 0; bottom: 0; background: var(--cache-hot); border-radius: 999px; }
+.vbar { height: 24px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 10px; }
+.vbar .dd { height: 20px; }
+.vbar .ib { width: 20px; height: 20px; }
+.vbar .fld { height: 20px; min-width: 36px; }
+.chan { position: relative; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--ctl-r); background: var(--well); }
+.chan i { position: absolute; width: 8px; height: 8px; border-radius: 50%; mix-blend-mode: screen; }
+.chan i:nth-child(1) { left: 4px; top: 4px; background: #ff4d4d; }
+.chan i:nth-child(2) { left: 8px; top: 4px; background: #45d05f; }
+.chan i:nth-child(3) { left: 6px; top: 8px; background: #4d7dff; }
+.vstage { flex: 1; margin: 0 10px; border-radius: var(--sub-r); background: var(--surround); box-shadow: inset 0 0 0 1px var(--hair); position: relative; display: flex; align-items: center; justify-content: center; min-height: 0; overflow: hidden; }
+.pic { width: 466px; height: 262px; position: relative; overflow: hidden; border-radius: 2px;
+  background: radial-gradient(110% 80% at 30% 18%, #ffd9a3 0%, #f0a35f 24%, #b95a4a 50%, #4a2c5c 76%, #1b1730 100%); }
+.pic .sun { position: absolute; left: 29%; top: 26%; width: 56px; height: 56px; border-radius: 50%; background: #fff3dd; opacity: .95; }
+.pic .sky1 { position: absolute; left: 0; right: 0; bottom: 0; height: 46%; background: #17122a; clip-path: polygon(0 60%, 6% 60%, 6% 30%, 14% 30%, 14% 48%, 22% 48%, 22% 18%, 30% 18%, 30% 44%, 40% 44%, 40% 36%, 47% 36%, 47% 12%, 54% 12%, 54% 40%, 63% 40%, 63% 26%, 72% 26%, 72% 50%, 80% 50%, 80% 34%, 90% 34%, 90% 56%, 100% 56%, 100% 100%, 0 100%); }
+.pic .sky2 { position: absolute; left: 0; right: 0; bottom: 0; height: 22%; background: #0b0914; clip-path: polygon(0 70%, 10% 70%, 10% 40%, 26% 40%, 26% 62%, 44% 62%, 44% 28%, 58% 28%, 58% 55%, 76% 55%, 76% 38%, 92% 38%, 92% 66%, 100% 66%, 100% 100%, 0 100%); }
+.pic .ttl { position: absolute; left: 34px; bottom: 34px; color: #f6f1e8; font-size: 22px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
+.selchip { position: absolute; left: 10px; top: 10px; height: 20px; padding: 0 9px; display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-size: 9.5px; font-weight: 600; }
+.atchip { position: absolute; right: 10px; top: 10px; height: 20px; padding: 0 9px; display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; background: var(--card-2); color: var(--ts); font-size: 9.5px; box-shadow: 0 4px 12px rgba(0,0,0,.35); }
+.atchip .g { width: 10px; height: 10px; color: var(--tm); }
+.gizmo { position: absolute; left: 60px; top: 54px; width: 340px; height: 160px; border: 1px solid var(--accent); }
+.gizmo i { position: absolute; width: 9px; height: 9px; border-radius: 50%; background: #ffffff; border: 1.5px solid var(--accent); }
+.gizmo i:nth-child(1){left:-5px;top:-5px} .gizmo i:nth-child(2){right:-5px;top:-5px} .gizmo i:nth-child(3){left:-5px;bottom:-5px} .gizmo i:nth-child(4){right:-5px;bottom:-5px}
+.gizmo .anc { position: absolute; left: 50%; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border: 1.5px solid var(--accent); border-radius: 50%; }
+.gizmo .anc::after { content: ""; position: absolute; left: 50%; top: 50%; width: 2px; height: 2px; margin: -1px 0 0 -1px; border-radius: 50%; background: var(--accent); }
+.gizmo .stem { position: absolute; left: 50%; top: -22px; width: 1px; height: 22px; background: var(--accent); }
+.gizmo .stem::before { content: ""; position: absolute; left: -4px; top: -4px; width: 9px; height: 9px; border-radius: 50%; background: #ffffff; border: 1.5px solid var(--accent); }
+.deck { height: 44px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 12px; }
+.clock { display: inline-flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+.clock .big { font-family: var(--m); font-size: 16px; font-weight: 500; color: var(--tp); letter-spacing: .02em; }
+.clock .fr { font-family: var(--m); font-size: 9.5px; color: var(--tm); }
+.transport { height: 32px; padding: 0 6px; display: inline-flex; align-items: center; gap: 2px; border-radius: 999px; background: var(--card-2); }
+.transport .ib { width: 24px; height: 24px; background: transparent; color: var(--tp); border-radius: 50%; }
+.transport .play { width: 26px; height: 26px; background: var(--accent); color: var(--accent-ink); margin: 0 2px; }
+.deck .dd { height: 22px; }
+.ready { display: inline-flex; align-items: center; gap: 6px; }
+.ready i { width: 46px; height: 5px; border-radius: 3px; background: var(--well); position: relative; overflow: hidden; }
+.ready i b { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--on); }
 
-/* ---------- inspector ---------- */
-.ibody { flex: 1; overflow: hidden; padding: 0 10px; display: flex; flex-direction: column; gap: 6px; }
-.sec { border-radius: 12px; background: var(--card2); padding: 6px 8px 6px 10px; flex: none; }
-.sec.selected { box-shadow: inset 0 0 0 1.5px var(--accent); }
-.sechead { height: 26px; display: flex; align-items: center; gap: 8px; }
-.sechead .name { font-size: 11.5px; font-weight: 600; color: var(--tp); }
-.sechead .ms { margin-left: auto; font-family: var(--fn); font-size: 9px; color: var(--tm); }
-.sechead .x { width: 12px; height: 12px; color: var(--tm); }
-.tw { width: 8px; height: 8px; flex: none; color: var(--tm); }
-.prop { height: 28px; display: flex; align-items: center; gap: 6px; }
-.stop { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--tm); flex: none; }
-.stop.on { background: var(--accent); border-color: var(--accent); }
-.nav { width: 24px; flex: none; color: var(--tm); font-size: 8px; display: flex; justify-content: center; gap: 2px; }
-.prop .n { width: 66px; flex: none; color: var(--ts); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.prop .well { width: 66px; height: 22px; }
-.prop.pair .well { width: 50px; }
-.link { width: 10px; height: 10px; flex: none; color: var(--tm); }
-.track { flex: 1; height: 4px; border-radius: 999px; background: var(--well); position: relative; margin: 0 6px 0 2px; }
-.track::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: var(--v, 60%); background: var(--accent); border-radius: 999px; }
-.track i { position: absolute; top: -4px; left: var(--v, 60%); width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.4); }
-.sw { width: 18px; height: 18px; border-radius: 50%; flex: none; box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.15); }
-.ifoot { height: 44px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 12px; }
+/* ---------- effect controls ---------- */
+.ibody { flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 2px; padding: 0 6px; }
+.sec { flex: none; border-radius: 10px; }
+.sec.sel { background: var(--card-2); }
+.sech { height: 24px; display: flex; align-items: center; gap: 6px; padding: 0 6px 0 8px; }
+.sech .sdot { width: 6px; height: 6px; border-radius: 50%; background: var(--tm); flex: none; }
+.sec.sel .sech .sdot, .sec.on .sech .sdot { background: var(--accent); }
+.sech .nm { font-size: 11px; font-weight: 600; color: var(--tp); }
+.sech .ms { margin-left: auto; font-family: var(--m); font-size: 9px; color: var(--tm); }
+.sech .x { width: 12px; height: 12px; color: var(--tm); }
+.sech .tw { width: 10px; height: 10px; color: var(--tm); }
+.prop { height: 22px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 6px 0 8px; }
+.prop .lbl { width: 54px; flex: none; font-size: 10px; color: var(--tm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prop .fld { height: 18px; min-width: 42px; font-size: 10px; }
+.prop .dd { height: 18px; font-size: 10px; flex: 1; }
+.prop .u { width: 12px; flex: none; font-size: 9px; color: var(--tm); }
+.prop .pair { flex: 1; display: flex; gap: 4px; justify-content: flex-end; }
+.csw { width: 18px; height: 18px; border-radius: 5px; flex: none; background: var(--csw); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
+.efoot { height: 32px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 10px; border-top: 1px solid var(--hair); }
 
 /* ---------- timeline ---------- */
-.tl-head { height: 40px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 14px 0 16px; }
-.ctabs { display: inline-flex; gap: 2px; padding: 2px; border-radius: 999px; background: var(--well); margin-left: 6px; }
-.ctabs .pill { height: 22px; background: transparent; color: var(--tm); font-size: 11px; }
-.ctabs .pill.on { background: var(--card2); color: var(--tp); font-weight: 500; }
-.tl-body { flex: 1; display: grid; grid-template-columns: 620px 1fr; min-height: 0; gap: 8px; padding: 0 12px 0 10px; }
-.outline { display: flex; flex-direction: column; min-width: 0; }
-.lanes { display: flex; flex-direction: column; min-width: 0; position: relative; border-radius: 12px; background: var(--card2); overflow: hidden; }
-.chrome1 { height: 32px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 6px; }
-.chrome1 .well { height: 24px; }
-.ocols, .orow { display: grid; grid-template-columns: 92px 20px 1fr 78px 72px 72px 56px 30px; gap: 6px; padding: 0 8px; align-items: center; }
-.ocols { height: 20px; flex: none; color: var(--tm); font-size: 9.5px; }
-.ocols .r { text-align: right; }
+.tl-body { flex: 1; display: grid; grid-template-columns: 600px 1fr; min-height: 0; }
+.outline { display: flex; flex-direction: column; min-width: 0; padding: 0 0 0 4px; }
+.ochrome { height: 24px; flex: none; display: flex; align-items: center; gap: 4px; padding: 0 6px; }
+.ochrome .dd { height: 20px; width: 150px; color: var(--tm); }
+.ochrome .ib { width: 20px; height: 20px; }
+.ochrome .grp { margin-left: auto; display: flex; gap: 2px; }
+.ochrome .grp .pill { height: 18px; padding: 0 8px; font-size: 9.5px; background: transparent; color: var(--tm); }
+.ochrome .grp .pill.on { background: var(--well); color: var(--ts); }
+.ocols, .orow { display: grid; grid-template-columns: 82px 16px 1fr 82px 54px 58px 54px 26px; gap: 6px; padding: 0 6px; align-items: center; }
+.ocols { height: 18px; flex: none; }
+.ocols .hint.r { text-align: right; }
 .orows { flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 2px; }
-.orow { height: 26px; flex: none; border-radius: 10px; }
-.orow.sel { background: var(--accent-soft); }
-.switches { display: flex; gap: 5px; align-items: center; }
-.switches .g, .modes6 .g { width: 11px; height: 11px; color: var(--td); }
-.switches .g.on, .modes6 .g.on { color: var(--tp); }
-.lnum { font-family: var(--fn); font-size: 9.5px; color: var(--tm); text-align: right; }
-.lname { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.lname .av { width: 16px; height: 16px; border-radius: 50%; flex: none; }
-.lname .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ts); }
-.orow.sel .lname .t { color: var(--tp); }
-.modes6 { display: flex; gap: 5px; }
-.pick { height: 20px; display: flex; align-items: center; justify-content: space-between; padding: 0 8px; font-size: 10px; color: var(--ts); background: var(--well); border-radius: 999px; }
-.pick .c { width: 8px; height: 8px; color: var(--tm); }
-.ms { font-family: var(--fn); font-size: 9.5px; color: var(--tm); text-align: right; }
-.ofoot { height: 32px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 6px; }
-.kf { position: relative; width: 11px; height: 11px; flex: none; }
-.kf::after { content: ""; position: absolute; inset: 0; background: var(--kfc, var(--ts)); clip-path: var(--kfs); border-radius: 1px; }
-.kf.lin { --kfs: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
-.kf.hold { --kfs: inset(0 round 2px); }
-.kf.bez { --kfs: polygon(0 0, 100% 0, 0 100%, 100% 100%); }
-.kf.sel { --kfc: var(--accent); }
-.kf.onlane { position: absolute; top: 7px; }
-/* ruler */
-.ruler { height: 48px; flex: none; position: relative; overflow: hidden; }
-.ruler .scale { position: absolute; left: 0; right: 0; top: 0; height: 24px;
-  background-image: repeating-linear-gradient(to right, var(--td) 0 1px, transparent 1px 100px), repeating-linear-gradient(to right, var(--hair) 0 1px, transparent 1px 25px);
-  background-size: 100% 10px, 100% 5px; background-position: 0 100%, 0 100%; background-repeat: repeat-x; }
-.ruler .nums { position: absolute; left: 0; right: 0; top: 4px; display: flex; font-family: var(--fn); font-size: 9px; color: var(--tm); }
-.ruler .nums span { width: 100px; flex: none; padding-left: 5px; }
-.ruler .wa { position: absolute; left: 140px; right: 210px; top: 26px; height: 14px; border-radius: 999px; background: var(--accent-soft); }
-.ruler .wa i { position: absolute; top: -2px; width: 6px; height: 18px; border-radius: 999px; background: var(--accent); }
+.orow { height: 22px; flex: none; border-radius: var(--row-r); }
+.orow.sel { background: var(--raised); }
+.sw6, .md6 { display: flex; gap: 3px; align-items: center; }
+.sw6 .g, .md6 .g { width: 11px; height: 11px; color: var(--td); }
+.sw6 .g.on, .md6 .g.on { color: var(--ts); }
+.lnum { font-size: 9.5px; color: var(--tm); text-align: right; }
+.lname { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.lname .tw { width: 9px; height: 9px; color: var(--tm); }
+.av { width: 16px; height: 16px; flex: none; border-radius: 50%; background: var(--lc); color: var(--card); display: inline-flex; align-items: center; justify-content: center; }
+.av .g { width: 10px; height: 10px; }
+.lname .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ts); font-size: 10.5px; }
+.orow.sel .lname .t { color: var(--tp); font-weight: 500; }
+.pick { height: 18px; display: flex; align-items: center; justify-content: space-between; padding: 0 5px 0 6px; font-size: 9.5px; color: var(--ts); background: var(--well); border-radius: var(--ctl-r); white-space: nowrap; overflow: hidden; }
+.pick .g { width: 8px; height: 8px; color: var(--tm); }
+.pick.none { color: var(--td); }
+.orow .ms { font-family: var(--m); font-size: 9px; color: var(--tm); text-align: right; }
+
+.lanes { display: flex; flex-direction: column; min-width: 0; position: relative; padding: 0 10px 0 6px; }
+.ruler { height: 36px; flex: none; position: relative; overflow: hidden; }
+.ruler .scale { position: absolute; left: 0; right: 0; top: 0; height: 18px;
+  background-image:
+    repeating-linear-gradient(to right, var(--tm) 0 1px, transparent 1px 120px),
+    repeating-linear-gradient(to right, var(--td) 0 1px, transparent 1px 60px),
+    repeating-linear-gradient(to right, var(--hair) 0 1px, transparent 1px 12px);
+  background-size: 100% 10px, 100% 6px, 100% 4px; background-position: 0 100%, 0 100%, 0 100%; background-repeat: repeat-x; }
+.ruler .nums { position: absolute; left: 0; right: 0; top: 0; display: flex; font-family: var(--m); font-size: 9px; color: var(--tm); }
+.ruler .nums span { width: 120px; flex: none; padding-left: 3px; }
+.ruler .wa { position: absolute; left: 120px; width: 480px; top: 21px; height: 12px; border-radius: 999px; background: var(--accent-soft); }
+.ruler .wa i { position: absolute; top: -1px; width: 6px; height: 14px; border-radius: 999px; background: var(--accent); }
 .ruler .wa i:first-child { left: -3px; } .ruler .wa i:last-child { right: -3px; }
-.cache { position: absolute; left: 0; right: 0; bottom: 3px; height: 4px; display: flex; gap: 2px; }
-.cache b { display: block; height: 100%; align-self: flex-end; border-radius: 999px; }
-.marker { position: absolute; left: 260px; bottom: 9px; display: flex; align-items: center; gap: 3px; }
-.marker .flag { width: 8px; height: 8px; border-radius: 50%; background: #c4c4c4; }
-.marker .pillm { height: 14px; padding: 0 6px; border-radius: 999px; background: var(--raised); display: flex; align-items: center; font-family: var(--fn); font-size: 8px; color: var(--tp); }
-.playhead { position: absolute; left: 372px; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--accent); z-index: 4; }
-.playhead::before { content: ""; position: absolute; left: -5px; top: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--card2); }
-.lanewell { flex: 1; background: var(--well); position: relative; overflow: hidden; }
-.lanewell::before, .lanewell::after { content: ""; position: absolute; top: 0; bottom: 0; background: rgba(0,0,0,.28); z-index: 1; }
-.lanewell::before { left: 0; width: 140px; } .lanewell::after { right: 0; width: 210px; }
-.lane { height: 28px; position: relative; z-index: 2; }
-.lbar { position: absolute; top: 5px; height: 18px; border-radius: 999px; background: var(--lc); opacity: .55; }
-.lbar.sel { opacity: .9; box-shadow: 0 0 0 2px var(--accent); }
-.lbar .ghost { position: absolute; top: -3px; bottom: -3px; border: 1px dashed var(--td); border-radius: 999px; }
-.lbar .wave { position: absolute; left: 6px; right: 6px; top: 3px; bottom: 3px; z-index: 1; opacity: .9;
-  background: repeating-linear-gradient(to right, rgba(255,255,255,.7) 0 1px, transparent 1px 3px);
-  -webkit-mask: linear-gradient(to bottom, transparent 0, #000 40%, #000 60%, transparent 100%); mask: linear-gradient(to bottom, transparent 0, #000 40%, #000 60%, transparent 100%); }
-.lane .phl { position: absolute; left: 372px; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--accent); z-index: 3; opacity: .9; }
-.lfoot { height: 32px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 10px; }
-.lfoot .zoom { flex: 1; max-width: 240px; height: 4px; border-radius: 999px; background: var(--well); position: relative; }
-.lfoot .zoom i { position: absolute; left: 44%; top: -4px; width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.4); }
-.lfoot .sbar { flex: 1; height: 6px; border-radius: 999px; background: var(--well); position: relative; }
-.lfoot .sbar i { position: absolute; left: 22%; width: 48%; top: 0; bottom: 0; border-radius: 999px; background: var(--raised); }
+.cache { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; display: flex; gap: 2px; align-items: flex-end; }
+.cache b { display: block; border-radius: 2px; }
+.marker { position: absolute; left: 300px; top: 20px; display: flex; align-items: center; gap: 3px; z-index: 3; }
+.marker .mdot { width: 8px; height: 8px; border-radius: 50%; background: #c4c4c4; }
+.marker .mpill { height: 14px; padding: 0 6px; border-radius: 999px; background: var(--raised); display: flex; align-items: center; font-size: 8.5px; color: var(--tp); white-space: nowrap; }
+.playhead { position: absolute; left: 269px; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--accent); z-index: 4; }
+.playhead::before { content: ""; position: absolute; left: -6px; top: 0; width: 14px; height: 14px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--card-2); }
+.lanewell { flex: none; height: 168px; border-radius: var(--sub-r); background: var(--card-2); position: relative; overflow: hidden; }
+.lanewell::before, .lanewell::after { content: ""; position: absolute; top: 0; bottom: 0; background: rgba(0,0,0,.3); z-index: 1; }
+.lanewell::before { left: 0; width: 120px; } .lanewell::after { left: 600px; right: 0; }
+.lane { height: 24px; border-bottom: 1px solid var(--hair); position: relative; z-index: 2; }
+.lane:last-child { border-bottom: 0; }
+.bar { position: absolute; top: 3px; height: 18px; border-radius: var(--bar-r); background: var(--lc); color: var(--accent-ink); font-size: 9px; font-weight: 600; padding: 0 8px; display: flex; align-items: center; white-space: nowrap; overflow: hidden; }
+.bar.sel { box-shadow: 0 0 0 2px var(--tp); }
+.bar .fi, .bar .fo { position: absolute; top: 0; bottom: 0; width: 22px; background: rgba(255,255,255,.55); }
+.bar .nm { position: relative; z-index: 1; }
+.bar .fi { left: 0; clip-path: polygon(0 0, 100% 0, 0 100%); }
+.bar .fo { right: 0; clip-path: polygon(0 0, 100% 0, 100% 100%); }
+.bar .wave { position: absolute; left: 0; right: 0; top: 2px; bottom: 2px; opacity: .4;
+  background: repeating-linear-gradient(to right, #0c0c0e 0 1px, transparent 1px 3px);
+  -webkit-mask: linear-gradient(to bottom, transparent 0, #000 35%, #000 65%, transparent 100%);
+  mask: linear-gradient(to bottom, transparent 0, #000 35%, #000 65%, transparent 100%); }
+.bar .wave::after { content: ""; position: absolute; left: 0; right: 0; top: 0; bottom: 0; background: repeating-linear-gradient(to right, transparent 0 7px, #0c0c0e 7px 8px, transparent 8px 19px, #0c0c0e 19px 21px, transparent 21px 33px); -webkit-mask: linear-gradient(to bottom, transparent 0, #000 20%, #000 80%, transparent 100%); mask: linear-gradient(to bottom, transparent 0, #000 20%, #000 80%, transparent 100%); }
+.ghost { position: absolute; top: 3px; height: 18px; border-radius: var(--bar-r); border: 1px dashed var(--tm); }
+.kf { position: absolute; top: 4px; width: 9px; height: 9px; }
+.kf::after { content: ""; position: absolute; inset: 0; background: var(--kfc, var(--accent-ink)); clip-path: var(--kfs); }
+.kf.lin { --kfs: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+.kf.hold { --kfs: inset(1px); }
+.kf.bez { --kfs: polygon(0 0, 100% 0, 0 100%, 100% 100%); }
+.kf.ksel { --kfc: var(--tp); }
+.lanewell > .phl { position: absolute; left: 269px; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--accent); z-index: 3; }
+.minimap { height: 14px; flex: none; margin: 2px 0 0; border-radius: 5px; background: var(--card-2); position: relative; overflow: hidden; }
+.minimap b { position: absolute; height: 2px; border-radius: 1px; background: var(--lc); }
+.minimap .win { position: absolute; left: 0; top: 0; bottom: 0; width: 411px; border-radius: 5px; border: 1px solid var(--ts); background: rgba(255,255,255,.08); }
+.tfoot { grid-column: 1 / -1; height: 22px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-top: 1px solid var(--hair); }
+.tfoot .ease { display: flex; gap: 4px; align-items: center; }
+.tfoot .ease .kf { position: relative; top: 0; }
+.tfoot .ease .kf::after { background: var(--tm); }
+.tfoot .pill { height: 18px; padding: 0 8px; font-size: 9.5px; background: transparent; color: var(--tm); }
+.tfoot .zoom { display: flex; align-items: center; gap: 6px; width: 140px; }
+.tfoot .zoom .g { width: 12px; height: 12px; color: var(--tm); }
+.tfoot .zoom .slider { background: var(--raised); }
+.tfoot .sbar { width: 300px; height: 6px; border-radius: 3px; background: var(--well); position: relative; }
+.tfoot .sbar i { position: absolute; left: 0; width: 57%; top: 0; bottom: 0; border-radius: 3px; background: var(--raised); }
+.tfoot .lside { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 
-/* readouts on the room (no strip: a pill) */
-.status { position: absolute; left: 12px; bottom: 0; height: 12px; }
-.readout { display: flex; align-items: center; gap: 14px; height: 24px; padding: 0 12px; border-radius: 999px; background: var(--card); box-shadow: var(--shadow); font-size: 9.5px; color: var(--tm); position: absolute; right: 12px; bottom: 8px; z-index: 6; }
-.readout .meter { display: inline-flex; align-items: center; gap: 5px; }
-.readout .meter i { width: 36px; height: 4px; border-radius: 999px; background: var(--well); position: relative; overflow: hidden; }
-.readout .meter i b { position: absolute; left: 0; top: 0; bottom: 0; background: var(--raised); }
+/* ---------- bottom bar, in the room ---------- */
+.bbar { grid-area: bbar; display: flex; align-items: center; gap: 8px; position: relative; }
+.rb { width: 28px; height: 28px; flex: none; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--card); color: var(--ts); box-shadow: var(--room-btn-shadow); }
+.status { flex: 1 1 0; min-width: 0; overflow: hidden; height: 28px; padding: 0 12px; display: flex; align-items: center; gap: 8px; border-radius: 999px; background: var(--card); box-shadow: var(--room-btn-shadow); color: var(--ts); font-size: 10.5px; }
+.status .g { width: 12px; height: 12px; color: var(--tm); }
+.meters { height: 28px; padding: 0 12px; display: flex; align-items: center; gap: 12px; border-radius: 999px; background: var(--card); box-shadow: var(--room-btn-shadow); }
+.meter { display: inline-flex; align-items: center; gap: 5px; font-size: 9.5px; color: var(--tm); white-space: nowrap; }
+.meters { flex: none; }
+.bbar .meters.job { gap: 8px; flex: none; padding-right: 6px; }
+.bbar .meters.job .pill.ghost { height: 18px; padding: 0 8px; font-size: 9.5px; }
+.meter i:not(.g) { width: 36px; height: 4px; border-radius: 2px; background: var(--well); position: relative; overflow: hidden;}
+.meter i:not(.g) b { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; background: var(--ts); }
+.meter .g { width: 11px; height: 11px; color: var(--tm); }
+.meter .mono { color: var(--ts); font-size: 9px; }
+.bbar .pill.room { height: 28px; background: var(--card); box-shadow: var(--room-btn-shadow); }
+.bbar .pill.room .g { width: 12px; height: 12px; color: var(--tm); }
 
-.tag { position: absolute; z-index: 20; width: 18px; height: 18px; border-radius: 50%; background: var(--hi); color: #201f1d; font: 600 10px/18px var(--page-sans); text-align: center; box-shadow: 0 0 0 2px rgba(0,0,0,.35); display: none; }
-.shell.notes .tag { display: block; }
+/* ---------- notes overlay ---------- */
+.tag { position: absolute; z-index: 20; width: 18px; height: 18px; border-radius: 50%; background: var(--hi); color: #201f1d; font: 500 10px/18px var(--page-sans); text-align: center; box-shadow: 0 0 0 2px rgba(0,0,0,.35); display: none; }
+.shell.noted .tag { display: block; }
 
+/* ---------- reference strips ---------- */
 .refs { margin-top: 26px; display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
 .ref { background: var(--mount-deep); border: 1px solid var(--mount-line); padding: 14px 16px 16px; }
 .ref h3 { margin: 0 0 10px; font: 400 9px var(--page-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
 .notes { margin: 0; padding-left: 0; list-style: none; counter-reset: n; color: var(--ink-2); font-size: 12.5px; line-height: 1.55; }
 .notes li { position: relative; padding-left: 28px; margin-bottom: 8px; counter-increment: n; }
-.notes li::before { content: counter(n); position: absolute; left: 0; top: 1px; width: 18px; height: 18px; border-radius: 50%; background: var(--hi); color: #201f1d; font: 600 10px/18px var(--page-sans); text-align: center; }
-.notes b { color: var(--ink); font-weight: 600; }
+.notes li::before { content: counter(n); position: absolute; left: 0; top: 1px; width: 18px; height: 18px; border-radius: 50%; background: var(--hi); color: #201f1d; font: 500 10px/18px var(--page-sans); text-align: center; }
+.notes b { color: var(--ink); font-weight: 500; }
 .kv { display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; font-size: 12px; }
 .kv dt { font: 9px var(--page-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); padding-top: 2px; }
 .kv dd { margin: 0; color: var(--ink-2); line-height: 1.45; }
@@ -305,240 +407,246 @@ body { margin: 0; background: var(--mount); color: var(--ink); font-family: var(
 
 <div class="wrap">
   <header class="masthead">
-    <h1>Lumit — Lantern</h1>
-    <p class="sub">A from-scratch shell on the Lyrica cues</p>
+    <h1>Lumit, Lantern</h1>
+    <p class="sub">Lumit's dark ramp, arranged as cards in a light room</p>
   </header>
   <p class="intro">
-    Dark cards lit inside a light room, which is the reference's own arrangement. Every function in the UI spec is
-    kept — this is the style meant to <strong>replace Round</strong>, and it is a whole style rather than a shape:
-    the cards, the pills, the transport, the floating tool dock and the type are all its own. Night is the same
-    design with the room turned down. <strong>Toggle the notes</strong> to see the structural moves numbered.
+    Every function in the UI spec is still here: the dock, every tool, the Viewer bar's ways of looking,
+    the transport, the whole outline, the inspector, the status line. What changed is the room the panels
+    sit in and how each control is drawn. Every colour is Lumit's own: the dark ramp becomes cards floating
+    in a light room, the spruce accent is spent on fills only, and the toolbar can stand along the top or
+    down the left edge.
+    <strong>Toggle the notes</strong> to see the structural moves numbered on the shell.
   </p>
+
   <div class="controls">
     <div class="group"><span class="glabel" id="l-room">Room</span>
       <div class="seg" role="group" aria-labelledby="l-room">
-        <button type="button" id="r-day" data-room="day" aria-pressed="true">Day</button>
-        <button type="button" id="r-night" data-room="night" aria-pressed="false">Night</button>
+        <button type="button" data-room="day" aria-pressed="true">Day</button>
+        <button type="button" data-room="night" aria-pressed="false">Night</button>
+      </div></div>
+    <div class="group"><span class="glabel" id="l-tools">Tools</span>
+      <div class="seg" role="group" aria-labelledby="l-tools">
+        <button type="button" data-tools="top" aria-pressed="true">Top</button>
+        <button type="button" data-tools="left" aria-pressed="false">Left</button>
+      </div></div>
+    <div class="group"><span class="glabel" id="l-sliders">Range sliders</span>
+      <div class="seg" role="group" aria-labelledby="l-sliders">
+        <button type="button" data-sliders="on" aria-pressed="true">On</button>
+        <button type="button" data-sliders="off" aria-pressed="false">Off</button>
       </div></div>
     <div class="group"><span class="glabel" id="l-notes">Annotations</span>
       <div class="seg" role="group" aria-labelledby="l-notes">
-        <button type="button" id="n-off" data-notes="off" aria-pressed="true">Resting state</button>
-        <button type="button" id="n-on" data-notes="on" aria-pressed="false">Show notes</button>
+        <button type="button" data-notes="off" aria-pressed="true">Resting state</button>
+        <button type="button" data-notes="on" aria-pressed="false">Show notes</button>
       </div></div>
   </div>
 
   <section class="stage">
     <div class="viewport" id="viewport"><div class="scaler" id="scaler">
-      <div class="shell" id="shell" data-room="day">
+      <div class="shell" id="shell" data-room="day" data-tools="top" data-sliders="on">
 
-        <!-- top band -->
-        <div class="top">
-          <span class="mark"><b></b></span>
+        <!-- ===== top band ===== -->
+        <div class="band">
+          <div class="mark"><i></i>Lumit</div>
           <div class="menus"><span>File</span><span>Edit</span><span>Composition</span><span>Layer</span><span>Effect</span><span>Animation</span><span>View</span><span>Window</span><span>Help</span></div>
-          <div class="wsp"><span class="pill on">Edit</span><span class="pill">Effects</span><span class="pill">Colour</span><span class="pill">Audio</span><span class="pill">Retiming</span><span class="pill">Nodes</span></div>
-          <div class="palette"><span class="g" style="width:12px;height:12px"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="4"/><path d="M9.5 9.5l4 4"/></svg></span>Command or effect<span class="k">⌘⇧P</span></div>
+          <div class="spill lime room"><span class="on">Edit</span><span>Effects</span><span>Colour</span><span>Audio</span><span>Retiming</span><span>Nodes</span></div>
+          <div class="palette"><i class="g g12" data-ic="search"></i>Command or effect<span class="k">ctrl shift p</span></div>
+          <span class="tag" style="left:548px;top:-2px">4</span>
         </div>
 
+        <!-- ===== toolbar: one element, two positions ===== -->
+        <nav class="tools" id="tools">
+          <span class="tag" style="left:-4px;top:-6px">1</span>
+        </nav>
+
+        <!-- ===== dock ===== -->
         <div class="dock">
+          <span class="tag" style="left:284px;top:120px">2</span>
+
           <!-- project -->
           <section class="card card--project">
-            <div class="chead"><span class="title"><span class="hdot"></span>Project</span><span class="sp"></span><span class="sub">10 items · 1 missing</span></div>
+            <div class="ct"><span class="hd"></span><span class="ttl">Project</span><span class="l"><span class="hint">10 items</span></span><span class="r"><span class="hint">1 missing</span></span></div>
             <div class="specimen">
               <div class="poster"></div>
               <div class="meta">
-                <span class="k">Name</span><span class="v">rooftop_a012.mov</span>
-                <span class="k">Size</span><span class="v num">1920 × 1080 · 25 fps</span>
-                <span class="k">Length</span><span class="v num">00:00:21:10</span>
-                <span class="k">Codec</span><span class="v">ProRes 422 HQ</span>
-                <span class="k">Sound</span><span class="v">48k stereo</span>
+                <span class="hint">Name</span><span class="v">rooftop_a012.mov</span>
+                <span class="hint">Size</span><span class="v mono">1920 x 1080, 25 fps</span>
+                <span class="hint">Length</span><span class="v mono">00:00:21:10</span>
+                <span class="hint">Codec</span><span class="v">ProRes 422 HQ</span>
+                <span class="hint">Sound</span><span class="v">48k stereo</span>
               </div>
             </div>
-            <div class="psearch"><div class="well ghost"><span class="swatch"></span>Search</div></div>
-            <div class="cols"><span>Name</span><span>Items</span><span>Size</span><span>fps</span><span>Path</span></div>
-            <div class="prows">
-              <div class="prow"><span class="nm"><span class="av"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="3.5" width="11" height="9" rx="2"/><path d="M2.5 6.5h11"/></svg></span></span><span class="t">Opening sequence</span></span><span class="n2">12</span><span class="n2">—</span><span class="n2">25</span><span class="pth">comps</span></div>
-              <div class="prow"><span class="nm"><span class="av"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="3.5" width="11" height="9" rx="2"/><path d="M2.5 6.5h11"/></svg></span></span><span class="t">Titles</span></span><span class="n2">4</span><span class="n2">—</span><span class="n2">25</span><span class="pth">comps</span></div>
-              <div class="prow sel"><span class="nm"><span class="av" style="color:var(--l-footage)"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="4" width="11" height="8" rx="2"/><path d="M6.5 6.5v3l3-1.5z"/></svg></span></span><span class="t">rooftop_a012.mov</span><span class="badge use">in use</span></span><span class="n2">—</span><span class="n2">842M</span><span class="n2">25</span><span class="pth">day2</span></div>
-              <div class="prow"><span class="nm"><span class="av" style="color:var(--l-footage)"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="4" width="11" height="8" rx="2"/><path d="M6.5 6.5v3l3-1.5z"/></svg></span></span><span class="t">rooftop_a017.mov</span><span class="badge miss">missing</span></span><span class="n2">—</span><span class="n2">—</span><span class="n2">25</span><span class="pth">day2</span></div>
-              <div class="prow"><span class="nm"><span class="av" style="color:var(--l-camera)"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="5.5"/><path d="M2.5 8h11M8 2.5v11"/></svg></span></span><span class="t">grade_master.cube</span></span><span class="n2">—</span><span class="n2">1.1M</span><span class="n2">—</span><span class="pth">luts</span></div>
-              <div class="prow"><span class="nm"><span class="av"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 12.5V4.5h4l1.5 2h5.5v6z" stroke-linejoin="round"/></svg></span></span><span class="t">Audio</span></span><span class="n2">3</span><span class="n2">—</span><span class="n2">—</span><span class="pth"></span></div>
-              <div class="prow"><span class="nm" style="padding-left:14px"><span class="av" style="color:var(--l-audio)"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 8.5v-2M6 11V5M9 13V3M13 8.5v-2"/></svg></span></span><span class="t">stinger_04.wav</span></span><span class="n2">—</span><span class="n2">6.4M</span><span class="n2">48k</span><span class="pth">audio</span></div>
-              <div class="prow"><span class="nm" style="padding-left:14px"><span class="av" style="color:var(--l-audio)"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 8.5v-2M6 11V5M9 13V3M13 8.5v-2"/></svg></span></span><span class="t">bed_loop.wav</span><span class="badge use">in use</span></span><span class="n2">—</span><span class="n2">18M</span><span class="n2">48k</span><span class="pth">audio</span></div>
-              <div class="prow"><span class="nm"><span class="av" style="color:var(--l-solid)"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="10" height="10" rx="2"/></svg></span></span><span class="t">Vignette solid</span></span><span class="n2">—</span><span class="n2">—</span><span class="n2">—</span><span class="pth"></span></div>
-            </div>
-            <div class="cfoot">
-              <span class="pill"><span class="g" style="width:11px;height:11px"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 12.5V4.5h4l1.5 2h5.5v6z" stroke-linejoin="round"/></svg></span>Folder</span>
-              <span class="pill"><span class="g" style="width:11px;height:11px"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="3.5" width="11" height="9" rx="2"/><path d="M2.5 6.5h11"/></svg></span>Composition</span>
-              <span class="pill"><span class="g" style="width:11px;height:11px"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 3v8M4.5 7.5L8 11l3.5-3.5M3 13h10"/></svg></span>Import</span>
+            <div class="psearch"><div class="dd"><i class="g g12" data-ic="search"></i>Search<span class="sp"></span><span class="swatchf"></span></div></div>
+            <div class="pcols"><span class="hint">Name</span><span class="hint">Items</span><span class="hint">Size</span><span class="hint">fps</span><span class="hint">Path</span></div>
+            <div class="prows" id="prows"></div>
+            <div class="pfoot">
+              <span class="pill">Folder</span>
+              <span class="pill">Composition</span>
+              <span class="pill">Import</span>
               <span class="sp"></span>
-              <span class="pill ghost">Proxies<span class="switch"></span></span>
+              <span class="hint">Proxies</span><span class="tog"></span>
             </div>
           </section>
 
           <!-- viewer -->
           <section class="card card--viewer">
+            <div class="ct"><span class="hd"></span><span class="ttl">Viewer</span><span class="r"><span class="hint">Opening sequence</span></span></div>
+            <span class="tag" style="left:calc(50% + 34px);top:5px">3</span>
+            <span class="tag" style="right:130px;top:30px">5</span>
             <div class="vbar">
-              <span class="title" style="display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:var(--tp)"><span class="hdot" style="width:6px;height:6px;border-radius:50%;background:var(--accent)"></span>Viewer</span>
+              <span class="dd">Fit 62%<i class="g" data-ic="chev"></i></span>
+              <span class="dd">Half<i class="g" data-ic="chev"></i></span>
+              <span class="chan" title="Channels"><i></i><i></i><i></i></span>
+              <span class="ib" title="Transparency board"><i class="g g12" data-ic="board"></i></span>
+              <span class="ib" title="View menu"><i class="g g12" data-ic="monitor"></i></span>
+              <span class="dd"><i class="g g12" data-ic="cube" style="color:var(--ts)"></i>Active camera<i class="g" data-ic="chev"></i></span>
+              <span class="fld" title="Exposure">+0.0</span>
+              <span class="ib" title="Take snapshot"><i class="g g12" data-ic="snap"></i></span>
+              <span class="ib off" title="Show snapshot"><i class="g g12" data-ic="eye"></i></span>
+              <span class="dd">sRGB<i class="g" data-ic="chev"></i></span>
               <span class="sp"></span>
-              <span class="pill">Fit 62%<span class="g chev"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l4 4 4-4"/></svg></span></span>
-              <span class="pill">Half<span class="g chev"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l4 4 4-4"/></svg></span></span>
-              <span class="rbtn" title="Channel"><span style="position:relative;width:13px;height:13px;display:inline-block"><i style="position:absolute;left:0;top:2px;width:8px;height:8px;border-radius:50%;background:#e0524a"></i><i style="position:absolute;left:5px;top:2px;width:8px;height:8px;border-radius:50%;background:#49b86b"></i><i style="position:absolute;left:2.5px;top:6px;width:8px;height:8px;border-radius:50%;background:#4a86e8"></i></span></span>
-              <span class="rbtn" title="Board"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="2.5" width="11" height="11" rx="2"/><path d="M2.5 8h11M8 2.5v11"/></svg></span></span>
-              <span class="rbtn" title="View"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="3.5" width="11" height="9" rx="2"/><rect x="5" y="6" width="6" height="4" rx="1"/></svg></span></span>
-              <span class="pill">Active camera<span class="g chev"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l4 4 4-4"/></svg></span></span>
-              <span class="pill num" title="Exposure">+0.0</span>
-              <span class="rbtn" title="Take snapshot"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="4.5" width="11" height="8" rx="2"/><circle cx="8" cy="8.5" r="2"/></svg></span></span>
-              <span class="rbtn" title="Show snapshot" style="color:var(--td)"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 8s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z"/><circle cx="8" cy="8" r="1.5"/></svg></span></span>
-              <span class="pill">sRGB<span class="g chev"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l4 4 4-4"/></svg></span></span>
+              <span class="hint mono">1920x1080 -&gt; 960x540</span>
             </div>
-            <div class="stagearea">
-              <div class="tooldock">
-                <span class="rbtn on" title="Selection"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M3.5 2.5l9 7-4 .8 2.3 4.2-1.8 1-2.3-4.2-3.2 2.7z"/></svg></span></span>
-                <span class="rbtn" title="Hand"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5 8V3.5a1 1 0 012 0V7M7 6.5V3a1 1 0 012 0v4M9 6.5V3.5a1 1 0 012 0V8M11 7.5a1 1 0 012 0V10a4 4 0 01-4 4H8a4 4 0 01-3.5-2L3 9.5a1 1 0 011.7-1L5 9.5"/></svg></span></span>
-                <span class="rbtn" title="Zoom"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="6.5" cy="6.5" r="4"/><path d="M9.5 9.5l4 4M4.5 6.5h4M6.5 4.5v4"/></svg></span></span>
-                <span class="rbtn" title="Rotation"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M13 8a5 5 0 11-1.5-3.6M13 2.5v3h-3"/></svg></span></span>
-                <span class="rbtn" title="Anchor point"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 2v3M8 11v3M2 8h3M11 8h3"/></svg></span></span>
-                <span class="rbtn" title="Razor"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 3l10 10M13 3L3 13M8 8v5"/></svg></span></span>
-                <span class="seamh"></span>
-                <span class="rbtn grp" title="Shape"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="2.5" width="11" height="11" rx="2"/></svg></span></span>
-                <span class="rbtn grp" title="Pen"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M3 13l6.5-6.5 1.5 1.5L4.5 14.5H3zM9.5 6.5l2-2 1.5 1.5-2 2"/></svg></span></span>
-                <span class="rbtn grp" title="Type"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 3.5h10M8 3.5v10M6 13.5h4"/></svg></span></span>
-                <span class="rbtn grp" title="Paint"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M12.5 2.5l1 1-6 6-1-1zM6.5 8.5c-2 0-3 1.5-3 3.5 2 0 3.5-1 3.5-3"/></svg></span></span>
-                <span class="rbtn grp" title="Roto"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 10c1-4 4-6 8-5s3 6-1 7-6-2-7-2z" stroke-dasharray="2 2"/></svg></span></span>
-                <span class="rbtn grp" title="Puppet"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="2"/><path d="M8 2v4M8 10v4M2 8h4M10 8h4"/></svg></span></span>
-                <span class="rbtn grp" title="Camera"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="2.5" y="4.5" width="8" height="7" rx="2"/><path d="M10.5 7l3-2v6l-3-2"/></svg></span></span>
-                <span class="seamh"></span>
-                <span class="rbtn" title="Snapping"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 3v5a4 4 0 008 0V3M4 6h3M9 6h3"/></svg></span></span>
-              </div>
-              <div class="frame">
-                <div class="sun"></div><div class="hill"></div><div class="hill2"></div>
+            <div class="vstage">
+              <div class="pic">
+                <div class="sun"></div><div class="sky1"></div><div class="sky2"></div>
                 <div class="ttl">Rooftop</div>
-                <div class="selname">Rooftop · title</div>
-                <div class="atchip">at Gaussian blur</div>
-                <div class="gizmo"><i></i><i></i><i></i><i></i><span class="anchor"></span><span class="rot"></span></div>
+                <div class="gizmo"><i></i><i></i><i></i><i></i><span class="anc"></span><span class="stem"></span></div>
               </div>
+              <div class="selchip">Rooftop title</div>
+              <div class="atchip"><i class="g" data-ic="fx"></i>at Gaussian blur</div>
             </div>
             <div class="deck">
-              <span class="clock"><span class="t">00:00:04:12</span><span class="f">f112 / 525</span></span>
+              <span class="clock"><span class="big">00:00:04:12</span><span class="fr">f112 / 525</span></span>
               <span class="sp"></span>
               <span class="transport">
-                <span class="rbtn"><span class="g"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M3 3h2v10H3zM13 3L6 8l7 5z"/></svg></span></span>
-                <span class="rbtn"><span class="g"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M11 3L4 8l7 5z"/></svg></span></span>
-                <span class="rbtn play"><span class="g"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M5 3l8 5-8 5z"/></svg></span></span>
-                <span class="rbtn"><span class="g"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M5 3l7 5-7 5z"/></svg></span></span>
-                <span class="rbtn"><span class="g"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M11 3h2v10h-2zM3 3l7 5-7 5z"/></svg></span></span>
+                <span class="ib" title="To start"><i class="g" data-ic="skipstart"></i></span>
+                <span class="ib" title="Previous frame"><i class="g" data-ic="prev"></i></span>
+                <span class="ib play" title="Play"><i class="g" data-ic="play"></i></span>
+                <span class="ib" title="Next frame"><i class="g" data-ic="next"></i></span>
+                <span class="ib" title="To end"><i class="g" data-ic="skipend"></i></span>
               </span>
+              <span class="tag" style="left:calc(50% - 64px);bottom:34px">6</span>
               <span class="sp"></span>
-              <span class="pill">Loop<span class="g chev"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l4 4 4-4"/></svg></span></span>
-              <span class="pill">Cached<span class="g chev"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l4 4 4-4"/></svg></span></span>
-              <span class="pill">Full</span>
-              <span class="rbtn" title="Audio"><span class="g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M3 6h3l4-3v10l-4-3H3zM12 6a3 3 0 010 4"/></svg></span></span>
-              <span class="ready"><i><b style="width:58%"></b></i><span class="num">58%</span></span>
+              <span class="dd" title="Loop mode"><i class="g g12" data-ic="loop" style="color:var(--ts)"></i><i class="g" data-ic="chev"></i></span>
+              <span class="dd" title="Preview mode">Cached<i class="g" data-ic="chev"></i></span>
+              <span class="dd" title="Quality">Full<i class="g" data-ic="chev"></i></span>
+              <span class="ib on" title="Audio"><i class="g g12" data-ic="speaker"></i></span>
+              <span class="ready" title="Preview ready"><i><b style="width:58%"></b></i><span class="hint mono">58%</span></span>
             </div>
           </section>
 
-          <!-- inspector -->
-          <section class="card card--inspector">
-            <div class="chead"><span class="title"><span class="hdot"></span>Effect controls</span><span class="sp"></span><span class="sub">Rooftop · title</span></div>
+          <!-- effect controls -->
+          <section class="card card--effects">
+            <div class="ct"><span class="hd"></span><span class="ttl">Effect controls</span><span class="r"><span class="hint">Rooftop title</span></span></div>
+            <span class="tag" style="left:4px;top:60px">7</span>
+            <span class="tag" style="right:4px;top:174px">8</span>
             <div class="ibody">
               <div class="sec">
-                <div class="sechead"><span class="tw"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l4 4 4-4"/></svg></span><span class="name">Transform</span></div>
-                <div class="prop"><span class="stop"></span><span class="nav"></span><span class="n">Anchor</span><span class="well">960</span></div>
-                <div class="prop"><span class="stop on"></span><span class="nav">◂ ◆ ▸</span><span class="n">Position</span><span class="well">948</span></div>
-                <div class="prop"><span class="stop"></span><span class="nav"></span><span class="n">Scale</span><span class="well">104.0<span class="u">%</span></span></div>
-                <div class="prop"><span class="stop on"></span><span class="nav">◂ ◇ ▸</span><span class="n">Rotation</span><span class="well">2.4<span class="u">°</span></span></div>
-                <div class="prop"><span class="stop"></span><span class="nav"></span><span class="n">Opacity</span><span class="well">100<span class="u">%</span></span></div>
+                <div class="sech"><i class="g tw" data-ic="twd"></i><span class="sdot"></span><span class="nm">Transform</span><span class="ms">0.1 ms</span></div>
+                <div class="prop"><span class="stopw on"></span><span class="nav">&#9666;<b>&#9670;</b>&#9656;</span><span class="lbl">Position</span><span class="pair"><span class="fld">948</span><span class="fld">552</span></span><span class="u">px</span><i class="g reset" data-ic="reset"></i></div>
+                <div class="prop"><span class="stopw"></span><span class="nav"></span><span class="lbl">Scale</span><span class="slider"><i style="left:52%"></i></span><span class="fld">104.0</span><span class="u">%</span><i class="g reset" data-ic="reset"></i></div>
+                <div class="prop"><span class="stopw on"></span><span class="nav">&#9666;<b>&#9671;</b>&#9656;</span><span class="lbl">Rotation</span><span class="slider"><i style="left:51%"></i></span><span class="fld">2.4</span><span class="u">&deg;</span><i class="g reset" data-ic="reset"></i></div>
+                <div class="prop"><span class="stopw"></span><span class="nav"></span><span class="lbl">Opacity</span><span class="slider"><i style="left:100%"></i></span><span class="fld">100</span><span class="u">%</span><i class="g reset" data-ic="reset"></i></div>
+                <div class="prop"><span class="stopw"></span><span class="nav"></span><span class="lbl">Easing</span><span class="irow" id="easing"></span><span class="sp"></span><span class="fld">50</span><span class="u"></span><i class="g reset" data-ic="reset"></i></div>
               </div>
-              <div class="sec selected">
-                <div class="sechead"><span class="tw"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l4 4 4-4"/></svg></span><span class="switch on"></span><span class="name">Gaussian blur</span><span class="ms">3.1 ms</span><span class="x g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg></span></div>
-                <div class="prop"><span class="stop on"></span><span class="nav">◂ ◆ ▸</span><span class="n">Blurriness</span><span class="well">24.0<span class="u">px</span></span></div>
-                <div class="prop"><span class="stop"></span><span class="nav"></span><span class="n">Dimensions</span><span class="well" style="font-family:var(--f)">Both<span class="g chev" style="margin-left:auto;color:var(--tm)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l4 4 4-4"/></svg></span></span></div>
-                <div class="prop pair"><span class="stop"></span><span class="nav"></span><span class="n">Centre</span><span class="well">960</span><span class="link g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 10l4-4M4.5 8.5a2.5 2.5 0 010-3.5l1-1a2.5 2.5 0 013.5 3.5M11.5 7.5a2.5 2.5 0 010 3.5l-1 1a2.5 2.5 0 01-3.5-3.5"/></svg></span><span class="well">540</span></div>
-                <div class="prop"><span class="stop"></span><span class="nav"></span><span class="n">Mix</span><span class="well" style="width:46px">100<span class="u">%</span></span><span class="track" style="--v:100%"><i></i></span></div>
+              <div class="sec sel">
+                <div class="sech"><i class="g tw" data-ic="twd"></i><span class="sdot"></span><span class="nm">Gaussian blur</span><span class="ms">3.1 ms</span><span class="tog on"></span><i class="g x" data-ic="x"></i></div>
+                <div class="prop"><span class="stopw"></span><span class="nav"></span><span class="lbl">Radius</span><span class="slider"><i style="left:24%"></i></span><span class="fld">24</span><span class="u">px</span><i class="g reset" data-ic="reset"></i></div>
+                <div class="prop"><span class="stopw"></span><span class="nav"></span><span class="lbl">Direction</span><span class="irow"><span class="ib on"><i class="g g12" data-ic="both"></i></span><span class="ib"><i class="g g12" data-ic="horiz"></i></span><span class="ib"><i class="g g12" data-ic="vert"></i></span></span><span class="sp"></span><span class="dd" style="flex:none">Repeat<i class="g" data-ic="chev"></i></span><i class="g reset" data-ic="reset"></i></div>
               </div>
-              <div class="sec">
-                <div class="sechead"><span class="tw"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l4 4 4-4"/></svg></span><span class="switch on"></span><span class="name">Glow</span><span class="ms">11.6 ms</span><span class="x g"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg></span></div>
-                <div class="prop"><span class="stop"></span><span class="nav"></span><span class="n">Threshold</span><span class="well" style="width:46px">62<span class="u">%</span></span><span class="track" style="--v:62%"><i></i></span></div>
-                <div class="prop"><span class="stop on"></span><span class="nav">◂ ◇ ▸</span><span class="n">Intensity</span><span class="well">1.4</span></div>
-                <div class="prop"><span class="stop"></span><span class="nav"></span><span class="n">Colour</span><span class="sw" style="background:#f0a35f"></span><span class="g" style="width:12px;height:12px;color:var(--tm)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 13l6-6M9 7l3-3 1 1-3 3zM8 6l2 2"/></svg></span></div>
+              <div class="sec on">
+                <div class="sech"><i class="g tw" data-ic="twd"></i><span class="sdot"></span><span class="nm">Glow</span><span class="ms">1.4 ms</span><span class="tog on"></span><i class="g x" data-ic="x"></i></div>
+                <div class="prop"><span class="stopw"></span><span class="nav"></span><span class="lbl">Threshold</span><span class="slider"><i style="left:62%"></i></span><span class="fld">62</span><span class="u">%</span><i class="g reset" data-ic="reset"></i></div>
+                <div class="prop"><span class="stopw"></span><span class="nav"></span><span class="lbl">Radius</span><span class="slider"><i style="left:40%"></i></span><span class="fld">40</span><span class="u">px</span><i class="g reset" data-ic="reset"></i></div>
+                <div class="prop"><span class="stopw"></span><span class="nav"></span><span class="lbl">Colour</span><span class="csw" style="--csw:#ffb347"></span><span class="ib" style="width:18px;height:18px;background:transparent;color:var(--tm)"><i class="g g12" data-ic="dropper"></i></span><span class="sp"></span><span class="fld">ffb347</span><span class="u"></span><i class="g reset" data-ic="reset"></i></div>
+                <div class="prop"><span class="stopw"></span><span class="nav"></span><span class="lbl">Blend</span><span class="dd">Add<span class="sp"></span><i class="g" data-ic="chev"></i></span><span class="u"></span><i class="g reset" data-ic="reset"></i></div>
               </div>
             </div>
-            <div class="ifoot"><span class="pill on">Add effect</span><span class="pill">Save preset</span></div>
+            <div class="efoot">
+              <span class="pill lime"><i class="g g12" data-ic="plus"></i>Add effect</span>
+              <span class="pill">Save preset</span>
+              <span class="sp"></span>
+              <span class="ib" title="Effects and presets"><i class="g g12" data-ic="fx"></i></span>
+            </div>
           </section>
 
           <!-- timeline -->
           <section class="card card--timeline">
-            <div class="tl-head">
-              <span class="title" style="display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:var(--tp)"><span class="hdot" style="width:6px;height:6px;border-radius:50%;background:var(--accent)"></span>Timeline</span>
-              <span class="ctabs"><span class="pill on">Opening sequence</span><span class="pill">Rooftop</span><span class="pill">Titles</span></span>
-              <span class="sp"></span>
-              <span class="segp"><span class="pill on">Layers</span><span class="pill">Graph</span></span>
-              <span class="pill on" style="margin-left:6px">Export</span>
+            <div class="ct">
+              <span class="hd"></span><span class="ttl">Timeline</span>
+              <span class="l"><span class="spill"><span class="on">Opening sequence</span><span>Titles</span></span></span>
+              <span class="r"><span class="spill"><span class="on">Layers</span><span>Graph</span></span><span class="pill lime"><i class="g g12" data-ic="export"></i>Export</span></span>
             </div>
+            <span class="tag" style="left:4px;top:52px">9</span>
+            <span class="tag" style="left:650px;bottom:28px">10</span>
+            <span class="tag" style="left:884px;top:24px">11</span>
             <div class="tl-body">
               <div class="outline">
-                <div class="chrome1">
-                  <span class="well ghost" style="flex:1;max-width:240px">Search layers</span>
-                  <span class="rbtn" title="Shy" style="width:24px;height:24px;color:var(--tm)"><span class="g" style="width:12px;height:12px"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 8s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z"/><path d="M3 3l10 10"/></svg></span></span>
-                  <span class="rbtn" title="Motion blur" style="width:24px;height:24px;color:var(--tm)"><span class="g" style="width:12px;height:12px"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="9" cy="8" r="4"/><path d="M2 5h3M2 8h4M2 11h3"/></svg></span></span>
-                  <span class="sp"></span>
-                  <span class="pill ghost">Switches</span><span class="pill ghost">Modes</span><span class="pill ghost">Pickers</span>
+                <div class="ochrome">
+                  <span class="dd"><i class="g g12" data-ic="search"></i>Search layers</span>
+                  <span class="ib on" title="Shy"><i class="g g12" data-ic="shy"></i></span>
+                  <span class="ib" title="Motion blur"><i class="g g12" data-ic="mb"></i></span>
+                  <span class="grp"><span class="pill on">Switches</span><span class="pill on">Modes</span><span class="pill on">Pickers</span></span>
                 </div>
-                <div class="ocols"><span>Switches</span><span class="r">#</span><span>Layer</span><span>Modes</span><span>Matte</span><span>Blend</span><span>Parent</span><span class="r">ms</span></div>
+                <div class="ocols"><span class="hint">Switches</span><span class="hint r">#</span><span class="hint">Layer</span><span class="hint">Modes</span><span class="hint">Matte</span><span class="hint">Blend</span><span class="hint">Parent</span><span class="hint r">ms</span></div>
                 <div class="orows" id="orows"></div>
-                <div class="ofoot">
-                  <span style="display:flex;gap:5px;align-items:center;padding:0 6px"><span class="kf lin"></span><span class="kf hold"></span><span class="kf bez"></span></span>
-                  <span class="pill">Ease</span>
-                  <span class="pill ghost">Reverse</span><span class="pill ghost">Copy</span><span class="pill ghost">Paste at playhead</span>
-                  <span class="sp"></span>
-                  <span class="rbtn" title="Measure" style="width:24px;height:24px;color:var(--tp)"><span class="g" style="width:12px;height:12px"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 1.5"/></svg></span></span>
-                </div>
               </div>
               <div class="lanes">
                 <div class="ruler">
                   <div class="scale"></div>
-                  <div class="nums"><span>0s</span><span>4s</span><span>8s</span><span>12s</span><span>16s</span><span>20s</span><span>24s</span></div>
+                  <div class="nums"><span>0s</span><span>2s</span><span>4s</span><span>6s</span><span>8s</span><span>10s</span></div>
                   <div class="wa"><i></i><i></i></div>
                   <div class="cache">
-                    <b style="width:138px;background:var(--cache-disk);height:70%"></b>
-                    <b style="width:158px;background:var(--cache-hot)"></b>
-                    <b style="width:70px;background:var(--cache-hot);opacity:.55;height:70%"></b>
-                    <b style="width:88px;background:var(--cache-disk);opacity:.7;height:45%"></b>
-                    <b style="width:118px;background:var(--cache-disk);opacity:.5;height:45%"></b>
+                    <b style="width:118px;background:var(--cache-disk);height:70%"></b>
+                    <b style="width:150px;background:var(--cache-hot);height:100%"></b>
+                    <b style="width:70px;background:var(--cache-hot);opacity:.6;height:70%"></b>
+                    <b style="width:92px;background:var(--cache-disk);opacity:.7;height:45%"></b>
+                    <b style="width:120px;background:var(--cache-disk);opacity:.5;height:45%"></b>
                   </div>
-                  <div class="marker"><span class="flag"></span><span class="pillm">beat 4</span></div>
+                  <div class="marker"><span class="mdot"></span><span class="mpill">beat 4</span></div>
                   <div class="playhead"></div>
                 </div>
                 <div class="lanewell" id="lanewell"></div>
-                <div class="lfoot">
-                  <span class="g" style="width:12px;height:12px;color:var(--tm)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 12l4-5 3 3 2-2 3 4z" stroke-linejoin="round"/></svg></span>
-                  <span class="zoom"><i></i></span>
-                  <span class="g" style="width:14px;height:14px;color:var(--ts)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 12l4-5 3 3 2-2 3 4z" stroke-linejoin="round"/></svg></span>
-                  <span class="rbtn" title="Snapping" style="width:24px;height:24px;color:var(--tp)"><span class="g" style="width:12px;height:12px"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 3v5a4 4 0 008 0V3M4 6h3M9 6h3"/></svg></span></span>
+                <div class="minimap" id="minimap"><span class="win"></span></div>
+              </div>
+              <div class="tfoot">
+                <span class="ease"><span class="kf lin"></span><span class="kf hold"></span><span class="kf bez"></span></span>
+                <span class="hint">Ease</span>
+                <span class="seamv"></span>
+                <span class="pill">Reverse</span><span class="pill">Copy</span><span class="pill">Paste at playhead</span>
+                <span class="seamv"></span>
+                <span class="ib on" title="Measure render time" style="width:18px;height:18px"><i class="g g12" data-ic="clock"></i></span>
+                <span class="lside">
+                  <span class="zoom"><i class="g" data-ic="lsmall"></i><span class="slider"><i style="left:38%"></i></span><i class="g" data-ic="lbig"></i></span>
+                  <span class="hint mono">1 tick = 5 f</span>
+                  <span class="ib on" title="Snapping" style="width:18px;height:18px"><i class="g g12" data-ic="magnet"></i></span>
                   <span class="sbar"><i></i></span>
-                </div>
+                </span>
               </div>
             </div>
           </section>
         </div>
 
-        <!-- readouts: a pill over the room -->
-        <div class="readout">
-          <span style="color:var(--ts)">Lumit is up to date</span>
-          <span class="meter"><span>vram</span><i><b style="width:64%"></b></i><span class="num">2.6 / 4 GB</span></span>
-          <span class="meter"><span>ram</span><i><b style="width:31%"></b></i><span class="num">5.0 / 16 GB</span></span>
-          <span class="meter"><span>disk</span><i><b style="width:12%"></b></i></span>
-          <span class="num">49.7 ms · 0 dropped</span>
+        <!-- ===== bottom bar ===== -->
+        <div class="bbar">
+          <!-- Lumit's own status line order (status_line_frb.dart): saved,
+               the cache meters, the measuring clock, the notice, then the
+               background jobs. Each item takes a bubble of its own, which is
+               the only thing this style changes about it. -->
+          <span class="meters" title="Saved"><span class="meter"><i class="g" data-ic="save"></i>Saved</span></span>
+          <span class="meters">
+            <span class="meter">vram<i><b style="width:64%"></b></i><span class="mono">2.6 / 4 GB</span></span>
+            <span class="meter">ram<i><b style="width:31%"></b></i><span class="mono">5.0 / 16 GB</span></span>
+            <span class="meter">disk<i><b style="width:12%"></b></i><span class="mono">12 / 100 GB</span></span>
+          </span>
+          <span class="meters" title="Measure render time"><span class="meter" style="color:var(--tp)"><i class="g" data-ic="clock"></i><span class="mono">49.7 ms</span></span></span>
+          <span class="status"><i class="g" data-ic="info"></i>Lumit is up to date<i class="g" data-ic="x" style="margin-left:auto;opacity:.55"></i></span>
+          <span class="meters job" title="Export, 41 per cent, click the mark to cancel"><span class="meter">Export<i><b style="width:41%"></b></i><span class="mono">02:12</span><i class="g" data-ic="x"></i></span></span>
+          <span class="tag" style="left:66px;top:8px">12</span>
         </div>
 
-        <span class="tag" style="left:560px;top:436px">1</span>
-        <span class="tag" style="left:640px;top:458px">2</span>
-        <span class="tag" style="left:20px;top:46px">3</span>
-        <span class="tag" style="left:470px;top:14px">4</span>
-        <span class="tag" style="left:1100px;top:120px">5</span>
-        <span class="tag" style="left:1010px;top:520px">6</span>
-        <span class="tag" style="left:30px;top:602px">7</span>
-        <span class="tag" style="left:1080px;top:786px">8</span>
       </div>
     </div></div>
   </section>
@@ -547,95 +655,223 @@ body { margin: 0; background: var(--mount); color: var(--ink); font-family: var(
     <div class="ref">
       <h3>The structural moves</h3>
       <ol class="notes">
-        <li><b>The floating tool dock.</b> Every tool from §1.7, in order and in groups, as round buttons in one vertical capsule floating in the Viewer card's margin — over the neutral surround, never over the picture. The armed tool is a filled accent circle. Flyouts open beside it; options open as a second capsule.</li>
-        <li><b>The transport is one pill</b> with a large accent play button at its centre — the Lyrica cue — and the clock is a capsule beside it. Loop, preview mode, quality, audio and the cache-ready bar sit on the same deck band. The Viewer bar above keeps only ways of looking.</li>
-        <li><b>Cards in a room.</b> Every pane is a dark card with an 18px radius, 12px apart, on a light room; the card's name and its header dot on a 40px line. The dock is untouched — cards still split, tab, float and drop exactly as panes do.</li>
-        <li><b>The top band belongs to the room, not a card</b>: the mark, the menus, a workspace pill with the fronted name filled, and the command palette as a pill at the right.</li>
-        <li><b>Sections as sub-cards.</b> The inspector is one list, but each section is a rounded sub-card with a toggle switch for enable, its cost, and its ×; selected takes an accent inset ring. Wells are capsules; a slider is an accent track with a white dot thumb.</li>
-        <li><b>The playhead is a pin</b> — a round accent head on a 2px line — and the work area is an accent capsule on the ruler with round handles. Cache runs are rounded segments; markers are dots with a pill label.</li>
-        <li><b>Rows are pills too.</b> Outline rows have a 10px radius and an avatar circle for the layer type; the selected row fills with the accent at 22%. Layer bars are capsules in the label colour; keys are the same three marks, softened.</li>
-        <li><b>Readouts float.</b> The status line, cache meters and frame cost live in one pill over the room's bottom-right corner rather than a strip.</li>
+        <li><b>The toolbar has two positions, and that is a new setting.</b> Every tool from §1.7 is here in the spec's order and groups: six simple tools, a seam, the seven groups with their corner triangle, a seam, the snapping switch. Along the top it is a strip in the room under the top band with the tool options at its right; down the left it is a rail of rounded squares with snapping at the foot, and the options open from the armed tool instead. The armed tool is the lime square with a black glyph. Flyouts, shortcuts and the "shown but disabled" rule for unbuilt tools are unchanged.</li>
+        <li><b>Cards in a room.</b> Each pane is a near-black card with a 16px radius and a soft shadow, 10px from its neighbours, in a light room by day and a near-black one by night. No hairline separates panes; the room does. Docking is untouched.</li>
+        <li><b>The card title is centred</b>, uppercase, 10px, tracked, muted, with a small lime dot at the card's top-left corner. The pane's own controls stand at the left and right of that line as pills and rounded rects.</li>
+        <li><b>The top band lives in the room.</b> The mark, nine menu words in room ink, the workspace strip as a segmented pill with the fronted workspace filled lime, and the command palette as a dark pill at the right. On macOS the menus go to the system bar.</li>
+        <li><b>The Viewer bar keeps only ways of looking.</b> Magnification, resolution, the channel mark, board, view menu, 3D view, exposure, the snapshot pair, the colour pipeline and the degradation reading. Everything about playing went to the deck under the picture, which stays on a strictly neutral stage in both rooms.</li>
+        <li><b>The transport is one pill</b> with a lime play button at its centre and the four marks either side; the clock is the one big number, in mono, with its frame count. Loop mode, preview mode, quality, audio and the cache-ready meter sit beside it. This is §9's Preview panel given a fixed seat.</li>
+        <li><b>A property row is</b> stopwatch, navigator, a muted label in a fixed column, the control, the value in its own cell, the unit, and a reset arrow. Sliders are a thin dark track with a small pale thumb; a parameter with no range gets a field or a dropdown; a colour gets a swatch and a dropper. Icon rows carry Easing and Direction.</li>
+        <li><b>Effect sections carry a toggle switch</b> at the right of the heading with the render cost and the close mark, and are separated by air rather than sub-cards; the selected section is the one filled a step lighter. Add effect is the lime pill at the foot, Save preset a grey one.</li>
+        <li><b>Outline rows are rounded fills</b> on a 24px pitch: six switch glyphs, the number, the twirl, a coloured type avatar, the name, six mode glyphs, three rounded-rect pickers and the cost. The selected row is filled grey; nothing is stroked. The chrome row above holds the search field, shy and motion blur, and the three group toggles.</li>
+        <li><b>Lanes are bright, labelled bars</b> with near-square corners and pale fade wedges at the ends, on a slightly lighter lane ground that dims outside the work area. Under them a minimap compresses the whole composition with a lighter window over the visible span. The foot carries the zoom slider, the magnet and the scrollbar.</li>
+        <li><b>The playhead is a lime pin</b> with a round head, the work area a translucent lime band with round handles, the cache bar rounded runs with a gap, the marker a grey dot with a label pill.</li>
+        <li><b>The bottom bar lives in the room.</b> Two round buttons, a wide dark pill for the status message, a second pill with the vram, ram and disk meters and the frame cost, then the pill actions at the right.</li>
       </ol>
     </div>
     <div class="ref">
       <h3>The system under it</h3>
       <dl class="kv">
-        <dt>Room</dt><dd>Day: a cool light grey room around dark cards — the reference's own arrangement. Night: the same cards in a near-black room. The Viewer surround is #7f7f7f in both.</dd>
-        <dt>Accent</dt><dd>One violet-blue, spent on filled pills: the armed tool, the fronted workspace and mode, the play button, the selection, the playhead, the work area, Add effect and Export. Never a word on a card.</dd>
-        <dt>States</dt><dd>on · attention · fault as small marks; the header dot is decorative and never a status light.</dd>
-        <dt>Type</dt><dd>Plus Jakarta Sans for words, DM Mono for numbers. Card titles 12px semibold, body 11, pills 10.5, the clock 15. Sentence case; no caps, no kickers.</dd>
-        <dt>Shape</dt><dd>Cards 18, sub-cards and stages 12, rows 10, everything else a capsule. Controls are stadiums; buttons are circles.</dd>
-        <dt>Elevation</dt><dd>Real: a card casts a soft shadow into the room; a floating capsule casts a deeper one. No blur, no glass, no bevel.</dd>
-        <dt>Motion</dt><dd>This is the style where the spring lives: ≤150ms with the one signature overshoot on the drag ghost, and filled pills that slide between positions.</dd>
+        <dt>Room</dt><dd>Lumit Light's own canvas by day, surface_0 by night. The cards are surface_1 in both, and at night they keep a one-pixel edge so they still read. The Viewer stage is the same neutral surround as ever, bounded by a hairline rather than by value.</dd>
+        <dt>Cards</dt><dd>Nothing here is a new colour. A card is surface_1, a section inside it surface_2, a control surface_3, a pressed fill surface_4, and a lane well surface_0. The arrangement changed, the ramp did not.</dd>
+        <dt>Accent</dt><dd>Spruce, spent on fills: the armed tool, the fronted workspace, the play button, the selection chip, the playhead and work area, the keyed stopwatch, Add effect, Export. Its label is text_primary rather than surface_0, which is the one place this parts from 7.1, because near-black on spruce only reaches 3.7.</dd>
+        <dt>States</dt><dd>Lumit's own success, warning and error, each a small filled mark or badge. A two-state option fills its active half surface_4; a mode fills it spruce. Toggle switches for enable.</dd>
+        <dt>Type</dt><dd>Plus Jakarta Sans for words, DM Mono for every number. Card titles 10px uppercase tracked; labels 9.5 to 10 muted; values white; the clock 16 mono.</dd>
+        <dt>Shape</dt><dd>Cards 16, sub-cards 12, rows 8, dropdowns and fields and icon buttons 7, rail buttons 9 to 10, bars 3. Full pills only for actions, active halves and chips.</dd>
+        <dt>Elevation</dt><dd>A soft shadow under every card and every room control; nothing else casts. No blur, no glass.</dd>
+        <dt>Motion</dt><dd>At most 150ms, ease-out; a filled half slides between positions when a segmented pill changes. Nothing animates at rest.</dd>
       </dl>
     </div>
   </div>
+
   <p class="foot">
-    Specimen data is invented. The Lyrica pages themselves could not be fetched from this sandbox, so the reference is read through the cues the canonical document records from it (<code>docs/15-DESIGN.md</code> §12.1) plus memory of the app; corrections against the real thing are expected. Written system: <code>docs/design-alt/15-DESIGN-LANTERN.md</code>.
+    Specimen data is invented. Every control named in <code>docs/07-UI-SPEC.md</code> §1.7, §2.2, §3, §4.1 to 4.3, §6, §9 and the status line is on this shell; what moved is stated in the notes, and the written system is <code>docs/design-alt/15-DESIGN-LANTERN.md</code>. Effects &amp; presets and Scopes are tabbed behind the inspector in this arrangement, as in the shipping Edit preset.
   </p>
 </div>
 
 <script>
 (function () {
-  var shell = document.getElementById('shell'), scaler = document.getElementById('scaler'), viewport = document.getElementById('viewport');
-  var G = {
-    eye: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 8s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z"/><circle cx="8" cy="8" r="1.5"/></svg>',
-    spk: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M3 6h3l4-3v10l-4-3H3z"/></svg>',
-    solo: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="4"/></svg>',
-    lock: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="7" width="8" height="6" rx="1.5"/><path d="M6 7V5a2 2 0 014 0v2"/></svg>',
-    shy: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 10c2-4 8-4 10 0"/></svg>',
-    guide: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="10" height="10" rx="1.5"/><path d="M1 7h14M1 10h14" stroke-dasharray="2 2"/></svg>',
-    fx: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 12V4h4M3 8h3M9 4h4M11 4v8"/></svg>',
-    d3: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M8 2l5 3v6l-5 3-5-3V5z"/></svg>',
-    mb: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="9" cy="8" r="4"/><path d="M2 6h3M2 10h3"/></svg>',
-    adj: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="5"/><path d="M8 3v10"/></svg>',
-    flow: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 8c3-4 9 4 12 0"/></svg>',
-    coll: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 5h10M3 8h10M3 11h10"/></svg>',
-    chev: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l4 4 4-4"/></svg>',
-    tw: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4l4 4-4 4"/></svg>'
+  /* ---- icons: 16 grid, 1.5 stroke, round caps, currentColor ---- */
+  var I = {
+    sel: '<path d="M3.5 2.5l9 7-4 .8 2.3 4.2-1.8 1-2.3-4.2-3.2 2.7z"/>',
+    hand: '<path d="M5 8V3.5a1 1 0 012 0V7M7 6.5V3a1 1 0 012 0v4M9 6.5V3.5a1 1 0 012 0V8M11 7.5a1 1 0 012 0V10a4 4 0 01-4 4H8a4 4 0 01-3.5-2L3 9.5a1 1 0 011.7-1L5 9.5"/>',
+    zoom: '<circle cx="6.5" cy="6.5" r="4"/><path d="M9.5 9.5l4 4M4.5 6.5h4M6.5 4.5v4"/>',
+    rot: '<path d="M13 8a5 5 0 11-1.5-3.6M13 2.5v3h-3"/>',
+    anchor: '<circle cx="8" cy="8" r="3"/><path d="M8 2v3M8 11v3M2 8h3M11 8h3"/>',
+    razor: '<path d="M3.5 3.5h9l-1 9h-7zM6 7h4"/>',
+    shape: '<rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/>',
+    pen: '<path d="M3 13l6.5-6.5 1.5 1.5L4.5 14.5H3zM9.5 6.5l2-2 1.5 1.5-2 2"/>',
+    type: '<path d="M3 3.5h10M8 3.5v10M6 13.5h4"/>',
+    paint: '<path d="M12.5 2.5l1 1-6 6-1-1zM6.5 8.5c-2 0-3 1.5-3 3.5 2 0 3.5-1 3.5-3"/>',
+    roto: '<path d="M3 10c1-4 4-6 8-5s3 6-1 7-6-2-7-2z" stroke-dasharray="2 2"/>',
+    puppet: '<circle cx="8" cy="8" r="2"/><path d="M8 2v4M8 10v4M2 8h4M10 8h4"/>',
+    camera: '<rect x="2.5" y="4.5" width="8" height="7" rx="1"/><path d="M10.5 7l3-2v6l-3-2"/>',
+    magnet: '<path d="M4 3v5a4 4 0 008 0V3M4 6h3M9 6h3"/>',
+    search: '<circle cx="6.5" cy="6.5" r="4"/><path d="M9.5 9.5l4 4"/>',
+    chev: '<path d="M4 6l4 4 4-4"/>',
+    twd: '<path d="M5 6.5l3 3 3-3"/>',
+    twr: '<path d="M6.5 5l3 3-3 3"/>',
+    folder: '<path d="M2.5 12.5V4.5h4l1.5 2h5.5v6z"/>',
+    comp: '<rect x="2.5" y="3.5" width="11" height="9" rx="1.5"/><path d="M2.5 6.5h11"/>',
+    import: '<path d="M8 3v8M4.5 7.5L8 11l3.5-3.5M3 13h10"/>',
+    export: '<path d="M8 12V4M4.5 7.5L8 4l3.5 3.5M3 13h10"/>',
+    film: '<rect x="2.5" y="4" width="11" height="8" rx="1"/><path d="M6.5 6.5v3l3-1.5z"/>',
+    audio: '<path d="M3 6.5v3M6 4v8M9 2v12M12 6v4"/>',
+    solid: '<rect x="3" y="3" width="10" height="10" rx="1.5"/>',
+    lut: '<circle cx="8" cy="8" r="5.5"/><path d="M2.5 8h11M8 2.5v11"/>',
+    cube: '<path d="M8 2l5.5 3v6L8 14l-5.5-3V5zM8 8l5.5-3M8 8v6M8 8L2.5 5"/>',
+    eye: '<path d="M2 8s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z"/><circle cx="8" cy="8" r="1.5"/>',
+    speaker: '<path d="M3 6h3l4-3v10l-4-3H3zM12 6a3 3 0 010 4"/>',
+    solo: '<circle cx="8" cy="8" r="5"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/>',
+    lock: '<rect x="3.5" y="7.5" width="9" height="6" rx="1"/><path d="M5.5 7.5V5a2.5 2.5 0 015 0v2.5"/>',
+    shy: '<path d="M8 3a2 2 0 100 4 2 2 0 000-4zM4 13c0-2.5 1.8-4 4-4s4 1.5 4 4"/>',
+    fx: '<path d="M8 2l1.3 3.7L13 7l-3.7 1.3L8 12l-1.3-3.7L3 7l3.7-1.3z"/>',
+    blend: '<rect x="2.5" y="2.5" width="8" height="8" rx="1"/><rect x="5.5" y="5.5" width="8" height="8" rx="1"/>',
+    mb: '<path d="M3 5h8M3 8h10M3 11h6"/>',
+    adj: '<circle cx="8" cy="8" r="5.5"/><path d="M8 2.5v11a5.5 5.5 0 000-11z" fill="currentColor"/>',
+    quality: '<path d="M8 2l6 6-6 6-6-6z"/>',
+    skipstart: '<path d="M3.5 3v10M13 3L5.5 8 13 13z"/>',
+    prev: '<path d="M11 3L4 8l7 5z"/>',
+    play: '<path d="M4.5 3.5l8 4.5-8 4.5z" fill="currentColor"/>',
+    next: '<path d="M5 3l7 5-7 5z"/>',
+    skipend: '<path d="M12.5 3v10M3 3l7.5 5L3 13z"/>',
+    loop: '<path d="M3 8a5 5 0 015-5h4M9 1.5L11.5 3 9 4.5M13 8a5 5 0 01-5 5H4M7 14.5L4.5 13 7 11.5"/>',
+    snap: '<rect x="2.5" y="4.5" width="11" height="8" rx="1.5"/><circle cx="8" cy="8.5" r="2"/>',
+    board: '<rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M2.5 8h11M8 2.5v11"/>',
+    monitor: '<rect x="2.5" y="3.5" width="11" height="9" rx="1.5"/><path d="M5.5 13h5"/>',
+    cog: '<circle cx="8" cy="8" r="2"/><path d="M8 2v2M8 12v2M2 8h2M12 8h2M3.8 3.8l1.4 1.4M10.8 10.8l1.4 1.4M3.8 12.2l1.4-1.4M10.8 5.2l1.4-1.4"/>',
+    keyboard: '<rect x="2" y="4.5" width="12" height="7" rx="1.5"/><path d="M4.5 7h1M7.5 7h1M10.5 7h1M5 9.5h6"/>',
+    info: '<circle cx="8" cy="8" r="5.5"/><path d="M8 7v4M8 5.2v.2"/>',
+    reset: '<path d="M4 8a4 4 0 104-4H5.5M7 2.5L5.5 4 7 5.5"/>',
+    dropper: '<path d="M10.5 2.5l3 3-6 6h-3v-3zM9 4l3 3"/>',
+    x: '<path d="M4 4l8 8M12 4l-8 8"/>',
+    plus: '<path d="M8 3v10M3 8h10"/>',
+    clock: '<circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 1.5"/>',
+    lsmall: '<path d="M4 12l3-4 2 2.5 1-1.5 2 3z"/>',
+    lbig: '<path d="M2 13l4-6 3 4 2-3 3 5z"/>',
+    save: '<path d="M3 3h8l2 2v8H3zM5 3v3h5V3M5 13V9h6v4"/>',
+    fill: '<path d="M3 8h10M3 5h6M3 11h6"/><circle cx="12" cy="11" r="1.5"/>',
+    both: '<path d="M2 8h12M8 2v12"/>',
+    horiz: '<path d="M2 8h12M4 6l-2 2 2 2M12 6l2 2-2 2"/>',
+    vert: '<path d="M8 2v12M6 4l2-2 2 2M6 12l2 2 2-2"/>',
+    e1: '<path d="M3 13L13 3"/>',
+    e2: '<path d="M3 13C9 13 13 9 13 3"/>',
+    e3: '<path d="M3 13C3 7 7 3 13 3"/>',
+    e4: '<path d="M3 13C10 13 6 3 13 3"/>',
+    e5: '<path d="M3 13h5V3h5"/>',
+    e6: '<path d="M3 13C5 5 7 3 9 7s2 6 4 6"/>'
   };
-  function g(k, on) { return '<span class="g' + (on ? ' on' : '') + '">' + G[k] + '</span>'; }
-  function pick(v) { return v === '—' ? '<span class="pick" style="color:var(--td)">—</span>' : '<span class="pick">' + v + '<span class="c g">' + G.chev + '</span></span>'; }
-  var rows = [
-    { n: 1, name: 'Rooftop · title', c: 'var(--l-text)', sw: [1,0,0,0,0,0], md: [1,0,0,1,null,null], p: ['None','Normal','None'], ms: '3.1', sel: true },
-    { n: 2, name: 'Glow pass', c: 'var(--l-precomp)', sw: [1,0,0,1,0,0], md: [1,0,1,null,null,0], p: ['Alpha · 1','Screen','1'], ms: '14.7' },
-    { n: 3, name: 'Rooftop edit', c: 'var(--l-sequence)', sw: [1,1,0,0,0,0], md: [0,0,0,null,1,null], p: ['None','Normal','None'], ms: '8.2' },
-    { n: 4, name: 'rooftop_a012.mov', c: 'var(--l-footage)', sw: [1,1,0,0,0,0], md: [0,0,1,null,0,null], p: ['None','Normal','None'], ms: '21.4' },
-    { n: 5, name: 'Vignette', c: 'var(--l-solid)', sw: [1,0,0,0,0,0], md: [1,0,0,1,null,null], p: ['None','Multiply','None'], ms: '1.9' },
-    { n: 6, name: 'Camera 1', c: 'var(--l-camera)', sw: [1,null,null,0,0,0], md: [null,null,null,null,null,null], p: ['—','—','None'], ms: '0.4' },
-    { n: 7, name: 'bed_loop.wav', c: 'var(--l-audio)', sw: [null,1,null,null,null,null], md: [null,null,null,null,null,null], p: ['—','—','None'], ms: '0.2' }
+  function svg(name) { return '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">' + (I[name] || '') + '</svg>'; }
+  function ic(name, cls) { return '<i class="g ' + (cls || '') + '" data-ic="' + name + '"></i>'; }
+
+  /* ---- the toolbar, 07 section 1.7 in order; one markup, two positions ---- */
+  var tools = [
+    ['sel', 'Selection', 'V', 0, 1], ['hand', 'Hand', 'H'], ['zoom', 'Zoom', 'Z'], ['rot', 'Rotation', 'W'], ['anchor', 'Anchor point', 'Y'], ['razor', 'Razor', 'C'], '|',
+    ['shape', 'Shape', 'Q', 1], ['pen', 'Pen', 'G', 1], ['type', 'Type', 'Ctrl+T', 1], ['paint', 'Paint', 'Ctrl+B', 1], ['roto', 'Roto', 'Alt+W', 1], ['puppet', 'Puppet', 'Ctrl+P', 1], ['camera', 'Camera', 'Shift+C', 1], '|'
   ];
-  var swk = ['eye','spk','solo','lock','shy','guide'], mdk = ['fx','d3','mb','adj','flow','coll'];
-  document.getElementById('orows').innerHTML = rows.map(function (r) {
+  var th = '';
+  th += '<span class="tgroup">';
+  tools.forEach(function (t) {
+    if (t === '|') { th += '<span class="tseam"></span>'; return; }
+    th += '<span class="tb' + (t[3] ? ' grp' : '') + (t[4] ? ' armed' : '') + '" title="' + t[1] + ' · ' + t[2] + '">' + ic(t[0], 'g16') + '</span>';
+  });
+  th += '<span class="tb tsnap" title="Snapping">' + ic('magnet', 'g16') + '</span>';
+  th += '</span>';
+  th += '<span class="topts"><span class="hint">Tool options</span><span class="dis" title="Selection draws nothing"><span class="swatch" style="--sw:#c2c8cb"></span><span class="swatch" style="--sw:#131517"></span><span class="fld mono">2 px</span></span></span>';
+  th += '<span class="tgap"></span>';
+  th += '<div class="spill lime room"><span class="on">Edit</span><span>Effects</span><span>Colour</span><span>Audio</span><span>Retiming</span><span>Nodes</span></div>';
+  var toolsEl = document.getElementById('tools');
+  toolsEl.insertAdjacentHTML('afterbegin', th);
+
+  /* ---- easing icon row ---- */
+  document.getElementById('easing').innerHTML = ['e1', 'e2', 'e3', 'e4', 'e5', 'e6'].map(function (k, i) {
+    return '<span class="ib' + (i === 2 ? ' on' : '') + '">' + ic(k, 'g12') + '</span>';
+  }).join('');
+
+  /* ---- project rows ---- */
+  var items = [
+    { ic: 'comp', t: 'Opening sequence', items: '12', size: '-', fps: '25', pth: 'comps' },
+    { ic: 'comp', t: 'Titles', items: '4', size: '-', fps: '25', pth: 'comps' },
+    { ic: 'film', c: 'footage', t: 'rooftop_a012.mov', badge: 'use', items: '-', size: '842M', fps: '25', pth: 'footage/day2', sel: 1 },
+    { ic: 'film', c: 'footage', t: 'rooftop_a017.mov', badge: 'miss', items: '-', size: '-', fps: '25', pth: 'footage/day2' },
+    { ic: 'lut', c: 'camera', t: 'grade_master.cube', items: '-', size: '1.1M', fps: '-', pth: 'luts' },
+    { ic: 'folder', t: 'Audio', items: '3', size: '-', fps: '-', pth: '' },
+    { ic: 'audio', c: 'audio', t: 'stinger_04.wav', items: '-', size: '6.4M', fps: '48k', pth: 'audio', ind: 1 },
+    { ic: 'audio', c: 'audio', t: 'bed_loop.wav', badge: 'use', items: '-', size: '18M', fps: '48k', pth: 'audio', ind: 1 }
+  ];
+  var badgeText = { use: 'in use', miss: 'missing' };
+  document.getElementById('prows').innerHTML = items.map(function (r) {
+    return '<div class="prow' + (r.sel ? ' sel' : '') + '"><span class="nm' + (r.ind ? ' in' : '') + '">' +
+      '<i class="g" data-ic="' + r.ic + '"' + (r.c ? ' style="color:var(--l-' + r.c + ')"' : '') + '></i><span class="t">' + r.t + '</span>' +
+      (r.badge ? '<span class="badge ' + r.badge + '">' + badgeText[r.badge] + '</span>' : '') + '</span>' +
+      '<span class="mono">' + r.items + '</span><span class="mono">' + r.size + '</span><span class="mono">' + r.fps + '</span><span class="pth">' + r.pth + '</span></div>';
+  }).join('');
+
+  /* ---- outline rows and lanes, one array; 60px per second, 1 tick = 5 f ---- */
+  var typeIcon = { text: 'type', precomp: 'comp', sequence: 'film', footage: 'film', solid: 'solid', camera: 'camera', audio: 'audio' };
+  var layers = [
+    { n: 1, name: 'Rooftop title', type: 'text', sel: 1, sw: [1, 0, 0, 0, 0, 1], md: [1, 1, 0, 1, 0, 0], matte: 'None', blend: 'Normal', parent: 'None', ms: '3.1', l: 60, w: 260, fi: 1, fo: 1, keys: [[100, 'hold'], [186, 'bez', 1], [240, 'lin']] },
+    { n: 2, name: 'Glow pass', type: 'precomp', sw: [1, 0, 0, 0, 0, 1], md: [1, 1, 0, 0, 0, 0], matte: 'Alpha', blend: 'Add', parent: 'None', ms: '1.4', l: 120, w: 220, fo: 1, keys: [[96, 'lin'], [170, 'bez']] },
+    { n: 3, name: 'Rooftop edit', type: 'sequence', sw: [1, 1, 0, 0, 0, 0], md: [1, 0, 1, 0, 0, 0], matte: 'None', blend: 'Normal', parent: 'None', ms: '0.9', l: 20, w: 520, fi: 1 },
+    { n: 4, name: 'rooftop_a012.mov', type: 'footage', sw: [1, 1, 0, 1, 0, 0], md: [1, 0, 0, 0, 0, 0], matte: 'None', blend: 'Normal', parent: 'Camera 1', ms: '0.6', l: 20, w: 340, ghost: [20, 450] },
+    { n: 5, name: 'Vignette', type: 'solid', sw: [1, 0, 0, 0, 1, 0], md: [1, 0, 0, 0, 1, 0], matte: 'None', blend: 'Multiply', parent: 'None', ms: '0.2', l: 0, w: 600, fi: 1, fo: 1 },
+    { n: 6, name: 'Camera 1', type: 'camera', sw: [1, 0, 0, 1, 0, 0], md: [0, 0, 0, 0, 0, 1], matte: '-', blend: '-', parent: 'None', ms: '-', l: 0, w: 600, keys: [[230, 'bez'], [350, 'bez']] },
+    { n: 7, name: 'bed_loop.wav', type: 'audio', sw: [0, 1, 0, 0, 0, 0], md: [0, 0, 0, 0, 0, 0], matte: '-', blend: '-', parent: 'None', ms: '-', l: 0, w: 600, wave: 1 }
+  ];
+  var swIcons = ['eye', 'speaker', 'solo', 'lock', 'shy', 'fx'];
+  var mdIcons = ['quality', 'fx', 'blend', 'mb', 'adj', 'cube'];
+  function pick(v) { return '<span class="pick' + (v === 'None' || v === '-' ? ' none' : '') + '">' + v + ic('chev') + '</span>'; }
+  document.getElementById('orows').innerHTML = layers.map(function (r) {
     return '<div class="orow' + (r.sel ? ' sel' : '') + '">' +
-      '<span class="switches">' + r.sw.map(function (v, i) { return v === null ? '<span class="g"></span>' : g(swk[i], v); }).join('') + '</span>' +
-      '<span class="lnum">' + r.n + '</span>' +
-      '<span class="lname"><span class="tw">' + G.tw + '</span><span class="av" style="background:' + r.c + ';opacity:.85"></span><span class="t">' + r.name + '</span></span>' +
-      '<span class="modes6">' + r.md.map(function (v, i) { return v === null ? '<span class="g"></span>' : g(mdk[i], v); }).join('') + '</span>' +
-      pick(r.p[0]) + pick(r.p[1]) + pick(r.p[2]) +
+      '<span class="sw6">' + swIcons.map(function (k, i) { return ic(k, r.sw[i] ? 'on' : ''); }).join('') + '</span>' +
+      '<span class="lnum mono">' + r.n + '</span>' +
+      '<span class="lname">' + ic('twr', 'tw') + '<span class="av" style="--lc:var(--l-' + r.type + ')">' + ic(typeIcon[r.type]) + '</span><span class="t">' + r.name + '</span></span>' +
+      '<span class="md6">' + mdIcons.map(function (k, i) { return ic(k, r.md[i] ? 'on' : ''); }).join('') + '</span>' +
+      pick(r.matte) + pick(r.blend) + pick(r.parent) +
       '<span class="ms">' + r.ms + '</span></div>';
   }).join('');
-  var lanes = [
-    { l: 120, w: 280, c: 'var(--l-text)', sel: true, k: [['hold',110],['bez',196,true],['lin',262]] },
-    { l: 180, w: 230, c: 'var(--l-precomp)', k: [['lin',50],['bez',150]] },
-    { l: 20, w: 520, c: 'var(--l-sequence)' },
-    { l: 20, w: 360, c: 'var(--l-footage)', ghost: 452 },
-    { l: 0, w: 600, c: 'var(--l-solid)' },
-    { l: 0, w: 600, c: 'var(--l-camera)', k: [['bez',240],['bez',352]] },
-    { l: 0, w: 600, c: 'var(--l-audio)', wave: true }
-  ];
-  document.getElementById('lanewell').innerHTML = lanes.map(function (n) {
-    return '<div class="lane"><div class="lbar' + (n.sel ? ' sel' : '') + '" style="left:' + n.l + 'px;width:' + n.w + 'px;--lc:' + n.c + '">' +
-      (n.ghost ? '<span class="ghost" style="left:0;width:' + n.ghost + 'px"></span>' : '') +
-      (n.wave ? '<span class="wave"></span>' : '') +
-      (n.k || []).map(function (k) { return '<span class="kf onlane ' + k[0] + (k[2] ? ' sel' : '') + '" style="left:' + k[1] + 'px"></span>'; }).join('') +
-      '</div></div>';
+  document.getElementById('lanewell').innerHTML = layers.map(function (r) {
+    var b = '<div class="bar' + (r.sel ? ' sel' : '') + '" style="left:' + r.l + 'px;width:' + r.w + 'px;--lc:var(--l-' + r.type + ')">' +
+      (r.fi ? '<span class="fi"></span>' : '') + (r.fo ? '<span class="fo"></span>' : '') + (r.wave ? '<span class="wave"></span>' : '') +
+      '<span class="nm">' + r.name + '</span>' +
+      (r.keys || []).map(function (k) { return '<span class="kf ' + k[1] + (k[2] ? ' ksel' : '') + '" style="left:' + k[0] + 'px"></span>'; }).join('') +
+      '</div>';
+    var g = r.ghost ? '<span class="ghost" style="left:' + r.ghost[0] + 'px;width:' + r.ghost[1] + 'px"></span>' : '';
+    return '<div class="lane">' + g + b + '</div>';
   }).join('') + '<div class="phl"></div>';
+  /* the minimap: the whole 21 s composition over the strip; the window is the visible 12 s */
+  var mm = document.getElementById('minimap'), k = 720 / 21 / 60;
+  mm.insertAdjacentHTML('afterbegin', layers.map(function (r, i) {
+    return '<b style="left:' + Math.round(r.l * k) + 'px;width:' + Math.round(r.w * k) + 'px;top:' + (2 + i * 1.5) + 'px;--lc:var(--l-' + r.type + ')"></b>';
+  }).join(''));
 
-  function press(sel, active) { document.querySelectorAll(sel).forEach(function (b) { b.setAttribute('aria-pressed', String(b === active)); }); }
-  document.querySelectorAll('[data-room]').forEach(function (b) { b.addEventListener('click', function () { shell.dataset.room = b.dataset.room; press('[data-room]', b); }); });
-  document.querySelectorAll('[data-notes]').forEach(function (b) { b.addEventListener('click', function () { shell.classList.toggle('notes', b.dataset.notes === 'on'); press('[data-notes]', b); }); });
-  function fit() { var s = Math.min(1, viewport.clientWidth / 1360); scaler.style.transform = 'scale(' + s + ')'; viewport.style.height = Math.ceil(820 * s) + 'px'; }
+  /* ---- resolve every icon slot ---- */
+  document.querySelectorAll('[data-ic]').forEach(function (el) { el.innerHTML = svg(el.dataset.ic); });
+
+  /* ---- page controls ---- */
+  var shell = document.getElementById('shell');
+  var scaler = document.getElementById('scaler');
+  var viewport = document.getElementById('viewport');
+  function press(sel, active) {
+    document.querySelectorAll(sel).forEach(function (b) { b.setAttribute('aria-pressed', String(b === active)); });
+  }
+  document.querySelectorAll('.controls button[data-room]').forEach(function (b) {
+    b.addEventListener('click', function () { shell.dataset.room = b.dataset.room; press('.controls button[data-room]', b); });
+  });
+  document.querySelectorAll('.controls button[data-sliders]').forEach(function (b) {
+    b.addEventListener('click', function () { shell.dataset.sliders = b.dataset.sliders; press('.controls button[data-sliders]', b); });
+  });
+  document.querySelectorAll('.controls button[data-tools]').forEach(function (b) {
+    b.addEventListener('click', function () { shell.dataset.tools = b.dataset.tools; press('.controls button[data-tools]', b); });
+  });
+  document.querySelectorAll('.controls button[data-notes]').forEach(function (b) {
+    b.addEventListener('click', function () { shell.classList.toggle('noted', b.dataset.notes === 'on'); press('.controls button[data-notes]', b); });
+  });
+  function fit() {
+    var s = Math.min(1, viewport.clientWidth / 1360);
+    scaler.style.transform = 'scale(' + s + ')';
+    viewport.style.height = Math.ceil(820 * s) + 'px';
+  }
   window.addEventListener('resize', fit); fit();
 })();
 </script>

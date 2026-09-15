@@ -20,7 +20,9 @@ import 'package:flutter/widgets.dart';
 
 // Prefixed: the widget that draws one glyph of the new set is also called
 // `LumitIcon`, and the enum below owns that name here.
+import 'icon_style.dart';
 import 'lumit_icon.dart' as glyph;
+import '../widgets/controls/base.dart' show ThemeScope;
 import 'lumit_icons.dart';
 
 /// One icon.
@@ -257,6 +259,10 @@ enum LumitIcon {
   nextFrame,
   toEnd,
 
+  /// The deck's loop-mode mark: two arrows chasing round. The set has one
+  /// drawing for the three modes, so the colour says which is set.
+  loop,
+
   /// An Adjustment layer: the set's half-filled circle, the mark for "this
   /// changes what is under it". It had been drawn as [solid], because the set
   /// was read as owing a drawing here — but the drawing was already in the
@@ -302,7 +308,19 @@ const double _iconStrokeUnits = 1.5;
 Widget lumitIcon(LumitIcon icon, {required double size, required Color color}) {
   final own = _ownGlyph(icon);
   if (own != null) {
-    return glyph.LumitIcon(own, size: size, colour: color);
+    // Restyled to the weight in force, or replaced by the person's own file.
+    return Builder(
+      builder: (context) {
+        // A glyph drawn outside any theme (a test, a bare probe) is the set's.
+        final scope =
+            context.dependOnInheritedWidgetOfExactType<ThemeScope>();
+        return glyph.LumitIcon(
+          scope == null ? own : IconStyle.resolve(icon.name, own, scope.theme),
+          size: size,
+          colour: color,
+        );
+      },
+    );
   }
   return CustomPaint(
     size: Size.square(size),
@@ -360,6 +378,7 @@ String? _ownGlyph(LumitIcon icon) => switch (icon) {
       LumitIcon.previousFrame => LumitIcons.previousFrame,
       LumitIcon.nextFrame => LumitIcons.nextFrame,
       LumitIcon.toEnd => LumitIcons.toEnd,
+      LumitIcon.loop => LumitIcons.loop,
       // Timeline and graph.
       LumitIcon.timelineBars => LumitIcons.layers,
       LumitIcon.graphCurve => LumitIcons.scopes,

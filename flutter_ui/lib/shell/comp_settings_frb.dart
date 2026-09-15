@@ -126,7 +126,8 @@ Future<bool> showCompSettingsFrb({
         // playhead, and changing a background comp's rate must not move it.
         final ui = Provider.of<LumitUiState>(context, listen: false);
         final mine = ui.selectedComp?.internalid == comp.internalid;
-        final was = mine ? comp.timeOfFrame(frame: ui.playheadFrame.value) : null;
+        final was =
+            mine ? comp.timeOfFrame(frame: ui.playheadFrame.value) : null;
         comp.setSettings(settings: settings);
         if (was != null) {
           ui.playheadFrame.value = comp.nearestFrameAtTime(time: was);
@@ -586,7 +587,7 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
               decoration: BoxDecoration(
                 color: _backgroundColour,
                 border: Border.all(color: t.hairline),
-                borderRadius: BorderRadius.circular(dialogGroupRadius),
+                borderRadius: BorderRadius.circular(t.tokens.sectionRadius),
               ),
             ),
           ),
@@ -662,7 +663,7 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
                     padding: const EdgeInsets.only(top: 8, bottom: 4),
                     child: Align(
                       alignment: Alignment.centerLeft,
-                      child: Text(title.toUpperCase(), style: t.kicker),
+                      child: Text(t.kickerCase(title), style: t.kicker),
                     ),
                   ),
                 ),

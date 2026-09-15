@@ -1,7 +1,14 @@
-# Lumit design language — the Rams envisioning
+# Lumit design language: Desk
 
-**Status: speculative. Not canonical, not binding on any code.** This is a complete
-alternative to [15-DESIGN.md](../15-DESIGN.md), written to the same section skeleton so the
+**The style is called Desk** (settled 2026-09-13), beside **Studio** for the canonical language
+and **Lantern** for the cards-in-a-room one. A style names the arrangement, a room names the palette,
+which is why Desk's own two rooms stay the grey room and Graphite.
+
+**Status: built, and history.** Desk ships as one of the three shapes, and
+[15-DESIGN.md](../15-DESIGN.md) §12 is the canonical statement of what it draws; where this
+document and the canonical one disagree, the canonical one holds, and the notes marked *as
+built* below say where the build parted from the drawing. This was written as a complete
+alternative to [15-DESIGN.md](../15-DESIGN.md), to the same section skeleton so the
 two can be read side by side, one section against its counterpart. Where a section number
 here matches one there, it is answering the same question with a different answer. Where this
 document is silent, the canonical one still holds.
@@ -11,10 +18,10 @@ principles** and the Braun/Vitsœ design practice behind them. Panel inventory, 
 interaction flows are unchanged and still live in [07-UI-SPEC.md](../07-UI-SPEC.md);
 terminology still follows [01-GLOSSARY.md](../01-GLOSSARY.md) exactly.
 
-RFC-2119 keywords are used with their usual force *within this document's own world* — they
+RFC-2119 keywords are used with their usual force *within this document's own world* - they
 bind an implementation of this style, not the shipping one.
 
-Visual reference: **[mockups/rams-shell.html](mockups/rams-shell.html)** — the shell drawn
+Visual reference: **[mockups/rams-shell.html](mockups/rams-shell.html)** - the shell drawn
 from scratch to this document, in both rooms, with the structural moves numbered (§12B). The
 earlier [mockups/shell.html](mockups/shell.html) is the token-swap comparison against the
 canonical layout and is kept as the control.
@@ -51,12 +58,12 @@ These survive because they are already Rams-correct, and re-deriving them would 
 produced them again:
 
 - **Semantic tokens only**, with hex literals confined to the theme module.
-- **Viewer-surround neutrality** (§2.1, §3.2) — strengthened, in fact: this style makes the
+- **Viewer-surround neutrality** (§2.1, §3.2) - strengthened, in fact: this style makes the
   surround the *same* grey in both rooms (§2.1).
 - **Hairline elevation**, no glassmorphism, no gradients-as-chrome.
 - **No punishment UI.** A dropped-frame counter is information.
 - **The user controls tempo**; nothing auto-advances.
-- **Never colour alone** — and here it goes further: colour is the *second* encoding
+- **Never colour alone** - and here it goes further: colour is the *second* encoding
   everywhere, never the first (§3.2).
 - The **hit-target compensation** of KD-2, unchanged: dense controls ≥24px visual and ≥32px
   slop; chrome controls ≥44px.
@@ -69,9 +76,9 @@ produced them again:
 |---|---|---|
 | **Dark-first**, `surface_0` at `#0b0c0e` | **Grey-first.** The default room is a calibrated light grey; Graphite is its equal counterpart, not a fallback (§2, §11) | Rams' world is light grey because a light grey room shows an object honestly. Near-black chrome is a fashion of the last decade, and it fails principle 7. Grading practice agrees: a picture is judged against a *mid* surround, not a black one |
 | `viewer_surround` differs by mode (`#121212` dark, `#9c9c9c`–`#b4b4b4` light) | **One grey, `#7f7f7f`, in both rooms** (§2.1) | Principle 6. The surround is a measuring instrument. An instrument that changes its reading when you change the room's lighting is dishonest |
-| **Two faces** — Hanken Grotesk and Geist Mono — and *mono for all numbers, absolutely* | **One face** (IBM Plex Sans), tabular figures everywhere a number appears; mono kept for exactly one job (§7.2) | Principle 10. Mono was solving jitter; `tnum` solves jitter. A second face to solve an already-solved problem is design that is not needed |
+| **Two faces** - Hanken Grotesk and Geist Mono - and *mono for all numbers, absolutely* | **One face** (IBM Plex Sans), tabular figures everywhere a number appears; mono kept for exactly one job (§7.2) | Principle 10. Mono was solving jitter; `tnum` solves jitter. A second face to solve an already-solved problem is design that is not needed |
 | **Kickers**: mono, caps, +0.12em, on every container label | **Lowercase 9px labels**, tracked +0.04em, muted (§7.2) | Braun engraves `volume`, not `VOLUME`. Caps are a raised voice, and forty container labels raising their voice at once is noise, not hierarchy |
-| Radii `{4, 8, 16, full}` | **`{2, 2, 2, full}`** — one radius, plus true circles for true dials (§12) | Principle 10, and Braun's own tooling radius. Four radii is three decisions per widget |
+| Radii `{4, 8, 16, full}` | **`{2, 2, 2, full}`** - one radius, plus true circles for true dials (§12) | Principle 10, and Braun's own tooling radius. Four radii is three decisions per widget |
 | `shadow_float`: black @50%, 0/15, blur 50 | **0/1, blur 3, black @14%**, on the same closed list (§2.3) | Principle 6. A menu is a millimetre above the panel, not five centimetres. A 50px blur draws a height nothing has |
 | Two saturated roles (`accent` + `animated`), two closed job lists | **One signal** plus three state marks, and `animated` dissolved into form (§3.1, §6.2) | Principle 4. Two "this is in hand" colours is one too many, and the canonical doc's own final open question already suspects it |
 | Forty-odd canonical chrome heights (§12A.6) | **Six** (§12A.6) | Principle 8, read the way Vitsœ reads it: thoroughness is a *pitch*, not a spreadsheet |
@@ -90,6 +97,11 @@ UI spec and should be argued there on its own merits.
 There is one ramp, instantiated at two lightnesses. They are the same design; neither is the
 other's inversion, because the eye is not symmetrical and white cannot get brighter.
 
+*As built*, the two rooms are colour schemes, **Grey room** and **Graphite**
+(`LumitColorScheme.greyRoom`, `.graphite`), chosen with one tap from the row under the Shape
+chips at Settings, Appearance, Rooms drawn for Desk. Picking Desk never changes the scheme by
+itself, and either room draws under any shape, as every scheme does (canonical §11.1, §12).
+
 ### 2.1 Grey room (the default)
 
 Braun's light-grey and off-white plastics, at the values they actually held: warm-neutral,
@@ -98,11 +110,11 @@ never blue, never pure white.
 | Token | Value | Role |
 |---|---|---|
 | `surface_0` | `#dedcd8` | The ground: application background, timeline well, graph paper, and **input wells**, which are inset |
-| `surface_1` | `#ecebe7` | Panel bodies — the default fill |
+| `surface_1` | `#ecebe7` | Panel bodies - the default fill |
 | `surface_2` | `#e4e2de` | Faint surfaces: header strips, bottom bars, layer rows |
 | `surface_3` | `#f7f6f3` | Hover and floating only: menus, popovers, hovered rows |
 | `surface_4` | `#d2d0cb` | Pressed fills, raised chips, scrollbar thumbs |
-| `viewer_surround` | `#7f7f7f` | The Viewer's pasteboard — **exactly neutral, and the same in both rooms** |
+| `viewer_surround` | `#7f7f7f` | The Viewer's pasteboard - **exactly neutral, and the same in both rooms** |
 
 ### 2.2 Graphite
 
@@ -126,11 +138,11 @@ actually sits on.
 | `text_secondary` | `#4c4c49` | `#c4c2bc` | Body copy, property names | 7.2 / 8.5 |
 | `text_muted` | `#696864` | `#918f89` | Labels, hints, inactive words | 4.7 / 4.7 |
 | `text_disabled` | `#848380` | `#78756f` | Disabled controls only | 3.2 / 3.3 |
-| `hairline` | `#cdcbc6` | `#353532` | 1px borders between panels, rows, cards | — |
-| `hairline_strong` | `#a9a7a1` | `#4e4e4a` | Dividers that must be found; pressed fill | — |
+| `hairline` | `#cdcbc6` | `#353532` | 1px borders between panels, rows, cards | - |
+| `hairline_strong` | `#a9a7a1` | `#4e4e4a` | Dividers that must be found; pressed fill | - |
 
 **Elevation is a hairline and a gap, never a wash.** `shadow_float` is
-**0/1, blur 3, black @14%** — enough to say "this is a millimetre above the panel", which is
+**0/1, blur 3, black @14%** - enough to say "this is a millimetre above the panel", which is
 the truth, and permitted on the same closed list the canonical doc names: modal dialogs,
 menus and popovers, panels being drag-undocked, and drag ghosts. Nothing else in the
 application casts a shadow, including under hover.
@@ -155,14 +167,16 @@ Everything else is grey. If a fifth referent appears, the answer is a form, not 
 **The signal never sets type.** It is a lamp, a fill and a 1–2px mark; it is never the colour
 of a word. This keeps it legible at its own low text-contrast (4.2:1 in the grey room) without
 compromise, and it keeps the rule simple: if you can read it, it is grey. The one filled
-action carries a **`#ffffff` label on the signal fill** in the grey room (5.0:1) and
-**`#17110c`** on it in Graphite (6.1:1) — the far end of the ramp from the text around it,
-which is the canonical Round rule generalised.
+action carries **the scheme's own `surface_0` as its label on the fill**, the far end of the
+ramp from the text around it (5.0:1 in the grey room, 6.1:1 in Graphite): Desk adds no colour
+of its own, so the label is the scheme's, not a value this document names.
 
 ### 3.2 `animated` is dissolved
 
-The canonical language spends a second saturated colour — amber `animated` — on seven jobs,
-and its own final open question doubts two of them. This style removes the token.
+The canonical language spends a second saturated colour - amber `animated` - on seven jobs,
+and its own final open question doubts two of them. This style removes the token. *As
+built*, the token stays in the struct and the amber is answered by the signal: in Grey room
+and Graphite, `animated` equals the accent.
 
 Each job is re-answered by form, which principle 4 prefers anyway because a form is readable
 without colour vision and at 3px:
@@ -170,8 +184,8 @@ without colour vision and at 3px:
 | Canonical job for `animated` | Answer here |
 |---|---|
 | Keyframe diamonds | The mark's own shape already says the interpolation (§6.2). Its *presence* says it is keyed |
-| Stopwatch on | **Filled** square, against an outlined one off |
-| Selected keyframes | `signal` — a selection is a selection, and the editor has one word for it |
+| Stopwatch on | **Filled** square, against an outlined one off. *As built* on every keyed row |
+| Selected keyframes | `signal` - a selection is a selection, and the editor has one word for it |
 | Selected gizmo handles | `signal`, and inside the neutrality zone the user's "neutral handles" option still applies |
 | The focused value field | The `signal` focus ring, like every other control. There is no special focus |
 | The work-area band | The band is **the absence of a dim**: outside the work area, the lane ground steps one value darker. A band drawn *in* is a second thing on the ruler; a band left *undimmed* is the same fact with nothing added |
@@ -185,7 +199,7 @@ readable in a black-and-white screenshot.
 Unchanged from the canonical §3.2 and, if anything, easier to obey here: within 48px of the
 Viewer image area the UI is strictly neutral, gizmos and guides excepted. Because the room is
 grey rather than near-black, the transition from chrome to `viewer_surround` is a small step
-rather than a cliff — which is the honest arrangement for judging a picture, and the reason
+rather than a cliff - which is the honest arrangement for judging a picture, and the reason
 finishing suites are painted the grey they are.
 
 ## 4. The token layer
@@ -195,14 +209,14 @@ reference, with the no-hex rule and the CI job unchanged. The delta is what it c
 
 ```
 - pub accent: Color32,          → pub signal: Color32,
-- pub accent_hover: Color32,    → (removed: see §8.2 — there is no hover colour, only a
+- pub accent_hover: Color32,    → (removed: see §8.2 - there is no hover colour, only a
                                    surface step, which the surfaces already carry)
 - pub animated: Color32,        → (removed: §3.2)
 - pub success / warning / error → pub on / attention / fault   (renamed to their referents)
 - pub disabled: Color32,        → (removed: text_disabled already says it)
 - pub fill_tonal: Color32,      → (removed: informational chips are hairline-bounded,
-                                   not filled — §12A.3a)
-+                                 pub module: f32,   // §7.1 — the 4px unit, one number
+                                   not filled - §12A.3a)
++                                 pub module: f32,   // §7.1 - the 4px unit, one number
 ```
 
 The struct loses five fields and gains one. That is principle 10 applied to the code as well
@@ -212,7 +226,8 @@ one it replaces, not more expensive.
 **No theme gallery.** Settings → Appearance offers **Grey room / Graphite** and nothing else.
 The `.lumtheme` file format is kept, because an accessibility override is a real need and a
 user's high-contrast variant is their business; the seven shipped palettes go. A design that
-ships seven palettes has not decided what it looks like.
+ships seven palettes has not decided what it looks like. *As built*, the gallery stays and
+the two rooms stand beside it as schemes in their own row (§2).
 
 ## 5. Iconography
 
@@ -221,12 +236,15 @@ weight, monochrome via `currentColor`, one icon per chrome word, no emoji ever. 
 
 - **Stroke 1.5px → 1.25px, butt caps, no round caps.** Braun's engraved marks are thin and
   cut, not drawn with a felt tip. Round caps read as friendly; this style is not friendly, it
-  is clear.
+  is clear. *As built*: the set's glyphs are stroked SVGs, so every one is drawn at the
+  style's `strokeWeight`, 1.25 under Desk, with no second set to keep; Settings, Appearance,
+  Icon set lets a person pick Regular, Engraved or Bold under any style, and a folder of
+  their own SVGs replaces icons one at a time or all at once.
 - **A glyph is drawn from the smallest number of strokes that names the thing.** Where the
   canonical set draws a recognisable object, this one draws the *operation*. The one
   place this bites: the four painter-drawn exceptions in `icons.dart` stay painter-drawn, but
   each is redrawn on the same 1.25px discipline so the set has one weight and not one-and-a-bit.
-- **The Channels indicator keeps its colour** — it is the one glyph whose subject *is*
+- **The Channels indicator keeps its colour** - it is the one glyph whose subject *is*
   colour, and principle 6 forbids drawing it in grey and pretending otherwise.
 
 **Chrome labels: Words is the default and stays the default.** The canonical three-way
@@ -240,7 +258,7 @@ every mode.
 The three content families below are **content, not chrome**. They are allowed colour because
 they are data being drawn, exactly as the picture is; they are not part of the signal system
 and must never be confused with it. Each family is drawn at one value and one chroma so that
-none shouts over another — and so that `signal` beats every one of them, which is the property
+none shouts over another - and so that `signal` beats every one of them, which is the property
 the whole arrangement depends on.
 
 ### 6.1 Layer types
@@ -265,21 +283,21 @@ Reserved, unchanged in intent: Shape, Null (outline only), Audio, Light.
 
 - Interpolation is **shape, and shape alone**: diamond linear, square hold, hourglass bezier
   in the lanes, circle bezier in the graph. Split at the vertical centre, left half incoming,
-  right half outgoing, as canonically specified — that ruling is excellent and is kept
+  right half outgoing, as canonically specified - that ruling is excellent and is kept
   verbatim.
 - **At rest a key is `text_secondary` filled with a `surface_1` outline. Selected, it is
   `signal`.** There is no third state and no `animated`.
 - Curve strokes take a four-step ramp in dimension order, re-derived at one value:
   `#4a6b7d` / `#5c7a63` / `#8a6a72` / `#7d7458` in the grey room, one step lighter in
   Graphite. A single-dimension property uses the first.
-- Bezier handles: `text_muted` stems, `signal` while grabbed. Selected is `signal` too — see
+- Bezier handles: `text_muted` stems, `signal` while grabbed. Selected is `signal` too - see
   §3.2.
 - Graph paper: `surface_0` ground, `hairline` minor lines, `hairline_strong` at zero and 100%.
 
 ### 6.3 The cache bar
 
-The canonical design here is genuinely good — two families, three fill heights, uncached
-drawn as nothing — and its reasoning (brightness alone was illegible on a 3px stripe) is
+The canonical design here is genuinely good - two families, three fill heights, uncached
+drawn as nothing - and its reasoning (brightness alone was illegible on a 3px stripe) is
 exactly the kind of finding principle 8 is about. It is kept whole, with the colours moved
 onto this palette: **`on` for held**, and a steel `#4a6b7d` (grey room) / `#5f8196`
 (Graphite) for the disk tier. Fill heights stay full / 70% / 45%.
@@ -288,7 +306,7 @@ onto this palette: **`on` for held**, and a steel `#4a6b7d` (grey room) / `#5f81
 
 - **Overrun**: `attention` hatching at 45°, 1px lines, 4px pitch, over a ~12% wash, with the
   mono `hold` tag. Unchanged but for the case of the tag (§7.2).
-- **Markers**: a plain grey flag, as canonically ruled, and for the canonical reason — a
+- **Markers**: a plain grey flag, as canonically ruled, and for the canonical reason - a
   marker says *here*, not *good* or *careful*. `#565656` in the grey room, `#c4c4c4` in
   Graphite. The upward triangle standing on the cache bar, the `surface_4` backdrop pill and
   the one-marker-per-frame rule are all kept.
@@ -301,13 +319,14 @@ One treatment, used everywhere, because the editor has one idea of "this is the 
 have":
 
 - **Selection**: `signal` 1px border, `signal` @ 14% fill. Clips, layers, assets, keyframes,
-  nodes, handles — all of them.
+  nodes, handles - all of them. *As built*: the 14% fill under a selected row and the 1px
+  `signal` outline on a selected bar.
 - **Focus**: a 1px `signal` ring offset 1px outside the control's bounds. No exceptions; the
   value field's special amber focus goes with `animated`.
 - **Drop targets**: 1.5px dashed `signal` with a 10% fill; an insertion caret is a 2px
   `signal` line.
 - **The playhead** is a 1px `signal` line with an 11×8 `signal` head at the top of the ruler,
-  as canonically drawn. The head earns its place — a bare hairline reads as a row seam — and
+  as canonically drawn. The head earns its place - a bare hairline reads as a row seam - and
   the ≥24px grab target is unchanged.
 
 ## 7. The module
@@ -315,13 +334,13 @@ have":
 ### 7.1 One number
 
 **Everything is a multiple of 4.** Not "a 4/8/12/16 spacing scale, with heights chosen per
-element" — every height, every gap, every inset, every padding, in chrome and in dialogs
+element" - every height, every gap, every inset, every padding, in chrome and in dialogs
 alike. The Vitsœ 606 is one drilled pitch and forty years of furniture hanging off it; this
 is the same idea with `module = 4`.
 
-The consequence is that the canonical §12A.6 metrics table — forty-one rows of surveyed
+The consequence is that the canonical §12A.6 metrics table - forty-one rows of surveyed
 artboard measurements, several of which disagree with each other by a pixel and one of which
-the doc itself records as the artboard disagreeing with itself — collapses into **six
+the doc itself records as the artboard disagreeing with itself - collapses into **six
 heights**:
 
 | Height | Modules | What stands at it |
@@ -335,7 +354,12 @@ heights**:
 
 Plus two atoms that are not heights: the **cache bar at 4**, and the **hairline at 1**.
 
-**Compact is one substitution, not a column**: the row becomes 20 and the property row 24 —
+*As built* (`DensityTokens.deskRegular`), the chrome measures beside the row module: the
+**header strip 24**, the **cache bar 4**, the **navigator band 16** and the **scrollbar 8**;
+the row 24, a secondary row 20, the in-row picker 16, the dropdown face 20, the property row
+28, the two Timeline chrome rows 24 each and the ruler the derived 48.
+
+**Compact is one substitution, not a column**: the row becomes 20 and the property row 24 -
 each drops one module. Nothing else changes, no type resizes, and there is no second table to
 keep in step with the first.
 
@@ -346,14 +370,19 @@ anything the editor needs stops fitting. §12A.6 records what is expected to hur
 
 **One face: IBM Plex Sans** (SIL OFL), bundled, with **tabular figures (`tnum`) switched on
 globally**. Plex is the nearest available thing to the neo-grotesque Braun set everything in:
-neutral, plain-numeralled, drawn for small sizes, and — the reason it wins over Inter or
-Archivo — it ships a mono cut from the same skeleton for the one place mono is honest.
+neutral, plain-numeralled, drawn for small sizes, and - the reason it wins over Inter or
+Archivo - it ships a mono cut from the same skeleton for the one place mono is honest.
+
+*As built*: `ShapeTokens.sansFamily` is IBM Plex Sans, bundled, with tabular figures in every
+text style; the label is 9px lowercase at +0.04em (`kickerTracking`); `t.mono` is IBM Plex Mono
+with tabular figures, so the timecode wells and value fields that read it keep a mono cut,
+which is the honest half of the experiment below until it is run.
 
 **The mono-for-numbers rule is retired, and this is the most arguable thing in this
 document.** Its purpose was to stop horizontal jitter while scrubbing; `tnum` stops horizontal
 jitter while scrubbing. A second face bundled to solve a solved problem is design that was not
 needed, which is principle 10's whole subject. **IBM Plex Mono survives for exactly one job**:
-text that is genuinely machine output and should look like it — the boot log, file paths, and
+text that is genuinely machine output and should look like it - the boot log, file paths, and
 expression source. Timecode, frame counts, percentages, durations and property values are set
 in Plex Sans with `tnum`.
 
@@ -362,8 +391,8 @@ in Plex Sans with `tnum`.
 > That is the honest version of the claim, and it is the one experiment this style most needs
 > to run.
 
-**Labels are lowercase.** The canonical kicker — mono, caps, +0.12em, on every container
-label in the application — is replaced by:
+**Labels are lowercase.** The canonical kicker - mono, caps, +0.12em, on every container
+label in the application - is replaced by:
 
 > **The label**: 9px, +0.04em, `text_muted`, sentence case with no capital unless the word is
 > a proper noun. `timeline`, `source time`, `work area`, `export queue`.
@@ -377,8 +406,8 @@ staying just as clearly "the application's word rather than the user's".
 | 9px, +0.04em, muted | **The label**: panel titles, section headers, column headers, tab labels, dialog titles, attribution, ruler numbers, the status bar |
 | 10px | Units beside a value (`px`, `%`, `°`), outline-row readouts, secondary notes and hints, layer bar labels |
 | 11px | Panel body copy, property names, menus, buttons, **and every value in a well** |
-| 13px | Dialog body emphasis — the one thing in chrome above 11px |
-| 22px+ | About box, the welcome screen, empty states only — outside chrome |
+| 13px | Dialog body emphasis - the one thing in chrome above 11px |
+| 22px+ | About box, the welcome screen, empty states only - outside chrome |
 
 Nothing in chrome is bold. Weight is not a hierarchy this style uses; size and value are.
 
@@ -395,7 +424,7 @@ comfort for nothing.
 ### 8.1 Less of it
 
 - Micro-motion budget **≤100ms** (from 150), transform and opacity only, and **ease-out
-  only** — no spring, no overshoot anywhere in chrome.
+  only** - no spring, no overshoot anywhere in chrome.
 - **The one signature interaction is withdrawn.** The canonical drag ghost lags the cursor and
   settles with a small overshoot on drop. A clip does not have mass; pretending it does is
   principle 6's exact failure. The ghost pins to the cursor and lands where it is dropped.
@@ -405,7 +434,7 @@ comfort for nothing.
 
 Hover and press are **surface steps**, never hue changes and never strokes appearing: idle on
 the panel's own surface, `surface_3` hovered, `hairline_strong` pressed. This is the
-canonical rerun-derived grammar, kept, and it is why `accent_hover` disappears from the token
+canonical borderless-widget grammar, kept, and it is why `accent_hover` disappears from the token
 struct (§4).
 
 ### 8.3 The three tiers stay
@@ -428,7 +457,7 @@ Principle 9, read for what this application actually is:
 
 ## 9. Accessibility
 
-The canonical §9 is kept in full — AccessKit roles and names, keyboard operability of every
+The canonical §9 is kept in full - AccessKit roles and names, keyboard operability of every
 control, the safe-triangle submenu rule, reading-order tab traversal, modal focus scopes,
 CI-checked contrast floors, never colour alone.
 
@@ -454,12 +483,12 @@ Two changes:
 - **The one rationed joke goes.** The canonical about box carries a serif line under the
   version number. Principle 3 says the aesthetic is a consequence of the work; a joke is an
   applied layer, and one joke is a precedent for the second. The about box carries the mark,
-  the version, the licences, and the names of the people involved — which is what an about box
+  the version, the licences, and the names of the people involved - which is what an about box
   is for.
 
 And one thing made explicit, because principle 6 deserves it stated: **a progress reading
 shows real progress or a real count, never a spinner standing in for knowledge we do not
-have.** `Exporting — 41% · 02:12 remaining` when the estimate is sound; `Exporting —
+have.** `Exporting - 41% · 02:12 remaining` when the estimate is sound; `Exporting -
 frame 103 of 250` when it is not; never an indeterminate bar implying a measurement nobody
 made.
 
@@ -476,16 +505,32 @@ it is not a compromise.
 
 ## 12. Shape
 
-**There is one.** Round (canonical §12 and §12.1) is withdrawn — the stadium controls, the
+*As built, past the document.* The review asked for Desk to be unmistakable, so the build
+goes further than the pages below in five places, each a thing an instrument has and a
+screen usually does not:
+
+- **The chassis.** The panels are plates in a 4px chassis of `surface_0`, with a 4px inset
+  from the window's edge, instead of tiles meeting on a hairline. Every radius is nought.
+- **Plates and lines.** A button is a flat `surface_2` plate with one shade line under it;
+  a dropdown is an underlined word with nothing boxed; a value well is an engraved recess,
+  dark on the top and left where the light does not reach and pale below and right, its
+  lit edge (focus, a scrub) drawn all round in its own colour.
+- **Keys.** The deck's transport marks are round 24px keys on the plate, the play key in
+  the signal.
+- **The needle.** The playhead is a 1px signal needle pinned by a 10px round knob with a
+  notch of the ground through it, in place of the triangle.
+- **Names on bars.** Every layer bar carries its name, as the study draws.
+
+**There is one.** Round (canonical §12 and §12.1) is withdrawn - the stadium controls, the
 filled-pill actives, the bigger cards, the header dot, the capsule bars, the tile gap and the
 card shadow all go with it. Panels butt together separated by a single hairline; there are no
 gaps between docked panels and no inset from the window edge.
 
-Radii: **2px on everything**, and **full only where the control is genuinely round** — which,
+Radii: **2px on everything**, and **full only where the control is genuinely round** - which,
 in this style, is a real category rather than a styling choice:
 
 > **The dial.** A control whose value is continuous, bounded and set by feel rather than by
-> typing — the zoom, the exposure, a rotation — MAY be drawn as a **circular dial with an
+> typing - the zoom, the exposure, a rotation - MAY be drawn as a **circular dial with an
 > engraved tick scale and one index mark**. It is the Braun form, and it is the honest form:
 > a thing you turn looks like a thing you turn. A dial always sits beside its own value in a
 > well, because a dial is imprecise and typing is not, and the two together are what the
@@ -515,14 +560,14 @@ question the editor asks; this is the audit.
 | **The work-area band as a painted band** | §3.2. Outside the work area, the lane ground steps one value darker. The band is the undimmed part |
 | **The Round shape entirely** | §12 |
 | **The header dot** | Canonical §12.1 calls it "the reference's quiet live-mark … decorative, never a status light". Principle 3: there are no decorative elements |
-| **The composition tab's and workspace tab's two different active treatments** | One treatment: the fronted tab's word goes to `text_primary` and a 2px `signal` rule sits under it. The canonical language already reached this for panel tabs; this extends it to all three |
+| **The composition tab's and workspace tab's two different active treatments** | One treatment: the fronted tab's word goes to `text_primary` and a 2px `signal` rule sits under it. The dock draws it for panel tabs; this extends it to all three. *As built*, the index sits **under the word for a tab** and **on the leading edge for a segment**: the workspace word, a dock panel tab and a composition tab carry a 2px `signal` rule under the fronted lowercase word and no fill; `HouseButton`'s active state as a segment draws the accent tint with a 2px accent index on the leading edge |
 | **Six shipped colour schemes and the theme editor** | §4 |
 
 ### 12A.2 Kept, with the numbers re-cut to the module
 
 The Timeline, Project panel, Welcome screen, dialogs and Viewer bars keep their approved
-anatomy — six bands in the Project panel, the double-height ruler reading as one band, the
-560-wide welcome column, the label-left dialog rows, the Viewer's two 22px strips — with
+anatomy - six bands in the Project panel, the double-height ruler reading as one band, the
+560-wide welcome column, the label-left dialog rows, the Viewer's two 22px strips - with
 every height taken to §7.1's nearest module:
 
 | Canonical | Here | Note |
@@ -533,7 +578,7 @@ every height taken to §7.1's nearest module:
 | Timeline chrome rows 24 and 23 | **24 and 24** | The owner's desktop ruling asked for ≥20 and got 24; the second row joins it |
 | Outline and lane rows 23 / 22 | **24 / 20** | Regular gains a pixel, Compact loses two |
 | Property rows 27 / 26 | **28 / 24** | |
-| Ruler, derived: 47 / 36 | **48 / 40** | Still derived — the ruler is exactly what the outline spends on its two chrome rows, which is what keeps the two halves of the Timeline meeting |
+| Ruler, derived: 47 / 36 | **48 / 40** | Still derived - the ruler is exactly what the outline spends on its two chrome rows, which is what keeps the two halves of the Timeline meeting |
 | Cache bar 3 | **4** | |
 | Value wells 20 | **20** | Already on the module |
 | Dialog title strip and rows 30 | **32** | |
@@ -549,18 +594,18 @@ every height taken to §7.1's nearest module:
 2. Compact's row at 20 is two pixels tighter than the canonical 22, which pushes the 16px clip
    bar and the 18px in-row picker close to their floors. If a picker cannot sit in a 20px row
    without breaking KD-2, Compact's row becomes 24 and Compact stops differing from Regular in
-   the outline — which would be a real loss and the clearest argument against §7.1.
+   the outline - which would be a real loss and the clearest argument against §7.1.
 3. The Viewer's two bars at 24 rather than 22 take 4px of picture. The bars shed in the
    canonical order and the transport is still last.
 
 ### 12A.3 Dialogs
 
-The canonical pattern is kept whole — title strip, optional tab row, label-left rows with the
+The canonical pattern is kept whole - title strip, optional tab row, label-left rows with the
 label in a fixed column, label-titled groups, a footer with a summary line and at most one
 filled action, buttons sized by their content, the stacking footer when the actions will not
 fit one line. Three notes:
 
-- The label column widths (190/12, 110/12, 100/10) become **192/12, 112/12, 100/8** — the
+- The label column widths (190/12, 110/12, 100/10) become **192/12, 112/12, 100/8** - the
   module, and each still pinned by its own metrics test.
 - **A disabled control is drawn, legible and deaf**, exactly as the canonical Export dialog
   rules. That ruling is principle 6 in full and it is kept verbatim, section-darkening
@@ -577,27 +622,38 @@ trace. A panel nobody is touching looks exactly as §2 says it does.
 
 The canonical shell is After Effects' shape, chosen so that the audience arrives home. This
 style keeps every panel, every control and every behaviour in [07-UI-SPEC.md](../07-UI-SPEC.md)
-and lays the *chrome* out again by one rule — Braun's: **a control sits where the hand goes
+and lays the *chrome* out again by one rule - Braun's: **a control sits where the hand goes
 most, at the size the hand needs, and nothing sits anywhere for tradition's sake**. The dock,
 the drop zones, the workspaces, floating windows and every keymap are untouched; what follows
 is the default arrangement and the chrome around it.
 
 ### 12B.1 The tool rail
 
-The toolbar (07 §1.7) leaves the horizontal strip and becomes a **44px column down the left
-edge of the window**, running from under the top line to the bottom of the readout strip.
+**The toolbar's position is a setting, and Left suits Desk.** The amendment is written
+up once, in [15-DESIGN-LANTERN.md](15-DESIGN-LANTERN.md) §12B.1, and it belongs to every style:
+07 §1.7 says the toolbar cannot be moved, and *moved* becomes **Settings, Appearance, Toolbar
+position: Top or Left**, machine-local, carrying the identical toolbar either way. The rail is
+what Desk's argument is about. *As built*, the setting defaults to **the style's choice**:
+under Desk that is the rail, under Studio and Lantern the strip, and a person who picks Top
+or Left keeps it under every style. The Viewer bars setting works the same way, and Desk's
+choice there is the deck. Top is the strip, which this style draws at 44 across and 32 down.
+
+What follows describes Left: a **44px column down the left edge of
+the window**, running from under the top line to the bottom of the readout strip.
 
 - Every group from §1.7's table, in its order, one 44×44 cell each: Selection, Hand, Zoom,
   Rotation, Anchor point, Razor; a seam; Shape, Pen, Type, Paint, Roto, Puppet, Camera. A
   group's cell carries the member last used with the corner triangle; press-and-hold and
   right-click open the flyout *to the right* of the rail; every shortcut and the cycling rule
   are unchanged. Unbuilt tools draw disabled and decline, exactly as the spec says.
-- **The armed tool wears a 2px `signal` index on the rail's edge** — the Braun switch mark —
+- **The armed tool wears a 2px `signal` index on the rail's edge** - the Braun switch mark -
   and sits on `surface_2`. It is the one saturated thing on the rail.
 - The snapping switch stands at the foot of the rail, apart from the tools, because it is a
   mode and not a tool.
-- **Tool options** (§1.7's table) open as a small panel hanging off the rail beside the armed
-  tool, only while a tool with options is armed; Selection shows nothing.
+- **Tool options** (§1.7's table) sit on the top line under Left, beside the workspace words
+  (§12B.2), and the strip above the dock is not mounted (*as built*; the first drawing hung
+  them off the rail as a small panel, and an earlier build kept the strip). Under Top they
+  stay on the strip. Selection shows nothing.
 - The reason: §7.2's hit floor is 44 on both axes. The horizontal strip gave up the vertical
   one (44 across, 30 down) to save height; a column gives up nothing, costs the panels 44px of
   width instead of 30px of height, and is where the hand already is when it leaves the picture.
@@ -608,14 +664,24 @@ One 28px strip: the mark, the nine menus as lowercase words, the workspace strip
 fronted name over a 2px `signal` rule, and the command palette's well at the right. On macOS
 the menus go to the system bar and the line keeps the rest, as the spec already provides.
 
+*As built* (`DensityTokens.menuBar`, 28 under Desk): the line carries the lowercase menus,
+the workspace words with their rule, and under Left also the tool options (§12B.1). The mark
+and the command well are not built. Under Top the workspace strip stays on the toolbar strip;
+only under Left does it ride the line.
+
 ### 12B.3 Bare panes and engraved labels
 
-The default arrangement has **no tab bars**. Each pane is a bare pane — the spec's own term
-for a panel that sits alone — carrying its name as a 9px lowercase label in its top-left corner
-and its own controls on the same 24px line. Docking is unchanged: right-click a pane to pop it
+The default arrangement has **no tab bars**. Each pane is a bare pane - the spec's own term
+for a panel that sits alone - carrying its name as a 9px lowercase label in its top-left corner
+and its own controls on the same 24px line. The Viewer and the Timeline, which draw a header
+of their own, carry no dock label line. Docking is unchanged: right-click a pane to pop it
 out, Window ▸ to add or drop one, drag a tab once a pane has company. Panels a preset stacks
 (Effects & presets and Scopes behind Effect controls in Edit) still stack, and a stacked group
 still shows its tabs; the resting default is simply built so that nothing is stacked.
+
+*As built*, the dock's tab strip draws no hover fill and no box: the fronted lowercase word
+stands in `text_primary` over a 2px `signal` rule, the rest in `text_muted`, and hovering a
+word brightens it to `text_primary` alone.
 
 ### 12B.4 The Viewer: ways of looking above, the deck below
 
@@ -626,35 +692,67 @@ The Viewer's two strips (07 §2.2) are re-cut by what they are *for*:
   exposure with its reset mark, the snapshot pair behind a seam, the colour pipeline, and the
   degradation reading (`1920×1080 → 960×540`). Every item keeps §2.2's behaviour.
 - **The deck**, a fixed 32px instrument strip under the picture, holds everything about
-  *playing*: the five transport marks, **the clock at 15px** — the one large number in the
-  application — with the frame count beside it, the loop mode, the preview mode (cached /
-  realtime), the quality toggle, audio, and the cache-ready meter. This is §9's Preview panel
-  given a permanent seat; the dockable Preview panel still exists for a second monitor.
+  *playing*: the five transport marks, **the clock at 15px** - the one large number in the
+  application - with the frame count beside it, the preview mode (cached /
+  realtime) and the quality as two dropdowns (*as built*: a dropdown, not a toggle), and the
+  cache-ready meter. The loop mode and audio mute are intent, not yet built: they arrive
+  with the engine step that carries them. This is §9's Preview panel
+  given a permanent seat, one of the four Viewer bars arrangements (07 §2.2); the dockable
+  Preview panel still exists for a second monitor.
 - The "at effect" chip and the selection's name stay over the picture, where the selection is.
 
 ### 12B.5 The Timeline
 
 - The header line: the panel label, the composition tabs (the fronted one over a `signal`
-  rule), and the one filled `export` at the right.
+  rule), and the one filled `export` at the right. *As built*, a tab is an 18px chip centred
+  on the 24 line, so the line reads as a line and not as a bar.
 - The outline's chrome row: the layer search well, the shy filter and the master motion-blur
   switch as bare glyphs, and the Layers / Graph modes at the right. **The timecode and frame
-  count are not repeated here** — the deck's clock is the clock, and typing into it moves the
-  playhead exactly as §4.1 requires.
+  count are not repeated here** - the deck's clock is the clock, and typing into it moves the
+  playhead exactly as §4.1 requires. *As built*, both stay on the chrome row, because the
+  deck is one of four Viewer bars arrangements and is not always shown.
 - The outline row, on the 24px module: switches · number · name · modes · matte · blend ·
   parent · ms, each control a bare glyph or a well, nothing boxed. The foot carries the ease
   strip, Reverse / Copy / Paste at playhead, the three group toggles, and the measuring clock.
 - **The ruler is an engraved scale**: a tick every four frames, a taller one every second, a
   labelled one every four seconds, on the upper half; the work-area handles, the markers and
   the 4px cache bar on the floor. The playhead is the one `signal` index, its head the grab.
-  Outside the work area the ground steps darker (§3.2) — nothing is painted in.
+  Outside the work area the ground steps darker (§3.2) - nothing is painted in.
 - **The lane foot holds the dial** (§12): the zoom as a real dial with a tick scale, its
   reading beside it (`1 tick = 4 f`), then the horizontal scrollbar.
 
+*As built*: the header line carries the composition tabs with the fronted one over its
+`signal` rule and the one filled Export at the right; each lane row is a full-width
+`surface_2` band on the lane ground with a pixel of ground above and below, and the bar
+stands on it, its hue mixed 30% into the band and outlined in the hue, in the accent while
+selected; a shut layer's keys draw on its bar as outlined diamonds in `text_secondary`.
+
 ### 12B.6 The readout strip
 
-The status line becomes a 20px strip of engraved readouts across the foot of the dock: the
-status message at the left; the three cache meters (vram / ram / disk) as 48×3 bars with their
-figures; the frame cost and the dropped-frame count at the right. It reports; it never alarms.
+The status line becomes a 20px strip of engraved readouts across the foot of the dock, in
+**the order the status line already has** (`status_line_frb.dart`): whether the document is
+saved, the cache meters with their exact figures, the measuring clock, the latest notice with
+its close mark, then the background jobs with their progress and a Cancel that works from
+anywhere. Nothing is added, dropped or reordered. It reports, and it never alarms.
+
+### 12B.6a The range slider is a setting
+
+Taken from [15-DESIGN-LANTERN.md](15-DESIGN-LANTERN.md) §12B.6 and stated here because it
+binds every style: **Settings, Appearance, Range sliders: on or off**, machine-local. Off, a
+ranged parameter draws its number alone. On, a track and thumb sit beside the number as a
+second grip on one value.
+
+Off suits Desk, and it is one setting away. A track is a second
+way to reach a number that a well already reaches, and principle 10 removes the second way
+unless it does something the first cannot. What a track does that a well cannot is show *where
+in its range* a value sits, which matters for a wipe's completion and not much else. The
+setting is the honest resolution: the track earns its place for the people who use it and
+costs nothing to the people who do not. The default is on under every shape, because
+changing the style must not silently change other settings.
+
+Under Desk a track is drawn as the style's own control, not as a capsule: a 2px
+`hairline_strong` rail with a small round `text_secondary` thumb, and no fill behind the
+travelled part.
 
 ### 12B.7 What this costs, beyond "What it would cost to build"
 
@@ -689,19 +787,19 @@ figures; the frame cost and the dropped-frame count at the right. It reports; it
 
 ## Brand
 
-The twin-keyframe mark is kept — two keyframe diamonds side by side with an additive white
+The twin-keyframe mark is kept - two keyframe diamonds side by side with an additive white
 where they overlap. It is a good mark and it is honest: keyframes are motion, the overlap is
 compositing, the white is luminance.
 
 One change: **the gradients flatten to solids.** The mark becomes two flat colours and a
-white, which is what it already is at 16px and what it should be at 512. Principle 7 — a
-gradient dates, a flat mark does not — and principle 6 — the gradient implies a lighting
+white, which is what it already is at 16px and what it should be at 512. Principle 7 - a
+gradient dates, a flat mark does not - and principle 6 - the gradient implies a lighting
 nothing in the mark has.
 
 The splash keeps the boot log, which is the most Rams-correct thing in the application: real
 plumbing reporting itself, slow items visible and attributable, a failure shown in
 `attention` with a short reason and the application opening degraded rather than hanging on a
-spinner. **The broken-glass splash art is withdrawn** — it is decoration, and principle 3
+spinner. **The broken-glass splash art is withdrawn** - it is decoration, and principle 3
 says the aesthetic is a consequence of the work rather than a layer over it. The splash is the
 mark, the wordmark, the version, and the log.
 
@@ -740,11 +838,11 @@ case; then the module; and treat the dial as a separate proposal on its own meri
   the rest of §7.2 stands unchanged.
 - **Does Compact survive the module?** §12A.2's second expected pain. If a 20px row cannot
   carry an 18px picker within KD-2, either Compact loses its distinctness or the module gains
-  an exception — and an exception in §7.1 is a hole in principle 8.
+  an exception - and an exception in §7.1 is a hole in principle 8.
 - **Is one signal enough for a compositor?** §3.2 removed a colour the canonical language
   spends on seven jobs. The honest risk is that "selected keyframe" and "selected clip" now
   look identical and the eye wants them not to. The answer, if so, is a form difference, not a
   second colour.
 - **The dial's keyboard and accessibility story.** §9 demands a keyboard equivalent for every
-  drag. A dial's is arrow keys with a modifier for coarse steps, which is straightforward —
+  drag. A dial's is arrow keys with a modifier for coarse steps, which is straightforward -
   but its AccessKit role and its value announcement need writing before it ships anywhere.

@@ -56,6 +56,7 @@ import '../state/settings.dart';
 import '../state/updates.dart';
 import '../state/workspace.dart';
 import '../theme/custom_theme.dart';
+import '../icons/icon_style.dart';
 import '../theme/theme.dart';
 import '../theme/theme_file.dart';
 import '../widgets/controls.dart';
@@ -410,7 +411,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         padding: const EdgeInsets.symmetric(horizontal: 14),
         child: Row(
           children: [
-            Text(l10n.settingsTitle.toUpperCase(), style: t.kickerOn),
+            Text(t.kickerCase(l10n.settingsTitle), style: t.kickerOn),
             const Spacer(),
             SizedBox(
               width: settingsSearchWidth,
@@ -632,7 +633,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       case SettingsPage.appearance:
         workspace.setScheme(LumitColorScheme.dark);
         workspace.setAccent(null);
-        ui.setShape(ThemeShape.sharp);
+        ui.setShape(ThemeShape.studio);
         workspace.setAnimationLevel(AnimationLevel.all);
         workspace.setThemedScopes(false);
         workspace.setThemedEffectGraphs(false);
@@ -643,6 +644,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         settings.waveformsFromBottom = shipped.waveformsFromBottom;
         settings.compact = shipped.compact;
         settings.chromeLabels = shipped.chromeLabels;
+        settings.room = shipped.room;
+        settings.toolBarPosition = shipped.toolBarPosition;
+        settings.rangeSliders = shipped.rangeSliders;
         workspace.recompose();
         workspace.save();
       case SettingsPage.timeline:
@@ -826,8 +830,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   options: ui.workspace.themeChoices,
                   width: _ddWide,
                   label: (c) => c.label,
-                  // Dark, Light, then the user's own: seven built-ins and a
-                  // growing list of custom themes is a long flat menu, and
+                  // Dark, Light, then the user's own: thirty-one built-ins and
+                  // a growing list of custom themes is a long flat menu, and
                   // light/dark is the first thing anyone is choosing by.
                   group: (c) => c.group,
                   onChanged: (c) => setState(() => ui.workspace.choose(c)),
@@ -869,6 +873,32 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               description: _themeMessage ?? ''),
           _row(t, l10n.settingsAccent, _accentSwatches(t, ui)),
           _row(t, l10n.settingsShape, _shapeChips(t, ui)),
+          // Desk's rooms are colour schemes, and this row is the one tap that
+          // picks one: choosing Desk leaves the scheme where it was.
+          if (ui.shape == ThemeShape.desk)
+            _row(t, l10n.settingsDeskRooms, _deskRoomChips(t, ui)),
+          // Only Lantern has a room to choose; the other two shapes never
+          // draw one, so the row would be a dial wired to nothing.
+          if (ui.shape == ThemeShape.lantern)
+            _row(
+              t,
+              l10n.settingsRoom,
+              _dropdown<LanternRoom>(
+                key: 'settings-lantern-room',
+                value: settings.room,
+                options: LanternRoom.values,
+                label: (room) => switch (room) {
+                  LanternRoom.auto => l10n.styleChoice,
+                  LanternRoom.day => l10n.roomDay,
+                  LanternRoom.night => l10n.roomNight,
+                },
+                onChanged: (room) => setState(() {
+                  settings.room = room;
+                  ui.workspace.recompose();
+                  ui.workspace.save();
+                }),
+              ),
+            ),
         ],
       ),
       (
@@ -978,15 +1008,110 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               value: settings.viewerBars,
               options: ViewerBars.values,
               label: (bars) => switch (bars) {
+                ViewerBars.auto => l10n.styleChoice,
                 ViewerBars.split => l10n.viewerBarsSplit,
                 ViewerBars.top => l10n.viewerBarsTop,
                 ViewerBars.bottom => l10n.viewerBarsBottom,
+                ViewerBars.deck => l10n.viewerBarsDeck,
               },
               width: _ddWide,
               onChanged: (bars) => setState(() {
                 settings.viewerBars = bars;
                 ui.workspace.settingsChanged();
               }),
+            ),
+          ),
+          // Where the toolbar stands. Machine-local like the scale: it is a
+          // fact about the person's monitor, not about a workspace.
+          _row(
+            t,
+            l10n.settingsToolBarPosition,
+            _dropdown<ToolBarPosition>(
+              key: 'settings-tool-bar-position',
+              value: settings.toolBarPosition,
+              options: ToolBarPosition.values,
+              label: (position) => switch (position) {
+                ToolBarPosition.auto => l10n.styleChoice,
+                ToolBarPosition.top => l10n.toolBarTop,
+                ToolBarPosition.left => l10n.toolBarLeft,
+              },
+              onChanged: (position) => setState(() {
+                settings.toolBarPosition = position;
+                ui.workspace.settingsChanged();
+              }),
+            ),
+          ),
+          _flag(t, 'settings-range-sliders', l10n.settingsRangeSliders,
+              value: settings.rangeSliders, set: (on) {
+            settings.rangeSliders = on;
+            ui.workspace.settingsChanged();
+          }),
+          _flag(t, 'settings-command-box', l10n.settingsCommandBox,
+              value: settings.commandBox, set: (on) {
+            settings.commandBox = on;
+            ui.workspace.settingsChanged();
+          }),
+          _row(
+            t,
+            l10n.settingsIconSet,
+            _dropdown<IconSet>(
+              key: 'settings-icon-set',
+              value: settings.iconSet,
+              options: IconSet.values,
+              label: (set) => switch (set) {
+                IconSet.styleChoice => l10n.styleChoice,
+                IconSet.regular => l10n.iconSetRegular,
+                IconSet.engraved => l10n.iconSetEngraved,
+                IconSet.bold => l10n.iconSetBold,
+              },
+              onChanged: (set) => setState(() {
+                settings.iconSet = set;
+                ui.workspace.recompose();
+                ui.workspace.save();
+              }),
+            ),
+          ),
+          // A person's own icons: one SVG per icon, named after it, in the
+          // folder beside the workspace store. Read at launch and on demand.
+          _row(
+            t,
+            l10n.settingsIconsFolder,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    HouseButton(
+                      key: const ValueKey('settings-icons-reload'),
+                      small: true,
+                      onPressed: () => setState(() {
+                        IconStyle.reload();
+                        ui.workspace.recompose();
+                      }),
+                      child: Text(l10n.reloadIcons),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      l10n.iconsReplaced(IconStyle.overrideCount),
+                      style: t.small.copyWith(color: t.textMuted),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                // The path is long; it takes a fixed slot and trims its end.
+                SizedBox(
+                  width: 240,
+                  child: Text(
+                    IconStyle.folder ?? '',
+                    key: const ValueKey('settings-icons-folder'),
+                    style: t.small.copyWith(color: t.textMuted),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -1029,10 +1154,10 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     ]);
   }
 
-  /// Sharp or Round, as the drawing draws it: two kicker chips side by side,
-  /// the one in force outlined. Not an accent fill — §3.1 spends the accent on
-  /// the tick beside the page name, and a second accent in the same window
-  /// would make neither of them mean anything.
+  /// Studio, Desk or Lantern, as the drawing draws it: kicker chips side by
+  /// side, the one in force outlined. Not an accent fill, because §3.1 spends
+  /// the accent on the tick beside the page name, and a second accent in the
+  /// same window would make neither of them mean anything.
   Widget _shapeChips(LumitTheme t, LumitUiState ui) => Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1046,11 +1171,42 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 frameless: ui.shape != shape,
                 onPressed: () => setState(() => ui.setShape(shape)),
                 child: Text(
-                  (shape == ThemeShape.sharp
-                          ? l10n.cornersSharp
-                          : l10n.cornersRound)
-                      .toUpperCase(),
+                  t.kickerCase(switch (shape) {
+                    ThemeShape.studio => l10n.shapeStudio,
+                    ThemeShape.desk => l10n.shapeDesk,
+                    ThemeShape.lantern => l10n.shapeLantern,
+                  }),
                   style: ui.shape == shape ? t.kickerOn : t.kicker,
+                ),
+              ),
+            ),
+          ],
+        ],
+      );
+
+  /// Grey room or Graphite, drawn like the shape chips with the scheme in
+  /// force outlined. A chip sets the scheme and nothing else.
+  Widget _deskRoomChips(LumitTheme t, LumitUiState ui) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final (key, scheme) in const [
+            ('settings-desk-room-grey', LumitColorScheme.greyRoom),
+            ('settings-desk-room-graphite', LumitColorScheme.graphite),
+          ]) ...[
+            if (scheme != LumitColorScheme.greyRoom) const SizedBox(width: 2),
+            SizedBox(
+              height: settingsControlHeight,
+              child: HouseButton(
+                key: ValueKey<String>(key),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                frameless: ui.workspace.colorScheme != scheme,
+                onPressed: () =>
+                    setState(() => ui.workspace.setScheme(scheme)),
+                child: Text(
+                  t.kickerCase(scheme.label),
+                  style: ui.workspace.colorScheme == scheme
+                      ? t.kickerOn
+                      : t.kicker,
                 ),
               ),
             ),
@@ -1593,7 +1749,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 hint: l10n.settingsExportFilenameHint(
                     exportTokenComp, exportTokenDate),
                 submitOnLostFocus: true,
-                onSubmitted: (text) => _setExportDefaults(template: text.trim()),
+                onSubmitted: (text) =>
+                    _setExportDefaults(template: text.trim()),
               ),
             ),
           ),
@@ -1701,8 +1858,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   Future<void> _pickExportFolder() async {
     final folder = await pickFolder();
     if (folder == null || !mounted) return;
-    _setExportDefaults(
-        destination: exportDestinationFolder, folder: folder);
+    _setExportDefaults(destination: exportDestinationFolder, folder: folder);
   }
 
   // ---- Shortcuts -----------------------------------------------------------

@@ -21,7 +21,8 @@ import 'package:lumit_flutter/panels/layer_fold_frb.dart' show RevealFilter;
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/panels/viewer_texture_controller.dart';
 import 'package:lumit_flutter/shell/about_window_frb.dart';
-import 'package:lumit_flutter/src/rust/api/audio.dart' show setAudioDevice;
+import 'package:lumit_flutter/src/rust/api/audio.dart'
+    show audioSetMuted, setAudioDevice;
 import 'package:lumit_flutter/src/rust/api/cache.dart';
 import 'package:lumit_flutter/src/rust/api/colour.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -475,6 +476,16 @@ class LumitUiState extends ChangeNotifier {
   /// to know which button to draw.
   final ValueNotifier<bool> playing = ValueNotifier(false);
 
+  /// Whether the output is muted (docs/07 §9). Mirrored from the call that
+  /// set it, so the deck's mark never asks the engine. Not persisted: a
+  /// launch into silence is the worse surprise.
+  final ValueNotifier<bool> audioMuted = ValueNotifier(false);
+
+  void setAudioMuted(bool muted) {
+    audioSetMuted(muted: muted);
+    audioMuted.value = muted;
+  }
+
   /// Start playing the fronted composition from the playhead.
   ///
   /// Everything about *how* playback runs — which frame is next, whether the
@@ -500,6 +511,8 @@ class LumitUiState extends ChangeNotifier {
       lastFrame: last,
     );
     _playedFrom = playheadFrame.value;
+    _reverse = false;
+    _turned = false;
     // Adaptive keeps time by skipping frames, so between pictures the
     // playhead is counted on at the comp's rate ([clockFrame]). Anchored by
     // the first picture, not by the press: the engine banks a pre-roll before
@@ -538,6 +551,17 @@ class LumitUiState extends ChangeNotifier {
   /// rather than a pass round the span ([playbackLoop]).
   ({int start, int end})? _loop;
 
+  /// Whether the leg now running plays backwards: ping-pong's every other
+  /// leg. The engine plays one leg at a time and the loop mode is the
+  /// frontend's, so the direction is remembered here.
+  bool _reverse = false;
+
+  /// Whether a turn has been asked for and the new leg has not yet shown a
+  /// frame. The worker is still on the old leg until the turn reaches it, so
+  /// it may deliver a frame or two past the turn and then that leg's own end,
+  /// none of which is about the leg the frontend is now running.
+  bool _turned = false;
+
   /// The clock that moves the playhead between pictures during adaptive
   /// playback. Every-frame shows every frame, so there the pictures are the
   /// clock and this never runs. Read on the Flutter side because the engine's
@@ -560,9 +584,14 @@ class LumitUiState extends ChangeNotifier {
       sinceAnchorMicros: _clockWatch.elapsedMicroseconds - anchor.micros,
       fps: _clockFps,
       end: _clockEnd,
+      reverse: _reverse,
     );
-    if (frame > playheadFrame.value) playheadFrame.value = frame;
+    if (_ahead(frame)) playheadFrame.value = frame;
   }
+
+  /// Whether `frame` is further along the running leg than the playhead.
+  bool _ahead(int frame) =>
+      _reverse ? frame < playheadFrame.value : frame > playheadFrame.value;
 
   /// One view plays and the others hold the picture they were last given
   /// (docs/impl/multi-viewer.md §2.5): the view named by "always preview this
@@ -574,6 +603,7 @@ class LumitUiState extends ChangeNotifier {
             ? BridgePlaybackMode.adaptive
             : BridgePlaybackMode.everyFrame,
         view: views.previewing?.engineId ?? activeViewId,
+        reverse: _reverse,
       );
 
   /// Stop the transport, and — unless the user is taking hold of the playhead
@@ -590,6 +620,8 @@ class LumitUiState extends ChangeNotifier {
   void stopPlayback({bool restorePlayhead = true}) {
     playing.value = false;
     _loop = null;
+    _reverse = false;
+    _turned = false;
     selectedComp?.stopPlayback();
     _returnPlayhead(restore: restorePlayhead);
   }
@@ -946,23 +978,56 @@ class LumitUiState extends ChangeNotifier {
   void _arrived(int frame) {
     frameArrived.value++;
     if (!playing.value) return;
+    // After a turn, a frame outside the work area is the old leg running on,
+    // and the first frame inside it is the new leg arriving.
+    final loop = _loop;
+    if (_turned && loop != null) {
+      if (frame < loop.start || frame > loop.end) return;
+      _turned = false;
+    }
     _clockAnchor = (frame: frame, micros: _clockWatch.elapsedMicroseconds);
     // The adaptive clock may already stand a frame past this picture, and pulling
     // the playhead back would make it twitch at every present.
-    if (frame > playheadFrame.value || !_clock.isActive) {
+    if (_ahead(frame) || !_clock.isActive) {
       playheadFrame.value = frame;
     }
-    // Round the work area: the frame at its end is shown, then playback starts
-    // again from its start. Restarted through `play` rather than by moving the
-    // playhead, because the sound and the scheduler's clock both take their
-    // baseline from the frame play was asked for.
-    final loop = _loop;
+    // The end of the work area: the frame there is shown, then the loop mode
+    // says what comes next (docs/07 §9). A new leg is started through `play`
+    // rather than by moving the playhead, because the sound and the
+    // scheduler's clock both take their baseline from the frame play was
+    // asked for.
     final comp = selectedComp;
-    if (loop != null && comp != null && frame >= loop.end) {
-      playheadFrame.value = loop.start;
-      _clockAnchor = null;
-      _playFrom(comp, loop.start);
+    if (loop == null || comp == null) return;
+    switch (workspace.performance.loop) {
+      case LoopMode.workArea:
+        if (frame >= loop.end) {
+          _turn(comp, loop.start, reverse: false);
+        }
+      case LoopMode.once:
+        if (frame >= loop.end) {
+          stopPlayback();
+        }
+      case LoopMode.pingPong:
+        // The turn frame has just been shown, so the next leg starts one
+        // frame past it rather than showing it twice.
+        if (!_reverse && frame >= loop.end) {
+          _turn(comp, loop.end - 1, reverse: true);
+        } else if (_reverse && frame <= loop.start) {
+          _turn(comp, loop.start + 1, reverse: false);
+        }
     }
+  }
+
+  /// Start the next leg of the loop from `frame`, in the direction given.
+  void _turn(CompositionReference comp, int frame, {required bool reverse}) {
+    final loop = _loop;
+    if (loop == null) return;
+    _reverse = reverse;
+    _turned = true;
+    playheadFrame.value = frame;
+    _clockAnchor = null;
+    _clockEnd = reverse ? loop.start : loop.end;
+    _playFrom(comp, frame);
   }
 
   /// Move the playhead because the user is taking hold of it — a drag on the
@@ -1054,8 +1119,8 @@ class LumitUiState extends ChangeNotifier {
   /// picture: a view that has never drawn has nothing to register.
   final Map<int, ViewerTextureController> _controllers = {};
 
-  ViewerTextureController controllerFor(int engineId) => _controllers
-      .putIfAbsent(engineId, () => ViewerTextureController());
+  ViewerTextureController controllerFor(int engineId) =>
+      _controllers.putIfAbsent(engineId, () => ViewerTextureController());
 
   /// The active view's controller, which is what the one-Viewer code paths
   /// and the tests mean by "the" controller.
@@ -1826,6 +1891,12 @@ class LumitUiState extends ChangeNotifier {
         // Playback ran off the end on its own. Stopping because the *user* asked
         // needs no message — `stopPlayback` already set the flag.
         case WorkerResponse_PlaybackEnded():
+          // The old leg reaching its own end after a turn was asked for: the
+          // new leg is already on its way, so this is not a stop.
+          if (_turned) {
+            _turned = false;
+            break;
+          }
           playing.value = false;
           // Running off the end returns the playhead too: where you are
           // when the transport stops should not depend on whether you stopped

@@ -28,7 +28,6 @@ import 'graph_channels.dart';
 import 'graph_maths.dart';
 import 'timeline_extras_frb.dart';
 import 'timeline_metrics_frb.dart';
-import 'timeline_navigator.dart';
 
 /// **A control standing in one of the Timeline's two chrome rows**, grown to
 /// the height the density states for them.
@@ -109,7 +108,7 @@ class Toolbar extends StatelessWidget {
     final lastFrame = model.durationFrames - 1;
     return Container(
       key: const ValueKey('tl-toolbar'),
-      height: t.density.timelineChromeRow + TimelineNavigator.band,
+      height: t.density.timelineChromeRow + t.density.navigatorBand,
       // The panel's own surface, ruled off from the column header below it —
       // the mockup draws both chrome rows on the panel ground with a
       // hairline under each, not as a raised strip.
@@ -215,25 +214,28 @@ class Toolbar extends StatelessWidget {
           // Kicker segments rather than icons: "Layers" and "Graph" are the
           // names of two shapes of the same panel, and a word says which one
           // is in force where two small glyphs made the reader guess.
-          _modeTab(
-            context,
-            keyName: 'tl-view-lanes',
-            label: l10n.timelineModeLayers,
-            tip: l10n.tipLaneView,
-            active: mode == TimelineMode.layers,
-            onPressed: () => onMode(TimelineMode.layers),
-          ),
-          const SizedBox(width: 2),
-          _modeTab(
-            context,
-            // Keeps the key the old Graph toolbar button had, so the graph
-            // editor's own tests and muscle memory both still find it.
-            keyName: 'tl-graph',
-            label: l10n.timelineModeGraph,
-            tip: l10n.tipGraphView,
-            active: mode == TimelineMode.graph,
-            onPressed: () => onMode(TimelineMode.graph),
-          ),
+          // Lantern draws the pair on the header line instead.
+          if (t.shape != ThemeShape.lantern) ...[
+            _modeTab(
+              context,
+              keyName: 'tl-view-lanes',
+              label: l10n.timelineModeLayers,
+              tip: l10n.tipLaneView,
+              active: mode == TimelineMode.layers,
+              onPressed: () => onMode(TimelineMode.layers),
+            ),
+            const SizedBox(width: 2),
+            _modeTab(
+              context,
+              // Keeps the key the old Graph toolbar button had, so the graph
+              // editor's own tests and muscle memory both still find it.
+              keyName: 'tl-graph',
+              label: l10n.timelineModeGraph,
+              tip: l10n.tipGraphView,
+              active: mode == TimelineMode.graph,
+              onPressed: () => onMode(TimelineMode.graph),
+            ),
+          ],
         ],
       ),
     );
@@ -252,21 +254,38 @@ class Toolbar extends StatelessWidget {
     required VoidCallback onPressed,
   }) {
     final t = ThemeScope.of(context).theme;
+    // Desk frames nothing: the word in force stands over a 2px accent rule.
+    final desk = t.shape == ThemeShape.desk;
+    final button = HouseButton(
+      key: ValueKey<String>(keyName),
+      small: true,
+      frameless: desk || !active,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      onPressed: onPressed,
+      child: Text(t.kickerCase(label), style: active ? t.kickerOn : t.kicker),
+    );
     return LumitTooltip(
       message: tip,
       // Grown to the chrome row's stated control height under Regular:
       // these three are the buttons the owner named as hard to hit.
       child: timelineChromeControl(
         t,
-        HouseButton(
-          key: ValueKey<String>(keyName),
-          small: true,
-          frameless: !active,
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-          onPressed: onPressed,
-          child:
-              Text(label.toUpperCase(), style: active ? t.kickerOn : t.kicker),
-        ),
+        !desk
+            ? button
+            : Stack(
+                children: [
+                  button,
+                  if (active)
+                    Positioned(
+                      key: const ValueKey('tl-mode-rule'),
+                      left: 6,
+                      right: 6,
+                      bottom: 0,
+                      height: 2,
+                      child: IgnorePointer(child: ColoredBox(color: t.accent)),
+                    ),
+                ],
+              ),
       ),
     );
   }
@@ -529,7 +548,7 @@ class KeyCommandStrip extends StatelessWidget {
           // all the room a 9px kicker leaves above and below it.
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
           onPressed: onPressed,
-          child: Text(label.toUpperCase(), style: on ? t.kickerOn : t.kicker),
+          child: Text(t.kickerCase(label), style: on ? t.kickerOn : t.kicker),
         ),
       );
 
@@ -806,7 +825,7 @@ class ColumnToggles extends StatelessWidget {
                   onPressed: () => onToggle(group),
                   child: labels == ChromeLabels.words
                       ? Text(
-                          columnGroupLabel(group).toUpperCase(),
+                          t.kickerCase(columnGroupLabel(group)),
                           style: hidden.contains(group) ? t.kicker : t.kickerOn,
                         )
                       // The glyph takes the word's own two strengths: muted
@@ -839,7 +858,7 @@ class ColumnToggles extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 onPressed: onToggleAnimated,
                 child: labels == ChromeLabels.words
-                    ? Text(l10n.filterAnimated.toUpperCase(),
+                    ? Text(t.kickerCase(l10n.filterAnimated),
                         style: animatedOnly ? t.kickerOn : t.kicker)
                     : glyph.LumitIcon(
                         LumitIcons.animated,

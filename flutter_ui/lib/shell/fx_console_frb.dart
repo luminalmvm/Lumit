@@ -319,7 +319,8 @@ class _FxConsoleState extends State<_FxConsole> {
 
   /// The strip's own kicker face — one definition, so the measurement below
   /// and the drawing cannot disagree about a pixel.
-  TextStyle _kickerStyle(LumitTheme t) => t.kicker.copyWith(letterSpacing: 0.54);
+  TextStyle _kickerStyle(LumitTheme t) =>
+      t.kicker.copyWith(letterSpacing: 0.54);
 
   /// The popover's width: the board's 320 as the floor, grown so every
   /// category kicker in the strip fits without truncation (the longest set is
@@ -388,8 +389,15 @@ class _FxConsoleState extends State<_FxConsole> {
           // usable console rather than a bar with nothing under it.
           final left = _fit(
               anchor.dx - width / 2, _margin, box.maxWidth - width - _margin);
-          final top = _fit(anchor.dy - _searchRowHeight / 2, _margin,
-              box.maxHeight - _searchRowHeight - _stripHeight - _footHeight - 56 - _margin);
+          final top = _fit(
+              anchor.dy - _searchRowHeight / 2,
+              _margin,
+              box.maxHeight -
+                  _searchRowHeight -
+                  _stripHeight -
+                  _footHeight -
+                  56 -
+                  _margin);
           final room = box.maxHeight -
               top -
               _margin -
@@ -582,7 +590,7 @@ class _FxConsoleState extends State<_FxConsole> {
           height: _headingHeight,
           padding: const EdgeInsets.symmetric(horizontal: 10),
           alignment: Alignment.centerLeft,
-          child: Text(heading.toUpperCase(), style: _kickerStyle(t)),
+          child: Text(t.kickerCase(heading), style: _kickerStyle(t)),
         ));
       }
       last = heading;
@@ -599,43 +607,42 @@ class _FxConsoleState extends State<_FxConsole> {
 
   Widget _entryRow(LumitTheme t, FxConsoleEntry entry, {required bool hot}) =>
       GestureDetector(
-              key: ValueKey<String>('fx-console-item-${entry.label}'),
-              behavior: HitTestBehavior.opaque,
-              onTap: () {
-                widget.onClose();
-                entry.run();
-              },
-              child: Container(
-                height: _rowHeight,
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                color: hot ? t.surface2 : null,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(entry.label,
-                          overflow: TextOverflow.ellipsis,
-                          style: hot ? t.bodyPrimary : t.body),
-                    ),
-                    const SizedBox(width: 8),
-                    // The preview swatch the board draws on every row. There
-                    // is no per-effect render behind it yet, so it is the
-                    // surface's own gradient — the slot the picture will take.
-                    Container(
-                      width: 34,
-                      height: 19,
-                      decoration: BoxDecoration(
-                        borderRadius:
-                            BorderRadius.circular(t.tokens.controlRadius),
-                        border: Border.all(color: t.hairline, width: 1),
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [t.surface2, t.surface4],
-                        ),
-                      ),
-                    ),
-                  ],
+        key: ValueKey<String>('fx-console-item-${entry.label}'),
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          widget.onClose();
+          entry.run();
+        },
+        child: Container(
+          height: _rowHeight,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          color: hot ? t.surface2 : null,
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(entry.label,
+                    overflow: TextOverflow.ellipsis,
+                    style: hot ? t.bodyPrimary : t.body),
+              ),
+              const SizedBox(width: 8),
+              // The preview swatch the board draws on every row. There
+              // is no per-effect render behind it yet, so it is the
+              // surface's own gradient, the slot the picture will take.
+              Container(
+                width: 34,
+                height: 19,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+                  border: Border.all(color: t.hairline, width: 1),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [t.surface2, t.surface4],
+                  ),
                 ),
               ),
-            );
+            ],
+          ),
+        ),
+      );
 }

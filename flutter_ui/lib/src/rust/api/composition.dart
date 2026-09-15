@@ -952,13 +952,24 @@ class CompositionReference {
   ///
   /// `mode` comes from the frontend because it is a user *setting*, kept in the
   /// workspace file the frontend owns — stating it is not deciding anything.
+  ///
+  /// `reverse` plays the leg backwards from `from` to frame zero, silent:
+  /// the loop modes are the frontend's, and a ping-pong asks for every
+  /// other leg reversed. The frame given is shown first in both directions,
+  /// so a ping-pong turns at the end minus one.
   void play(
           {required BigInt from,
           required double scale,
           required BridgePlaybackMode mode,
-          required int view}) =>
+          required int view,
+          required bool reverse}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferencePlay(
-          that: this, from: from, scale: scale, mode: mode, view: view);
+          that: this,
+          from: from,
+          scale: scale,
+          mode: mode,
+          view: view,
+          reverse: reverse);
 
   /// The preview tier adaptive playback has settled on: 1 Full, 2 Half,
   /// 3 Third, 4 Quarter. Shown beside the mode so "why is it soft?" has an

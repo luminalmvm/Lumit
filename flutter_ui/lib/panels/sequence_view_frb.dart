@@ -537,9 +537,7 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
             ),
             // The clip's own ends, because this *is* the clip drawn as far as
             // its source goes.
-            borderRadius: BorderRadius.circular(t.shape == ThemeShape.round
-                ? t.tokens.controlRadius
-                : sharpClipRadius),
+            borderRadius: BorderRadius.circular(clipRadius(t)),
           ),
         ),
       ),
@@ -620,9 +618,7 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
               // this box and reads localPosition.dx across the full width, so
               // the edge-grab zones are the ones they always were, curve or
               // no curve. Deliberate: the ends are the smallest targets here.
-              borderRadius: BorderRadius.circular(t.shape == ThemeShape.round
-                  ? t.tokens.controlRadius
-                  : sharpClipRadius),
+              borderRadius: BorderRadius.circular(clipRadius(t)),
             ),
             alignment: Alignment.center,
             clipBehavior: Clip.hardEdge,

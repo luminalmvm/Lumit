@@ -21,7 +21,6 @@ import '../state/drag_payloads.dart';
 import '../state/file_dialogs.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
-import 'project_chrome_frb.dart' show projectHueSquare;
 import 'project_columns_frb.dart';
 import 'project_menu_frb.dart';
 import 'timeline_extras_frb.dart' show showLabelPicker;
@@ -40,8 +39,6 @@ const double _badgeBorderAlpha = 0.28;
 /// The row's label square: an 8px hue-quartered mark in a 14px slot —
 /// the slot is the hit target, and its width is fixed so the squares
 /// stand in a column however deep the rows are indented.
-const double _labelSquareSize = 8;
-const double _labelSquareHit = 14;
 
 /// The label chip an untagged item's kind wears by default — the mockup's own
 /// per-type tints, which are the label palette's chips: azure for
@@ -107,7 +104,7 @@ class ProjectBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: _badgePad),
       decoration: BoxDecoration(
         border: Border.all(color: colour.withValues(alpha: _badgeBorderAlpha)),
-        borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+        borderRadius: BorderRadius.circular(t.tokens.actionRadius),
       ),
       child: Text(
         label,
@@ -523,7 +520,6 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                 // cluster keeps its measured places. No gap of its own: the
                 // slot's inset either side of the 8px square is the standoff,
                 // and the first cell brings the usual row gap with it.
-                _labelSquare(t),
                 ...widget.columns.cells(
                   items: widget.cells.items,
                   size: widget.cells.size,
@@ -646,25 +642,11 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
   Widget _glyph(LumitTheme t) {
     final (icon, tint) = _iconFor(item, t);
     final tag = widget.label != 0 ? widget.label : widget.inherited;
+    // The glyph is also the colour control: it already wears the label
+    // colour, so pressing it is where a person looks to change it.
     return KeyedSubtree(
       key: ValueKey<String>('project-glyph-${projectItemId(item)}'),
-      child: lumitIcon(
-        widget.missing ? LumitIcon.unlink : icon,
-        size: projectRowIconSize,
-        color: widget.missing
-            ? t.warning
-            : tag != 0
-                ? t.labelColour(tag)
-                : tint,
-      ),
-    );
-  }
-
-  /// The label square: always the hues, never the row's current colour — the
-  /// glyph two cells left already wears that, so this stays the mark that
-  /// says "a colour is set here" rather than a second copy of the answer.
-  /// Opens the same eight-colour picker every label control does.
-  Widget _labelSquare(LumitTheme t) => LumitTooltip(
+      child: LumitTooltip(
         message: l10n.tipLabelColour,
         child: GestureDetector(
           key: ValueKey<String>('project-label-swatch-${projectItemId(item)}'),
@@ -674,16 +656,24 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                 keyPrefix: 'project-label');
             if (picked != null) widget.onSetLabel(picked);
           },
-          child: SizedBox(
-            width: _labelSquareHit,
-            height: projectRowHeight,
-            child: Center(
-              child: projectHueSquare(t, size: _labelSquareSize),
-            ),
+          child: lumitIcon(
+            widget.missing ? LumitIcon.unlink : icon,
+            size: projectRowIconSize,
+            color: widget.missing
+                ? t.warning
+                : tag != 0
+                    ? t.labelColour(tag)
+                    : tint,
           ),
         ),
-      );
+      ),
+    );
+  }
 
+  /// The label square: always the hues, never the row's current colour — the
+  /// glyph two cells left already wears that, so this stays the mark that
+  /// says "a colour is set here" rather than a second copy of the answer.
+  /// Opens the same eight-colour picker every label control does.
   Widget _nameOrEditor(LumitTheme t) {
     final controller = _rename;
     if (widget.renaming && controller != null) {

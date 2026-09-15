@@ -24,6 +24,7 @@ import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeLayerSwitch;
 import 'package:lumit_flutter/src/rust/api/state.dart' show OpenProgress;
 import 'package:lumit_flutter/src/rust/api/shell.dart' show bootLog;
 import 'package:lumit_flutter/state/dock.dart';
+import 'package:lumit_flutter/state/settings.dart' show ToolBarPosition;
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/state/viewer_view.dart';
 import 'package:lumit_flutter/state/app_state.dart';
@@ -76,7 +77,12 @@ class LumitAppNew extends StatelessWidget {
               child: Directionality(
                 textDirection: TextDirection.ltr,
                 child: ColoredBox(
-                  color: uiState.theme.surface0,
+                  // Under Lantern the menu and toolbar bands sit on the room,
+                  // the ground the cards stand in; the flat shapes keep the
+                  // deepest surface.
+                  color: uiState.theme.tokens.roomed
+                      ? uiState.theme.room
+                      : uiState.theme.surface0,
                   // Settings → Interface → UI scale, the Flutter counterpart of
                   // egui's `set_pixels_per_point`: layout and hit-testing scale
                   // together (see widgets/ui_scale.dart).
@@ -307,27 +313,42 @@ class _LumitAppViewState extends State<LumitAppView> {
     );
   }
 
-  Widget _shell(LumitUiState uiState, LumitState state) => Column(
-        children: [
-          LumitMenuBarFrb(app: state),
-          // The tools, under the menu and above everything else — where a
-          // toolbar goes, and where docs/07 §1.7 puts it.
-          const LumitToolBarFrb(),
-          Expanded(
-            child: DockWidget(
-              root: uiState.split,
-              buildPanel: buildPanelBodyFrb,
-              // Persisted, so an arrangement survives a restart.
-              onLayoutChanged: uiState.saveLayout,
-              activePanel: uiState.activePane,
-              maximised: uiState.maximisedPane,
-            ),
-          ),
-          // The strip under the dock (docs/07 §1): the running export's
-          // progress and Cancel, reachable without the dialogue open.
-          const StatusLineFrb(),
-        ],
-      );
+  Widget _shell(LumitUiState uiState, LumitState state) {
+    final dock = DockWidget(
+      root: uiState.split,
+      buildPanel: buildPanelBodyFrb,
+      // Persisted, so an arrangement survives a restart.
+      onLayoutChanged: uiState.saveLayout,
+      activePanel: uiState.activePane,
+      maximised: uiState.maximisedPane,
+    );
+    // Toolbar position Left: the tools go on a rail flush to the window's
+    // left edge, and the menu bar's line carries the options and the
+    // workspace strip, so the strip above the dock is not mounted at all.
+    // The dock keeps its own inset either way.
+    final rail =
+        uiState.workspace.interface.toolBarPositionFor(uiState.theme.shape) ==
+            ToolBarPosition.left;
+    return Column(
+      children: [
+        LumitMenuBarFrb(app: state),
+        // The tools, under the menu and above everything else, where a
+        // toolbar goes, and where docs/07 §1.7 puts it.
+        if (!rail) const LumitToolBarFrb(),
+        Expanded(
+          child: rail
+              ? Row(children: [
+                  const LumitToolRailFrb(),
+                  Expanded(child: dock),
+                ])
+              : dock,
+        ),
+        // The strip under the dock (docs/07 §1): the running export's
+        // progress and Cancel, reachable without the dialogue open.
+        const StatusLineFrb(),
+      ],
+    );
+  }
 
   /// Which keymap context the focused panel is. Panels with no bindings of
   /// their own resolve to `Global`, which is also the fallback for every other
@@ -449,8 +470,8 @@ class _LumitAppViewState extends State<LumitAppView> {
             final last = comp.durationFrames() - 1;
             ui.scrubTo(start ? 0 : (last < 0 ? 0 : last));
           } else {
-            ui.scrubTo(comp.frameAtTime(
-                time: start ? work.inPoint : work.outPoint));
+            ui.scrubTo(
+                comp.frameAtTime(time: start ? work.inPoint : work.outPoint));
           }
         }
       // The ends of the selected layer's bar (`I` and `O`). From the read

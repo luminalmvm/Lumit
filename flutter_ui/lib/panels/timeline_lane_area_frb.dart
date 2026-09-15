@@ -669,11 +669,16 @@ class LayerArea extends StatelessWidget {
                               // The lower reach of the one band the ruler
                               // starts (§12A.1) — behind the bars, the keys
                               // and the marquee, because it is the ground they
-                              // stand on.
-                              inside: Color.alphaBlend(
-                                  t.animated
-                                      .withValues(alpha: workAreaLaneFillAlpha),
-                                  t.surface1),
+                              // stand on. Desk paints nothing in, and
+                              // Lantern's lanes stand on a surface2 band.
+                              inside: switch (t.shape) {
+                                ThemeShape.studio => Color.alphaBlend(
+                                    t.animated.withValues(
+                                        alpha: workAreaLaneFillAlpha),
+                                    t.surface1),
+                                ThemeShape.desk => t.surface1,
+                                ThemeShape.lantern => t.surface2,
+                              },
                               outside: t.timelineOutOfRange,
                               edge: workAreaEdgeColour(t),
                             ),
@@ -981,7 +986,7 @@ class LayerArea extends StatelessWidget {
                                   builder: (context, _) => CustomPaint(
                                     painter: RowDividerPainter(
                                       step: t.density.laneRow,
-                                      colour: t.hairline,
+                                      colour: rowSeamColour(t),
                                       // Only the fraction: rounding is
                                       // invariant under whole-pixel shifts,
                                       // so a whole-pixel scroll changes

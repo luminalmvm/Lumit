@@ -262,7 +262,7 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
               padding: const EdgeInsets.symmetric(horizontal: 2),
               child: Row(
                 children: [
-                  Text(l10n.welcomeRecent.toUpperCase(), style: t.kicker),
+                  Text(t.kickerCase(l10n.welcomeRecent), style: t.kicker),
                   const Spacer(),
                   // No question first. The one destructive control that asks
                   // is the disk cache, because that one throws away a night's
@@ -284,7 +284,7 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
             key: const ValueKey('welcome-recent-well'),
             decoration: BoxDecoration(
               color: t.surface1,
-              borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+              borderRadius: BorderRadius.circular(t.tokens.sectionRadius),
               border: Border.all(color: t.hairline),
             ),
             child: Column(
@@ -514,7 +514,8 @@ class _WelcomeCardState extends State<_WelcomeCard> {
             // page in `surface_1` behind a plain hairline. Hover takes both up
             // one step, which is the same grammar every house button uses.
             color: _hover ? t.surface2 : t.surface1,
-            borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+            // A card is a band on the page, so it wears the section's corner.
+            borderRadius: BorderRadius.circular(t.tokens.sectionRadius),
             border: Border.all(color: _hover ? t.hairlineStrong : t.hairline),
           ),
           child: Column(

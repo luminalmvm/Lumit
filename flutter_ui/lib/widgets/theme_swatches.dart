@@ -1,7 +1,7 @@
 // A theme at a glance: eight colours in a row.
 //
-// The picker names themes and shows none of them, so choosing between seven
-// built-ins and a shelf of your own meant selecting each in turn and watching
+// The picker names themes and shows none of them, so choosing between thirty
+// odd built-ins and a shelf of your own meant selecting each in turn and watching
 // the whole interface change. This is the cheap answer: the colours that
 // actually decide how a theme reads — the three grounds, the text on them, the
 // accent, and the three role colours — drawn as a strip beside the picker, so

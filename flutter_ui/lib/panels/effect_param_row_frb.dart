@@ -356,9 +356,10 @@ class EffectParamRowFrb extends StatelessWidget {
     );
 
     // The unit goes on the control itself, inside the riders: `100 %` then the
-    // Blend dropdown, never `100` then Blend then `%`.
-    final control = _greyed(_withRiders(t, id,
-        withUnitRider(t, param.unit, _control(context, t, id, value, frame))));
+    // Blend dropdown, never `100` then Blend then `%`. The reset arrow comes
+    // last, after everything the row writes.
+    final control = _greyed(_withReset(t, id, _withRiders(t, id,
+        withUnitRider(t, param.unit, _control(context, t, id, value, frame)))));
 
     // **An Action is a button, and a button says its own name**. Drawn
     // in the value column with the name column left empty, rather than as a
@@ -520,6 +521,34 @@ class EffectParamRowFrb extends StatelessWidget {
       };
     }
     return null;
+  }
+
+  /// The row's reset arrow, muted, drawn whatever the value is: pressing it
+  /// writes the parameter's declared default as one op, the cheapest undo a
+  /// row can offer. A kind with no default (an Action) draws none.
+  Widget _withReset(LumitTheme t, UuidValue id, Widget control) {
+    final fallback = defaultEffectValue(param.kind);
+    if (fallback == null) return control;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Flexible(child: control),
+        const SizedBox(width: 2),
+        LumitTooltip(
+          message: l10n.tipResetParameter,
+          child: HouseButton(
+            key: ValueKey<String>('fx-reset-$id-${param.id}'),
+            frameless: true,
+            small: true,
+            padding: const EdgeInsets.all(1),
+            onPressed: () => _set(fallback),
+            // A step under the row's other glyphs: the arrow rides beside a
+            // 10px unit rider and is an undo, not a control.
+            child: LumitIcon(LumitIcons.reset, size: 12, colour: t.textMuted),
+          ),
+        ),
+      ],
+    );
   }
 
   /// Write this parameter. The value goes up to the panel rather than being
@@ -1114,31 +1143,43 @@ class EffectParamRowFrb extends StatelessWidget {
           : BridgeScalar.static_(clamped)));
     }
 
+    final field = _scalarField(
+      context,
+      scalar: scalar,
+      frame: frame,
+      sliderMin: min,
+      sliderMax: max,
+      hardMin: min,
+      hardMax: max,
+      keyName: keyName,
+      write: (s) => _set(BridgeEffectValue.float(s)),
+      // The same seed the Float row offers: a closed range keeps every
+      // float affordance, and turning an expression on must not
+      // move the picture until it is edited.
+      setExpression: () {
+        final sampled = sampleScalarWithContext(
+            scalar: scalar,
+            time: timeOfFrame(comp, frame),
+            layer: currentLayer);
+        _set(BridgeEffectValue.float(
+            BridgeScalar.expression(sampled.toString())));
+      },
+    );
+
+    // The track is a setting (Settings, Interface, Range sliders): off, the
+    // number stands alone and the row is as wide as every other row. Read
+    // here rather than in a panel so all three hosts of this row agree; the
+    // panels already rebuild their rows when the workspace notifies.
+    final rangeSliders = Provider.of<LumitUiState>(context, listen: false)
+        .workspace
+        .interface
+        .rangeSliders;
+    if (!rangeSliders) return field;
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _scalarField(
-          context,
-          scalar: scalar,
-          frame: frame,
-          sliderMin: min,
-          sliderMax: max,
-          hardMin: min,
-          hardMax: max,
-          keyName: keyName,
-          write: (s) => _set(BridgeEffectValue.float(s)),
-          // The same seed the Float row offers: a closed range keeps every
-          // float affordance, and turning an expression on must not
-          // move the picture until it is edited.
-          setExpression: () {
-            final sampled = sampleScalarWithContext(
-                scalar: scalar,
-                time: timeOfFrame(comp, frame),
-                layer: currentLayer);
-            _set(BridgeEffectValue.float(
-                BridgeScalar.expression(sampled.toString())));
-          },
-        ),
+        field,
         const SizedBox(width: 6),
         HouseSlider(
           key: ValueKey<String>('fx-slider-$keyName'),
@@ -1309,7 +1350,7 @@ class EffectParamRowFrb extends StatelessWidget {
                 height: 18,
                 decoration: BoxDecoration(
                   color: shown,
-                  borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+                  borderRadius: BorderRadius.circular(t.tokens.wellRadius),
                   border: Border.all(color: t.hairlineStrong),
                 ),
               ),
@@ -1541,14 +1582,13 @@ class EffectParamRowFrb extends StatelessWidget {
       // line cannot be seen at all.
       final canGrow =
           !constraints.hasBoundedHeight || constraints.maxHeight >= 44;
+      // Each rider lays its own parts straight into the row: a switch keeps
+      // its box at full size and only its word gives, where a nested row
+      // would have shared the room evenly and starved the box first.
       final riderRow = [
         for (final (p, v) in riders) ...[
           const SizedBox(width: 6),
-          Flexible(
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              ..._rider(t, id, p, v),
-            ]),
-          ),
+          ..._rider(t, id, p, v),
         ],
       ];
       if (constraints.maxWidth >= wrapBelow || !canGrow) {

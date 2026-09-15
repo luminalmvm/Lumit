@@ -174,8 +174,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     } catch (_) {
       return;
     }
-    applyShaderSource(
-        layer: layer, effect: effect, source: text, origin: path);
+    applyShaderSource(layer: layer, effect: effect, source: text, origin: path);
     if (mounted) context.read<LumitUiState>().model.refresh();
   }
 
@@ -300,9 +299,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
 
   bool _copyClaim() {
     final ui = _boundUi;
-    if (!mounted ||
-        ui == null ||
-        ui.activePanel != Panel.effectControls) {
+    if (!mounted || ui == null || ui.activePanel != Panel.effectControls) {
       return _priorCopyClaim?.call() ?? false;
     }
     return _copyPickedEffects(ui) || (_priorCopyClaim?.call() ?? false);
@@ -310,9 +307,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
 
   bool _pasteClaim() {
     final ui = _boundUi;
-    if (!mounted ||
-        ui == null ||
-        ui.activePanel != Panel.effectControls) {
+    if (!mounted || ui == null || ui.activePanel != Panel.effectControls) {
       return _priorPasteClaim?.call() ?? false;
     }
     return _pastePickedEffects(ui) || (_priorPasteClaim?.call() ?? false);
@@ -320,9 +315,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
 
   bool _deleteClaim() {
     final ui = _boundUi;
-    if (!mounted ||
-        ui == null ||
-        ui.activePanel != Panel.effectControls) {
+    if (!mounted || ui == null || ui.activePanel != Panel.effectControls) {
       return _priorDeleteClaim?.call() ?? false;
     }
     return _deletePickedEffects(ui) || (_priorDeleteClaim?.call() ?? false);
@@ -834,8 +827,8 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                       // text layer's words are the first thing you want when
                       // you select one.
                       SourceRowsFrb(
-                        key:
-                            ValueKey<String>('src-card-${layer.internallayerId}'),
+                        key: ValueKey<String>(
+                            'src-card-${layer.internallayerId}'),
                         layer: layer,
                         onChanged: ui.model.refresh,
                         open: _isOpen('source'),
@@ -859,7 +852,8 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                         ),
                       ),
                       _TransformSection(
-                        key: ValueKey<String>('tf-card-${layer.internallayerId}'),
+                        key: ValueKey<String>(
+                            'tf-card-${layer.internallayerId}'),
                         layer: layer,
                         comp: comp,
                         transform: info.transform,
@@ -891,7 +885,8 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                     // Its rows listen to the playhead one at a time, so the card
                     // itself does not have to.
                     TextAnimatorRowsFrb(
-                      key: ValueKey<String>('anim-card-${layer.internallayerId}'),
+                      key: ValueKey<String>(
+                          'anim-card-${layer.internallayerId}'),
                       layer: layer,
                       onChanged: ui.model.refresh,
                       comp: comp,
@@ -934,8 +929,8 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                       // same card, and only where it is *listed* changes. The
                       // indices stay stack indices, which is what keeps a drag
                       // within the group a reorder of the chain.
-                      for (final index in _stackIndices(info.effects,
-                          audio: false))
+                      for (final index
+                          in _stackIndices(info.effects, audio: false))
                         _effectCard(context, ui, comp, layer, info, index),
                       if (_stackIndices(info.effects, audio: true)
                           case final rack when rack.isNotEmpty) ...[
@@ -1124,127 +1119,119 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     final playhead = ui.playheadFrame.value;
     final fx = style ? info.styles[index] : info.effects[index];
     return _WhenPicked(
-                          key: ValueKey<String>('fx-pick-${style ? 'style-' : ''}$index'),
-                          picked: ui.selectedEffects,
-                          id: fx.id,
-                          builder: (context, selected) => _EffectSection(
-                          key: ValueKey<String>('fx-card-${style ? 'style-' : ''}$index'),
-                          info: fx,
-                          style: style,
-                          open: _isOpen('fx-${fx.id}'),
-                          onToggle: () =>
-                              _toggleEffect(fx.id, ui.selectedEffects.value),
-                          selected: selected && !style,
-                          driven: _driven,
-                          renaming: _renamingEffect == fx.id,
-                          onRenamed: (name) {
-                            // Stage the name on a fresh handle and commit the
-                            // list — one op, one undo step, the same shape
-                            // every stack edit has.
-                            final stack =
-                                style ? layer.getStyles() : layer.getEffects();
-                            for (final instance in stack) {
-                              if (instance.id() == fx.id) {
-                                instance.setCustomName(name: name);
-                                try {
-                                  layer.setEffects(effects: stack);
-                                } catch (_) {
-                                  // The stack changed under us; re-reading is
-                                  // the recovery.
-                                }
-                                break;
-                              }
-                            }
-                            setState(() => _renamingEffect = null);
-                            ui.model.refresh();
-                          },
-                          // Escape: close the editor, write nothing.
-                          onRenameCancelled: () =>
-                              setState(() => _renamingEffect = null),
-                          onStartRename: () =>
-                              setState(() => _renamingEffect = fx.id),
-                          onSelect: () {
-                            if (style) return;
-                            ui.pickEffect(
-                              layer,
-                              fx.id,
-                              order: [for (final e in info.effects) e.id],
-                            );
-                            // **Double-clicking a Custom shader's heading
-                            // enters its inner graph** — the
-                            // heading and the Graph panel's box are one
-                            // selection, so they are one door. The
-                            // first click still picks, exactly as it did.
-                            if (fx.name == 'custom_shader' &&
-                                _headingTaps
-                                    .putIfAbsent(fx.id, DoubleTap.new)
-                                    .tap()) {
-                              ui.enterShaderGraph(layer, fx.id,
-                                  effectName:
-                                      fx.customName ?? effectLabelOf(fx.name));
-                            }
-                          },
-                          stagedValue: _effects.stagedValue,
-                          trackCorrected: info.trackCorrected,
-                          index: index,
-                          count: style ? info.styles.length : info.effects.length,
-                          onStackChanged: ui.model.refresh,
-                          onWrite: (id, param, value) {
-                            _effects.write(layer, id, param, value);
-                            ui.model.refresh();
-                          },
-                          onWritePair: (id, values) {
-                            _effects.writeAll(layer, id, values);
-                            ui.model.refresh();
-                          },
-                          onLive: (id, param, value) => setState(() {
-                            _effects.live(comp, layer, id, param, value,
-                                frame: ui.playheadFrame.value,
-                                scale: ui.viewerScale);
-                          }),
-                          layer: layer,
-                          allLayers: ui.model.layers,
-                          comp: comp,
-                          playheadFrame: playhead,
-                          onSeek: (frame) => ui.playheadFrame.value = frame,
-                          isGroupOpen: _isGroupOpen,
-                          onToggleGroup: _toggleGroup,
-                          pressed: _actionPressed,
-                          themedGraphs: ui.workspace.themedEffectGraphs,
-                          curvePlotSize: ui.workspace.curvePlotSize,
-                          onCurvePlotSize: ui.workspace.setCurvePlotSize,
-                          onAction: (effect, param) {
-                            // The Custom shader's two buttons are the
-                            // frontend's own (docs/impl/custom-shader.md §1.1,
-                            // §3.2): one opens a native file dialogue, the
-                            // other the editor window, and neither is an event
-                            // the engine could answer. Every other Action row
-                            // goes back as one, which is what the kind is.
-                            if (fx.name == 'custom_shader') {
-                              if (param == 'load_from_file') {
-                                _loadShaderInto(layer, effect);
-                                return;
-                              }
-                              if (param == 'edit') {
-                                _editShaderOn(layer, effect);
-                                return;
-                              }
-                            }
-                            try {
-                              fireEffectAction(
-                                  layer: layer,
-                                  effect: effect,
-                                  param: param,
-                                  frame: BigInt.from(playhead));
-                            } catch (_) {
-                              // Refused — another analysis is already running,
-                              // or the media cannot be read. The effect's own
-                              // status line says which; a thrown error here
-                              // would be a dialogue over a button press.
-                            }
-                            setState(() => _actionPressed += 1);
-                          },
-                        ));
+        key: ValueKey<String>('fx-pick-${style ? 'style-' : ''}$index'),
+        picked: ui.selectedEffects,
+        id: fx.id,
+        builder: (context, selected) => _EffectSection(
+              key: ValueKey<String>('fx-card-${style ? 'style-' : ''}$index'),
+              info: fx,
+              style: style,
+              open: _isOpen('fx-${fx.id}'),
+              onToggle: () => _toggleEffect(fx.id, ui.selectedEffects.value),
+              selected: selected && !style,
+              driven: _driven,
+              renaming: _renamingEffect == fx.id,
+              onRenamed: (name) {
+                // Stage the name on a fresh handle and commit the
+                // list, one op, one undo step, the same shape
+                // every stack edit has.
+                final stack = style ? layer.getStyles() : layer.getEffects();
+                for (final instance in stack) {
+                  if (instance.id() == fx.id) {
+                    instance.setCustomName(name: name);
+                    try {
+                      layer.setEffects(effects: stack);
+                    } catch (_) {
+                      // The stack changed under us; re-reading is
+                      // the recovery.
+                    }
+                    break;
+                  }
+                }
+                setState(() => _renamingEffect = null);
+                ui.model.refresh();
+              },
+              // Escape: close the editor, write nothing.
+              onRenameCancelled: () => setState(() => _renamingEffect = null),
+              onStartRename: () => setState(() => _renamingEffect = fx.id),
+              onSelect: () {
+                if (style) return;
+                ui.pickEffect(
+                  layer,
+                  fx.id,
+                  order: [for (final e in info.effects) e.id],
+                );
+                // **Double-clicking a Custom shader's heading
+                // enters its inner graph**, the
+                // heading and the Graph panel's box are one
+                // selection, so they are one door. The
+                // first click still picks, exactly as it did.
+                if (fx.name == 'custom_shader' &&
+                    _headingTaps.putIfAbsent(fx.id, DoubleTap.new).tap()) {
+                  ui.enterShaderGraph(layer, fx.id,
+                      effectName: fx.customName ?? effectLabelOf(fx.name));
+                }
+              },
+              stagedValue: _effects.stagedValue,
+              trackCorrected: info.trackCorrected,
+              index: index,
+              count: style ? info.styles.length : info.effects.length,
+              onStackChanged: ui.model.refresh,
+              onWrite: (id, param, value) {
+                _effects.write(layer, id, param, value);
+                ui.model.refresh();
+              },
+              onWritePair: (id, values) {
+                _effects.writeAll(layer, id, values);
+                ui.model.refresh();
+              },
+              onLive: (id, param, value) => setState(() {
+                _effects.live(comp, layer, id, param, value,
+                    frame: ui.playheadFrame.value, scale: ui.viewerScale);
+              }),
+              layer: layer,
+              allLayers: ui.model.layers,
+              comp: comp,
+              playheadFrame: playhead,
+              onSeek: (frame) => ui.playheadFrame.value = frame,
+              isGroupOpen: _isGroupOpen,
+              onToggleGroup: _toggleGroup,
+              pressed: _actionPressed,
+              themedGraphs: ui.workspace.themedEffectGraphs,
+              curvePlotSize: ui.workspace.curvePlotSize,
+              onCurvePlotSize: ui.workspace.setCurvePlotSize,
+              onAction: (effect, param) {
+                // The Custom shader's two buttons are the
+                // frontend's own (docs/impl/custom-shader.md §1.1,
+                // §3.2): one opens a native file dialogue, the
+                // other the editor window, and neither is an event
+                // the engine could answer. Every other Action row
+                // goes back as one, which is what the kind is.
+                if (fx.name == 'custom_shader') {
+                  if (param == 'load_from_file') {
+                    _loadShaderInto(layer, effect);
+                    return;
+                  }
+                  if (param == 'edit') {
+                    _editShaderOn(layer, effect);
+                    return;
+                  }
+                }
+                try {
+                  fireEffectAction(
+                      layer: layer,
+                      effect: effect,
+                      param: param,
+                      frame: BigInt.from(playhead));
+                } catch (_) {
+                  // Refused, another analysis is already running,
+                  // or the media cannot be read. The effect's own
+                  // status line says which; a thrown error here
+                  // would be a dialogue over a button press.
+                }
+                setState(() => _actionPressed += 1);
+              },
+            ));
   }
 }
 
@@ -1363,7 +1350,7 @@ class _Header extends StatelessWidget {
               onPressed: () => showAddEffectMenu(buttonContext, onAdd),
               // Add effect is a container label like every other kicker, so the
               // capitals live here rather than in the arb file.
-              child: Text(l10n.addEffect.toUpperCase(),
+              child: Text(t.kickerCase(l10n.addEffect),
                   style: t.kicker.copyWith(color: t.textSecondary)),
             ),
           ),
@@ -1386,8 +1373,7 @@ class _Header extends StatelessWidget {
 /// provenance: Lumit's own audio effects and a hosted plugin file under the
 /// one Audio key, and a menu that asked where an entry came from would offer
 /// half of them.
-Future<void> showAddEffectMenu(
-    BuildContext context, ValueChanged<String> onAdd,
+Future<void> showAddEffectMenu(BuildContext context, ValueChanged<String> onAdd,
     {String? category}) async {
   final box = context.findRenderObject();
   if (box is! RenderBox) return;
@@ -1738,8 +1724,7 @@ class _EffectSection extends StatelessWidget {
           info.name,
           effectId: id,
           values: {
-            for (final p in info.values)
-              p.id: stagedValue(id, p.id) ?? p.value,
+            for (final p in info.values) p.id: stagedValue(id, p.id) ?? p.value,
           },
           comp: comp,
           layer: layer,
@@ -1839,9 +1824,7 @@ class _EffectSection extends StatelessWidget {
         // not doing anything (docs/12 §1, §2.3). An effect that is behaving
         // draws none of this.
         if (effectBadgeRow(context,
-                id: '$id',
-                reason: info.badgeReason,
-                detail: info.badgeDetail)
+                id: '$id', reason: info.badgeReason, detail: info.badgeDetail)
             case final badge?)
           badge,
         if (displayAt(playheadFrame) != null)

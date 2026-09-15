@@ -297,6 +297,11 @@ type for every number, hairline borders rather than shadows, one accent, no UI t
 Every colour comes from the theme struct in `flutter_ui/lib/theme/`. A hex literal, a
 Material `Colors.*` or a `Color.fromARGB` from number literals anywhere else in
 `flutter_ui/lib` fails CI. Read the colour off `LumitTheme`, and add a token if none fits.
+A container label (a panel title, a column header, a tab) is set through
+`LumitTheme.kickerCase`, so its case follows the shape rather than the string.
+A row height that differs by shape is a `DensityTokens` field, read off
+`DensityTokens.forShape`; a height spelled out in a widget is a defect. A corner or an
+inset that differs by shape is a `ShapeTokens` field on `LumitTheme.tokens`, the same way.
 Lumit's own widgets over stock Material ones.
 
 Voice, in the interface and the docs: British English, sentence case, calm, no exclamation

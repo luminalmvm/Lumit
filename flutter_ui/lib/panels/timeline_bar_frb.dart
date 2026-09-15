@@ -4,6 +4,7 @@
 // Split out of timeline_panel_frb.dart.
 
 import 'dart:math';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -28,6 +29,7 @@ import 'timeline_key_block_frb.dart';
 /// the 5 the outline drew. Half of 8 is the number here. Twirl the layer open
 /// and each property draws its own at full size, where they can be dragged.
 const double _summaryKeyHalf = 4;
+
 /// How near the end of a bar counts as grabbing its edge to trim rather than its
 /// middle to move.
 const double _trimGrab = 8;
@@ -44,6 +46,7 @@ BarGrab barGrabAt(double dx, double width) {
   if (dx > width - edge) return BarGrab.trimOut;
   return BarGrab.move;
 }
+
 /// The live preview of a bar drag in flight: how far each edge and the start
 /// offset have moved, in frames. Published by the bar and read by the waveform
 /// lane, so the transients travel with the bar rather than jumping on release.
@@ -259,6 +262,7 @@ class BarEndMarksPainter extends CustomPainter {
   bool shouldRepaint(BarEndMarksPainter old) =>
       old.atIn != atIn || old.atOut != atOut || old.colour != colour;
 }
+
 /// One layer's bar: drag its middle to move it, its ends to trim.
 class Bar extends StatefulWidget {
   final CompositionReference comp;
@@ -496,7 +500,6 @@ class _BarState extends State<Bar> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    final round = t.shape == ThemeShape.round;
     // ZERO bridge calls: the span already mapped to comp frames, the
     // kind, and the clip split positions all ride in on the read model.
     final info = widget.entry.info;
@@ -557,6 +560,38 @@ class _BarState extends State<Bar> {
       // there are.
       child: Stack(
         children: [
+          // Desk's rail: a full-width band on the lane ground with a pixel of
+          // ground above and below, the bar standing on it.
+          if (t.shape == ThemeShape.desk)
+            Positioned(
+              key: ValueKey<String>(
+                  'tl-bar-band-${widget.entry.layer.internallayerId}'),
+              left: 0,
+              right: 0,
+              top: 1,
+              bottom: 1,
+              child: IgnorePointer(child: ColoredBox(color: t.surface2)),
+            ),
+          // Lantern's selected row: accent_soft behind the bar, rounded as
+          // the outline's row is.
+          if (widget.selected && t.shape == ThemeShape.lantern)
+            Positioned(
+              key: ValueKey<String>(
+                  'tl-bar-rowfill-${widget.entry.layer.internallayerId}'),
+              left: 0,
+              right: 0,
+              top: laneRowGap(t),
+              bottom: laneRowGap(t),
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: rowSelectionFill(t),
+                    borderRadius:
+                        BorderRadius.circular(t.tokens.controlRadius),
+                  ),
+                ),
+              ),
+            ),
           // What the drag landed on, marked while it holds it (docs/07 §4.5) —
           // the same hairline the lane keys draw, because it is the same
           // service. Behind the bar, so the bar it caught is still legible.
@@ -576,8 +611,8 @@ class _BarState extends State<Bar> {
                   'tl-bar-ghost-${widget.entry.layer.internallayerId}'),
               left: ghost.$1,
               width: (ghost.$2 - ghost.$1).clamp(1.0, 1e6),
-              top: clipBarInsetFor(t.density),
-              height: clipBarHeight,
+              top: clipBarInsetOf(t),
+              height: clipBarHeightOf(t),
               child: IgnorePointer(
                 child: Container(
                   decoration: BoxDecoration(
@@ -592,8 +627,26 @@ class _BarState extends State<Bar> {
                     // Follows the bar's own ends: this *is* the bar, drawn as
                     // far as its source goes, and a rectangle round a capsule
                     // would read as a second object rather than the same one.
-                    borderRadius: BorderRadius.circular(
-                        round ? t.tokens.controlRadius : sharpClipRadius),
+                    borderRadius: BorderRadius.circular(clipRadius(t)),
+                  ),
+                ),
+              ),
+            ),
+          // Lantern's selection: a 2px accent ring standing outside the bar,
+          // drawn behind it so the hit rect stays the bar's own rectangle.
+          if (widget.selected && t.shape == ThemeShape.lantern)
+            Positioned(
+              key: ValueKey<String>(
+                  'tl-bar-ring-${widget.entry.layer.internallayerId}'),
+              left: left - 2,
+              width: width + 4,
+              top: clipBarInsetOf(t) - 2,
+              height: clipBarHeightOf(t) + 4,
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: t.accent, width: 2),
+                    borderRadius: BorderRadius.circular(clipRadius(t) + 2),
                   ),
                 ),
               ),
@@ -603,8 +656,8 @@ class _BarState extends State<Bar> {
                 'tl-bar-body-${widget.entry.layer.internallayerId}'),
             left: left,
             width: width,
-            top: clipBarInsetFor(t.density),
-            height: clipBarHeight,
+            top: clipBarInsetOf(t),
+            height: clipBarHeightOf(t),
             // Selection on the raw DOWN, outside the gesture arena: the
             // bar's tap otherwise waits for the move/trim drag recognisers
             // to concede before the Effect controls learn the layer.
@@ -787,13 +840,34 @@ class _BarState extends State<Bar> {
                       // Selected bars brighten that fill rather than growing an
                       // outline: the hue still says which layer this is, and a
                       // lighter bar reads at a glance where a 1px box did not.
-                      color: widget.selected
-                          ? Color.lerp(t.labelColour(info.label), t.textPrimary,
-                                  0.35)!
-                              .withValues(alpha: clipFillSelectedAlpha)
-                          : t
-                              .labelColour(info.label)
-                              .withValues(alpha: clipFillAlpha),
+                      // Desk mixes the hue into the row's band and keeps that
+                      // fill when selected; Lantern draws the hue at 55 percent.
+                      color: switch (t.shape) {
+                        ThemeShape.desk => Color.alphaBlend(
+                            t
+                                .labelColour(info.label)
+                                .withValues(alpha: deskBarMix),
+                            t.surface2),
+                        ThemeShape.lantern => t
+                            .labelColour(info.label)
+                            .withValues(alpha: lanternBarAlpha),
+                        ThemeShape.studio => widget.selected
+                            ? Color.lerp(t.labelColour(info.label),
+                                    t.textPrimary, 0.35)!
+                                .withValues(alpha: clipFillSelectedAlpha)
+                            : t
+                                .labelColour(info.label)
+                                .withValues(alpha: clipFillAlpha),
+                      },
+                      // Desk outlines the bar in its hue, and in the accent
+                      // when selected; Lantern rings it from outside (below).
+                      border: t.shape == ThemeShape.desk
+                          ? Border.all(
+                              color: widget.selected
+                                  ? t.accent
+                                  : t.labelColour(info.label),
+                              width: 1)
+                          : null,
                       // Stadium ends under Round (§12.1) — the control
                       // radius is the sentinel that clamps to half the bar's own
                       // height. **The bar's HIT rect is unchanged and stays
@@ -802,8 +876,7 @@ class _BarState extends State<Bar> {
                       // full width and the trim zones keep exactly the grab area
                       // they had. That is deliberate — a curved end would take
                       // pixels off the corner of a target already only 8 px wide.
-                      borderRadius: BorderRadius.circular(
-                          round ? t.tokens.controlRadius : sharpClipRadius),
+                      borderRadius: BorderRadius.circular(clipRadius(t)),
                     ),
                     child: Stack(
                       children: [
@@ -849,8 +922,11 @@ class _BarState extends State<Bar> {
                         // the name on every bar and so did the editor, and the
                         // owner's ruling from desktop testing is that it reads
                         // as the outline's own column of names said twice.
-                        // Off by default, unchanged when on.
-                        if (widget.showName)
+                        // Off by default, unchanged when on. Lantern's bar
+                        // carries its name always, at 11 semibold.
+                        if (widget.showName ||
+                            t.shape == ThemeShape.lantern ||
+                            t.shape == ThemeShape.desk)
                           Positioned(
                             left: clipEdgeWidth + 4,
                             right: 2,
@@ -863,7 +939,10 @@ class _BarState extends State<Bar> {
                                   info.name,
                                   key: ValueKey<String>(
                                       'tl-bar-name-${widget.entry.layer.internallayerId}'),
-                                  style: t.small.copyWith(color: t.textPrimary),
+                                  style: t.shape == ThemeShape.lantern
+                                      ? t.bodyPrimary
+                                          .copyWith(fontWeight: FontWeight.w600)
+                                      : t.small.copyWith(color: t.textPrimary),
                                   maxLines: 1,
                                   overflow: TextOverflow.clip,
                                   softWrap: false,
@@ -932,17 +1011,28 @@ class _BarState extends State<Bar> {
                   'tl-bar-keys-${widget.entry.layer.internallayerId}'),
               child: IgnorePointer(
                 child: CustomPaint(
-                  painter: LaneKeysPainter(
-                    frames: [
-                      for (final k in widget.summaryKeys)
-                        laneKeyFrame(k, widget.fps) + shift,
-                    ],
-                    selected: const {},
-                    axis: widget.axis,
-                    colour: t.animated,
-                    chosen: t.textPrimary,
-                    half: _summaryKeyHalf,
-                  ),
+                  // Desk and Lantern draw the marks as outlined diamonds in
+                  // the secondary text colour, as their mockups do.
+                  painter: t.shape == ThemeShape.studio
+                      ? LaneKeysPainter(
+                          frames: [
+                            for (final k in widget.summaryKeys)
+                              laneKeyFrame(k, widget.fps) + shift,
+                          ],
+                          selected: const {},
+                          axis: widget.axis,
+                          colour: t.animated,
+                          chosen: t.textPrimary,
+                          half: _summaryKeyHalf,
+                        )
+                      : OutlinedKeysPainter(
+                          frames: [
+                            for (final k in widget.summaryKeys)
+                              laneKeyFrame(k, widget.fps) + shift,
+                          ],
+                          axis: widget.axis,
+                          colour: t.textSecondary,
+                        ),
                 ),
               ),
             ),
@@ -1102,3 +1192,52 @@ class _BarState extends State<Bar> {
 
 /// Which part of a bar a drag grabbed: its middle, or one of its two ends.
 enum BarGrab { move, trimIn, trimOut }
+
+/// A shut layer's keys as outlined diamonds on its bar, Desk's and Lantern's
+/// mark: 7px across, a 1px stroke, one per frame.
+class OutlinedKeysPainter extends CustomPainter {
+  final List<double> frames;
+  final TimelineAxis axis;
+  final Color colour;
+
+  /// Half the diamond's height.
+  static const double half = 3.5;
+
+  const OutlinedKeysPainter(
+      {required this.frames, required this.axis, required this.colour});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final mid = size.height / 2;
+    final clip = canvas.getLocalClipBounds();
+    final paint = Paint()
+      ..color = colour
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    for (final frame in frames) {
+      final x = axis.xOf(frame);
+      if (x < clip.left - half || x > clip.right + half) continue;
+      canvas.drawPath(
+        Path()
+          ..moveTo(x, mid - half)
+          ..lineTo(x + half, mid)
+          ..lineTo(x, mid + half)
+          ..lineTo(x - half, mid)
+          ..close(),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(OutlinedKeysPainter old) =>
+      !listEquals(old.frames, frames) ||
+      old.colour != colour ||
+      old.axis.frames != axis.frames ||
+      old.axis.width != axis.width;
+
+  // The marks are a statement, not a target: the marquee under them keeps
+  // the pointer.
+  @override
+  bool? hitTest(Offset position) => false;
+}

@@ -17,7 +17,7 @@ import 'package:lumit_flutter/widgets/controls.dart';
 /// A dock tab, by the panel's name. Tab labels are kickers (docs/15-DESIGN.md
 /// §7.1), so what is on screen is the capitalised form of the sentence-case
 /// string — the transform is the style's, not the arb file's.
-Finder _tab(String title) => find.text(title.toUpperCase());
+Finder _tab(String title) => find.text(LumitTheme.dark().kickerCase(title));
 
 /// A scrollable panel body whose State construction is counted, so a test can
 /// prove the State object survived (was not rebuilt from scratch). Reads/writes
@@ -163,7 +163,8 @@ void main() {
       active: active,
     ));
     await tester.pump();
-    expect(active.value, Panel.viewer.pane(), reason: 'pane A is inactive to start');
+    expect(active.value, Panel.viewer.pane(),
+        reason: 'pane A is inactive to start');
 
     // One unbroken gesture: press (which activates pane A), move, release.
     final gesture =
@@ -176,7 +177,8 @@ void main() {
     await gesture.up();
     await tester.pump();
 
-    expect(active.value, Panel.project.pane(), reason: 'the press activated pane A');
+    expect(active.value, Panel.project.pane(),
+        reason: 'the press activated pane A');
     expect(drags, greaterThan(0),
         reason: 'the drag took effect on the first gesture');
   });

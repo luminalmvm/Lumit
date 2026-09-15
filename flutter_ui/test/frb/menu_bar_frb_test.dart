@@ -49,9 +49,12 @@ void main() {
       Future<String?> Function()? openPicker,
       Future<String?> Function()? savePicker,
       Future<List<String>> Function()? footagePicker,
+      ThemeShape shape = ThemeShape.studio,
     }) async {
       final p = freshProject();
       await tester.pumpWidget(hostPanel(
+        shape: shape,
+        density: DensityTokens.forShape(shape, false),
         // Along the top, where the shell puts it. Centred — which is what an
         // overlay entry does with a bar that has no height of its own — the
         // File menu had only half the window beneath it to open into, and
@@ -344,7 +347,7 @@ void main() {
     testWidgets('Undo and Redo grey out with the document history',
         (tester) async {
       final p = await mount(tester);
-      final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.sharp);
+      final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio);
 
       Color? colourOf(String label) =>
           tester.widget<Text>(find.text(label)).style?.color;
@@ -777,7 +780,7 @@ void main() {
     testWidgets('unbuilt commands are listed, marked and disabled',
         (tester) async {
       await mount(tester);
-      final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.sharp);
+      final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio);
 
       await tester.tap(find.byKey(const ValueKey<String>('menu-Animation')));
       await tester.pump();
@@ -984,6 +987,35 @@ void main() {
           tester.getTopLeft(find.byKey(const ValueKey<String>('menu-File'))).dx,
           lessThan(20),
           reason: 'File is the first heading, at the left');
+    });
+
+    /// **The headings wear the shape's case, and the menus are the same.**
+    /// Desk's top line reads its menus as lowercase words in the body face a
+    /// size up, its mockup's; Lantern and Studio keep the sentence-case word.
+    /// The keys, and the rows behind them, do not change with the shape.
+    testWidgets('the headings follow the shape and the menus do not',
+        (tester) async {
+      for (final shape in ThemeShape.values) {
+        await mount(tester, shape: shape);
+        expect(tester.getSize(find.byType(LumitMenuBarFrb)).height,
+            DensityTokens.forShape(shape, false).menuBar,
+            reason: 'the line is the shape\'s own height under $shape');
+        final desk = shape == ThemeShape.desk;
+        expect(find.text(desk ? 'composition' : 'Composition'), findsOneWidget,
+            reason: '$shape');
+        if (desk) {
+          final style = tester.widget<Text>(find.text('composition')).style;
+          expect(style?.fontFamily, ShapeTokens.desk.sansFamily,
+              reason: 'Desk sets its menus in its own face');
+          expect(style?.fontSize, 12);
+        }
+        await tester.tap(find.byKey(const ValueKey<String>('menu-Edit')));
+        await tester.pump();
+        expect(find.byKey(const ValueKey<String>('menu-row-Undo')),
+            findsOneWidget,
+            reason: 'the same rows under $shape');
+        await dismiss(tester);
+      }
     });
 
     /// The update row is live rather than listed-and-dead. It is not

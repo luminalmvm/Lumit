@@ -28,6 +28,8 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lumit_flutter/icons/lumit_icon.dart' as glyph;
+import 'package:lumit_flutter/icons/lumit_icons.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/panels/transform_rows_frb.dart' show writeScalar;
@@ -712,16 +714,14 @@ void main() {
           reason: 'the setting keeps the playhead where the picture stopped');
     }, skip: zeroCopyViewerUnavailable);
 
-    /// Running off the end is the engine's to notice: it knows the length and it
-    /// is the one counting. The frontend is *told*, and that is the only reason
-    /// its transport goes back to showing a play button.
-    testWidgets('playback ends on its own at the end of the composition',
-        (tester) async {
-      final p = withLayer();
-      // A tenth of a second, so the end arrives inside a test rather than in the
-      // thirty seconds a default comp lasts.
-      final was = p.comp.getSettings();
-      p.comp.setSettings(
+    /// A six-frame comp with its work area on frames 1 to 4, so a loop mode
+    /// has an end to reach inside a test. A tenth of a second, so the end
+    /// arrives inside a test rather than in the thirty seconds a default comp
+    /// lasts.
+    void shortWorkArea(dynamic p) {
+      final comp = p.comp as CompositionReference;
+      final was = comp.getSettings();
+      comp.setSettings(
         settings: BridgeCompSettings(
           name: was.name,
           width: 160,
@@ -734,8 +734,27 @@ void main() {
           duration: const BridgeRational(num: 1, den: 10),
         ),
       );
+      comp.setWorkArea(
+        span: BridgeSpan(
+          inPoint: comp.timeOfFrame(frame: 1),
+          outPoint: comp.timeOfFrame(frame: 4),
+          startOffset: const BridgeRational(num: 0, den: 1),
+        ),
+      );
+    }
+
+    /// Running off the end is the engine's to notice: it knows the length and it
+    /// is the one counting. The frontend is *told*, and that is the only reason
+    /// its transport goes back to showing a play button. The playhead is parked
+    /// past the work area, which is the one run that does not loop.
+    testWidgets('playback ends on its own at the end of the composition',
+        (tester) async {
+      final p = withLayer();
+      shortWorkArea(p);
       await mount(tester, p);
       expect(p.comp.durationFrames(), 6, reason: '0.1 s at 60 fps');
+      p.uiState.playheadFrame.value = 5;
+      await tester.pump();
 
       await pressBar(tester, 'viewer-play');
       await tester.pump();
@@ -747,6 +766,85 @@ void main() {
 
       expect(p.uiState.playing.value, isFalse,
           reason: 'the engine said it ended; nothing in Dart worked it out');
+    });
+
+    testWidgets('play once stops at the work-area end and returns the playhead',
+        (tester) async {
+      final p = withLayer();
+      shortWorkArea(p);
+      p.uiState.workspace.performance.loop = LoopMode.once;
+      await mount(tester, p);
+
+      await pressBar(tester, 'viewer-play');
+      await tester.pump();
+      await settleFrb(tester,
+          minRounds: 6,
+          maxRounds: coldWorkerRounds,
+          until: () => !p.uiState.playing.value);
+
+      expect(p.uiState.playing.value, isFalse,
+          reason: 'the work-area end stopped the run');
+      expect(p.uiState.playheadFrame.value, 0,
+          reason: 'stopping returns the playhead to where play started');
+    }, skip: zeroCopyViewerUnavailable);
+
+    testWidgets('ping-pong turns round at the work-area end', (tester) async {
+      final p = withLayer();
+      shortWorkArea(p);
+      p.uiState.workspace.performance.loop = LoopMode.pingPong;
+      await mount(tester, p);
+
+      // The turn sets the playhead back in the same handler that saw the end
+      // frame, so the end is caught by a listener rather than polled for.
+      var reachedEnd = false;
+      void watch() {
+        if (p.uiState.playheadFrame.value >= 4) reachedEnd = true;
+      }
+
+      p.uiState.playheadFrame.addListener(watch);
+      addTearDown(() => p.uiState.playheadFrame.removeListener(watch));
+
+      await pressBar(tester, 'viewer-play');
+      await tester.pump();
+      await settleFrb(tester,
+          minRounds: 6,
+          maxRounds: coldWorkerRounds,
+          until: () => reachedEnd && p.uiState.playheadFrame.value < 4);
+
+      expect(p.uiState.playing.value, isTrue,
+          reason: 'the end of the work area is a turn, not a stop');
+      expect(p.uiState.playheadFrame.value, lessThan(4),
+          reason: 'the playhead is running back down');
+
+      await pressBar(tester, 'viewer-play');
+      await tester.pump();
+    }, skip: zeroCopyViewerUnavailable);
+
+    testWidgets(
+        'the mute mark silences the output and shows the muted speaker',
+        (tester) async {
+      final p = withLayer();
+      p.uiState.workspace.interface.viewerBars = ViewerBars.deck;
+      await mount(tester, p);
+
+      String glyphUnder(String key) => tester
+          .widget<glyph.LumitIcon>(find.descendant(
+            of: find.byKey(ValueKey<String>(key)),
+            matching: find.byType(glyph.LumitIcon),
+          ))
+          .glyph;
+
+      expect(audioMuted(), isFalse);
+      expect(glyphUnder('viewer-mute'), LumitIcons.audio);
+
+      await pressBar(tester, 'viewer-mute');
+      expect(audioMuted(), isTrue, reason: 'the engine was told');
+      expect(p.uiState.audioMuted.value, isTrue);
+      expect(glyphUnder('viewer-mute'), LumitIcons.muted);
+
+      await pressBar(tester, 'viewer-mute');
+      expect(audioMuted(), isFalse);
+      expect(glyphUnder('viewer-mute'), LumitIcons.audio);
     });
 
     testWidgets('the timecode reads HH:MM:SS:FF at the comp rate',
@@ -1283,7 +1381,7 @@ void main() {
       // The tone map is asked for; this test drives it, so it asks.
       p.uiState.workspace.interface.showToneMap = true;
       await mount(tester, p);
-      final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.sharp);
+      final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio);
 
       final picker = find.byKey(const ValueKey('viewer-colour'));
       expect(picker, findsOneWidget, reason: 'it is always in the header');

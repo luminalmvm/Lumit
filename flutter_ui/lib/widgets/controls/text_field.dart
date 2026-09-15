@@ -4,7 +4,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../theme/theme.dart';
 import '../autofill.dart';
 import 'base.dart';
 import 'buttons.dart';
@@ -263,11 +262,13 @@ class _HouseTextFieldState extends State<HouseTextField>
                               left: BorderSide(color: t.theme.selectionFill),
                               right: BorderSide(color: t.theme.selectionFill),
                               bottom: BorderSide(color: t.theme.selectionFill)),
-                          borderRadius: t.theme.shape == ThemeShape.round
-                              ? BorderRadius.only(
-                                  bottomLeft: Radius.circular(8),
-                                  bottomRight: Radius.circular(8))
-                              : null),
+                          // The list hangs under the well, so it wears the
+                          // well's own corner.
+                          borderRadius: BorderRadius.only(
+                              bottomLeft:
+                                  Radius.circular(t.theme.tokens.wellRadius),
+                              bottomRight:
+                                  Radius.circular(t.theme.tokens.wellRadius))),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
@@ -335,15 +336,16 @@ class _HouseTextFieldState extends State<HouseTextField>
           ? null
           : BoxDecoration(
               color: widget.fill ?? t.surface0,
-              borderRadius: BorderRadius.circular(t.tokens.controlRadius.clamp(0, 10)),
+              borderRadius: wellCorners(t),
               // `animated`, not `accent`: a focused well is the one focus that
               // means "you are about to change a value" (§3.1, §6.5), and the
               // drawings draw the focused well's edge in that token.
               // [DragValueField] has answered focus this way all along; a well
               // you type into rather than scrub had simply never answered at
               // all.
-              border:
-                  Border.all(color: _focus.hasFocus ? t.animated : t.hairline),
+              border: wellBorder(
+                  t, _focus.hasFocus ? t.animated : t.hairline,
+                  lit: _focus.hasFocus),
             ),
       child: _withLeading(
         leading,

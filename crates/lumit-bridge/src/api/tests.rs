@@ -8056,6 +8056,19 @@ fn the_audio_transport_answers_without_a_device() {
     assert!(!audio_clock().playing, "stop leaves it stopped");
 }
 
+/// The monitor mute is remembered whether or not a stream ever opened, so a
+/// muted deck reads muted on a machine with no sound device too.
+#[cfg(feature = "media")]
+#[test]
+fn audio_mute_round_trips_without_a_device() {
+    use crate::api::audio::{audio_muted, audio_set_muted};
+
+    audio_set_muted(true);
+    assert!(audio_muted(), "muted");
+    audio_set_muted(false);
+    assert!(!audio_muted(), "unmuted");
+}
+
 /// Detection needs something to listen to. A comp with no audio says so rather
 /// than placing zero markers and looking like it worked.
 #[test]

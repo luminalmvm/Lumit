@@ -162,7 +162,7 @@ class _EasePopoverState extends State<_EasePopover> {
             padding: const EdgeInsets.symmetric(horizontal: 10),
             child: Row(
               children: [
-                Text(l10n.easeBlockTitle.toUpperCase(), style: t.kickerOn),
+                Text(t.kickerCase(l10n.easeBlockTitle), style: t.kickerOn),
                 const Spacer(),
                 Text(
                   l10n.easeKeyCount(widget.count),

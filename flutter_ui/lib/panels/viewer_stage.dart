@@ -52,7 +52,6 @@ import 'viewer_zoom.dart';
 export '../state/viewer_view.dart' show ViewerChannel;
 import '../state/viewer_view.dart' show ViewerChannel;
 
-
 /// What is painted around the picture.
 ///
 /// Neutral by default, and deliberately so: a grade cannot be judged against a
@@ -569,8 +568,7 @@ class ViewerStage extends StatelessWidget {
                       ValueListenableBuilder<int>(
                         valueListenable: uiState.playheadFrame,
                         builder: (context, frame, _) => ViewerRotoLayer(
-                          active:
-                              uiState.tools.tool.group == ToolGroup.roto,
+                          active: uiState.tools.tool.group == ToolGroup.roto,
                           tool: uiState.tools.tool,
                           state: state,
                           uiState: uiState,
@@ -1307,7 +1305,7 @@ class ViewerTag extends StatelessWidget {
                 borderRadius: BorderRadius.circular(t.tokens.controlRadius),
               ),
               child: Text(
-                name.toUpperCase(),
+                t.kickerCase(name),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: t.kicker.copyWith(
