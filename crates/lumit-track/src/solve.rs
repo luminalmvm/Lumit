@@ -73,6 +73,25 @@ pub struct SolveSettings {
     /// lens, it is a failed estimate.
     pub min_focal_factor: f64,
     pub max_focal_factor: f64,
+    /// The operator's lens, in **source raster pixels** — the same unit
+    /// [`SolveSegment::focal_px`] and [`SolvedPose::focal_px`] report in, and
+    /// what [`SolveSettings::default_focal_factor`] becomes once multiplied by
+    /// the raster's long edge. `None` self-calibrates from the pairs as
+    /// described in docs/impl/tracking.md §4's deviation 1.
+    ///
+    /// Set, it is the operator's word and is taken as such: the F→K search is
+    /// skipped, the first segment's focal is pinned to the hint — through both
+    /// passes and through the bundle, whose first focal column is held rather
+    /// than refined, so the number that comes back is the number typed in —
+    /// and every later segment and ramp knot starts from the hint through the
+    /// zoom detector's measured cut ratios exactly as it starts from the
+    /// search today, and is refined by the bundle exactly as it is today. It
+    /// is honoured even where self-calibration would have disagreed (a wrong
+    /// hint solves to a wrong camera, and the reprojection error says so), it
+    /// is not clamped by `min_focal_factor`/`max_focal_factor`, and only a
+    /// value that is not a positive finite number is refused
+    /// ([`SolveError::BadFocalHint`]).
+    pub focal_px: Option<f64>,
     /// IRLS sweeps in rotation averaging. Fixed, not convergence-driven, so the
     /// work is the same every run.
     pub rotation_iterations: usize,
@@ -116,6 +135,7 @@ impl Default for SolveSettings {
             default_focal_factor: 1.2,
             min_focal_factor: 0.3,
             max_focal_factor: 6.0,
+            focal_px: None,
             rotation_iterations: 12,
             position_iterations: 24,
             min_parallax_deg: 0.5,
@@ -161,6 +181,11 @@ pub enum SolveError {
     /// (14-ENGINEERING-RULES §1.4).
     #[error("the solve was cancelled")]
     Cancelled,
+    /// [`SolveSettings::focal_px`] is not a positive finite number of pixels.
+    /// The hint is otherwise never second-guessed, so this is the one shape of
+    /// hint the solve refuses rather than honours.
+    #[error("the focal hint is not a positive, finite number of pixels")]
+    BadFocalHint,
 }
 
 /// Something the solve wants the caller to know without failing over it.
@@ -315,6 +340,11 @@ pub fn solve_camera_cancellable(
     settings: &SolveSettings,
     cancel: &dyn Fn() -> bool,
 ) -> Result<CameraSolve, SolveError> {
+    if let Some(hint) = settings.focal_px {
+        if !(hint.is_finite() && hint > 0.0) {
+            return Err(SolveError::BadFocalHint);
+        }
+    }
     let (first, last) = set.frame_range().ok_or(SolveError::NoTracks)?;
     let (w, h) = set.source_size();
     if w == 0 || h == 0 {
@@ -352,27 +382,51 @@ pub fn solve_camera_cancellable(
     // across cuts and along ramps alike — and the whole shot has one base
     // focal unknown to search for, which every pair in it votes on.
     let mut curve = FocalCurve::build(&segments, zooms, settings);
-    let voters: Vec<(&PairGeometry, f64, f64)> = usable
-        .iter()
-        .filter(|g| g.verdict == PairVerdict::Translating)
-        .map(|g| {
-            (
-                *g,
-                curve.value_at(&segments, g.from),
-                curve.value_at(&segments, g.to),
-            )
-        })
-        .collect();
-    let base = match focal_from_pairs(&voters, centre, range) {
-        Some(f) => f,
+    // A hint is the operator's word: it replaces the search outright, it is
+    // not clamped to the self-calibration's plausible range, and its knot —
+    // the first segment's first — is held through the bundle so the number
+    // that comes back is the number that went in. Everything downstream of
+    // it (the ratios across cuts and along ramps, the second pass, the
+    // refinement of every other knot) runs exactly as it does on a searched
+    // focal.
+    let pinned: Vec<usize> = match settings.focal_px {
+        Some(hint) => {
+            for v in &mut curve.values {
+                *v *= hint;
+            }
+            curve
+                .knots
+                .first()
+                .and_then(|list| list.first())
+                .map(|&(_, knot)| knot)
+                .into_iter()
+                .collect()
+        }
         None => {
-            notes.push(SolveNote::FocalGuessed { segment: 0 });
-            settings.default_focal_factor * long_edge
+            let voters: Vec<(&PairGeometry, f64, f64)> = usable
+                .iter()
+                .filter(|g| g.verdict == PairVerdict::Translating)
+                .map(|g| {
+                    (
+                        *g,
+                        curve.value_at(&segments, g.from),
+                        curve.value_at(&segments, g.to),
+                    )
+                })
+                .collect();
+            let base = match focal_from_pairs(&voters, centre, range) {
+                Some(f) => f,
+                None => {
+                    notes.push(SolveNote::FocalGuessed { segment: 0 });
+                    settings.default_focal_factor * long_edge
+                }
+            };
+            for v in &mut curve.values {
+                *v = (*v * base).clamp(range.0, range.1);
+            }
+            Vec::new()
         }
     };
-    for v in &mut curve.values {
-        *v = (*v * base).clamp(range.0, range.1);
-    }
     sync_segment_focals(&mut segments, &curve);
 
     // --- 2..6. Two passes over the geometry ---------------------------------
@@ -390,7 +444,9 @@ pub fn solve_camera_cancellable(
         if cancel() {
             return Err(SolveError::Cancelled);
         }
-        let pass = one_pass(set, &usable, &segments, &curve, centre, settings, cancel)?;
+        let pass = one_pass(
+            set, &usable, &segments, &curve, &pinned, centre, settings, cancel,
+        )?;
         curve.values.clone_from(&pass.focals);
         sync_segment_focals(&mut segments, &curve);
         outcome = Some(pass);
@@ -456,12 +512,16 @@ struct Pass {
 }
 
 /// Relative poses → rotation averaging → global positions → triangulation →
-/// bundle adjustment, from the focal knots `curve` currently carries.
+/// bundle adjustment, from the focal knots `curve` currently carries. The
+/// knots listed in `pinned` are held where they are through the bundle — the
+/// operator's focal hint, when there is one.
+#[allow(clippy::too_many_arguments)]
 fn one_pass(
     set: &TrackSet,
     usable: &[&PairGeometry],
     segments: &[SolveSegment],
     curve: &FocalCurve,
+    pinned: &[usize],
     centre: [f64; 2],
     settings: &SolveSettings,
     cancel: &dyn Fn() -> bool,
@@ -601,6 +661,7 @@ fn one_pass(
         centre,
         settings.huber_px,
         settings.bundle_iterations,
+        pinned,
         cancel,
     );
     // Now — and only now — reprojection is the right judge. Anything the
@@ -628,6 +689,7 @@ fn one_pass(
             centre,
             settings.huber_px,
             settings.bundle_iterations,
+            pinned,
             cancel,
         );
     }

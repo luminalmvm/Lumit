@@ -214,6 +214,11 @@ pub enum Reason {
     /// parse failure on one chunk skips that chunk and continues, and the
     /// report lists what was skipped).
     ChunkUnreadable { chunk: String },
+    /// The `.aep`'s item tree could not be read at all, so only its footage
+    /// references were imported — `count` of them — and no folder, comp or
+    /// layer came with them (docs/11 §7's whole-file fallback). Only the
+    /// direct route raises it, and once per import.
+    StructureUnreadable { count: usize },
 
     // --- masks ---
     /// AE feathers a mask separately in x and y; Lumit has one width.
@@ -444,6 +449,11 @@ impl std::fmt::Display for Reason {
             Self::ChunkUnreadable { chunk } => write!(
                 f,
                 "a record in the project file ({chunk}) could not be read and was skipped"
+            ),
+            Self::StructureUnreadable { count } => write!(
+                f,
+                "the project's structure could not be read — only its footage references \
+                 ({count}) were imported, with no compositions or layers"
             ),
             Self::MaskFeatherAxesDiffer { x, y } => write!(
                 f,

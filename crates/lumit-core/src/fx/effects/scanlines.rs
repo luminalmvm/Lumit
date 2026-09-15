@@ -93,15 +93,13 @@ impl Scanlines {
     /// period), so the kernel never sees raw time or does its own time maths
     /// (§2.4). Never a panel row.
     ///
-    /// **Known ceiling** (docs/impl/effect-registry.md §2.4a, and the open item
-    /// in docs/TODO.md): this is in raster pixels, and a derived id carries no
-    /// declared unit, so [`ResolvedStack::rescale_spatial`](crate::fx::
-    /// ResolvedStack::rescale_spatial) leaves it behind while it moves
-    /// `scanline_period`. A stack resolved against one raster and reused at
-    /// another therefore rolls to the wrong phase. Only reachable with a
-    /// non-zero Roll speed on a precomp realised at a second size; the fix is a
-    /// decision (teach the rescale pass about derived units, or derive the roll
-    /// in periods rather than pixels), so it is not taken here.
+    /// This is in **raster pixels**, and a derived id carries no declared
+    /// unit, so [`ScanlinesDef::derived_spatial`] names it and
+    /// [`ResolvedStack::rescale_spatial`](crate::fx::ResolvedStack::rescale_spatial)
+    /// moves it with `scanline_period` — a stack resolved against one raster
+    /// and reused at another (a precomp realised at a second size) rolls to
+    /// the same phase it would have resolved to there. Before that the period
+    /// moved and the roll stayed, and the phase shifted with the size.
     pub const DERIVED_ROLL_PX: ParamId = ParamId::new("derived.roll_px");
 
     /// The intensity and roll offset out of a resolved bag: [`Scanlines::
@@ -171,6 +169,11 @@ impl EffectDef for ScanlinesDef {
             Scanlines::DERIVED_ROLL_PX,
             Value::Float((roll_speed * lt * f64::from(period_px)) as f32),
         );
+    }
+
+    /// The roll offset is a raster-pixel length; the intensity is not.
+    fn derived_spatial(&self) -> &'static [ParamId] {
+        &[Scanlines::DERIVED_ROLL_PX]
     }
 
     fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {

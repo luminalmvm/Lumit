@@ -871,6 +871,22 @@ impl LensFlare {
         ),
     ];
 
+    /// The geometry half of every [`Self::DERIVED_LIGHTS`] pair — the sixteen
+    /// ids whose values are raster-pixel lengths and so must follow the raster
+    /// under [`ResolvedStack::rescale_spatial`](crate::fx::ResolvedStack::rescale_spatial).
+    /// The colour half is deliberately absent: `(r, g, b, 0)` is not a length.
+    /// Built from the pairs rather than spelled a second time, so the two lists
+    /// cannot drift apart.
+    pub const DERIVED_LIGHT_GEOMETRY: [ParamId; lf::MAX_SOURCES] = {
+        let mut ids = [ParamId(0); lf::MAX_SOURCES];
+        let mut i = 0;
+        while i < lf::MAX_SOURCES {
+            ids[i] = Self::DERIVED_LIGHTS[i].0;
+            i += 1;
+        }
+        ids
+    };
+
     /// The Lights-mode sources out of a resolved bag — [`Self::packed`]'s
     /// missing argument, so no caller has to know the ids. Empty in Manual and
     /// Matte modes, which is exactly what the old resolve arm left there.
@@ -1044,5 +1060,11 @@ impl EffectDef for LensFlareDef {
             count += 1;
         }
         push(LensFlare::DERIVED_LIGHT_COUNT, Value::Int(count as i32));
+    }
+
+    /// Each light's `(x, y, half_w, half_h)` is raster pixels and follows the
+    /// raster; its `(r, g, b, 0)` and the count do not.
+    fn derived_spatial(&self) -> &'static [ParamId] {
+        &LensFlare::DERIVED_LIGHT_GEOMETRY
     }
 }

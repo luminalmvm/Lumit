@@ -35,7 +35,9 @@
 //! user picks the `.aep` and nothing has to be run inside After Effects at all.
 //! It is a second front end, never a second importer — everything downstream is
 //! shared, and [`Bundle::source`] is the only thing that remembers which way in
-//! was taken. The Bridge stays first-class: it is the fidelity backstop, and it
+//! was taken (with [`Bundle::footage_only`] saying whether the whole project
+//! came, or only its footage references because the structure could not be
+//! read). The Bridge stays first-class: it is the fidelity backstop, and it
 //! is what cannot drift when Adobe changes the file format.
 
 pub mod aep;
@@ -72,6 +74,12 @@ pub struct Bundle {
     /// the Bridge cannot read a `CUSTOM_VALUE` blob and the direct parser can,
     /// while a new After Effects may break the parser and never the Bridge.
     pub source: BundleSource,
+    /// The direct parser could not read the project's structure and fell
+    /// back to its footage references alone (docs/11 §7): the capture holds
+    /// footage items and nothing else, and the report says so in one row
+    /// ([`note_skipped_chunks`]). Never set on the Bridge route — the Bridge
+    /// writes a whole capture or none.
+    pub footage_only: bool,
 }
 
 /// Where a [`Bundle`] came from.
@@ -120,16 +128,33 @@ pub fn open_ae(path: &Path) -> Result<Bundle, ImportError> {
 
 /// Add a row for every chunk the direct parser had to skip (docs/11 §7: a
 /// parse failure on one chunk skips that chunk and continues, and the report
-/// lists what was skipped).
+/// lists what was skipped) — and the one row for the whole structure, when
+/// the parser fell back to footage references alone.
 ///
 /// Only the `.aep` route's skips are folded in. A property the *Bridge* could
 /// not read is already an unreadable node in the capture, and [`map_capture`]
 /// raises its row from there — adding these on top would say it twice. Those
 /// rows are the ones carrying a match name; a skipped chunk carries a chunk id
 /// and no match name.
+///
+/// A footage-only bundle ([`Bundle::footage_only`]) gets exactly one row,
+/// against the project itself, saying that the structure could not be read
+/// and how many references came instead. It is raised here rather than in
+/// the mapping because the mapping sees a capture, and a capture of footage
+/// items looks the same whether the project held nothing else or the parser
+/// could not read the rest.
 pub fn note_skipped_chunks(bundle: &Bundle, report: &mut ImportReport) {
     if bundle.source != BundleSource::Aep {
         return;
+    }
+    if bundle.footage_only {
+        report.row(
+            ItemPath::default(),
+            Outcome::Skipped,
+            Reason::StructureUnreadable {
+                count: bundle.capture.items.len(),
+            },
+        );
     }
     for row in &bundle.report.unreadables {
         if row.match_name.is_some() {
@@ -200,6 +225,7 @@ pub fn open_bundle(path: &Path) -> Result<Bundle, ImportError> {
         capture,
         report,
         source: BundleSource::Bridge,
+        footage_only: false,
     })
 }
 
@@ -842,5 +868,52 @@ mod tests {
         let mut report = ImportReport::default();
         note_skipped_chunks(&bundle, &mut report);
         assert!(report.rows.is_empty());
+    }
+
+    /// **A footage-only parse is one row against the project, and a whole
+    /// parse is none.**
+    ///
+    /// docs/11 §7's fallback reaches the report here, on the same call the
+    /// bridge already makes for skipped chunks — so the bridge picks it up
+    /// without a change. The row is a skip (the comps and layers are what was
+    /// lost), it names the project rather than any item, and it carries the
+    /// one fact the user wants: how many references came instead.
+    #[test]
+    fn a_footage_only_bundle_says_so_once_against_the_project() {
+        let mut bundle = opened();
+        bundle.source = BundleSource::Aep;
+        bundle.footage_only = true;
+        let mut report = ImportReport::default();
+        note_skipped_chunks(&bundle, &mut report);
+
+        let rows: Vec<&ReportRow> = report
+            .rows
+            .iter()
+            .filter(|row| matches!(row.reason, Reason::StructureUnreadable { .. }))
+            .collect();
+        assert_eq!(rows.len(), 1, "said once");
+        assert_eq!(rows[0].outcome, Outcome::Skipped);
+        assert_eq!(rows[0].path, ItemPath::default());
+        assert_eq!(rows[0].path.to_string(), "Project");
+        assert_eq!(
+            rows[0].reason,
+            Reason::StructureUnreadable {
+                count: bundle.capture.items.len()
+            }
+        );
+        assert_eq!(rows[0].reason.key(), "structure_unreadable");
+        assert_eq!(
+            rows[0].reason.args()["count"],
+            bundle.capture.items.len().to_string()
+        );
+
+        // A whole parse says nothing of the kind.
+        bundle.footage_only = false;
+        let mut report = ImportReport::default();
+        note_skipped_chunks(&bundle, &mut report);
+        assert!(!report
+            .rows
+            .iter()
+            .any(|row| matches!(row.reason, Reason::StructureUnreadable { .. })));
     }
 }
