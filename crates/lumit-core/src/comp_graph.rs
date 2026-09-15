@@ -42,6 +42,18 @@ pub const MERGE: &str = "merge";
 pub const SWITCH: &str = "switch";
 /// The match name of the Node graph effect (§1.3).
 pub const NODE_GRAPH: &str = "node_graph";
+/// The match name of the Split channels node (§1.3).
+pub const SPLIT_CHANNELS: &str = "split_channels";
+/// The match name of the Combine channels node (§1.3).
+pub const COMBINE_CHANNELS: &str = "combine_channels";
+
+/// Split channels' outputs and Combine channels' inputs, red to alpha. Red
+/// keeps the `output` and `input` ids, as Merge's A does, so Auto-wire and Heal
+/// still find it.
+pub const SPLIT_OUTPUTS: [&str; 4] = ["output", "green", "blue", "alpha"];
+/// See [`SPLIT_OUTPUTS`].
+pub const COMBINE_INPUTS: [&str; 4] = ["input", "green", "blue", "alpha"];
+const CHANNEL_LABELS: [&str; 4] = ["Red", "Green", "Blue", "Alpha"];
 
 /// What a node graph composition holds instead of layers.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -310,6 +322,19 @@ fn fx_ports(
                 .collect();
             ins.push(GraphPort::new("index", "Index", PortType::Number));
             return (ins, out);
+        }
+        SPLIT_CHANNELS | COMBINE_CHANNELS => {
+            let channels = |ids: [&str; 4]| {
+                ids.into_iter()
+                    .zip(CHANNEL_LABELS)
+                    .map(|(id, label)| GraphPort::new(id, label, PortType::Image))
+                    .collect()
+            };
+            return if inst.effect.match_name == SPLIT_CHANNELS {
+                (vec![GraphPort::of(INPUT_PORT)], channels(SPLIT_OUTPUTS))
+            } else {
+                (channels(COMBINE_INPUTS), out)
+            };
         }
         NODE_GRAPH => {
             let mut ins = vec![GraphPort::of(INPUT_PORT)];
@@ -1335,6 +1360,58 @@ mod tests {
         let points: Vec<&GraphPort> = ins.iter().filter(|p| p.ty == PortType::Points).collect();
         assert_eq!(points.len(), 1, "its declared Points input, once");
         assert_eq!(points[0].id, "points");
+    }
+
+    /// Split channels hands out a picture per channel and Combine channels
+    /// takes one per channel, red on the `output` and `input` ids.
+    #[test]
+    fn split_and_combine_show_a_socket_per_channel() {
+        let graph = built(vec![GraphNode::Output { id: Uuid::now_v7() }], Vec::new());
+        let labels = |ports: &[GraphPort]| -> Vec<String> {
+            ports.iter().map(|p| p.label.clone()).collect()
+        };
+
+        let (ins, outs) = ports_of(&graph, &fx(SPLIT_CHANNELS), None);
+        assert_eq!(ids(&ins), vec!["input"]);
+        assert_eq!(ids(&outs), vec!["output", "green", "blue", "alpha"]);
+        assert_eq!(labels(&outs), vec!["Red", "Green", "Blue", "Alpha"]);
+        assert!(outs.iter().all(|p| p.ty == PortType::Image));
+
+        // Its four pickers are rows, never sockets.
+        let combine = fx(COMBINE_CHANNELS);
+        let GraphNode::Fx(inst) = &combine else {
+            unreachable!()
+        };
+        let rows: Vec<&str> = inst.params.iter().map(|p| p.id.as_str()).collect();
+        assert_eq!(rows, ["red_from", "green_from", "blue_from", "alpha_from"]);
+        let (ins, outs) = ports_of(&graph, &combine, None);
+        assert_eq!(ids(&ins), vec!["input", "green", "blue", "alpha"]);
+        assert_eq!(labels(&ins), vec!["Red", "Green", "Blue", "Alpha"]);
+        assert!(ins.iter().all(|p| p.ty == PortType::Image));
+        assert_eq!(ids(&outs), vec!["output"]);
+    }
+
+    /// Any Split output is an ordinary picture: it validates into a Combine's
+    /// socket and into a matte socket as any picture does.
+    #[test]
+    fn a_split_output_wires_like_any_picture() {
+        let source = read(Uuid::now_v7());
+        let split = fx(SPLIT_CHANNELS);
+        let combine = fx(COMBINE_CHANNELS);
+        let blur = fx("blur");
+        let out = GraphNode::Output { id: Uuid::now_v7() };
+        let edges = vec![
+            wire(&source, OUTPUT_PORT.id, &split, INPUT_PORT.id),
+            wire(&split, "green", &combine, "green"),
+            wire(&combine, OUTPUT_PORT.id, &blur, INPUT_PORT.id),
+            wire(&split, "alpha", &blur, MATTE_PORT.id),
+            wire(&blur, OUTPUT_PORT.id, &out, INPUT_PORT.id),
+        ];
+        let mut graph = built(vec![source, split, combine, blur, out], edges);
+        graph.validate(None).expect("a channel is a picture");
+
+        graph.edges[1].from_port = "luminance".into();
+        assert_eq!(graph.validate(None), Err(GraphError::UnknownPort));
     }
 
     /// A Time offset takes a picture and a number and hands a picture on: the

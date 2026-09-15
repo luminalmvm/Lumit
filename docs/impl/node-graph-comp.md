@@ -135,12 +135,14 @@ its `custom_name` is the box's name; the Node panel draws its rows with the widg
 has; presets and copy carry it. A driver in a node graph is the same `EffectInstance` a driver
 on a layer is. Merge, Switch and the Node graph effect are `Fx` nodes too (§1.3).
 
-### 1.3 Three new catalogue entries
+### 1.3 New catalogue entries
 
 | Entry | Category | Rows | Sockets in a node graph | In a layer stack |
 |---|---|---|---|---|
 | **Merge** (`merge`) | Compositing | Mode (the `BlendMode::NAMES` choice, id `mode`), Opacity (0 to 100, %) | in: A (`input`, image), B (`background`, image), Opacity (number). out: `output` | Not offered. Adding one to a stack is refused. |
 | **Switch** (`switch`) | Compositing | Index (whole number, 0 and up) | in: `in0`, `in1`, ... one more than are wired, Index (number). out: `output` | Not offered, as Merge. |
+| **Split channels** (`split_channels`) | Compositing | none | in: Input (`input`, image). out: Red (`output`), Green (`green`), Blue (`blue`), Alpha (`alpha`), all image | Not offered, as Merge. |
+| **Combine channels** (`combine_channels`) | Compositing | Red from, Green from, Blue from, Alpha from (the `CHANNEL_OPTIONS` choice, ids `red_from` .. `alpha_from`, default Luminance) | in: Red (`input`), Green (`green`), Blue (`blue`), Alpha (`alpha`), all image. out: `output` | Not offered, as Merge. |
 | **Node graph** (`node_graph`) | Utility | the graph's Inputs (derived, §1.5), Mix, the injected Blend | in: `input` (the first picture Input), one image socket per further picture Input, one socket per value Input, Matte. out: `output` | Applies the graph to the layer (§2.4). |
 
 **Compositing is a new `FxCategory`.** Its two members are `is_image_op() == false`, exactly
@@ -158,6 +160,18 @@ declares `matte = false`. Switch declares `matte = false`. The Node graph effect
 universal Matte row and the Mix seam, so a graph dissolves back over the layer like any
 effect.
 
+Split channels and Combine channels (GitHub issue 153) are Compositing entries as Merge is,
+with `matte = false`. A Split has no rows: its sockets are the whole box. Each output of a
+Split is an opaque greyscale picture of one channel of the straight input. Each channel of
+a Combine's result is one straight channel of the picture on that socket, picked on its
+row: Luminance, Alpha, Red, Green or Blue, Luminance by default. A Split's grey has
+luminance equal to its channel, so the default keeps Split then Combine the identity, and a
+colour picture wired in gives its brightness. The rows are choices and answer no
+`port_type`, so they add no sockets. An unwired Red, Green or Blue reads 0 and an unwired
+Alpha reads 1, so three pictures combine to an opaque one. The result is premultiplied, and
+Split then Combine is the identity wherever alpha is above 0. Red keeps the `input` and `output` ids, as Merge's A does, so Auto-wire and Heal
+reach it.
+
 ### 1.4 Sockets and wires
 
 One function, `comp_graph::ports_of(node) -> (inputs, outputs)`, is the table every reader
@@ -173,6 +187,8 @@ graph to draws. They cannot disagree because there is one of it.
 | Fx, driver | the parameter sockets and the signature's data inputs, as on a layer | the signature's outputs |
 | Fx, `merge` | `input`, `background` (image); `opacity` (number) | `output` |
 | Fx, `switch` | `in0` .. `inN` (image), N being one more than the last wired index; `index` (number) | `output` |
+| Fx, `split_channels` | `input` (image) | `output`, `green`, `blue`, `alpha` (image), labelled Red, Green, Blue, Alpha |
+| Fx, `combine_channels` | `input`, `green`, `blue`, `alpha` (image), labelled Red, Green, Blue, Alpha | `output` |
 | Fx, `node_graph` | `input` (image); one image socket per further picture Input of the graph it names, by that Input's id; one socket per value Input; `matte` | `output` |
 | Output | `input` (image) | none |
 
@@ -406,6 +422,25 @@ Read inside a graph applied as an effect is placed in the graph comp's own pixel
 scaled by that factor, which is exact when the graph's frame and the host's raster share a
 coordinate frame and approximate otherwise, and the code says so where it happens.
 
+**Built 2026-09-15: a box with several picture outputs.** Split channels is the first. The
+lowering keys what it has lowered by box and output socket, so a wire reads the step of the
+socket it leaves; every other box lands on `output` alone and lowers to the same steps as
+before. Neither entry has a kernel. Both lower to `GraphStep::Fx` steps running Set channels
+(docs/08 §3.94), which works on straight values, re-premultiplies, and takes a second
+picture on its Source row as `picture`. A Split lowers one step per output that something in
+the cone reads, picking that channel into red, green and blue with alpha Full on. A Combine
+reads its four rows at the graph's time, through `resolve_instance` as Merge reads Mode, so
+they keyframe, and maps each pick to Set channels' own (Luminance 4, Alpha 3, Red 0, Green 1,
+Blue 2, plus 5 for the Source row). It lowers three steps over the Red picture: Red's pick
+into red and Green's pick into green with blue Full off and alpha Full on, then Blue's pick
+into blue, then Alpha's pick into alpha, or Full on when Alpha is unwired. Red's pick is
+read in the first step, before anything else is written. An unwired Source reads 0, which is what an unwired Green or Blue wants. A bypassed
+Split hands its input on at every output and a bypassed Combine hands on Red. The frame key
+already feeds each wire's `from_port`, so two outputs of one Split name two frames. The
+picture at a Split box (§4.5) is its Red. The planner, `cone_of`, `time_demands` and the
+audio walk follow boxes rather than sockets, and all of a Split's outputs share one cone, so
+none of them changed.
+
 ### 2.4 The Node graph effect on a layer
 
 `run_ops` cannot reach the realiser, and `realise_segment` runs a stack in one call. Rather
@@ -568,7 +603,15 @@ on empty ground for the console filtered to its type, drop a loose box on a wire
 Auto-wire (a box added while one is picked is wired after it, and takes over feeding the
 Output if the picked box did), Heal (deleting a box joins what fed its `input` to everything
 its `output` fed), marquee and modifiers, groups and their washes, frame-all, snap, rename
-by double-click, the tick and the twirl, Delete claimed while the panel is focused. Save group
+by double-click, the tick and the twirl, Delete claimed while the panel is focused. The console
+opens four ways with no wire in hand, the new box placed at the pointer: Ctrl+Space, a
+right-click on empty ground, and Tab or Shift+A while the canvas has focus. The last three
+are on by default and each can be turned off in Settings, Timeline, Node graphs; with
+right-click off, the press is an ordinary empty-ground press again. An effect dragged
+from Effects & presets lands as a box where it is let go, auto-wired as a console add is. Ctrl+C
+copies the picked boxes but never the Output, and Ctrl+V pastes them with their values, keys,
+names and the wires among them as fresh boxes at the pointer, one op, picked; the text is a
+graph group's and stays in the app, so it pastes into any node graph in the project. Save group
 to a file was not offered in v1 for a node graph, since the `.lumgrp` preset carries
 layer-graph edges; round two adds the second preset kind (§5.8).
 
@@ -617,9 +660,13 @@ from.
   **New node graph** is offered on the Composition menu, in the command palette and on the
   project panel's context menu beside New composition; it opens the composition settings
   dialogue with the name prefilled. The bottom bar keeps its three words.
-- The Timeline, on a node graph, shows the ruler and one line of hint text in place of the
-  layer rows: "This composition is a node graph. Its boxes are in the Node graph panel."
-  The empty-comp hint does not fire, because the comp is not empty.
+- The Timeline, on a node graph, keeps its comp tabs and draws the ruler over the full width,
+  scrubbing the playhead, and the node graph canvas under it in place of the layer rows, so
+  switching between comps never leaves the panel. Both canvases can be up at once (the Nodes
+  workspace shows the Graph panel over the Timeline); each answers the editing keys only while
+  its own panel is active, and a pick in either is the one pick the Node panel follows. The
+  empty-comp hint does not fire, because the comp is not empty.
+- The Effect controls, on a node graph, draw the Node panel itself: the picked box's rows.
 - The Effect controls draw a Node graph effect's card with the graph's name in its header and
   an **Open** action row that fronts the graph, then the derived rows, then Mix and the Matte
   row. The Custom shader's card is the shape.
@@ -630,9 +677,9 @@ and the footer keeps its three words); it opens the composition settings dialogu
 node graph door set and lets the engine name the comp. The project panel keeps the per-item
 node graph fact beside the names it already caches, one read per comp per document change.
 The Timeline keeps its comp tabs and its bar over a node graph, since the tabs are the way
-back out, and draws the hint where the layer table would go; the ruler lives inside that
-table and goes with it, as it does for an empty comp. The Input form's wells commit once per
-drag, a nested box's Input rows draw as derived rows, and a layer row with no layers to pick
+back out. The hint it first drew where the layer table would go was replaced by the ruler and
+the canvas on 2026-09-15, since a hint pointing at another panel was no use for quick
+switching. The Input form's wells commit once per drag, a nested box's Input rows draw as derived rows, and a layer row with no layers to pick
 from draws its dash. The layer's console offers each node graph once, under Node graphs,
 applied rather than fronted; the palette still fronts every comp. The card's Open row fronts
 the bound comp and does nothing when the comp has gone.
@@ -872,6 +919,9 @@ the parent's.
 
 ### 5.7 A box's keys in the Timeline
 
+Superseded on 2026-09-15: over a node graph the Timeline draws the canvas (§4.4) rather than
+the rows below.
+
 On a node graph the Timeline draws the ruler and one row per Fx box in document order:
 a heading row with the box's name and twirl, then, open, one parameter row per row the box
 has, with the diamonds a layer's effect rows have. A box has no span, so no bar is drawn. A
@@ -917,6 +967,10 @@ a mistyped drop already get. The refusal is `SetCompGraph`'s own `SecondOutput`,
 document is left exactly as it was and the panel says the engine's sentence.
 `list_graph_groups` is a free function beside `list_node_groups`, both over `presets_in`,
 whose probe already accepted a `nodes` array.
+
+Copy and paste on the canvas (§4.2) ride the same text: `save_graph_group` copies, and
+`paste_graph_boxes(text, x, y) -> Vec<Uuid>` shares the insert's one commit but adds no group
+and hands back the fresh ids for the canvas to pick.
 
 ### 5.9 Collapse on a placed graph
 
@@ -1082,6 +1136,18 @@ Round two, engine (`lumit-core` unless said):
     switch; beats are found on a graph.
 24. `effect_examples` skips Merge, Switch, Node graph and Time offset as unillustrable,
     and Split and Combine with the drivers.
+25. Split channels and Combine channels: `ports_of` for both, and Combine's four picker rows
+    add no sockets; a Split's Green validates into a Combine's `green` and a Split output
+    into a matte socket; both are refused on a layer
+    stack and offered by the graph console (bridge); the Output wired from a Split's `output`
+    and from its `green` names two frames (`lumit-eval`). Render (`node_graph_end_to_end.rs`,
+    skip on no GPU): a Read of a half-transparent solid through a Split gives each straight
+    channel as an opaque grey, and two outputs differ; Split into Combine with all four wired
+    and the pickers at their default Luminance is the Read; a Combine with Alpha unwired is
+    opaque; the coloured Read into all four sockets with Red from Red, Green from Green, Blue
+    from Blue and Alpha from Alpha is the Read; the Read on Red alone at Luminance gives red
+    equal to its luminance; the Read on Alpha alone with Alpha from Alpha reads its alpha; a bypassed Split hands on its input
+    at every output. `effect_examples` skips both as unillustrable.
 
 Bridge, round two: `graph_inputs` on the layer info and a fresh one offered for a layer with
 none; `set_effects` on that instance commits `SetLayerGraphInputs` and the preview patches
@@ -1105,6 +1171,17 @@ gains a `Timeline (node graph)` case; the Effect controls draw the placed graph'
 and the Timeline its fold; the comp canvas saves and inserts a group; the collapse cell
 dims when forced; the Retime clock face counts at the nested rate; the audio cell dims on a
 retimed layer; the Input form offers a preview item; the budgets hold.
+
+Flutter, 2026-09-15: over a node graph the Timeline draws the tabs, the ruler and the canvas,
+and a scrub moves the playhead; Effect controls draw the picked box's rows and leave the last
+layer's effects alone on Delete, Copy and Paste; an effect dropped from Effects & presets makes
+a box on the comp canvas and joins the stack or places a driver on the layer canvas; a
+right-click on empty ground, Tab and Shift+A open the console, and Shift+A typed into a rename
+does not; with any one of the three turned off in Settings it opens nothing and the other two
+still open the console, and the settings load as on from a file without them; Ctrl+A still selects all; copy and paste make fresh wired boxes in one op, picked,
+never the Output, and a pasted Input takes the next free id (bridge); with both canvases up,
+only the active panel's answers the keys; a held audio timeline claim stands down when the
+Timeline is active.
 
 ## 8. Work packages
 

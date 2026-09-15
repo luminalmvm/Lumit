@@ -35,7 +35,7 @@ import 'dart:ui' show PointMode;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart'
-    show HardwareKeyboard, KeyDownEvent, LogicalKeyboardKey;
+    show HardwareKeyboard, KeyDownEvent, KeyEvent, LogicalKeyboardKey;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -54,7 +54,9 @@ import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../shell/fx_console_frb.dart';
 import '../state/dock.dart';
+import '../state/drag_payloads.dart';
 import '../state/file_dialogs.dart';
+import '../state/settings.dart' show InterfaceSettings;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/marquee.dart';
@@ -229,6 +231,32 @@ String graphNodeKey(BridgeNodeRef node) => switch (node) {
       BridgeNodeRef_Effect(:final field0) => 'effect:$field0',
       BridgeNodeRef_Driver(:final field0) => 'driver:$field0',
     };
+
+/// Tab, or Shift+A as Blender has it: the keys that open the console over a
+/// focused canvas, each only while Settings leaves it on.
+bool graphAddKey(KeyEvent event, InterfaceSettings settings) {
+  final keys = HardwareKeyboard.instance;
+  if (keys.isControlPressed || keys.isAltPressed || keys.isMetaPressed) {
+    return false;
+  }
+  return switch (event.logicalKey) {
+    LogicalKeyboardKey.tab =>
+      !keys.isShiftPressed && settings.tabOpensNodeSearch,
+    LogicalKeyboardKey.keyA =>
+      keys.isShiftPressed && settings.shiftAOpensNodeSearch,
+    _ => false,
+  };
+}
+
+/// Where the pointer is inside the box [key] names, in that box's own pixels,
+/// or null when it is somewhere else.
+Offset? graphPointerIn(GlobalKey key) {
+  final pointer = lastKnownPointerPosition;
+  final box = key.currentContext?.findRenderObject();
+  if (pointer == null || box is! RenderBox || !box.attached) return null;
+  final local = box.globalToLocal(pointer);
+  return (Offset.zero & box.size).contains(local) ? local : null;
+}
 
 /// What a parameter row needs to know about the wire feeding it: the
 /// driver's name, the type the wire carries, and whether the source is a box
@@ -815,6 +843,12 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
 
   /// Whether the search console is up, so a second ask cannot stack another.
   bool _searching = false;
+
+  /// A right-click on empty canvas, waiting for its release.
+  bool _menuPress = false;
+
+  /// The canvas's own box, so a drop and the pointer are measured in it.
+  final GlobalKey _canvasKey = GlobalKey();
 
   final FocusNode _canvasFocus = FocusNode(debugLabel: 'graph canvas');
 
@@ -1543,7 +1577,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   /// the same popover the shell opens, with a foot line
   /// saying what a row will do. One search surface, two doors: what the
   /// canvas contributes is the list, the spot the box lands on, and the
-  /// sentence.
+  /// sentence. Tab, Shift+A and a right-click are the Ctrl+Space door.
   Future<void> _openSearch(Offset at, {GraphSocket? wire}) async {
     if (_searching) return;
     setState(() => _searching = true);
@@ -1585,7 +1619,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
                     label: engineLabel(effect.label),
                     kind: FxConsoleKind.effect,
                     group: engineLabel(effect.categoryLabel),
-                    run: () => _addEffect(effect),
+                    run: () => _addEffect(effect.name),
                   ),
             // The saved groups, beside the drivers they are made of.
             // Only with no wire in hand: a group is a rig, not a socket, so
@@ -1610,16 +1644,38 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   /// *is* the list, so the new box appears at the chain's end with the
   /// picture's wires already on it, and the op is the one the Effect menu
   /// commits.
-  void _addEffect(BridgeEffectInfo info) {
+  void _addEffect(String name) {
     final layer = _layer;
     if (layer == null) return;
     try {
-      layer.addEffect(name: info.name);
+      layer.addEffect(name: name);
     } catch (_) {
       return;
     }
     _ui?.model.refresh();
     _reload();
+  }
+
+  /// An effect dragged in from Effects & presets goes where the console puts
+  /// it: a driver lands where it was let go, anything else joins the stack.
+  void _dropped(EffectDragData data, Offset global) {
+    final box = _canvasKey.currentContext?.findRenderObject();
+    if (box is! RenderBox || _graph == null) return;
+    final driver = (widget.driversLister ?? listDrivers)()
+        .where((d) => d.name == data.name)
+        .firstOrNull;
+    if (driver != null) {
+      _addDriver(driver, _toCanvas(box.globalToLocal(global)), null);
+    } else {
+      _addEffect(data.name);
+    }
+  }
+
+  /// Where the pointer is on this canvas, in canvas units, or null when it is
+  /// somewhere else.
+  Offset? get _pointerOnCanvas {
+    final local = graphPointerIn(_canvasKey);
+    return local == null ? null : _toCanvas(local);
   }
 
   // --- Named groups -------------------------------------------------------
@@ -1847,6 +1903,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
 
   void _down(PointerDownEvent event, GraphLayout layout) {
     _canvasFocus.requestFocus();
+    _menuPress = false;
     if (_claimed) {
       _claimed = false;
       return;
@@ -1979,6 +2036,12 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     // an additive one keeps what is picked and adds the catch to it.
     if (event.buttons == kMiddleMouseButton) {
       setState(() => _panFrom = _pan - event.localPosition);
+      return;
+    }
+    // The right button opens the console on release.
+    if (event.buttons == kSecondaryMouseButton &&
+        _ui!.workspace.interface.rightClickOpensNodeSearch) {
+      _menuPress = true;
       return;
     }
     final keys = HardwareKeyboard.instance;
@@ -2131,6 +2194,12 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
         }
       }
       if (moved && _graph != null) _commit(_wiringNow());
+      return;
+    }
+
+    if (_menuPress) {
+      _menuPress = false;
+      if (!moved && _graph != null) _openSearch(at);
       return;
     }
 
@@ -2337,11 +2406,20 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
       focusNode: _canvasFocus,
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        // No Tab door: Ctrl+Space is the console's one key, answered
-        // through [_consoleClaim] so it works with focus anywhere in the app.
+        // Ctrl+Space works with focus anywhere, through [_consoleClaim]. Tab
+        // and Shift+A only while the canvas has focus.
         if (event.logicalKey == LogicalKeyboardKey.delete ||
             event.logicalKey == LogicalKeyboardKey.backspace) {
           _deleteSelected();
+          return KeyEventResult.handled;
+        }
+        // Only the canvas itself: a rename field inside it types these.
+        if (node.hasPrimaryFocus &&
+            graphAddKey(event, _ui!.workspace.interface)) {
+          if (_graph != null) {
+            _openSearch(_pointerOnCanvas ??
+                _toCanvas(Offset(_viewport.width / 2, _viewport.height / 2)));
+          }
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
@@ -2351,6 +2429,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
       // without a gesture detector per socket — so a popover drawn inside it
       // would have its presses read as presses on the ground behind it.
       child: Stack(
+        key: _canvasKey,
         children: [
           Positioned.fill(
             child: Listener(
@@ -2459,6 +2538,22 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
                   ],
                 ),
               ),
+            ),
+          ),
+          // An effect dragged in from Effects & presets. Translucent, so every
+          // other press still reaches the canvas under it.
+          Positioned.fill(
+            child: DragTarget<EffectDragData>(
+              onAcceptWithDetails: (details) =>
+                  _dropped(details.data, details.offset),
+              builder: (context, candidate, _) => candidate.isEmpty
+                  ? const SizedBox.expand()
+                  : IgnorePointer(
+                      child: Container(
+                        decoration: BoxDecoration(
+                            border: Border.all(color: t.accent, width: 2)),
+                      ),
+                    ),
             ),
           ),
         ],
@@ -3123,15 +3218,29 @@ class _NodeNameFieldState extends State<_NodeNameField> {
       extentOffset: widget.initial.length,
     );
 
+  // Autofocus does nothing here, since the canvas took focus on the press
+  // that opened the rename, so the field asks for it outright.
+  final FocusNode _focus = FocusNode(debugLabel: 'box rename');
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focus.requestFocus();
+    });
+  }
+
   @override
   void dispose() {
     _controller.dispose();
+    _focus.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => HouseTextField(
         controller: _controller,
+        focusNode: _focus,
         width: double.infinity,
         autofocus: true,
         submitOnLostFocus: true,

@@ -472,11 +472,15 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     }
   }
 
+  /// Whether the keys are this panel's to answer. The Timeline asks a claim it
+  /// took over before its own, so a claim held from before must stand down.
+  bool get _keysAreOurs => _ui?.activePanel == Panel.audioTimeline;
+
   /// Delete: the picked clip.
   bool _deleteClaim() {
     final picked = _selectedClip;
     final ui = _ui;
-    if (!mounted || ui == null || picked == null) return false;
+    if (!mounted || ui == null || picked == null || !_keysAreOurs) return false;
     for (final track in _lastTracks) {
       if (track.id != picked.track) continue;
       for (final clip in track.entry.info.clips) {
@@ -527,7 +531,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   bool _copyKeys() {
     final ui = _ui;
     final comp = ui?.selectedComp;
-    if (!mounted || ui == null || comp == null) return false;
+    if (!mounted || ui == null || comp == null || !_keysAreOurs) return false;
     final channels = _keyChannels(ui);
     final selection = _keysOnChannels(channels);
     if (selection.isEmpty) return false;
@@ -542,7 +546,9 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   /// Paste puts them down at the playhead, on the rows the selection sits on.
   bool _pasteKeys() {
     final ui = _ui;
-    if (!mounted || ui == null || graphKeyClipboard.isEmpty) return false;
+    if (!mounted || ui == null || graphKeyClipboard.isEmpty || !_keysAreOurs) {
+      return false;
+    }
     final channels = _keyChannels(ui);
     if (channels.isEmpty) return false;
     final (fpsNum, fpsDen) = ui.model.fpsExact;

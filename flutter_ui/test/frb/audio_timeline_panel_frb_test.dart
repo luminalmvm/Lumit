@@ -1238,6 +1238,34 @@ void main() {
         reason: 'the picked clip goes when this panel holds the keys');
   });
 
+  testWidgets('a Timeline mounted over the held keys keeps Delete to itself',
+      (tester) async {
+    final timeline = ValueNotifier(false);
+    addTearDown(timeline.dispose);
+    final p = await mountClips(tester,
+        beside: ValueListenableBuilder<bool>(
+          valueListenable: timeline,
+          builder: (_, shown, __) =>
+              shown ? const TimelinePanelFrb() : const SizedBox.shrink(),
+        ));
+    final clip = p.top.getClips().single;
+    await tester.tapAt(onBody(tester, clip));
+    await tester.pump();
+    p.ui.activePane.value = Panel.audioTimeline.pane();
+    await tester.pump();
+
+    // The Timeline mounts while this panel holds the keys, so it holds this
+    // panel's claim as the one it displaced and asks it first.
+    timeline.value = true;
+    await settleFrb(tester, minRounds: 2);
+    p.ui.activePane.value = Panel.timeline.pane();
+    await tester.pump();
+    p.ui.deleteClaim?.call();
+    await settleFrb(tester, minRounds: 2);
+    expect(p.top.getClips(), hasLength(1),
+        reason: 'a claim held from before must not answer for the Timeline');
+  });
+
   group('Budgets', () {
     late _Rebuilds rebuilds;
 

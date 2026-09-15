@@ -414,6 +414,16 @@ class InterfaceSettings {
   /// Whether the top line carries the command box that opens the palette.
   bool commandBox;
 
+  /// Whether a right-click on empty node graph canvas opens node search. On by
+  /// default, and each of the three ways in turns off on its own.
+  bool rightClickOpensNodeSearch;
+
+  /// Whether Tab over a focused node graph canvas opens node search.
+  bool tabOpensNodeSearch;
+
+  /// Whether Shift+A over a focused node graph canvas opens node search.
+  bool shiftAOpensNodeSearch;
+
   /// Which weight the icon set draws at, or the style's own.
   IconSet iconSet;
 
@@ -460,6 +470,9 @@ class InterfaceSettings {
     this.toolBarPosition = ToolBarPosition.auto,
     this.rangeSliders = true,
     this.commandBox = true,
+    this.rightClickOpensNodeSearch = true,
+    this.tabOpensNodeSearch = true,
+    this.shiftAOpensNodeSearch = true,
     this.iconSet = IconSet.styleChoice,
     this.room = LanternRoom.auto,
   });
@@ -488,6 +501,9 @@ class InterfaceSettings {
         'tool_bar_position': toolBarPosition.name,
         'range_sliders': rangeSliders,
         'command_box': commandBox,
+        'right_click_opens_node_search': rightClickOpensNodeSearch,
+        'tab_opens_node_search': tabOpensNodeSearch,
+        'shift_a_opens_node_search': shiftAOpensNodeSearch,
         'icon_set': iconSet.name,
         'lantern_room': room.name,
       };
@@ -581,6 +597,12 @@ class InterfaceSettings {
         rangeSliders: j['range_sliders'] as bool? ?? true,
         // Absent means shown, and a name no build wrote means the style's.
         commandBox: j['command_box'] as bool? ?? true,
+        // Absent means on, since a file from before these existed never turned
+        // them off.
+        rightClickOpensNodeSearch:
+            j['right_click_opens_node_search'] as bool? ?? true,
+        tabOpensNodeSearch: j['tab_opens_node_search'] as bool? ?? true,
+        shiftAOpensNodeSearch: j['shift_a_opens_node_search'] as bool? ?? true,
         iconSet: IconSet.values.firstWhere(
           (s) => s.name == j['icon_set'],
           orElse: () => IconSet.styleChoice,

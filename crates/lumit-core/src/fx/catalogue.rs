@@ -76,6 +76,7 @@ use super::effects::{
     clone_to_points::{CloneToPoints, CloneToPointsDef},
     colour_balance::{ColourBalance, ColourBalanceDef},
     colour_control::{ColourControl, ColourControlDef},
+    combine_channels::{CombineChannels, CombineChannelsDef},
     connect_points::{ConnectPoints, ConnectPointsDef},
     contrast::{Contrast, ContrastDef},
     corner_pin::{CornerPin, CornerPinDef},
@@ -153,6 +154,7 @@ use super::effects::{
     sharpen_simple::{SharpenSimple, SharpenSimpleDef},
     slider_control::{SliderControl, SliderControlDef},
     spherize::{Spherize, SpherizeDef},
+    split_channels::{SplitChannels, SplitChannelsDef},
     sprite_flare::{SpriteFlare, SpriteFlareDef},
     stroke::{Stroke, StrokeDef},
     switch::{Switch, SwitchDef},
@@ -391,6 +393,10 @@ crate::catalogue![
     // The per-node clock (node-graph-comp.md §5.2): what joins the two
     // pictures is a wire, and what moves one of them in time is this.
     TimeOffsetDef => TimeOffset,
+    // A picture into its four channels and back, for work on one channel
+    // alone.
+    SplitChannelsDef => SplitChannels,
+    CombineChannelsDef => CombineChannels,
     // The Controls family, last in the catalogue and so last in the
     // Add-effect menu, which groups by first appearance here. The order
     // inside it is After Effects' own Expression Controls order, which is what

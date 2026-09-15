@@ -713,11 +713,12 @@ Round two adds five things to the same section, and no new idiom with them:
     value, in document order and at offset zero, empty on a layer comp. The Timeline draws a
     row and a lane per box from the held model and asks the engine nothing, which is the
     reason the layers' effects ride there too.
-- **Graph groups have their own three calls.** `CompositionReference::save_graph_group(name,
+- **Graph groups have their own four calls.** `CompositionReference::save_graph_group(name,
     colour, nodes)` answers the JSON text and Dart chooses where it goes;
     `insert_graph_group(text, x, y)` is one `Op::SetCompGraph` and so one undo step, with
-    every node id minted at insert; `list_graph_groups()` lists the `.lumngrp` files beside
-    `list_node_groups()`'s `.lumgrp` ones, so neither listing can offer the other's file. A
+    every node id minted at insert; `paste_graph_boxes(text, x, y)` is the same insert for
+    the canvas's paste, with no group added and the fresh ids answered;
+    `list_graph_groups()` lists the `.lumngrp` files beside `list_node_groups()`'s `.lumgrp` ones, so neither listing can offer the other's file. A
     text that is not one of ours is `BridgeError::InvalidEffect`, and one carrying an Output
     is refused whole by the engine, a graph having exactly one.
 - `BridgeLayerInfo::collapse_forced` says the collapse switch is set and something forces an

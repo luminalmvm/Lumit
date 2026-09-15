@@ -19,6 +19,7 @@
 // no round trip, and nothing else on the machine can have overwritten it.
 
 import 'dart:convert';
+import 'dart:ui' show Offset;
 
 /// What kind of thing is on the clipboard, so Paste knows what to do with the
 /// text rather than guessing from its shape.
@@ -56,6 +57,11 @@ class LumitClipboard {
     _kind = null;
     _text = null;
   }
+
+  /// Boxes copied on a node graph canvas, as saved-group text, and where their
+  /// top-left corner stood. Kept apart from the tray, since only a canvas
+  /// pastes them.
+  ({String text, Offset at})? boxes;
 }
 
 /// What kind of Lumit document [text] is, or null when it is not one.

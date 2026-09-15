@@ -246,6 +246,9 @@ void main() {
       viewerBars: ViewerBars.bottom,
       toolBarPosition: ToolBarPosition.left,
       rangeSliders: false,
+      rightClickOpensNodeSearch: false,
+      tabOpensNodeSearch: false,
+      shiftAOpensNodeSearch: false,
       room: LanternRoom.night,
     );
     final back = InterfaceSettings.fromJson(all.toJson());
@@ -267,10 +270,31 @@ void main() {
     expect(back.viewerBars, ViewerBars.bottom);
     expect(back.toolBarPosition, ToolBarPosition.left);
     expect(back.rangeSliders, isFalse);
+    expect(back.rightClickOpensNodeSearch, isFalse);
+    expect(back.tabOpensNodeSearch, isFalse);
+    expect(back.shiftAOpensNodeSearch, isFalse);
     expect(back.room, LanternRoom.night);
     // Every field is one of the above: a new one added without a line here is
     // a setting nothing checks survives the file.
-    expect(all.toJson().keys.length, 22);
+    expect(all.toJson().keys.length, 25);
+  });
+
+  // The three extra ways into node search are on for a fresh install and for
+  // a file from before they existed, and each one turns off by itself.
+  test('the node search ways in stay on unless a settings file turns them off',
+      () {
+    final fresh = InterfaceSettings();
+    final old = InterfaceSettings.fromJson(const {'ui_scale': 1.25});
+    for (final i in [fresh, old]) {
+      expect(i.rightClickOpensNodeSearch, isTrue);
+      expect(i.tabOpensNodeSearch, isTrue);
+      expect(i.shiftAOpensNodeSearch, isTrue);
+    }
+    final noTab = InterfaceSettings.fromJson(
+        (InterfaceSettings()..tabOpensNodeSearch = false).toJson());
+    expect(noTab.tabOpensNodeSearch, isFalse);
+    expect(noTab.rightClickOpensNodeSearch, isTrue);
+    expect(noTab.shiftAOpensNodeSearch, isTrue);
   });
 
   /// Top is the strip every install has drawn, so a file written before the

@@ -4864,6 +4864,35 @@ mod tests {
         );
     }
 
+    /// **Two outputs of one box are two pictures.** The Output wired from a
+    /// Split channels box's Red and from its Green names two frames.
+    #[test]
+    fn two_outputs_of_a_split_name_two_frames() {
+        use lumit_core::comp_graph::GraphNode;
+        let (doc, mut comp, read, _, _) = node_graph_doc();
+        let split = lumit_core::fx::instantiate("split_channels").unwrap();
+        let split_id = split.id;
+        let out = comp
+            .graph
+            .as_ref()
+            .and_then(|g| g.output_id())
+            .expect("an Output");
+        if let Some(g) = comp.graph.as_mut() {
+            g.nodes.push(GraphNode::Fx(split));
+        }
+        let at = |port: &str| {
+            let mut c = comp.clone();
+            if let Some(g) = c.graph.as_mut() {
+                g.edges = vec![
+                    wire(read, "output", split_id, "input"),
+                    wire(split_id, port, out, "input"),
+                ];
+            }
+            key(&doc, &c, 1.0)
+        };
+        assert_ne!(at("output"), at("green"));
+    }
+
     /// **A driver inside a graph turns its clock** (§2.5). A Wiggle into a
     /// parameter moves the picture while every stored number holds still, so
     /// two frames of such a graph must not share a name - and a graph with no

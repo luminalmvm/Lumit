@@ -153,6 +153,7 @@ Colour noise
 Colour overlay
 Columns
 Combine
+Combine channels
 Combine with existing alpha
 Completion
 Complexity
@@ -771,6 +772,7 @@ Spherize
 Spiky
 Spin
 Split
+Split channels
 Spread
 Spread z
 Sprite

@@ -260,7 +260,9 @@ class LumitUiState extends ChangeNotifier {
   /// Ask the focused panel to select everything, and say whether one was asked.
   /// False means the shell should fall back to selecting every layer.
   bool requestSelectAll() {
-    if (!_selectAllPanels.contains(activePanel)) return false;
+    // Over a node graph the Timeline draws the canvas, whose boxes are its own.
+    final canvas = activePanel == Panel.timeline && model.isNodeGraph;
+    if (!_selectAllPanels.contains(activePanel) && !canvas) return false;
     selectAllRequest.value++;
     return true;
   }

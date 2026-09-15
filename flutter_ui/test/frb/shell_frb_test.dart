@@ -322,6 +322,51 @@ void main() {
       expect(p.uiState.workspace.interface.transformInEffectControls, isTrue);
     });
 
+    // Each way into node search has its own switch, on by default.
+    testWidgets('the node search switches each turn off one way in',
+        (tester) async {
+      final p = freshProject();
+      tester.view.physicalSize = const Size(1400, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(hostPanel(
+        child: Builder(
+          builder: (context) => HouseButton(
+            key: const ValueKey('open-settings'),
+            onPressed: () => showSettingsWindowFrb(context),
+            child: const Text('Open'),
+          ),
+        ),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('open-settings')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('settings-page-timeline')));
+      await tester.pumpAndSettle();
+
+      final settings = p.uiState.workspace.interface;
+      final ways = <String, bool Function()>{
+        'settings-right-click-node-search': () =>
+            settings.rightClickOpensNodeSearch,
+        'settings-tab-node-search': () => settings.tabOpensNodeSearch,
+        'settings-shift-a-node-search': () => settings.shiftAOpensNodeSearch,
+      };
+      for (final way in ways.entries) {
+        final row = find.byKey(ValueKey<String>(way.key));
+        if (row.evaluate().isEmpty) {
+          await tester.scrollUntilVisible(row, 120,
+              scrollable: find.byType(Scrollable).last);
+          await tester.pumpAndSettle();
+        }
+        expect(way.value(), isTrue);
+        await tester.tap(row);
+        await tester.pumpAndSettle();
+        expect(way.value(), isFalse, reason: '${way.key} turns its own off');
+      }
+    });
+
     /// **Nothing was lost in the rebuild.** The window was taken apart
     /// and put back to a new drawing with six pages instead of five, and every
     /// control it hosted has to still be somewhere. This walks the pages and
@@ -375,6 +420,9 @@ void main() {
           'settings-playhead-stays',
           'settings-transform-in-fx',
           'settings-easing-in-popup',
+          'settings-right-click-node-search',
+          'settings-tab-node-search',
+          'settings-shift-a-node-search',
         ],
         'viewer': [
           'settings-smooth-zoomed-viewer',

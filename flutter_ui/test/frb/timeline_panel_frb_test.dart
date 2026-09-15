@@ -21,8 +21,9 @@ import 'package:lumit_flutter/state/clipboard.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:uuid/uuid.dart';
 import 'package:lumit_flutter/state/comp_time.dart';
-import 'package:lumit_flutter/l10n/strings.dart';
+import 'package:lumit_flutter/panels/comp_graph_panel.dart';
 import 'package:lumit_flutter/panels/project_panel_frb.dart';
+import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/panels/graph_editor_frb.dart';
 import 'package:lumit_flutter/panels/layer_fold_frb.dart';
 import 'package:lumit_flutter/icons/icons.dart';
@@ -34,7 +35,6 @@ import 'package:lumit_flutter/panels/timeline_navigator.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/panels/transform_rows_frb.dart';
 import 'package:lumit_flutter/panels/waveform_frb.dart';
-import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/state/settings.dart';
 import 'package:lumit_flutter/state/timeline_columns.dart';
 import 'package:lumit_flutter/state/tools.dart';
@@ -5133,34 +5133,34 @@ void main() {
     });
 
     /// **The Timeline on a node graph** (docs/impl/node-graph-comp.md §4.4):
-    /// there are no layers to draw, so it says where the boxes are. It is not
-    /// a drop target either, because the engine refuses a layer here and the
-    /// canvas is what footage is dropped on.
-    testWidgets('a node graph shows the hint instead of the layer rows',
-        (tester) async {
+    /// there are no layers to draw, so it draws the ruler and the canvas.
+    testWidgets('a node graph shows the ruler and the canvas', (tester) async {
       final p = withComp();
       final graph = p.state.project!.newNodeGraph(name: 'Wires');
       p.uiState.setSelectedComp(graph);
       p.uiState.model.refresh();
       await mount(tester, p);
 
-      expect(find.byKey(const ValueKey('timeline-node-graph')), findsOneWidget);
-      expect(find.text(l10n.timelineNodeGraph), findsOneWidget);
-      expect(find.byType(TimelineRuler), findsNothing,
+      expect(find.byType(TimelineRuler), findsOneWidget);
+      expect(find.byType(CompGraphPanel), findsOneWidget);
+      expect(
+          tester.widget<CompGraphPanel>(find.byType(CompGraphPanel)).host,
+          Panel.timeline);
+      expect(find.byKey(const ValueKey('tl-navigator')), findsNothing,
           reason: 'nothing of the layer table is drawn');
       // The tabs stay: they are the way back out of a node graph, and the
       // Export button belongs to the comp rather than to the layer table.
       expect(find.byKey(ValueKey<String>('tl-tab-${graph.internalid}')),
           findsOneWidget);
       expect(find.byKey(const ValueKey('tl-export')), findsOneWidget);
-      expect(
-        find.descendant(
-          of: find.byKey(const ValueKey('timeline-node-graph')),
-          matching: find.byWidgetPredicate((w) => w is DragTarget<Object>),
-        ),
-        findsNothing,
-        reason: 'a node graph takes no drop: the engine refuses a layer here',
-      );
+
+      // The ruler spans the panel and scrubs the playhead.
+      final box = tester.getRect(find.byKey(const ValueKey('tl-ruler')));
+      expect(box.width, 1280);
+      await tester.tapAt(Offset(box.left + box.width * 0.5, box.center.dy));
+      await tester.pump();
+      final frames = graph.durationFrames();
+      expect(p.uiState.playheadFrame.value, closeTo(frames * 0.5, 2));
     });
 
     /// **A drop used to ignore where it was aimed.** Footage always went on at

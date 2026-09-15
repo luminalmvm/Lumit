@@ -138,6 +138,8 @@ These three words are **not interchangeable**.
 | **Merge** | The node that lays picture A over picture B with a blend mode and an opacity. A node graph's own; a layer stack joins pictures with layers and blend modes. |
 | **Switch** (node) | The node that shows one of its pictures, chosen by an index. Not a layer's switches, which stay the per-layer toggles they were. |
 | **Time offset** (node) | The node that shows its input at another time, by an Offset in seconds. A node graph's own, and the only per-node time there is. |
+| **Split channels** | The node that hands out a picture's red, green, blue and alpha as four greyscale pictures. A node graph's own. Not the Split driver, which takes a colour value apart. |
+| **Combine channels** | The node that builds one picture from four greyscale pictures, one per channel: Split channels in reverse. Not the Combine driver. |
 | **Node graph effect** | The effect that applies a node graph to a layer. The layer's picture is the graph's first picture Input, the graph's other Inputs are the effect's rows, and the Output is what the effect hands on. |
 | **Wire** / **port** | A connection on the Graph panel's canvas, and the typed socket it plugs into. Wire and socket colour is the data type. |
 | **Points stream** | The typed, evaluated data a points-emitting effect produces (Particulate first) — per-frame particle attributes, never stored in the project, like an image. |

@@ -1352,3 +1352,202 @@ fn a_preview_item_shows_only_where_nothing_feeds_the_input() {
         "an applied graph never shows a preview item"
     );
 }
+
+/// A half-transparent plate, so a straight channel and a premultiplied one
+/// differ.
+const PLATE: [f32; 4] = [0.8, 0.4, 0.2, 0.5];
+
+/// The plate read into a Split channels box, then `rest` adds the boxes and
+/// wires after it, handed the Split's id and the Output's.
+fn split_graph(
+    enabled: bool,
+    rest: impl FnOnce(Uuid, Uuid, &mut Vec<GraphNode>, &mut Vec<GraphEdge>),
+) -> (Arc<Document>, Uuid) {
+    let mut doc = Document::new();
+    let plate = Uuid::now_v7();
+    doc.items.push(solid(plate, "plate", PLATE, COMP, COMP));
+    let mut split = effect("split_channels", &[]);
+    split.enabled = enabled;
+    let (src, split, out) = (read(plate), GraphNode::Fx(split), output());
+    let (split_id, out_id) = (split.id(), out.id());
+    let mut edges = vec![wire(src.id(), "output", split_id, "input")];
+    let mut nodes = vec![src, split, out];
+    rest(split_id, out_id, &mut nodes, &mut edges);
+    let mut comp = graph_comp("graph", nodes, edges);
+    comp.background = LinearColour([0.0; 4]);
+    let id = comp.id;
+    doc.items.push(ProjectItem::Composition(comp));
+    (Arc::new(doc), id)
+}
+
+/// The plate read straight into the Output, for the pictures above to be
+/// measured against.
+fn plate_alone() -> (Arc<Document>, Uuid) {
+    let mut doc = Document::new();
+    let plate = Uuid::now_v7();
+    doc.items.push(solid(plate, "plate", PLATE, COMP, COMP));
+    let (src, out) = (read(plate), output());
+    let edges = vec![wire(src.id(), "output", out.id(), "input")];
+    let mut comp = graph_comp("graph", vec![src, out], edges);
+    comp.background = LinearColour([0.0; 4]);
+    let id = comp.id;
+    doc.items.push(ProjectItem::Composition(comp));
+    (Arc::new(doc), id)
+}
+
+/// The middle pixel in scene-linear floats, premultiplied as the composite is.
+fn linear_at(r: &mut HeadlessRenderer, (doc, comp): (Arc<Document>, Uuid)) -> [f32; 4] {
+    let (px, w, _) = r
+        .render_preview_linear(&doc, comp, 0, lumit_render::Quality::default())
+        .unwrap();
+    let d = ((32 * w + 32) * 4) as usize;
+    [px[d], px[d + 1], px[d + 2], px[d + 3]]
+}
+
+fn near(a: [f32; 4], b: [f32; 4]) -> bool {
+    a.iter().zip(b).all(|(x, y)| (x - y).abs() < 0.01)
+}
+
+/// **Split channels** hands out each channel of the straight picture as an
+/// opaque grey, and two of its outputs are two different pictures.
+#[test]
+fn a_split_hands_out_each_straight_channel_as_an_opaque_grey() {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    let mut seen = Vec::new();
+    for (port, value) in lumit_core::comp_graph::SPLIT_OUTPUTS.into_iter().zip(PLATE) {
+        let shown = linear_at(
+            &mut r,
+            split_graph(true, |split, out, _, edges| {
+                edges.push(wire(split, port, out, "input"));
+            }),
+        );
+        assert!(
+            near(shown, [value, value, value, 1.0]),
+            "{port} is that channel, straight and opaque: {shown:?}, wanted {value}"
+        );
+        seen.push(shown);
+    }
+    assert!(!near(seen[0], seen[1]), "red and green are two pictures");
+}
+
+/// **Split then Combine is the identity** on a pixel with any alpha, and a
+/// Combine with its Alpha unwired is opaque.
+#[test]
+fn a_split_into_a_combine_gives_the_picture_back() {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    let plate = linear_at(&mut r, plate_alone());
+    let combined = |alpha: bool| {
+        split_graph(true, |split, out, nodes, edges| {
+            let combine = GraphNode::Fx(effect("combine_channels", &[]));
+            let combine_id = combine.id();
+            nodes.push(combine);
+            for (from, to) in lumit_core::comp_graph::SPLIT_OUTPUTS
+                .into_iter()
+                .zip(lumit_core::comp_graph::COMBINE_INPUTS)
+            {
+                if alpha || to != "alpha" {
+                    edges.push(wire(split, from, combine_id, to));
+                }
+            }
+            edges.push(wire(combine_id, "output", out, "input"));
+        })
+    };
+
+    let whole = linear_at(&mut r, combined(true));
+    assert!(
+        near(whole, plate),
+        "all four back in is the plate: {whole:?} against {plate:?}"
+    );
+
+    let opaque = linear_at(&mut r, combined(false));
+    let straight = [PLATE[0], PLATE[1], PLATE[2], 1.0];
+    assert!(
+        near(opaque, straight),
+        "an unwired Alpha is full on: {opaque:?} against {straight:?}"
+    );
+}
+
+/// The plate read straight into the Combine sockets named, with `picks` on
+/// its rows, red to alpha. The Split nobody reads lowers to nothing.
+fn plate_combined(picks: [u32; 4], sockets: &[&str]) -> (Arc<Document>, Uuid) {
+    split_graph(true, |_, out, nodes, edges| {
+        let mut combine = effect("combine_channels", &[]);
+        let rows = ["red_from", "green_from", "blue_from", "alpha_from"];
+        for (row, pick) in rows.into_iter().zip(picks) {
+            set_value(&mut combine, row, EffectValue::Choice(pick));
+        }
+        let (plate, combine) = (nodes[0].id(), GraphNode::Fx(combine));
+        for socket in sockets {
+            edges.push(wire(plate, "output", combine.id(), socket));
+        }
+        edges.push(wire(combine.id(), "output", out, "input"));
+        nodes.push(combine);
+    })
+}
+
+/// **Combine reads the channel each row picks**: Red from Red and so on gives
+/// a coloured plate back, the default Luminance gives its brightness, and
+/// Alpha from Alpha reads its coverage.
+#[test]
+fn a_combine_reads_the_channel_each_row_picks() {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    // By `CHANNEL_OPTIONS`: Luminance, Alpha, Red, Green, Blue.
+    const LUMINANCE: u32 = 0;
+    const ALPHA: u32 = 1;
+    let plate = linear_at(&mut r, plate_alone());
+    let all = lumit_core::comp_graph::COMBINE_INPUTS;
+
+    let own = linear_at(&mut r, plate_combined([2, 3, 4, ALPHA], &all));
+    assert!(
+        near(own, plate),
+        "each channel from itself is the plate: {own:?} against {plate:?}"
+    );
+
+    let [red, green, blue, alpha] = PLATE;
+    let luma = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+    let bright = linear_at(&mut r, plate_combined([LUMINANCE; 4], &["input"]));
+    assert!(
+        near(bright, [luma, 0.0, 0.0, 1.0]),
+        "the default reads the plate's brightness into red: {bright:?}, wanted {luma}"
+    );
+
+    let coverage = linear_at(
+        &mut r,
+        plate_combined([LUMINANCE, LUMINANCE, LUMINANCE, ALPHA], &["alpha"]),
+    );
+    assert!(
+        near(coverage, [0.0, 0.0, 0.0, alpha]),
+        "Alpha from Alpha is the plate's coverage: {coverage:?}"
+    );
+}
+
+/// **A bypassed Split** hands its input on at every output.
+#[test]
+fn a_bypassed_split_hands_on_its_input() {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    let plate = linear_at(&mut r, plate_alone());
+    for port in ["output", "green"] {
+        let shown = linear_at(
+            &mut r,
+            split_graph(false, |split, out, _, edges| {
+                edges.push(wire(split, port, out, "input"));
+            }),
+        );
+        assert!(
+            near(shown, plate),
+            "bypassed, {port} is the plate: {shown:?}"
+        );
+    }
+}

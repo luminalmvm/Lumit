@@ -8999,6 +8999,14 @@
   "@fxSwitch": {
     "description": "Node graph box name - shows one of its pictures, chosen by an index."
   },
+  "fxSplitChannels": "Split channels",
+  "@fxSplitChannels": {
+    "description": "Node graph box name - hands out its picture's red, green, blue and alpha as four greyscale pictures."
+  },
+  "fxCombineChannels": "Combine channels",
+  "@fxCombineChannels": {
+    "description": "Node graph box name - builds one picture from four greyscale pictures, one per red, green, blue and alpha."
+  },
   "fxIndex": "Index",
   "@fxIndex": {
     "description": "Node graph controls - a control on Switch: which of its pictures is shown, counting from zero."
@@ -10987,9 +10995,9 @@
   "@volumeNegInf": {
     "description": "What a volume well reads at or below the -100 dB knee, where the sound is exactly off - an abbreviation of negative infinity."
   },
-  "nodeNoSelection": "Pick a node in the Graph panel.",
+  "nodeNoSelection": "Pick a node on the graph.",
   "@nodeNoSelection": {
-    "description": "Empty-state line in the Node panel when no box has been picked on the graph canvas, so there are no parameters to list."
+    "description": "Empty-state line in the Node panel, and in Effect controls over a node graph composition, when no box has been picked on a graph canvas, so there are no parameters to list."
   },
   "nodeDrivenCount": "{count} driven",
   "@nodeDrivenCount": {
@@ -11589,6 +11597,22 @@
   "settingsLayerNamesOnLaneBars": "Layer names on lane bars",
   "@settingsLayerNamesOnLaneBars": {
     "description": "Settings window, Timeline page: the name of one setting - whether each layer bar in the Timeline lane area is labelled with the layer name. Off by default."
+  },
+  "settingsGroupNodeGraphs": "Node graphs",
+  "@settingsGroupNodeGraphs": {
+    "description": "Settings window, Timeline page: heading over the rows about the node graph canvases."
+  },
+  "settingsRightClickOpensNodeSearch": "Right-click opens node search",
+  "@settingsRightClickOpensNodeSearch": {
+    "description": "Settings window, Timeline page: the name of one setting - whether a right-click on empty node graph canvas opens the search for adding a box at the pointer. On by default."
+  },
+  "settingsTabOpensNodeSearch": "Tab opens node search",
+  "@settingsTabOpensNodeSearch": {
+    "description": "Settings window, Timeline page: the name of one setting - whether the Tab key over a focused node graph canvas opens the search for adding a box at the pointer. On by default. Keep Tab as the key name."
+  },
+  "settingsShiftAOpensNodeSearch": "Shift+A opens node search",
+  "@settingsShiftAOpensNodeSearch": {
+    "description": "Settings window, Timeline page: the name of one setting - whether Shift+A over a focused node graph canvas opens the search for adding a box at the pointer. On by default. Keep Shift+A as the key combination."
   },
   "closePanel": "Close panel",
   "@closePanel": {
@@ -13097,10 +13121,6 @@
   "newNodeGraph": "New node graph",
   "@newNodeGraph": {
     "description": "Menu item, command palette row and Project panel context menu row: create a node graph composition. It opens the same settings dialogue New composition does."
-  },
-  "timelineNodeGraph": "This composition is a node graph. Its boxes are in the Node graph panel.",
-  "@timelineNodeGraph": {
-    "description": "What the Timeline says when the fronted composition is a node graph, which has boxes and wires instead of layers. Two short sentences under the panel's name."
   },
   "fxConsoleNodeGraphs": "Node graphs",
   "@fxConsoleNodeGraphs": {

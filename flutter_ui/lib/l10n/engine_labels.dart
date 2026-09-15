@@ -689,6 +689,8 @@ Map<String, String> get _table => {
       "Median": l10n.fxMedian,
       "Merge": l10n.fxMerge,
       "Time offset": l10n.fxTimeOffset,
+      "Split channels": l10n.fxSplitChannels,
+      "Combine channels": l10n.fxCombineChannels,
       "Midtone contrast": l10n.fxMidtoneContrast,
       "Midtones": l10n.fxMidtones,
       "Mirror": l10n.fxMirror,

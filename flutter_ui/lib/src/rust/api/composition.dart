@@ -22,7 +22,7 @@ import 'solid.dart';
 import 'state.dart';
 import 'wireframes.dart';
 
-// These functions are ignored because they are not marked as `pub`: `add_at`, `bridge_marker`, `colour_view_pair`, `commit_slide`, `commit`, `composition`, `core_marker`, `core_markers`, `dispatch`, `document`, `footage_span_and_size`, `graph_of`, `has_picture`, `insert_row`, `layer_switch_op`, `place_footage`, `project`, `read_groups`, `runs_as_video`, `to_engine`
+// These functions are ignored because they are not marked as `pub`: `add_at`, `add_graph_group`, `bridge_marker`, `colour_view_pair`, `commit_slide`, `commit`, `composition`, `core_marker`, `core_markers`, `dispatch`, `document`, `footage_span_and_size`, `graph_of`, `has_picture`, `insert_row`, `layer_switch_op`, `place_footage`, `project`, `read_groups`, `runs_as_video`, `to_engine`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `id`, `new`, `project_id`
 
@@ -1009,6 +1009,16 @@ class CompositionReference {
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceNewGraphInstance(
               that: this, name: name, graph: graph);
+
+  /// Paste boxes copied with [`Self::save_graph_group`] at `(x, y)`, the
+  /// canvas's Ctrl+V. The same insert as a saved group but with no group
+  /// wash left behind, and the fresh ids come back so the canvas can pick
+  /// what it pasted.
+  List<UuidValue> pasteGraphBoxes(
+          {required String text, required double x, required double y}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferencePasteGraphBoxes(
+              that: this, text: text, x: x, y: y);
 
   /// Paste a layer copied by [`crate::api::layer::LayerReference::copy_layer`]
   /// into this composition, at the top of the stack.

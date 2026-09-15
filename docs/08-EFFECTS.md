@@ -344,9 +344,10 @@ argument: what it applies is the coverage a model made of the frame, and the hon
 keep part of the background is a mask on the layer.
 Each keeps its stored ids, so a project saved before any of the drops loads exactly as it
 did (the forward-migration walk only appends what a schema has *grown*, and
-carries a row nobody declares any more along untouched). **Merge**, **Switch** and **Time
-offset** are the other three: Compositing entries only a node graph holds (§3.97, §3.98,
-§3.100), where a picture arrives on a wire and there is no layer to pick.
+carries a row nobody declares any more along untouched). **Merge**, **Switch**, **Time
+offset**, **Split channels** and **Combine channels** are the other five: Compositing entries
+only a node graph holds (§3.100, §3.101, §3.103, §3.106, §3.107), where a picture arrives on
+a wire and there is no layer to pick.
 
 **The Channel choice says which channel of the matte layer drives the effect**: Luminance
 (the default — the premultiplied Rec. 709 luma every kernel has always read), Red, Green,
@@ -6708,6 +6709,35 @@ own and does carry on.
 **Determinism** is §3.104's, word for word: the model runs as a baked analysis and never
 inside a render, every key carries the pack's hash and the provider that ran it, and once a
 matte is cached it is an input like any other.
+
+### 3.106 Split channels
+
+**Parameters:** none.
+
+A **Compositing** effect, held by a node graph composition only, as Merge is (§3.100). It
+takes one picture on `input` and hands out four, labelled Red (`output`), Green (`green`),
+Blue (`blue`) and Alpha (`alpha`). Each is an opaque greyscale picture of that channel of the
+straight input: red, green and blue are the channel, alpha is 1. The graph walk lowers each
+output something reads onto one Set channels pass (§3.94), so there is no kernel of its own.
+Bypassed, it hands its input on at every output. It carries no Matte row.
+[impl/node-graph-comp.md](impl/node-graph-comp.md) §1.3, §2.3.
+
+### 3.107 Combine channels
+
+**Parameters:** **Red from**, **Green from**, **Blue from**, **Alpha from** (Luminance /
+Alpha / Red / Green / Blue, keyframeable, default Luminance).
+
+A **Compositing** effect, held by a node graph composition only, as Merge is. It takes four
+pictures, labelled Red (`input`), Green (`green`), Blue (`blue`) and Alpha (`alpha`), and each
+channel of its result is the straight channel its row picks from the picture on that socket.
+Luminance is `0.2126 R + 0.7152 G + 0.0722 B`. It is the default because a Split channels
+output is grey with alpha 1, so its luminance is the channel, and a colour picture wired in
+gives its brightness. The rows are not sockets. An unwired Red,
+Green or Blue reads 0; an unwired Alpha reads 1, so three greyscale pictures combine to an
+opaque one. The result is premultiplied, and Split channels then Combine channels is the
+identity on any pixel whose alpha is above 0. The graph walk lowers it onto three Set
+channels passes. Bypassed, it hands on Red. It carries no Matte row.
+[impl/node-graph-comp.md](impl/node-graph-comp.md) §1.3, §2.3.
 
 ## 4. Tier 2 — AE parity direction (post-v1)
 

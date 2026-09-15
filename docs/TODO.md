@@ -535,16 +535,15 @@ gaps in 0.4.0's release note:
     form, and the no-stream word on a box's rows - `_drivenInGraph` in
     `panels/node_panel.dart` writes `noStream: false` rather than reading the box's inputs.
     `saveGraphGroup`, `insertGraphGroup`, `listGraphGroups` and `BridgeGraphInput.preview`
-    all cross the seam and nothing calls them.
-- **P5, the Timeline and Effect controls** (§8): a graph's Fx boxes as Timeline rows with
-    their lanes under the `n:<box>` prefix, the placed graph's Inputs as a section in
+    all cross the seam and nothing calls them, bar `saveGraphGroup`, which copy uses.
+- **P5, the Timeline and Effect controls** (§8): the placed graph's Inputs as a section in
     Effect controls and a fold in the Timeline, the dimmed collapse and audio cells, and
-    the Retime clock face. `BridgeCompModel.graph_boxes`, `BridgeLayerInfo.graph_inputs`
-    and `collapse_forced` are filled and read nowhere, and the Timeline still draws only
-    the hint placeholder for a node graph (`NodeGraphTimeline`,
-    `panels/timeline_layer_rows_frb.dart`).
+    the Retime clock face. `BridgeLayerInfo.graph_inputs` and `collapse_forced` are filled
+    and read nowhere. A graph's Fx boxes as Timeline rows were dropped: over a node graph
+    the Timeline draws the canvas now (§4.4), so `BridgeCompModel.graph_boxes` has no
+    reader and a box's keys have no lane.
 - **The manual is ahead of both.** `web-docs/.../use/node-graphs.mdx` already describes the
-    Effect controls section and the Timeline's box rows as things the editor draws; it
+    Effect controls section and the Timeline's Inputs fold as things the editor draws; it
     becomes true when P4 and P5 land, and until then it overclaims.
 
 ## Next - colour management: OCIO (docs/impl/ocio.md)

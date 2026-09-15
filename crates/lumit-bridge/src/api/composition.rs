@@ -3297,21 +3297,66 @@ impl CompositionReference {
     /// which is the treatment every other bad graph gets.
     #[frb(sync)]
     pub fn insert_graph_group(&self, text: String, x: f64, y: f64) -> Result<(), BridgeError> {
-        let preset = lumit_core::preset::comp_group_from_json(&text)
+        self.add_graph_group(&text, [x, y], true).map(|_| ())
+    }
+
+    /// Paste boxes copied with [`Self::save_graph_group`] at `(x, y)`, the
+    /// canvas's Ctrl+V. The same insert as a saved group but with no group
+    /// wash left behind, and the fresh ids come back so the canvas can pick
+    /// what it pasted.
+    #[frb(sync)]
+    pub fn paste_graph_boxes(
+        &self,
+        text: String,
+        x: f64,
+        y: f64,
+    ) -> Result<Vec<Uuid>, BridgeError> {
+        self.add_graph_group(&text, [x, y], false)
+    }
+
+    /// Insert and paste share this: one commit, fresh ids, and the group only
+    /// when it was asked for.
+    #[frb(ignore)]
+    fn add_graph_group(
+        &self,
+        text: &str,
+        at: [f64; 2],
+        named: bool,
+    ) -> Result<Vec<Uuid>, BridgeError> {
+        let preset = lumit_core::preset::comp_group_from_json(text)
             .map_err(|_| BridgeError::InvalidEffect)?;
-        let added = lumit_core::preset::comp_group_instantiated(&preset, [x, y]);
+        let mut added = lumit_core::preset::comp_group_instantiated(&preset, at);
+        let ids = added.group.members.clone();
 
         let doc = self.document()?;
         let mut graph = self.graph_of(&doc)?.clone();
+        // An Input's id is its parameter outside the graph, so a copy landing
+        // beside its original takes the next free `_2`, as a new Input does.
+        let mut taken: std::collections::HashSet<String> =
+            graph.inputs().map(|i| i.id.clone()).collect();
+        for node in &mut added.nodes {
+            if let lumit_core::comp_graph::GraphNode::Input { input, .. } = node {
+                let stem = input.id.clone();
+                let mut n = 2;
+                while taken.contains(&input.id) {
+                    input.id = format!("{stem}_{n}");
+                    n += 1;
+                }
+                taken.insert(input.id.clone());
+            }
+        }
         graph.nodes.extend(added.nodes);
         graph.edges.extend(added.edges);
         graph.layout.extend(added.layout);
-        graph.groups.push(added.group);
+        if named {
+            graph.groups.push(added.group);
+        }
 
         self.commit(lumit_core::Op::SetCompGraph {
             comp: self.id,
             graph: Box::new(graph),
-        })
+        })?;
+        Ok(ids)
     }
 
     /// This composition's graph, or [`BridgeError::InvalidComp`] for a comp

@@ -19695,6 +19695,89 @@
       "matte_role": "none"
     },
     {
+      "slug": "split-channels",
+      "match_name": "split_channels",
+      "label": "Split channels",
+      "version": 1,
+      "category": "Compositing",
+      "category_slug": "compositing",
+      "params": [],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "combine-channels",
+      "match_name": "combine_channels",
+      "label": "Combine channels",
+      "version": 1,
+      "category": "Compositing",
+      "category_slug": "compositing",
+      "params": [
+        {
+          "id": "red_from",
+          "label": "Red from",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "green_from",
+          "label": "Green from",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "blue_from",
+          "label": "Blue from",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "alpha_from",
+          "label": "Alpha from",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
       "slug": "slider-control",
       "match_name": "slider_control",
       "label": "Slider control",

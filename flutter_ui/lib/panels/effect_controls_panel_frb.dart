@@ -61,6 +61,7 @@ import '../widgets/controls.dart';
 import '../widgets/curve_editor.dart';
 import 'effect_param_row_frb.dart';
 import 'graph_panel.dart' show drivenParamsOf, graphCompById;
+import 'node_panel.dart' show NodePanelFrb;
 import 'camera_track_display_frb.dart';
 import 'plane_display_frb.dart';
 import 'planar_track_display_frb.dart';
@@ -325,6 +326,12 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   bool Function()? _priorCopyClaim;
   bool Function()? _priorPasteClaim;
 
+  /// Whether the editing keys are this panel's to answer: it is focused and
+  /// showing a layer's effects. Over a node graph it shows a box instead, and
+  /// the layer it last held is in another comp.
+  bool _editsLayers(LumitUiState ui) =>
+      ui.activePanel == Panel.effectControls && !ui.model.isNodeGraph;
+
   void _unbindDriven() {
     _boundUi?.selectedLayer.removeListener(_readDriven);
     _boundUi?.model.removeListener(_readDriven);
@@ -342,7 +349,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
 
   bool _copyClaim() {
     final ui = _boundUi;
-    if (!mounted || ui == null || ui.activePanel != Panel.effectControls) {
+    if (!mounted || ui == null || !_editsLayers(ui)) {
       return _priorCopyClaim?.call() ?? false;
     }
     return _copyPickedEffects(ui) || (_priorCopyClaim?.call() ?? false);
@@ -350,7 +357,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
 
   bool _pasteClaim() {
     final ui = _boundUi;
-    if (!mounted || ui == null || ui.activePanel != Panel.effectControls) {
+    if (!mounted || ui == null || !_editsLayers(ui)) {
       return _priorPasteClaim?.call() ?? false;
     }
     return _pastePickedEffects(ui) || (_priorPasteClaim?.call() ?? false);
@@ -358,7 +365,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
 
   bool _deleteClaim() {
     final ui = _boundUi;
-    if (!mounted || ui == null || ui.activePanel != Panel.effectControls) {
+    if (!mounted || ui == null || !_editsLayers(ui)) {
       return _priorDeleteClaim?.call() ?? false;
     }
     return _deletePickedEffects(ui) || (_priorDeleteClaim?.call() ?? false);
@@ -399,7 +406,9 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   void _onSelectAllRequested() {
     final ui = _boundUi;
     if (!mounted || ui == null) return;
-    if (!ui.selectAllRequestIsFor(Panel.effectControls)) return;
+    if (!ui.selectAllRequestIsFor(Panel.effectControls) || !_editsLayers(ui)) {
+      return;
+    }
     final layer = ui.selectedLayer.value ?? _lastLayer;
     if (layer == null) return;
     final info = ui.model.byId(layer.internallayerId)?.info;
@@ -535,6 +544,8 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         hint: l10n.effectControlsNoComp,
       );
     }
+    // A node graph has no layers, so the picked box's rows go here instead.
+    if (ui.model.isNodeGraph) return const NodePanelFrb();
 
     return ValueListenableBuilder<UuidValue?>(
       valueListenable: ui.selectedGroupHeader,

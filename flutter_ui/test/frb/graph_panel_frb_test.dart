@@ -15,7 +15,7 @@
 import 'dart:io';
 
 import 'package:flutter/gestures.dart'
-    show PointerScrollEvent, kDoubleTapMinTime;
+    show PointerScrollEvent, kDoubleTapMinTime, kSecondaryMouseButton;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -23,6 +23,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/graph_panel.dart';
 import 'package:lumit_flutter/panels/viewer_prefix_chip.dart';
 import 'package:lumit_flutter/state/dock.dart';
+import 'package:lumit_flutter/state/drag_payloads.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/graph.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -1585,6 +1586,87 @@ void main() {
       expect(p.layer.getGraphDrivers(), hasLength(2),
           reason: 'one undo takes the whole rig away');
       expect(p.layer.getGraph().wiring.groups, isEmpty);
+    });
+
+    /// From Effects & presets: an effect joins the stack as the console's does,
+    /// and a driver lands where it was let go. One op each.
+    testWidgets('an effect or a driver dragged onto the canvas is added',
+        (tester) async {
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      final layer = comp.addSolidLayer();
+      layer.addEffect(name: 'blur');
+      p.uiState.selectedLayer.value = layer;
+      p.uiState.model.refresh();
+      const size = Size(900, 600);
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      Widget source(String name, String key) => Draggable<EffectDragData>(
+            data: EffectDragData(name, name),
+            hitTestBehavior: HitTestBehavior.opaque,
+            feedback: const SizedBox(width: 8, height: 8),
+            child: SizedBox(key: ValueKey<String>(key), width: 60, height: 20),
+          );
+      await tester.pumpWidget(hostPanel(
+        child: Column(children: [
+          Row(children: [
+            source('exposure', 'drag-effect'),
+            source('wiggle', 'drag-driver'),
+          ]),
+          const Expanded(child: GraphPanelFrb()),
+        ]),
+        state: p.state,
+        uiState: p.uiState,
+        size: size,
+      ));
+      await tester.pump();
+      final was = comp.documentRevision();
+
+      await tester.drag(find.byKey(const ValueKey<String>('drag-effect')),
+          const Offset(300, 350),
+          warnIfMissed: false);
+      await tester.pumpAndSettle();
+      expect([for (final e in layer.getEffects()) e.getInfo().name],
+          ['blur', 'exposure']);
+      expect(comp.documentRevision(), was + BigInt.one, reason: 'one op');
+
+      await tester.drag(find.byKey(const ValueKey<String>('drag-driver')),
+          const Offset(300, 350),
+          warnIfMissed: false);
+      await tester.pumpAndSettle();
+      final drivers = layer.getGraphDrivers();
+      expect(drivers, hasLength(1));
+      final canvas =
+          tester.getTopLeft(find.byKey(const ValueKey('graph-canvas')));
+      final from =
+          tester.getTopLeft(find.byKey(const ValueKey<String>('drag-driver')));
+      final place = layer.getGraph().wiring.layout.firstWhere(
+          (l) => l.node == BridgeNodeRef.driver(drivers.single.id()));
+      expect(Offset(place.x, place.y),
+          from + const Offset(300, 350) - canvas,
+          reason: 'the driver sits where it was let go');
+      expect(comp.documentRevision(), was + BigInt.two, reason: 'one op');
+    });
+
+    testWidgets('a right-click on empty canvas opens the console',
+        (tester) async {
+      final p = withBlur();
+      await mount(tester, p);
+      await tester.tapAt(const Offset(600, 420), buttons: kSecondaryMouseButton);
+      await tester.pump();
+      expect(
+          find.byKey(const ValueKey<String>('fx-console-bar')), findsOneWidget);
+    });
+
+    testWidgets('a right-click opens nothing with its setting off',
+        (tester) async {
+      final p = withBlur();
+      p.uiState.workspace.interface.rightClickOpensNodeSearch = false;
+      await mount(tester, p);
+      await tester.tapAt(const Offset(600, 420), buttons: kSecondaryMouseButton);
+      await tester.pump();
+      expect(find.byKey(const ValueKey<String>('fx-console-bar')), findsNothing);
     });
   });
 }

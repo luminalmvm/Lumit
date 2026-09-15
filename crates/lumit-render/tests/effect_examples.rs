@@ -540,11 +540,12 @@ fn unillustrable(match_name: &str) -> Option<&'static str> {
         }
         // The Compositing family. Merge lays one picture over another, Switch
         // picks between several and Time offset shows its input at another
-        // moment: each is realised by the node graph's own walk rather than by
+        // moment, and Split and Combine channels take a picture apart and put
+        // it back: each is realised by the node graph's own walk rather than by
         // a kernel, and only a node graph can hold one. This harness stages one
         // effect on one layer, so there is no graph here to hold it and nothing
         // to wire a second picture from.
-        "merge" | "switch" | "time_offset" => {
+        "merge" | "switch" | "time_offset" | "split_channels" | "combine_channels" => {
             Some("only a node graph holds one, and there is no graph here")
         }
         // And the effect that applies a graph: it shows whatever graph it is
@@ -835,7 +836,7 @@ fn env_path(key: &str) -> Option<PathBuf> {
     std::env::var_os(key).map(PathBuf::from)
 }
 
-/// **The six entries no picture can be made of** (docs/impl/node-graph-comp.md
+/// **The eight entries no picture can be made of** (docs/impl/node-graph-comp.md
 /// test 24). The run above wants a GPU, a clip and an output directory, so it
 /// is ignored by default and would never say whether these arms are there; this
 /// one asks the function directly, which is the whole of what the arms do.
@@ -848,6 +849,8 @@ fn the_graph_only_entries_and_the_two_drivers_are_unillustrable() {
         "merge",
         "switch",
         "time_offset",
+        "split_channels",
+        "combine_channels",
         "node_graph",
         "split",
         "combine",

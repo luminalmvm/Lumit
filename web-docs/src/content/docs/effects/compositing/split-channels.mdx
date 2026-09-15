@@ -1,0 +1,41 @@
+---
+title: Split channels
+description: "Hands out a picture's red, green, blue and alpha as four greyscale pictures."
+---
+
+Split channels is a **Compositing** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Split channels takes the picture on its **Input** socket and hands out each channel on a
+socket of its own: **Red**, **Green**, **Blue** and **Alpha**. Each is an opaque greyscale
+picture of that channel, read before the colour is multiplied by the alpha. It is a box in
+a [node graph composition](/use/node-graphs/) and is not offered on a layer's stack. Wire
+the four back into [Combine channels](/effects/compositing/combine-channels/) to get the
+picture back.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+
+{/* END GENERATED */}
+
+## What each control does
+
+Split channels has no controls. Its sockets are the whole box.
+
+## Related
+
+- [Combine channels](/effects/compositing/combine-channels/)
+- [Node graph compositions](/use/node-graphs/)
+- [Compositing](/effects/#compositing)
+- [Effects](/use/effects/)

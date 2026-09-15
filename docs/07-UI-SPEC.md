@@ -2919,8 +2919,9 @@ summoned by a wire let go over empty canvas — the same popover wears the canva
 list: effects (which join the stack, and so the chain), drivers, saved groups; inside a
 Custom shader's inner graph, the shader vocabulary, Parameter box included; over a node
 graph composition, the project's items as Read nodes, then Input, then effects, then Merge
-and Switch under Compositing, then drivers. The graph's
-own `Tab` door is gone: one surface, one key.
+and Switch under Compositing, then drivers. Over a focused
+canvas it has three more doors, all the same popover with the box placed at the pointer: a
+right-click on empty ground, `Tab`, and `Shift+A` as Blender has it.
 
 **Where it opens.** The popover MUST open **on the pointer** — its search row under the
 hand, anywhere in the window, pulled in just enough that the whole popover stays on
@@ -3023,8 +3024,8 @@ small image over each choice, remain the destination (polish tracked in TODO).
 - **Comp with no layers**: the Timeline shows one line of hint text (drag footage here, or
   press the new-Sequence-layer / new-Solid shortcuts). Hints disappear at first content
   and never return unprompted.
-- **Node graph composition**: the Timeline shows the ruler and one line saying the
-  composition is a node graph and that its boxes are in the Node graph panel. It is not the
+- **Node graph composition**: the Timeline shows the ruler and, in place of the layer rows,
+  the node graph canvas, and Effect controls show the picked box's rows. It is not the
   empty-comp hint and does not clear: a node graph never gains a layer.
 - **Tooltips policy**: every icon control has a tooltip with its name and current shortcut,
   on a ~500 ms hover delay. **A tooltip is a name, not an explanation: one or two words,
@@ -3296,7 +3297,10 @@ Deck (§2.2), the **Toolbar position**: Top or Left (§1.7), the **Range sliders
 that opens the command palette, an **Icon set** dropdown, the style's choice, Regular,
 Engraved or Bold, which is the weight the whole set is drawn at, and a **Custom icons** row
 naming the folder beside the workspace store where an SVG named after an icon replaces it,
-one file or a whole set, with a Reload button), **Timeline**, **Viewer**, **Audio**,
+one file or a whole set, with a Reload button), **Timeline** (its last section, **Node
+graphs**, holds three switches, all on by default, one for each of the console's extra doors
+on a canvas (§12.2): *Right-click opens node search*, *Tab opens node search* and *Shift+A
+opens node search*), **Viewer**, **Audio**,
 **Autosave**, **Export**, **Addons**
 (§6 of [12-PLUGINS.md](12-PLUGINS.md)), **Preview and cache** (playback mode, quality tier
 and reset, and the RAM and VRAM frame-cache budgets with their readouts and Clear buttons) and

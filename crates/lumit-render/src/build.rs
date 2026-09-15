@@ -3128,6 +3128,10 @@ fn graph_comp_draw(
     }
 }
 
+/// Where one output socket of a box landed in a graph's plan: the box, the
+/// socket, and the step, `None` where it reads transparent.
+type Landed = (Uuid, &'static str, Option<usize>);
+
 /// What the node graph lowering carries, unchanged at every depth: the
 /// project, the comp being walked, the frame, and the fetch the draw builder
 /// already has for one layer's own pixels.
@@ -3178,8 +3182,10 @@ impl GraphLower<'_> {
         visited: &mut Vec<Uuid>,
         plan: &mut GraphDraw,
     ) -> Option<usize> {
-        use lumit_core::comp_graph::{GraphNode, InputKind, NODE_GRAPH};
-        use lumit_core::graph::{INPUT_PORT, MATTE_PORT};
+        use lumit_core::comp_graph::{
+            GraphNode, InputKind, COMBINE_CHANNELS, NODE_GRAPH, SPLIT_CHANNELS, SPLIT_OUTPUTS,
+        };
+        use lumit_core::graph::{INPUT_PORT, MATTE_PORT, OUTPUT_PORT};
 
         let output = graph.output_id()?;
         // What the Output reaches, in the order a box's sources land before
@@ -3215,17 +3221,56 @@ impl GraphLower<'_> {
         // Precomp layer's stack takes.
         let diag = ((plan.width as f32).powi(2) + (plan.height as f32).powi(2)).sqrt();
 
-        // Which step each box landed on, in the order they were lowered.
-        let mut steps: Vec<(Uuid, Option<usize>)> = Vec::with_capacity(order.len());
-        let wired = |steps: &[(Uuid, Option<usize>)], node: Uuid, port: &str| -> Option<usize> {
-            let (from, _) = graph.wire_into(node, port)?;
+        // Which step each box's output landed on, in the order they were
+        // lowered. Keyed by socket too, since a Split channels box has four.
+        let mut steps: Vec<Landed> = Vec::with_capacity(order.len());
+        let wired = |steps: &[Landed], node: Uuid, port: &str| -> Option<usize> {
+            let (from, from_port) = graph.wire_into(node, port)?;
             steps
                 .iter()
-                .find(|(id, _)| id == from)
-                .and_then(|(_, step)| *step)
+                .find(|(id, out, _)| id == from && *out == from_port)
+                .and_then(|(_, _, step)| *step)
         };
+        // One Set channels pass over `input` with `source` on its Source row,
+        // which is all Split channels and Combine channels are made of.
+        let channel_pass = |id: Uuid, input: Option<usize>, source, picks: [u32; 4]| {
+            let mut inst = lumit_core::fx::instantiate("set_channels")?;
+            inst.id = id;
+            let rows = ["red_from", "green_from", "blue_from", "alpha_from"];
+            for (row, pick) in rows.into_iter().zip(picks) {
+                if let Some(p) = inst.params.iter_mut().find(|p| p.id == row) {
+                    p.value = lumit_core::model::EffectValue::Choice(pick);
+                }
+            }
+            Some(GraphStep::Fx {
+                input,
+                ops: lumit_core::fx::resolve_stack(
+                    std::slice::from_ref(&inst),
+                    self.t,
+                    diag,
+                    1.0,
+                    &markers,
+                    context.clone(),
+                ),
+                fx_ids: vec![id],
+                matte: None,
+                picture: source,
+                colour_tables: vec![None],
+                flare_lens_files: vec![None],
+            })
+        };
+        // Set channels picks, by their place in `SET_CHANNELS_OPTIONS`.
+        const RED: u32 = 0;
+        const GREEN: u32 = 1;
+        const BLUE: u32 = 2;
+        const ALPHA: u32 = 3;
+        const LUMINANCE: u32 = 4;
+        // Adding this reads the same channel off the Source row.
+        const SOURCE: u32 = 5;
+        const FULL_ON: u32 = 10;
+        const FULL_OFF: u32 = 11;
 
-        for id in order {
+        for id in order.iter().copied() {
             let Some(node) = graph.node(id) else { continue };
             let step = match node {
                 // The Output shows what is wired into it; it is no step of its
@@ -3288,14 +3333,20 @@ impl GraphLower<'_> {
                     // box have no op for the resolver to leave out, so a
                     // bypassed box hands on its main picture here, which is
                     // where a bypassed ordinary box lands anyway. A Switch's
-                    // own picture is its first socket.
+                    // own picture is its first socket, and a Split hands its
+                    // input on at every output.
                     if !inst.enabled {
                         let main = if inst.effect.match_name == lumit_core::comp_graph::SWITCH {
                             wired(&steps, id, "in0")
                         } else {
                             input
                         };
-                        steps.push((id, main));
+                        let outs: &[&'static str] = if inst.effect.match_name == SPLIT_CHANNELS {
+                            &SPLIT_OUTPUTS
+                        } else {
+                            &[OUTPUT_PORT.id]
+                        };
+                        steps.extend(outs.iter().map(|port| (id, *port, main)));
                         continue;
                     }
                     match inst.effect.match_name.as_str() {
@@ -3359,6 +3410,87 @@ impl GraphLower<'_> {
                             });
                             Some(plan.steps.len() - 1)
                         }
+                        // Each output something in the cone reads is one pass:
+                        // that channel of the straight picture in red, green
+                        // and blue, and alpha full on.
+                        SPLIT_CHANNELS => {
+                            let mut red = None;
+                            for (pick, port) in (RED..).zip(SPLIT_OUTPUTS) {
+                                let read = graph.edges.iter().any(|e| {
+                                    e.from == id && e.from_port == port && order.contains(&e.to)
+                                });
+                                if !read {
+                                    continue;
+                                }
+                                let picks = [pick, pick, pick, FULL_ON];
+                                let Some(pass) = channel_pass(id, input, None, picks) else {
+                                    continue;
+                                };
+                                plan.steps.push(pass);
+                                let step = Some(plan.steps.len() - 1);
+                                if port == OUTPUT_PORT.id {
+                                    red = step;
+                                } else {
+                                    steps.push((id, port, step));
+                                }
+                            }
+                            red
+                        }
+                        // Three passes over the Red picture, each taking the
+                        // picked channel of the next one off its Source row.
+                        // An empty Source reads nothing, so an unwired Alpha
+                        // is full on instead.
+                        COMBINE_CHANNELS => {
+                            let rows = lumit_core::fx::resolve_instance(
+                                inst,
+                                &drivers,
+                                self.t,
+                                diag,
+                                1.0,
+                                &markers,
+                                context.clone(),
+                            );
+                            // A `CHANNEL_OPTIONS` pick as Set channels' own
+                            // pick, Luminance first.
+                            let own = |row: &str| {
+                                let at = rows.iter().next().map_or(0, |op| {
+                                    op.params.choice(lumit_core::fx::ParamId::new(row), 0)
+                                });
+                                [LUMINANCE, ALPHA, RED, GREEN, BLUE]
+                                    .get(at as usize)
+                                    .copied()
+                                    .unwrap_or(LUMINANCE)
+                            };
+                            let alpha = wired(&steps, id, "alpha");
+                            let alpha_pick = match alpha {
+                                Some(_) => own("alpha_from") + SOURCE,
+                                None => FULL_ON,
+                            };
+                            let passes = [
+                                (
+                                    wired(&steps, id, "green"),
+                                    [
+                                        own("red_from"),
+                                        own("green_from") + SOURCE,
+                                        FULL_OFF,
+                                        FULL_ON,
+                                    ],
+                                ),
+                                (
+                                    wired(&steps, id, "blue"),
+                                    [RED, GREEN, own("blue_from") + SOURCE, FULL_ON],
+                                ),
+                                (alpha, [RED, GREEN, BLUE, alpha_pick]),
+                            ];
+                            let mut at = input;
+                            for (source, picks) in passes {
+                                if let Some(s) = channel_pass(id, at, source, picks) {
+                                    plan.steps.push(s);
+                                    at = Some(plan.steps.len() - 1);
+                                }
+                            }
+                            at
+                        }
                         NODE_GRAPH => self
                             .nested_step(inst, graph, id, input, &steps, &drivers, visited, plan),
                         _ => {
@@ -3402,7 +3534,7 @@ impl GraphLower<'_> {
                     }
                 }
             };
-            steps.push((id, step));
+            steps.push((id, OUTPUT_PORT.id, step));
         }
         wired(&steps, output, INPUT_PORT.id)
     }
@@ -3509,7 +3641,7 @@ impl GraphLower<'_> {
         graph: &lumit_core::comp_graph::CompGraph,
         id: Uuid,
         input: Option<usize>,
-        steps: &[(Uuid, Option<usize>)],
+        steps: &[Landed],
         drivers: &lumit_core::fx::ResolvedDrivers,
         visited: &mut Vec<Uuid>,
         plan: &mut GraphDraw,
@@ -3531,11 +3663,11 @@ impl GraphLower<'_> {
             return input;
         };
         let socket = |port: &str| -> Option<usize> {
-            let (from, _) = graph.wire_into(id, port)?;
+            let (from, from_port) = graph.wire_into(id, port)?;
             steps
                 .iter()
-                .find(|(node, _)| node == from)
-                .and_then(|(_, step)| *step)
+                .find(|(node, out, _)| node == from && *out == from_port)
+                .and_then(|(_, _, step)| *step)
         };
         // The box's own sockets, in the inner Inputs' order: the first picture
         // Input is `input`, every further one is a socket named by its id.

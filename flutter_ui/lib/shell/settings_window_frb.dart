@@ -691,6 +691,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         settings.transformInEffectControls = shipped.transformInEffectControls;
         settings.easingInPopup = shipped.easingInPopup;
         settings.layerNamesOnBars = shipped.layerNamesOnBars;
+        settings.rightClickOpensNodeSearch = shipped.rightClickOpensNodeSearch;
+        settings.tabOpensNodeSearch = shipped.tabOpensNodeSearch;
+        settings.shiftAOpensNodeSearch = shipped.shiftAOpensNodeSearch;
         workspace.settingsChanged();
       case SettingsPage.viewer:
         workspace.setSmoothZoomedViewer(false);
@@ -1546,6 +1549,28 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               l10n.settingsLayerNamesOnLaneBars,
               value: settings.layerNamesOnBars, set: (on) {
             settings.layerNamesOnBars = on;
+            changed();
+          }),
+        ],
+      ),
+      (
+        l10n.settingsGroupNodeGraphs,
+        [
+          _flag(t, 'settings-right-click-node-search',
+              l10n.settingsRightClickOpensNodeSearch,
+              value: settings.rightClickOpensNodeSearch, set: (on) {
+            settings.rightClickOpensNodeSearch = on;
+            changed();
+          }),
+          _flag(t, 'settings-tab-node-search', l10n.settingsTabOpensNodeSearch,
+              value: settings.tabOpensNodeSearch, set: (on) {
+            settings.tabOpensNodeSearch = on;
+            changed();
+          }),
+          _flag(t, 'settings-shift-a-node-search',
+              l10n.settingsShiftAOpensNodeSearch,
+              value: settings.shiftAOpensNodeSearch, set: (on) {
+            settings.shiftAOpensNodeSearch = on;
             changed();
           }),
         ],

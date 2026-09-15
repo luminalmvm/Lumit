@@ -460,7 +460,13 @@ mod tests {
         assert!(r.effects.len() >= 91, "the catalogue has lost effects");
         for e in &r.effects {
             assert!(!e.slug.is_empty(), "{} has no slug", e.match_name);
-            assert!(!e.params.is_empty(), "{} declares no parameters", e.label);
+            // Split channels is all sockets and has no rows.
+            let socket_only = e.match_name == crate::comp_graph::SPLIT_CHANNELS;
+            assert!(
+                socket_only || !e.params.is_empty(),
+                "{} declares no parameters",
+                e.label
+            );
         }
     }
 

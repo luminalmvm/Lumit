@@ -1793,7 +1793,8 @@ it. Binding rules beyond the drawings themselves:
   label palette.
 - **Auto-wire and Heal are `HouseToggle`s** in the panel header (on in `animated`),
   beside frame-all and the zoom readout.
-- The **console over the canvas** (Ctrl+Space, or a wire dropped on empty ground)
+- The **console over the canvas** (Ctrl+Space, a right-click on empty ground, Tab or
+  Shift+A, or a wire dropped on empty ground)
   filters by the dragged wire's type and says so in its footer; category
   suffixes are kickers.
 - The Nodes workspace keeps the **whole viewer bar on the small viewer** and the ordinary

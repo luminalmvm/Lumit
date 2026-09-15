@@ -13,12 +13,22 @@
 
 import 'dart:typed_data' show Float64List;
 
+import 'package:flutter/gestures.dart'
+    show PointerDeviceKind, kDoubleTapMinTime, kSecondaryMouseButton;
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/panels/comp_graph_panel.dart';
+import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
 import 'package:lumit_flutter/panels/graph_panel.dart';
 import 'package:lumit_flutter/panels/node_panel.dart';
+import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
+import 'package:lumit_flutter/shell/fx_console_frb.dart'
+    show lastKnownPointerPosition;
+import 'package:lumit_flutter/shell/menu_bar_frb.dart'
+    show copySelectionFrb, pasteSelectionFrb;
 import 'package:lumit_flutter/src/rust/api/comp_graph.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -845,6 +855,361 @@ void main() {
         hasLength(1),
         reason: 'a Switch takes its first picture on in0, not on an input',
       );
+    });
+
+    /// Where a box sits on the canvas, from the document.
+    Offset placeOf(CompositionReference graph, UuidValue id) {
+      final p = graph.getNodeGraph().wiring.layout.firstWhere((l) => l.node == id);
+      return Offset(p.x, p.y);
+    }
+
+    bool picked(WidgetTester tester, UuidValue id, {int at = 0}) => tester
+        .widgetList<GraphNodeCard>(find.byWidgetPredicate(
+            (w) => w is GraphNodeCard && w.box.key == compNodeKey(id)))
+        .elementAt(at)
+        .selected;
+
+    Future<void> pickExposure(WidgetTester tester) async {
+      expect(
+          find.byKey(const ValueKey<String>('fx-console-bar')), findsOneWidget);
+      await tester.enterText(
+          find.byKey(const ValueKey('fx-console-query')), 'exposure');
+      await tester.pump();
+      await tester
+          .tap(find.byKey(const ValueKey<String>('fx-console-item-Exposure')));
+      await tester.pump();
+    }
+
+    testWidgets('an effect dragged from Effects & presets lands where it drops',
+        (tester) async {
+      final p = withGraph();
+      final read = seedRead(p.graph, p.state, const Offset(20, 40));
+      p.uiState.model.refresh();
+      await mount(
+        tester,
+        p,
+        child: Column(children: [
+          const Draggable<EffectDragData>(
+            data: EffectDragData('exposure', 'Exposure'),
+            hitTestBehavior: HitTestBehavior.opaque,
+            feedback: SizedBox(width: 8, height: 8),
+            child: SizedBox(
+                key: ValueKey<String>('drag-source'), width: 60, height: 20),
+          ),
+          const Expanded(child: GraphPanelFrb()),
+        ]),
+      );
+      await tester.tapAt(tester.getCenter(card(read)));
+      await tester.pump();
+      final was = p.graph.documentRevision();
+      final from =
+          tester.getTopLeft(find.byKey(const ValueKey<String>('drag-source')));
+
+      await tester.drag(find.byKey(const ValueKey<String>('drag-source')),
+          const Offset(400, 300),
+          warnIfMissed: false);
+      await tester.pumpAndSettle();
+
+      final added = p.graph
+          .getNodeGraph()
+          .nodes
+          .where((n) => n.matchName == 'exposure')
+          .single
+          .id;
+      final canvas =
+          tester.getTopLeft(find.byKey(const ValueKey('comp-graph-canvas')));
+      expect(placeOf(p.graph, added), from + const Offset(400, 300) - canvas,
+          reason: 'the box sits where it was let go');
+      expect(
+          p.graph
+              .getNodeGraph()
+              .wiring
+              .edges
+              .where((e) => e.from == read && e.to == added),
+          hasLength(1),
+          reason: 'Auto-wire put it after the picked box, as the console does');
+      expect(p.graph.documentRevision(), was + BigInt.one, reason: 'one op');
+    });
+
+    testWidgets('a right-click, Tab and Shift+A each open the console',
+        (tester) async {
+      final p = withGraph();
+      await mount(tester, p);
+      addTearDown(() => lastKnownPointerPosition = null);
+      final canvas =
+          tester.getTopLeft(find.byKey(const ValueKey('comp-graph-canvas')));
+      final boxes = p.graph.getNodeGraph().nodes.length;
+
+      // A right-click on empty ground, the box landing under it.
+      const click = Offset(300, 200);
+      await tester.tapAt(canvas + click, buttons: kSecondaryMouseButton);
+      await tester.pump();
+      await pickExposure(tester);
+      expect(p.graph.getNodeGraph().nodes, hasLength(boxes + 1));
+      expect(placeOf(p.graph, p.uiState.compGraphNode.value!.id), click);
+
+      // Tab with the canvas focused, the box landing at the pointer.
+      await tester.tapAt(canvas + const Offset(600, 450));
+      await tester.pump();
+      const pointer = Offset(120, 380);
+      lastKnownPointerPosition = canvas + pointer;
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      await pickExposure(tester);
+      expect(p.graph.getNodeGraph().nodes, hasLength(boxes + 2));
+      expect(placeOf(p.graph, p.uiState.compGraphNode.value!.id), pointer);
+
+      // Shift+A, Blender's add key.
+      await tester.tapAt(canvas + const Offset(600, 450));
+      await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pump();
+      await pickExposure(tester);
+      expect(p.graph.getNodeGraph().nodes, hasLength(boxes + 3));
+
+      // Ctrl+A opens nothing, and select all still picks every box.
+      await tester.tapAt(canvas + const Offset(600, 450));
+      await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+      expect(find.byKey(const ValueKey<String>('fx-console-bar')), findsNothing);
+      p.uiState.activePane.value = Panel.graph.pane();
+      expect(p.uiState.requestSelectAll(), isTrue);
+      await tester.pump();
+      for (final node in p.graph.getNodeGraph().nodes) {
+        expect(picked(tester, node.id), isTrue);
+      }
+    });
+
+    // Settings turns each way in off by itself, and the other two still work.
+    testWidgets('each way into the console turns off on its own',
+        (tester) async {
+      final p = withGraph();
+      await mount(tester, p);
+      addTearDown(() => lastKnownPointerPosition = null);
+      final canvas =
+          tester.getTopLeft(find.byKey(const ValueKey('comp-graph-canvas')));
+      lastKnownPointerPosition = canvas + const Offset(120, 380);
+      final settings = p.uiState.workspace.interface;
+
+      var round = 0;
+      Future<void> rightClick() => tester.tapAt(
+          // A new spot each round, so it never lands on the last box added.
+          canvas + Offset(100 + 250.0 * round, 100),
+          buttons: kSecondaryMouseButton);
+      Future<void> press(LogicalKeyboardKey key, {bool shift = false}) async {
+        await tester.tapAt(canvas + const Offset(600, 450));
+        await tester.pump();
+        if (shift) await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+        await tester.sendKeyEvent(key);
+        if (shift) await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      }
+
+      final ways = <(Future<void> Function(), void Function(bool))>[
+        (rightClick, (on) => settings.rightClickOpensNodeSearch = on),
+        (
+          () => press(LogicalKeyboardKey.tab),
+          (on) => settings.tabOpensNodeSearch = on
+        ),
+        (
+          () => press(LogicalKeyboardKey.keyA, shift: true),
+          (on) => settings.shiftAOpensNodeSearch = on
+        ),
+      ];
+      for (final off in ways) {
+        for (final way in ways) {
+          way.$2(!identical(way, off));
+        }
+        for (final way in ways) {
+          await way.$1();
+          await tester.pump();
+          if (identical(way, off)) {
+            expect(find.byKey(const ValueKey<String>('fx-console-bar')),
+                findsNothing,
+                reason: 'round $round: the way turned off opens nothing');
+          } else {
+            await pickExposure(tester);
+          }
+        }
+        round++;
+      }
+    });
+
+    testWidgets('copy and paste bring the boxes and their wire, fresh',
+        (tester) async {
+      final p = withGraph();
+      final blur = seedFx(p.graph, 'blur', const Offset(40, 40));
+      final glow = seedFx(p.graph, 'glow', const Offset(300, 40));
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      addTearDown(() => lastKnownPointerPosition = null);
+      await wire(tester, blur, 'output', glow, 'input');
+      final before = p.graph.getNodeGraph();
+
+      // Everything picked, the Output too: the Output is never copied.
+      p.uiState.activePane.value = Panel.graph.pane();
+      expect(p.uiState.requestSelectAll(), isTrue);
+      await tester.pump();
+      expect(copySelectionFrb(p.uiState), isTrue);
+
+      final canvas =
+          tester.getTopLeft(find.byKey(const ValueKey('comp-graph-canvas')));
+      lastKnownPointerPosition = canvas + const Offset(100, 300);
+      final was = p.graph.documentRevision();
+      expect(await pasteSelectionFrb(p.state, p.uiState, p.graph, null), isTrue);
+      await tester.pump();
+
+      final after = p.graph.getNodeGraph();
+      expect(after.nodes, hasLength(before.nodes.length + 2),
+          reason: 'two boxes, and no second Output');
+      expect(p.graph.documentRevision(), was + BigInt.one, reason: 'one op');
+      final fresh = [
+        for (final n in after.nodes)
+          if (!before.nodes.any((b) => b.id == n.id)) n.id,
+      ];
+      expect(after.wiring.edges, hasLength(2));
+      expect(
+          after.wiring.edges
+              .where((e) => fresh.contains(e.from) && fresh.contains(e.to)),
+          hasLength(1),
+          reason: 'the wire between them came along');
+      expect(after.wiring.groups, isEmpty, reason: 'a paste is not a group');
+      expect(placeOf(p.graph, fresh.first), const Offset(100, 300),
+          reason: 'the copied corner lands at the pointer');
+      expect(placeOf(p.graph, blur), const Offset(40, 40),
+          reason: 'the originals are untouched');
+      for (final id in fresh) {
+        expect(picked(tester, id), isTrue, reason: 'the pasted boxes are picked');
+      }
+      expect(picked(tester, blur), isFalse);
+
+      p.state.project!.undo();
+      p.uiState.model.refresh();
+      await tester.pump();
+      expect(p.graph.getNodeGraph().nodes, hasLength(before.nodes.length),
+          reason: 'one undo step');
+    });
+
+    testWidgets('keys answer only on the canvas whose panel is active',
+        (tester) async {
+      final p = withGraph();
+      final blur = seedFx(p.graph, 'blur', const Offset(40, 40));
+      p.uiState.model.refresh();
+      await mount(
+        tester,
+        p,
+        size: const Size(1400, 600),
+        child: const Row(children: [
+          Expanded(child: GraphPanelFrb()),
+          Expanded(child: TimelinePanelFrb()),
+        ]),
+      );
+      expect(find.byType(CompGraphPanel), findsNWidgets(2));
+
+      // Picked on the Graph panel's canvas.
+      await tester.tapAt(tester.getCenter(card(blur).first));
+      await tester.pump();
+      expect(p.uiState.compGraphNode.value?.id, blur);
+
+      p.uiState.activePane.value = Panel.timeline.pane();
+      expect(copySelectionFrb(p.uiState), isFalse);
+      expect(p.uiState.deleteClaim!(), isFalse,
+          reason: 'nothing is picked on the Timeline\'s canvas');
+      expect(p.uiState.requestSelectAll(), isTrue);
+      await tester.pump();
+      expect(picked(tester, blur, at: 1), isTrue,
+          reason: 'Ctrl+A picked every box on the Timeline\'s canvas');
+
+      p.uiState.activePane.value = Panel.graph.pane();
+      expect(copySelectionFrb(p.uiState), isTrue);
+      expect(p.uiState.deleteClaim!(), isTrue);
+      await tester.pump();
+      expect(p.graph.getNodeGraph().nodes.any((n) => n.id == blur), isFalse);
+    });
+
+    testWidgets('Effect controls draw the picked box over a node graph',
+        (tester) async {
+      final p = withGraph();
+      final blur = seedFx(p.graph, 'blur', const Offset(60, 40));
+      p.uiState.model.refresh();
+      await mount(
+        tester,
+        p,
+        child: const Row(children: [
+          SizedBox(width: 600, child: GraphPanelFrb()),
+          Expanded(child: EffectControlsPanelFrb()),
+        ]),
+      );
+      expect(
+          find.descendant(
+              of: find.byType(EffectControlsPanelFrb),
+              matching: find.byType(NodePanelFrb)),
+          findsOneWidget);
+      expect(find.text(l10n.nodeNoSelection), findsOneWidget);
+
+      await tester.tapAt(tester.getCenter(card(blur)));
+      await tester.pump();
+      expect(find.byKey(ValueKey<String>('node-row-$blur-radius')),
+          findsOneWidget);
+    });
+
+    testWidgets('Shift+A typed into a box rename opens no console',
+        (tester) async {
+      final p = withGraph();
+      final blur = seedFx(p.graph, 'blur', const Offset(60, 40));
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      final name = find.byKey(ValueKey<String>('graph-node-name-node:$blur'));
+      await tester.tap(name);
+      await tester.pump(kDoubleTapMinTime);
+      await tester.tap(name);
+      await tester.pumpAndSettle();
+      final field =
+          find.byKey(ValueKey<String>('graph-node-rename-node:$blur'));
+      expect(field, findsOneWidget);
+      // No click into it: the field takes the keys as soon as it opens.
+      expect(
+          tester
+              .widget<EditableText>(find.descendant(
+                  of: field, matching: find.byType(EditableText)))
+              .focusNode
+              .hasPrimaryFocus,
+          isTrue);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pump();
+      expect(find.byKey(const ValueKey<String>('fx-console-bar')), findsNothing,
+          reason: 'the capital A belongs to the name being typed');
+    });
+
+    testWidgets('a cancelled right-press leaves the next drag a marquee',
+        (tester) async {
+      final p = withGraph();
+      final blur = seedFx(p.graph, 'blur', const Offset(240, 160));
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      final canvas =
+          tester.getTopLeft(find.byKey(const ValueKey('comp-graph-canvas')));
+
+      // A right-press on empty ground that never comes up.
+      final right = await tester.startGesture(canvas + const Offset(600, 450),
+          kind: PointerDeviceKind.mouse, buttons: kSecondaryMouseButton);
+      await right.cancel();
+      await right.removePointer();
+      await tester.pump();
+
+      final band = tester.getRect(card(blur)).inflate(20);
+      await tester.dragFrom(band.topLeft, band.bottomRight - band.topLeft);
+      await tester.pump();
+      expect(picked(tester, blur), isTrue, reason: 'the band took the box');
+      expect(
+          find.byKey(const ValueKey<String>('fx-console-bar')), findsNothing);
     });
   }, skip: !engineAvailable);
 }

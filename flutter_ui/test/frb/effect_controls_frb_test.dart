@@ -2768,6 +2768,34 @@ void main() {
           reason: 'the layer itself is untouched');
     });
 
+    testWidgets('over a node graph the claims leave the last layer alone',
+        (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'blur');
+      await mount(tester, p, transform: false);
+      final blur = p.layer.getEffects().single;
+      p.uiState
+          .copyEffectsToClipboard(p.layer.copyEffects(effects: [blur.id()]));
+      p.uiState.setEffectSelection(p.layer, [blur.id()]);
+      await tester.pump();
+
+      // A node graph fronted, the effect still picked in the comp it left.
+      final graph = p.state.project!.newNodeGraph(name: 'Graph');
+      p.uiState
+        ..setSelectedComp(graph)
+        ..selectedLayer.value = null;
+      p.uiState.model.refresh();
+      await tester.pump();
+      p.uiState.activePane.value = Panel.effectControls.pane();
+      expect(p.uiState.selectedEffects.value, [blur.id()]);
+
+      p.uiState.pasteClaim?.call();
+      p.uiState.deleteClaim?.call();
+      await tester.pump();
+      expect([for (final e in p.layer.getEffects()) e.id()], [blur.id()],
+          reason: 'the layer is in another comp, so neither key reaches it');
+    });
+
     /// **Fronting another comp does not lose your place** (item 6.28). The
     /// read model rebinds to the new comp's layers, so the layer this panel
     /// is showing stops being in it while still existing perfectly well in

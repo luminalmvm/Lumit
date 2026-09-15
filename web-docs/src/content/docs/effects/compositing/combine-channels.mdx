@@ -1,0 +1,47 @@
+---
+title: Combine channels
+description: "Builds one picture from four greyscale pictures, one per channel."
+---
+
+Combine channels is a **Compositing** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Combine channels builds one picture from the pictures on its **Red**, **Green**, **Blue**
+and **Alpha** sockets. Each channel of the result is one channel of the picture on that
+socket, the luminance unless its row picks another. An unwired Red, Green or Blue reads as
+nothing, and an unwired Alpha reads as fully opaque, so three pictures make an opaque one.
+It is a box in a [node graph composition](/use/node-graphs/) and is not offered on a
+layer's stack. It is [Split channels](/effects/compositing/split-channels/) in reverse.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Red from** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+| **Green from** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+| **Blue from** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+| **Alpha from** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Red from**, **Green from**, **Blue from**, **Alpha from**: which channel of the picture
+  on that socket makes the channel of the result. **Luminance** reads the brightness, so
+  the greyscale pictures from Split channels and any colour picture both work unchanged.
+
+## Related
+
+- [Split channels](/effects/compositing/split-channels/)
+- [Node graph compositions](/use/node-graphs/)
+- [Compositing](/effects/#compositing)
+- [Effects](/use/effects/)

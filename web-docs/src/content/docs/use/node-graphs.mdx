@@ -22,7 +22,9 @@ A composition is a layer stack or a node graph, never both. A node graph refuses
 layer command, and a composition made with layers never becomes one.
 
 Open a node graph as you open any composition and it draws in the
-[Node graph](/use/nodes/) panel rather than the Timeline.
+[Node graph](/use/nodes/) panel. The [Timeline](/panels/timeline/) draws it too, under the
+comp tabs and the ruler, and [Effect controls](/panels/effect-controls/) show the picked
+box's rows.
 
 ## The boxes
 
@@ -93,12 +95,20 @@ input.
 
 ## The console
 
-`Ctrl+Space` over the canvas opens the [effects console](/use/fx-console/). Over a node
-graph it lists, in order: the project's items as Read boxes, the four Input kinds, the
-effects, Merge, Switch and Time offset under **Compositing**, and the drivers.
+`Ctrl+Space` over the canvas opens the [effects console](/use/fx-console/). So do a
+right-click on empty canvas, and `Tab` or `Shift+A` with the canvas focused, each of which
+can be turned off in [Settings ▸ Timeline](/use/settings/#timeline). The new box lands at the
+pointer. Over a node graph it lists, in order: the project's items as Read
+boxes, the four Input kinds, the effects, Merge, Switch and Time offset under
+**Compositing**, and the drivers.
 
 Dragging footage or a composition from the Project panel onto the canvas makes a Read box
-where it lands.
+where it lands. Dragging an effect from [Effects & presets](/panels/effects-presets/) makes
+its box there.
+
+`Ctrl+C` copies the picked boxes, and `Ctrl+V` pastes them at the pointer with their values,
+keyframes, names and the wires between them. The Output is never copied. A paste works in
+any node graph in the project.
 
 ## Place a graph as a layer
 
@@ -144,10 +154,6 @@ on and the Viewer renders the composition with the Output wired to that box. A d
 value Input and the Output itself offer no chip.
 
 ## Keyframes
-
-On a node graph the [Timeline](/panels/timeline/) draws the ruler and one row per effect
-box, with a lane per parameter once the box is twirled open. A box has no span, so there is
-no bar. The keys drag, ease and delete as a layer's do, and the graph editor plots them.
 
 Turn a row's stopwatch on in the Node panel to start keyframing it.
 

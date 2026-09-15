@@ -137,11 +137,16 @@ class CompGraphPanel extends StatefulWidget {
   final List<BridgeEffectInfo> Function()? nodesLister;
   final List<BridgeEffectInfo> Function()? effectsLister;
 
+  /// The panel this canvas sits in. The Graph panel and the Timeline can both
+  /// show one, so each answers the editing keys only while its own is active.
+  final Panel host;
+
   const CompGraphPanel({
     super.key,
     required this.comp,
     this.nodesLister,
     this.effectsLister,
+    this.host = Panel.graph,
   });
 
   @override
@@ -185,6 +190,7 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
   Offset? _marqueeTo;
   bool _marqueeAdds = false;
   bool _searching = false;
+  bool _menuPress = false;
   Size _viewport = Size.zero;
 
   /// The canvas's own render box, so a drop from the project panel lands
@@ -208,6 +214,10 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
       ui.consoleClaim = _consoleClaim;
       if (ui.deleteClaim != _deleteClaim) _priorDeleteClaim = ui.deleteClaim;
       ui.deleteClaim = _deleteClaim;
+      if (ui.copyClaim != _copyClaim) _priorCopyClaim = ui.copyClaim;
+      ui.copyClaim = _copyClaim;
+      if (ui.pasteClaim != _pasteClaim) _priorPasteClaim = ui.pasteClaim;
+      ui.pasteClaim = _pasteClaim;
     }
     _reload();
   }
@@ -224,10 +234,12 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
 
   bool Function()? _priorDeleteClaim;
   bool Function()? _priorConsoleClaim;
+  bool Function()? _priorCopyClaim;
+  bool Function()? _priorPasteClaim;
 
   bool _deleteClaim() {
     final ui = _ui;
-    if (!mounted || ui == null || ui.activePanel != Panel.graph) {
+    if (!mounted || ui == null || ui.activePanel != widget.host) {
       return _priorDeleteClaim?.call() ?? false;
     }
     return _deleteSelected() || (_priorDeleteClaim?.call() ?? false);
@@ -237,13 +249,29 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
     final ui = _ui;
     if (!mounted ||
         ui == null ||
-        ui.activePanel != Panel.graph ||
+        ui.activePanel != widget.host ||
         _graph == null ||
         _searching) {
       return _priorConsoleClaim?.call() ?? false;
     }
     _openSearch(_toCanvas(Offset(_viewport.width / 2, _viewport.height / 2)));
     return true;
+  }
+
+  bool _copyClaim() {
+    final ui = _ui;
+    if (!mounted || ui == null || ui.activePanel != widget.host) {
+      return _priorCopyClaim?.call() ?? false;
+    }
+    return _copySelected(ui) || (_priorCopyClaim?.call() ?? false);
+  }
+
+  bool _pasteClaim() {
+    final ui = _ui;
+    if (!mounted || ui == null || ui.activePanel != widget.host) {
+      return _priorPasteClaim?.call() ?? false;
+    }
+    return _pasteBoxes(ui) || (_priorPasteClaim?.call() ?? false);
   }
 
   void _unbind() {
@@ -253,6 +281,8 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
     if (_ui?.consoleClaim == _consoleClaim) {
       _ui!.consoleClaim = _priorConsoleClaim;
     }
+    if (_ui?.copyClaim == _copyClaim) _ui!.copyClaim = _priorCopyClaim;
+    if (_ui?.pasteClaim == _pasteClaim) _ui!.pasteClaim = _priorPasteClaim;
   }
 
   @override
@@ -265,7 +295,7 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
   void _onSelectAllRequested() {
     final ui = _ui;
     if (!mounted || ui == null) return;
-    if (!ui.selectAllRequestIsFor(Panel.graph)) return;
+    if (!ui.selectAllRequestIsFor(widget.host)) return;
     setState(() => _pick([for (final n in _graph?.nodes ?? const []) n.id]));
   }
 
@@ -768,7 +798,8 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
 
   // --- The console --------------------------------------------------------
 
-  /// Ctrl+Space, and a wire let go over empty canvas, open the console, the
+  /// Ctrl+Space, Tab, Shift+A, a right-click and a wire let go over empty
+  /// canvas all open the console, the
   /// same popover the shell opens, wearing this canvas's own list: the
   /// project's items as Read boxes, the four Input kinds, the effects, then
   /// the boxes only a graph can hold.
@@ -1061,6 +1092,65 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
     return true;
   }
 
+  // --- Copy and paste -----------------------------------------------------
+
+  /// Copy the picked boxes as saved-group text, never the Output. Where their
+  /// top-left corner stood rides along, so a paste with the pointer elsewhere
+  /// lands just off the originals.
+  bool _copySelected(LumitUiState ui) {
+    final graph = _graph;
+    if (graph == null) return false;
+    final ids = [
+      for (final id in _selection.values)
+        if (id != graph.wiring.output) id,
+    ];
+    if (ids.isEmpty) return false;
+    final layout = _layout();
+    final corners = [
+      for (final id in ids)
+        if (layout.byKey[compNodeKey(id)] case final box?) box.rect.topLeft,
+    ];
+    final String text;
+    try {
+      text = widget.comp.saveGraphGroup(name: '', colour: 0, nodes: ids);
+    } catch (_) {
+      return false;
+    }
+    ui.clipboard.boxes = (
+      text: text,
+      at: corners.fold(corners.firstOrNull ?? Offset.zero,
+          (a, b) => Offset(math.min(a.dx, b.dx), math.min(a.dy, b.dy))),
+    );
+    return true;
+  }
+
+  /// Paste the copied boxes at the pointer, or beside where they were copied
+  /// from when the pointer is off this canvas. One op, and they become the pick.
+  bool _pasteBoxes(LumitUiState ui) {
+    final held = ui.clipboard.boxes;
+    if (_graph == null || held == null) return false;
+    final at = _pointerOnCanvas ??
+        held.at + const Offset(graphDotGrid * 2, graphDotGrid * 2);
+    final List<UuidValue> ids;
+    try {
+      ids = widget.comp.pasteGraphBoxes(text: held.text, x: at.dx, y: at.dy);
+    } catch (_) {
+      // Refused whole, so the document is as it was.
+      return true;
+    }
+    ui.model.refresh();
+    _reload();
+    setState(() => _pick(ids));
+    return true;
+  }
+
+  /// Where the pointer is on this canvas, in canvas units, or null when it is
+  /// somewhere else.
+  Offset? get _pointerOnCanvas {
+    final local = graphPointerIn(_canvasKey);
+    return local == null ? null : _toCanvas(local);
+  }
+
   // --- Dropping a box into a wire (N7) ------------------------------------
 
   ({BridgeCompEdge edge, GraphSocket into, GraphSocket outOf})? _dropInsert(
@@ -1108,6 +1198,7 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
 
   void _down(PointerDownEvent event, GraphLayout layout) {
     _canvasFocus.requestFocus();
+    _menuPress = false;
     if (_claimed) {
       _claimed = false;
       return;
@@ -1170,6 +1261,12 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
 
     if (event.buttons == kMiddleMouseButton) {
       setState(() => _panFrom = _pan - event.localPosition);
+      return;
+    }
+    // A right-click on empty ground opens the console on release.
+    if (event.buttons == kSecondaryMouseButton &&
+        _ui!.workspace.interface.rightClickOpensNodeSearch) {
+      _menuPress = true;
       return;
     }
     final keys = HardwareKeyboard.instance;
@@ -1305,6 +1402,12 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
       return;
     }
 
+    if (_menuPress) {
+      _menuPress = false;
+      if (!moved) _openSearch(at);
+      return;
+    }
+
     if (_marqueeFrom case final from?) {
       final to = _marqueeTo;
       final adds = _marqueeAdds;
@@ -1386,6 +1489,14 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
         final entry =
             listGraphNodes().where((e) => e.name == 'node_graph').firstOrNull;
         if (entry != null) _addFx(entry, at, graph: dropped);
+      case EffectDragData(:final name):
+        // From Effects & presets: the box the console would add, where it
+        // was let go.
+        final info = [
+          ...(widget.effectsLister ?? listEffects)(),
+          ...(widget.nodesLister ?? listGraphNodes)(),
+        ].where((e) => e.name == name && name != 'node_graph').firstOrNull;
+        if (info != null) _addFx(info, at);
     }
   }
 
@@ -1485,11 +1596,20 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
           _deleteSelected();
           return KeyEventResult.handled;
         }
+        // Only the canvas itself: a rename field inside it types these.
+        if (node.hasPrimaryFocus &&
+            graphAddKey(event, _ui!.workspace.interface)) {
+          _openSearch(_pointerOnCanvas ??
+              _toCanvas(Offset(_viewport.width / 2, _viewport.height / 2)));
+          return KeyEventResult.handled;
+        }
         return KeyEventResult.ignored;
       },
       child: DragTarget<Object>(
         onWillAcceptWithDetails: (details) =>
-            details.data is FootageDragData || details.data is CompDragData,
+            details.data is FootageDragData ||
+            details.data is CompDragData ||
+            details.data is EffectDragData,
         onAcceptWithDetails: (details) => _dropped(details.data, details.offset),
         builder: (context, candidate, _) => Listener(
           onPointerDown: (e) => _down(e, layout),
