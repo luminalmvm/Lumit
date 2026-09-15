@@ -252,11 +252,8 @@ pub enum GlowFringe {
 /// (bit-exact passthrough, matching the CPU reference's short-circuit).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GlowOp {
-    /// The gaussian's half-width, raster pixels.
-    pub radius_px: f32,
-    /// The round exponentials the halo is built from once Falloff is above 0,
-    /// or None for the gaussian this effect shipped with, to the byte.
-    pub octaves: Option<[GlowOctaveOp; 5]>,
+    /// How the halo is built from the bright pass.
+    pub shape: GlowShape,
     /// The fringe left on the finished halo, or None for no pass at all.
     pub fringe: Option<GlowFringe>,
     /// Linear-light bright threshold, ≥ 0 (unbounded above).
@@ -285,6 +282,27 @@ pub(super) struct GlowParams {
     /// Was Invert; the seam applies it once instead. Always 0.
     pub(super) _pad0: f32,
     pub(super) _pad: [f32; 2],
+}
+
+/// A glow's halo: the gaussian at Falloff 0, round exponentials above it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum GlowShape {
+    Gaussian(GlowGaussianOp),
+    Exponential([GlowOctaveOp; 5]),
+}
+
+/// A glow's gaussian. Mirrors `lumit_core::fx::cpu::GlowGaussian`, with the
+/// grid size worked out host-side.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GlowGaussianOp {
+    /// Full-size pixels a texel of its grid.
+    pub step: f32,
+    /// The grid's size, `cpu::glow_grid` of the picture's.
+    pub grid: [u32; 2],
+    /// σ, grid texels.
+    pub sigma: f32,
+    /// How many texels out each pass reads.
+    pub reach: f32,
 }
 
 /// One exponential of a glow's halo. Mirrors `lumit_core::fx::cpu::GlowOctave`,
@@ -674,11 +692,12 @@ impl FxEngine {
     }
 
     /// Apply one glow (docs/08 §3.3, v1 core) to a linear working texture,
-    /// returning a new texture of the same size. Four passes: the bright
-    /// pass keeps only the light above the threshold (soft knee, all four
-    /// premultiplied channels — the halo carries alpha), the shared
-    /// separable gaussian widens it (Repeat edges, fixed: the halo holds
-    /// its strength along frame borders), and the combine pass adds
+    /// returning a new texture of the same size. The bright pass keeps only
+    /// the light above the threshold (soft knee, all four premultiplied
+    /// channels, as the halo carries alpha), the shared separable gaussian
+    /// widens it on a coarser grid, read far enough out to leave no edge
+    /// (Repeat edges, fixed: the halo holds its strength along frame
+    /// borders), and the combine pass adds
     /// `intensity · tint · halo` back onto the untouched input in linear,
     /// alpha saturating at 1. Intensity 0 short-circuits inside the combine
     /// kernel to the bit-exact identity.
@@ -729,34 +748,9 @@ impl FxEngine {
             h,
             bytemuck::bytes_of(&params),
         );
-        let halo = if let Some(octaves) = &op.octaves {
-            self.glow_exponential(ctx, &bright, w, h, octaves)
-        } else {
-            let tmp = work_texture(ctx, w, h, "fx-glow-tmp");
-            let blurred = work_texture(ctx, w, h, "fx-glow-blur");
-            let sigma = (op.radius_px * 0.5).max(1e-3);
-            for (dir, pass_src, dst) in [([1.0, 0.0], &bright, &tmp), ([0.0, 1.0], &tmp, &blurred)]
-            {
-                self.dispatch(
-                    ctx,
-                    &self.blur,
-                    pass_src,
-                    pass_src,
-                    dst,
-                    w,
-                    h,
-                    bytemuck::bytes_of(&BlurParams {
-                        dir,
-                        radius: op.radius_px,
-                        sigma,
-                        edge: 1, // Repeat, always (see the CPU reference)
-                        mix_amt: 1.0,
-                        matte_on: 0.0,
-                        _pad0: 0.0,
-                    }),
-                );
-            }
-            blurred
+        let halo = match &op.shape {
+            GlowShape::Gaussian(g) => self.glow_gaussian(ctx, &bright, w, h, g),
+            GlowShape::Exponential(octaves) => self.glow_exponential(ctx, &bright, w, h, octaves),
         };
         // The fringe rides on the halo alone, before the recombine.
         let halo = match &op.fringe {
@@ -775,6 +769,100 @@ impl FxEngine {
             bytemuck::bytes_of(&params),
         );
         out
+    }
+
+    /// The halo at Falloff 0: shrunk onto a grid, blurred there by the shared
+    /// gaussian read 6σ out, and scaled back up. The CPU reference is
+    /// `cpu::glow_gaussian`.
+    fn glow_gaussian(
+        &self,
+        ctx: &GpuContext,
+        bright: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        g: &GlowGaussianOp,
+    ) -> wgpu::Texture {
+        let [cw, ch] = g.grid;
+        let grid = |axis: u32| GlowExpParams {
+            step: g.step,
+            lambda: 0.0,
+            weight: 1.0,
+            axis,
+            first: 1,
+            taps: 0,
+            reach: 0.0,
+            _pad: 0.0,
+        };
+        let blur = |dir: [f32; 2]| BlurParams {
+            dir,
+            radius: g.reach,
+            sigma: g.sigma,
+            edge: 1, // Repeat, always (see the CPU reference)
+            mix_amt: 1.0,
+            matte_on: 0.0,
+            _pad0: 0.0,
+        };
+        let (across, across_p) = (work_texture(ctx, cw, h, "fx-glow-across"), grid(0));
+        let (coarse, coarse_p) = (work_texture(ctx, cw, ch, "fx-glow-coarse"), grid(1));
+        let (tmp, tmp_p) = (work_texture(ctx, cw, ch, "fx-glow-tmp"), blur([1.0, 0.0]));
+        let (lit, lit_p) = (work_texture(ctx, cw, ch, "fx-glow-lit"), blur([0.0, 1.0]));
+        let halo = work_texture(ctx, w, h, "fx-glow-halo");
+        let down = &self.glow_exp_down;
+        self.dispatch(
+            ctx,
+            down,
+            bright,
+            bright,
+            &across,
+            cw,
+            h,
+            bytemuck::bytes_of(&across_p),
+        );
+        self.dispatch(
+            ctx,
+            down,
+            &across,
+            &across,
+            &coarse,
+            cw,
+            ch,
+            bytemuck::bytes_of(&coarse_p),
+        );
+        self.dispatch(
+            ctx,
+            &self.blur,
+            &coarse,
+            &coarse,
+            &tmp,
+            cw,
+            ch,
+            bytemuck::bytes_of(&tmp_p),
+        );
+        self.dispatch(
+            ctx,
+            &self.blur,
+            &tmp,
+            &tmp,
+            &lit,
+            cw,
+            ch,
+            bytemuck::bytes_of(&lit_p),
+        );
+        let up = &self.glow_exp_up;
+        self.dispatch(
+            ctx,
+            up,
+            &lit,
+            &lit,
+            &halo,
+            w,
+            h,
+            bytemuck::bytes_of(&across_p),
+        );
+        for spent in [across, coarse, tmp, lit] {
+            ctx.recycle(spent);
+        }
+        halo
     }
 
     /// The halo for a Falloff above 0: each exponential is shrunk onto its

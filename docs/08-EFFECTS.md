@@ -834,17 +834,19 @@ band or clip prematurely.
 **Algorithm sketch.**
 1. Threshold pass: `max(0, colour − threshold)` with a soft knee (smoothstep over
    `knee` width), in linear light, premultiplied input taken directly.
-2. One separable gaussian on the light that is left, at Radius.
-3. **Falloff** above zero drops the gaussian. A gaussian stops dead at its Radius, and a
-   bright highlight shows that edge as a hard square. The halo is instead a sum of five
+2. One separable gaussian on the light that is left, σ = Radius / 2, read out to 6σ where it
+   is down to e⁻¹⁸ of its peak. Cut off any closer, the two passes stop in a square that a
+   bright highlight shows as a hard edge. The light is tent-sampled onto a grid σ / 4 apart
+   (the grid's σ is reduced by the tent's own variance, step² / 6), blurred there, and scaled
+   back up through a Catmull-Rom filter. At a Radius of 8 px or less the grid is the picture.
+3. **Falloff** above zero replaces the gaussian with a sum of five
    round exponentials, `exp(-r/λ)`, each twice as wide as the one before and taking
    `falloff / (1 + falloff)` of the previous one's share of the light. The shares add up to
    one, so Falloff moves light outward rather than adding any. The first has
    `λ = 0.285 × Radius`, which keeps the gaussian's share of the light (1 − e⁻²) inside
    Radius, so the glow keeps its size as Falloff leaves zero. Each exponential is
    tent-sampled onto a grid one λ apart, convolved there out to 16 λ with the last third
-   faded to nothing, and added back up through a Catmull-Rom filter. No gaussian is
-   involved at any step.
+   faded to nothing, and added back up through a Catmull-Rom filter.
 4. Optional **chromatic aberration**: the finished halo through the directional fringe of
    §3.6, at a fraction of Radius and along **Angle**, before the recombine. The bloom breaks
    into colour along its own edges; the picture under it is never resampled. Both of RGB
@@ -872,10 +874,9 @@ band or clip prematurely.
 
 Cost class `moderate`; ROI `full-frame` (Radius is unbounded px@comp, so a %-diag padding
 cannot bound it statically, mirroring Chromatic aberration's own px@comp choice).
-With Falloff above zero the cost does not grow with Radius: every exponential is worked out
-on a grid one λ apart, so it reads the same number of texels at any size. Only a very small
-Radius, where λ is under a pixel, runs at full size. The gaussian at Falloff 0 has no such
-grid, and a 200 px radius is still 200 px of taps.
+The cost does not grow with Radius: the gaussian is worked out on a grid σ / 4 apart and
+every exponential on a grid one λ apart, so each reads the same number of texels at any size.
+Only a small Radius, where the grid step would be under a pixel, runs at full size.
 
 **The Matte gates the seed (§2.6).** Glow is one of the four effects that claim the
 matte inside their own maths: the input is multiplied by the matte's luma **before** step 1,

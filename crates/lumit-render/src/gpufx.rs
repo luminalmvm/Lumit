@@ -3231,8 +3231,7 @@ impl GpuEffect for Glow {
             h,
             aux.matte(),
             &lumit_gpu::fx::GlowOp {
-                radius_px: halo.radius_px,
-                octaves: glow_octave_ops(halo.radius_px, halo.falloff, w, h),
+                shape: glow_shape(halo.radius_px, halo.falloff, w, h),
                 fringe,
                 threshold,
                 knee,
@@ -3244,26 +3243,32 @@ impl GpuEffect for Glow {
     }
 }
 
-/// A glow's exponentials in the shape the GPU takes them, or None for the
-/// gaussian. The GPU crate doesn't see `lumit-core`, so the numbers are
-/// worked out here, once, from the same function the CPU reference reads.
-fn glow_octave_ops(
-    radius_px: f32,
-    falloff: f32,
-    w: u32,
-    h: u32,
-) -> Option<[lumit_gpu::fx::GlowOctaveOp; 5]> {
-    use lumit_core::fx::cpu::{glow_grid, glow_octaves, GLOW_REACH};
-    (falloff > 0.0).then(|| {
-        glow_octaves(radius_px, falloff, w, h).map(|o| lumit_gpu::fx::GlowOctaveOp {
-            step: o.step,
-            grid: [glow_grid(w, o.step), glow_grid(h, o.step)],
-            lambda: o.lambda,
-            reach: GLOW_REACH * o.lambda,
-            taps: o.taps,
-            weight: o.weight,
+/// A glow's halo in the shape the GPU takes it. The GPU crate doesn't see
+/// `lumit-core`, so the numbers are worked out here, once, from the same
+/// functions the CPU reference reads.
+fn glow_shape(radius_px: f32, falloff: f32, w: u32, h: u32) -> lumit_gpu::fx::GlowShape {
+    use lumit_core::fx::cpu::{glow_gaussian_plan, glow_grid, glow_octaves, GLOW_REACH};
+    use lumit_gpu::fx::{GlowGaussianOp, GlowOctaveOp, GlowShape};
+    if falloff > 0.0 {
+        GlowShape::Exponential(
+            glow_octaves(radius_px, falloff, w, h).map(|o| GlowOctaveOp {
+                step: o.step,
+                grid: [glow_grid(w, o.step), glow_grid(h, o.step)],
+                lambda: o.lambda,
+                reach: GLOW_REACH * o.lambda,
+                taps: o.taps,
+                weight: o.weight,
+            }),
+        )
+    } else {
+        let g = glow_gaussian_plan(radius_px, w, h);
+        GlowShape::Gaussian(GlowGaussianOp {
+            step: g.step,
+            grid: [glow_grid(w, g.step), glow_grid(h, g.step)],
+            sigma: g.sigma,
+            reach: g.reach,
         })
-    })
+    }
 }
 
 struct BlockGlitch;

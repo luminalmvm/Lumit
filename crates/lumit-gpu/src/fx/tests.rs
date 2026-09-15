@@ -335,8 +335,7 @@ fn wgsl_matted_glow_seeds_only_inside_the_matte_and_spills_past_it() {
 
     let matte_tex = upload_linear_f32(&ctx, &matte, w, h);
     let op = GlowOp {
-        radius_px: 6.0,
-        octaves: None,
+        shape: glow_shape(6.0, 0.0, w, h),
         fringe: None,
         threshold: 0.8,
         knee: 0.5,
@@ -2410,6 +2409,7 @@ fn wgsl_glow_matches_the_cpu_oracle() {
             1.0f32,
         ),
         ("hard-knee", 4.0, 0.5, 0.0, 2.0, [1.0; 4], 1.0),
+        ("wide", 24.0, 0.5, 0.5, 4.0, [1.0; 4], 1.0),
         ("threshold-0", 8.0, 0.0, 0.0, 1.0, [1.0; 4], 1.0),
         (
             "tinted-mixed",
@@ -2438,8 +2438,7 @@ fn wgsl_glow_matches_the_cpu_oracle() {
 
         let tex = upload_linear_f32(&ctx, &img, w, h);
         let op = GlowOp {
-            radius_px: radius,
-            octaves: None,
+            shape: glow_shape(radius, 0.0, w, h),
             fringe: None,
             threshold,
             knee,
@@ -2465,20 +2464,30 @@ fn wgsl_glow_matches_the_cpu_oracle() {
     }
 }
 
-/// A glow's exponentials as `lumit-render` hands them over, restated here
-/// because this crate only sees `lumit-core` in its tests.
-fn glow_octave_ops(radius_px: f32, falloff: f32, w: u32, h: u32) -> Option<[GlowOctaveOp; 5]> {
-    use lumit_core::fx::cpu::{glow_grid, glow_octaves, GLOW_REACH};
-    (falloff > 0.0).then(|| {
-        glow_octaves(radius_px, falloff, w, h).map(|o| GlowOctaveOp {
-            step: o.step,
-            grid: [glow_grid(w, o.step), glow_grid(h, o.step)],
-            lambda: o.lambda,
-            reach: GLOW_REACH * o.lambda,
-            taps: o.taps,
-            weight: o.weight,
+/// A glow's halo as `lumit-render` hands it over, restated here because this
+/// crate only sees `lumit-core` in its tests.
+fn glow_shape(radius_px: f32, falloff: f32, w: u32, h: u32) -> GlowShape {
+    use lumit_core::fx::cpu::{glow_gaussian_plan, glow_grid, glow_octaves, GLOW_REACH};
+    if falloff > 0.0 {
+        GlowShape::Exponential(
+            glow_octaves(radius_px, falloff, w, h).map(|o| GlowOctaveOp {
+                step: o.step,
+                grid: [glow_grid(w, o.step), glow_grid(h, o.step)],
+                lambda: o.lambda,
+                reach: GLOW_REACH * o.lambda,
+                taps: o.taps,
+                weight: o.weight,
+            }),
+        )
+    } else {
+        let g = glow_gaussian_plan(radius_px, w, h);
+        GlowShape::Gaussian(GlowGaussianOp {
+            step: g.step,
+            grid: [glow_grid(w, g.step), glow_grid(h, g.step)],
+            sigma: g.sigma,
+            reach: g.reach,
         })
-    })
+    }
 }
 
 /// The §1.6 oracle for the glow's **Falloff** and its **Chromatic aberration**
@@ -2554,8 +2563,7 @@ fn wgsl_glow_falloff_and_fringe_match_the_cpu_oracle() {
             }
         });
         let op = GlowOp {
-            radius_px: halo.radius_px,
-            octaves: glow_octave_ops(radius_px, falloff, w, h),
+            shape: glow_shape(radius_px, falloff, w, h),
             fringe,
             threshold: 0.8,
             knee: 0.5,

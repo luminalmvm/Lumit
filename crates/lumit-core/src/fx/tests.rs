@@ -4206,11 +4206,11 @@ fn cpu_glow_blooms_spreads_alpha_and_keeps_neutral_exact() {
 }
 
 /// **Falloff** (docs/08 §3.3): one bright pixel on black, so the halo is the
-/// profile. Above zero it has to be round, fall away at a steady rate, and
-/// carry on past the Radius. The gaussian it replaces stops dead at the
-/// Radius in a square, which is what a bright glow showed.
+/// profile. At every Falloff it has to be round and carry on past the Radius,
+/// a gaussian at 0 and an exponential above it. The glow used to stop dead at
+/// the Radius in a square, which is what a bright glow showed.
 #[test]
-fn cpu_glow_falloff_is_round_exponential_and_has_no_edge() {
+fn cpu_glow_halo_is_round_and_has_no_edge() {
     let (w, h) = (129u32, 129u32);
     let at = |x: u32, y: u32| ((y * w + x) * 4) as usize;
     let mut img = vec![0.0f32; (w * h * 4) as usize];
@@ -4241,28 +4241,35 @@ fn cpu_glow_falloff_is_round_exponential_and_has_no_edge() {
         out
     };
 
-    // Zero is the gaussian this effect shipped with, and it ends at the Radius.
+    // A 3-4-5 triangle puts a point on the axis and one off it at the same
+    // distance, so a square halo shows up as two different values.
+    let round = |halo: &[f32], name: &str| {
+        for (r, off) in [(20u32, (12, 16)), (35, (21, 28))] {
+            let axis = halo[at(64 + r, 64)];
+            let diagonal = halo[at(64 + off.0, 64 + off.1)];
+            assert!(
+                (axis / diagonal - 1.0).abs() < 0.1,
+                "{name} round at {r} px: {axis} on the axis, {diagonal} off it"
+            );
+        }
+    };
+
+    // Zero is the gaussian, σ half the Radius, still going past twice it.
     let gaussian = bloom(0.0);
     let mut plain = img.clone();
     cpu::glow(&mut plain, w, h, 16.0, 0.0, 0.0, 1.0, [1.0; 4], 1.0, &[]);
-    assert_eq!(gaussian, plain, "falloff 0 is the gaussian bloom unchanged");
-    assert_eq!(
-        gaussian[at(99, 64)],
-        0.0,
-        "the gaussian stops at its Radius"
+    assert_eq!(gaussian, plain, "falloff 0 is the plain glow");
+    round(&gaussian, "gaussian");
+    assert!(
+        gaussian[at(99, 64)] > 0.0,
+        "the gaussian carries on past the Radius"
     );
+    let (near, far) = (gaussian[at(76, 64)], gaussian[at(88, 64)]);
+    let sigma = ((24.0f32 * 24.0 - 12.0 * 12.0) / 2.0 / (near / far).ln()).sqrt();
+    assert!((sigma / 8.0 - 1.0).abs() < 0.05, "σ {sigma}, expected 8");
 
-    // A 3-4-5 triangle puts a point on the axis and one off it at the same
-    // distance, so a square halo shows up as two different values.
     let exp = bloom(1e-3);
-    for (r, off) in [(20.0f32, (12, 16)), (35.0, (21, 28))] {
-        let axis = exp[at(64 + r as u32, 64)];
-        let diagonal = exp[at(64 + off.0, 64 + off.1)];
-        assert!(
-            (axis / diagonal - 1.0).abs() < 0.1,
-            "round at {r} px: {axis} on the axis, {diagonal} off it"
-        );
-    }
+    round(&exp, "exponential");
     // It falls by the same factor every pixel, at the core's decay length.
     let (near, far) = (exp[at(84, 64)], exp[at(99, 64)]);
     assert!(far > 0.0, "the light carries on past twice the Radius");
@@ -4381,10 +4388,11 @@ fn cpu_glow_fringe_colours_the_halo_and_leaves_the_picture() {
     assert!(rb(&turned, above) > 1e-4, "angle 90 splits along y");
     assert!(rb(&turned, beside) < 1e-5, "and leaves the x axis grey");
 
-    // The picture keeps its own pixels: a corner the halo never reaches is
-    // untouched, fringe or no fringe.
+    // The picture keeps its own pixels: a corner the halo barely reaches is all
+    // but untouched, fringe or no fringe.
     let far = at(30, 0);
-    assert_eq!(fringed[far..far + 4], img[far..far + 4]);
+    let untouched = |px: &[f32]| (0..4).all(|c| (px[far + c] - img[far + c]).abs() < 1e-3);
+    assert!(untouched(&fringed));
 
     // **Wavelength** runs the same offset as a gradient of taps rather than
     // three, so it is a different picture at the same Amount, and it still
@@ -4397,7 +4405,7 @@ fn cpu_glow_fringe_colours_the_halo_and_leaves_the_picture() {
             .any(|i| (spectral[i] - spectral[i + 2]).abs() > 1e-4),
         "the spectral halo broke into colour too"
     );
-    assert_eq!(spectral[far..far + 4], img[far..far + 4]);
+    assert!(untouched(&spectral));
 
     // **The three colours** are read on both tiers: swap red and blue and the
     // fringe swaps with them.
