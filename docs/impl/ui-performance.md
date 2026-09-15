@@ -776,7 +776,11 @@ the empty-preview condition — useful on purpose, misleading by accident; trust
 `media beside project:` line, not the intent. `--no-enable-impeller` runs the same
 table on Skia (§2.4). Every work package below re-runs the probe before and after; a
 package is done when its gate row holds. docs/13 §7.3 names it the manual instrument
-for B1/B2; it is deleted the day a real-window CI harness supersedes it.
+for B1/B2 on the real edit. The real-window harness
+(`integration_test/ui_budget_test.dart`, 2026-09-14) shares its gesture code
+(`ProbeGestures`) and measures the same list over a generated 200-layer comp, from a
+test, so the two cannot drift apart in how they press, scroll and drag. The probe stays
+for the real edit in its own conditions, and the harness is what CI runs.
 
 **The accounting, corrected 2026-08-31.** Frames are counted against the
 gesture's own window: `_measure` stamps `[t0, t1]` with `Timeline.now` (printed as the

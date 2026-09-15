@@ -760,6 +760,14 @@ pub struct BridgeParamInfo {
     /// per parameter engine-side, so a row's unit travels with the row rather
     /// than with its id and the panel never has to guess.
     pub unit: BridgeUnit,
+    /// Whether this row comes from the **instance** rather than from the
+    /// effect's declaration (docs/impl/effect-registry.md §4): a Custom
+    /// shader's uniform, a Node graph's Input. False for every row
+    /// [`list_parameters`] answers, since a match name can only ever say what
+    /// the effect declares. The panel draws the two the same; the flag is for
+    /// the one row that sits between them, the Sync affordance
+    /// (docs/impl/custom-shader.md §1.5).
+    pub derived: bool,
 }
 
 /// What kind of control a parameter wants, and the numbers that control needs.
@@ -1019,6 +1027,17 @@ pub(crate) fn bridge_param(param: &lumit_core::fx::ParamSchema) -> BridgeParamIn
         label: param.label.to_owned(),
         kind,
         unit: bridge_unit(param.unit),
+        derived: false,
+    }
+}
+
+/// One **derived** row, as the panel reads it: [`bridge_param`] with the flag
+/// set, and nothing else different, because nothing else is.
+#[frb(ignore)]
+pub(crate) fn bridge_derived_param(param: &lumit_core::fx::ParamSchema) -> BridgeParamInfo {
+    BridgeParamInfo {
+        derived: true,
+        ..bridge_param(param)
     }
 }
 
@@ -1766,6 +1785,50 @@ pub struct BridgeEffectInstance {
     /// keyframes. Carried rather than looked up: the handle is a
     /// snapshot, and the layer it came from is the only place this is known.
     offset: Rational,
+    /// The derived rows [`fill_derived`] put on this copy that the **document
+    /// does not hold** — offered, not yet adopted (docs/impl/custom-shader.md
+    /// §1.5). The handle is the only place the difference survives: once the
+    /// row is on `effect.params` it looks like every other row, and
+    /// [`Self::parameter_sync`] has to say which ones the user has not said
+    /// yes to yet, while [`Self::get_effects`] has to leave them out of the
+    /// commit. A row leaves this list when the user writes to it or presses
+    /// Sync.
+    offered: Vec<String>,
+}
+
+/// What the Sync and Remove affordances would do to one instance
+/// (docs/impl/custom-shader.md §1.5, docs/impl/effect-registry.md §4), read
+/// before either is pressed so the row can name its counts and the removal
+/// can say what it will break.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct BridgeParamSync {
+    /// Rows the instance's own state derives that the document does not
+    /// carry, in derived order: what [`BridgeEffectInstance::sync_parameters`]
+    /// adds.
+    pub adds: Vec<String>,
+    /// Rows the document carries that neither the declaration nor the
+    /// derivation names any more, in stored order: what
+    /// [`BridgeEffectInstance::remove_unused_parameters`] removes.
+    pub removes: Vec<BridgeUnusedParam>,
+}
+
+/// One stored row nothing declares any more, and what removing it would cost.
+///
+/// Rule 1 (registry §4): nothing is removed behind the user's back, and the
+/// action that does remove it says what it will break first. What it can
+/// break is what the row itself holds: keyframes and an expression. An
+/// expression **elsewhere** that reads this id by name is not walked — that
+/// is a whole-document search for a sentence, and the expression degrades to
+/// its own missing-name rule rather than to a crash.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeUnusedParam {
+    pub id: String,
+    /// Whether any of its channels carries keyframes.
+    pub keyframed: bool,
+    /// Whether any of its channels is driven by an expression.
+    pub expression: bool,
 }
 
 /// One parameter's current value, as [`BridgeEffectInstance::get_info`]
@@ -2175,14 +2238,19 @@ fn validated(program: &lumit_core::fx::shader::ShaderProgram) -> &'static Option
 /// nobody's edit behind it — the one thing §1.5 forbids. Here it reaches only
 /// the two copies the bridge makes: the clone `read_instance_info` reads, so a
 /// derived row draws its value rather than a dash, and the staged copy a handle
-/// holds, so `set_value` can write one. A staged copy reaches the document only
-/// alongside an edit the user actually made, which is what makes adopting a row
+/// holds, so `set_value` can write one. The commit road
+/// ([`BridgeEffectInstance::get_effects`]) leaves a filled row behind unless
+/// the user wrote to it or pressed Sync, which is what makes adopting a row
 /// the user's act rather than the panel's.
+///
+/// Answers the ids it added, in derived order, so a handle can remember which
+/// of its rows are offered rather than stored.
 #[frb(ignore)]
-fn fill_derived(effect: &mut EffectInstance) {
+fn fill_derived(effect: &mut EffectInstance) -> Vec<String> {
     let Some(def) = lumit_core::fx::def(effect.effect.match_name.as_str()) else {
-        return;
+        return Vec::new();
     };
+    let mut added = Vec::new();
     // `derived` answers `&'static [ParamSchema]` — a session-lived parse cache,
     // not a borrow of the instance — so the read is over before the write.
     for param in def.derived(effect) {
@@ -2195,16 +2263,43 @@ fn fill_derived(effect: &mut EffectInstance) {
                 value,
                 extra: serde_json::Map::new(),
             });
+            added.push(param.id.to_owned());
         }
     }
+    added
 }
 
 /// The rows an instance's own source declares, as the panel reads them.
 #[frb(ignore)]
 fn derived_params_of(effect: &EffectInstance) -> Vec<BridgeParamInfo> {
     lumit_core::fx::def(effect.effect.match_name.as_str())
-        .map(|def| def.derived(effect).iter().map(bridge_param).collect())
+        .map(|def| {
+            def.derived(effect)
+                .iter()
+                .map(bridge_derived_param)
+                .collect()
+        })
         .unwrap_or_default()
+}
+
+/// Whether any channel of a stored value carries keyframes, and whether any
+/// is driven by an expression — the two things removing the row would take
+/// with it.
+#[frb(ignore)]
+fn animation_of(value: &lumit_core::model::EffectValue) -> (bool, bool) {
+    use lumit_core::anim::Animation;
+    use lumit_core::model::EffectValue;
+    let channels: Vec<&lumit_core::anim::Property> = match value {
+        EffectValue::Float(p) => vec![p],
+        EffectValue::Point(x, y) => vec![x, y],
+        EffectValue::Colour(c) => c.iter().collect(),
+        _ => Vec::new(),
+    };
+    let keyframed = channels.iter().any(|p| p.is_animated());
+    let expression = channels
+        .iter()
+        .any(|p| matches!(p.animation, Animation::Expression(_)));
+    (keyframed, expression)
 }
 
 /// `effect` with a **Node graph** instance's Inputs copy brought up to the
@@ -2308,8 +2403,12 @@ impl BridgeEffectInstance {
         // And the rows this instance's *own* source declares (§1.5), so a
         // derived control is as live as a declared one: `get_value` answers it,
         // `set_value` writes it, and the commit is the ordinary one.
-        fill_derived(&mut effect);
-        BridgeEffectInstance { effect, offset }
+        let offered = fill_derived(&mut effect);
+        BridgeEffectInstance {
+            effect,
+            offset,
+            offered,
+        }
     }
 
     /// One read for everything a card draws — see [`BridgeEffectInstanceInfo`].
@@ -2400,9 +2499,132 @@ impl BridgeEffectInstance {
         def.schema()
             .params
             .iter()
-            .chain(def.derived(&self.effect))
             .map(bridge_param)
+            .chain(def.derived(&self.effect).iter().map(bridge_derived_param))
             .collect()
+    }
+
+    /// What Sync and Remove would do to this instance, as it stands on this
+    /// handle (docs/impl/custom-shader.md §1.5): the derived rows the document
+    /// has not adopted, and the stored rows nothing names any more.
+    ///
+    /// Read on the gesture that draws the affordance, never per rebuild. The
+    /// answer is about the **document**, not this copy: a row
+    /// [`fill_derived`] put here at construction is still `new` until
+    /// [`Self::sync_parameters`] says otherwise, and a source staged by
+    /// [`Self::set_shader_source`] on this same handle counts as the instance's
+    /// state, so the editor can ask what Apply will leave behind.
+    ///
+    /// An effect this build does not know answers nothing either way: with no
+    /// declaration to hold the stored rows against, none of them is unused.
+    #[frb(sync)]
+    pub fn parameter_sync(&self) -> BridgeParamSync {
+        let Some(def) = lumit_core::fx::def(self.effect.effect.match_name.as_str()) else {
+            return BridgeParamSync::default();
+        };
+        let derived = def.derived(&self.effect);
+        let declared = &def.schema().params;
+        let names =
+            |id: &str| declared.iter().any(|p| p.id == id) || derived.iter().any(|p| p.id == id);
+        let stored = |id: &str| !self.offered.iter().any(|o| o == id);
+        BridgeParamSync {
+            adds: derived
+                .iter()
+                .filter(|p| lumit_core::fx::default_param_value(&p.kind).is_some())
+                .filter(|p| {
+                    !self
+                        .effect
+                        .params
+                        .iter()
+                        .any(|have| have.id == p.id && stored(&have.id))
+                })
+                .map(|p| p.id.to_owned())
+                .collect(),
+            removes: self
+                .effect
+                .params
+                .iter()
+                .filter(|p| stored(&p.id) && !names(&p.id))
+                .map(|p| {
+                    let (keyframed, expression) = animation_of(&p.value);
+                    BridgeUnusedParam {
+                        id: p.id.clone(),
+                        keyframed,
+                        expression,
+                    }
+                })
+                .collect(),
+        }
+    }
+
+    /// **Sync parameters** (registry §4 rule 2): adopt every row this
+    /// instance's state derives and the document lacks, at its default, on
+    /// the **staged** copy. `LayerReference::set_effects` is the commit, so the
+    /// adoption is one `SetLayerEffects` and one undo step, and it is the
+    /// user's act: nothing here runs on a read or on a render.
+    ///
+    /// Answers the ids adopted, in derived order — what the affordance
+    /// reports. Empty when there was nothing to adopt, so a caller can skip a
+    /// commit that would undo to itself. Rows the document already holds are
+    /// untouched: their values are the document's, not the source's defaults.
+    #[frb(sync)]
+    pub fn sync_parameters(&mut self) -> Vec<String> {
+        let adopted = self.parameter_sync().adds;
+        self.drop_stale_offers();
+        fill_derived(&mut self.effect);
+        self.offered.clear();
+        adopted
+    }
+
+    /// Forget the offered rows the instance's current state no longer derives.
+    ///
+    /// A source staged on this handle can stop naming a uniform the fill put
+    /// here for the source before it. That row is neither the document's nor
+    /// the new source's, and it must not ride the commit as if the user had
+    /// asked for it — which is a different thing from rule 1: a row the
+    /// **document** holds is never touched here.
+    #[frb(ignore)]
+    fn drop_stale_offers(&mut self) {
+        if self.offered.is_empty() {
+            return;
+        }
+        let derived_now: Vec<String> = lumit_core::fx::def(self.effect.effect.match_name.as_str())
+            .map(|def| {
+                def.derived(&self.effect)
+                    .iter()
+                    .map(|p| p.id.to_owned())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let offered = std::mem::take(&mut self.offered);
+        self.effect
+            .params
+            .retain(|p| !offered.contains(&p.id) || derived_now.contains(&p.id));
+        self.offered = offered
+            .into_iter()
+            .filter(|id| derived_now.contains(id))
+            .collect();
+    }
+
+    /// **Remove unused parameters** (registry §4 rule 1): take away every
+    /// stored row that neither the declaration nor the derivation names, on
+    /// the **staged** copy, keyframes and expression and all.
+    /// `LayerReference::set_effects` is the commit — one op, one undo step,
+    /// which is also the way back.
+    ///
+    /// Deliberate by construction: it is the only road that removes a row, it
+    /// runs on nobody's read, and [`Self::parameter_sync`] says beforehand
+    /// what each removal will break. Answers the ids removed, in stored order.
+    #[frb(sync)]
+    pub fn remove_unused_parameters(&mut self) -> Vec<String> {
+        let unused: Vec<String> = self
+            .parameter_sync()
+            .removes
+            .into_iter()
+            .map(|p| p.id)
+            .collect();
+        self.effect.params.retain(|p| !unused.contains(&p.id));
+        unused
     }
 
     /// The WGSL text this instance holds, or `None` when it holds none
@@ -2471,6 +2693,7 @@ impl BridgeEffectInstance {
         self.effect
             .extra
             .insert(EXTRA_KEY.to_owned(), serde_json::Value::Object(block));
+        self.drop_stale_offers();
     }
 
     /// Whether this instance's shader will draw, and why not when it will not
@@ -2577,9 +2800,20 @@ impl BridgeEffectInstance {
         lumit_core::fx::effects::node_graph::comp_of(&self.effect)
     }
 
+    /// The instance as the **commit** takes it: every row the document holds
+    /// or the user has written to, and none of the rows [`fill_derived`] put
+    /// here that nobody has touched. Those are offered, and rule 2 (registry
+    /// §4) says adopting one is an act — a write to it, or
+    /// [`Self::sync_parameters`] — not a side effect of committing something
+    /// else. `get_info` still draws them, at their defaults, off the copy that
+    /// keeps them.
     #[frb(ignore)]
     pub fn get_effects(&self) -> EffectInstance {
-        self.effect.clone()
+        let mut effect = self.effect.clone();
+        if !self.offered.is_empty() {
+            effect.params.retain(|p| !self.offered.contains(&p.id));
+        }
+        effect
     }
 
     #[frb(sync)]
@@ -2643,7 +2877,11 @@ impl BridgeEffectInstance {
             .find(|p| p.id == id)
             .ok_or(BridgeError::InvalidParam)?;
 
-        value.write_at(&mut param.value, offset, bounds)
+        value.write_at(&mut param.value, offset, bounds)?;
+        // Writing to an offered row is the act that adopts it (§1.5): from
+        // here it rides the commit like every row the document holds.
+        self.offered.retain(|o| *o != id);
+        Ok(())
     }
 
     #[frb(ignore)]

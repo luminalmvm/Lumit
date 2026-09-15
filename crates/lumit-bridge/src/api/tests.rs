@@ -13540,6 +13540,184 @@ fn a_custom_shaders_rows_are_the_ones_its_own_source_declares() {
     );
 }
 
+/// Three rows: two floats to key and drive, and a colour.
+const THREE_ROWS: &str = "\
+struct Params {
+    /// @slider(0, 200) @default(25) @unit(px) Radius
+    radius: f32,
+    /// @slider(0, 1) Wobble
+    wobble: f32,
+    /// @colour @default(1, 0.5, 0.2, 1) Tint
+    tint: vec4<f32>,
+}
+
+fn shade(uv: vec2<f32>) -> vec4<f32> {
+    return lumit_sample(uv) * p.tint * p.radius * p.wobble;
+}
+";
+
+/// The edit after it: the two floats are gone and a whole number is new.
+const NEXT_ROWS: &str = "\
+struct Params {
+    /// @colour @default(1, 0.5, 0.2, 1) Tint
+    tint: vec4<f32>,
+    /// Steps
+    steps: i32,
+}
+
+fn shade(uv: vec2<f32>) -> vec4<f32> {
+    return lumit_sample(uv) * p.tint * f32(p.steps);
+}
+";
+
+/// **Adopting and removing are the user's acts, and each says what it does**
+/// (docs/impl/effect-registry.md §4 rules 1 and 2, on the effect they were
+/// written for).
+///
+/// A shader edit offers rows and adopts none; Sync adopts them in one commit;
+/// an edit that stops naming a row leaves it, keyframes and expression intact,
+/// and says what removing it would cost; Remove is the one road that takes it
+/// away, and undo is the way back.
+#[test]
+fn sync_adopts_the_offered_rows_and_remove_takes_the_unused_ones() {
+    let (project, layer) = project_with_layer();
+    layer.add_effect("custom_shader".into()).expect("added");
+    set_shader(&layer, THREE_ROWS, None);
+
+    // Apply wrote the text and nothing else: the rows are offered, the
+    // document does not hold them, and every row says which half it is from.
+    let fresh = only_effect(&layer);
+    let sync = fresh.parameter_sync();
+    assert_eq!(
+        sync.adds,
+        ["radius", "wobble", "tint"],
+        "offered, not adopted"
+    );
+    assert!(sync.removes.is_empty());
+    let rows = fresh.list_parameters();
+    assert_eq!(
+        rows.iter()
+            .filter(|r| r.derived)
+            .map(|r| r.id.as_str())
+            .collect::<Vec<_>>(),
+        ["radius", "wobble", "tint"],
+        "the derived tail carries the flag"
+    );
+    assert!(
+        rows.iter().any(|r| r.id == "mix" && !r.derived),
+        "the declared head does not"
+    );
+    assert!(fresh.get_info().derived_params.iter().all(|r| r.derived));
+    assert!(
+        crate::api::effect::list_parameters("custom_shader".into())
+            .iter()
+            .all(|r| !r.derived),
+        "a match name can only ever answer the declared half"
+    );
+    assert_eq!(
+        only_effect(&layer).parameter_sync().adds,
+        ["radius", "wobble", "tint"],
+        "reading the stack adopts nothing"
+    );
+
+    // Sync: one staged act, one commit.
+    let mut stack = layer.get_effects().expect("stack");
+    assert_eq!(stack[0].sync_parameters(), ["radius", "wobble", "tint"]);
+    assert!(
+        stack[0].sync_parameters().is_empty(),
+        "a second press has nothing left to adopt"
+    );
+    layer.set_effects(stack, None).expect("committed");
+    assert!(
+        only_effect(&layer).parameter_sync().adds.is_empty(),
+        "the document holds them now"
+    );
+
+    // Key one adopted row and drive another, exactly as declared rows are.
+    let key = |num: i64, value: f64| BridgeKeyframe {
+        time: BridgeRational { num, den: 1 },
+        value,
+        interp_in: BridgeSideInterp::Linear,
+        interp_out: BridgeSideInterp::Linear,
+    };
+    let mut stack = layer.get_effects().expect("stack");
+    stack[0]
+        .set_value(
+            "radius".into(),
+            BridgeEffectValue::Float(BridgeScalar::Keyframed(vec![key(0, 10.0), key(2, 90.0)])),
+        )
+        .expect("keyed");
+    stack[0]
+        .set_value(
+            "wobble".into(),
+            BridgeEffectValue::Float(BridgeScalar::Expression("time".into())),
+        )
+        .expect("driven");
+    layer.set_effects(stack, None).expect("committed");
+
+    // The edit that stops naming them: rule 1, and the cost of removal.
+    set_shader(&layer, NEXT_ROWS, None);
+    let edited = only_effect(&layer);
+    let sync = edited.parameter_sync();
+    assert_eq!(sync.adds, ["steps"], "the new row is offered");
+    assert_eq!(
+        sync.removes
+            .iter()
+            .map(|r| (r.id.as_str(), r.keyframed, r.expression))
+            .collect::<Vec<_>>(),
+        [("radius", true, false), ("wobble", false, true)],
+        "the rows nothing names any more, and what each one holds"
+    );
+    assert!(
+        matches!(
+            edited.get_value("radius".into()),
+            Ok(BridgeEffectValue::Float(BridgeScalar::Keyframed(keys))) if keys.len() == 2
+        ),
+        "the keys are still there"
+    );
+    assert!(
+        edited.get_value("steps".into()).is_ok(),
+        "the offered row is live on the copy"
+    );
+
+    // Remove: says what it took, one commit, and undo is the way back.
+    let mut stack = layer.get_effects().expect("stack");
+    assert_eq!(stack[0].remove_unused_parameters(), ["radius", "wobble"]);
+    layer.set_effects(stack, None).expect("committed");
+    let trimmed = only_effect(&layer);
+    assert!(trimmed.parameter_sync().removes.is_empty());
+    assert!(
+        trimmed.get_value("radius".into()).is_err(),
+        "gone from the document"
+    );
+    assert_eq!(
+        trimmed.parameter_sync().adds,
+        ["steps"],
+        "removing adopts nothing"
+    );
+    project.undo().expect("undone");
+    assert!(
+        matches!(
+            only_effect(&layer).get_value("radius".into()),
+            Ok(BridgeEffectValue::Float(BridgeScalar::Keyframed(keys))) if keys.len() == 2
+        ),
+        "one undo puts the keyed row back"
+    );
+
+    // A source staged on a handle drops the offers made for the one before
+    // it, so an Apply never writes a row nobody asked for.
+    let mut stack = layer.get_effects().expect("stack");
+    assert!(stack[0].get_value("steps".into()).is_ok(), "offered again");
+    stack[0].set_shader_source(THREE_ROWS.into(), None);
+    assert!(
+        stack[0].get_value("steps".into()).is_err(),
+        "the new text does not name it, and it was never the document's"
+    );
+    assert!(stack[0].parameter_sync().adds.is_empty());
+    layer.set_effects(stack, None).expect("committed");
+    assert!(only_effect(&layer).get_value("steps".into()).is_err());
+}
+
 /// **The compile state crosses in both directions**, and a refusal and a
 /// compile error read as one sentence because the person is looking at one text
 /// box (§2.1, §2.2).

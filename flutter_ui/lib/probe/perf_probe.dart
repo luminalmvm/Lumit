@@ -1,8 +1,9 @@
 // The parked measurement probe behind docs/impl/ui-performance.md:
-// the manual instrument for docs/13's B1/B2 until a real-window harness
-// exists. Activated only when the build passes
-// --dart-define=LUMIT_PROBE_PROJECT=<path-to-.lum> (see main.dart); an
-// ordinary build compiles it out of reach, so it ships in nothing.
+// the manual instrument for docs/13's B1/B2 on the real edit. Its
+// gesture code (ProbeGestures, below) is shared with the real-window harness,
+// integration_test/ui_budget_test.dart, which is what CI runs. Activated only
+// when the build passes --dart-define=LUMIT_PROBE_PROJECT=<path-to-.lum> (see
+// main.dart); an ordinary build compiles it out of reach, so it ships in nothing.
 //
 // What it does: opens the given project, fronts the comp named "Clips" (or
 // the first comp), then drives the measured gestures — select clicks, wheel
@@ -12,8 +13,7 @@
 // total span) and every bridge crossing per gesture. Results are written to
 // LUMIT_PROBE_OUT as plain text: the note's §2 table is this file's output.
 //
-// Every ui-performance work package re-runs this before and after; it goes
-// the day docs/13 §7.3's real-window CI harness supersedes it.
+// Every ui-performance work package re-runs this before and after.
 
 import 'dart:developer' as developer;
 import 'dart:io';
@@ -96,12 +96,183 @@ List<FrameTiming> framesWithin(List<FrameTiming> frames, int t0, int t1) => [
           f,
     ];
 
+/// The [q]th quantile of an ascending list, the way the probe has always read
+/// it: the element at the rounded position, no interpolation.
+double percentile(List<double> sorted, double q) =>
+    sorted.isEmpty ? 0 : sorted[((sorted.length - 1) * q).round()];
+
+/// The Timeline's on-screen rects, clamped to the panel (see [timelineGeometry]).
+typedef TimelineGeometry = ({
+  Rect panel,
+  Rect ruler,
+  Rect lanes,
+  Rect? viewer,
+  bool clamped,
+});
+
+/// The gesture-driving half of the probe, shared with the real-window
+/// harness (`integration_test/ui_budget_test.dart`) so both drive the same
+/// pointer path at the same pace and one measures what the other measured.
+///
+/// Every event goes out through [send]. The app hands it straight to
+/// [GestureBinding]; the test binding drops a bare `handlePointerEvent` on the
+/// floor (its default source is the physical mouse, which live tests ignore),
+/// so the harness feeds it through `handlePointerEventForSource` instead.
+mixin ProbeGestures {
+  void send(PointerEvent e);
+
+  int _pointer = 4242;
+
+  Future<void> click(Offset at) async {
+    final id = _pointer++;
+    send(PointerDownEvent(
+        pointer: id,
+        position: at,
+        kind: PointerDeviceKind.mouse,
+        buttons: kPrimaryButton));
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    send(PointerUpEvent(
+        pointer: id, position: at, kind: PointerDeviceKind.mouse));
+  }
+
+  /// A press without its release, so a caller can look at the frame between
+  /// the two, which is what B2 is.
+  int press(Offset at) {
+    final id = _pointer++;
+    send(PointerDownEvent(
+        pointer: id,
+        position: at,
+        kind: PointerDeviceKind.mouse,
+        buttons: kPrimaryButton));
+    return id;
+  }
+
+  void release(int id, Offset at) => send(
+      PointerUpEvent(pointer: id, position: at, kind: PointerDeviceKind.mouse));
+
+  /// One move per frame from [from] to [to] over [duration]: the pace of a
+  /// hand, and one frame of work per event rather than a queue of them.
+  Future<void> drag(Offset from, Offset to, Duration duration) async {
+    final id = _pointer++;
+    send(PointerDownEvent(
+        pointer: id,
+        position: from,
+        kind: PointerDeviceKind.mouse,
+        buttons: kPrimaryButton));
+    final sw = Stopwatch()..start();
+    var last = from;
+    while (sw.elapsed < duration) {
+      await SchedulerBinding.instance.endOfFrame;
+      final t =
+          (sw.elapsed.inMicroseconds / duration.inMicroseconds).clamp(0.0, 1.0);
+      final p = Offset.lerp(from, to, t)!;
+      send(PointerMoveEvent(
+          pointer: id,
+          position: p,
+          delta: p - last,
+          kind: PointerDeviceKind.mouse,
+          buttons: kPrimaryButton));
+      last = p;
+    }
+    send(PointerUpEvent(
+        pointer: id, position: last, kind: PointerDeviceKind.mouse));
+  }
+
+  void wheel(Offset at, double dy) => send(PointerScrollEvent(
+      position: at, scrollDelta: Offset(0, dy), kind: PointerDeviceKind.mouse));
+
+  Future<void> withCtrl(Future<void> Function() body) async {
+    HardwareKeyboard.instance.handleKeyEvent(const KeyDownEvent(
+        physicalKey: PhysicalKeyboardKey.controlLeft,
+        logicalKey: LogicalKeyboardKey.controlLeft,
+        timeStamp: Duration.zero));
+    try {
+      await body();
+    } finally {
+      HardwareKeyboard.instance.handleKeyEvent(const KeyUpEvent(
+          physicalKey: PhysicalKeyboardKey.controlLeft,
+          logicalKey: LogicalKeyboardKey.controlLeft,
+          timeStamp: Duration.zero));
+    }
+  }
+
+  // ---- element lookup -----------------------------------------------------
+
+  List<Element> elements(bool Function(Element) test) {
+    final found = <Element>[];
+    void visit(Element e) {
+      if (test(e)) found.add(e);
+      e.visitChildren(visit);
+    }
+
+    final root = WidgetsBinding.instance.rootElement;
+    if (root != null) visit(root);
+    return found;
+  }
+
+  List<Element> byTypeName(String name) =>
+      elements((e) => e.widget.runtimeType.toString() == name);
+
+  Element? byKey(Key key) => elements((e) => e.widget.key == key).firstOrNull;
+
+  Rect? rectOf(Element? e) {
+    final ro = e?.renderObject;
+    if (ro is! RenderBox || !ro.hasSize || !ro.attached) return null;
+    return ro.localToGlobal(Offset.zero) & ro.size;
+  }
+
+  /// Panel geometry. The ruler and lane rects live in the horizontal scroll's
+  /// CONTENT space: a project saved zoomed-in reports them thousands of pixels
+  /// wide and starting left of the window, and a gesture aimed at a fraction
+  /// of that width lands outside the window and measures nothing (a whole run
+  /// of empty rows, found the hard way). Every rect is therefore intersected
+  /// with the panel's own on-screen rect before any point is taken from it.
+  /// Null when the Timeline is not up yet.
+  TimelineGeometry? timelineGeometry() {
+    final panel = rectOf(byTypeName('TimelinePanelFrb').firstOrNull);
+    final rulerFull = rectOf(byTypeName('TimelineRuler').firstOrNull);
+    final lanesFull = rectOf(byTypeName('LayerArea').firstOrNull);
+    if (panel == null || rulerFull == null || lanesFull == null) return null;
+    final clamped =
+        rulerFull.left < panel.left || rulerFull.right > panel.right;
+    return (
+      panel: panel,
+      ruler: clamped ? rulerFull.intersect(panel) : rulerFull,
+      lanes: clamped ? lanesFull.intersect(panel) : lanesFull,
+      viewer: rectOf(byTypeName('ViewerPanelFrb').firstOrNull),
+      clamped: clamped,
+    );
+  }
+
+  /// How far the rows under [at] actually scroll, read off the vertical
+  /// scrollable there. A wheel leg sized to this scrolls; one sized by guess
+  /// grinds the stops, where drawing nothing is the correct answer and the
+  /// row reads like a stall (ui-performance.md §2.6).
+  double verticalScrollExtentAt(Offset at) {
+    var extent = 0.0;
+    for (final e in elements(
+        (e) => e is StatefulElement && e.state is ScrollableState)) {
+      final r = rectOf(e);
+      if (r == null || !r.contains(at)) continue;
+      final p = ((e as StatefulElement).state as ScrollableState).position;
+      if (!p.hasContentDimensions) continue;
+      if (axisDirectionToAxis(p.axisDirection) != Axis.vertical) continue;
+      if (p.maxScrollExtent > extent) extent = p.maxScrollExtent;
+    }
+    return extent;
+  }
+
+  /// Wheel notches of 120 px that stay inside [extent].
+  static int notchesFor(double extent) =>
+      extent <= 0 ? 9 : (extent / 120).floor().clamp(2, 30);
+}
+
 void startPerfProbe(
     LumitState state, LumitUiState ui, CountingBridgeHandler? bridge) {
   _Probe(state, ui, bridge).run();
 }
 
-class _Probe {
+class _Probe with ProbeGestures {
   final LumitState state;
   final LumitUiState ui;
   final CountingBridgeHandler? bridge;
@@ -138,93 +309,8 @@ class _Probe {
     }
   }
 
-  // ---- pointer dispatch ---------------------------------------------------
-
-  int _pointer = 4242;
-
-  void _send(PointerEvent e) => GestureBinding.instance.handlePointerEvent(e);
-
-  Future<void> _click(Offset at) async {
-    final id = _pointer++;
-    _send(PointerDownEvent(
-        pointer: id,
-        position: at,
-        kind: PointerDeviceKind.mouse,
-        buttons: kPrimaryButton));
-    await Future<void>.delayed(const Duration(milliseconds: 40));
-    _send(PointerUpEvent(
-        pointer: id, position: at, kind: PointerDeviceKind.mouse));
-  }
-
-  Future<void> _drag(Offset from, Offset to, Duration duration) async {
-    final id = _pointer++;
-    _send(PointerDownEvent(
-        pointer: id,
-        position: from,
-        kind: PointerDeviceKind.mouse,
-        buttons: kPrimaryButton));
-    final sw = Stopwatch()..start();
-    var last = from;
-    while (sw.elapsed < duration) {
-      await SchedulerBinding.instance.endOfFrame;
-      final t = (sw.elapsed.inMicroseconds / duration.inMicroseconds)
-          .clamp(0.0, 1.0);
-      final p = Offset.lerp(from, to, t)!;
-      _send(PointerMoveEvent(
-          pointer: id,
-          position: p,
-          delta: p - last,
-          kind: PointerDeviceKind.mouse,
-          buttons: kPrimaryButton));
-      last = p;
-    }
-    _send(PointerUpEvent(
-        pointer: id, position: last, kind: PointerDeviceKind.mouse));
-  }
-
-  void _wheel(Offset at, double dy) => _send(PointerScrollEvent(
-      position: at, scrollDelta: Offset(0, dy), kind: PointerDeviceKind.mouse));
-
-  Future<void> _withCtrl(Future<void> Function() body) async {
-    HardwareKeyboard.instance.handleKeyEvent(const KeyDownEvent(
-        physicalKey: PhysicalKeyboardKey.controlLeft,
-        logicalKey: LogicalKeyboardKey.controlLeft,
-        timeStamp: Duration.zero));
-    try {
-      await body();
-    } finally {
-      HardwareKeyboard.instance.handleKeyEvent(const KeyUpEvent(
-          physicalKey: PhysicalKeyboardKey.controlLeft,
-          logicalKey: LogicalKeyboardKey.controlLeft,
-          timeStamp: Duration.zero));
-    }
-  }
-
-  // ---- element lookup -----------------------------------------------------
-
-  List<Element> _elements(bool Function(Element) test) {
-    final found = <Element>[];
-    void visit(Element e) {
-      if (test(e)) found.add(e);
-      e.visitChildren(visit);
-    }
-
-    final root = WidgetsBinding.instance.rootElement;
-    if (root != null) visit(root);
-    return found;
-  }
-
-  List<Element> _byTypeName(String name) =>
-      _elements((e) => e.widget.runtimeType.toString() == name);
-
-  Element? _byKey(Key key) =>
-      _elements((e) => e.widget.key == key).firstOrNull;
-
-  Rect? _rectOf(Element? e) {
-    final ro = e?.renderObject;
-    if (ro is! RenderBox || !ro.hasSize || !ro.attached) return null;
-    return ro.localToGlobal(Offset.zero) & ro.size;
-  }
+  @override
+  void send(PointerEvent e) => GestureBinding.instance.handlePointerEvent(e);
 
   // ---- gesture measurement ------------------------------------------------
 
@@ -262,8 +348,7 @@ class _Probe {
   ) {
     double ms(Duration d) => d.inMicroseconds / 1000.0;
     List<double> sorted(Iterable<double> xs) => xs.toList()..sort();
-    double at(List<double> xs, double q) =>
-        xs.isEmpty ? 0 : xs[((xs.length - 1) * q).round()];
+    const at = percentile;
 
     final inGesture = framesWithin(frames, t0, t1);
     final build = sorted(frames.map((f) => ms(f.buildDuration)));
@@ -272,8 +357,8 @@ class _Probe {
     final over17 = span.where((s) => s > 17.0).length;
     final over9 = span.where((s) => s > 8.7).length;
     final secs = (t1 - t0) / 1e6;
-    final starts = sorted(inGesture
-        .map((f) => f.timestampInMicroseconds(dart_ui.FramePhase.vsyncStart) / 1000.0));
+    final starts = sorted(inGesture.map((f) =>
+        f.timestampInMicroseconds(dart_ui.FramePhase.vsyncStart) / 1000.0));
     final gaps = sorted([
       for (var i = 1; i < starts.length; i++) starts[i] - starts[i - 1],
     ]);
@@ -282,7 +367,8 @@ class _Probe {
     // The gesture's window on the Timeline clock, for lining a CPU-sample or
     // VM-timeline capture up against exactly these frames.
     out.writeln('tus=$t0..$t1');
-    out.writeln('frames=${inGesture.length} (+${frames.length - inGesture.length}'
+    out.writeln(
+        'frames=${inGesture.length} (+${frames.length - inGesture.length}'
         ' trailing) wall=${secs.toStringAsFixed(2)}s '
         'fps=${(inGesture.length / secs).toStringAsFixed(1)}');
     if (gaps.isNotEmpty) {
@@ -311,7 +397,8 @@ class _Probe {
         ..sort((a, b) => b.value.$2.compareTo(a.value.$2));
       final total = delta.values.fold(0, (s, v) => s + v.$1);
       final totalMs = delta.values.fold(0, (s, v) => s + v.$2) / 1000.0;
-      out.writeln('bridge: $total calls, ${totalMs.toStringAsFixed(1)}ms total');
+      out.writeln(
+          'bridge: $total calls, ${totalMs.toStringAsFixed(1)}ms total');
       for (final e in entries.take(8)) {
         out.writeln('  ${e.key} x${e.value.$1} '
             '${(e.value.$2 / 1000.0).toStringAsFixed(1)}ms');
@@ -342,7 +429,7 @@ class _Probe {
       await Future<void>.delayed(const Duration(milliseconds: 500));
       if (state.project == null) continue;
       if (state.comps().isEmpty) continue;
-      if (_byTypeName('TimelinePanelFrb').isEmpty) continue;
+      if (byTypeName('TimelinePanelFrb').isEmpty) continue;
       break;
     }
     if (state.project == null) {
@@ -357,9 +444,7 @@ class _Probe {
     final target = comps
             .where((c) => c.$2.toLowerCase() == 'clips')
             .firstOrNull ??
-        comps
-            .where((c) => c.$2.toLowerCase().contains('clip'))
-            .firstOrNull ??
+        comps.where((c) => c.$2.toLowerCase().contains('clip')).firstOrNull ??
         comps.firstOrNull;
     if (target == null) {
       out.writeln('FAILED: no comp');
@@ -382,47 +467,30 @@ class _Probe {
     out.writeln('media beside project: '
         '${mediaLive ? "resolves (live preview)" : "MISSING (empty preview)"}');
 
-    // Panel geometry. The ruler and lane rects live in the horizontal scroll's
-    // CONTENT space: a project saved zoomed-in reports them thousands of pixels
-    // wide and starting left of the window, and a gesture aimed at a fraction
-    // of that width lands outside the window and measures nothing (a whole run
-    // of empty rows, found the hard way). Every rect is therefore intersected
-    // with the panel's own on-screen rect before any point is taken from it.
-    final panel = _rectOf(_byTypeName('TimelinePanelFrb').firstOrNull);
-    final rulerFull = _rectOf(_byTypeName('TimelineRuler').firstOrNull);
-    final lanesFull = _rectOf(_byTypeName('LayerArea').firstOrNull);
-    final viewer = _rectOf(_byTypeName('ViewerPanelFrb').firstOrNull);
-    final rows = _byTypeName('OutlineRow');
-    out.writeln('panel=${_fmtRect(panel)} viewer=${_fmtRect(viewer)}');
-    out.writeln('ruler=${_fmtRect(rulerFull)} lanes=${_fmtRect(lanesFull)} '
-        'rows=${rows.length}');
-    if (panel == null ||
-        rulerFull == null ||
-        lanesFull == null ||
-        rows.isEmpty) {
-      out.writeln('FAILED: geometry not found');
+    // Panel geometry, clamped to the window (see [timelineGeometry]).
+    final geometry = timelineGeometry();
+    final rows = byTypeName('OutlineRow');
+    if (geometry == null || rows.isEmpty) {
+      out.writeln('FAILED: geometry not found (rows=${rows.length})');
       _flush();
       return;
     }
-    final clamped = rulerFull.left < panel.left || rulerFull.right > panel.right;
-    final ruler = clamped ? rulerFull.intersect(panel) : rulerFull;
-    final lanes = clamped ? lanesFull.intersect(panel) : lanesFull;
-    if (clamped) {
-      out.writeln('clamped to window: ruler=${_fmtRect(ruler)} '
-          'lanes=${_fmtRect(lanes)}');
-    }
-    final laneCentre = Offset(
-        lanes.left + lanes.width * 0.55, lanes.top + lanes.height * 0.4);
+    final (:panel, :ruler, :lanes, :viewer, :clamped) = geometry;
+    out.writeln('panel=${_fmtRect(panel)} viewer=${_fmtRect(viewer)}');
+    out.writeln('ruler=${_fmtRect(ruler)} lanes=${_fmtRect(lanes)} '
+        'rows=${rows.length}${clamped ? " (clamped to window)" : ""}');
+    final laneCentre =
+        Offset(lanes.left + lanes.width * 0.55, lanes.top + lanes.height * 0.4);
 
     // Warm-up: zoom out to fit, scroll the rows to the top.
-    await _withCtrl(() async {
+    await withCtrl(() async {
       for (var i = 0; i < 24; i++) {
-        _wheel(laneCentre, 120);
+        wheel(laneCentre, 120);
         await Future<void>.delayed(const Duration(milliseconds: 30));
       }
     });
     for (var i = 0; i < 40; i++) {
-      _wheel(laneCentre, -120);
+      wheel(laneCentre, -120);
       await Future<void>.delayed(const Duration(milliseconds: 10));
     }
     await Future<void>.delayed(const Duration(seconds: 1));
@@ -433,17 +501,8 @@ class _Probe {
     // notches ground against the stops — where drawing nothing is the *correct*
     // answer (idle is zero frames) — and the row read "12 fps". A leg
     // that stays in range measures scrolling, not the stop.
-    var vExtent = 0.0;
-    for (final e in _elements((e) =>
-        e is StatefulElement && e.state is ScrollableState)) {
-      final r = _rectOf(e);
-      if (r == null || !r.contains(laneCentre)) continue;
-      final p = ((e as StatefulElement).state as ScrollableState).position;
-      if (!p.hasContentDimensions) continue;
-      if (axisDirectionToAxis(p.axisDirection) != Axis.vertical) continue;
-      if (p.maxScrollExtent > vExtent) vExtent = p.maxScrollExtent;
-    }
-    final vNotches = vExtent <= 0 ? 9 : (vExtent / 120).floor().clamp(2, 30);
+    final vExtent = verticalScrollExtentAt(laneCentre);
+    final vNotches = ProbeGestures.notchesFor(vExtent);
     out.writeln('vertical extent=${vExtent.toStringAsFixed(0)}px, '
         'wheel legs $vNotches notches x 120px');
 
@@ -500,11 +559,11 @@ class _Probe {
     await _measure('scroll: lanes wheel $vNotches down + $vNotches up, 25ms',
         () async {
       for (var i = 0; i < vNotches; i++) {
-        _wheel(laneCentre, 120);
+        wheel(laneCentre, 120);
         await Future<void>.delayed(const Duration(milliseconds: 25));
       }
       for (var i = 0; i < vNotches; i++) {
-        _wheel(laneCentre, -120);
+        wheel(laneCentre, -120);
         await Future<void>.delayed(const Duration(milliseconds: 25));
       }
     });
@@ -517,40 +576,39 @@ class _Probe {
     await _measure('scroll: lanes wheel $vNotches down + $vNotches up, 90ms',
         () async {
       for (var i = 0; i < vNotches; i++) {
-        _wheel(laneCentre, 120);
+        wheel(laneCentre, 120);
         await Future<void>.delayed(const Duration(milliseconds: 90));
       }
       for (var i = 0; i < vNotches; i++) {
-        _wheel(laneCentre, -120);
+        wheel(laneCentre, -120);
         await Future<void>.delayed(const Duration(milliseconds: 90));
       }
     });
 
     // G3: wheel-scroll over the outline half.
-    final outlineCentre = Offset(
-        panel.left + (lanes.left - panel.left) * 0.5,
+    final outlineCentre = Offset(panel.left + (lanes.left - panel.left) * 0.5,
         lanes.top + lanes.height * 0.4);
     await _measure('scroll: outline wheel $vNotches down + $vNotches up, 25ms',
         () async {
       for (var i = 0; i < vNotches; i++) {
-        _wheel(outlineCentre, 120);
+        wheel(outlineCentre, 120);
         await Future<void>.delayed(const Duration(milliseconds: 25));
       }
       for (var i = 0; i < vNotches; i++) {
-        _wheel(outlineCentre, -120);
+        wheel(outlineCentre, -120);
         await Future<void>.delayed(const Duration(milliseconds: 25));
       }
     });
 
     // G4: ctrl+wheel zoom in then out over the lanes.
     await _measure('zoom: ctrl+wheel 14 in + 14 out', () async {
-      await _withCtrl(() async {
+      await withCtrl(() async {
         for (var i = 0; i < 14; i++) {
-          _wheel(laneCentre, -120);
+          wheel(laneCentre, -120);
           await Future<void>.delayed(const Duration(milliseconds: 90));
         }
         for (var i = 0; i < 14; i++) {
-          _wheel(laneCentre, 120);
+          wheel(laneCentre, 120);
           await Future<void>.delayed(const Duration(milliseconds: 90));
         }
       });
@@ -562,13 +620,15 @@ class _Probe {
     // rendered (presenting from the bank) — the cached/uncached split.
     final rulerY = ruler.top + ruler.height * 0.30;
     await _measure('playhead drag: sweep right (fresh spans)', () async {
-      await _drag(Offset(ruler.left + ruler.width * 0.15, rulerY),
+      await drag(
+          Offset(ruler.left + ruler.width * 0.15, rulerY),
           Offset(ruler.left + ruler.width * 0.75, rulerY),
           const Duration(milliseconds: 2500));
     });
     await _measure('playhead drag: sweep back left (revisited spans)',
         () async {
-      await _drag(Offset(ruler.left + ruler.width * 0.75, rulerY),
+      await drag(
+          Offset(ruler.left + ruler.width * 0.75, rulerY),
           Offset(ruler.left + ruler.width * 0.25, rulerY),
           const Duration(milliseconds: 2500));
     });
@@ -595,7 +655,7 @@ class _Probe {
       out.writeln('setWorkArea failed: $e');
     }
     await Future<void>.delayed(const Duration(milliseconds: 800));
-    final endHandle = _rectOf(_byKey(const ValueKey('tl-work-end')));
+    final endHandle = rectOf(byKey(const ValueKey('tl-work-end')));
     out.writeln('end handle: ${_fmtRect(endHandle)}');
     if (endHandle != null) {
       final from = endHandle.center;
@@ -603,8 +663,8 @@ class _Probe {
           (from.dx - ruler.width * 0.3).clamp(ruler.left + 10, ruler.right),
           from.dy);
       await _measure('work-area drag: end handle left then back', () async {
-        await _drag(from, to, const Duration(milliseconds: 2000));
-        await _drag(to, from, const Duration(milliseconds: 2000));
+        await drag(from, to, const Duration(milliseconds: 2000));
+        await drag(to, from, const Duration(milliseconds: 2000));
       });
     } else {
       out.writeln('work-area handle not found on screen; skipped');
@@ -615,29 +675,30 @@ class _Probe {
     // stays where it was, the raster cost is the window composite, not the
     // lane pictures; if it falls, the lane pictures are what the raster
     // thread is paying for.
-    final graphTab = _rectOf(_byKey(const ValueKey('tl-graph')));
+    final graphTab = rectOf(byKey(const ValueKey('tl-graph')));
     if (graphTab != null) {
-      await _click(graphTab.center);
+      await click(graphTab.center);
       await Future<void>.delayed(const Duration(seconds: 1));
       await _measure('graph mode: ctrl+wheel 14 in + 14 out', () async {
-        await _withCtrl(() async {
+        await withCtrl(() async {
           for (var i = 0; i < 14; i++) {
-            _wheel(laneCentre, -120);
+            wheel(laneCentre, -120);
             await Future<void>.delayed(const Duration(milliseconds: 90));
           }
           for (var i = 0; i < 14; i++) {
-            _wheel(laneCentre, 120);
+            wheel(laneCentre, 120);
             await Future<void>.delayed(const Duration(milliseconds: 90));
           }
         });
       });
       await _measure('graph mode: playhead drag on ruler', () async {
-        await _drag(Offset(ruler.left + ruler.width * 0.2, rulerY),
+        await drag(
+            Offset(ruler.left + ruler.width * 0.2, rulerY),
             Offset(ruler.left + ruler.width * 0.7, rulerY),
             const Duration(milliseconds: 2500));
       });
-      final lanesTab = _rectOf(_byKey(const ValueKey('tl-view-lanes')));
-      if (lanesTab != null) await _click(lanesTab.center);
+      final lanesTab = rectOf(byKey(const ValueKey('tl-view-lanes')));
+      if (lanesTab != null) await click(lanesTab.center);
       await Future<void>.delayed(const Duration(milliseconds: 600));
     } else {
       out.writeln('graph tab not found; skipped');
@@ -647,7 +708,8 @@ class _Probe {
     ui.renderTimings.setMeasuring(false);
     await Future<void>.delayed(const Duration(milliseconds: 600));
     await _measure('playhead drag, measuring off', () async {
-      await _drag(Offset(ruler.left + ruler.width * 0.15, rulerY),
+      await drag(
+          Offset(ruler.left + ruler.width * 0.15, rulerY),
           Offset(ruler.left + ruler.width * 0.75, rulerY),
           const Duration(milliseconds: 2500));
     });
@@ -671,23 +733,24 @@ class _Probe {
     out.writeln('== $name ==');
     for (var i = 0; i < 6; i++) {
       final live = cellPrefix == null
-          ? _byTypeName('OutlineRow')
-          : _elements((e) => switch (e.widget.key) {
+          ? byTypeName('OutlineRow')
+          : elements((e) => switch (e.widget.key) {
                 ValueKey<String>(:final value) => value.startsWith(cellPrefix),
                 _ => false,
               });
       if (live.isEmpty) break;
-      final row = _rectOf(live[(i * 3 + 1) % live.length]);
+      final row = rectOf(live[(i * 3 + 1) % live.length]);
       if (row == null) continue;
-      final at =
-          cellPrefix == null ? Offset(row.left + dx, row.center.dy) : row.center;
+      final at = cellPrefix == null
+          ? Offset(row.left + dx, row.center.dy)
+          : row.center;
       final frames = <FrameTiming>[];
       _bucket = frames;
       final before = bridge?.snapshot();
       final sw = Stopwatch()..start();
       final clickedAt = DateTime.now();
       _lastBuiltAt = clickedAt;
-      await _click(at);
+      await click(at);
       await SchedulerBinding.instance.endOfFrame;
       final ack = sw.elapsedMicroseconds / 1000.0;
       // Quiet: 300ms with no frame reported, or 4s cap.
@@ -702,15 +765,14 @@ class _Probe {
       // Settled: the last frame the interface actually *built* something in.
       // WP-5's gate is on this rather than on `quiet`, which keeps running for
       // as long as the preview is republishing behind the edit.
-      final settled = _lastBuiltAt
-          .difference(clickedAt)
-          .inMicroseconds
-          .clamp(0, 1 << 31) /
-          1000.0;
+      final settled =
+          _lastBuiltAt.difference(clickedAt).inMicroseconds.clamp(0, 1 << 31) /
+              1000.0;
       _bucket = null;
       final after = bridge?.snapshot();
       final builds = frames.map((f) => f.buildDuration.inMicroseconds / 1000.0);
-      final worstBuild = builds.isEmpty ? 0.0 : builds.reduce((a, b) => a > b ? a : b);
+      final worstBuild =
+          builds.isEmpty ? 0.0 : builds.reduce((a, b) => a > b ? a : b);
       final delta = <String, (int, int)>{};
       if (before != null && after != null) {
         for (final k in after.calls.keys) {

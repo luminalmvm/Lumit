@@ -247,7 +247,8 @@ void main() {
         label: 'Intensity',
         kind: BridgeParamKind.float(
             default_: 1, sliderMin: 0, sliderMax: 10),
-        unit: BridgeUnit.raw);
+        unit: BridgeUnit.raw,
+        derived: false);
     final info = BridgeEffectInstanceInfo(
         id: fxId,
         name: 'lumit.glow',

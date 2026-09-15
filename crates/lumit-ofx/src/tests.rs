@@ -973,6 +973,40 @@ fn a_binary_that_is_not_a_plugin_is_refused_rather_than_called() {
     assert!(Bundle::open(root.path().join("absent.ofx")).is_err());
 }
 
+#[cfg(target_os = "windows")]
+#[test]
+fn a_plugin_finds_the_dlls_shipped_beside_it() {
+    let test = "a_plugin_finds_the_dlls_shipped_beside_it";
+    let Ok(root) = tempfile::tempdir() else {
+        return;
+    };
+    let needy = std::env::current_exe().ok().and_then(|exe| {
+        let examples = exe.parent()?.parent()?.join("examples");
+        Some(examples.join("needs_side_dll.dll")).filter(|path| path.is_file())
+    });
+    let (Some(needy), Some(side)) = (needy, test_plugin()) else {
+        eprintln!("{test}: skipped, build it first: cargo test -p lumit-ofx --no-run");
+        return;
+    };
+    let dir = root
+        .path()
+        .join("Needy.ofx.bundle")
+        .join("Contents")
+        .join(BUNDLE_ARCH_DIR);
+    assert!(std::fs::create_dir_all(&dir).is_ok());
+    let binary = dir.join("Needy.ofx");
+    assert!(std::fs::copy(&needy, &binary).is_ok());
+    assert!(std::fs::copy(&side, dir.join("lumit_side_dep.dll")).is_ok());
+
+    // Opened from somewhere else, the way the broker opens it.
+    let opened = Bundle::open(&binary);
+    assert!(
+        opened.is_ok(),
+        "the DLL beside the plugin was not found: {:?}",
+        opened.err()
+    );
+}
+
 #[test]
 fn the_standard_plugin_location_is_always_searched() {
     let paths = crate::bundle::search_paths();

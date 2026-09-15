@@ -151,10 +151,10 @@ not Lumit's:
     `ImpellerSwitch::Disabled` back to `Default` in
     `flutter_ui/windows/runner/main.cpp` the day Impeller clears the 60 fps mandate.
     Standing, not one-off - delete only when the flip lands.
-- **B1 and B2 have no standing gate in CI.** WP-6's matrix gates *rebuild counts*;
-    the 8 ms UI-thread frame and the next-frame acknowledgement are still read off
-    the probe by hand. The entry under *What the performance harness still cannot
-    measure* below is where that lives.
+- **B1 has no standing gate in CI.** `ui_budget_test.dart` asserts B2 everywhere, but
+    the 8 ms UI-thread frame is asserted only under `LUMIT_REFERENCE_HW=1`, which no
+    runner sets. The entry under *What the performance harness still cannot measure*
+    below is where that lives.
 
 ## Now - the effect registry (docs/impl/effect-registry.md §6)
 
@@ -172,10 +172,11 @@ hand-written `BUILTINS` literal are all gone. What is left is §6 step 5.
     `&'static [ParamSchema]`, and nothing downstream can tell a derived row from a
     declared one. What remains is the panel's half, where the rules (§4 of the note) put
     it: a derived row is **offered, never adopted** (docs/08 §3.95), and there is no
-    gesture yet that adopts one or removes a row the graph or the shader no longer has -
-    CS2's `sync_parameters` and `remove_unused_parameters` are unwritten. Then **spare
-    parameters**, the user's own sliders for expressions to read, which need no shader at
-    all and ride the same mechanism.
+    gesture yet that adopts one or removes a row the graph or the shader no longer has.
+    The bridge carries both (custom-shader.md CS2: `parameter_sync`, `sync_parameters`,
+    `remove_unused_parameters`); the panel row that presses them, CS3's Sync and Remove,
+    is unwritten. Then **spare parameters**, the user's own sliders for expressions to
+    read, which need no shader at all and ride the same mechanism.
 
 - **The effect manual is sixteen pages behind the catalogue.** The catalogue stands at 139
     and `web-docs/src/content/docs/effects/` holds 123 pages: the whole **Audio** family has
@@ -871,14 +872,17 @@ carries whole frames as freely as the park queue did, but none counts its depth 
 **What the performance harness still cannot measure** (`crates/lumit-bench`
 drives the reference comp headless through B3, B4, B5, B6, B7 and B11, and adds
 Particulate's B12–B14 and the puppet's B15–B17, which need no comp and no media; the job
-`performance gates (ratio vs baseline)` gates the ratio to a checked-in baseline). Five
+`performance gates (ratio vs baseline)` gates the ratio to a checked-in baseline). Three
 budgets are outside its reach and remain manual release checks, each needing its own
 instrumentation:
 
-- **B1 and B2 — UI frame time and input acknowledgement.** They belong to the Flutter
-    thread, which no engine-side harness has. Wants frame timing recorded in the app
-    (`SchedulerBinding`'s frame callbacks) and a way to drive an interaction from a test,
-    so "8 ms during a drag" becomes a number rather than a feeling.
+- **B1 and B2: measured now, gated in part.** `flutter_ui/integration_test/ui_budget_test.dart`
+    runs the app on a real window over a 200-layer comp, drives the ui-performance note's
+    gesture list, and reads every `FrameTiming`: build p95 and worst per gesture, frames to
+    acknowledgement per press. B2 is asserted everywhere (a frame count). B1's 8.3 ms is
+    asserted only under `LUMIT_REFERENCE_HW=1`; the Linux job records the table (debug
+    build, Xvfb, software GL) and gates nothing else. Still owed: a runner that sets the
+    switch, and a maximised-window profile run as part of a release rather than by hand.
 - **B8 — export throughput.** The encoder is not in the harness. A timed export of the
     same reference comp at the YouTube 1080p60 preset is the measurement; it needs hardware
     encode present to mean anything, which no runner has.
