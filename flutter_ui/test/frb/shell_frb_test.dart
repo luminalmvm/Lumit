@@ -1500,24 +1500,18 @@ void main() {
       });
       await tester.tap(find.byKey(const ValueKey('export-choose')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('export-start')));
-      await tester.pumpAndSettle();
 
-      // On a machine carrying the pack there is nothing to refuse, so both
-      // endings are pinned and the test is true wherever it runs. The question
-      // is the one the pre-flight asks, over this composition, not what the
-      // machine happens to have installed.
+      // On a machine with the pack installed there is nothing to refuse, so
+      // Export isn't pressed at all. A real export started here is still
+      // winding down when the next test presses Export.
       if (!subject!.addonNeeded()) {
-        final queued = exportQueueList().where((i) => i.path == target);
-        expect(queued, hasLength(1),
-            reason: 'the pack is here, so the export is an export like any '
-                'other');
-        exportQueueCancel(id: queued.first.id);
-        exportQueueRemove(id: queued.first.id);
-        await tester.tap(find.byKey(const ValueKey('export-queue-dismiss')));
+        await tester.tap(find.byKey(const ValueKey('export-close')));
         await tester.pumpAndSettle();
         return;
       }
+
+      await tester.tap(find.byKey(const ValueKey('export-start')));
+      await tester.pumpAndSettle();
 
       expect(find.text('An addon this project needs is not installed'),
           findsOneWidget,
